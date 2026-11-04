@@ -4,8 +4,11 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.SetupQuestionnaire
 import java.io.File
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -20,7 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The setup questionnaire on the phone (docs/JARVIS-API.md section 147;
+ * "Personalize Jarvis" on the phone (docs/JARVIS-API.md section 147;
  * `net/SetupQuestionnaire.kt`, `ui/screens/SetupQuestionnairePlate.kt`; the
  * PC's module is `backend/jarvis_setup.py`).
  *
@@ -30,11 +33,16 @@ import org.junit.Test
  *
  * What it proves: the phone reads the PC's questions and choices without
  * inventing a word, prefills the last accepted answers and drops choices this
- * PC no longer offers, builds the READ-ONLY plan body and NOTHING else, reads
- * the plan's effects and the PC's "would not change" reasons, and says a card
- * still waiting is still waiting. The last checks read the two phone files as
- * text and fail if an apply path or a `confirm` body ever appears: applying is
- * deliberately the PC's step, not the phone's.
+ * PC no longer offers, splits the questions by the PC's OWN sections (and
+ * shows a section it has no title for by the id the PC sent), builds the
+ * READ-ONLY plan body and NOTHING else, reads the plan's effects and the PC's
+ * "would not change" reasons, and says a card still waiting is still waiting.
+ * The ONE progress line says whether the PC's question set is finished, how
+ * many questions it has answered and which question its card is on - and a set
+ * finished before the new questions is NOT called finished. The last checks
+ * read the two phone files as text and fail if an apply path, a `confirm` body
+ * or a progress write ever appears: applying and recording progress are
+ * deliberately the PC's steps, not the phone's.
  */
 class SetupQuestionnaireTest {
 
@@ -97,9 +105,12 @@ class SetupQuestionnaireTest {
     // -- The PC's questions ---------------------------------------------------
 
     @Test
-    fun thePcsQuestionnaireIsFourteenQuestionsInItsOwnOrder() {
-        assertEquals(14, fixture["count"]!!.jsonPrimitiveInt())
-        assertEquals(14, view.questions.size)
+    fun thePcsQuestionnaireIsItsOwnQuestionsInItsOwnOrder() {
+        // The count is the PC's, never a number typed into this test: the
+        // question set grows (14 -> 25 for "Personalize Jarvis"), and a pinned
+        // count would go red on the day the PC adds one rather than prove
+        // anything about this app.
+        assertEquals(fixture["count"]!!.jsonPrimitiveInt(), view.questions.size)
         assertEquals(
             (fixture["questions"]!!.jsonArray).map { it.jsonObject["id"]!!.jsonPrimitiveText() },
             view.questions.map { it.id },
@@ -345,10 +356,274 @@ class SetupQuestionnaireTest {
         assertEquals("", old.reason)
     }
 
+    /**
+     * The number of questions is the PC's, so this screen may not type one:
+     * the kicker used to say "Twenty-five questions" while the progress line
+     * beside it was computed from the PC's own list, and the two disagreed on
+     * the same page as soon as the set changed (audit 2026-11-03, bug 3).
+     */
+    @Test
+    fun theKickerCarriesNoCountOfItsOwn() {
+        // The count the page really shows is `view.questions.size`, which the
+        // fixture proves is the PC's number - not a second opinion.
+        assertEquals(fixture["count"]!!.jsonPrimitiveInt(), view.questions.size)
+        val kicker = SetupQuestionnaire.KICKER
+        assertTrue(
+            "the kicker types a number: ${kicker.filter { it.isDigit() }}",
+            kicker.none { it.isDigit() },
+        )
+        val spelled = Regex(
+            "\\b(?:ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|" +
+                "seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\\b",
+            RegexOption.IGNORE_CASE,
+        )
+        assertNull(
+            "the kicker spells a number of questions: ${spelled.find(kicker)?.value}",
+            spelled.find(kicker),
+        )
+        // It still says what the screen is for.
+        assertTrue(kicker.contains("how you want Jarvis to behave"))
+    }
+
+    // -- The PC's sections ----------------------------------------------------
+
+    /** One question as `GET /api/setup` sends it, with the PC's own section id. */
+    private fun questionRow(id: String, section: String? = null): JsonObject = buildJsonObject {
+        put("id", id)
+        put("title", "Question $id")
+        put("help", "")
+        put("multi", false)
+        if (section != null) put("section", section)
+        putJsonArray("options") {
+            add(buildJsonObject {
+                put("id", "on")
+                put("label", "On")
+                put("detail", "")
+            })
+        }
+    }
+
+    private fun bodyWith(
+        questions: List<JsonObject>,
+        sections: JsonElement? = null,
+    ): JsonObject = buildJsonObject {
+        put("available", true)
+        if (sections != null) put("sections", sections)
+        put("questions", JsonArray(questions))
+    }
+
+    @Test
+    fun theQuestionsAreSplitByThePcsOwnSectionsInItsOwnOrder() {
+        val declared = buildJsonArray {
+            add(buildJsonObject { put("id", "talk"); put("title", "How it talks") })
+            add(buildJsonObject { put("id", "read"); put("title", "What it may read") })
+            add(buildJsonObject { put("id", "empty"); put("title", "Nothing here yet") })
+        }
+        val got = SetupQuestionnaire.parse(
+            bodyWith(
+                listOf(
+                    questionRow("q1", "read"),
+                    questionRow("q2", "talk"),
+                    questionRow("q3", "other"),
+                ),
+                declared,
+            ),
+        )!!
+        // The PC's declared order wins over the order its questions arrive in,
+        // and a declared section with no question is not drawn as an empty tab.
+        assertEquals(listOf("talk", "read", "other"), got.sections.map { it.id })
+        assertEquals(listOf("How it talks", "What it may read", ""), got.sections.map { it.title })
+        assertEquals(listOf("q2"), got.sections[0].questions.map { it.id })
+        assertEquals(listOf("q1"), got.sections[1].questions.map { it.id })
+        assertEquals(listOf("q3"), got.sections[2].questions.map { it.id })
+        // A section the PC declared no word for keeps the id it sent.
+        assertEquals("other", SetupQuestionnaire.sectionWords(got.sections[2]))
+        // The flat list keeps the PC's own order, which is what the plan posts.
+        assertEquals(listOf("q1", "q2", "q3"), got.questions.map { it.id })
+    }
+
+    @Test
+    fun aSectionTitleIsReadInEveryShapeThePcSendsAndItsIdWhenItSendsNone() {
+        val pairs = SetupQuestionnaire.parse(
+            bodyWith(
+                listOf(questionRow("q1", "talk")),
+                buildJsonArray {
+                    add(buildJsonArray {
+                        add(JsonPrimitive("talk"))
+                        add(JsonPrimitive("How it talks"))
+                    })
+                },
+            ),
+        )!!
+        assertEquals("How it talks", pairs.sections.single().title)
+
+        val mapped = SetupQuestionnaire.parse(
+            bodyWith(
+                listOf(questionRow("q1", "talk")),
+                buildJsonObject { put("talk", "How it talks") },
+            ),
+        )!!
+        assertEquals("How it talks", mapped.sections.single().title)
+
+        val untitled = SetupQuestionnaire.parse(bodyWith(listOf(questionRow("q1", "learning"))))!!
+        assertEquals(listOf("learning"), untitled.sections.map { it.id })
+        assertEquals("", untitled.sections.single().title)
+        assertEquals("learning", SetupQuestionnaire.sectionWords(untitled.sections.single()))
+    }
+
+    @Test
+    fun aPcFromBeforeSectionsDrawsOneUnnamedGroup() {
+        val old = SetupQuestionnaire.parse(bodyWith(listOf(questionRow("q1"), questionRow("q2"))))!!
+        assertEquals(1, old.sections.size)
+        assertEquals("", old.sections.single().id)
+        assertEquals("", old.sections.single().title)
+        assertEquals(listOf("q1", "q2"), old.sections.single().questions.map { it.id })
+        assertEquals(
+            SetupQuestionnaire.ALL_SECTIONS,
+            SetupQuestionnaire.sectionWords(old.sections.single()),
+        )
+        // The shared fixture is the PC's own table: whatever `section` each row
+        // carries is the group it lands in, and no question is lost.
+        val fromFixture = SetupQuestionnaire.parse(
+            buildJsonObject {
+                put("available", true)
+                put("questions", fixture["questions"]!!)
+            },
+        )!!
+        val sent = (fixture["questions"]!!.jsonArray).associate { row ->
+            val body = row.jsonObject
+            body["id"]!!.jsonPrimitiveText() to (body["section"]?.jsonPrimitiveText() ?: "")
+        }
+        for (group in fromFixture.sections) {
+            for (question in group.questions) assertEquals(sent[question.id], group.id)
+        }
+        assertEquals(
+            fromFixture.questions.size,
+            fromFixture.sections.sumOf { it.questions.size },
+        )
+    }
+
+    // -- The one progress line ------------------------------------------------
+
+    private fun progressBody(
+        version: Int? = null,
+        completedVersion: Int? = null,
+        completedAt: Double? = null,
+        answeredCount: Int? = null,
+        question: String? = null,
+    ): JsonObject = buildJsonObject {
+        put("available", true)
+        putJsonArray("questions") {
+            add(questionRow("q1", "talk"))
+            add(questionRow("q2", "talk"))
+            add(questionRow("q3", "read"))
+        }
+        if (version != null) put("version", version)
+        if (completedVersion != null) put("completed_version", completedVersion)
+        if (completedAt != null) put("completed_at", completedAt)
+        if (answeredCount != null) put("answered_count", answeredCount)
+        if (question != null) {
+            putJsonObject("in_progress") {
+                put("section", "talk")
+                put("question", question)
+            }
+        }
+    }
+
+    @Test
+    fun theProgressLineSaysHowManyAreAnsweredAndWhereThePcsCardIs() {
+        val both = SetupQuestionnaire.parse(
+            progressBody(
+                version = 2, completedVersion = 1, answeredCount = 2, question = "q3",
+            ),
+        )!!
+        assertEquals(3, SetupQuestionnaire.questionNumber(both))
+        assertEquals(
+            "Not finished - 2 of 3 answered. On the PC this is at question 3 of 3.",
+            SetupQuestionnaire.progressWords(both),
+        )
+
+        val countOnly = SetupQuestionnaire.parse(
+            progressBody(version = 2, completedVersion = 1, answeredCount = 1),
+        )!!
+        assertEquals("Not finished - 1 of 3 answered.", SetupQuestionnaire.progressWords(countOnly))
+
+        val whereOnly = SetupQuestionnaire.parse(
+            progressBody(version = 2, completedVersion = 1, question = "q2"),
+        )!!
+        assertEquals(
+            "Not finished. On the PC this is at question 2 of 3.",
+            SetupQuestionnaire.progressWords(whereOnly),
+        )
+
+        // A question this phone does not have in its list: no invented place.
+        val unknown = SetupQuestionnaire.parse(
+            progressBody(version = 2, completedVersion = 1, answeredCount = 1, question = "gone"),
+        )!!
+        assertNull(SetupQuestionnaire.questionNumber(unknown))
+        assertEquals("Not finished - 1 of 3 answered.", SetupQuestionnaire.progressWords(unknown))
+
+        // An older backend sends nothing to say, so the screen says nothing.
+        val quiet = SetupQuestionnaire.parse(progressBody())!!
+        assertEquals("", SetupQuestionnaire.progressWords(quiet))
+    }
+
+    @Test
+    fun aSetFinishedBeforeTheNewQuestionsIsNotCalledFinished() {
+        val before = SetupQuestionnaire.parse(
+            progressBody(
+                version = 2, completedVersion = 1, completedAt = 1_765_000_000.0,
+                answeredCount = 2, question = "q3",
+            ),
+        )!!
+        assertFalse(SetupQuestionnaire.finished(before))
+        assertEquals(
+            "Not finished - 2 of 3 answered. On the PC this is at question 3 of 3.",
+            SetupQuestionnaire.progressWords(before),
+        )
+
+        // A `completed_version` with no `version` sent is never read as done.
+        val unknownSet = SetupQuestionnaire.parse(
+            progressBody(completedVersion = 1, answeredCount = 2),
+        )!!
+        assertFalse(SetupQuestionnaire.finished(unknownSet))
+        assertEquals(
+            "Not finished - 2 of 3 answered.",
+            SetupQuestionnaire.progressWords(unknownSet),
+        )
+
+        // A PC that names its question set but not the one it finished is not
+        // called finished either, even with a `completed_at` from an older set.
+        val halfSaid = SetupQuestionnaire.parse(
+            progressBody(version = 2, completedAt = 1_765_000_000.0),
+        )!!
+        assertFalse(SetupQuestionnaire.finished(halfSaid))
+
+        // An older PC has no versions at all: its `completed_at` is the sign.
+        val oldPc = SetupQuestionnaire.parse(progressBody(completedAt = 1_765_000_000.0))!!
+        assertTrue(SetupQuestionnaire.finished(oldPc))
+
+        val done = SetupQuestionnaire.parse(
+            progressBody(version = 2, completedVersion = 2, completedAt = 1_765_000_000.0),
+        )!!
+        assertTrue(SetupQuestionnaire.finished(done))
+        assertEquals(
+            "Finished ${SetupQuestionnaire.dateText(1_765_000_000.0)}.",
+            SetupQuestionnaire.progressWords(done),
+        )
+        assertNotNull(SetupQuestionnaire.dateText(1_765_000_000.0))
+        assertNull(SetupQuestionnaire.dateText(null))
+        assertNull(SetupQuestionnaire.dateText(0.0))
+
+        // Finished but no date to show: no invented date either.
+        val doneNoDate = SetupQuestionnaire.parse(progressBody(version = 2, completedVersion = 2))!!
+        assertEquals("Finished.", SetupQuestionnaire.progressWords(doneNoDate))
+    }
+
     // -- Read-only on purpose -------------------------------------------------
 
     @Test
-    fun theTwoPhoneFilesHoldNoApplyPathAndNoConfirmBody() {
+    fun theTwoPhoneFilesHoldNoApplyPathNoConfirmBodyAndNoProgressWrite() {
         val net = codeOnly(
             repoFile(
                 "jarvis-client/app/src/main/java/com/jarvis/client/net/SetupQuestionnaire.kt",
@@ -359,15 +634,20 @@ class SetupQuestionnaireTest {
                 "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SetupQuestionnairePlate.kt",
             ).readText(),
         )
-        // The route and the body field stay on the PC: this app can only read
-        // and ask for the read-only plan.
+        // The routes and the body fields stay on the PC: this app can only read
+        // and ask for the read-only plan, and only READ where the card is -
+        // recording it is the card's own state (ARCHITECTURE.md section 8).
         for (source in listOf(net, plate)) {
             assertFalse(source.contains("/api/setup/apply"))
             assertFalse(source.contains("confirm"))
             assertFalse(source.contains("setupApply"))
             assertFalse(source.contains("applyBody"))
+            assertFalse(source.contains("/api/setup/progress"))
+            assertFalse(source.contains("setupProgress"))
+            assertFalse(source.contains("progressBody"))
         }
         assertTrue(net.contains(SetupQuestionnaire.PLAN_PATH))
+        assertTrue(net.contains("progressWords"))
         assertTrue(SetupQuestionnaire.PLAIN_ONLY.contains("made on the PC"))
     }
 

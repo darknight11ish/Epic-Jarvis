@@ -105,6 +105,11 @@ except Exception:
 # The owner's manner line (jarvis_manner.py) has its own suite, test_manner.py;
 # this one checks the rest of the request word for word, so it is left out here.
 AG._manner_now = lambda *a, **k: None
+# The Personalize Jarvis line (jarvis_agent.with_setup_state_note, Wave B
+# 2026-11-03) is ONE system line added to every local turn while the quiz is
+# unfinished - correct to send, but not inside a test that pins the rules block
+# and the request around it. test_setup_quiz.py proves that line and its placing.
+AG.setup_state_note = lambda: None
 import _ollama_wire as W  # noqa: E402
 
 # Every turn in this file would otherwise reach the default end-of-turn

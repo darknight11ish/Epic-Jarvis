@@ -3144,7 +3144,15 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // values are typed by the owner on this PC, cross Rust once and go into
       // Windows Credential Manager; the page never holds the token.
       "allow-hud-connect-account-save",
-      "allow-hud-connect-account-cancel"]);
+      "allow-hud-connect-account-cancel",
+      // The "Personalize Jarvis" banner's "Not now" (Wave B, 2026-11-03;
+      // ruling Q4): the page holds no token and its own POSTs are refused, so
+      // this is the one write it can make - `POST /api/setup/progress
+      // {"dismiss": true}`, whose whole effect is one timestamp in
+      // `setup.json`. Navigation class: no setting, no answer, no card. Its
+      // read and its offer are Rust's own (`setup_offer.rs`); the quiz's
+      // questions, plan and apply stay the Settings window's.
+      "allow-hud-setup-dismiss"]);
   // And the preset grant holds exactly the contract read and the BAR'S ONE
   // apply: no model switch, no lane start, no approval command beside them.
   const hudPresets = surfaces.slice(surfaces.indexOf('identifier = "focus-presets"'));

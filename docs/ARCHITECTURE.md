@@ -2827,6 +2827,19 @@ backend routes, in both directions; the rest are listed here only.
   offering a control that would have to guess. No route was added, so
   `tools/check_parity.py` has nothing new to classify.
 
+- **A routine's PARTS are answered on both apps and created only on the PC, and
+  that is one-sided on purpose** (2026-11-03, the owner's ask; JARVIS-API §21.15;
+  the same rule as the entry above, one wave later). A reminder may carry up to
+  twelve parts, each with its own time and its own buttons; the PC draws one row
+  per part under "Just went off" and the phone one notification action set per
+  part, both through the same `POST /api/schedule/act {"do": "answer", "step": k}`,
+  so answering a part is not one-sided at all. What IS one-sided is creating and
+  editing one: a part's destination can be a file on this PC's Obsidian vault or a
+  goal/habit id, and a phone cannot read this PC's folders. The phone therefore
+  answers parts, reads them, and never creates or edits a routine - and the routine
+  itself is still ONE job, so nothing about the phone's list changed shape. No
+  route was added, so `tools/check_parity.py` has nothing new to classify.
+
 - **Approving a card from a notification is the phone's surface, and that is
   one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
   desktop does not post approval cards to Windows notifications, so there is
@@ -3481,10 +3494,21 @@ delete-all** (Ruling 15 keeps "clear named list" in the Brain window). Phase 1
 is view, add, and the EXISTING one-job actions - snooze, add time, pause,
 resume, done, delete. Editing an item's words/time/repeat, moving it between
 lists and reordering are Phase 2: they need backend actions and a rank column,
-so they need a later deploy, and they are not faked in the page. The phone is
+so they need a later deploy, and they are not faked in the page. **Since
+2026-11-03 that Phase 2 sentence is out of date and is corrected here**: the rank
+column and the `edit`/`move`/`reorder` verbs landed on the PC on 2026-10-22, and
+`EDIT_KEYS` now also carries a reminder's `action` and its routine `steps`
+(JARVIS-API §21.14, §21.15), so the page's editor has a backend to call. The parts
+editor itself landed on 2026-11-03: ONE builder inside the page's existing script
+block serves both doors - the Add form for a new routine and a row's own editor
+for an existing one - because a fifth inline `<script>` would break the CSP/hash
+rule, and it is copied to all three copies of `jarvis_hud.html` byte for byte.
+The phone is
 not missing a control: its own app already reads and acts on the same
-schedule. `tools/check_parity.py` has nothing new to classify, because no
-backend route is added and the phone's read of `/api/schedule` is unchanged.
+schedule, and it answers a routine's parts without creating or editing one (see
+"One-sided on purpose" above). `tools/check_parity.py` still has nothing new to
+classify, because no backend route is added and the phone's read of
+`/api/schedule` is unchanged.
 
 **The phone's Home row gained a Reminders button on 2026-11-02, and since that
 afternoon it opens the phone's OWN Reminders screen - the Brain's Coming up
@@ -3581,17 +3605,27 @@ which is said plainly here rather than read as a clean pass it did not earn.
 real frame decoder and text reader on the owner's PC remain NOT-TESTABLE until
 field-tested; that is not a pass.
 
-**The setup questionnaire is shared, and its APPLY step is the desktop's alone,
-one-sided on purpose** (2026-10-20; JARVIS-API §147; `backend/jarvis_setup.py`,
-`setup.patch`). Both apps read the same fourteen questions (`GET /api/setup`)
-and both may ask the read-only plan (`POST /api/setup/plan`, which writes
-nothing and raises no card): the desktop draws it in Settings → First-time
-setup (`setup-questionnaire.js`, `setup-bridge.js`, `setup-settings.js`,
+**"Personalize Jarvis" (the setup questionnaire) is shared, and its APPLY step
+AND its progress write are the desktop's alone, one-sided on purpose**
+(2026-10-20; renamed and widened to seven sections on 2026-11-03; JARVIS-API
+§147; `backend/jarvis_setup.py`, `setup.patch`). Both apps read the same
+twenty-five questions in seven sections (`GET /api/setup`) and both may ask the
+read-only plan (`POST /api/setup/plan`, which writes nothing and raises no
+card): the desktop draws it in Settings → Personalize Jarvis
+(`setup-questionnaire.js`, `setup-bridge.js`, `setup-settings.js`,
 `src-tauri/src/setup_questionnaire.rs`) and the phone reads the same questions
 on its own Settings card (`net/SetupQuestionnaire.kt`,
 `ui/screens/SetupQuestionnairePlate.kt`), with the same prefill, the same
-effects (instant / asks you on a card / blocked) and the same "would not
-change" reasons. **Applying (`POST /api/setup/apply`) is the PC's alone**: it
+sections, the same effects (instant / asks you on a card / blocked) and the
+same "would not change" reasons. **The phone also reads the answered count and
+where the PC's card is; it never records progress, because progress is the
+card's own state** - `POST /api/setup/progress` is the desktop card's own, the
+phone has no path and no body for it (`tools/check_parity.py` keeps it
+`deliberate`), and the backend refuses it from any other device (403, the same
+PC-only rule `/api/setup/apply` uses), so the refusal is the enforcement and not
+the comment. That is safe on the PC alone because the route is cardless *only*
+in that narrow sense: it records the owner's own Option ids, calls no setter and
+can change no setting. **Applying (`POST /api/setup/apply`) is the PC's alone**: it
 calls the EXISTING setters in a fixed safest-first order, ONE at a time, and
 every loosening change raises its OWN existing approval card and waits for it,
 so one apply can take minutes and needs a person at the PC; several of those
@@ -3601,9 +3635,10 @@ tell). A phone button would either fail halfway or sit behind cards it cannot
 answer, so the phone has no apply path at all and says the changes are made on
 the PC. That is not a missing screen - the read-only half is built and tested,
 the write is deliberately not. `tools/check_parity.py` classifies
-`/api/setup/apply` `deliberate`, and nothing here invents a gate action, a tier
-or a latch: every option maps to a setter the matching Settings control already
-calls, and the preset answer is a recommendation that changes no model.
+`/api/setup/apply` and `/api/setup/progress` `deliberate`, and nothing here
+invents a gate action, a tier or a latch: every option maps to a setter the
+matching Settings control already calls, and the preset answer is a
+recommendation that changes no model.
 
 (`backend/jarvis_receipts.py`, `plugins/ready/receipts/`, JARVIS-API §132).
 The store and its two routes are built: `GET /api/receipts` (the recent list)

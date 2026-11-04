@@ -349,6 +349,23 @@ input:focus-visible, textarea:focus-visible {
 
 .toggle input { accent-color: var(--cyan); width: 15px; height: 15px; }
 
+/* The quiz's "show only new / unanswered" filter (Wave B, 2026-11-03). It is
+   NOT a `.toggle`: every `.toggle` on this page is a registry setting row, and
+   `tests/settings-catalogue.mjs` holds the page to that (one row per catalogue
+   row, bracketed by its markers). This is the questionnaire's own view choice,
+   not a setting, so it gets the same shape and none of the row's meaning. */
+.sq-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+  font-size: var(--text-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.sq-filter input { accent-color: var(--cyan); width: 15px; height: 15px; }
+
 .row {
   display: flex;
   align-items: center;
@@ -564,6 +581,16 @@ input:focus-visible, textarea:focus-visible {
   color: var(--accent-text);
   font-weight: 600;
 }
+
+/* The "Personalize Jarvis" place anchor (Wave B, 2026-11-03). The card keeps
+   its long id (`setup-questionnaire`) because the jump list, Settings search
+   and the desktop suite already name it; this empty span carries the place
+   other surfaces ask for by name (`open_fix_place`, SETTINGS_PLACES, the HUD's
+   "Finish now" and the tray's "Setup unfinished" row). `settings.js`'s
+   `applyPlace` takes any element id, scrolls it into view and focuses its
+   first control - so the span is zero-height and sits on the card's first
+   line, which makes both landing points the same card. */
+.place-anchor { display: block; height: 0; }
 
 .choice:focus-visible,
 .btn:focus-visible {

@@ -1208,6 +1208,26 @@
  {
   "type": "function",
   "function": {
+   "name": "setup_quiz",
+   "description": "Explain the owner's Personalize Jarvis quiz and stage a choice in it. Use when: the owner asks what the quiz asks, what a question means, which option does what, where they left off, or says to pick an option. Leave \"question\" out to list them; otherwise it is a question id or the owner's words. \"staged_answer\" is one option id: it stages the choice in the open desktop card only. It never applies anything - the owner presses Apply on the PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "question": {
+      "type": "string",
+      "description": "a question id or the owner's words for one; \"\" (or left out) lists the sections and questions"
+     },
+     "staged_answer": {
+      "type": "string",
+      "description": "one of that question's option ids to stage as the owner's choice; leave it out to only explain"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "refresh_abilities",
    "description": "Re-read what Jarvis can do and has right now, and say in one plain sentence what changed. Use when: the owner asks you to refresh your abilities or your awareness of your own functions, or says something you can do is missing or newly available. Do NOT use it to explain one feature (that is feature_guide). It only re-reads: nothing is restarted, nothing is changed and no approval is needed.",
    "parameters": {
