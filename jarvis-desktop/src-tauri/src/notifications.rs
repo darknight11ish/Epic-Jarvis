@@ -1027,10 +1027,22 @@ mod tests {
         // own doc: `windows_subsystem = "windows"` means no console), so the one
         // place the failure would be readable was the place that did not exist.
         let lib = include_str!("lib.rs");
-        for name in ["fn push_to_hud<", "fn emit_quickbar<", "fn emit_all<"] {
+        // 2026-11-03: `push_to_hud` fans one feed out to every HUD page, so the
+        // log line for a dropped push moved into `push_to_hud_label` - one
+        // window's failure must not be silent, and it must not be a failure of
+        // the whole fan-out either. The rule is unchanged: a dropped event
+        // leaves a trace, and never through `eprintln!` in a release build.
+        for name in [
+            "fn push_to_hud<",
+            "fn push_to_hud_label<",
+            "fn emit_quickbar<",
+            "fn emit_all<",
+        ] {
             let body = function(lib, name);
+            let writes_log = body.contains("logfile::log")
+                || (name == "fn push_to_hud<" && body.contains("push_to_hud_label("));
             assert!(
-                body.contains("logfile::log"),
+                writes_log,
                 "{name} no longer writes the log file, so a dropped event leaves no trace"
             );
             assert!(
