@@ -25662,7 +25662,7 @@ origin and token checks as the old route; the answer is:
                                           "pci_id","monitor"}],
                                "source": "jarvis_hardware.detect()"},
                   "questionnaire": {"focus_choices", "priority_choices", "answers"}},
-     "recommendations": {"by_gpu_count": {"1","2","3": {...}},
+     "recommendations": {"basis", "by_gpu_count": {"1","2","3": {...}},
                          "three_gpu_plan": {"confirmed", "layout", "cards",
                                             "heavy_pooled", "link_note",
                                             "future_not_a_preset"}},
