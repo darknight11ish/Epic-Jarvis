@@ -2822,6 +2822,18 @@ $SHIPPED = @(
     # 2026-10-31): shipped whole, no patch; reads the model/preset and the
     # measured rows, and asks the EXISTING switch/apply cards.
     'jarvis_model_knowledge.py'
+    # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
+    # the owner's decision: "Read + actions"; JARVIS-API section 189). Fixed
+    # api.github.com addresses only, the token in the header and never in a
+    # result; every read and every action asks a person first, and it cannot
+    # merge, push, commit, delete or close. github-tools.patch gives the gate
+    # its four actions. It sits above the ORDER MATTERS note on purpose:
+    # jarvis_phone_apps.py must stay last (and so never scanned), and this one
+    # is read by the jargon ratchet as the new user-facing module it is. Placing
+    # it here also keeps the list clear of the bottom, where other branches
+    # append, so two PRs adding a module do not fight over the same lines. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_github.py'
     # ORDER MATTERS TO ONE READER: backend/_where.py's list is read by
     # tools/check_zero_jargon.py, which only matches a comma-terminated entry,
     # so jarvis_phone_apps.py stays LAST - appending after it would newly
@@ -2856,17 +2868,6 @@ $SHIPPED = @(
     # patch. The same entry, in the same position, is in backend/_where.py's
     # SHIPPED list.
     'jarvis_mood.py'
-    # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
-    # the owner's decision: "Read + actions"; JARVIS-API section 189). Fixed
-    # api.github.com addresses only, the token in the header and never in a
-    # result; every read and every action asks a person first, and it cannot
-    # merge, push, commit, delete or close. github-tools.patch gives the gate
-    # its four actions. It sits BEFORE jarvis_phone_apps.py on purpose: the
-    # ORDER MATTERS note above keeps that one last (and so never scanned), and
-    # this one is read by the jargon ratchet as the new user-facing module it
-    # is. The same entry, in the same position, is in backend/_where.py's
-    # SHIPPED list.
-    'jarvis_github.py'
     'jarvis_phone_apps.py'
 )
 
