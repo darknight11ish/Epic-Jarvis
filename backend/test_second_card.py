@@ -2404,6 +2404,21 @@ def t_the_toml():
     check("and no switch lives in it (the switches are in second-card.json)",
           not re.search(r"^\s*(master|long_context|vision|learning|browser_control|wiki|study|referee)\s*=",
                         toml[toml.index("\n[second_card]\n"):].split("\n[", 2)[1], re.M))
+    # The template's own `third_port` is a DEFAULT, so it may not sit on a port
+    # another lane already owns. It said 11436 - the everyday lane's own port -
+    # from 2026-09-28 until 2026-11-04, while the code had moved to 11438: one
+    # number typed twice, and nothing compared them. Neither number is typed
+    # here; the template's is read out of the file and the code's out of the
+    # module, so the two can only agree by being the same fact.
+    found = re.search(r"^third_port\s*=\s*(\d+)\s*$", toml, re.M)
+    check("the shipped toml's third_port IS the code's DEFAULT_THIRD_PORT "
+          f"({SC.DEFAULT_THIRD_PORT}), not a second copy of the number",
+          found is not None and int(found.group(1)) == SC.DEFAULT_THIRD_PORT,
+          (found.group(1) if found else "no third_port line", SC.DEFAULT_THIRD_PORT))
+    check("... and the template's default is on NO lane's port "
+          f"(LANE_PORTS {SC.LANE_PORTS})",
+          found is not None and int(found.group(1)) not in SC.LANE_PORTS,
+          (found.group(1) if found else "no third_port line", SC.LANE_PORTS))
 
 
 # ------------------------------------------- 8 GB and bigger extra cards --
