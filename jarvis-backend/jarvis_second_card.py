@@ -349,7 +349,7 @@ it, and never a default (docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section
     The third lane is NOT mutually exclusive with the second's: a feature
     on the third card and a feature on the second card are meant to run at
     the SAME TIME, on different physical cards. It therefore needs its own
-    port ([second_card] third_port, default 11436, never MAIN_OLLAMA_PORT
+    port ([second_card] third_port, default 11438, never MAIN_OLLAMA_PORT
     or _port()'s own value) and its own log file
     (second-card-third-ollama.log) - sharing either would either fail to
     bind, or interleave two processes' output into one unreadable file.
@@ -455,11 +455,33 @@ THIRD_ACTION = "second_card_third_assign"
 PIN_ACTION = "chat_card_pin"
 HOST = "127.0.0.1"
 DEFAULT_PORT = 11435
+MAIN_OLLAMA_PORT = 11434
+#: Every OTHER port this repo already puts an Ollama copy on, by the module
+#: that owns it. The third lane's own port must miss all of these: it can run
+#: at the SAME TIME as any of them (module docstring), so sharing one either
+#: fails to bind or silently steals another feature's lane. The numbers are
+#: literals rather than imports because importing jarvis_model_lanes /
+#: jarvis_screen_picture / jarvis_big_coder from here would be a new cycle;
+#: test_second_card.py's t_third_port_is_disjoint_from_every_lane_port reads
+#: each module's OWN constant and fails if these copies ever drift.
+EVERYDAY_LANE_PORT = 11436   # jarvis_model_lanes.lane_by_key("everyday").port
+PICTURE_LANE_PORT = 11437    # jarvis_screen_picture.DEFAULT_PORT
+POOLED_LANE_PORT = 11450     # jarvis_model_lanes.POOLED_PORT == jarvis_big_coder.BIG_PORT
+#: DEFAULT_PORT (11435) is the second card's own lane and MAIN_OLLAMA_PORT
+#: (11434) is Ollama itself; both are in the tuple as well, so the one list
+#: below is the whole truth about which ports are spoken for.
+LANE_PORTS = (MAIN_OLLAMA_PORT, DEFAULT_PORT, EVERYDAY_LANE_PORT,
+              PICTURE_LANE_PORT, POOLED_LANE_PORT)
 #: The third lane's own port (module docstring: it can run at the SAME
 #: TIME as the second card's lane, so it cannot share _port()'s value the
 #: way _COMBINED_LANE safely does).
-DEFAULT_THIRD_PORT = 11436
-MAIN_OLLAMA_PORT = 11434
+#:
+#: WAS 11436 until 2026-11-04, which is the EVERYDAY lane's port (it moved
+#: there on 2026-10-16, PR #440, after this default was chosen on 2026-09-28) -
+#: so turning the third-card feature on would have failed to bind or stolen
+#: the assistant's own port. 11437 is not free either (the screen-picture
+#: lane, jarvis_screen_picture.DEFAULT_PORT), so this is the first free one.
+DEFAULT_THIRD_PORT = 11438
 
 #: Turing. See the module docstring and MODEL-TOPOLOGY.md.
 MIN_COMPUTE = 7.5
@@ -1317,6 +1339,23 @@ def _log_path(role: str = "second") -> Path:
     return _config_dir() / name
 
 
+def _refuse_a_colliding_third_port_default() -> None:
+    """Fail LOUDLY if DEFAULT_THIRD_PORT ever lands on a lane that already
+    exists. Run once at import, on two tuples of literals, so it can only fire
+    if somebody edits the constants - which is exactly the moment a silent
+    step-up would hide the mistake instead of reporting it. RuntimeError, not
+    `assert`: `python -O` strips asserts, and this must not be strippable."""
+    if DEFAULT_THIRD_PORT in LANE_PORTS:
+        raise RuntimeError(
+            f"jarvis_second_card.DEFAULT_THIRD_PORT is {DEFAULT_THIRD_PORT}, "
+            f"which is already a lane port {LANE_PORTS}. The third card's lane "
+            f"runs at the same time as the others, so it cannot share a port: "
+            f"pick the next free number and update this constant.")
+
+
+_refuse_a_colliding_third_port_default()
+
+
 def _port() -> int:
     try:
         p = int(_cfg("port", DEFAULT_PORT))
@@ -1326,18 +1365,22 @@ def _port() -> int:
 
 
 def _third_port() -> int:
-    """The third lane's own port - never MAIN_OLLAMA_PORT or _port()'s own
-    value (module docstring: the two lanes can run at once, so they cannot
-    share a port the way _LANE and _COMBINED_LANE safely do)."""
+    """The third lane's own port - never MAIN_OLLAMA_PORT, never _port()'s own
+    value, and never any other lane port this repo already uses (module
+    docstring: the lanes can run at once, so they cannot share a port the way
+    _LANE and _COMBINED_LANE safely do)."""
     try:
         p = int(_cfg("third_port", DEFAULT_THIRD_PORT))
     except (TypeError, ValueError):
         return DEFAULT_THIRD_PORT
-    taken = (MAIN_OLLAMA_PORT, _port())
+    taken = LANE_PORTS + (_port(),)
     if not (1024 <= p <= 65535) or p in taken:
         p = DEFAULT_THIRD_PORT
-    # The default itself can be taken (a second-card `port` set to 11436):
-    # step up to the next port that neither of the other two copies uses.
+    # The default itself can be taken (a second-card `port` set to it, or
+    # another lane moved onto it in a later PR): step up to the next port that
+    # nothing in LANE_PORTS and no configured second-card `port` uses. A
+    # DEFAULT_THIRD_PORT that collides never reaches here - the import-time
+    # check above raises instead.
     while p in taken:
         p += 1
     return p

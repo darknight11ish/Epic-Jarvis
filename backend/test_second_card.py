@@ -463,11 +463,95 @@ def t_third_port_never_shares_the_second_lanes_port():
                        ({"port": SC.DEFAULT_THIRD_PORT}, "second port = the third's default"),
                        ({"third_port": SC.DEFAULT_PORT}, "third port = the second's default"),
                        ({"third_port": SC.MAIN_OLLAMA_PORT}, "third port = the main Ollama's"),
-                       ({"port": SC.DEFAULT_THIRD_PORT, "third_port": 11436}, "both set to 11436")):
+                       ({"port": SC.EVERYDAY_LANE_PORT, "third_port": SC.EVERYDAY_LANE_PORT},
+                        "both set to the everyday lane's port")):
         with with_cfg(cfg):
             t, sec = SC._third_port(), SC._port()
             check(f"{label}: the third lane's port is its own",
                   t not in (sec, SC.MAIN_OLLAMA_PORT) and 1024 <= t <= 65535, (t, sec))
+
+
+def t_third_port_is_disjoint_from_every_lane_port():
+    """Defect A, measured 2026-11-04 and fixed the same day.
+
+    DEFAULT_THIRD_PORT was 11436 from 2026-09-28 (5cc47a9c4). On 2026-10-16 the
+    owner's EVERYDAY lane moved onto 11436 (2f85d772d, PR #440) - so the third
+    card's lane and the assistant's everyday lane both claimed one port, and
+    _third_port()'s guard only ever checked 11434 and 11435, so it could not
+    see it. Turning the third-card feature on would either fail to bind or
+    steal the everyday port.
+
+    This test is deliberately broader than the one above it: it reads each
+    lane module's OWN constant rather than SC's copies, so it still catches the
+    collision if a lane moves again, and it asserts the SHIPPED default (not
+    just whatever _third_port() computes from the current config) - the check
+    that was missing. It also proves the loud guard exists and fires.
+
+    Fails on the base commit (11436 IS the everyday lane's port) and passes
+    after the fix (11438 is on no lane in this repo).
+    """
+    import jarvis_model_lanes as L
+    import jarvis_screen_picture as SP
+    import jarvis_big_coder as BC
+
+    # Every port an Ollama copy in this repo can listen on, read from the
+    # module that owns it - never from a copy pasted into this test.
+    lanes = {
+        "Ollama itself (jarvis_second_card.MAIN_OLLAMA_PORT)": SC.MAIN_OLLAMA_PORT,
+        "the second card's lane (jarvis_second_card.DEFAULT_PORT)": SC.DEFAULT_PORT,
+        "the everyday lane (jarvis_model_lanes)": L.lane_by_key("everyday").port,
+        "the coding lane (jarvis_model_lanes)": L.lane_by_key("coding").port,
+        "the pooled lane (jarvis_model_lanes.POOLED_PORT)": L.POOLED_PORT,
+        "the pooled lane (jarvis_big_coder.BIG_PORT)": BC.BIG_PORT,
+        "the screen-picture lane (jarvis_screen_picture.DEFAULT_PORT)": SP.DEFAULT_PORT,
+    }
+    for lane in BC.LANES:
+        port = lane.get("port") if isinstance(lane, dict) else getattr(lane, "port", None)
+        if port:
+            lanes[f"jarvis_big_coder lane {lane}"] = int(port)
+
+    check("DEFECT A: the shipped third-lane default is on NO other lane's port",
+          SC.DEFAULT_THIRD_PORT not in lanes.values(),
+          (SC.DEFAULT_THIRD_PORT,
+           {n: p for n, p in lanes.items() if p == SC.DEFAULT_THIRD_PORT}))
+    check("... and SC.LANE_PORTS is that same table, so the guard cannot drift from it",
+          set(SC.LANE_PORTS) == set(lanes.values()),
+          (sorted(SC.LANE_PORTS), sorted(set(lanes.values()))))
+
+    # _third_port() must miss every lane under every plausible configuration,
+    # not only under the empty one the test above tries.
+    def with_cfg(cfg):
+        return mock.patch.object(SC, "_cfg", lambda k, d=None: cfg.get(k, d))
+    for cfg, label in (({}, "no config"),
+                       ({"port": SC.DEFAULT_THIRD_PORT}, "second port = the third's default"),
+                       ({"third_port": 11436}, "third port = the everyday lane's"),
+                       ({"third_port": 11437}, "third port = the screen-picture lane's"),
+                       ({"third_port": 11450}, "third port = the pooled lane's"),
+                       ({"third_port": 11434}, "third port = Ollama's own")):
+        with with_cfg(cfg):
+            t, sec = SC._third_port(), SC._port()
+        clash = [n for n, p in lanes.items() if p == t]
+        check(f"{label}: _third_port() = {t} is on no other lane's port",
+              t not in lanes.values(), (t, sec, clash))
+        check(f"{label}: ... and it is still never the second card's own port",
+              t != sec, (t, sec))
+
+    # THE LOUD GUARD: a default that collides must raise at import, not be
+    # silently stepped over. Simulated by calling the guard with a bad value.
+    real = SC.DEFAULT_THIRD_PORT
+    try:
+        SC.DEFAULT_THIRD_PORT = 11436
+        raised = None
+        try:
+            SC._refuse_a_colliding_third_port_default()
+        except RuntimeError as exc:
+            raised = str(exc)
+        check("a future default that collides raises RuntimeError, in words",
+              raised is not None and "11436" in raised and "already a lane port" in raised,
+              raised)
+    finally:
+        SC.DEFAULT_THIRD_PORT = real
+    SC._refuse_a_colliding_third_port_default()   # the shipped one is fine
 
 
 def t_third_card_no_default_winner():
@@ -539,7 +623,7 @@ def t_third_card_approval_card():
               "says 127.0.0.1 only, and that nothing leaves",
               "Longer conversations" in text and "2080 Ti" in text and "2060" in text
               and "instead of" in text and "AT THE SAME TIME" in text
-              and "127.0.0.1:11436" in text and "Nothing leaves this PC" in text
+              and f"127.0.0.1:{SC.DEFAULT_THIRD_PORT}" in text and "Nothing leaves this PC" in text
               and "If you say no" in text and detail["leaves_this_pc"] is False, text)
         check("and the assignment is set", SC._read_switches()["third_feature"] == "long_context")
         code, out = SC.request_change("third", assign="long_context")
@@ -593,10 +677,12 @@ def t_third_card_lane_independent():
         check("two SEPARATE processes were started, on two different ports",
               len(w.started) == 2)
         ports = sorted(p.kwargs["env"]["OLLAMA_HOST"] for p in w.started)
-        check("11435 (the second lane) and 11436 (the third lane), never the same port",
-              ports == ["127.0.0.1:11435", "127.0.0.1:11436"], ports)
+        check(f"11435 (the second lane) and {SC.DEFAULT_THIRD_PORT} (the third lane), "
+              f"never the same port",
+              ports == ["127.0.0.1:11435", f"127.0.0.1:{SC.DEFAULT_THIRD_PORT}"], ports)
         third_env = next(p.kwargs["env"] for p in w.started
-                         if p.kwargs["env"]["OLLAMA_HOST"] == "127.0.0.1:11436")
+                         if p.kwargs["env"]["OLLAMA_HOST"]
+                         == f"127.0.0.1:{SC.DEFAULT_THIRD_PORT}")
         check("the third lane is pinned to the THIRD card's id, not the second's",
               third_env["CUDA_VISIBLE_DEVICES"] == U_2080TI_2
               and G.U_2060 not in third_env["CUDA_VISIBLE_DEVICES"])
@@ -605,7 +691,7 @@ def t_third_card_lane_independent():
         check("long_context still answers from the second card's own lane",
               lc is not None and lc.url == "http://127.0.0.1:11435")
         check("vision answers from the THIRD card's lane, at the same time",
-              vi is not None and vi.url == "http://127.0.0.1:11436"
+              vi is not None and vi.url == f"http://127.0.0.1:{SC.DEFAULT_THIRD_PORT}"
               and "third graphics card" in vi.why, vi)
         # Turning vision off stops ONLY the third lane; long_context (still on
         # the second) keeps running - the two lanes are independent.
@@ -630,7 +716,8 @@ def t_third_card_lane_independent():
         check("only ONE process was started (the third lane)", len(w.started) == 1)
         check("the third lane is running, and lane_for('long_context') uses it",
               st["third"]["lane"]["state"] == "running"
-              and SC.lane_for("long_context").url == "http://127.0.0.1:11436")
+              and SC.lane_for("long_context").url
+              == f"http://127.0.0.1:{SC.DEFAULT_THIRD_PORT}")
 
 
 def t_switches():
