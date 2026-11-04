@@ -879,7 +879,10 @@ await check("the shell holds exactly those two commands, and its own read", () =
 });
 
 await check("the read is on the proxy's fixed list, with one bounded query", () => {
-  assert.match(PROXY, /pub const HUD_GET_PATHS: \[&str; 11\]/);
+  // `12` since Wave B (2026-11-03) added `/api/setup` for the "Personalize
+  // Jarvis" banner. The count is part of the line on purpose: a wrong one is a
+  // compile error, not a route that quietly stops being read.
+  assert.match(PROXY, /pub const HUD_GET_PATHS: \[&str; 12\]/);
   assert.match(PROXY, /"\/api\/calendar",/);
   assert.match(PROXY, /const CALENDAR_PATH: &str = "\/api\/calendar";/);
   assert.match(PROXY, /let value = query\?\.strip_prefix\("days="\)\?;/);

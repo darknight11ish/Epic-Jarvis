@@ -135,9 +135,13 @@ check("the HUD page has its own fallback read, not only the event", () => {
   // (stream.rs) were both set to, so a card is never staler than one beat.
   const hud = code(page("jarvis_hud.html"));
   assert.match(hud, /es\.addEventListener\("approval"/, "the page must follow the approval event");
+  // The beat itself is the pinned part; what rides it may grow. Wave B added
+  // the "Personalize Jarvis" banner's read to the same beat (2026-11-03), so
+  // the check is the interval and the calls it must still make, not the exact
+  // argument list.
   assert.match(
     hud,
-    /setInterval\(\(\) => \{ apprPoll\(\); initPoll\(\); loadPresets\(\); \}, 30000\)/,
+    /setInterval\(\(\) => \{[^}]*apprPoll\(\);[^}]*initPoll\(\);[^}]*loadPresets\(\);[^}]*\}, 30000\)/,
     "the page's own safety net is 30 seconds",
   );
 });

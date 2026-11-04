@@ -119,7 +119,7 @@
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Start here</span>
             <a href="#first-run">Set up Jarvis</a>
-            <a href="#setup-questionnaire">First-time setup</a>
+            <a href="#setup-questionnaire">Personalize Jarvis</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Your devices</span>
@@ -332,12 +332,45 @@
            src-tauri/src/setup_questionnaire.rs, setup-questionnaire.js). It is
            written by hand rather than generated: it is not a toggle row.
         -->
+      <!-- ── "Personalize Jarvis" (Wave B, 2026-11-03) ────────────────────────
+           The setup questionnaire, now a 25-question quiz in seven sections
+           (Gemini's ruling Q1: sections + a one-at-a-time stepper INSIDE this
+           card, not a second window; Q3: a "show only new / unanswered" filter
+           and the previous answers pre-filled). The card keeps its own long id
+           (`setup-questionnaire`) because the jump list, Settings search and
+           the desktop suite already name it; the place other surfaces ask for
+           (`open_fix_place` / `SETTINGS_PLACES` / the HUD's "Finish now" and the
+           tray's "Setup unfinished" row) is the `personalize-jarvis` anchor on
+           the first line of the card, which `settings.js`'s `applyPlace` finds
+           by id. Both names land on this one card.
+
+           A GUIDE, NOT A SECOND SETTINGS SYSTEM. Every question, option,
+           section, version and sentence is the PC's own data
+           (`backend/jarvis_setup.py`, JARVIS-API section 147); every option maps
+           to a setter the matching card below already calls, with its own tier
+           check and its own approval card. This page invents no action,
+           approves nothing and applies nothing by itself: a plan is READ-ONLY
+           (POST /api/setup/plan writes nothing and raises no card), and the one
+           Apply is a two-press action whose second press is the only thing that
+           sends `confirm: true` (setup-settings.js,
+           src-tauri/src/setup_questionnaire.rs, setup-questionnaire.js).
+
+           "Not now" and "Keep current settings" write NO answer: they post one
+           progress note (POST /api/setup/progress, cardless and desktop-only,
+           through the same Rust command) - the first records a timestamp and
+           hides the offer for a day, the second records that the owner is happy
+           as things are so Jarvis stops offering at all
+           (`src-tauri/src/setup_offer.rs`). Neither calls a setter.
+
+           It is written by hand rather than generated: it is not a toggle row.
+        -->
       <section class="card" id="setup-questionnaire">
-        <h2 id="sq-title">First-time setup</h2>
+        <span id="personalize-jarvis" class="place-anchor"></span>
+        <h2 id="sq-title">Personalize Jarvis</h2>
         <p class="note" id="sq-kicker">
-          Fourteen questions about how you want Jarvis to behave. Do "Set up Jarvis"
-          above first if you have not - it is the five choices that matter on day
-          one, and this page assumes they are made. Every answer
+          "Set up Jarvis" above is the five choices that matter on day one; this
+          is the longer pass through settings that already exist, in short
+          sections. Step through one at a time, or show them all. Every answer
           changes settings that already exist; nothing here is a new kind of
           rule.
         </p>
@@ -348,8 +381,30 @@
           PC, one at a time. This page never applies anything by itself.
         </p>
         <div id="sq-body" hidden>
+          <p class="note" id="sq-done" hidden></p>
+          <nav id="sq-sections" class="choices" role="tablist" aria-label="Quiz sections" hidden></nav>
+          <div class="row" id="sq-mode" role="group" aria-label="How to show the questions">
+            <button class="btn small" id="sq-step" type="button" aria-pressed="true">Step through one by one</button>
+            <button class="btn ghost small" id="sq-showall" type="button" aria-pressed="false">Show all</button>
+          </div>
+          <p class="note" id="sq-mode-hint">
+            One question at a time, in the PC's own order. Skip leaves an answer
+            as it was and moves on - nothing is written until Apply.
+          </p>
+          <p class="sc-line" id="sq-progress" role="status" aria-live="polite"></p>
+          <label class="sq-filter" id="sq-filter-row">
+            <input id="sq-filter" type="checkbox" />
+            <span id="sq-filter-words">Show only new / unanswered</span>
+          </label>
+          <p class="note" id="sq-filter-empty" hidden></p>
           <p class="state" id="sq-plan-status" role="status"></p>
           <div id="sq-questions"></div>
+          <div class="row" id="sq-stepnav">
+            <button class="btn ghost small" id="sq-prev" type="button">Back</button>
+            <button class="btn ghost small" id="sq-skip" type="button">Skip this one</button>
+            <button class="btn small" id="sq-next" type="button">Next</button>
+          </div>
+          <p class="note" id="sq-step-where"></p>
           <div id="sq-plan"></div>
           <p class="sc-line" id="sq-counts"></p>
           <div id="sq-last" hidden></div>
@@ -358,6 +413,7 @@
           <p class="note" id="sq-card-wait"></p>
           <div class="row">
             <button class="btn" id="sq-apply" type="button" disabled>Apply these changes</button>
+            <button class="btn ghost" id="sq-again" type="button">Take it again</button>
           </div>
           <p class="note" id="sq-apply-why" hidden></p>
           <div id="sq-confirm" hidden>
@@ -368,6 +424,11 @@
             </div>
           </div>
           <div id="sq-result" hidden></div>
+          <div class="row" id="sq-offer-btns">
+            <button class="btn ghost" id="sq-not-now" type="button">Not now</button>
+            <button class="btn ghost" id="sq-keep" type="button">Keep current settings</button>
+          </div>
+          <p class="note" id="sq-offer-why"></p>
         </div>
         <p class="state" id="sq-reading" role="status">Reading this PC…</p>
         <span class="status" id="sq-status" role="status"></span>
@@ -1440,6 +1501,21 @@
           </span>
         </label>
 
+        <!-- Wave B (2026-11-03): the "Personalize Jarvis" offer has its own
+             switch - `notif_setup` -> `setup`, Ruling Q4's "give it a switch in
+             Notification Preferences" - and its row is DELIBERATELY NOT HAND-
+             WRITTEN HERE. Every toggle row between the `settings-toggles`
+             markers is generated from `backend/jarvis_settings_registry.py` by
+             `tools/gen_settings_cases.py`, and `tests/settings-catalogue.mjs`
+             holds this page to exactly that table. The registry row is the
+             backend's Wave B change, so it arrives by regenerating:
+                 py -3 tools/gen_settings_cases.py
+             and then the `setup` entry joins `notifications-prefs.js`'s
+             NOTIF_ROWS and `notifications-settings.js`'s SWITCHES (both say so
+             at their own NOTIF_ROWS / SWITCHES). The Rust side already has the
+             switch: `notifications.rs` `NotificationPrefs.setup`,
+             `Kind::Setup`, quiet-hours-gated, ON when nothing is stored.
+        -->
         <h3 class="subhead">Quiet hours</h3>
         <p class="note">
           Silences non-urgent notifications during these hours. Quiet hours never silence urgent alerts or decisions waiting for you.

@@ -248,6 +248,14 @@ permissions = [
   # is kept in this window and the phone has no card at all.
   "allow-hud-connect-account-save",
   "allow-hud-connect-account-cancel",
+  # The "Personalize Jarvis" banner's "Not now" (Wave B, 2026-11-03; ruling
+  # Q4): the page holds no token and its own POSTs are refused, so this is the
+  # one write it can make - `POST /api/setup/progress {"dismiss": true}`,
+  # whose whole effect is one timestamp in `setup.json`. It is navigation
+  # class: no setting, no answer, no card, and the quiet-hours/notification
+  # decision is Rust's own (`setup_offer.rs`). The quiz's questions, its plan
+  # and its apply stay the Settings window's, through `setup-questionnaire`.
+  "allow-hud-setup-dismiss",
 ]
 
 # The daily brief and the interruption budget. Granted to the quickbar alone,

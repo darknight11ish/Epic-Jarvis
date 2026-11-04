@@ -616,8 +616,14 @@ pub async fn set_thinking(
     Err(backend_refusal(status, &text))
 }
 
-/// The place an error's fix button opens: "settings", "brain", "history" or
-/// "tutorials". Nothing else is accepted.
+/// The place an error's fix button opens: "settings", "brain", "history",
+/// "tutorials" or "personalize-jarvis". Nothing else is accepted.
+///
+/// `"personalize-jarvis"` (2026-11-03, Wave B) is the HUD's "Finish now" door:
+/// the HUD holds no token and cannot post, so the one thing it may ask for is
+/// this navigation - Settings, opened at the "Personalize Jarvis" card. It
+/// answers no question and applies nothing; the card's own Apply is still the
+/// only write.
 ///
 /// `async`, not a plain command: both windows are built the first time
 /// they are shown, and a plain command runs on the WebView2 callback
@@ -635,6 +641,10 @@ pub async fn open_fix_place(app: AppHandle, place: String) -> Result<(), String>
         // Brain, on "Tutorials and the FAQ" - the one Help place, and the same
         // destination the palette's Help row opens. Navigation only.
         "tutorials" => crate::windows::show_brain_at(&app, "tutorials"),
+        // The HUD's "Finish now" (2026-11-03): Settings, at the Personalize
+        // Jarvis card. `show_settings_at` still holds the closed place list and
+        // the App lock, exactly as for the tray's own row.
+        "personalize-jarvis" => crate::windows::show_settings_at(&app, "personalize-jarvis"),
         _ => Err("That is not a place this button opens.".to_string()),
     }
 }
@@ -924,5 +934,45 @@ mod tests {
             MANNER_MISSING.to_string()
         );
         assert!(personality_switch_answer(500, "{\"error\":\"nope\"}").is_err());
+    }
+
+    /// The fix button's closed list, read from this file's own source: a place
+    /// is granted by being an arm in `open_fix_place`, and nothing else in the
+    /// app can open a window at a name that is not here.
+    ///
+    /// A source check rather than a call, because every arm builds a window and
+    /// needs a running `AppHandle`. It is the same shape the module's own
+    /// docstring describes, and it is what stops the HUD's "Finish now" from
+    /// opening a place nobody answers.
+    #[test]
+    fn the_fix_button_opens_only_the_places_it_names() {
+        let src = include_str!("plain_errors.rs");
+        let at = src
+            .find("pub async fn open_fix_place(")
+            .expect("open_fix_place is gone");
+        let rest = &src[at..];
+        let end = rest.find("\n}\n").map(|i| i + 3).unwrap_or(rest.len());
+        let body = &rest[..end];
+        for place in [
+            "settings",
+            "brain",
+            "history",
+            "tutorials",
+            "personalize-jarvis",
+        ] {
+            assert!(
+                body.contains(&format!("\"{place}\" =>")),
+                "`{place}` is no longer a place the fix button opens"
+            );
+        }
+        // The HUD's one navigation lands on the quiz's own Settings place, not
+        // on plain Settings: a banner that opens the top of a 3,000-line page
+        // is the bug the Updates place was added for in 2026-10-27.
+        assert!(
+            body.contains("show_settings_at(&app, \"personalize-jarvis\")"),
+            "the quiz place does not open Settings at the quiz card"
+        );
+        // Nothing opens a window from free text: the catch-all refuses.
+        assert!(body.contains("_ => Err(\"That is not a place this button opens.\""));
     }
 }

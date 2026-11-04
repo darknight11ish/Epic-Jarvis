@@ -161,6 +161,11 @@ const ID_FLOATING_SMALLER: &str = "floating-smaller";
 const ID_RECONNECT: &str = "reconnect";
 const ID_SETTINGS: &str = "settings";
 const ID_UPDATE: &str = "update";
+/// "Setup unfinished - 9 of 25" (Wave B, 2026-11-03): the "Personalize Jarvis"
+/// quiz is not finished. Like the update row it is ABSENT when there is
+/// nothing to do, and it is driven by `setup_offer`'s state - never fetched
+/// from here.
+const ID_SETUP: &str = "setup-unfinished";
 const ID_STATUS_CHECK: &str = "status-check";
 const ID_QUIT: &str = "quit";
 
@@ -191,6 +196,9 @@ struct Rows {
     backend: MenuItem<tauri::Wry>,
     /// Parented only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
+    /// "Setup unfinished - 9 of 25" (Wave B): parented only while the quiz is
+    /// unfinished. Same change-of-parent rule as `update`.
+    setup: MenuItem<tauri::Wry>,
     /// The "More…" submenu `update` is added to and removed from - change of
     /// parent is how the row becomes absent (Tauri 2.12 has no `set_visible`).
     more: Submenu<tauri::Wry>,
@@ -459,6 +467,26 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         true,
         None::<&str>,
     )?;
+    // The "Personalize Jarvis" row (Wave B, 2026-11-03). Built like any other
+    // row and parented into "More…" only while the quiz is unfinished - at a
+    // fresh launch the state has not been read yet, so it starts absent and
+    // `on_setup_state` puts it in when a read says so. The same handle is
+    // re-labelled in place as the count moves.
+    let setup_state = app
+        .state::<crate::setup_offer::SetupOfferState>()
+        .snapshot();
+    let setup_label = setup_state.tray_label();
+    let setup = MenuItem::with_id(
+        app,
+        ID_SETUP,
+        // Never shown when the quiz is finished; this is only the handle's
+        // starting text.
+        setup_label
+            .clone()
+            .unwrap_or_else(|| "Setup unfinished".to_string()),
+        true,
+        None::<&str>,
+    )?;
     let settings = MenuItem::with_id(app, ID_SETTINGS, "Settings and help…", true, None::<&str>)?;
     let status_check = MenuItem::with_id(
         app,
@@ -500,6 +528,13 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         &reconnect,
         &status_check,
     ];
+    // The quiz row sits after the status check and before the update row: both
+    // are "state moved, so the row appeared" rows that `on_*` appends when it
+    // has something to say, and a last row needs no index that a later addition
+    // would silently shift.
+    if setup_label.is_some() {
+        more_items.push(&setup);
+    }
     if update_label.is_some() {
         more_items.push(&update);
     }
@@ -561,6 +596,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             watch,
             backend,
             update,
+            setup,
             more,
             stop_everything,
             toggle_spotlight,
@@ -1542,6 +1578,55 @@ pub fn update_started(app: &AppHandle, version: &str) {
     }
 }
 
+/// Adds, re-labels or removes the "Setup unfinished" row (Wave B, 2026-11-03).
+///
+/// Called by `setup_offer::refresh_setup_state` when a read of the PC's own
+/// questionnaire state really moved, and by nothing else. The rule is
+/// [`crate::setup_offer::SetupState::tray_label`]: no unfinished quiz means the
+/// row is not in the menu at all - a greyed row saying "Setup unfinished" is a
+/// nag with no door. The row lives in "More…" (`append`, because it is that
+/// submenu's last-but-one row) and is removed from it rather than disabled.
+///
+/// Pressing it opens Settings at the quiz card (`handle_menu_event`); this
+/// function only decides whether the row exists and what it says. It changes no
+/// setting and answers no question.
+pub fn on_setup_state(app: &AppHandle) {
+    let label = app
+        .state::<crate::setup_offer::SetupOfferState>()
+        .snapshot()
+        .tray_label();
+    if let Some(rows) = app
+        .state::<TrayHandles>()
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+    {
+        match label {
+            Some(label) => {
+                if let Err(err) = rows.setup.set_text(label) {
+                    eprintln!("[jarvis] tray: could not re-label the setup row: {err}");
+                }
+                // The count moves as questions are answered, so the row is
+                // always enabled while it exists - there is always a door.
+                let _ = rows.setup.set_enabled(true);
+                if rows.more.get(ID_SETUP).is_none() {
+                    if let Err(err) = rows.more.append(&rows.setup) {
+                        eprintln!("[jarvis] tray: could not show the setup row: {err}");
+                    }
+                }
+            }
+            None => {
+                if rows.more.get(ID_SETUP).is_some() {
+                    if let Err(err) = rows.more.remove(&rows.setup) {
+                        eprintln!("[jarvis] tray: could not remove the setup row: {err}");
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Called by the stream whenever the link state moves. Re-labels the rows and
 /// repaints the icon.
 pub fn on_link_changed(app: &AppHandle, link: &LinkState) {
@@ -1823,6 +1908,22 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         }
 
         ID_RECONNECT => crate::stream::kick(app),
+
+        // "Setup unfinished - 9 of 25" (Wave B, 2026-11-03): Settings, at the
+        // "Personalize Jarvis" card. Navigation only - the card's own Apply is
+        // still the one write, and this row answers no question.
+        ID_SETUP => {
+            if let Err(err) = windows::show_settings_at(app, "personalize-jarvis") {
+                eprintln!("[jarvis] tray: the Personalize Jarvis card could not open: {err}");
+                commands::notify_failed(
+                    app,
+                    crate::setup_offer::TITLE,
+                    "Settings could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
+            }
+        }
 
         ID_STATUS_CHECK => run_status_check(app),
 
@@ -2606,5 +2707,39 @@ mod tests {
         // printing; the row still belongs in the menu, in plain words.
         assert_eq!(update_row(Some("")).as_deref(), Some("Update Jarvis"));
         assert_eq!(update_row(Some("   ")).as_deref(), Some("Update Jarvis"));
+    }
+
+    /// Wave B (2026-11-03): the same absence rule for "Setup unfinished - 9 of
+    /// 25". The state is `setup_offer`'s own, and this test is what holds the
+    /// tray to it: no unfinished quiz, no row; and the count the owner sees is
+    /// the count the state carries, not a number the tray typed.
+    #[test]
+    fn the_setup_row_is_absent_when_the_quiz_is_done_or_unread() {
+        use crate::setup_offer::SetupState;
+
+        // Not read yet: no row. An absent answer is not "unfinished".
+        assert_eq!(SetupState::default().tray_label(), None);
+
+        // Finished: no row.
+        let done = SetupState {
+            known: true,
+            version: 2,
+            completed_version: 2,
+            answered: 25,
+            total: 25,
+            dismissed_at: None,
+        };
+        assert_eq!(done.tray_label(), None);
+
+        // Unfinished: the row, with the state's own two numbers.
+        let behind = SetupState {
+            completed_version: 1,
+            answered: 9,
+            ..done
+        };
+        assert_eq!(
+            behind.tray_label().as_deref(),
+            Some("Setup unfinished \u{2014} 9 of 25")
+        );
     }
 }

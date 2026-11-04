@@ -1,17 +1,26 @@
 //! The setup questionnaire, for Settings (JARVIS-API section 147; the PC's
 //! module is `backend/jarvis_setup.py`, and `backend/setup.patch` installs its
-//! three routes: `GET /api/setup`, `POST /api/setup/plan`,
-//! `POST /api/setup/apply`).
+//! routes: `GET /api/setup`, `POST /api/setup/plan`,
+//! `POST /api/setup/progress`, `POST /api/setup/apply`).
 //!
-//! ONE command, `setup_questionnaire`, with three verbs and no fourth:
+//! ONE command, `setup_questionnaire`, with four verbs and no fifth:
 //!
-//! * `"read"` - `GET /api/setup`: the fourteen questions, the current values,
-//!   the last accepted answers and outcomes, and how long a card may wait. A
-//!   read; no stale-link hold.
+//! * `"read"` - `GET /api/setup`: the questions (with their section and
+//!   version), the current values, the last accepted answers and outcomes, how
+//!   far the quiz has got, and how long a card may wait. A read; no stale-link
+//!   hold.
 //! * `"plan"` - `POST /api/setup/plan {"answers": {...}}`: READ-ONLY on the
 //!   PC. The module writes nothing and raises no card for it, so this command
 //!   sends only the answers object - never `confirm`. A stale link does not
 //!   hold it, because it changes nothing.
+//! * `"progress"` - `POST /api/setup/progress`: where the owner is in the card
+//!   (`{"section", "question", "draft_answers"}`), a dismissal
+//!   (`{"dismiss": true}`), or "Keep current settings" (`{"keep_current":
+//!   true}`). Cardless and gateless on the PC: it records the owner's own
+//!   Option ids and timestamps, calls no setter and cannot change a setting.
+//!   It is NOT held on a stale link either - a progress note is not a change,
+//!   and a stale stream must not lock the UI out of remembering where the
+//!   owner was.
 //! * `"apply"` - `POST /api/setup/apply {"answers": {...}, "confirm": true}`:
 //!   the one write. It refuses unless the `confirm` argument is exactly
 //!   `true`, so an accidental or invented call cannot change anything; the
@@ -44,13 +53,19 @@ use crate::commands::{
     backend_refusal, backend_unreachable, jarvis_base, jarvis_client, jarvis_headers,
 };
 
-/// The three routes the PC's module installs.
+/// The four routes the PC's module installs.
 pub(crate) const PATH: &str = "/api/setup";
 pub(crate) const PLAN_PATH: &str = "/api/setup/plan";
+pub(crate) const PROGRESS_PATH: &str = "/api/setup/progress";
 pub(crate) const APPLY_PATH: &str = "/api/setup/apply";
 
 /// The verbs this command takes. Anything else is refused before the network.
-pub(crate) const ACTIONS: &[&str] = &["read", "plan", "apply"];
+pub(crate) const ACTIONS: &[&str] = &["read", "plan", "progress", "apply"];
+
+/// The longest section id or question id this app will send. Both are Option
+/// ids from the PC's own question set - a few dozen characters at most - so a
+/// page cannot use this route to push an unbounded string into `setup.json`.
+const MAX_ID_CHARS: usize = 120;
 
 /// What an older backend is told to do about it.
 const UPDATE_WORDS: &str = "This PC's Jarvis does not have the setup questionnaire yet. \
@@ -61,6 +76,10 @@ const UPDATE_WORDS: &str = "This PC's Jarvis does not have the setup questionnai
 /// twice the read's time.
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
 const PLAN_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Recording progress writes one small document. It is a local file write on
+/// the PC, so it needs no card time - only enough for a busy machine.
+const PROGRESS_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// The apply works through changes one at a time, waiting on each existing
 /// approval card. The gate may wait 900 s on one card alone, and a full pass
@@ -137,6 +156,110 @@ pub(crate) fn apply_body(
     Ok(serde_json::json!({ "answers": answers, "confirm": true }))
 }
 
+/// A question id or a section id as this route accepts one.
+///
+/// Both are Option ids from the PC's own question set - a few dozen characters
+/// of ASCII at most - so anything longer, or with punctuation a real id does
+/// not use, is refused before the network. This route writes into the PC's
+/// `setup.json`, and a page must not be able to grow it with free text.
+fn progress_id(value: Option<&str>, missing: &str) -> Result<String, String> {
+    let text = value.unwrap_or("").trim().to_string();
+    if text.is_empty() || text.chars().count() > MAX_ID_CHARS {
+        return Err(missing.to_string());
+    }
+    if !text
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    {
+        return Err("That is not a question id this card can record.".to_string());
+    }
+    Ok(text)
+}
+
+/// `POST /api/setup/progress`'s body: where the owner is in the card, a
+/// dismissal, or "Keep current settings".
+///
+/// Three shapes, and only these three (the PC's route refuses anything else):
+///
+/// * `{"dismiss": true}` - "Not now" on the card. One timestamp.
+/// * `{"keep_current": true}` - "Keep current settings": the owner is happy as
+///   they are. It writes no answer, calls no setter and raises no card; the PC
+///   moves `completed_version` and records the dismissal in ONE post, so a
+///   half-finished pair cannot leave them marked complete but still nagged
+///   (build spec section 11.5).
+/// * `{"section"?, "question", "draft_answers"?}` - the stepper's own position
+///   and the choices staged so far. A draft is NEVER applied: `apply` is the
+///   only verb that changes anything, and it is the card's own button.
+///
+/// The page sends all of this as ONE `progress` object (one argument rather
+/// than five, so the command stays readable), and an unknown key is refused
+/// here rather than passed on: the body this route builds is exactly the three
+/// shapes above and nothing else.
+pub(crate) fn progress_body(
+    progress: Option<&serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    const FIELDS: &[&str] = &[
+        "section",
+        "question",
+        "draft_answers",
+        "dismiss",
+        "keep_current",
+    ];
+    let body = progress
+        .map(|value| {
+            value.as_object().cloned().ok_or_else(|| {
+                "The progress note must be one JSON object, like {\"question\": \"talk_style\"}."
+                    .to_string()
+            })
+        })
+        .transpose()?
+        .unwrap_or_default();
+    for key in body.keys() {
+        if !FIELDS.contains(&key.as_str()) {
+            return Err(format!(
+                "The setup questionnaire cannot record {key:?} as progress."
+            ));
+        }
+    }
+    if body.get("dismiss").and_then(|v| v.as_bool()) == Some(true) {
+        return Ok(serde_json::json!({ "dismiss": true }));
+    }
+    if body.get("keep_current").and_then(|v| v.as_bool()) == Some(true) {
+        return Ok(serde_json::json!({ "keep_current": true }));
+    }
+    let question = progress_id(
+        body.get("question").and_then(|v| v.as_str()),
+        "There is no question to record progress for.",
+    )?;
+    let mut out = serde_json::Map::new();
+    if let Some(section) = body
+        .get("section")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        out.insert(
+            "section".into(),
+            serde_json::json!(progress_id(
+                Some(section),
+                "There is no section to record progress for."
+            )?),
+        );
+    }
+    out.insert("question".into(), serde_json::json!(question));
+    if let Some(draft) = body.get("draft_answers") {
+        let object = draft.as_object().ok_or_else(|| {
+            "The draft answers must be one JSON object, like {\"talk_style\": \"warm\"}."
+                .to_string()
+        })?;
+        out.insert(
+            "draft_answers".into(),
+            serde_json::Value::Object(object.clone()),
+        );
+    }
+    Ok(serde_json::Value::Object(out))
+}
+
 async fn get(app: &AppHandle, path: &str) -> Result<serde_json::Value, String> {
     let base = jarvis_base(app);
     let response = jarvis_client(Some(READ_TIMEOUT))?
@@ -169,20 +292,26 @@ async fn post(
     answer(status, &text)
 }
 
-/// The questionnaire's three verbs, for Settings. See this module's docstring.
+/// The questionnaire's four verbs, for Settings. See this module's docstring.
+///
+/// The argument names are the page's own (`setup-bridge.js`): `answers` for a
+/// plan or an apply, and one `progress` object for the fourth verb
+/// (`{section?, question?, draft_answers?, dismiss?, keep_current?}`). Anything
+/// else is refused here, before the network.
 #[tauri::command]
 pub async fn setup_questionnaire(
     app: AppHandle,
     action: String,
     answers: Option<serde_json::Value>,
     confirm: Option<bool>,
+    progress: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    // The four-verb guard: a page cannot name a verb this command does not
-    // send, and it is refused before any body is built or the network touched.
+    // The verb guard: a page cannot name a verb this command does not send, and
+    // it is refused before any body is built or the network touched.
     let verb = action.as_str();
     if !ACTIONS.contains(&verb) {
         return Err(format!(
-            "The setup questionnaire cannot {verb:?}. It can read, plan or apply."
+            "The setup questionnaire cannot {verb:?}. It can read, plan, progress or apply."
         ));
     }
     match verb {
@@ -190,6 +319,13 @@ pub async fn setup_questionnaire(
         "plan" => {
             let body = plan_body(answers.as_ref())?;
             post(&app, PLAN_PATH, body, PLAN_TIMEOUT).await
+        }
+        // Where the owner is, a dismissal, or "Keep current settings". Not held
+        // on a stale link: it is not a change, and a stale stream must not stop
+        // the card from remembering.
+        "progress" => {
+            let body = progress_body(progress.as_ref())?;
+            post(&app, PROGRESS_PATH, body, PROGRESS_TIMEOUT).await
         }
         // The only verb left once the guard above has passed: apply.
         _ => {
@@ -218,21 +354,23 @@ mod tests {
     }
 
     #[test]
-    fn the_verbs_are_the_three_routes_and_no_others() {
+    fn the_verbs_are_the_four_routes_and_no_others() {
         assert_eq!(PATH, "/api/setup");
         assert_eq!(PLAN_PATH, "/api/setup/plan");
+        assert_eq!(PROGRESS_PATH, "/api/setup/progress");
         assert_eq!(APPLY_PATH, "/api/setup/apply");
-        assert_eq!(ACTIONS, &["read", "plan", "apply"]);
+        assert_eq!(ACTIONS, &["read", "plan", "progress", "apply"]);
         for verb in ACTIONS {
             assert!(
-                ["read", "plan", "apply"].contains(verb),
+                ["read", "plan", "progress", "apply"].contains(verb),
                 "{verb} is not a route this command sends"
             );
         }
-        // The command refuses a fourth verb before anything is sent.
+        // The command refuses a fifth verb before anything is sent.
         assert!(!ACTIONS.contains(&"approve"));
         assert!(!ACTIONS.contains(&"apply_all"));
         assert!(!ACTIONS.contains(&"set"));
+        assert!(!ACTIONS.contains(&"complete"));
     }
 
     #[test]
@@ -334,5 +472,115 @@ mod tests {
         assert!(PLAN_TIMEOUT > READ_TIMEOUT);
         // `setup-bridge.js` sets APPLY_BUDGET_MS above this; the desktop suite
         // reads both numbers and pins the order.
+    }
+
+    /// Wave B (2026-11-03): the fourth verb's three bodies, and the fact that a
+    /// progress note can never turn into anything else.
+    #[test]
+    fn a_progress_note_is_one_of_three_small_bodies() {
+        // Where the owner is: the section, the question, the staged draft.
+        let body = progress_body(Some(&json!({
+            "section": "learning",
+            "question": "reworded_memories",
+            "draft_answers": { "reworded_memories": "on" },
+        })))
+        .expect("a progress body");
+        assert_eq!(
+            body,
+            json!({ "section": "learning", "question": "reworded_memories",
+                     "draft_answers": { "reworded_memories": "on" } })
+        );
+        // The draft is optional: a question with nothing staged yet is still a
+        // place worth remembering.
+        assert_eq!(
+            progress_body(Some(&json!({ "question": "talk_style" }))).expect("body"),
+            json!({ "question": "talk_style" })
+        );
+        // "Not now" is one constant field, and nothing else can ride with it.
+        assert_eq!(
+            progress_body(Some(&json!({ "dismiss": true }))).expect("dismiss"),
+            json!({ "dismiss": true })
+        );
+        assert_eq!(
+            progress_body(Some(&json!({
+                "section": "learning", "question": "talk_style", "dismiss": true,
+            })))
+            .expect("dismiss wins"),
+            json!({ "dismiss": true }),
+            "a dismissal is the whole body, whatever else was sent"
+        );
+        // "Keep current settings": the one post the build spec recommends
+        // (section 11.5), so a half-finished pair cannot leave the owner marked
+        // complete but still nagged - or the reverse.
+        assert_eq!(
+            progress_body(Some(&json!({ "keep_current": true }))).expect("keep"),
+            json!({ "keep_current": true })
+        );
+        assert_eq!(
+            progress_body(Some(&json!({
+                "section": "learning", "question": "talk_style", "keep_current": true,
+            })))
+            .expect("keep wins"),
+            json!({ "keep_current": true })
+        );
+    }
+
+    /// A progress body may never carry an answer as an ANSWER: it has no
+    /// `confirm`, no `answers` object and no verb but its own. The PC applies
+    /// nothing for it, and this is the half this app owns.
+    #[test]
+    fn a_progress_note_cannot_apply_anything() {
+        let body = progress_body(Some(&json!({
+            "section": "learning",
+            "question": "reworded_memories",
+            "draft_answers": { "reworded_memories": "on" },
+        })))
+        .expect("body");
+        let keys: Vec<&str> = body
+            .as_object()
+            .expect("object")
+            .keys()
+            .map(String::as_str)
+            .collect();
+        // `serde_json`'s map is ordered, so the comparison is a set.
+        assert_eq!(
+            keys,
+            vec!["draft_answers", "question", "section"],
+            "the progress body carries the position and nothing else"
+        );
+        assert!(!body.to_string().contains("confirm"));
+        assert!(!body.to_string().contains("\"answers\""));
+
+        // No question, no dismissal, no keep: nothing to say, refused before
+        // the network (the PC's own route answers 400 to the same shape).
+        for bad in ["", "   "] {
+            assert!(
+                progress_body(Some(&json!({ "question": bad }))).is_err(),
+                "accepted `{bad}` as a question"
+            );
+        }
+        assert!(progress_body(None).is_err());
+        assert!(progress_body(Some(&json!({}))).is_err());
+        assert!(progress_body(Some(&json!({ "dismiss": false }))).is_err());
+        // Free text, an over-long id and a non-object draft are all refused:
+        // this route writes into the PC's `setup.json`.
+        for bad in [
+            json!({ "question": "how should it talk?" }),
+            json!({ "question": "q".repeat(MAX_ID_CHARS + 1) }),
+            json!({ "question": "talk_style", "draft_answers": ["warm"] }),
+        ] {
+            assert!(progress_body(Some(&bad)).is_err(), "accepted {bad}");
+        }
+        // A field this route does not have is refused, not passed on: the body
+        // it builds is exactly the three documented shapes.
+        for extra in [
+            json!({ "question": "talk_style", "confirm": true }),
+            json!({ "question": "talk_style", "answers": { "talk_style": "warm" } }),
+            json!({ "dismiss": true, "completed_version": 2 }),
+        ] {
+            assert!(progress_body(Some(&extra)).is_err(), "accepted {extra}");
+        }
+        // A real id with the punctuation the PC's own ids use is fine.
+        assert!(progress_body(Some(&json!({ "question": "live_idle_seconds" }))).is_ok());
     }
 }

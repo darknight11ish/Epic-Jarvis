@@ -2985,6 +2985,24 @@ html[data-cal-view="day"] .cal-side{display:none;}
   line-height:1.4; color:var(--dim);}
 .memory-door-hidden{color:var(--text); font-weight:600;}
 
+/* ---- "Personalize Jarvis" (Wave B, 2026-11-03) -------------------------- *
+ * The one offer that the setup quiz is unfinished. It sits in the right rail
+ * as its own section, so it is visible from every tab (the memory door above
+ * is a Memory-tab list; this one is not). "Finish now" is navigation -
+ * open_fix_place, the same granted door the settings gear uses - and "Not now"
+ * hides this block for the launch and records the dismissal on the PC through
+ * hud_setup_dismiss. Nothing here answers a question or changes a setting. */
+#setup-offer{margin:10px 0 0;}
+#setup-offer[hidden]{display:none;}
+#setup-offer .hud-label{margin:0 0 6px;}
+.setup-offer-words{margin:0 0 7px; font-size:11.5px; line-height:1.45; color:var(--text);}
+.setup-offer-words strong{color:var(--ice); font-weight:600;}
+.setup-offer-btns{display:flex; gap:6px; flex-wrap:wrap;}
+.setup-offer-btns button{font:inherit; font-size:11px; padding:4px 8px; cursor:pointer;
+  color:var(--text); background:transparent; border:1px solid var(--line); border-radius:4px;}
+.setup-offer-btns button:hover{color:var(--ice); border-color:rgb(var(--accent-rgb) / .5);}
+.setup-offer-btns button.primary{color:var(--ice); border-color:rgb(var(--accent-rgb) / .5);}
+
 </style>
 
 <!-- ==================================================================== *
@@ -3944,6 +3962,20 @@ html[data-cal-view="day"] .cal-side{display:none;}
         <ul class="memory-door-list" id="memory-door-list"></ul>
         <p class="memory-door-empty" id="memory-door-empty" hidden>No memory cards are waiting. New facts Jarvis wants to remember will show up here.</p>
         <p class="memory-door-where" id="memory-door-where">Memory is the Memory tab in the Brain window - decide each card there.</p>
+      </div>
+    </div>
+
+    <!-- "Personalize Jarvis" (Wave B, 2026-11-03): the one offer that the setup
+         quiz is unfinished. A rail section of its own so it is visible from
+         every tab, not only Memory. `paintSetupOffer` fills the words from the
+         PC's own counts; both buttons are navigation or a dismissal and
+         neither answers a question - see setup_offer.rs and js below. -->
+    <div class="rail-section" id="setup-offer" hidden>
+      <div class="hud-label">Personalize Jarvis</div>
+      <p class="setup-offer-words" id="setup-offer-words"></p>
+      <div class="setup-offer-btns">
+        <button type="button" class="primary" id="setup-offer-finish">Finish now</button>
+        <button type="button" class="no" id="setup-offer-not-now">Not now</button>
       </div>
     </div>
 
@@ -9442,6 +9474,114 @@ window.__hudMemoryDoor = {
 }());
 /* == memory door end == */
 
+/* == setup offer begin == */
+/* "Personalize Jarvis" (Wave B, 2026-11-03; Gemini's rulings Q1, Q3 and Q4).
+ *
+ * The one offer that the setup quiz is unfinished, read from the SAME
+ * GET /api/setup both apps read (hud_proxy.rs `allowed_get` carries it). It is
+ * a banner, not a quiz: this page answers no question and changes no setting.
+ *
+ *  - "Finish now" is navigation through the HUD's already-granted
+ *    `open_fix_place` - Settings, at the "Personalize Jarvis" card. The same
+ *    door the settings gear beside this page uses.
+ *  - "Not now" hides the banner for the WHOLE launch (a page variable, like the
+ *    memory banner's own dismissal) AND records the dismissal on the PC through
+ *    `hud_setup_dismiss`, which silences the toast for 24 hours. That command
+ *    writes one timestamp and nothing else; it is the one write this page makes
+ *    here, and the only reason it needs a command at all (the HUD holds no
+ *    token, so its own POST would be refused).
+ *
+ * An absent route, an unreachable PC or an answer this page cannot read draws
+ * NOTHING - never a banner with an invented count.
+ */
+var SETUP_OFFER = { state: null, dismissed: false, inflight: false };
+
+/* The PC's answer, narrowed to the three facts this banner says. Null unless
+ * all of them are numbers: half an answer is not a count. */
+function setupOfferFrom(j){
+  if(!j || typeof j !== "object") return null;
+  var version = Number(j.version);
+  var completed = Number(j.completed_version);
+  var answered = Number(j.answered_count);
+  var total = Array.isArray(j.questions) ? j.questions.length : NaN;
+  if(!isFinite(version) || !isFinite(completed) || !isFinite(answered) || !isFinite(total)) {
+    return null;
+  }
+  return { unfinished: completed < version, answered: answered, total: total };
+}
+
+function paintSetupOffer(){
+  var box = document.getElementById("setup-offer");
+  if(!box) return;
+  var state = SETUP_OFFER.state;
+  var show = Boolean(state && state.unfinished === true && !SETUP_OFFER.dismissed);
+  box.hidden = !show;
+  if(!show) return;
+  var words = document.getElementById("setup-offer-words");
+  if(!words) return;
+  words.replaceChildren();
+  var count = document.createElement("strong");
+  count.textContent = state.answered + " of " + state.total + " answered.";
+  words.appendChild(count);
+  words.appendChild(document.createTextNode(
+    " The quiz is in Settings on this PC - nothing is applied until you press Apply there."
+  ));
+}
+
+async function refreshSetupOffer(){
+  if(SETUP_OFFER.inflight) return;
+  SETUP_OFFER.inflight = true;
+  try {
+    var r = await jfetch("/api/setup", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    if(r.ok){
+      var j = await r.json();
+      var next = setupOfferFrom(j);
+      if(next) SETUP_OFFER.state = next;
+    }
+  } catch(e) { /* no route, no PC: no banner, and never an invented one */ }
+  finally {
+    SETUP_OFFER.inflight = false;
+    paintSetupOffer();
+  }
+}
+
+/* The one navigation this banner offers: Settings, at the quiz card. The same
+ * granted `open_fix_place` the settings gear beside this page calls. */
+function setupOfferFinish(){
+  try {
+    var core = window.__TAURI__ && window.__TAURI__.core;
+    if(core && typeof core.invoke === "function"){
+      return core.invoke("open_fix_place", {place:"personalize-jarvis"});
+    }
+  } catch(e) { /* a plain browser has no shell; the tray row still opens it */ }
+  return null;
+}
+
+/* "Not now": hidden for this launch, and recorded on the PC so the toast is
+ * silent for 24 hours. The local hide happens first and stands even if the
+ * write fails - the owner pressed the button, and the only effect of a failed
+ * write is that Jarvis may mention it again tomorrow. */
+function setupOfferDismiss(){
+  SETUP_OFFER.dismissed = true;
+  paintSetupOffer();
+  try {
+    var core = window.__TAURI__ && window.__TAURI__.core;
+    if(core && typeof core.invoke === "function"){
+      return core.invoke("hud_setup_dismiss");
+    }
+  } catch(e) { /* no shell: the banner is still hidden for this launch */ }
+  return null;
+}
+
+(function(){
+  var finish = document.getElementById("setup-offer-finish");
+  if(finish) finish.onclick = function(){ setupOfferFinish(); };
+  var notNow = document.getElementById("setup-offer-not-now");
+  if(notNow) notNow.onclick = function(){ setupOfferDismiss(); };
+  refreshSetupOffer();
+}());
+/* == setup offer end == */
+
 window.__hudInitPoll = initPoll;
 initPoll();
 
@@ -9563,7 +9703,7 @@ function subscribe(){
 
 // The safety net. Deliberately slow: if the stream is working this is nearly
 // free, and if it is not, this is what keeps the page usable.
-setInterval(() => { apprPoll(); initPoll(); loadPresets(); }, 30000);
+setInterval(() => { apprPoll(); initPoll(); loadPresets(); refreshSetupOffer(); }, 30000);
 // The shell's link push carries who set the power mode (hud_bootstrap.js
 // powerChanged); the `power` event carries only the mode. Registered once,
 // here, not in subscribe(), which runs again on every reconnect.

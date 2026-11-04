@@ -1,49 +1,78 @@
 /**
- * Settings -> "First-time setup" (JARVIS-API section 147; the PC's module is
+ * Settings → "Personalize Jarvis" (JARVIS-API section 147; the PC's module is
  * `backend/jarvis_setup.py`, its routes are installed by `setup.patch`).
  *
- * The fourteen questions, in the PC's own words, in one card. The owner picks
- * answers, the page asks the PC for a READ-ONLY plan (`POST /api/setup/plan`),
- * and the plan is drawn beside the questions: every change with the PC's own
- * sentence and its effect - Instant, Asks you on a card, or Blocked - plus
- * everything the PC says would NOT change and why.
+ * THE CARD, UPGRADED IN PLACE (Wave B, 2026-11-03; Gemini's ruling Q1). No new
+ * window and no second page: this same Settings card now has
  *
- * THE ONE ACTION. "Apply these changes" is the only control that writes, and
- * it takes TWO presses: the first shows the confirm step with the plan's own
- * count ("3 changes - 1 of them will ask you on a card"), the second calls
- * `applySetup(applyBody(draft))`, which is the only body in the app carrying
- * `confirm: true`. There is no apply on load, on a link reconnect, on a
- * changed answer or on a timer. `load()` never calls `applySetup()`, and the
+ *  - a row of SECTION tabs, built from the PC's own `sections`;
+ *  - a "Step through one by one" / "Show all" mode, where step mode paints ONE
+ *    question and a Back / Skip / Next row;
+ *  - a progress line, "8 of 25 answered", counted from the draft;
+ *  - a "show only new / unanswered" filter, driven by each question's own
+ *    `version` against `completed_version`;
+ *  - "Take it again", "Not now" and "Keep current settings".
+ *
+ * Every question, option, section and sentence is the PC's. The rules live in
+ * `setup-questionnaire.js` (DOM-free, so `node tests/setup-questionnaire.mjs`
+ * can test them); this file only paints them and sends the calls.
+ *
+ * THE ONE ACTION. "Apply these changes" is the only control that writes
+ * settings, and it takes TWO presses: the first shows the confirm step with the
+ * plan's own count ("3 changes - 1 of them will ask you on a card"), the second
+ * calls `applySetup(applyBody(draft))`, which is the only body in the app
+ * carrying `confirm: true`. There is no apply on load, on a link reconnect, on
+ * a changed answer or on a timer. `load()` never calls `applySetup()`, and the
  * suite pins that.
+ *
+ * THE OTHER WRITES ARE NOT SETTINGS. "Not now" and "Keep current settings" post
+ * one progress note (`POST /api/setup/progress`, through the same Rust command,
+ * cardless and desktop-only): a timestamp, and - for "Keep current settings" -
+ * the PC's own `completed_version`. Neither carries an answer, calls a setter or
+ * raises a card. The stepper's position is sent the same way, debounced, so the
+ * phone and the HUD can say where the PC's card is.
  *
  * HONEST WAITING. The PC works through the changes one at a time and waits on
  * each existing approval card, so applying can take minutes. The card says so
  * before the press and while it runs, and a card still waiting when the PC's
  * patience runs out is drawn as STILL WAITING - never as done and never as
  * failed. Nothing here approves a card.
- *
- * `setup-questionnaire.js` owns every rule and every word that can be tested
- * without a browser; this file only paints it and sends the two calls.
  */
 import { currentLink, onLink } from "./jarvis-link.js";
-import { applySetup, planSetup, readSetup } from "./setup-bridge.js";
+import { applySetup, planSetup, progressSetup, readSetup } from "./setup-bridge.js";
 import {
   ALL,
   APPLY,
   APPLYING,
   APPLY_BUSY,
+  BACK,
   CANCEL,
   CONFIRM,
+  DONE_HEADING,
+  DONE_WORDS,
+  FILTER_EMPTY,
+  FILTER_LABEL,
+  FINISH,
   HELP,
+  KEEP_CURRENT,
+  KEEP_CURRENT_WORDS,
   KICKER,
   LAST_RUN_HEADING,
+  NEXT,
   NONE,
   NOTHING_CHANGED,
   NOTHING_TO_APPLY,
+  NOT_NOW,
+  NOT_NOW_WORDS,
   PLAN_HEADING,
   PLAN_READING,
   RECOMMENDATION_HEADING,
+  SHOW_ALL,
   SKIPPED_HEADING,
+  SKIP,
+  STEP_MODE_HINT,
+  STEP_THROUGH,
+  TAKE_AGAIN,
   TITLE,
   allNoneState,
   answeredCount,
@@ -55,18 +84,29 @@ import {
   chooseOne,
   confirmWords,
   draftFromAnswers,
+  firstUnanswered,
   gate,
   lastRunView,
+  nextQuestion,
   normaliseReading,
   optionOn,
   planBody,
   planView,
+  positionWords,
+  progressBody,
+  progressWords,
+  questionById,
+  sectionsOf,
   toggleOption,
+  visibleQuestions,
 } from "./setup-questionnaire.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 const PLAN_DEBOUNCE_MS = 250;
+/** How long after the last step the position is sent. Long enough that walking
+ *  through five questions is one write, not five. */
+const PROGRESS_DEBOUNCE_MS = 700;
 
 const $ = (id) => document.getElementById(id);
 
@@ -76,12 +116,29 @@ const el = {
   title: $("sq-title"),
   kicker: $("sq-kicker"),
   help: $("sq-help"),
+  done: $("sq-done"),
+  sections: $("sq-sections"),
+  mode: $("sq-mode"),
+  step: $("sq-step"),
+  showall: $("sq-showall"),
+  modeHint: $("sq-mode-hint"),
+  progress: $("sq-progress"),
+  filterRow: $("sq-filter-row"),
+  filter: $("sq-filter"),
+  filterWords: $("sq-filter-words"),
+  filterEmpty: $("sq-filter-empty"),
   questions: $("sq-questions"),
+  stepnav: $("sq-stepnav"),
+  prev: $("sq-prev"),
+  skip: $("sq-skip"),
+  next: $("sq-next"),
+  stepWhere: $("sq-step-where"),
   planStatus: $("sq-plan-status"),
   plan: $("sq-plan"),
   counts: $("sq-counts"),
   apply: $("sq-apply"),
   applyWhy: $("sq-apply-why"),
+  again: $("sq-again"),
   confirm: $("sq-confirm"),
   confirmText: $("sq-confirm-text"),
   confirmYes: $("sq-confirm-yes"),
@@ -91,6 +148,10 @@ const el = {
   about: $("sq-about"),
   storage: $("sq-storage"),
   cardWait: $("sq-card-wait"),
+  offerBtns: $("sq-offer-btns"),
+  notNow: $("sq-not-now"),
+  keep: $("sq-keep"),
+  offerWhy: $("sq-offer-why"),
   status: $("sq-status"),
 };
 
@@ -106,6 +167,17 @@ let planTimer = 0;
  *  plan must never overwrite the newer one. */
 let planGeneration = 0;
 let lastResult = null;
+
+/* The stepper's own view state. Not settings: which question is on screen, and
+ * whether the card is showing one at a time. */
+let stepMode = true;
+let section = "";
+let currentId = "";
+let filterOn = false;
+let progressTimer = 0;
+/** The last position sent, so an unchanged position is not re-sent on every
+ *  repaint (and a replay of the same note never reaches the PC). */
+let sentProgress = "";
 
 function live() {
   try {
@@ -127,6 +199,78 @@ function node(tag, className, text) {
   if (className) made.className = className;
   if (text !== undefined && text !== null) made.textContent = String(text);
   return made;
+}
+
+/* ── The sections, the filter and the progress line ──────────────────────── */
+
+function questionsShown() {
+  return visibleQuestions(reading, { section, filter: filterOn });
+}
+
+function paintSections() {
+  if (!el.sections) return;
+  const sections = sectionsOf(reading);
+  el.sections.replaceChildren();
+  el.sections.hidden = sections.length === 0;
+  for (const row of sections) {
+    const tab = node("button", "choice", row.title);
+    tab.type = "button";
+    tab.dataset.section = row.id;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-pressed", row.id === section ? "true" : "false");
+    tab.addEventListener("click", () => {
+      if (busy) return;
+      section = row.id;
+      currentId = "";
+      paintView();
+      queueProgress();
+    });
+    el.sections.append(tab);
+  }
+}
+
+function paintProgress() {
+  if (el.progress) el.progress.textContent = progressWords(reading, draft);
+  if (el.filterWords) {
+    const fresh = visibleQuestions(reading, { filter: true }).length;
+    el.filterWords.textContent = `${FILTER_LABEL} (${fresh})`;
+  }
+  if (el.filterEmpty) {
+    const none = filterOn && questionsShown().length === 0;
+    el.filterEmpty.hidden = !none;
+    el.filterEmpty.textContent = none ? FILTER_EMPTY : "";
+  }
+  if (el.done) {
+    const finished = reading && reading.version > 0
+      && reading.completedVersion >= reading.version;
+    el.done.hidden = !finished;
+    el.done.textContent = finished ? `${DONE_HEADING}. ${DONE_WORDS}` : "";
+  }
+}
+
+function paintMode() {
+  if (el.step) el.step.setAttribute("aria-pressed", stepMode ? "true" : "false");
+  if (el.showall) el.showall.setAttribute("aria-pressed", stepMode ? "false" : "true");
+  if (el.modeHint) {
+    el.modeHint.hidden = !stepMode;
+    el.modeHint.textContent = stepMode ? STEP_MODE_HINT : "";
+  }
+  if (el.stepnav) el.stepnav.hidden = !stepMode;
+  if (el.step) el.step.textContent = STEP_THROUGH;
+  if (el.showall) el.showall.textContent = SHOW_ALL;
+}
+
+function paintOffer() {
+  if (!el.offerBtns) return;
+  const offered = Boolean(reading && reading.available
+    && reading.version > 0 && reading.completedVersion < reading.version);
+  el.offerBtns.hidden = !offered;
+  if (el.notNow) el.notNow.textContent = NOT_NOW;
+  if (el.keep) el.keep.textContent = KEEP_CURRENT;
+  if (el.offerWhy) {
+    el.offerWhy.textContent = offered ? `${NOT_NOW_WORDS} ${KEEP_CURRENT_WORDS}` : "";
+    el.offerWhy.hidden = !offered;
+  }
 }
 
 /* ── The questions ───────────────────────────────────────────────────────── */
@@ -207,17 +351,62 @@ function syncQuestion(question) {
   }
 }
 
+/**
+ * The one question the stepper is showing, decided from the view state.
+ *
+ * `currentId` is kept across repaints; when it no longer names something the
+ * card is showing (the section changed, the filter hid it, the PC re-read), the
+ * first visible question takes over, so the card can never sit on a blank panel
+ * with a Next button that has nowhere to go.
+ */
+function currentQuestion() {
+  const shown = questionsShown();
+  if (!shown.length) return null;
+  const found = shown.find((q) => q.id === currentId);
+  return found || shown[0];
+}
+
 function paintQuestions() {
   if (!el.questions) return;
+  const shown = questionsShown();
   el.questions.replaceChildren();
-  for (const question of (reading && reading.questions) || []) {
-    el.questions.append(questionRow(question));
+  if (!shown.length) {
+    if (el.stepWhere) el.stepWhere.textContent = "";
+    paintStepNav();
+    return;
   }
+  if (stepMode) {
+    const one = currentQuestion();
+    currentId = one ? one.id : "";
+    if (one) el.questions.append(questionRow(one));
+  } else {
+    for (const question of shown) el.questions.append(questionRow(question));
+  }
+  paintStepNav();
   renderQuestionsState();
 }
 
+function paintStepNav() {
+  if (!el.stepWhere) return;
+  const shown = questionsShown();
+  if (!stepMode) {
+    el.stepWhere.textContent = "";
+    return;
+  }
+  const one = currentQuestion();
+  el.stepWhere.textContent = one ? positionWords(reading, one.id) : "";
+  if (el.prev) el.prev.textContent = BACK;
+  if (el.next) el.next.textContent = NEXT;
+  if (el.skip) el.skip.textContent = SKIP;
+  if (el.prev) {
+    const at = one ? shown.findIndex((q) => q.id === one.id) : 0;
+    el.prev.disabled = busy || at <= 0;
+  }
+  if (el.next) el.next.textContent = one && shown.length <= 1 ? FINISH : NEXT;
+}
+
 function renderQuestionsState() {
-  for (const question of (reading && reading.questions) || []) syncQuestion(question);
+  for (const question of questionsShown()) syncQuestion(question);
 }
 
 /** While the one apply runs, no answer may change under it: the whole
@@ -228,6 +417,126 @@ function setQuestionsEnabled(enabled) {
   for (const button of el.questions.querySelectorAll("[data-pick]")) {
     button.disabled = !enabled;
   }
+  for (const button of (el.stepnav && el.stepnav.querySelectorAll("button")) || []) {
+    button.disabled = !enabled;
+  }
+  for (const button of (el.sections && el.sections.querySelectorAll("button")) || []) {
+    button.disabled = !enabled;
+  }
+}
+
+/** Everything the view state decides, painted in one pass. */
+function paintView() {
+  paintSections();
+  paintMode();
+  paintProgress();
+  paintOffer();
+  paintQuestions();
+}
+
+/* ── The stepper's moves ─────────────────────────────────────────────────── */
+
+function stepTo(questionId) {
+  const next = questionById(reading, questionId);
+  if (!next) return;
+  currentId = next.id;
+  if (next.section) section = next.section;
+  paintView();
+  queueProgress();
+}
+
+/** The section after the current one that has something visible, or "". */
+function nextSectionWithQuestions() {
+  const sections = sectionsOf(reading);
+  const at = sections.findIndex((row) => row.id === section);
+  for (let i = Math.max(0, at + 1); i < sections.length; i += 1) {
+    const id = sections[i].id;
+    if (visibleQuestions(reading, { section: id, filter: filterOn }).length) return id;
+  }
+  return "";
+}
+
+/** Next: the next question on screen, then the next section's first. */
+function goNext() {
+  const shown = questionsShown();
+  const at = shown.findIndex((q) => q.id === currentId);
+  if (at >= 0 && shown[at + 1]) {
+    stepTo(shown[at + 1].id);
+    return;
+  }
+  const following = nextSectionWithQuestions();
+  if (!following) {
+    paintStepNav();
+    return;
+  }
+  section = following;
+  const first = visibleQuestions(reading, { section, filter: filterOn })[0];
+  if (first) stepTo(first.id);
+}
+
+function goBack() {
+  const shown = questionsShown();
+  const at = shown.findIndex((q) => q.id === currentId);
+  if (at > 0) {
+    stepTo(shown[at - 1].id);
+    return;
+  }
+  const sections = sectionsOf(reading);
+  const here = sections.findIndex((row) => row.id === section);
+  if (here <= 0) return;
+  section = sections[here - 1].id;
+  const shownNow = visibleQuestions(reading, { section, filter: filterOn });
+  const last = shownNow[shownNow.length - 1];
+  if (last) stepTo(last.id);
+}
+
+/**
+ * Skip: drop this question's staged answer and land on the next one that still
+ * has none.
+ *
+ * Leaving the id out of the draft is the whole mechanism (build spec section
+ * 7.2): `planBody` sends only the draft, the PC plans nothing for an absent id,
+ * and the merge on apply keeps the answer the owner already had. The
+ * `nextQuestion` rule is the same one the card's "first unanswered" uses, so a
+ * retake walks only what still needs an answer.
+ */
+function skipCurrent() {
+  const one = currentQuestion();
+  if (!one) return;
+  draft = chooseOne(draft, one.id, "");
+  const next = nextQuestion(reading, draft, one.id);
+  renderQuestionsState();
+  paintProgress();
+  if (next) {
+    stepTo(next.id);
+  } else {
+    paintView();
+    queueProgress();
+  }
+}
+
+/** "Take it again": empty the draft and start at the first question. Writes
+ *  nothing - the old answers are still on the PC until Apply. */
+function takeAgain() {
+  if (busy) return;
+  planGeneration += 1;
+  draft = {};
+  plan = null;
+  lastResult = null;
+  filterOn = false;
+  stepMode = true;
+  if (el.filter) el.filter.checked = false;
+  if (el.result) el.result.replaceChildren();
+  if (el.plan) el.plan.replaceChildren();
+  if (el.counts) el.counts.textContent = "";
+  if (el.planStatus) el.planStatus.textContent = NOTHING_CHANGED;
+  const first = (reading && reading.questions || [])[0];
+  section = first && first.section ? first.section : "";
+  currentId = first ? first.id : "";
+  paintView();
+  say("Starting again from the first question. Nothing has been changed.");
+  paintApply();
+  queueProgress();
 }
 
 /* ── The plan (read-only on the PC) ──────────────────────────────────────── */
@@ -306,7 +615,11 @@ function paintApply() {
     el.applyWhy.textContent = gateNow.why;
     el.applyWhy.hidden = !gateNow.why;
   }
+  if (el.again) el.again.textContent = TAKE_AGAIN;
   setQuestionsEnabled(!busy);
+  // `setQuestionsEnabled` re-enables the Back/Next/Skip row as a whole; the
+  // step itself decides whether Back has anywhere to go.
+  paintStepNav();
   syncConfirm();
 }
 
@@ -365,6 +678,67 @@ function resultRows(result) {
   }
 }
 
+/* ── Where the owner is (POST /api/setup/progress) ──────────────────────── */
+
+/**
+ * Tell the PC where the card is, after the walking has stopped for a moment.
+ *
+ * Debounced and de-duplicated, because walking five questions should be one
+ * small write rather than five. A failure is NOT shown and NOT retried: where
+ * the card is happens to be a nicety (the phone and the HUD read it), it
+ * changes no setting, and a status line about it would be noise on a card that
+ * is otherwise working. The next step tries again.
+ */
+function queueProgress() {
+  if (!reading || !reading.available || !currentId) return;
+  clearTimeout(progressTimer);
+  progressTimer = setTimeout(() => {
+    progressTimer = 0;
+    void sendProgress(progressBody({ section, question: currentId, draft }));
+  }, PROGRESS_DEBOUNCE_MS);
+}
+
+async function sendProgress(body) {
+  const key = JSON.stringify(body);
+  if (key === sentProgress) return;
+  sentProgress = key;
+  const answer = await progressSetup(body);
+  if (answer && answer.ok === false) {
+    // Let the next step try again rather than believing it was recorded.
+    sentProgress = "";
+  }
+}
+
+/** "Not now": hide the offer for a day. No answer is written. */
+async function notNow() {
+  if (busy) return;
+  sentProgress = "";
+  const answer = await progressSetup(progressBody({ dismiss: true }));
+  if (answer && answer.ok === false) {
+    say(answer.error || "That did not reach the PC. Try again in a moment.", "warn");
+    return;
+  }
+  if (reading) reading.dismissedAt = Date.now() / 1000;
+  paintOffer();
+  say("Not now. Jarvis will not offer this again for a day.");
+}
+
+/** "Keep current settings": the owner is happy as they are. No setting, no
+ *  answer and no card - one progress note that moves `completed_version`. */
+async function keepCurrent() {
+  if (busy) return;
+  sentProgress = "";
+  const answer = await progressSetup(progressBody({ keepCurrent: true }));
+  if (answer && answer.ok === false) {
+    say(answer.error || "That did not reach the PC. Try again in a moment.", "warn");
+    return;
+  }
+  if (reading) reading.completedVersion = reading.version;
+  paintView();
+  paintApply();
+  say("Kept as it is. Nothing was changed, and Jarvis will not offer this again.");
+}
+
 /* ── Reading, planning, applying ─────────────────────────────────────────── */
 
 async function load() {
@@ -372,7 +746,15 @@ async function load() {
   const raw = await readSetup();
   reading = normaliseReading(raw);
   draft = draftFromAnswers(reading);
+  // The chat's staged choices (the `setup_quiz` tool writes
+  // `in_progress.draft_answers`) are shown as the draft's own, cleaned the same
+  // way as the saved answers, so a choice staged in chat is highlighted here.
+  const staged = reading.inProgress && reading.inProgress.draftAnswers;
+  if (staged && Object.keys(staged).length) {
+    draft = { ...draft, ...draftFromAnswers({ ...reading, answers: staged }) };
+  }
   lastResult = null;
+  sentProgress = "";
   if (el.body) el.body.hidden = false;
   if (el.reading) el.reading.hidden = true;
   if (el.title) el.title.textContent = TITLE;
@@ -385,8 +767,22 @@ async function load() {
   if (el.cardWait) {
     el.cardWait.textContent = reading.available ? cardWaitWords(reading.cardWaitS) : "";
   }
+  // Where to open: the question the PC remembers (a resume), else the first one
+  // the owner has never answered - which is ruling Q3's "first unanswered
+  // question on open". A finished quiz opens at the top of its own list.
+  const resumed = reading.inProgress
+    ? questionById(reading, reading.inProgress.question)
+    : null;
+  const start = resumed || firstUnanswered(reading) || reading.questions[0] || null;
+  const sections = sectionsOf(reading);
+  if (start && start.section) section = start.section;
+  else if (!section && sections.length) section = sections[0].id;
+  currentId = start ? start.id : "";
+  if (el.filter) {
+    el.filter.checked = filterOn;
+  }
   lastRunRows();
-  paintQuestions();
+  paintView();
   plan = null;
   if (reading.available && answeredCount(draft)) schedulePlan();
   else {
@@ -396,6 +792,7 @@ async function load() {
   }
   paintApply();
   say(reading.available ? "" : reading.reason, reading.available ? "" : "warn");
+  if (reading.available) queueProgress();
 }
 
 function onAnswered() {
@@ -410,8 +807,10 @@ function onAnswered() {
   if (el.counts) el.counts.textContent = "";
   if (el.planStatus) el.planStatus.textContent = PLAN_READING;
   say("Working out what would change. Nothing has been changed yet.");
+  paintProgress();
   paintApply();
   schedulePlan();
+  queueProgress();
 }
 
 function schedulePlan() {
@@ -514,6 +913,36 @@ if (el.body && el.questions) {
     el.apply?.addEventListener("click", beginApply);
     el.confirmYes?.addEventListener("click", confirmApply);
     el.confirmNo?.addEventListener("click", cancelApply);
+    el.again?.addEventListener("click", takeAgain);
+    el.step?.addEventListener("click", () => {
+      if (busy) return;
+      stepMode = true;
+      paintView();
+      queueProgress();
+    });
+    el.showall?.addEventListener("click", () => {
+      if (busy) return;
+      stepMode = false;
+      paintView();
+    });
+    el.filter?.addEventListener("change", () => {
+      if (busy) return;
+      filterOn = el.filter.checked === true;
+      currentId = "";
+      paintView();
+      queueProgress();
+    });
+    el.prev?.addEventListener("click", () => {
+      if (!busy) goBack();
+    });
+    el.next?.addEventListener("click", () => {
+      if (!busy) goNext();
+    });
+    el.skip?.addEventListener("click", () => {
+      if (!busy) skipCurrent();
+    });
+    el.notNow?.addEventListener("click", () => void notNow());
+    el.keep?.addEventListener("click", () => void keepCurrent());
     onLink(() => paint());
     load();
   } else if (el.reading) {

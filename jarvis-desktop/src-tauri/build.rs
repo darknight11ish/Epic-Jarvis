@@ -114,6 +114,12 @@ fn main() {
             "hud_get",
             "hud_chat",
             "hud_chat_cancel",
+            // The HUD's "Not now" on the "Personalize Jarvis" banner (Wave B,
+            // 2026-11-03): the page holds no token and its own POSTs stay
+            // refused, so this command is the ONE way it records a dismissal -
+            // `POST /api/setup/progress {"dismiss": true}`, one timestamp, no
+            // setting and no card. HUD window only.
+            "hud_setup_dismiss",
             // The HUD Reminders tab's writes (2026-10-21, the owner's
             // request): add ONE reminder/timer/alarm/to-do item, and change
             // ONE job. No clear-list form (Ruling 15: that stays the

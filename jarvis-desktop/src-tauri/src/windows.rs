@@ -718,11 +718,17 @@ pub fn show_settings(app: &AppHandle) -> Result<(), String> {
 /// press now); the closed mapping stays for every other surface that can ask
 /// for the Updates card by name.
 ///
+/// `"personalize-jarvis"` (2026-11-03, Wave B) is the "Personalize Jarvis"
+/// card's own id, so the HUD's "Finish now" and the tray's "Setup unfinished"
+/// row can open Settings straight at the quiz. It is a place, not a control:
+/// nothing here answers a question, and applying still needs the card's own
+/// two presses.
+///
 /// `"updates"` is `settings.html`'s own card id, so a NEW window is opened at
 /// `settings.html#updates`, and an open one hears [`SETTINGS_PLACE_EVENT`].
 /// Navigation only: nothing here checks, downloads or installs, and App lock
 /// still applies exactly as it does for [`show_settings`].
-pub(crate) const SETTINGS_PLACES: [&str; 1] = ["updates"];
+pub(crate) const SETTINGS_PLACES: [&str; 2] = ["updates", "personalize-jarvis"];
 
 /// The event an open Settings hears a place by. The page's own copy of this
 /// spelling is `settings-place.js`; the test
@@ -2386,6 +2392,14 @@ mod tests {
             settings_place("updates").expect("updates is a place"),
             "updates"
         );
+        // Wave B: the HUD's "Finish now" and the tray's "Setup unfinished" row
+        // open the Personalize Jarvis card by name. The id is the card's own,
+        // which `the_settings_place_event_is_one_name_in_both_languages` below
+        // checks the page really holds.
+        assert_eq!(
+            settings_place("personalize-jarvis").expect("the quiz is a place"),
+            "personalize-jarvis"
+        );
         for bad in [
             "",
             "settings",
@@ -2393,10 +2407,15 @@ mod tests {
             "updates#more",
             "../updates",
             "rare",
+            "Personalize Jarvis",
+            "personalize_jarvis",
+            "personalize",
+            "setup-questionnaire",
         ] {
             assert!(settings_place(bad).is_err(), "accepted `{bad}` as a place");
         }
         assert!(SETTINGS_PLACES.contains(&"updates"));
+        assert!(SETTINGS_PLACES.contains(&"personalize-jarvis"));
     }
 
     /// Two spellings, one event: Rust emits this name and the page listens for
@@ -2421,6 +2440,15 @@ mod tests {
         assert!(
             html.contains("<section class=\"card\" id=\"updates\">"),
             "there is no `updates` card for the place to land on"
+        );
+        // The quiz's card keeps its own long id (`setup-questionnaire`, which
+        // the jump list and the desktop suite already name), and carries the
+        // place's id on the anchor at its top. `settings.js`'s `applyPlace`
+        // accepts any element id and scrolls/focuses from there, so this is the
+        // name Rust hands over and the card the owner lands on.
+        assert!(
+            html.contains("<span id=\"personalize-jarvis\" class=\"place-anchor\"></span>"),
+            "there is no `personalize-jarvis` anchor for the place to land on"
         );
     }
 }

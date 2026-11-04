@@ -51,6 +51,27 @@ export const SET_LIMIT_COMMAND = "set_limit";
  * `key` is the limits-table row (`backend/jarvis_limits.py`), `pref` is the name
  * this module and Rust use, and `mode` says where a change goes: `"limit"` means
  * the backend owns it and this page only asks (see `saveNotificationPrefs`).
+ *
+ * WAVE B (2026-11-03) AND THE EIGHTH ROW. "Personalize Jarvis" has its own
+ * switch - `notif_setup` -> `setup`, `notifications.rs` `Kind::Setup` - and it
+ * is NOT drawn here yet, on purpose. This page's notification toggles are not
+ * words it owns: `settings.html`'s rows between the `settings-toggles` markers
+ * are GENERATED from `backend/jarvis_settings_registry.py` by
+ * `tools/gen_settings_cases.py`, and `tests/settings-catalogue.mjs` holds the
+ * page to exactly that table. That registry row is the backend's Wave B change
+ * (`jarvis_settings_registry.py`, `jarvis_notify_prefs.py`), so this branch
+ * cannot generate it; a hand-written row here would fail the catalogue suite
+ * today and be duplicated by the generator tomorrow. When the backend lands:
+ *
+ *   py -3 tools/gen_settings_cases.py
+ *   # then add  { key: "notif_setup", pref: "setup", kind: "bool" }  here,
+ *   # and the `setup` entry in notifications-settings.js's SWITCHES.
+ *
+ * Until then this page never SENDS `setup`, which matters: `refresh()` pushes
+ * every switch it shows back to Rust, so a missing row plus a lenient payload
+ * would overwrite an owner's choice made on the phone every time Settings
+ * opened. The Rust switch itself defaults ON and already obeys the value the
+ * PC's settings file carries, which the phone can change.
  */
 export const NOTIF_ROWS = [
   { key: "notif_alarms", pref: "alarms", kind: "bool" },
