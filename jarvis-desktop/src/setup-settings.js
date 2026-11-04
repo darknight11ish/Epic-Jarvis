@@ -48,9 +48,6 @@ import {
   BACK,
   CANCEL,
   CONFIRM,
-  DONE_HEADING,
-  DONE_WORDS,
-  FILTER_EMPTY,
   FILTER_LABEL,
   FINISH,
   HELP,
@@ -84,11 +81,14 @@ import {
   chooseOne,
   confirmWords,
   draftFromAnswers,
+  filterEmptyWords,
+  finishedPassWords,
   firstUnanswered,
   gate,
   lastRunView,
   nextQuestion,
   normaliseReading,
+  offerShown,
   optionOn,
   planBody,
   planView,
@@ -236,15 +236,20 @@ function paintProgress() {
     el.filterWords.textContent = `${FILTER_LABEL} (${fresh})`;
   }
   if (el.filterEmpty) {
-    const none = filterOn && questionsShown().length === 0;
-    el.filterEmpty.hidden = !none;
-    el.filterEmpty.textContent = none ? FILTER_EMPTY : "";
+    // One scope governs both lines: the count above is the whole
+    // questionnaire's, so this sentence is too (`filterEmptyWords` says which
+    // of the two truths it is).
+    const words = filterEmptyWords(reading, { section, filter: filterOn });
+    el.filterEmpty.hidden = !words;
+    el.filterEmpty.textContent = words;
   }
   if (el.done) {
-    const finished = reading && reading.version > 0
-      && reading.completedVersion >= reading.version;
-    el.done.hidden = !finished;
-    el.done.textContent = finished ? `${DONE_HEADING}. ${DONE_WORDS}` : "";
+    // "Finished" is `completed_version`, which "Keep current settings" moves
+    // without answering anything - so the block is the model's to word, never
+    // a sentence typed here.
+    const words = finishedPassWords(reading, draft);
+    el.done.hidden = !words;
+    el.done.textContent = words;
   }
 }
 
@@ -262,8 +267,10 @@ function paintMode() {
 
 function paintOffer() {
   if (!el.offerBtns) return;
-  const offered = Boolean(reading && reading.available
-    && reading.version > 0 && reading.completedVersion < reading.version);
+  // "Not now" counts here too: the toast and the HUD were already silenced by
+  // `dismissed_at`, and this row used to stay on screen and promise the
+  // opposite (audit 2026-11-03, bug 4).
+  const offered = offerShown(reading, Date.now() / 1000);
   el.offerBtns.hidden = !offered;
   if (el.notNow) el.notNow.textContent = NOT_NOW;
   if (el.keep) el.keep.textContent = KEEP_CURRENT;
@@ -536,7 +543,7 @@ function takeAgain() {
   paintView();
   say("Starting again from the first question. Nothing has been changed.");
   paintApply();
-  queueProgress();
+  clearStagedDraft();
 }
 
 /* ── The plan (read-only on the PC) ──────────────────────────────────────── */
@@ -707,6 +714,28 @@ async function sendProgress(body) {
     // Let the next step try again rather than believing it was recorded.
     sentProgress = "";
   }
+}
+
+/**
+ * "Take it again" tells the PC the staged draft is gone, AT ONCE.
+ *
+ * It cannot ride `queueProgress`'s debounce for two reasons. The PC clears a
+ * draft on an EXPLICIT empty object and keeps whatever it has when the field
+ * is absent (`progress()`), so the empty object has to be built on purpose
+ * (`progressBody({clearDraft: true})`). And if the owner answered within
+ * `PROGRESS_DEBOUNCE_MS`, the queued note would be replaced by the answered
+ * one - leaving the old draft on the PC, to be merged straight back by
+ * `load()` on the next open (audit 2026-11-03, bug 2).
+ *
+ * The position rides with it, so this is still one small write and not two.
+ */
+function clearStagedDraft() {
+  if (!reading || !reading.available || !currentId) return;
+  clearTimeout(progressTimer);
+  progressTimer = 0;
+  void sendProgress(progressBody({
+    section, question: currentId, draft, clearDraft: true,
+  }));
 }
 
 /** "Not now": hide the offer for a day. No answer is written. */

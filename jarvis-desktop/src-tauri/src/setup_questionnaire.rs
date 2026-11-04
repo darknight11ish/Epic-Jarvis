@@ -583,4 +583,24 @@ mod tests {
         // A real id with the punctuation the PC's own ids use is fine.
         assert!(progress_body(Some(&json!({ "question": "live_idle_seconds" }))).is_ok());
     }
+
+    /// A progress body's EXPLICIT empty draft is the PC's only clear signal
+    /// (audit 2026-11-03, bug 2): the page sends it for "Take it again", and
+    /// this module must pass it through rather than drop it as "nothing".
+    #[test]
+    fn an_explicitly_empty_draft_still_reaches_the_pc() {
+        let body = progress_body(Some(&json!({
+            "section": "learning",
+            "question": "reworded_memories",
+            "draft_answers": {},
+        })))
+        .expect("a clear is a progress body");
+        assert_eq!(
+            body,
+            json!({ "section": "learning", "question": "reworded_memories",
+                     "draft_answers": {} }),
+            "the empty object is the clear, and it is not dropped"
+        );
+        assert_eq!(body["draft_answers"], json!({}));
+    }
 }

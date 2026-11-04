@@ -356,6 +356,35 @@ class SetupQuestionnaireTest {
         assertEquals("", old.reason)
     }
 
+    /**
+     * The number of questions is the PC's, so this screen may not type one:
+     * the kicker used to say "Twenty-five questions" while the progress line
+     * beside it was computed from the PC's own list, and the two disagreed on
+     * the same page as soon as the set changed (audit 2026-11-03, bug 3).
+     */
+    @Test
+    fun theKickerCarriesNoCountOfItsOwn() {
+        // The count the page really shows is `view.questions.size`, which the
+        // fixture proves is the PC's number - not a second opinion.
+        assertEquals(fixture["count"]!!.jsonPrimitiveInt(), view.questions.size)
+        val kicker = SetupQuestionnaire.KICKER
+        assertTrue(
+            "the kicker types a number: ${kicker.filter { it.isDigit() }}",
+            kicker.none { it.isDigit() },
+        )
+        val spelled = Regex(
+            "\\b(?:ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|" +
+                "seventeen|eighteen|nineteen|twenty|thirty|forty|fifty)\\b",
+            RegexOption.IGNORE_CASE,
+        )
+        assertNull(
+            "the kicker spells a number of questions: ${spelled.find(kicker)?.value}",
+            spelled.find(kicker),
+        )
+        // It still says what the screen is for.
+        assertTrue(kicker.contains("how you want Jarvis to behave"))
+    }
+
     // -- The PC's sections ----------------------------------------------------
 
     /** One question as `GET /api/setup` sends it, with the PC's own section id. */

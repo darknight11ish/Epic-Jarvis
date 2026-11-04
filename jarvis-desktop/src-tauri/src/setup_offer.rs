@@ -40,7 +40,11 @@
 //! The launch itself is the fourth gate and it lives in the caller: the offer
 //! is not considered until the app has been up for [`OFFER_AFTER`], so it
 //! cannot race the HUD's own first paint. One offer per launch, held by
-//! [`SetupOfferState`]'s `offered` flag.
+//! [`SetupOfferState`]'s `offered` flag - and the launch's one look at the
+//! state is only SPENT once the state is really known ([`OfferStep`]): a
+//! backend that is not answering at the sixtieth second used to cost the whole
+//! launch its reminder, because the caller latched the flag before looking
+//! (audit 2026-11-03, bug 1).
 //!
 //! THE TRAY ROW IS ABSENT, NOT DISABLED. As with the update row, "there is
 //! nothing to do" is the row not being there at all rather than a greyed one -
@@ -322,25 +326,67 @@ pub(crate) async fn refresh_setup_state(app: AppHandle) {
 
 /// Raises the one toast this launch may raise, if all four gates say yes.
 ///
+/// Returns whether this launch's one offer is now SETTLED. `false` means the
+/// PC's state has not been read yet: "we could not ask" is not an answer, so
+/// nothing is offered and nothing is spent - the caller keeps its flag unset
+/// and looks again on its next beat. Every state that really arrived settles
+/// the launch, whether it raised a toast or not (a finished quiz, a dismissal
+/// and the owner's own switch are answers too).
+///
 /// Called by `spawn_telemetry_loop` once the app has been up for
 /// [`OFFER_AFTER`]; the state itself is refreshed on the same thirty-second
 /// beat as the notification choices.
-pub(crate) fn offer_once(app: AppHandle) {
+pub(crate) fn offer_once(app: AppHandle) -> bool {
     let holder = app.state::<SetupOfferState>();
     let state = holder.snapshot();
-    if !state.unfinished() || holder.was_offered() {
-        return;
+    // The notification store is only asked once there is a real state to ask
+    // about: an unread state is not an answer and costs no work.
+    let may_post =
+        state.known && crate::notifications::may_post(&app, crate::notifications::Kind::Setup);
+    match offer_step(&state, holder.was_offered(), may_post, now_secs()) {
+        OfferStep::NotYetKnown => false,
+        OfferStep::Settled => true,
+        OfferStep::Raise => {
+            holder.mark_offered();
+            crate::commands::notify(&app, TITLE, &state.toast_body());
+            true
+        }
     }
-    if !state.may_offer_at(now_secs()) {
-        return;
+}
+
+/// What one look at the state decides, without an app: the pure half of
+/// [`offer_once`], so "a failed read costs nothing" is a test rather than a
+/// comment.
+///
+/// The three answers are the three things a look can mean: the PC has not
+/// answered yet (nothing spent), it answered and there is nothing to post, or
+/// it answered and the toast is the one this launch gets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum OfferStep {
+    /// No read has landed. Nothing is offered, and this launch's one offer is
+    /// NOT spent: the caller looks again.
+    NotYetKnown,
+    /// The state is real and no toast is raised for it - finished, dismissed
+    /// for the day, already offered, or held back by the owner's own switch
+    /// and quiet hours.
+    Settled,
+    /// The state is real and unfinished: this launch's toast is due.
+    Raise,
+}
+
+pub(crate) fn offer_step(
+    state: &SetupState,
+    was_offered: bool,
+    may_post: bool,
+    now: f64,
+) -> OfferStep {
+    if !state.known {
+        return OfferStep::NotYetKnown;
     }
-    // The owner's own switch, and quiet hours. A `false` here is not an error:
-    // it is the answer Q4 asks for ("Never use Kind::Other").
-    if !crate::notifications::may_post(&app, crate::notifications::Kind::Setup) {
-        return;
+    if !state.unfinished() || was_offered || !state.may_offer_at(now) || !may_post {
+        return OfferStep::Settled;
     }
-    holder.mark_offered();
-    crate::commands::notify(&app, TITLE, &state.toast_body());
+    OfferStep::Raise
 }
 
 /// The first-run door: after the walkthrough, open Settings at the quiz.
@@ -677,6 +723,69 @@ mod tests {
         assert!(
             body.contains("state.toast_body()"),
             "the toast does not carry the counts"
+        );
+    }
+
+    #[test]
+    fn a_failed_read_never_spends_the_launchs_one_offer() {
+        let at = 1_800_000_000.0;
+        // No read has landed: nothing raised AND nothing spent. This is the
+        // whole of bug 1 - the caller latched "considered" before looking, so
+        // one failed GET /api/setup at the 60 s mark cost that launch its
+        // reminder even though the tray row appeared later.
+        let cold = SetupState::default();
+        assert_eq!(offer_step(&cold, false, true, at), OfferStep::NotYetKnown);
+        assert_eq!(offer_step(&cold, false, false, at), OfferStep::NotYetKnown);
+        assert_eq!(offer_step(&cold, true, true, at), OfferStep::NotYetKnown);
+        // A state that really arrived settles the launch, whether or not it
+        // raises a toast: a finished quiz, a dismissal for the day, an offer
+        // already made, and the owner's own switch are answers too.
+        assert_eq!(
+            offer_step(&known(1, None), false, true, at),
+            OfferStep::Raise
+        );
+        assert_eq!(
+            offer_step(&known(2, None), false, true, at),
+            OfferStep::Settled
+        );
+        assert_eq!(
+            offer_step(&known(1, Some(at)), false, true, at),
+            OfferStep::Settled
+        );
+        assert_eq!(
+            offer_step(&known(1, None), true, true, at),
+            OfferStep::Settled
+        );
+        assert_eq!(
+            offer_step(&known(1, None), false, false, at),
+            OfferStep::Settled
+        );
+    }
+
+    #[test]
+    fn the_loop_spends_the_offer_on_the_answers_own_word() {
+        // The caller's flag comes from `offer_once`, so a "not known" return
+        // leaves the launch's one look unspent and the next beat tries again.
+        let lib = include_str!("lib.rs");
+        let loop_body = function(lib, "fn spawn_telemetry_loop(");
+        assert!(
+            loop_body.contains("offer_considered = setup_offer::offer_once("),
+            "the loop no longer latches its flag from the offer's own answer"
+        );
+        assert!(
+            !loop_body.contains("offer_considered = true;"),
+            "the launch's one offer is spent before the state is known again"
+        );
+        // And the answer is false only for the state that has not arrived.
+        let src = include_str!("setup_offer.rs");
+        let body = function(src, "pub(crate) fn offer_once(");
+        assert!(
+            body.contains("-> bool"),
+            "offer_once cannot say whether the offer was spent"
+        );
+        assert!(
+            body.contains("OfferStep::NotYetKnown => false"),
+            "an unread state settles the launch's one offer"
         );
     }
 

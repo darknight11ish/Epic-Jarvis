@@ -542,6 +542,40 @@ await check("the filter is new-or-unanswered, driven by each question's own vers
   assert.deepEqual(Q.visibleQuestions(oldPc, { filter: true }).map((q) => q.id), ["b"]);
 });
 
+await check("the filter's empty line and its count tell the same truth", () => {
+  // Four questions are new or unanswered across the whole questionnaire; that
+  // number is the label above the panel ("Show only new / unanswered (4)").
+  assert.equal(Q.visibleQuestions(STEPS, { filter: true }).length, 4);
+  // The section on screen holds none of them, so the panel says THAT. It used
+  // to say "Every question is answered and up to date" here, contradicting
+  // the count right above it (audit 2026-11-03, bug 6).
+  assert.equal(Q.visibleQuestions(STEPS, { section: "notify", filter: true }).length, 0);
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "notify", filter: true }),
+    Q.FILTER_SECTION_EMPTY);
+  assert.doesNotMatch(Q.FILTER_SECTION_EMPTY, /Every question is answered/);
+  // A section that does have fresh questions says nothing at all.
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "talk", filter: true }), "");
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "learning", filter: true }), "");
+  // The completion sentence is for a questionnaire with nothing fresh
+  // ANYWHERE - the same set the count is taken from.
+  const finished = Q.normaliseReading({
+    available: true, version: 1, completed_version: 1,
+    sections: [{ id: "a", title: "A" }, { id: "b", title: "B" }],
+    questions: [
+      { id: "q1", title: "Q1", section: "a", version: 1, options: [{ id: "x", label: "X" }] },
+      { id: "q2", title: "Q2", section: "b", version: 1, options: [{ id: "x", label: "X" }] },
+    ],
+    answers: { q1: "x", q2: "x" },
+  });
+  assert.equal(Q.visibleQuestions(finished, { filter: true }).length, 0);
+  assert.equal(Q.filterEmptyWords(finished, { section: "a", filter: true }), Q.FILTER_EMPTY);
+  assert.equal(Q.filterEmptyWords(finished, { filter: true }), Q.FILTER_EMPTY);
+  // The filter off is no empty state at all: the whole section is on screen.
+  assert.equal(Q.filterEmptyWords(STEPS, { section: "notify", filter: false }), "");
+  // The two sentences are different on purpose.
+  assert.notEqual(Q.FILTER_EMPTY, Q.FILTER_SECTION_EMPTY);
+});
+
 await check("next, first-unanswered and the position words walk the PC's order", () => {
   // Forward from a question to the next one with no answer in the draft.
   assert.equal(Q.nextQuestion(STEPS, STEPS_DRAFT, "talk_style").id, "personality");
@@ -600,6 +634,75 @@ await check("the reading carries the PC's own progress state, and tolerates ever
   assert.equal(Q.normaliseReading({
     available: true, questions: [], in_progress: { section: "learning" },
   }).inProgress, null, "a position with no question is not a position");
+});
+
+await check("the card's offer row honours Not now for the same day the toast does", () => {
+  const at = 1_800_000_000;
+  // Unfinished, never dismissed: offered.
+  assert.equal(STEPS.version, 2);
+  assert.equal(STEPS.completedVersion, 1);
+  assert.equal(Q.offerShown(STEPS, at), true);
+  // Dismissed now, an hour ago, a second before the day is up: not offered.
+  // The row used to ignore `dismissed_at` entirely and paint itself again on
+  // the next open, inside the very day it promised to stay quiet (audit
+  // 2026-11-03, bug 4).
+  const dismissed = { ...STEPS, dismissedAt: at };
+  assert.equal(Q.offerShown(dismissed, at), false);
+  assert.equal(Q.offerShown(dismissed, at + 3_600), false);
+  assert.equal(Q.offerShown(dismissed, at + Q.OFFER_QUIET_SECS - 1), false);
+  // Twenty-four hours later the offer is back, exactly as the toast's is.
+  assert.equal(Q.offerShown(dismissed, at + Q.OFFER_QUIET_SECS), true);
+  assert.equal(Q.offerShown(dismissed, at + Q.OFFER_QUIET_SECS + 60), true);
+  // A clock that went backwards is still "just pressed": the quiet reading.
+  assert.equal(Q.offerShown(dismissed, at - 60), false);
+  // Zero is not a real press, so it hides nothing.
+  assert.equal(Q.offerShown({ ...STEPS, dismissedAt: 0 }, at), true);
+  // A finished pass is not offered whatever the clock says, and a PC without
+  // the questionnaire offers nothing at all.
+  assert.equal(Q.offerShown({ ...STEPS, completedVersion: 2 }, at), false);
+  assert.equal(Q.offerShown(Q.normaliseReading({ available: false }), at), false);
+  // The 24 hours is the Rust toast's own number, not a second opinion.
+  const rust = read("src-tauri/src/setup_offer.rs");
+  const hours = Number(
+    /DISMISS_QUIET_SECS: f64 = ([0-9.]+) \* 60\.0 \* 60\.0/.exec(rust)[1],
+  );
+  assert.equal(hours * 3_600, Q.OFFER_QUIET_SECS, "one press, one length of quiet");
+});
+
+await check("the finished block never claims answers the pass does not have", () => {
+  // Not finished: no block at all.
+  assert.equal(Q.finishedPassWords(STEPS, STEPS_DRAFT), "");
+  assert.equal(Q.finishedPassWords(Q.normaliseReading({ available: true }), {}), "");
+
+  // "Keep current settings" records `completed_version` and writes NO answer,
+  // so the block may not say "Every question the PC has is answered" - it used
+  // to, and kept saying it (audit 2026-11-03, bug 5).
+  const kept = { ...STEPS, completedVersion: 2 };
+  const keptWords = Q.finishedPassWords(kept, STEPS_DRAFT);
+  assert.equal(keptWords, `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  assert.doesNotMatch(keptWords, /Every question the PC has is answered/);
+  assert.match(keptWords, /still unanswered/);
+
+  // Every question answered: the completion sentence, and only then.
+  const all = {
+    talk_style: "warm", personality: "calm_stoic", reading_tools: ["calendar"],
+    lights_without_card: "off", learning: "learn", reworded_memories: "on",
+    chat_history: "off", notifications: ["phone"],
+  };
+  assert.equal(Q.finishedPassWords(kept, all), `${Q.DONE_HEADING}. ${Q.DONE_WORDS}`);
+  // One answer short is not completion, and an empty answer is not one either.
+  const almost = { ...all };
+  delete almost.chat_history;
+  assert.equal(Q.finishedPassWords(kept, almost), `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  assert.equal(Q.finishedPassWords(kept, { ...all, chat_history: "" }),
+    `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  // A reading with no questions is never "every question is answered".
+  const empty = Q.normaliseReading({
+    available: true, version: 2, completed_version: 2, questions: [],
+  });
+  assert.equal(Q.finishedPassWords(empty, {}), `${Q.DONE_HEADING}. ${Q.KEPT_WORDS}`);
+  // And the two bodies are different words, not the same one twice.
+  assert.notEqual(Q.DONE_WORDS, Q.KEPT_WORDS);
 });
 
 /* ── 4. The bridge: what is sent, and what can never be sent ─────────────── */
@@ -674,6 +777,19 @@ await check("progress sends one small note, and never an answer's confirm", asyn
   // Nothing staged means no draft field at all, not an empty object.
   assert.deepEqual(Q.progressBody({ question: "talk_style", draft: {} }),
     { question: "talk_style" });
+  // EXCEPT for "Take it again", which needs the explicit empty object: the PC
+  // merges a supplied draft and only an explicit `{}` clears it, while an
+  // absent field means "keep what you have" - so the retake was undone on the
+  // next open (audit 2026-11-03, bug 2).
+  assert.deepEqual(
+    Q.progressBody({ section: "talk", question: "talk_style", draft: {}, clearDraft: true }),
+    { section: "talk", question: "talk_style", draft_answers: {} });
+  // A clear that still has staged answers sends them as usual: the flag never
+  // turns a real draft into a wipe.
+  assert.deepEqual(
+    Q.progressBody({ question: "talk_style", draft: { talk_style: "warm" }, clearDraft: true }),
+    { question: "talk_style", draft_answers: { talk_style: "warm" } });
+  assert.ok(!("confirm" in Q.progressBody({ question: "talk_style", clearDraft: true })));
   // It is never an apply: no confirm, no answers.
   for (const body of [Q.progressBody({ dismiss: true }),
     Q.progressBody({ keepCurrent: true }),
@@ -758,6 +874,33 @@ await check("the page names no route and no gate action, and never applies on lo
   assert.ok(planAt > 0 && applyBodyAt > planAt);
   assert.ok(!bareModel.slice(planAt, applyBodyAt).includes("confirm"),
     "planBody never builds a confirm");
+});
+
+await check("the card paints the three honest states from the model", () => {
+  const page = read("src/setup-settings.js");
+  // Bugs 4, 5 and 6 were each a sentence computed in the page: the offer row
+  // ignored the PC's dismissal, the done block claimed answers it did not
+  // have, and the empty panel tested a different set from the count above it.
+  assert.match(page, /offerShown\(reading, Date\.now\(\) \/ 1000\)/,
+    "the offer row decides from the PC's dismissal again");
+  assert.match(page, /finishedPassWords\(reading, draft\)/,
+    "the done block words itself from its own idea of finished");
+  assert.match(page, /filterEmptyWords\(reading, \{ section, filter: filterOn \}\)/,
+    "the empty panel is not the count's own set");
+  for (const word of ["DONE_HEADING", "DONE_WORDS", "FILTER_EMPTY"]) {
+    assert.ok(!page.includes(word), `the page still words ${word} itself`);
+  }
+  // "Take it again" sends the explicit empty draft AT ONCE - not through the
+  // debounced position note, which the next answer would replace (bug 2).
+  assert.match(page, /clearDraft: true/);
+  const takeAt = page.indexOf("function takeAgain()");
+  const takeEnd = page.indexOf("function planRows(");
+  assert.ok(takeAt > 0 && takeEnd > takeAt, "takeAgain is gone from the page");
+  const takeBody = page.slice(takeAt, takeEnd);
+  assert.ok(takeBody.includes("clearStagedDraft()"),
+    "the retake never clears the draft the PC stores");
+  assert.ok(!takeBody.includes("queueProgress()"),
+    "the retake's clear rides the debounce, where the next note replaces it");
 });
 
 await check("the Rust command builds the bodies, refuses without confirm, and holds only apply on a stale link", () => {

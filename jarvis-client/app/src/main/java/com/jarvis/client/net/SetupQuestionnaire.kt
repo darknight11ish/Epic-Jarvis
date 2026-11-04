@@ -20,10 +20,10 @@ import java.util.Locale
  * module is `backend/jarvis_setup.py`, its routes are installed by
  * `setup.patch`).
  *
- * READ-ONLY, ON PURPOSE. The phone reads the same twenty-five questions in
- * seven sections, the current values and the last accepted answers, and it may
- * ask the PC for the read-only plan (`POST /api/setup/plan` writes nothing and
- * raises no card), so the owner can see what their answers would change and
+ * READ-ONLY, ON PURPOSE. The phone reads the same questions the PC has, in the
+ * PC's own sections - the current values and the last accepted answers - and it
+ * may ask the PC for the read-only plan (`POST /api/setup/plan` writes nothing
+ * and raises no card), so the owner can see what their answers would change and
  * what each change costs: instant, one of the PC's own approval cards, or
  * blocked on this PC. It also reads the answered count and where the PC's own
  * card has got to ([progressWords]) - a reading of the card's state, never a
@@ -55,7 +55,7 @@ object SetupQuestionnaire {
     const val HEADING = "Personalize Jarvis"
     const val TITLE = "Personalize Jarvis"
     const val KICKER =
-        "Twenty-five questions about how you want Jarvis to behave. Every answer " +
+        "Questions about how you want Jarvis to behave, in short sections. Every answer " +
             "changes settings that already exist; nothing here is a new kind of rule."
     const val HELP =
         "Pick the answers that sound like you, then read what would change. " +
