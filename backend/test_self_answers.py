@@ -103,10 +103,18 @@ def the_docs_quoted_questions_all_answer():
     The page is the owner's map of what he can ask. It is read here, not
     restated, so a line added to it without a real answer fails this suite.
     """
-    start = DOC.index("## Asking about itself")
-    end = DOC.index("## \"Open <a place>\"")
-    section = DOC[start:end]
-    promised = re.findall(r'"([^"\n]+\?)"', section)
+    # The three self-knowledge sections the page promises (2026-11-04 phase 2
+    # added the last two): every quoted question in each must answer.
+    sections = (
+        ("## Asking about itself", "## Its own machine, speed and memory"),
+        ("## Its own machine, speed and memory", "## Two things at once"),
+        ("## Two things at once", '## "Open <a place>"'),
+    )
+    promised = []
+    for start_heading, end_heading in sections:
+        start = DOC.index(start_heading)
+        end = DOC.index(end_heading)
+        promised += re.findall(r'"([^"\n]+\?)"', DOC[start:end])
     check("the page's section still quotes a set of questions", len(promised) >= 4,
           str(promised))
     for words in promised:
