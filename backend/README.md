@@ -7319,15 +7319,19 @@ these hold:
 - "Learn automatically" and background learning are both on;
 - the learning model runs on this PC (its address is this PC, and its name
   is not an Ollama "-cloud" model - the learner now refuses those outright);
-- every message the learner read was seen arriving by this PC, typed or said
-  aloud (the strictest voice check only), in a conversation where no tool
-  read outside text. The PC keeps a short in-memory list of the messages it
-  saw arrive - a fingerprint of the words, never the words - even while chat
-  history is off (`jarvis_chat_log.py`);
+- every message a fact is learned FROM was seen arriving by this PC, typed or
+  said aloud (the strictest voice check only), and did not itself read outside
+  text. The PC keeps a short in-memory list of the messages it saw arrive - a
+  fingerprint of the words, never the words - even while chat history is off
+  (`jarvis_chat_log.py`). Since 2026-11-03 one bad message cards only the
+  facts whose words it holds (per-fact attribution), and a fact's words must
+  fit ONE clean message or TWO CONSECUTIVE clean messages - never stitched
+  across a message that read outside text;
 - none of those messages looks pasted (a link, hidden characters, an
   encoded block, email headers, more than 600 characters, or words that read
   like instructions to Jarvis);
-- every word and number of the fact is in what you said;
+- every word and number of the fact is in what you said (in one clean message,
+  or two consecutive clean ones - the rule above);
 - it does not replace a fact you already have;
 - nothing sensitive (health, money, passwords and account details, other
   people's private details) unless you allowed that - see "The
@@ -7403,6 +7407,36 @@ before the fix):
   The route header is built in your `jarvis_hud.py`, which this repository
   does not hold: the new lines sit next to `feedback.patch`'s `turn_id`
   line and were checked only on the patch-stack stand-in.
+
+**The memory review's repairs (2026-11-03).** Measured on the owner's PC: five
+learning passes, zero facts saved, six carded - two because a tool had run
+somewhere in the same pass (the whole pass was carded), two because the local
+model could not finish the sensitive-topic check within 8 seconds, two because
+the learner had reworded the fact. Three changes, each fail-closed and each
+with its pins in `backend/test_auto_learn.py`:
+
+- **Per-fact attribution.** One bad turn no longer cards the whole pass: a
+  fact is learned from the clean turns that hold its words (`_attributed`).
+  Gemini's two hardenings on the memory review: the words must fit ONE clean
+  turn, or TWO CONSECUTIVE clean turns with no other turn between them - never
+  across a turn that read outside text (so a tool output cannot supply half a
+  fact); and a pass with any tool turn or re-sent words may not use "Save
+  facts even when Jarvis had to reword them" to bypass grounding. A turn's own
+  `read_outside` is what makes it unclean; a typed turn after an earlier tool
+  turn is still the owner's words.
+- **A patient second sensitive ask.** A check that could not RUN (a timeout,
+  an unreachable model, an unreadable answer - never a topic it flagged) is
+  asked again after a 1.5 s pause with a 30 s deadline
+  (`SENSITIVE_RETRY_TIMEOUT`, `SENSITIVE_RETRY_BACKOFF`; the tests set the
+  pause to 0.0). A clean second answer saves; a second failure is still a
+  card, still counted as the fault it is.
+- **A reworded-card recheck.** Turning on "Save facts even when Jarvis had to
+  reword them" rechecks the pending cards whose ONLY reason was "not in your
+  own words" (`recheck_pending_proposals`, and again on every later pass);
+  they save with `meta.reworded`, at most five per call. The other two old
+  reasons need the turns of the pass that was carded, which were never stored,
+  so those cards stay for the owner's yes - said plainly rather than guessed
+  at.
 
 **Where it goes.** Right after `chat-history.patch` (`memory-erase.patch`
 comes after it). Its context is chat-history's lines (the learner call it moves, both route blocks,
@@ -7579,8 +7613,13 @@ a card.
    the model is told it is data, not instructions. **It fails closed:** an
    "unsure", an answer that is not the JSON asked for, no answer within
    8 seconds, Ollama not running, no model known, or a model that is not on
-   this PC or is a cloud model - all make the fact a card. It never goes
-   through a proxy (`jarvis_local_http.py`).
+   this PC or is a cloud model - all make the fact a card. **Since
+   2026-11-03** a check that could not RUN at all (a timeout, an unreachable
+   model, an unreadable answer - never a topic it flagged) is asked once more
+   after a 1.5 s pause with a 30-second deadline (`jarvis_auto_learn.
+   SENSITIVE_RETRY_TIMEOUT`): a clean second answer saves the fact, a second
+   failure is still a card. It never goes through a proxy
+   (`jarvis_local_http.py`).
 3. **Your switch.** With "Also remember sensitive topics automatically" on,
    layers 1 and 2 do not run - **except one narrow check** (your decision of
    2026-09-24, after the safety research): passwords, PINs, account and ID

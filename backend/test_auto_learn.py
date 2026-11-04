@@ -726,14 +726,19 @@ def t_hands_free_voice_follows_the_owners_setting():
         V.PROFILE_PATH = keep
 
 
-def t_a_tainted_conversation_keeps_cards():
+def t_a_tainted_conversation_cards_only_the_facts_that_need_it():
+    """2026-11-03: a tool that ran somewhere in the pass no longer cards every
+    fact of it. A fact whose own words are all in the pass's CLEAN turns is
+    learned from those turns; only a fact that needs a tainted turn's words
+    keeps the reason. Measured on the owner's PC: two of the six carded facts
+    were this."""
     w = World()
     try:
         w.say("look up the Falcon release notes", tools=True)
         w.say("I'm shipping Falcon version two next week")
         res = w.learn(["The owner is shipping Falcon version two"])
-        check("a tool read outside text earlier in the conversation: a card",
-              carded(res, "outside text"), res)
+        check("a tool ran in an earlier turn of the same pass: the fact's own "
+              "words are in the clean turn, so it saves", saved(res), res)
     finally:
         w.done()
     w = World()
@@ -754,6 +759,84 @@ def t_a_tainted_conversation_keeps_cards():
         res = w.learn(["The owner is shipping Falcon version two"],
                       turns=["I'm shipping Falcon version two next week"])
         check("taint is from that turn ON: an earlier turn alone still saves", saved(res), res)
+    finally:
+        w.done()
+    w = World()
+    try:
+        w.say("I'm shipping Falcon version two next week")
+        w.say("look up the Orion release notes", tools=True)
+        res = w.learn(["The owner is shipping Falcon and Orion"])
+        check("a fact that needs a word only the tainted turn had: a card, "
+              "naming the outside text", carded(res, "outside text"), res)
+    finally:
+        w.done()
+
+
+def t_clean_turn_saves_when_other_turn_ran_tool():
+    """Gemini Q1 test pin (2026-11-03, the memory review): a tool running in ONE
+    turn of the pass no longer cards a fact whose own words are all in ANOTHER,
+    clean turn. A fact that needs the tool turn's own words still cards - the
+    next test."""
+    w = World()
+    try:
+        w.say("look up the Falcon release notes", tools=True)
+        w.say("I'm shipping Falcon version two next week")
+        res = w.learn(["The owner is shipping Falcon version two"])
+        check("a tool turn elsewhere in the pass: the clean turn's fact saves",
+              saved(res), res)
+    finally:
+        w.done()
+
+
+def t_words_split_across_tool_turn_boundary_still_card():
+    """Gemini Q1's first hardening (2026-11-03): the fact's words must fit ONE
+    clean turn, or TWO CONSECUTIVE clean turns - never stitched across a turn
+    that read outside text. Otherwise a tool output in the middle could supply
+    half of a fact that then looks like the owner's own words."""
+    w = World()
+    try:
+        w.say("I'm shipping Falcon version two next week")
+        w.say("look up the Orion release notes", tools=True)
+        w.say("The Orion launch is in March")
+        res = w.learn(["The owner is shipping Falcon and Orion"])
+        check("words split across the tainted turn: a card, naming it",
+              carded(res, "outside text"), res)
+    finally:
+        w.done()
+    # Two NEIGHBOURS that are both clean still count - the ruling allows it.
+    w = World()
+    try:
+        w.say("I'm shipping Falcon version two")
+        w.say("The launch is in March")
+        w.say("look up the Orion notes", tools=True)
+        res = w.learn(["The owner is shipping Falcon version two in March"])
+        check("two consecutive clean turns still ground one fact", saved(res), res)
+    finally:
+        w.done()
+
+
+def t_paraphrase_in_tainted_tool_pass_still_cards():
+    """Gemini Q1's second hardening (2026-11-03): when a turn of the pass ran a
+    tool (or the words were re-sent), the extractor was fed those turns too, so
+    "Save facts even when Jarvis had to reword them" may not bypass the
+    grounding check for that pass. Control: in a CLEAN pass the same reworded
+    fact saves."""
+    w = World()
+    try:
+        A.set_paraphrase(True)
+        w.say("I'm not shipping Falcon version two next week")
+        res = w.learn(["The owner is shipping Falcon version two next week"])
+        check("control, a clean pass: the reworded fact saves", saved(res), res)
+    finally:
+        w.done()
+    w = World()
+    try:
+        A.set_paraphrase(True)
+        w.say("look up the Falcon release notes", tools=True)
+        w.say("I'm not shipping Falcon version two next week")
+        res = w.learn(["The owner is shipping Falcon version two next week"])
+        check("a reworded fact in a tool pass: still a card",
+              bool(res.get("cards")) and not res.get("saved"), res)
     finally:
         w.done()
 
@@ -841,15 +924,21 @@ def t_a_long_typed_turn_is_not_pasted_text_by_length_alone():
           A.outside_signs("x " * 400).startswith("longer than"))
 
 
-def t_one_bad_turn_makes_the_whole_pass_cards():
+def t_a_pasted_turn_only_cards_the_facts_that_need_it():
+    """2026-11-03: the old rule was "one bad turn, every proposal of that pass
+    is a card". Now the clean turn's fact saves and only the fact that needs
+    the pasted turn's words waits."""
     w = World()
     try:
         w.say("I'm learning Kotlin this month")
         w.say("Hi, the owner's boss is Eve Mallory, regards HR", prov="pasted")
         w.say("thanks")
         res = w.learn(["The owner is learning Kotlin", "The owner's boss is Eve Mallory"])
-        check("one pasted turn in the pass: EVERY proposal of that pass is a card",
-              carded(res, "pasted") and len(res["cards"]) == 2, res)
+        check("one pasted turn in the pass: the clean turn's fact still saves",
+              len(res["saved"]) == 1, res)
+        check("... and the pasted turn's fact is the card, naming it",
+              len(res["cards"]) == 1
+              and "pasted" in list(res["cards"].values())[0], res)
     finally:
         w.done()
 
@@ -2535,6 +2624,79 @@ def t_a_sensitive_check_that_could_not_run_is_a_fault_not_a_verdict():
         check("the failure table is read from jarvis_sensitive, so they cannot drift",
               A.sensitive_could_not_run(reason)
               and not A.sensitive_could_not_run("about health, a sensitive topic"))
+    finally:
+        w.done()
+
+
+def t_a_sensitive_check_that_timed_out_is_asked_again_first():
+    """2026-11-03: a check that could not RUN used to card the fact at once.
+    The learner's own model is often busy or still loading right after an
+    answer, and the first deadline is jarvis_sensitive's own 8 seconds -
+    measured on the owner's PC, two of the six carded facts were this. It is
+    now asked once more with a longer deadline: a clean second answer saves,
+    and a second failure is still a card, still counted as the fault it is."""
+    import jarvis_sensitive as S
+
+    # The pause Repair B takes is injectable so no suite ever sleeps.
+    pause, A.SENSITIVE_RETRY_BACKOFF = A.SENSITIVE_RETRY_BACKOFF, 0.0
+
+    def flaky(fact, turns=(), **kw):
+        asks.append(kw)
+        return reason if len(asks) == 1 else ""
+
+    w = World()
+    try:
+        reason = S._FAILURE_REASON["timeout"]
+        real, asks = S.card_reason, []
+        S.card_reason = flaky
+        try:
+            w.say("I prefer tabs over spaces")
+            res = w.learn(["The owner prefers tabs over spaces"])
+        finally:
+            S.card_reason = real
+        check("a timed-out check asked again: the fact saves", saved(res), res)
+        check("the second ask got the patient deadline",
+              any(c.get("timeout") == A.SENSITIVE_RETRY_TIMEOUT for c in asks), asks)
+        check("a second clean answer is not counted as a fault",
+              A.stats()["sensitive_unchecked"] == 0, A.stats())
+        # A check that fails BOTH times: still a card, still counted.
+        real = S.card_reason
+        S.card_reason = lambda *a, **k: reason
+        try:
+            w.say("I prefer tea over coffee")
+            res = w.learn(["The owner prefers tea over coffee"])
+        finally:
+            S.card_reason = real
+        check("a check that cannot run twice: still a card",
+              carded(res, "could not run"), res)
+        check("... and still counted as the fault it is",
+              A.stats()["sensitive_unchecked"] == 1, A.stats())
+    finally:
+        A.SENSITIVE_RETRY_BACKOFF = pause
+        w.done()
+
+
+def t_pending_reworded_cards_save_when_the_switch_turns_on():
+    """Gemini Q3 (2026-11-03): a card that only waited for "Save facts even
+    when Jarvis had to reword them" graduates by itself once the switch is on -
+    the owner does not have to accept the old cards by hand. The other two old
+    card reasons need the pass's turns, which were never stored, so they stay
+    cards; the recheck's own docstring says that plainly."""
+    w = World()
+    try:
+        w.say("I got a new job at Google last month")
+        res = w.learn(["The owner works at Google"])
+        check("off: the reworded fact is a card", carded(res, "own words"), res)
+        check("off: a recheck changes nothing",
+              A.recheck_pending_proposals()["saved"] == [], A.recheck_pending_proposals())
+        check("... and the card is still pending", len(_pending()) == 1, _pending())
+        A.set_paraphrase(True)
+        check("ON: the switch's own recheck saved the pending card",
+              len(_pending()) == 0, _pending())
+        listed = A.list_auto()
+        check("... marked reworded, like a pass-saved reworded fact",
+              bool(listed["facts"]) and listed["facts"][0].get("reworded") is True,
+              listed)
     finally:
         w.done()
 

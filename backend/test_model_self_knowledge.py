@@ -134,10 +134,13 @@ def main():
     # "HEAVY MODE" label: `_preset_answer` renders `heavy_words` IN PLACE OF
     # `cost` when the build carries it (PR #1106), so the label is not in this
     # answer any more. The window is asserted too - this check is named after
-    # it and used to leave it unchecked.
+    # it and used to leave it unchecked. It is 32,768 since 2026-11-03 (the
+    # pooled lane's measured rung); the exact number is pinned by
+    # test_pooled_lane.py and quoted here from the preset itself.
+    cod_ctx = int(P.by_id("coding").context)
     check("preset detail: its model, window and honest cost",
           r is not None and "Coding" in r.reply and "qwen3-coder" in r.reply.lower()
-          and "16,384 tokens" in r.reply
+          and cod_ctx == 32768 and f"{cod_ctx:,} tokens" in r.reply
           and "both cards at once" in r.reply and "paused" in r.reply,
           getattr(r, "reply", None))
     r = ask("which model would the general preset load?")

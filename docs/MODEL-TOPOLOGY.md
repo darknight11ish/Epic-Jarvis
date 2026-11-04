@@ -693,7 +693,7 @@ has been run.
 
 ---
 
-## The Coding preset's pooled both-card lane, measured (2026-11-02)
+## The Coding preset's pooled both-card lane, measured (2026-11-02, amended 2026-11-03)
 
 The Coding preset's model is `qwen3-coder-30b-a3b-ud-q3-k-xl`, about 14.8 GB of
 GPU-resident memory. That fits neither card alone, so its lane is neither
@@ -716,23 +716,52 @@ models paused first and put back afterwards:
 | RTX 2080 SUPER while it ran | 7,674 of 8,192 MiB used |
 | After the stop | `qwen3.5:9b ctx=196608` on 11436 and `qwen3:8b ctx=16384` on 11435, both zero spill |
 
-**The zero-spill context on this PC today is 16,384, not 28,672.** Measured as
-a ladder with every model unloaded, each rung a real cold load:
+**On 2026-11-02 the zero-spill context on this PC was 16,384, not 28,672.**
+Measured as a ladder with every model unloaded, each rung a real cold load; the
+whole ladder was measured again on 2026-11-03:
 
 | `num_ctx` | Size | In video memory | Spilled |
 |---|---|---|---|
+| **32,768 (what the preset asks for)** | **16,513.7 MiB** | **16,190.1 MiB** | **323.5 MiB** |
 | 28,672 | 16,114 MiB | 15,902 MiB | **212 MiB** |
 | 24,576 | 15,722 MiB | 15,514 MiB | **208 MiB** |
 | 20,480 | 15,326 MiB | 15,123 MiB | **204 MiB** |
 | 16,384 | 14,886 MiB | **14,886 MiB** | **0** |
 
-So the Coding preset asks for 16,384, and the pooled start refuses (503, in the
-machine's own words) rather than loading a model that spills. The 2026-10-18
-measurement's 28,672 rung is kept in `jarvis_big_coder.NUM_CTX` for that mode
-and was not changed; the ladder above is why the preset does not use it.
-`OLLAMA_SCHED_SPREAD=1` was tried at 28,672 and did not change the split
-(212 MiB spilled, 68.4 tok/s). The whole measurement, the method and the undo
-are in `docs/MEASURED-2026-11-02-POOLED-LANE.md`.
+**2026-11-03: the preset moved to 32,768 and accepts the measured 323.5 MiB.**
+Every rung above 16,384 spills (20,480 at 203.5 MiB, 24,576 at 207.5, 28,672 at
+211.5), and 32,768 - the largest rung measured to load on this PC - loaded at
+**16,513.7 MiB with 323.5 MiB in system RAM**, against 16,384 at 14,886.2 MiB
+with none. Cold load was 36.0 s against 37.0 s, and decode was 80.36 against
+79.88 tok/s median on the three prompts - inside this model's own run-to-run
+noise. The 8 GB card is what runs out first (at 28,672 it was at 7,529 of
+8,192 MiB; at 32,768, 7,591), which is why the spill jumps by 112 MiB rather
+than growing smoothly. The owner accepted that measured cost, so:
+
+- the preset asks for **32,768** (`jarvis_model_lanes.POOLED_CTX`; the preset
+  records `context_measured = 32768`, `spill_gib = 0.3`, and keeps
+  `context_zero_spill = 16384` as the historical fact);
+- the pooled start passes `load_coder(..., allow_spill=...)` the one number
+  **352 MiB** (`POOLED_SPILL_ALLOWANCE`) - the 323.5 MiB measurement
+  (`POOLED_SPILL_MEASURED_MIB`) plus about 9%, so the same split reported
+  slightly differently still loads, and nothing larger is accepted;
+- **zero spill is still the rule by default and for every other caller.**
+  `load_coder` with no allowance refuses any spill at all (unchanged), the
+  big-coder mode's 28,672-token rung and its zero-spill check are unchanged,
+  and a load that spills past the 352 MiB cap is refused (503) in the machine's
+  own words, naming both the spill and the allowance.
+
+The 2026-10-18 measurement's 28,672 rung is kept in `jarvis_big_coder.NUM_CTX`
+for that mode and was not changed. `OLLAMA_SCHED_SPREAD=1` was tried at 28,672
+and did not change the split (212 MiB spilled, 68.4 tok/s). The whole
+measurement, the method and the undo are in
+`docs/MEASURED-2026-11-02-POOLED-LANE.md` - the 2026-11-02 numbers above, and
+the 2026-11-03 amendment at its end. The extra 16,384 tokens the new window adds
+over the old 16,384-token window were not filled by that measurement (every
+prompt was 40-43 tokens), so a
+genuinely long conversation that uses them is still unmeasured - the decode
+speed of a nearly-full 32,768-token window was not measured either - and a
+15-minute real coding test runs after this is deployed.
 
 A sixth Ollama, or a model left loaded on port 11434 (Ollama's own default
 server), does not need to be stopped: measured on the same day, that server's
