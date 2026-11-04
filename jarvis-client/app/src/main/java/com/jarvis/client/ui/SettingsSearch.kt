@@ -533,16 +533,18 @@ object SettingsSearch {
             source = listOf("ui/screens/LearningSettingsPlate.kt"),
         ),
         Row(
-            // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the
-            // PC's fourteen questions and its READ-ONLY plan. The heading, the
-            // kicker and the "changes are made on the PC" line are
+            // "Personalize Jarvis" (S2, 2026-10-20, renamed 2026-11-03;
+            // JARVIS-API section 147): the PC's twenty-five questions in seven
+            // sections, its READ-ONLY plan and its one progress line. The
+            // heading, the kicker and the "changes are made on the PC" line are
             // SetupQuestionnaire's own constants, so the quotes are looked for
             // there.
-            key = "setup-questionnaire", title = "First-time setup",
-            label = "Setup questionnaire; first-time setup; how Jarvis behaves; starting out; " +
-                "recommended setup; what would change",
+            key = "setup-questionnaire", title = "Personalize Jarvis",
+            label = "Personalize Jarvis; customization quiz; setup quiz; " +
+                "setup questionnaire; first-time setup; how Jarvis behaves; " +
+                "starting out; recommended setup; what would change",
             quotes = listOf(
-                "Fourteen questions about how you want Jarvis to behave.",
+                "Twenty-five questions about how you want Jarvis to behave.",
                 "This screen only shows what your answers would change.",
             ),
             source = JUMP + listOf("net/SetupQuestionnaire.kt"),

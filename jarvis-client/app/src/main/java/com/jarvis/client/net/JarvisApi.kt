@@ -3723,11 +3723,13 @@ class JarvisApi(
 
     // -------------------------------------------- the setup questionnaire ----
     // JARVIS-API.md section 147. The reading and the READ-ONLY plan; there is
-    // deliberately no apply call on the phone (ARCHITECTURE.md section 8): the
-    // apply works through the PC's existing setters one at a time, waiting on
-    // each existing approval card, and several of those changes are PC-only.
+    // deliberately no apply call and no progress call on the phone
+    // (ARCHITECTURE.md section 8): the apply works through the PC's existing
+    // setters one at a time, waiting on each existing approval card, several of
+    // those changes are PC-only, and where the owner is in the card is the
+    // card's own state.
 
-    /** `GET /api/setup` - the fourteen questions and the PC's own values. */
+    /** `GET /api/setup` - the questions, the values, the progress and the PC's own counts. */
     suspend fun setupQuestionnaire(): ApiResult<JsonObject> = probe(SetupQuestionnaire.PATH)
 
     /** `POST /api/setup/plan {"answers": {...}}` - writes nothing on the PC. */
