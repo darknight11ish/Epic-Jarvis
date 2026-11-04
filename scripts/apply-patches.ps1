@@ -2055,6 +2055,23 @@ $PATCHES = @(
     # there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'phone-apps.patch'
+    # The self-benchmark's routes (bench.patch, 2026-11-04; DESIGN.md section 6
+    # and phase 1). FIVE route branches in jarvis_hud.py and no install block:
+    # GET /api/bench, GET /api/bench/run/<id>, GET /api/bench/history,
+    # POST /api/bench/run and POST /api/bench/cancel - every one of them a
+    # 12-line call into a shipped module, so the logic stays in
+    # backend/jarvis_bench.py where its test can drive it with fake replies.
+    #
+    # It appends immediately before plugin-loader.patch (which must stay LAST
+    # of all) and adds no install block, so the loader's own anchor is
+    # untouched. Its two hunks anchor INSIDE hardware.patch's own added blocks
+    # (the GET /api/hardware body and the POST /api/hardware/apply body), so the
+    # stack walk invents no line of the owner's original file:
+    # tools/check_patch_original_text.py measures 0 hunks / 0 lines for it. Every
+    # patch that enumerates "the patches written after me" has had its name
+    # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
+    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'bench.patch'
     'plugin-loader.patch'
 )
 
@@ -2840,6 +2857,16 @@ $SHIPPED = @(
     # Standard library only, no network. The same entry, in the same position,
     # is in backend/_where.py's SHIPPED list.
     'jarvis_storage_health.py'
+    # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
+    # owner's own request: measure Jarvis's own token speed across the local
+    # models, the layer placement and the context sizes, keep a separate
+    # history, and explain the results in plain words). Phase 1 is the engine
+    # and its store: one run = one model + one setup + N repeats on one lane,
+    # the prefill correction, per-card VRAM and utilisation from nvidia-smi,
+    # and its own `bench.jsonl` (never `speed.jsonl`). `bench.patch` is the
+    # routes that reach it. Standard library only, loopback only. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_bench.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

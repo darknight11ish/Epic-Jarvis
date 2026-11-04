@@ -651,9 +651,16 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
     order = _stack.order()
     check("phone-apps.patch is in apply-patches.ps1's order",
           "phone-apps.patch" in order, order[-3:])
-    check("... immediately before plugin-loader.patch, which stays last",
+    check("... and the loader still comes last of all",
+          order[-1] == "plugin-loader.patch", order[-3:])
+    # It used to assert phone-apps.patch was IMMEDIATELY before the loader. A
+    # patch appended after it (bench.patch, 2026-11-04) legitimately sits
+    # between them - the rule that matters is that the loader is last and that
+    # nothing but a patch written after this one is after this one.
+    check("... with only the patches written after this one between it and "
+          "the loader",
           "phone-apps.patch" in order
-          and order[order.index("phone-apps.patch") + 1] == "plugin-loader.patch",
+          and order[order.index("phone-apps.patch") + 1] == "bench.patch",
           order[-3:])
     patch = (HERE / "phone-apps.patch").read_text(encoding="utf-8")
     check("the patch touches jarvis_hud.py only - no jarvis_gate.py hunk, "
