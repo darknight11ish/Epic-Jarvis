@@ -62,6 +62,7 @@ import os
 import shutil
 import sqlite3
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -1130,8 +1131,22 @@ def t_g13_the_audit_line_for_an_answered_part_carries_no_words():
 #   G14 - the chat builder: two forms, one echo, one receipt
 # --------------------------------------------------------------------------
 
+
+def _a_local_morning(hour=7):
+    """A fixed date at `hour` LOCAL time, as an epoch.
+
+    The chat builder's bare "at 8" means the next 8 o'clock on THIS machine, so
+    a fixed epoch makes a check pass or fail by the runner's own time zone:
+    1_800_000_000.0 is 08:00 UTC - so "at 8" had already passed there and came
+    back as 8pm, one part instead of three - while it is midnight in the
+    owner's zone. `mktime` builds the epoch from LOCAL parts, so the timed
+    clauses below are always ahead of the question, on any runner.
+    """
+    return time.mktime((2027, 1, 15, hour, 0, 0, 0, 0, -1))
+
+
 def t_g14_a_timed_chain_becomes_timed_parts():
-    now = 1_800_000_000.0
+    now = _a_local_morning()
     intent = Q.match("remind me at 8 to start the laundry, then at 8:30 move it to the "
                      "dryer, then at 9 fold it", now)
     check("a timed chain is a reminder_set with steps", intent is not None
