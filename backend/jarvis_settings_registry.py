@@ -664,13 +664,26 @@ class Outcome:
     said: str
     waiting: bool = False       # a card is up; nothing changed yet
     refused_pc_only: bool = False
+    #: The action receipt the setting's OWN module wrote for this change, when
+    #: it writes one (the Anti-Slop filter does: `jarvis_antislop._change`
+    #: records a row and hands its id back). "" means "no row was written".
+    #: Callers must use THIS id rather than guessing "the newest row in the
+    #: database": two changes can land in the same clock tick, and the newest
+    #: row may be another surface's change entirely (2026-11-03 review, BUG 2).
+    receipt_id: str = ""
 
 
 def _say(code: int, out: dict, *, on_ok: Optional[str] = None) -> Outcome:
     """The common shape every one of these `handle_*`/`request_*` functions
     already returns: (http code, {"ok"?, "message"|"said"?, "error"?,
-    "waiting"?, "pc_only"?}). Never invents a sentence: falls back to a
-    plain "that did not work" only when the function gave none at all."""
+    "waiting"?, "pc_only"?, "receipt_id"?}). Never invents a sentence: falls
+    back to a plain "that did not work" only when the function gave none at
+    all.
+
+    A module that records its OWN action receipt hands the row's id back in
+    `receipt_id`; it is carried through here unchanged, so a caller can point a
+    chat's "undo" at exactly that row instead of inferring it from what is
+    newest (2026-11-03 review, BUG 2)."""
     out = out if isinstance(out, dict) else {}
     if out.get("pc_only"):
         return Outcome(False, str(out.get("error") or "That can only be changed on the PC."),
@@ -681,7 +694,8 @@ def _say(code: int, out: dict, *, on_ok: Optional[str] = None) -> Outcome:
     waiting = bool(out.get("waiting"))
     if not said:
         said = on_ok or ("Waiting for your approval." if waiting else "Done.")
-    return Outcome(True, said, waiting=waiting)
+    return Outcome(True, said, waiting=waiting,
+                   receipt_id=str(out.get("receipt_id") or ""))
 
 
 def _missing(name: str) -> Outcome:
@@ -722,7 +736,12 @@ def set_prompt_coach(on: bool, *, peer=None, local=None) -> Outcome:
 # so a spoken sentence, a tap in Settings and a phone POST cannot disagree.
 
 def set_antislop(on: bool, *, peer=None, local=None) -> Outcome:
-    """Turn the Anti-Slop filter on or off. No card either way."""
+    """Turn the Anti-Slop filter on or off. No card either way.
+
+    The module records its OWN action receipt for the write and returns its id,
+    which `_say` carries on `Outcome.receipt_id` - a caller that keeps an undo
+    pointer (the chat's "undo") points at that exact row, never at "whatever is
+    newest" (2026-11-03 review, BUG 2)."""
     try:
         import jarvis_antislop as AS
     except Exception:
@@ -736,7 +755,10 @@ def set_antislop(on: bool, *, peer=None, local=None) -> Outcome:
 
 
 def set_antislop_mode(value: str, *, peer=None, local=None) -> Outcome:
-    """`during` (filter as it writes) or `after` (audit and list findings)."""
+    """`during` (filter as it writes) or `after` (audit and list findings).
+
+    The module's own receipt id is handed back on `Outcome.receipt_id`, exactly
+    as `set_antislop` does."""
     try:
         import jarvis_antislop as AS
     except Exception:
@@ -752,7 +774,10 @@ def set_antislop_mode(value: str, *, peer=None, local=None) -> Outcome:
 
 
 def set_antislop_scope(scope: str, on: bool, *, peer=None, local=None) -> Outcome:
-    """One of copy / code / ui inside the filter."""
+    """One of copy / code / ui inside the filter.
+
+    The module's own receipt id is handed back on `Outcome.receipt_id`, exactly
+    as `set_antislop` does."""
     try:
         import jarvis_antislop as AS
     except Exception:
@@ -4331,6 +4356,116 @@ def weather_source_label(source: str) -> str:
     except Exception:                       # noqa: BLE001 - the id is the answer
         pass
     return str(source or "the weather source")
+
+
+# --- the readers the chat receipts need for five more families (2026-11-03) --
+#
+# FIVE families are changed by a chat runner that calls its module's own setter
+# directly, so there is no BoolSetting/ChoiceSetting/NumberSetting row and no
+# `now()` for them. An undo receipt still needs the value BEFORE the change, and
+# it must be the owning module's own answer - never a default invented here.
+#
+# Read-only, every one: no reader writes anything, raises a card, opens a route
+# or changes a setter. Each answers the CURRENT effective value (the module's
+# own default when nothing is stored) and returns None ONLY when it genuinely
+# cannot read it. None means "no receipt" to `jarvis_quick.py`, never a guessed
+# before.
+
+
+def browser_mode_now() -> Optional[str]:
+    """Which browser Jarvis uses, from `jarvis_browser_engine.settings()`.
+
+    The same read GET /api/browser/engine draws the picker from. The mode id
+    ("auto", "visible", "headless"), never a display name. A damaged or
+    unreadable settings file makes that module say why (`why`) - then this is
+    None, because the stored choice is not readable, and a receipt must not
+    guess it. The module's own "unknown mode reads as Automatic" answer is
+    still an answer (why is empty), so it is returned."""
+    try:
+        import jarvis_browser_engine as BE
+        got = BE.settings() or {}
+        if str(got.get("why") or "").strip():
+            return None
+        mode = str(got.get("mode") or "")
+        return mode if mode in tuple(getattr(BE, "MODES", ())) else None
+    except Exception:                       # noqa: BLE001 - None is the answer
+        return None
+
+
+def asks_first_now(action: str) -> Optional[bool]:
+    """Whether "What asks first" will ask first for `action`, or None.
+
+    Read from `jarvis_asks_first.view()` - the same data GET /api/asks_first
+    hands the page. Only a row with a real switch (the LOOSE table the setting
+    may loosen or tighten) has an answer; a fixed or must-ask row has no switch
+    to read, and then this is None."""
+    wanted = str(action or "")
+    if not wanted:
+        return None
+    try:
+        import jarvis_asks_first as AF
+        view = AF.view() or {}
+        for group in view.get("groups") or ():
+            for row in (group or {}).get("rows") or ():
+                if str((row or {}).get("id") or "") != wanted:
+                    continue
+                switch = (row or {}).get("switch")
+                if isinstance(switch, dict) and isinstance(switch.get("asks"), bool):
+                    return switch["asks"]
+                return None
+    except Exception:                       # noqa: BLE001 - None is the answer
+        return None
+    return None
+
+
+def card_mode_now() -> Optional[str]:
+    """How much of an approval card is shown now, from
+    `jarvis_card_summary.card_mode()` - the same read GET /api/card-prefs draws.
+
+    One of `jarvis_card_summary.MODES`. The module answers its own default when
+    nothing is stored (and for a damaged file, which it deliberately reads as
+    the default), so this is that module's effective answer; it is None only
+    when the module cannot be imported or read at all."""
+    try:
+        import jarvis_card_summary as CS
+        mode = str(CS.card_mode() or "")
+        return mode if mode in tuple(getattr(CS, "MODES", ())) else None
+    except Exception:                       # noqa: BLE001 - None is the answer
+        return None
+
+
+def reading_tool_now(tool: str) -> Optional[bool]:
+    """Whether the AI model is offered `tool` at all, from `jarvis_asks_first`.
+
+    The same `[tools].enabled` read GET /api/asks_first's tool list draws. The
+    tool name may be the Settings page's own name: `real_tool()` maps it the
+    way the route does. None when the module cannot be imported or the read
+    itself raises."""
+    wanted = str(tool or "")
+    if not wanted:
+        return None
+    try:
+        import jarvis_asks_first as AF
+        return AF.real_tool(wanted) in AF.tools_enabled_set()
+    except Exception:                       # noqa: BLE001 - None is the answer
+        return None
+
+
+def antislop_scope_now(scope: str) -> Optional[bool]:
+    """One Anti-Slop scope's state (copy / code / ui), from its own state file.
+
+    `jarvis_antislop.get_state()["scopes"]` - the same read the filter itself
+    obeys. None when the module or the scope cannot be read, never a default
+    invented here."""
+    wanted = str(scope or "")
+    if not wanted:
+        return None
+    try:
+        import jarvis_antislop as AS
+        value = ((AS.get_state() or {}).get("scopes") or {}).get(wanted)
+        return value if isinstance(value, bool) else None
+    except Exception:                       # noqa: BLE001 - None is the answer
+        return None
 
 
 def current_value(setting) -> Optional[str]:
