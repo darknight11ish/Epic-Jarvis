@@ -713,8 +713,10 @@ pub fn show_settings(app: &AppHandle) -> Result<(), String> {
 
 /// Places in Settings another surface may name - the Settings twin of
 /// [`BRAIN_PLACES`], added for the owner's report of 2026-10-27: the tray's
-/// "Update available — v…" row "only opens the settings page", leaving him to
-/// find the card himself.
+/// update row "only opens the settings page", leaving him to find the card
+/// himself. That row stopped naming this place on 2026-11-03 (it installs on
+/// press now); the closed mapping stays for every other surface that can ask
+/// for the Updates card by name.
 ///
 /// `"updates"` is `settings.html`'s own card id, so a NEW window is opened at
 /// `settings.html#updates`, and an open one hears [`SETTINGS_PLACE_EVENT`].
@@ -2374,10 +2376,10 @@ mod tests {
         assert!(round.contains("\"clickThrough\":true"), "{round}");
     }
 
-    /// The tray's "Update available — v…" row names a place, and only a name
-    /// this app really has is one: the list is short and closed, so a typo in
-    /// the tray cannot open an arbitrary fragment of the page (the owner's
-    /// report of 2026-10-27 - the row used to open plain Settings).
+    /// The Updates place is a name this app really has, and only a name it has
+    /// is one: the list is short and closed, so a typo from any surface that
+    /// asks for it cannot open an arbitrary fragment of the page (the owner's
+    /// report of 2026-10-27 - the tray's row then used to open plain Settings).
     #[test]
     fn only_a_named_place_is_a_place_in_settings() {
         assert_eq!(

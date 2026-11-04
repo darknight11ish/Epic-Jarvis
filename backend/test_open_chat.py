@@ -24,11 +24,23 @@ No network, no model.
 from __future__ import annotations
 
 import gc
+import os
 import sys
 import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+
+#: THIS SUITE TESTS THIS CHECKOUT, never the owner's live install. With
+#: JARVIS_BACKEND set (which it is on his PC, and in a shell that exports it)
+#: `require_shipped` would compare this tree's module with the installed one and
+#: stop the run - correctly, because a suite must not report on a copy it did
+#: not test. test_read_link.py and test_live_parity.py make the same two pops
+#: for the same reason, and without them a branch that changes jarvis_quick.py
+#: cannot run this suite at the desk at all.
+os.environ.pop("JARVIS_BACKEND", None)
+os.environ.pop("JARVIS_CONFIG_DIR", None)
+
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 
@@ -220,38 +232,96 @@ DECISION_NEAR_MISSES = (
 )
 
 
+class _Cards:
+    """A stand-in for this PC's approvals table: `jarvis_gate.pending()`.
+
+    D1 (2026-11-03): the approval sentence is now answered ONLY while a card is
+    really waiting, so the suite has to be able to say how many are. `count=0`
+    is an idle PC (the gate is there, nothing is waiting); the outer
+    `sys.modules` state is restored either way, so the case that wants NO gate
+    at all (a backend that does not carry one) still gets ImportError.
+    """
+
+    def __init__(self, count=1):
+        self.rows = [{"id": f"card-{i}", "action": "change_setting"}
+                     for i in range(int(count))]
+        self.saved = None
+
+    def __enter__(self):
+        import types
+        mod = types.ModuleType("jarvis_gate")
+        mod.pending = lambda: [dict(r) for r in self.rows]
+        self.saved = sys.modules.get("jarvis_gate")
+        sys.modules["jarvis_gate"] = mod
+        return self
+
+    def __exit__(self, *exc):
+        if self.saved is None:
+            sys.modules.pop("jarvis_gate", None)
+        else:
+            sys.modules["jarvis_gate"] = self.saved
+        return False
+
+
 def t_a_typed_decision_answers_where_the_card_is():
     now = time.time()
     sched = _Sched()
     try:
-        for text in DECISIONS:
-            intent = Q.match(text, now=now)
-            check(f"a typed decision is answered without the model: {text!r}",
-                  intent is not None and intent.name == "approval_where", intent)
-            if intent is None or intent.name != "approval_where":
-                continue
-            result = Q.run(intent, sched, now)
-            check(f"and really answers, no model: {text!r}",
-                  result is not None and isinstance(result.reply, str)
-                  and bool(result.reply.strip()), result)
-            if result is None:
-                continue
-            reply = result.reply.lower()
-            check(f"the answer names the card: {text!r}", "card" in reply, result.reply)
-            check(f"and says where it is: {text!r}",
-                  "approval window" in reply and "on this pc" in reply, result.reply)
-            check(f"and says typing here cannot do it: {text!r}",
-                  "cannot approve" in reply, result.reply)
-            fields = Q.route_fields(result)
-            check(f"the route carries the intent, unchanged: {text!r}",
-                  fields.get("quick") == "approval_where", fields)
-            check(f"and raises no gate: {text!r}", "gate" not in fields, fields)
+        with _Cards(1):
+            for text in DECISIONS:
+                intent = Q.match(text, now=now)
+                check(f"a typed decision is answered without the model: {text!r}",
+                      intent is not None and intent.name == "approval_where", intent)
+                if intent is None or intent.name != "approval_where":
+                    continue
+                result = Q.run(intent, sched, now)
+                check(f"and really answers, no model: {text!r}",
+                      result is not None and isinstance(result.reply, str)
+                      and bool(result.reply.strip()), result)
+                if result is None:
+                    continue
+                reply = result.reply.lower()
+                check(f"the answer names the card: {text!r}", "card" in reply, result.reply)
+                check(f"and says where it is: {text!r}",
+                      "approval window" in reply and "on this pc" in reply, result.reply)
+                check(f"and says typing here cannot do it: {text!r}",
+                      "cannot approve" in reply, result.reply)
+                fields = Q.route_fields(result)
+                check(f"the route carries the intent, unchanged: {text!r}",
+                      fields.get("quick") == "approval_where", fields)
+                check(f"and raises no gate: {text!r}", "gate" not in fields, fields)
         for text in DECISION_NEAR_MISSES:
-            intent = Q.match(text, now=now)
+            with _Cards(1):
+                intent = Q.match(text, now=now)
             check(f"a sentence that merely contains one goes to the model: {text!r}",
                   intent is None or intent.name != "approval_where", intent)
     finally:
         sched.close()
+
+
+def t_with_nothing_waiting_a_bare_yes_is_ordinary_chat():
+    """D1 (2026-11-03): "yes" and "no" are ordinary words, not a card pointer.
+
+    Measured before the fix: `match("yes")`, `match("Yes")`, `match("yes
+    please")` and `match("no")` all returned `approval_where` on a PC with
+    nothing pending, so ordinary conversation got the canned "approvals are
+    decided on the card itself" sentence instead of an answer.
+    """
+    now = time.time()
+    for count in (0, None):
+        # `count=0` is an idle gate; `None` is a backend that carries no gate at
+        # all (this repository's own suites, an install without it).
+        for text in ("yes", "Yes", "yes please", "no", "No", "no thanks",
+                     "approve", "approve it", "deny", "reject"):
+            if count is None:
+                sys.modules.pop("jarvis_gate", None)
+                intent = Q.match(text, now=now)
+            else:
+                with _Cards(0):
+                    intent = Q.match(text, now=now)
+            where = "no gate" if count is None else "nothing waiting"
+            check(f"{where}: {text!r} is not the approval sentence",
+                  intent is None or intent.name != "approval_where", intent)
 
 
 def t_a_typed_decision_can_never_approve():
@@ -263,7 +333,8 @@ def t_a_typed_decision_can_never_approve():
     """
     sched = _Sched()
     try:
-        intent = Q.match("approve")
+        with _Cards(1):
+            intent = Q.match("approve")
         result = Q.run(intent, sched, time.time())
         fields = Q.route_fields(result)
         for forbidden in ("approved", "approve", "deny", "denied", "decision",
@@ -297,6 +368,7 @@ if __name__ == "__main__":
                t_route_carries_the_intent_name, t_fixed_line_style,
                t_the_phones_own_list_is_current,
                t_a_typed_decision_answers_where_the_card_is,
+               t_with_nothing_waiting_a_bare_yes_is_ordinary_chat,
                t_a_typed_decision_can_never_approve):
         print(f"\n--- {fn.__name__} ---")
         try:

@@ -1895,18 +1895,24 @@ The owner decided on 2026-09-24 that Jarvis learns automatically by default
 (`jarvis_auto_learn.py`, `auto-learn.patch`, docs/JARVIS-API.md §19). It is
 not an approve-all: the learner still proposes every fact, and a proposal is
 saved without a card only when a fixed list of checks passes - source
-`conversation` or a colon "Remember:", every turn the learner read seen LIVE
-by this PC as typed or very-strictly-verified voice in an untainted
-conversation (the live-turn registry `jarvis_chat_log.record_turn()` writes
-on every request, history on or off), no sign of pasted or hidden text, every
-word of the fact in those turns - and no "not", "used to", "if", relation
-word or he/she/they of theirs left out of the fact - never a correction,
-nothing sensitive unless the owner allowed it (`jarvis_sensitive.py`: word
+`conversation` or a colon "Remember:", every turn a fact is learned from seen
+LIVE by this PC as typed or very-strictly-verified voice, the live-turn
+registry `jarvis_chat_log.record_turn()` writing on every request, history on
+or off; since 2026-11-03 a bad turn cards only the facts that need its words
+(per-fact attribution), and the fact's words must fit one clean turn or two
+consecutive clean turns - never across a turn that read outside text - so a
+tool output in one turn cannot supply half of a fact; no sign of pasted or
+hidden text, every word of the fact in those turns - and no "not", "used to",
+"if", relation word or he/she/they of theirs left out of the fact - never a
+correction, nothing sensitive unless the owner allowed it
+(`jarvis_sensitive.py`: word
 lists in eight languages, number and token shapes, anything private about
 another person - since 2026-09-26 an everyday fact about someone ("my sister
 likes jazz") is not a card on its own: the local model decides it, and only
 its clear "not sensitive" saves it - then the learner's own local model; its
-"unsure" or no answer is a card too; and passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are a card even when
+"unsure" or no answer is a card too, and a check that could not RUN is asked
+once more after a short pause with a 30-second deadline before the card
+(2026-11-03); and passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are a card even when
 the owner allowed sensitive topics, by the patterns alone,
 `jarvis_sensitive.always_asks`), and a local model by address AND name. Anything else is the same
 card as before, with the reason on it. Saved facts are `source = "auto"` and
@@ -2743,6 +2749,34 @@ The two apps are meant to do the same things. These are the exceptions, each
 with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
+
+- **More than one conversation window is the desktop's, and that is one-sided on
+  purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
+  open at once"*; JARVIS-API §184.5). The desktop opens extra copies of its own
+  HUD page (`chat_windows.rs`, labels `chat-1`..`chat-8`), each with its own
+  conversation id and its own window; the phone keeps one screen at a time and
+  switches conversation through its existing History screen. A window is a Tauri
+  webview with its own capability file, its own entry in `window_memory.rs`, its
+  own App-lock answer and its own screen-capture exclusion - the phone has no
+  such surface to copy, and "have eight windows" is not a phone shape. What is
+  NOT one-sided is the ability: both apps can read and open the same kept
+  conversations, and the server card for clearing one is answerable in either
+  app. Nothing here adds a route, so `tools/check_parity.py` classifies no new
+  path for the windows themselves.
+
+- **The Update button and the two-halves version handshake are the desktop's, and
+  that is one-sided on purpose** (2026-11-03; the owner's ask *"when i click
+  update on the jarvis hud i want it linked to the back end so both are always
+  updated at the same time"*; JARVIS-API §184.7). The button updates THIS PC's
+  backend folder and replaces THIS PC's signed executable (`update.rs`'s
+  `update_both`), and the handshake reads `GET /api/self` back and compares it
+  with the executable's own version. A phone cannot do either: the patch
+  program, the repository and the Python folder are on the PC, and "a phone
+  patches a PC's backend" is exactly the kind of remote code change the standing
+  rules keep off it. The phone's own update path is unchanged and still its own
+  (the `client-latest` APK, Platform checks). No route is added for the
+  handshake side beyond the read both apps may make; `tools/check_parity.py`
+  classifies no new phone surface.
 
 - **A scheduled task's own words (`job`) can be sent by neither app's Reminders
   screen yet, and that is one-sided on purpose** (2026-11-03; the owner's
@@ -5150,3 +5184,239 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    archived or retired, so check there before adopting a dependency — and
    check our own file before copying theirs, because twice now we already had
    the thing, and once ours was stricter.
+
+---
+
+## 13. What Jarvis knows about itself, and what it may do with that (added 2026-11-03)
+
+The owner asked for a Jarvis that is "as flexible and versatile as it
+reasonably can be - open any menu or setting area on request, pull up any old
+conversation, have multiple conversation windows open at once, clear any
+memory or conversation on request, and know every setting/function/ability it
+has". This section is the design of the half that is new: a self portrait, a
+wider navigation vocabulary, extra conversation windows, ONE carded clear, and a
+version read-back for Updates. The wire shapes are JARVIS-API §184; the
+decision is `decisions.d/2026-11-03-self-portrait-imported-and-clear-one-card.md`.
+
+Five rules hold it together, and each is enforced by code rather than by this
+page.
+
+### 13.1 The self-model is read-only, fixed, and not a new authority
+
+`GET /api/self` (`backend/jarvis_self_portrait.py`, shipped whole and installed
+by `plugins/ready/self-portrait/` with no patch) reports what exists and what
+state it is in. It does not explain a feature, decide anything, or become a
+second source for any fact:
+
+- **Every row is imported, never typed.** Places come from
+  `jarvis_settings_registry.SECTIONS` and `jarvis_menus.MENUS`; settings from the
+  registry's own `BOOL_SETTINGS`/`CHOICE_SETTINGS`; "what asks first" from
+  `jarvis_asks_first.view()`; abilities from `jarvis_feature_guide.features()`;
+  plugins from `jarvis_plugins`; store counts from the stores themselves. If a
+  registry changes, the portrait changes with it; `backend/test_self_portrait.py`
+  fails if a real section or menu is missing.
+- **It describes; it never decides.** A caller that ignores the portrait loses
+  nothing. "How do I use feature X" stays `jarvis_feature_guide.py`'s job and
+  "change setting X" stays `jarvis_settings_registry.py`'s - the module's own
+  header says this (`jarvis_self_portrait.py:31-35`), because a third prose
+  source would drift from both.
+- **Fixed data and live state only.** Never the pairing token, an API key, an
+  account secret, a word of memory or chat, an email or web page, an owner
+  folder path, or a model-written sentence (`jarvis_self_portrait.py:26-30`). A
+  value that cannot be read is `null` with `value_known: false` (or `count: null`
+  and a `why_not`) - never guessed, and an unread switch is never reported as
+  off. This is the injection-surface rule the research named: a self-model is
+  text that reaches the model, so it is checked-in data or nothing.
+- **The private counts can only be withheld.** `?app_locked=1` /
+  `?hide_memory_lists=1` let a client that already knows it is locked ask the
+  portrait to withhold the memory and conversation counts; they can never unlock
+  anything, and the same App-lock / hidden-lists rule that governs
+  `/api/history` and `/api/memory/status` is what decides.
+- **Cheap where it is read often.** The portrait is cached for 20 s and the
+  installer-identity block for 60 s, so a HUD reading it on a timer does not
+  re-import every module once a second.
+
+### 13.2 Navigation changes display only
+
+"Open a place" rides the **existing per-answer `X-Jarvis-Route` field** - not a
+new route and not a new event kind. `open_settings` and `open_brain` have been
+read by both apps since 2026-09-27 and 2026-10-31; the wider vocabulary this
+change adds is `open_area` (a place id) plus an optional `open_anchor` (a row in
+it), and it is additive: a backend that sends only the old fields behaves
+exactly as before.
+
+- **One field, two tables, no second mechanism.** The desktop maps the area word
+  to a real surface in ONE Rust table (`hud_nav.rs`'s `AREA_ALIASES`) and the
+  phone makes the same decision in `OpenPlace.kt`'s tested table. Both read the
+  same route field from the same answer.
+- **Display only, by construction.** No navigation path writes a setting, raises
+  a card or approves anything. The desktop's `dispatch` changes nothing and every
+  window it opens passes the same App-lock check as the tray row that opens it;
+  the phone hands the id to its existing one-time `openSettings` request and
+  nothing else. The owner still makes the change by hand.
+- **An area this app does not have is said, never guessed.** The desktop answers
+  *"Jarvis asked to open "<area>", but the desktop has no "<area>". Nothing was
+  opened."* in the HUD's own log; the phone has its own sentence for a real place
+  it has no screen for (habits, mood, plugins) and for a PC-only place. A
+  missing id is a sentence, never a wrong screen and never a dead control.
+- **Nothing global moves a window.** A navigation is delivered to the MAIN HUD
+  only (`push_to_hud_main`, `lib.rs`), so an extra chat window can never jump
+  because a request made elsewhere named a place. RESEARCH.md's F4 is the reason:
+  a broadcast emit would make every open chat window obey.
+
+### 13.3 The place ids have ONE home, and it already existed
+
+No new screens registry was created, and that is a design decision, not an
+omission. The ids live where they are already tested against the real UI:
+
+- `jarvis_settings_registry.SECTIONS` - every Settings card/row, held to
+  `settings.html`'s `<section class="card" id=...>` and `SettingsScreen.kt`'s
+  `item(key = ...)` by `test_settings_registry.py`, and reflected into the
+  generated `jarvis-desktop/src/settings-catalog.js`;
+- `jarvis_menus.MENUS` - every hideable menu, held to the phone by
+  `tools/check_registry_phone.py` and reflected into the generated
+  `menu-catalog.js` / `MenuCatalog.kt`.
+
+A hand-written fourth list would disagree with the real screens within a week.
+`jarvis_self_portrait.places()` imports the two registries instead, so adding a
+Settings card or a menu adds a place with no edit to this feature, and
+`backend/test_self_portrait.py` fails if one real row is missing from the
+portrait.
+
+### 13.4 A destructive clear is ONE exact item, ONE card, ONE decision
+
+Clearing a conversation is irreversible, so it follows the program's existing
+destructive shape rather than inventing a new one:
+
+- **Two phases.** The request names ONE conversation id and raises ONE approval
+  card; the delete happens only after a person approves that card
+  (`POST /api/conversations/clear`, action `conversation_clear`, tier `ask`).
+  Denial, a timeout, a refused gate or a failed read deletes nothing.
+- **The card is specific and consequence-first.** It names the exact
+  conversation by the PC's own title and message count, says it cannot be
+  undone, says the facts Jarvis learned from it are KEPT, and says copies in
+  older backups stay until they age out. A card that cannot be read is not a
+  card to approve.
+- **Fail closed.** Any tier other than `ask` is refused with a `503` rather than
+  obeyed; a second request while a card waits is a `409`; the id is re-read
+  before deleting. The gate is the one human decision; nothing auto-approves and
+  nothing acts on a stale link.
+- **No bulk and no cardless form.** The body is exactly `{"id"}`, one
+  conversation per request, and there is no list form and no "clear all". One
+  item behind one card is not a limitation of this change; it is the rule
+  (`CLAUDE.md`, "one action, one decision"; ARCHITECTURE §2's "no approve-all").
+- **A cleared chat is not a cleared memory.** The delete goes through the one
+  delete the History routes already use and never touches the memory store, so
+  the facts survive. Forgetting keeps its existing doors, including "Forget a
+  time frame" with its own card, preview and Undo.
+
+### 13.5 The two halves must agree about their version
+
+The Update button patches this PC's backend and then replaces this PC's signed
+executable; it used to be possible to finish one half and believe both had
+moved. Now both sides are read back:
+
+- The backend's `version` block (in `GET /api/self`, and alone at
+  `GET /api/self/version`) carries the app version and the installer's own
+  recorded identity - the sha256 of the three identity modules and, after a
+  reseal, the repository commit.
+- `jarvis-desktop/src-tauri/src/backend_self.rs` compares the executable's
+  version with it and answers one state with one plain sentence. **"In sync" is
+  said only when both sides parse to the same version**; a 404 from a backend
+  that predates `/api/self` is reported as OLDER, never as fine; a backend that
+  is NEWER is safe (the route is additive) and said as such; two numbering
+  schemes are "cannot be compared", never a made-up sync.
+- The read is display-only and has a short timeout; nothing waits on it and
+  nothing auto-updates. At start-up only the "backend is older" answer is spoken,
+  once, in the HUD's chat log.
+
+### 13.6 A storage cleanup is scanned, shown, and carded before anything is touched
+
+The owner's second ask of the same day - *"take inventory of storage and to see
+if it can clear any temporary files up safely"* - is `backend/jarvis_storage_health.py`
+(shipped whole, with its `jarvis-backend/` twin; docs/JARVIS-API.md §184.8).
+The shape is the program's destructive shape, applied to files:
+
+- **The scan is bounded and read-only.** `GET /api/storage/scan` reports the
+  disks, the folders Jarvis uses, and a CANDIDATE list of temporary things with
+  exact bytes, file counts and times. It walks to a fixed depth with an entry
+  and time budget and says `bounded: true` when it hit one, so a count is never
+  presented as exact when it is not. It never follows a symlink or junction:
+  those are skipped, counted and said in `notes`. The build caches are reported
+  as "regenerable, slow to rebuild" and never planned.
+- **Only Python cache is a default.** `pycache` is the one category planned when
+  the caller names none. Jarvis's own logs and the old deploy snapshots are
+  MOVED into `_jarvis-quarantine-<date>` beside the live program, never
+  deleted; `%TEMP%` scratch files with Jarvis's own prefixes are deleted. A
+  plain `.bak` is deliberately not on the snapshot list - it may be the only
+  copy of something.
+- **The dry run names every path.** `GET /api/storage/cleanup/plan` returns the
+  exact absolute paths, their bytes, per-category totals, every refused
+  candidate with its reason, and a single-use token good for 15 minutes. It
+  writes nothing. A plan over 60 items is refused rather than summarised.
+- **ONE card, and it lists everything.** `POST /api/storage/cleanup` raises one
+  card under `storage_cleanup`, tier `ask` in both shipped settings copies; any
+  other tier is refused, never obeyed. The card says what each category is,
+  then "Exactly this, nothing else" and one line per path with its size and
+  whether it will be deleted or moved, and what saying no means. One plan is in
+  flight at a time; a plan with nothing to clear raises no card.
+- **On a yes, it is carried out exactly as shown.** The token must match, be
+  single-use and unexpired, and the categories must still be the planned ones.
+  Every item is re-checked immediately before it is touched (path, shape, no
+  link, and for a deletion its file count, size and newest time), and the first
+  discrepancy stops the whole run with what was already done. The receipt
+  separates `freed_bytes` (really deleted) from `moved_bytes` (still on disk).
+- **The denylist is absolute.** `~/.openjarvis` (memory, chat history,
+  approvals, receipts, voiceprint, projects), the Downloads folder, relative
+  paths, `..`, links or junctions anywhere in the chain, anything outside the
+  allowlisted roots for its category, the live program's files, and any file
+  this repository tracks in git (and when that cannot be proved, the answer is
+  "cannot prove, so it will not clear it"). No network, no elevation, no
+  subprocess except a read-only `git ls-files`.
+
+There is no route that clears without the card, no "clean everything" control,
+and no app screen on either device - so the safety of this feature does not
+depend on a client behaving itself.
+
+### 13.7 A capability refresh re-reads; it never restarts
+
+`POST /api/self/refresh` and the `refresh_abilities` chat tool (docs/JARVIS-API.md
+§184.9) are the owner's *"refresh its function and capabilities awareness"*. The
+refresh clears the portrait's two caches, rebuilds it from the modules as they
+are at that moment, compares the counts before and after, and answers one plain
+sentence naming what moved - with `started_at` carried through, so a caller can
+see the process is the same one. It raises **no card**, because it writes
+nothing, changes no setting and restarts nothing; it is a read of this PC's own
+code and state. The tool rides the gate's existing `skill_list` action (tier
+`auto`), exactly like `feature_guide`, so no new action, tier or card wording is
+invented for it, and it is not recorded as reading outside text because nothing
+outside is read. A refresh cannot become a way to change anything: the only
+route that writes from this module is the carded conversation clear (§13.4).
+
+### 13.8 What is deliberately not here
+
+- **No screens.json, no fourth list.** 13.3.
+- **No new event kind.** Navigation is the per-answer field; the desktop shell
+  may accept a `ui.navigate` frame if a future backend ever sends one, but this
+  backend does not publish it, and a frame nothing reads would be the
+  doorbell-into-an-empty-room defect §6 names.
+- **No model-mediated navigation.** The ids and the tables are deterministic;
+  the model is not asked to invent a section id.
+- **No bulk clear, no cardless clear, no memory-clear route.** 13.4.
+- **No model tool that clears a conversation, by design.** `conversation_find`
+  and `conversation_open` ARE model tools (read-only, under `skill_list`, so
+  they raise no card). `conversation_clear` is deliberately NOT one (Gemini
+  ruling 1, 2026-11-03): an LLM must never have an autonomous tool to wipe the
+  transcript. Clearing stays the REST route, an app UI action or the fast path,
+  always behind its ONE `conversation_clear` card. The explainer and
+  `open_area` from the first sketch are still not built; the portrait's routes
+  and the existing `feature_guide` cover the plain-words side. JARVIS-API
+  §184.10 says the same.
+- **No storage tool and no storage screen, on the tree this was written from.**
+  The storage routes and their ONE card are built and tested, but no
+  `storage_scan`/`storage_cleanup` model tool is registered and neither app
+  draws a storage page. The module carries the exact tool names its wiring
+  worker adds (`TOOL_ROWS`); §184.8 documents the routes and §184.10 the gap.
+- **No mobile self screen and no mobile window fleet.** The portrait is a read
+  both apps can make; the phone has no screen for it yet and one chat at a time.
+  Both are recorded in §8 rather than left to be read as oversights.

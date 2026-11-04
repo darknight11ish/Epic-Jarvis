@@ -3138,6 +3138,235 @@ def _run_feature_guide(args: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   Refreshing Jarvis's own capabilities awareness (2026-11-03)
+# --------------------------------------------------------------------------
+# The owner's ask: *"refresh its function and capabilities awareness"*. The
+# self portrait (jarvis_self_portrait.py, installed by plugins/ready/
+# self-portrait) already knows every place, setting, ability and plugin it can
+# find; this tool asks it to RE-READ now and report, in one plain sentence,
+# what moved. It is a READ: no card, no setting changed, nothing restarted.
+# Decided under the gate's own `skill_list` action ("listing what Jarvis can
+# do", tier "auto"), exactly like FEATURE_GUIDE_TOOL - no new action, tier or
+# card wording is invented for it.
+REFRESH_ABILITIES_TOOL = "refresh_abilities"
+
+
+def _refresh_abilities_tool_text() -> str:
+    """The refresh_abilities description: when to call it, and what it is not.
+
+    Short like every tool text (`backend/test_tool_text.py` holds each to 300
+    tokens), and it says the two things the model gets wrong: this is not the
+    feature explainer (that is feature_guide), and it does not restart or
+    change anything - so it can be called without worrying the owner.
+    """
+    return ("Re-read what Jarvis can do and has right now, and say in one "
+            "plain sentence what changed. Use when: the owner asks you to "
+            "refresh your abilities or your awareness of your own functions, "
+            "or says something you can do is missing or newly available. Do "
+            "NOT use it to explain one feature (that is feature_guide). It "
+            "only re-reads: nothing is restarted, nothing is changed and no "
+            "approval is needed.")
+
+
+def _run_refresh_abilities(args: dict) -> dict:
+    """The tool's whole job: refresh the portrait and hand its sentence back."""
+    try:
+        import jarvis_self_portrait as SP
+    except Exception as exc:                # noqa: BLE001 - an older PC
+        return {"ok": False,
+                "error": f"the self portrait is not installed here "
+                         f"({type(exc).__name__})"}
+    try:
+        out = SP.refresh()
+    except Exception as exc:                # noqa: BLE001 - said, never raised
+        return {"ok": False,
+                "error": f"the abilities could not be re-read "
+                         f"({type(exc).__name__})"}
+    return {"ok": True,
+            "said": str(out.get("said") or ""),
+            "counts": dict(out.get("counts") or {}),
+            "changed": dict(out.get("changed") or {})}
+
+
+# --------------------------------------------------------------------------
+#   The owner's ask by chat: what Jarvis is made of, and its old conversations
+# --------------------------------------------------------------------------
+# The owner's 2026-11-03 ask, in their own words: "be aware of every setting,
+# function and ability it has", "pull up any old conversation", "clear any
+# memory or conversation on request". The inventory and the conversation routes
+# already exist in jarvis_self_portrait.py (installed by
+# plugins/ready/self-portrait); these are the four tools that let the owner
+# reach them by talking.
+#
+#   self_portrait, conversation_find, conversation_open - READ-ONLY, no card.
+#       They read fixed registry data or the owner's own kept chats on this PC,
+#       and they change nothing. Decided under the gate's own `skill_list`
+#       action ("listing what Jarvis can do", tier "auto"), exactly like
+#       feature_guide - no new action, tier or card wording is invented.
+#       conversation_find returns TITLES AND DATES ONLY: the older History
+#       search decision (2026-09-28) is "shown on screen only; nothing handed
+#       to the AI", and a title is the chat's own name, not its words.
+#       conversation_open DOES hand the kept turns to the local model - that is
+#       what "pull up any old conversation" (2026-11-03) asks for, it stays on
+#       this PC's model (rule 1), and it is only reached when the owner asked
+#       to open that one chat.
+#   Clearing a conversation is DELIBERATELY NOT a model tool (Gemini ruling 1,
+#   2026-11-03): an LLM must never have an autonomous tool to wipe the
+#   transcript (prompt-injection / hallucinated-wipe hazard). The REST route
+#   POST /api/conversations/clear still raises the ONE card under the action
+#   `conversation_clear` (tier "ask"); the apps and the fast path are the only
+#   callers. Nothing in this file offers it to the model.
+SELF_PORTRAIT_TOOL = "self_portrait"
+CONVERSATION_FIND_TOOL = "conversation_find"
+CONVERSATION_OPEN_TOOL = "conversation_open"
+#: The three read-only tools and the one gate action they all resolve under.
+SELF_READ_TOOLS = (SELF_PORTRAIT_TOOL, CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL)
+SELF_READ_GATE = "skill_list"
+#: How much one answer may carry, so the local model's window stays sane.
+CONVERSATION_FIND_MAX = 10
+CONVERSATION_OPEN_MAX = 60
+
+
+def _self_portrait_tool_text() -> str:
+    return ("Read what Jarvis is made of on this PC right now: how many places "
+            "(Settings cards and menus) it can open, how many settings, ask-first "
+            "actions, abilities and drop-in plugins it has, which stores exist and "
+            "how to clear them, and which version it runs. Use when: the owner asks "
+            "what you can do, what you have, what is connected, or where a kind of "
+            "setting lives. Do NOT use it to explain one feature in words (that is "
+            "feature_guide) or to change anything. Read-only: no card, nothing "
+            "changed.")
+
+
+def _conversation_find_tool_text() -> str:
+    return ("Find the owner's own kept conversations on this PC by words they "
+            "were about, or list the newest ones when no words are given. Returns "
+            "each chat's ID, title and date - never its message text. Use when: "
+            "the owner asks which old chat was about something, or wants to open "
+            "one by name. Do NOT use it for their notes, files or the public web. "
+            "Read-only: no card, nothing changed.")
+
+
+def _conversation_open_tool_text() -> str:
+    return ("Open ONE kept conversation by the ID conversation_find gave, and "
+            "read its messages so you can answer about them. Use when: the owner "
+            "asked to open, read or bring up one of their old conversations. Never "
+            "invent an ID; if you do not have one, call conversation_find first. "
+            "Read-only: no card, nothing changed. The words come from this PC's "
+            "own kept chat and stay on this PC.")
+
+
+def _run_self_portrait(args: dict) -> dict:
+    """The whole job: read the portrait and hand a COMPACT inventory back.
+
+    Deliberately compact: the model does not need every id (the full portrait is
+    GET /api/self for a screen), only the counts and the shapes it must not
+    claim wrongly. No setting value, chat word or secret is in this result
+    beyond the counts.
+    """
+    try:
+        import jarvis_self_portrait as SP
+    except Exception as exc:                # noqa: BLE001 - an older PC
+        return {"ok": False,
+                "error": f"the self portrait is not installed here "
+                         f"({type(exc).__name__})"}
+    try:
+        got = SP.build()
+    except Exception as exc:                # noqa: BLE001 - said, never raised
+        return {"ok": False,
+                "error": f"the portrait could not be read ({type(exc).__name__})"}
+    counts = SP.counts(got)
+    stores = [{"id": s.get("id"), "count": s.get("count"),
+               "how_to_clear": s.get("how_to_clear")}
+              for s in got.get("stores") or ()]
+    return {"ok": True,
+            "schema": got.get("schema"),
+            "version": {"app_version": (got.get("version") or {}).get("app_version"),
+                        "started_at": (got.get("version") or {}).get("started_at")},
+            "counts": counts,
+            "stores": stores,
+            "ability_groups": [g.get("group") for g in
+                               (got.get("asks_first") or {}).get("groups") or ()],
+            "note": ("This is the inventory only. For one feature's words and "
+                     "where it lives, use feature_guide; to change a setting, use "
+                     "change_setting; to open a place, the owner says so in words.")}
+
+
+def _run_conversation_find(args: dict) -> dict:
+    """Search the kept chats, or list the newest - METADATA ONLY.
+
+    Titles and dates only, never message text: the History search was decided on
+    2026-09-28 as "shown on screen only; nothing handed to the AI", and this
+    tool must not widen that. The id is what conversation_open takes.
+    """
+    args = args or {}
+    try:
+        limit = int(args.get("limit") or CONVERSATION_FIND_MAX)
+    except (TypeError, ValueError):
+        limit = CONVERSATION_FIND_MAX
+    limit = max(1, min(CONVERSATION_FIND_MAX, limit))
+    query = str(args.get("query") or "").strip()
+    try:
+        import jarvis_self_portrait as SP
+    except Exception as exc:                # noqa: BLE001 - an older PC
+        return {"ok": False,
+                "error": f"the chat history is not reachable here "
+                         f"({type(exc).__name__})"}
+    try:
+        if query:
+            import jarvis_chat_log as CL
+            found = CL.search(query, limit=limit)
+        else:
+            code, found = SP.conversation_list(f"limit={limit}")
+            if code != 200:
+                found = {}
+    except Exception as exc:                # noqa: BLE001 - said, never raised
+        return {"ok": False,
+                "error": f"the chat history could not be read ({type(exc).__name__})"}
+    rows = [r for r in found.get("conversations") or () if isinstance(r, dict)]
+    if query and not found.get("query_ok", True):
+        return {"ok": False,
+                "error": str(found.get("why") or
+                             "those search words are too short or too long.")}
+    out = [{"id": r.get("id"), "title": r.get("title"),
+            "updated": r.get("updated"), "turns": r.get("turns")}
+           for r in rows[:limit]]
+    return {"ok": True, "query": query, "conversations": out, "count": len(out),
+            "more": bool(found.get("more")),
+            "note": ("Titles and dates only, never the chat's words. To read one, "
+                     "call conversation_open with its id.")}
+
+
+def _run_conversation_open(args: dict) -> dict:
+    """Open ONE kept conversation by id and hand its turns back (bounded)."""
+    cid = str((args or {}).get("id") or "").strip()
+    try:
+        import jarvis_self_portrait as SP
+    except Exception as exc:                # noqa: BLE001 - an older PC
+        return {"ok": False,
+                "error": f"the chat history is not reachable here "
+                         f"({type(exc).__name__})"}
+    code, conv = SP.conversation_get(cid)
+    if code == 400:
+        return {"ok": False, "error": "That is not a conversation id."}
+    if code == 423:
+        return {"ok": False, "error": "That is hidden while App lock or \"Hide "
+                                      "memory lists and chat history\" is on."}
+    if code == 503:
+        return {"ok": False, "error": "The chat history is not available on this PC."}
+    if code != 200 or not isinstance(conv, dict):
+        return {"ok": False, "error": "No such conversation - it may have been "
+                                      "deleted. Call conversation_find again."}
+    turns = [t for t in conv.get("turns") or () if isinstance(t, dict)]
+    shown = turns[-CONVERSATION_OPEN_MAX:] if len(turns) > CONVERSATION_OPEN_MAX else turns
+    return {"ok": True, "id": conv.get("id"), "title": conv.get("title"),
+            "kind": conv.get("kind"), "updated": conv.get("updated"),
+            "turns_total": len(turns), "turns_shown": len(shown),
+            "turns": [{"role": t.get("role"), "text": t.get("text"),
+                       "at": t.get("at")} for t in shown]}
+
+
+# --------------------------------------------------------------------------
 #   Reverse engineering with REA (jarvis_rea.py, 2026-10-20)
 # --------------------------------------------------------------------------
 # The owner asked to integrate "reverse engineer anything". REA is a real MCP server with 207
@@ -4144,6 +4373,48 @@ TOOLS: dict = {
         _plain_prepare("Explain feature"),
         lambda args, state, **_: _run_feature_guide(args),
         gate_lookup_name=lambda args: "skill_list"),
+    # Re-read Jarvis's own abilities (REFRESH_ABILITIES_TOOL, 2026-11-03): the
+    # owner asked to "refresh its function and capabilities awareness". Read-only
+    # like FEATURE_GUIDE_TOOL above, and decided under the same gate action
+    # (`skill_list`, tier "auto"), so it needs no action, tier or card of its own.
+    REFRESH_ABILITIES_TOOL: Tool(
+        REFRESH_ABILITIES_TOOL, _refresh_abilities_tool_text(),
+        {"type": "object", "properties": {}},
+        _plain_prepare("Refresh abilities"),
+        lambda args, state, **_: _run_refresh_abilities(args),
+        gate_lookup_name=lambda args: "skill_list"),
+    # What Jarvis is made of, and the owner's own old conversations
+    # (2026-11-03). The three are read-only and go through the generic path with
+    # the gate's own `skill_list` action (tier "auto"), like feature_guide, so
+    # they raise no card. Clearing a kept conversation is NOT here: Gemini
+    # ruling 1 keeps it route/app/fast-path only, behind its one card.
+    SELF_PORTRAIT_TOOL: Tool(
+        SELF_PORTRAIT_TOOL, _self_portrait_tool_text(),
+        {"type": "object", "properties": {}},
+        _plain_prepare("Self portrait"),
+        lambda args, state, **_: _run_self_portrait(args),
+        gate_lookup_name=lambda args: SELF_READ_GATE),
+    CONVERSATION_FIND_TOOL: Tool(
+        CONVERSATION_FIND_TOOL, _conversation_find_tool_text(),
+        {"type": "object", "properties": {
+            "query": {"type": "string",
+                      "description": "words the chat was about; leave out to list "
+                                     "the newest chats"},
+            "limit": {"type": "integer",
+                      "description": f"how many chats, at most "
+                                     f"{CONVERSATION_FIND_MAX}"}}},
+        _plain_prepare("Find conversations"),
+        lambda args, state, **_: _run_conversation_find(args),
+        gate_lookup_name=lambda args: SELF_READ_GATE),
+    CONVERSATION_OPEN_TOOL: Tool(
+        CONVERSATION_OPEN_TOOL, _conversation_open_tool_text(),
+        {"type": "object", "properties": {
+            "id": {"type": "string",
+                   "description": "the conversation id conversation_find gave"}},
+         "required": ["id"]},
+        _plain_prepare("Open conversation"),
+        lambda args, state, **_: _run_conversation_open(args),
+        gate_lookup_name=lambda args: SELF_READ_GATE),
     # Raising the connect card - see CONNECT_TOOL above for why this is not put
     # to the gate. `_one_call` hands this tool to `_connect_call` before the
     # generic path, so prepare()/execute() here are never reached by a real
@@ -7193,7 +7464,20 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # own sentences. Nothing outside is read, and recording a
                 # listing as a read would make a later note write wait for a
                 # person for no reason.
-                PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL}
+                PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL,
+                # Re-reading Jarvis's own abilities (REFRESH_ABILITIES_TOOL,
+                # 2026-11-03): it re-reads THIS PC's own modules and switches
+                # and its answer is this file's sentence. Nothing outside is
+                # read, so it is not recorded as a read (which would make a
+                # later note write wait for a person for no reason).
+                REFRESH_ABILITIES_TOOL,
+                # The self portrait (SELF_PORTRAIT_TOOL, 2026-11-03): fixed
+                # registry data and this PC's own counts - nothing outside is
+                # read. The two CONVERSATION read tools are deliberately NOT
+                # here: an old chat's answers may quote a page or an email, so
+                # opening one counts as reading, and a note write later in that
+                # turn must still wait for a person.
+                SELF_PORTRAIT_TOOL}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -8478,7 +8762,21 @@ TOOL_GROUPS = (
       # move. `plugin_list` reads and `plugin_switch` turns one plugin on (one
       # modify_own_code card) or off (instant) - the same "Jarvis's own
       # switches" subject the group's own description names.
-      PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL)),
+      PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL,
+      # Re-reading the self portrait (REFRESH_ABILITIES_TOOL, 2026-11-03)
+      # shares this group for the same reason: it is a read of Jarvis's own
+      # abilities and settings, and a group's members cost nothing extra in
+      # more_tools' own enum, so test_short_tool_list.py's pin does not move.
+      REFRESH_ABILITIES_TOOL, SELF_PORTRAIT_TOOL,
+      # The owner's own old conversations (2026-11-03: "pull up any old
+      # conversation"). They ride in this group rather than a new one, and that
+      # is a MEASURED choice: the short list's budget
+      # (test_short_tool_list.py) counts group NAMES and descriptions, so a
+      # seventh group pushed it from 1,600 to 1,608 tokens; a group's members
+      # cost nothing there and are paid only when the group is opened, which
+      # ships OFF. Both are read-only. Clearing is NOT a model tool (Gemini
+      # ruling 1) - it stays route/app/fast-path only, behind its one card.
+      CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -8716,6 +9014,29 @@ TOOL_HINTS = {
         r"no longer authori", r"\brevoke\b", r"\byou don'?t have approval\b",
         r"no approval to search", r"\bask me before (?:you )?search",
         r"without asking any ?more"),
+    # The self portrait, the ability refresh and the owner's own conversations
+    # (2026-11-03, jarvis_self_portrait.py). Written from those tools' own
+    # descriptions, so the diet list offers them exactly when the question is
+    # about Jarvis itself or an old chat - and never for an unrelated request.
+    "self_portrait": (
+        r"\bwhat (?:can|do) you (?:do|have)\b", r"\byour (?:abilities|capabilit)",
+        r"\bevery setting\b", r"\bwhat settings\b", r"\bwhat (?:is|are) (?:connected|set up)\b",
+        r"\bwhat do you know how to\b", r"\byour (?:plugins?|stores?)\b",
+        r"\blist (?:your|the) (?:features|abilities|settings)\b"),
+    "refresh_abilities": (
+        r"\brefresh\b.*\b(?:abilities|capabilit|awareness|skills|settings)\b",
+        r"\bre-?read\b.*\b(?:abilities|capabilit|settings)\b",
+        r"\bupdate your (?:abilities|capabilities|awareness)\b",
+        r"\bwhat (?:else )?can you do now\b"),
+    "conversation_find": (
+        r"\bold (?:chat|conversation)", r"\b(?:past|earlier|previous) (?:chat|conversation)",
+        r"\bconversations?\b", r"\bchat history\b", r"\bwhich chat\b",
+        r"\bfind (?:that|the|my) (?:chat|conversation)\b"),
+    "conversation_open": (
+        r"\bopen (?:that|the|my|one) (?:chat|conversation)\b",
+        r"\bread (?:that|the|my|one) (?:chat|conversation)\b",
+        r"\bpull up (?:that|the|my|one) (?:chat|conversation)\b",
+        r"\bwhat did (?:we|i) say (?:in|about)\b.*\bchat\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
@@ -14394,6 +14715,61 @@ CONNECT_AFTER_OUTSIDE = (
     "message, in your own words.")
 
 
+#: The words a person or a model may use for a small number setting. The one
+#: shipped NumberSetting ("the live idle timeout") is 30-600 seconds, so ten
+#: words cover every value a person says in plain speech.
+_NUMBER_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                 "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+_NUMBER_UNIT = re.compile(r"(seconds?|secs?|s|minutes?|mins?|m)?")
+
+
+def _number_setting_seconds(text) -> Optional[int]:
+    """The whole number of SECONDS a model's `change_setting` value names, or
+    None. Accepts "180", "3 minutes", "three minutes", "90s" - digits or the
+    ten small words, with an optional minutes unit. The RANGE is not checked
+    here: the setting's own setter owns it (jarvis_limits.change), so a value
+    out of range is refused by the same rule both apps and the spoken path
+    already obey."""
+    raw = str(text or "").strip().lower().replace(",", "")
+    if not raw:
+        return None
+    parts = raw.split()
+    if len(parts) == 1:
+        number, unit = parts[0], ""
+    elif len(parts) == 2:
+        number, unit = parts
+    elif len(parts) == 3 and parts[0] in ("a", "an"):
+        number, unit = parts[1], parts[2]
+    else:
+        return None
+    found = re.fullmatch(r"(\d+)(seconds?|secs?|s|minutes?|mins?|m)?", number)
+    if found:
+        value = int(found.group(1))
+        unit = found.group(2) or unit
+    else:
+        value = _NUMBER_WORDS.get(number)
+        if value is None:
+            return None
+    unit_found = _NUMBER_UNIT.fullmatch(unit)
+    if unit_found is None:
+        return None
+    if (unit_found.group(1) or "").startswith("m"):
+        value *= 60
+    return value
+
+
+def _number_setting_words(setting) -> str:
+    """The refusal for a number value that cannot be read, naming the row's own
+    range in the owner's words when this PC has it. Never invents a range."""
+    try:
+        rng = setting.range_words()
+    except Exception:                       # noqa: BLE001 - older PC
+        rng = ""
+    return ("refused: that has to be a whole number of seconds or minutes"
+            + (f", {rng}" if rng else "")
+            + ". Nothing was changed.")
+
+
 def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
                    *, watch: "_TurnWatch") -> None:
     """One change_setting call - the whole of the model-facing settings tool.
@@ -14478,6 +14854,16 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
     wake_word = bool(setting is None and choice is None and R.wake_word_from_words(asked))
     browser = bool(setting is None and choice is None and not wake_word
                    and R.browser_mode_named(asked))
+    # A NUMBER setting (the jarvis_settings_registry.NumberSetting table, 2026-11-01:
+    # "the live idle timeout" is the one shipped row). Resolved LAST, after every
+    # other kind, so a sentence that names a switch or a choice is never read as a
+    # number. Before 2026-11-03 nothing called find_number_setting_words from the
+    # model-facing path at all, so the ONE number the registry counts as changeable
+    # (capability_keys / changeable_settings) could not be changed by asking - the
+    # spoken path could, the tool could not. Its own setter is still the only thing
+    # that decides the range (jarvis_limits.change), exactly like every other kind.
+    number = (None if setting is not None or choice is not None or wake_word or browser
+              else R.find_number_setting_words(asked))
     apply = None
     if setting is not None:
         if value not in ("on", "off"):
@@ -14504,6 +14890,15 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
             return stop(R.browser_mode_bad_words(value))
         key = "browser_mode"
         apply = lambda: R.set_browser_mode(mode)
+    elif number is not None:
+        # The model sends the value as words ("three minutes", "180", "3 minutes").
+        # Seconds is the unit every number setting's setter takes; a value the
+        # range refuses is answered with the row's own range and changes nothing.
+        seconds = _number_setting_seconds(value)
+        if seconds is None:
+            return stop(_number_setting_words(number))
+        key = number.key
+        apply = lambda: number.set(seconds)
     else:
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)

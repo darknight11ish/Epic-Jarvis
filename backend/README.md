@@ -257,7 +257,7 @@ on a throwaway copy instead.
 | `learning-extract-reason.patch` | `jarvis_extract.py` | **A failed local-model call says WHY it failed** (2026-10-28, `docs/defect-register.tsv` DEF-017). `jarvis_extract._local_llm()`'s `except Exception: return None` threw away the exception class, the HTTP status and the body, so the learner's only message was "reached no model at http://127.0.0.1:11436 ... Is it pulled?" - while on 2026-10-28 the owner's own PC had `qwen3.5:9b` loaded (9.86 GB VRAM) and answered a one-token `POST /api/generate` in **1.969 s**, with an EMPTY `response` and `done_reason: "length"`. It now records a CLOSED-WORLD reason - the exception class or the kind of empty answer, the HTTP status, the wall duration and Ollama's own `done_reason`; never a prompt word and never an answer word - keeps returning `None`, and hands the reason to `jarvis_auto_learn.note_model_failure`, which `/api/memory/learning` already reads back in `counters.model_failures`, `counters.last_model_error` and the human `counters.note`. **And it asks the model to answer, not to think:** `qwen3.5:9b` is a hybrid reasoning model, and with a small budget it can spend the whole of it in `thinking` and return that same empty 200 (the measured `thinking: "Okay"`), so the request now carries `"think": False`; an Ollama old enough not to know the field ignores it, so no version probe is needed (Gemini Edition-3 review F1). **No HUD hunk and no app change**: the counters path is the shipped `jarvis_auto_learn.py`. ONE file, no install block, no route, no gate row, no tier row - so it is appended immediately before `plugin-loader.patch` (which must stay LAST of all), after `f01-manual-lane-gate.patch`, and its context is the `_local_llm` block of the owner's own file, which no earlier patch writes. `backend/test_learning_local_llm_reason.py` is the proof, including the bite proof: with this patch taken back off the published base, the old code has no way to say why, records nothing, and sends no `think` flag at all. |
 | `phone-apps.patch` | `jarvis_hud.py` | **The phone's app allow-list, managed: add or remove ONE app, card first** (2026-11-02; the owner's words: "i would need to approve a card with the apps i would like it to manipulate first and i can remove or add any android app to that list any time with an approval card... or by going to the settings and changing it there too"; `docs/JARVIS-API.md` section 176). PR #1067 made `[phone_apps]` the whole permission for opening an app on the phone and it ships EMPTY, so the only way in was editing `jarvis-framework.toml` by hand. This adds the management: `GET /api/phone/apps` (read-only) and `POST /api/phone/apps` (ONE app, ONE `change_own_config` card naming the friendly name and the exact package id, nothing written until approved), wired to the shipped `jarvis_phone_apps.py` in THREE hunks - the GET read, the `_desktop_action` branch beside `/api/limits/settings`, and the POST route TUPLE. No install block, so `plugin-loader.patch`'s anchor is untouched. **No `jarvis_gate.py` hunk and no new gate action**: the model tool resolves through the existing `change_setting` key to `change_own_config`, the same action the other settings changes use, and `backend/test_phone_app_allowlist.py` proves that mapping is load-bearing (the tool's own name is not a `_TOOL_ACTIONS` key, so without it the gate would answer `unclassified_tool`) and fails pre-fix. No bulk path. The write is the same config layer the other settings use - one line of the owner's text, the whole file re-parsed and compared, atomic replace, then `reload_framework()` - and an applied add or remove writes one audit line. Appended last of the core patches, immediately before `plugin-loader.patch`; every suite that enumerates "the patches written after me" has the name. See "The phone's app list, managed", at the very end. |
 
-| `gate-tool-actions-gap.patch` | `jarvis_gate.py` | **Four tools resolved to NO gate action at all** (2026-11-01; the residue PR #1064 made visible by making two suites hermetic). `jarvis_agent.py` offers `send_file_to_phone`, `protect_from_jarvis`, `connect_account` and `rea_investigate`, and not one of them had a line in `jarvis_gate._TOOL_ACTIONS` - so `action_for_tool()` answered `unclassified_tool` for every one of them. Fail-SAFE (that name takes `unknown_action_tier`, "ask") and still wrong: the card the owner was shown was never the one the tool raises, and "What can Jarvis reach" listed all four as unclassified. **No patch in `backend/` named any of the four**, which is why no run of `apply-patches.ps1` could ever have added them. ONE hunk, four ADDED lines at the END of `_TOOL_ACTIONS`, each on an action that ALREADY exists and already owns its tier and its card words - `send_file_to_phone` itself, `protect_item`, `change_own_config`, `run_shell_on_host` - so no new action, tier or card wording is invented. **It sits BEFORE `unknown-risk-approvable.patch`**, whose own guard (`backend/test_gate_unknown_risk.py`) requires that patch to be the last one that writes `jarvis_gate.py`; the two do not interact (its eight rows go at the TOP of `_RISK`, these four lines at the END of `_TOOL_ACTIONS`). Its context is `gate-entries.patch`'s own last line, so the stack walk invents no pre-image and `_stack.py`'s `jarvis_gate.py` RATCHET does not move. `jarvis-backend/jarvis_gate.py` - the published base, which is meant to be the state AFTER the patches - carries the same four lines. Proved by `backend/test_gate_tool_actions.py`, the CI-visible half of `test_agent.py`'s `t_every_tool_resolves_to_a_real_jarvis_gate_action` (which prints `skip` in CI, where `jarvis_gate` cannot be imported): at the desk, against a copy of the installed backend, `test_agent.py` went **311 passed / 4 failed -> 315 passed / 0 failed**. See "Four tools that reached the gate with no action". |
+| `gate-tool-actions-gap.patch` | `jarvis_gate.py` | **Four tools resolved to NO gate action at all** (2026-11-01; the residue PR #1064 made visible by making two suites hermetic). `jarvis_agent.py` offers `send_file_to_phone`, `protect_from_jarvis`, `connect_account` and `rea_investigate`, and not one of them had a line in `jarvis_gate._TOOL_ACTIONS` - so `action_for_tool()` answered `unclassified_tool` for every one of them. Fail-SAFE (that name takes `unknown_action_tier`, "ask") and still wrong: the card the owner was shown was never the one the tool raises, and "What can Jarvis reach" listed all four as unclassified. **No patch in `backend/` named any of the four**, which is why no run of `apply-patches.ps1` could ever have added them. ONE hunk; it ADDS the four missing lines at the END of `_TOOL_ACTIONS`, each on an action that ALREADY exists and already owns its tier and its card words - `send_file_to_phone` itself, `protect_item`, `change_own_config`, `run_shell_on_host` - plus, since 2026-11-03, `conversation_clear` (the F6 self portrait's one-card clear: the tool's own name is its action, and its shipped tier line is "ask"), so no new action, tier or card wording is invented. **It sits BEFORE `unknown-risk-approvable.patch`**, whose own guard (`backend/test_gate_unknown_risk.py`) requires that patch to be the last one that writes `jarvis_gate.py`; the two do not interact (its eight rows go at the TOP of `_RISK`, these four lines at the END of `_TOOL_ACTIONS`). Its context is `gate-entries.patch`'s own last line, so the stack walk invents no pre-image and `_stack.py`'s `jarvis_gate.py` RATCHET does not move. `jarvis-backend/jarvis_gate.py` - the published base, which is meant to be the state AFTER the patches - carries the same four lines. Proved by `backend/test_gate_tool_actions.py`, the CI-visible half of `test_agent.py`'s `t_every_tool_resolves_to_a_real_jarvis_gate_action` (which prints `skip` in CI, where `jarvis_gate` cannot be imported): at the desk, against a copy of the installed backend, `test_agent.py` went **311 passed / 4 failed -> 315 passed / 0 failed**. See "Four tools that reached the gate with no action". |
 
 ## Four tools that reached the gate with no action (2026-11-01)
 
@@ -7319,15 +7319,19 @@ these hold:
 - "Learn automatically" and background learning are both on;
 - the learning model runs on this PC (its address is this PC, and its name
   is not an Ollama "-cloud" model - the learner now refuses those outright);
-- every message the learner read was seen arriving by this PC, typed or said
-  aloud (the strictest voice check only), in a conversation where no tool
-  read outside text. The PC keeps a short in-memory list of the messages it
-  saw arrive - a fingerprint of the words, never the words - even while chat
-  history is off (`jarvis_chat_log.py`);
+- every message a fact is learned FROM was seen arriving by this PC, typed or
+  said aloud (the strictest voice check only), and did not itself read outside
+  text. The PC keeps a short in-memory list of the messages it saw arrive - a
+  fingerprint of the words, never the words - even while chat history is off
+  (`jarvis_chat_log.py`). Since 2026-11-03 one bad message cards only the
+  facts whose words it holds (per-fact attribution), and a fact's words must
+  fit ONE clean message or TWO CONSECUTIVE clean messages - never stitched
+  across a message that read outside text;
 - none of those messages looks pasted (a link, hidden characters, an
   encoded block, email headers, more than 600 characters, or words that read
   like instructions to Jarvis);
-- every word and number of the fact is in what you said;
+- every word and number of the fact is in what you said (in one clean message,
+  or two consecutive clean ones - the rule above);
 - it does not replace a fact you already have;
 - nothing sensitive (health, money, passwords and account details, other
   people's private details) unless you allowed that - see "The
@@ -7403,6 +7407,36 @@ before the fix):
   The route header is built in your `jarvis_hud.py`, which this repository
   does not hold: the new lines sit next to `feedback.patch`'s `turn_id`
   line and were checked only on the patch-stack stand-in.
+
+**The memory review's repairs (2026-11-03).** Measured on the owner's PC: five
+learning passes, zero facts saved, six carded - two because a tool had run
+somewhere in the same pass (the whole pass was carded), two because the local
+model could not finish the sensitive-topic check within 8 seconds, two because
+the learner had reworded the fact. Three changes, each fail-closed and each
+with its pins in `backend/test_auto_learn.py`:
+
+- **Per-fact attribution.** One bad turn no longer cards the whole pass: a
+  fact is learned from the clean turns that hold its words (`_attributed`).
+  Gemini's two hardenings on the memory review: the words must fit ONE clean
+  turn, or TWO CONSECUTIVE clean turns with no other turn between them - never
+  across a turn that read outside text (so a tool output cannot supply half a
+  fact); and a pass with any tool turn or re-sent words may not use "Save
+  facts even when Jarvis had to reword them" to bypass grounding. A turn's own
+  `read_outside` is what makes it unclean; a typed turn after an earlier tool
+  turn is still the owner's words.
+- **A patient second sensitive ask.** A check that could not RUN (a timeout,
+  an unreachable model, an unreadable answer - never a topic it flagged) is
+  asked again after a 1.5 s pause with a 30 s deadline
+  (`SENSITIVE_RETRY_TIMEOUT`, `SENSITIVE_RETRY_BACKOFF`; the tests set the
+  pause to 0.0). A clean second answer saves; a second failure is still a
+  card, still counted as the fault it is.
+- **A reworded-card recheck.** Turning on "Save facts even when Jarvis had to
+  reword them" rechecks the pending cards whose ONLY reason was "not in your
+  own words" (`recheck_pending_proposals`, and again on every later pass);
+  they save with `meta.reworded`, at most five per call. The other two old
+  reasons need the turns of the pass that was carded, which were never stored,
+  so those cards stay for the owner's yes - said plainly rather than guessed
+  at.
 
 **Where it goes.** Right after `chat-history.patch` (`memory-erase.patch`
 comes after it). Its context is chat-history's lines (the learner call it moves, both route blocks,
@@ -7579,8 +7613,13 @@ a card.
    the model is told it is data, not instructions. **It fails closed:** an
    "unsure", an answer that is not the JSON asked for, no answer within
    8 seconds, Ollama not running, no model known, or a model that is not on
-   this PC or is a cloud model - all make the fact a card. It never goes
-   through a proxy (`jarvis_local_http.py`).
+   this PC or is a cloud model - all make the fact a card. **Since
+   2026-11-03** a check that could not RUN at all (a timeout, an unreachable
+   model, an unreadable answer - never a topic it flagged) is asked once more
+   after a 1.5 s pause with a 30-second deadline (`jarvis_auto_learn.
+   SENSITIVE_RETRY_TIMEOUT`): a clean second answer saves the fact, a second
+   failure is still a card. It never goes through a proxy
+   (`jarvis_local_http.py`).
 3. **Your switch.** With "Also remember sensitive topics automatically" on,
    layers 1 and 2 do not run - **except one narrow check** (your decision of
    2026-09-24, after the safety research): passwords, PINs, account and ID

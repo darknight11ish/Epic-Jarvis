@@ -187,6 +187,17 @@ TOOL_NAMES = {
     "plugin_list": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
     "plugin_switch": "Switching ONE of Jarvis's own drop-in plugins on (one card) "
                      "or off (instant); it takes effect the next time Jarvis starts",
+    # What Jarvis is made of, and the owner's own old conversations (2026-11-03;
+    # jarvis_self_portrait.py). test_reach.py requires plain words for every
+    # tool; the two conversation reads change nothing and the clear is ONE card
+    # per conversation, so that is said in its own line.
+    "self_portrait": "Saying what it is made of on this PC (read-only)",
+    "refresh_abilities": "Re-reading its own abilities and settings when you ask "
+                         "(read-only, nothing restarted)",
+    "conversation_find": "Finding your old conversations by their titles "
+                         "(read-only, titles and dates only)",
+    "conversation_open": "Opening one of your old conversations to read it "
+                         "(read-only, on this PC)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as
