@@ -6540,7 +6540,8 @@
           "pc_reminder_sounds",
           "pc_briefing_notification",
           "pc_handoff_notification",
-          "pc_quiet_hours"
+          "pc_quiet_hours",
+          "pc_setup_notification"
         ],
         "turn_on": "turn on alarm sounds",
         "turn_off": "turn off alarm sounds",
@@ -9824,6 +9825,24 @@
       "reason": "switch present on the desktop Settings page"
     },
     {
+      "key": "pc_setup_notification",
+      "names": [
+        "the personalize jarvis reminder",
+        "personalize jarvis reminder",
+        "the personalize jarvis notification",
+        "the setup reminder",
+        "the setup notification"
+      ],
+      "section": "notifications",
+      "desktop_row": "notif-setup",
+      "turn_on": "turn on the personalize jarvis reminder",
+      "turn_off": "turn off the personalize jarvis reminder",
+      "resolved": true,
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
+    },
+    {
       "key": "pc_quiet_hours",
       "names": [
         "quiet hours",
@@ -10273,6 +10292,16 @@
     {
       "id": "notif-handoff",
       "label": "Website needs you (Solve it here)",
+      "section": "notifications",
+      "owner": "desktop",
+      "phone_key": null,
+      "in_settings_html": true,
+      "in_desktop_catalog": true,
+      "in_phone_catalog": false
+    },
+    {
+      "id": "notif-setup",
+      "label": "Personalize Jarvis",
       "section": "notifications",
       "owner": "desktop",
       "phone_key": null,
