@@ -1208,6 +1208,26 @@
  {
   "type": "function",
   "function": {
+   "name": "setup_quiz",
+   "description": "Explain the owner's Personalize Jarvis quiz and stage a choice in it. Use when: the owner asks what the quiz asks, what a question means, which option does what, where they left off, or says to pick an option. Leave \"question\" out to list them; otherwise it is a question id or the owner's words. \"staged_answer\" is one option id: it stages the choice in the open desktop card only. It never applies anything - the owner presses Apply on the PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "question": {
+      "type": "string",
+      "description": "a question id or the owner's words for one; \"\" (or left out) lists the sections and questions"
+     },
+     "staged_answer": {
+      "type": "string",
+      "description": "one of that question's option ids to stage as the owner's choice; leave it out to only explain"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "connect_account",
    "description": "Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the owner asks to connect, set up or link one. The OWNER types the token, private link or username and password into that card on this PC; it is saved into Windows Credential Manager and tested for real. NEVER take a password, token or private link in the chat and never pass one here: this tool has no field for a value. For any other account say Settings-only.",
    "parameters": {

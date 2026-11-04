@@ -34,12 +34,20 @@ OUT = ROOT / "backend" / "fixtures" / "setup_questions.json"
 
 
 def questions() -> list:
-    """`GET /api/setup`'s `questions`, in the PC's order and the PC's words."""
+    """`GET /api/setup`'s `questions`, in the PC's order and the PC's words.
+
+    `section` and `version` were added by Wave B (2026-11-03): the section is
+    what both apps group by, and the version is what the "show only new /
+    unanswered" filter compares with `completed_version`. They come from
+    `jarvis_setup.QUESTIONS`, never typed here.
+    """
     return [
         {
             "id": q["id"],
             "title": q["title"],
             "help": q["help"],
+            "section": q["section"],
+            "version": q["version"],
             "multi": bool(q["multi"]),
             "options": [
                 {"id": o["id"], "label": o["label"], "detail": o.get("detail", "")}
@@ -54,7 +62,7 @@ def questions() -> list:
 def doc() -> dict:
     rows = questions()
     return {
-        "version": 1,
+        "version": 2,
         "generated_by": "tools/gen_setup_questions.py",
         "source": "backend/jarvis_setup.py",
         "note": "both apps render these same questions; regenerate, never hand-edit",
