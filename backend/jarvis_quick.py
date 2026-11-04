@@ -17914,9 +17914,16 @@ def _set_at_plain(kind: str, w: When, text: str, sched, now: float, n: str,
     a mutating action (JARVIS-API section 21.15)."""
     import jarvis_schedule as S
     noun = "Alarm" if kind == "alarm" else "Reminder"
+    # `steps` rides along ONLY when this really is a routine (2026-11-04). A
+    # plain reminder keeps the exact call it always made, so a Scheduler that
+    # predates routines - and a test double written against that signature -
+    # still answers a reminder instead of raising TypeError on a keyword it has
+    # never heard of. `steps=None` would be the same call for today's
+    # jarvis_schedule; not sending it is what keeps the older one working.
+    routine = {"steps": steps} if steps else {}
     if w.rule is not None:
         try:
-            j = sched.add_repeat(kind, w.rule, text, source="quick", steps=steps)
+            j = sched.add_repeat(kind, w.rule, text, source="quick", **routine)
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
         words = S.rule_words(j.get("rule") or w.rule)
@@ -17934,7 +17941,7 @@ def _set_at_plain(kind: str, w: When, text: str, sched, now: float, n: str,
     if w.passed:
         return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
     try:
-        j = sched.add_at(kind, w.at, text, source="quick", steps=steps)
+        j = sched.add_at(kind, w.at, text, source="quick", **routine)
     except (ValueError, OverflowError) as exc:
         return Result(S._sentence(exc), n)
     what = f"the {kind} for {S.when_words(w.at, now)}"
