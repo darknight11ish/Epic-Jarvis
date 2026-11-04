@@ -2512,7 +2512,7 @@ export const FEATURE_DIRECTORY = {
       "status": "not-a-setting",
       "label_note": "",
       "example": "turn on Inspect a program or app statically",
-      "example_ok": true,
+      "example_ok": false,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",
       "where_phone": "All features and abilities",
