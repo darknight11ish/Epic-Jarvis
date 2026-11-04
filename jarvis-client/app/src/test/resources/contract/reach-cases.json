@@ -1376,6 +1376,10 @@
      "name": "Explaining and checking one of Jarvis's own features (read-only)"
     },
     {
+     "id": "setup_quiz",
+     "name": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)"
+    },
+    {
      "id": "refresh_abilities",
      "name": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
     },

@@ -254,15 +254,18 @@ def t_setting_links_are_real():
     # is the bespoke card in "How Jarvis talks", not a generated toggle row, so
     # the list was fourteen. `jarvis_calendar` joined on 2026-10-29 for the same
     # reason (typed switch built with the store; the Settings card is the UI
-    # slice), so it is fifteen.
+    # slice), so it is fifteen. `voice_check_locked` joined on 2026-11-03: the
+    # typed switch and the phone's Voice card are built, and no desktop
+    # SETTINGS_ROWS row exists yet, so it is sixteen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known fifteen",
+    check("...and the BoolSettings with no desktop row are the known sixteen",
           orphans == ["antislop", "big_coder", "big_model",
                       "big_model_deep_questions", "big_model_wiki", "chat_history",
                       "jarvis_calendar", "lights_without_card", "media_index",
                       "phone_notifications", "second_card_combined",
                       "second_card_suggest_correction", "second_card_suggest_struggle",
-                      "smartwatch_notifications", "write_like_me"], str(orphans))
+                      "smartwatch_notifications", "voice_check_locked",
+                      "write_like_me"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
                           if r.owner == "phone" and r.setting)
     check("the three phone rows name the three phone-side spoken settings",
@@ -374,9 +377,17 @@ def t_bool_settings_is_the_measured_thirteen():
     "Personalize Jarvis" reminder. It is one of the twenty-one linked rows
     above, because `notif-setup` joined the page with its setter - the same
     shape as the other five PC-notification switches.
+
+    Thirty-seven since 2026-11-03: `voice_check_locked`, "Check my voice when my
+    phone is locked" (the owner's ask; the rule is jarvis_live's one function).
+    ONE OF THE ORPHANS ABOVE, said plainly rather than hidden: no desktop
+    SETTINGS_ROWS row draws it yet - the desktop's half was not part of this
+    lane - while the typed phrases and the phone's Voice switch are real.
+    `section` is None for one_moment's reason: the "voice" card belongs to the
+    wake-word feature.
     """
-    check("BOOL_SETTINGS holds its thirty-six spoken settings",
-          len(R.BOOL_SETTINGS) == 36, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-seven spoken settings",
+          len(R.BOOL_SETTINGS) == 37, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

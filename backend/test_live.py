@@ -2123,8 +2123,29 @@ def t_the_module_keeps_to_itself():
           "through jarvis_agent and the local lane check)", warm >= 2 and
           not re.search(r"/api/chat|jarvis_router|openai|anthropic|https?://(?!127\.0\.0\.1|localhost)",
                         code, re.I), warm)
-    check("it writes no file (it only reads the photo test's results)",
-          not re.search(r"write_text|write_bytes|(?<!url)open\(", code))
+    # 2026-11-03: the module now writes ONE file - its own voice-check setting,
+    # because the owner asked for that setting to be changeable ("make this a
+    # setting i can change"). The claim this pin has always made is still true
+    # and is still enforced: Live writes nothing about a session - no audio, no
+    # words, no numbers. So the pin is NARROWED rather than dropped: the one
+    # save function is cut out of the source before the search, and the file it
+    # writes is then read back to prove it holds one boolean and nothing else.
+    writes_nothing_else = re.sub(r"def _save_voice_check[\s\S]*?\n\n\ndef ", "", code)
+    check("it writes no file except its own one setting (no audio, no words, no numbers)",
+          not re.search(r"write_text|write_bytes|(?<!url)open\(", writes_nothing_else))
+    setting_tmp = Path(tempfile.mkdtemp(prefix="jarvis-live-setting-"))
+    real_config = L._config_dir
+    L._config_dir = lambda: setting_tmp
+    try:
+        saved = L._save_voice_check(False)
+        held = json.loads(L._voice_check_path().read_text(encoding="utf-8"))
+        check("...and that one file holds nothing but the one boolean",
+              saved.get("ok") is True and held == {L.VOICE_CHECK_SETTING: False}, held)
+        check("...which is what the rule reads back",
+              L.voice_check_setting() is False)
+    finally:
+        L._config_dir = real_config
+        shutil.rmtree(setting_tmp, ignore_errors=True)
     check("nothing the model can call starts Live (no tool, no schedule kind)",
           "register_kind" not in code and "TOOLS" not in code)
     check("it never approves anything",

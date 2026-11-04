@@ -198,6 +198,14 @@ TOOL_NAMES = {
                          "(read-only, titles and dates only)",
     "conversation_open": "Opening one of your old conversations to read it "
                          "(read-only, on this PC)",
+    # The "Personalize Jarvis" quiz (Wave B, 2026-11-03; jarvis_setup.py).
+    # test_reach.py requires plain words for every tool in jarvis_agent.TOOLS
+    # and caught this one missing (2026-11-04). It reads the questions, the
+    # owner's place and answers, and stages a draft choice; it never applies
+    # anything, so it is described read-only here exactly as it is classified
+    # read-only in jarvis_claims.py.
+    "setup_quiz": "Explaining your Personalize Jarvis quiz and staging a "
+                  "choice in it (read-only; you press Apply on the PC)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

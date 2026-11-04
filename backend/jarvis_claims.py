@@ -148,6 +148,14 @@ READ_ONLY_TOOLS = frozenset({
     # the acting half below.
     "self_portrait", "refresh_abilities",
     "conversation_find", "conversation_open",
+    # "setup_quiz" (Wave B, 2026-11-03; test_smarter_answers.py caught it
+    # unclassified on 2026-11-04). It reads the quiz, explains a question from
+    # the real plan and stages a DRAFT answer in setup.json's in_progress -
+    # `jarvis_setup.apply()` is never called, every setter stays untouched and
+    # the owner presses Apply on the PC. So a sentence saying a setting was
+    # changed after it must still be corrected, which is this set: read-only
+    # for the claim check, exactly as the tool's own docstring says.
+    "setup_quiz",
 })
 
 #: The other half of the same classification (audit H4): every tool that can

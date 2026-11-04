@@ -78,6 +78,35 @@ class PhoneFaceBarTest {
     }
 
     @Test
+    fun `the face bar's typing box cannot grow to the bar's whole height`() {
+        // The owner's screenshot of 2026-11-03, after choosing Full screen: the
+        // face was gone and the bar's small typing box was a tall column down
+        // the right of an otherwise blank screen, with "Show chat", "More" and
+        // the microphone halfway down it. A `BasicTextField`'s decoration box is
+        // measured with the max height of whatever contains the field - here
+        // the bar's Row, whose max height is the whole rest of the screen - so
+        // `fillMaxSize` filled it. Measured on the phone on 2026-11-03: the
+        // field's own node was [666,620]-[870,2382], 1762px tall, where 48dp
+        // is 144px. Filling the WIDTH is wanted; the height must stay the
+        // field's own.
+        assertFalse(
+            "the decoration box fills the height it is measured with again",
+            typeBox.contains("fillMaxSize()"),
+        )
+        assertTrue(
+            "the decoration box stopped filling the plate's width",
+            typeBox.contains("Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart)"),
+        )
+        // The two halves that keep the height the field's own: the plate and
+        // the field each still carry their 48dp minimum.
+        assertEquals(
+            "the plate or the field lost its 48dp height",
+            2,
+            Regex("""heightIn\(min = 48\.dp\)""").findAll(typeBox).count(),
+        )
+    }
+
+    @Test
     fun `both typing boxes make the same send decision, and only a real send opens the chat`() {
         // (a) of the 2026-11-02 review: the face box used to send "was this
         // answer right?" to the PC as a question. It must call the SAME one

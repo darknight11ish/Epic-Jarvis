@@ -13,7 +13,7 @@ answered three of those four facts for a switch, and only two for a choice -
 and it could not name the number setting, the sun-and-moon switch, any animal
 switch or the weather source at all. So:
 
-1. EVERY ROW EXPLAINS AND CARRIES A REAL VALUE. All 36 `BOOL_SETTINGS`, all 10
+1. EVERY ROW EXPLAINS AND CARRIES A REAL VALUE. All 37 `BOOL_SETTINGS`, all 10
    `CHOICE_SETTINGS` and the one `NUMBER_SETTINGS` row produce an answer that
    either contains the value its OWN reader just returned or the one fixed
    sentence "I could not read its current value on this PC, so I will not
@@ -158,7 +158,7 @@ def _quoted(text: str) -> list:
 
 
 def _all_rows():
-    """Every explainable ROW as (kind, key, row) - the 36 + 10 + 1."""
+    """Every explainable ROW as (kind, key, row) - the 37 + 10 + 1."""
     rows = [("bool", b.key, b) for b in R.BOOL_SETTINGS]
     rows += [("choice", c.key, c) for c in R.CHOICE_SETTINGS]
     rows += [("number", n.key, n) for n in R.NUMBER_SETTINGS]
@@ -169,12 +169,19 @@ def _all_rows():
 #   What the reader is
 # --------------------------------------------------------------------------
 def t_the_counts_and_the_readers_are_the_registrys_own():
-    """36 switches, 10 choices, 1 number - and a reader for every one of them.
+    """37 switches, 10 choices, 1 number - and a reader for every one of them.
 
     The numbers are the plan's own count on this tree; if a row is added
     without a reader, the "every row explains with a value" checks below fail
-    and this check names the row before they do."""
-    check("36 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 36,
+    and this check names the row before they do.
+
+    Thirty-six since 2026-11-03: "Check my voice when my phone is locked" (the
+    owner's ask), whose reader is jarvis_live's own voice_check_setting().
+
+    Thirty-seven on the same day: the "Personalize Jarvis" reminder
+    (`pc_setup_notification`, Wave B), whose reader is `_read_notify
+    ("notif_setup")` in this table."""
+    check("37 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 37,
           len(R.BOOL_SETTINGS))
     check("10 CHOICE_SETTINGS", len(R.CHOICE_SETTINGS) == 10, len(R.CHOICE_SETTINGS))
     check("1 NUMBER_SETTINGS", len(R.NUMBER_SETTINGS) == 1, len(R.NUMBER_SETTINGS))
@@ -198,7 +205,7 @@ def t_the_counts_and_the_readers_are_the_registrys_own():
 
 
 def t_every_row_explains_with_a_real_value():
-    """Every one of the 47 rows answers, with its value or the fixed sentence."""
+    """Every one of the 48 rows answers, with its value or the fixed sentence."""
     previous = _install_server()
     try:
         for kind, key, row in _all_rows():

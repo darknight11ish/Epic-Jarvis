@@ -556,12 +556,13 @@ def change(body, *, peer=None, local=None) -> tuple:
                               "nothing was changed."}
     if not _person_said_yes(v):
         outcome = getattr(v, "outcome", None)
-        words = {"denied": "You said no, so nothing was changed.",
-                 "timed_out": "The card was not answered in time, so nothing was "
-                              "changed."}
-        return 409, {"ok": False, "changed": False,
-                     "error": words.get(outcome, "That was not approved, so nothing "
-                                                 "was changed.")}
+        if outcome == "denied":
+            said = "You said no, so nothing was changed."
+        elif outcome == "timed_out":
+            said = "The card was not answered in time, so nothing was changed."
+        else:
+            said = "That was not approved, so nothing was changed."
+        return 409, {"ok": False, "changed": False, "error": said}
     try:
         out = write(action, name, package)
     except PhoneAppsError as exc:
