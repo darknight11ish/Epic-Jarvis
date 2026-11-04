@@ -737,4 +737,242 @@ class ScheduleTest {
         assertNull(Schedule.answerBody("all", 0))
         assertNull(Schedule.answerBody("", 0))
     }
+
+    // ---- a routine: a reminder with PARTS (2026-11-03) --------------------
+    //
+    // The owner's ask, Gemini's rulings Q8/Q9. What is proved here is the
+    // PHONE's half only: it reads the parts the PC handed out, draws each one
+    // with its own buttons, and answers ONE part's ONE button by its INDEX.
+    // Creating or editing a routine is the PC's alone (a part's destination can
+    // be the Obsidian vault on that PC or a goal/habit id), and the PC's own
+    // rules are proved in backend/test_schedule_steps.py.
+    //
+    // The fixture is the REAL `GET /api/schedule` shape for a routine
+    // (`jarvis_schedule._view`): `steps` with the effective `buttons` on each
+    // part, `steps_parts`/`steps_cursor`, and a part's own question carrying NO
+    // `kind` marker.
+
+    private val routine = obj(
+        """{"available":true,"asks":true,"jobs":[],
+           "todo":[{"id":"s0000000020","kind":"reminder","text":"Morning routine",
+             "state":"fired","fired_at":1762196400,"went_off_at":"08:00","asks":true,
+             "steps":[
+               {"id":"p1","label":"meds","offset_min":0,"at":null,"when":"08:00",
+                "buttons":[{"label":"Done","does":"done"}],
+                "fired_at":1762192800,"done":true,"missed":false,"current":false},
+               {"id":"p2","label":"keys","offset_min":null,"at":null,
+                "buttons":[{"label":"Done","does":"done"}],
+                "fired_at":1762192800,"done":false,"missed":false,"current":true},
+               {"id":"p3","label":"leave","offset_min":30,"at":null,"when":"08:30",
+                "buttons":[{"label":"Locked","does":"record"},
+                           {"label":"Later","does":"snooze","minutes":10}],
+                "ask":{"question":"Did you lock the door?",
+                       "buttons":[{"label":"Locked","does":"record"},
+                                  {"label":"Later","does":"snooze","minutes":10}],
+                       "record":{"history":true,"obsidian_daily":true}},
+                "fired_at":null,"done":false,"missed":false,"current":false}],
+             "steps_parts":3,"steps_cursor":1}]}""",
+    )
+
+    @Test
+    fun `a routine's parts are read in the PC's order with its own marks on them`() {
+        val job = Schedule.parse(routine)!!.todo.single()
+        assertEquals(3, Schedule.partCount(job))
+        assertEquals(3, job.stepsParts)
+        assertEquals(1, job.stepsCursor)
+        assertEquals(0, job.missedParts)
+        assertFalse(job.stepsUnreadable)
+        assertEquals(listOf("meds", "keys", "leave"), job.steps.map { it.label })
+        assertEquals(listOf("p1", "p2", "p3"), job.steps.map { it.id })
+        // The PC's own words for a part's moment, and null for an untimed one.
+        assertEquals("08:00", job.steps[0].whenWords)
+        assertEquals("08:30", job.steps[2].whenWords)
+        assertEquals("", job.steps[1].whenWords)
+        assertEquals(0, job.steps[0].offsetMin ?: -1)
+        assertNull("an untimed part has no offset at all", job.steps[1].offsetMin)
+        // Its own marks: part 1 done, part 2 on now, part 3 not surfaced yet.
+        assertTrue(job.steps[0].done)
+        assertTrue(job.steps[1].current)
+        assertNull(job.steps[2].firedAt)
+        assertFalse(job.steps[2].done)
+        // "Part 2 of 4"-style line, from the PC's cursor and count.
+        assertEquals("Part 2 of 3", Schedule.partCountLine(job))
+        assertEquals(listOf("Done: meds", "Next: keys", "leave"), job.steps.map(Schedule::partLine))
+        // ...and an ordinary reminder says nothing about parts at all.
+        val plain = Schedule.parse(list)!!.jobs.first { it.id == "s0000000003" }
+        assertTrue(plain.steps.isEmpty())
+        assertEquals(0, Schedule.partCount(plain))
+        assertEquals("", Schedule.partCountLine(plain))
+        assertEquals("", Schedule.missedPartsLine(plain.missedParts))
+    }
+
+    @Test
+    fun `a part's own question is read without the kind marker and its buttons are the PC's`() {
+        val job = Schedule.parse(routine)!!.todo.single()
+        // A plain checklist line has the ONE implicit Done the PC hands out.
+        assertEquals(listOf("Done"), job.steps[0].buttons.map { it.label })
+        assertEquals(listOf("done"), job.steps[0].buttons.map { it.does })
+        assertNull(job.steps[0].ask)
+        // A part that asks carries its question and buttons under `ask`, with
+        // no `kind` marker (a part IS an ask by sitting there).
+        val asking = job.steps[2]
+        assertEquals("Did you lock the door?", asking.ask?.question)
+        assertTrue(asking.ask!!.record.history)
+        assertTrue(asking.ask!!.record.obsidianDaily)
+        // The buttons DRAWN are the effective list, never the ask's re-parsed.
+        assertEquals(listOf("Locked", "Later"), asking.buttons.map { it.label })
+        assertEquals(10, asking.buttons.last().minutes)
+        // A part can only be answered once the PC has surfaced it and it is not
+        // already done: no control that could only be refused.
+        assertFalse("not surfaced", job.steps[2].canAnswer)
+        assertFalse("already done", job.steps[0].canAnswer)
+        assertTrue("on now", job.steps[1].canAnswer)
+    }
+
+    @Test
+    fun `one part's one button is an index and a step, never a label`() {
+        assertEquals("""{"id":"s0000000020","do":"answer","button":0,"step":1}""",
+            Schedule.answerBody("s0000000020", 0, step = 1))
+        // The first part is index 0, and it is written out - never dropped.
+        assertEquals("""{"id":"s0000000020","do":"answer","button":1,"step":0}""",
+            Schedule.answerBody("s0000000020", 1, step = 0))
+        // An ordinary reminder's body is byte-for-byte what it always was.
+        assertEquals("""{"id":"s0000000020","do":"answer","button":0}""",
+            Schedule.answerBody("s0000000020", 0, step = null))
+        // The PC's own bounds: no button 3, no part 12, no negative part.
+        assertNull(Schedule.answerBody("s0000000020", 3, step = 0))
+        assertNull(Schedule.answerBody("s0000000020", 0, step = Schedule.MAX_STEPS))
+        assertNull(Schedule.answerBody("s0000000020", 0, step = -1))
+        assertNull(Schedule.answerBody("all", 0, step = 0))
+        assertEquals(12, Schedule.MAX_STEPS)
+    }
+
+    @Test
+    fun `the event says which part went off and each part keys its own notice`() {
+        // The PC's additive keys: `step` and `parts` (jarvis_schedule.tick).
+        assertEquals(1, Schedule.partFrom(
+            obj("""{"id":"s0000000020","kind":"reminder","state":"fired","late":false,"step":1,"parts":3}""")))
+        assertEquals(0, Schedule.partFrom(
+            obj("""{"id":"s0000000020","kind":"reminder","state":"fired","step":0,"parts":3}""")))
+        // An ordinary job's event carries no step, and is not a part.
+        assertNull(Schedule.partFrom(obj("""{"id":"s0000000001","kind":"timer","state":"fired"}""")))
+        assertNull(Schedule.partFrom(obj("""{"id":"s0000000001","kind":"timer","state":"changed","step":1}""")))
+        // Never a part this build has no room for.
+        assertNull(Schedule.partFrom(
+            obj("""{"id":"s0000000020","kind":"reminder","state":"fired","step":12,"parts":13}""")))
+        // Its own notification key: part 2 must not replace part 1.
+        val first = Schedule.shownKey("s0000000020", 1762192800.0, "4", 1L, "#step0@")
+        val second = Schedule.shownKey("s0000000020", 1762194600.0, "5", 2L, "#step1@")
+        assertFalse("two parts shared one key", first == second)
+        assertTrue(first.startsWith("s0000000020#step0@"))
+        // ...and the job id still comes out of it, so the reconcile pass asks
+        // the PC about the JOB and not about "s…#step2@…".
+        assertEquals("s0000000020", Schedule.jobIdFromTag(first))
+        assertEquals("s0000000020", Schedule.jobIdFromTag(second))
+    }
+
+    @Test
+    fun `a part's notification names the routine and says where the part sits`() {
+        val job = Schedule.parse(routine)!!.todo.single()
+        // Unlocked: the routine's own name, and the part's own words with its
+        // place - never a label this phone made up.
+        assertEquals("Morning routine" to "keys (part 2 of 3)",
+            Schedule.partNotification("reminder", job, job.steps[1], 1, 3, private = false))
+        // A part that asks says its question, which is what the owner reads.
+        assertEquals("Morning routine" to "Did you lock the door? (part 3 of 3)",
+            Schedule.partNotification("reminder", job, job.steps[2], 2, 3, private = false))
+        // Locked / private lists on: only the kind's generic line, and a
+        // question's own generic line when it asks one.
+        val lockedAsk = Schedule.partNotification("reminder", job, job.steps[2], 2, 3, private = true)!!
+        assertEquals(Schedule.title("reminder") to Schedule.ASK_ON_LOCK_SCREEN, lockedAsk)
+        val lockedPlain = Schedule.partNotification("reminder", job, job.steps[1], 1, 3, private = true)!!
+        assertEquals(Schedule.lockScreen("reminder"), lockedPlain.second)
+        assertFalse(lockedPlain.second.contains("keys"))
+        // A part index with no count to name falls back to the part's words.
+        assertEquals("keys", Schedule.partPosition("keys", 1, 0))
+        // No job, no notice: never a guess.
+        assertNull(Schedule.partNotification("reminder", null, job.steps[1], 1, 3, private = false))
+    }
+
+    @Test
+    fun `a part this phone cannot read keeps its place so no answer shifts`() {
+        val job = Schedule.job(
+            obj(
+                """{"id":"s0000000021","kind":"reminder","text":"x","state":"fired",
+                   "steps":[{"id":"p1","label":"meds","buttons":[{"label":"Done","does":"done"}],
+                             "fired_at":1,"done":false},
+                            "not a part at all",
+                            {"id":"p3","label":"leave","buttons":[{"label":"Done","does":"done"}],
+                             "fired_at":1}],
+                   "steps_parts":3}""",
+            ),
+        )!!
+        assertEquals(3, job.steps.size)
+        assertEquals(listOf("meds", "", "leave"), job.steps.map { it.label })
+        // The unreadable one offers nothing and cannot be answered.
+        assertFalse(job.steps[1].canAnswer)
+        assertTrue(job.steps[1].buttons.isEmpty())
+        // The part AFTER it is still index 2 - the PC's index, unchanged.
+        assertEquals("p3", job.steps[2].id)
+        // A routine whose blocks would not decode says so in one line and is
+        // drawn as a plain reminder (the PC sent no `steps` at all).
+        val broken = Schedule.job(
+            obj("""{"id":"s0000000022","kind":"reminder","text":"x","state":"active",
+                   "steps_unreadable":true}"""),
+        )!!
+        assertTrue(broken.stepsUnreadable)
+        assertTrue(broken.steps.isEmpty())
+        assertEquals(0, Schedule.partCount(broken))
+        assertTrue(Schedule.PARTS_UNREADABLE.contains("could not be read"))
+    }
+
+    @Test
+    fun `missed parts are counted in words and never hidden`() {
+        assertEquals("", Schedule.missedPartsLine(0))
+        assertEquals("1 part was missed while your PC was off or asleep.", Schedule.missedPartsLine(1))
+        assertEquals("3 parts were missed while your PC was off or asleep.", Schedule.missedPartsLine(3))
+        val job = Schedule.job(
+            obj(
+                """{"id":"s0000000023","kind":"reminder","text":"x","state":"fired",
+                   "steps":[{"id":"p1","label":"a","buttons":[{"label":"Done","does":"done"}],
+                             "fired_at":1,"missed":true},
+                            {"id":"p2","label":"b","buttons":[{"label":"Done","does":"done"}]}],
+                   "steps_parts":2,"missed_parts":2}""",
+            ),
+        )!!
+        assertEquals(2, job.missedParts)
+        assertTrue(job.steps[0].missed)
+        assertEquals(Schedule.missedPartsLine(2), Schedule.missedPartsLine(job.missedParts))
+    }
+
+    @Test
+    fun `while the words are hidden a part's label goes and its buttons stay`() {
+        val hidden = Schedule.hide(Schedule.parse(routine)!!).todo.single()
+        assertTrue("a part's label is the owner's own words", hidden.steps.all { it.label.isEmpty() })
+        assertTrue("and so is its question", hidden.steps.all { it.ask == null })
+        // The part's place and its own buttons are not words about the owner:
+        // they are what he presses, the same line the notification keeps.
+        assertEquals(3, Schedule.partCount(hidden))
+        assertEquals("Part 2 of 3", Schedule.partCountLine(hidden))
+        assertEquals(listOf("Locked", "Later"), hidden.steps[2].buttons.map { it.label })
+        assertEquals("Done", Schedule.partLine(hidden.steps[0].copy(current = false)))
+        assertEquals("Next", Schedule.partLine(hidden.steps[1]))
+    }
+
+    @Test
+    fun `a part's block is what an older PC never sends and a newer one always keeps`() {
+        // No `steps` at all: every ordinary reminder's answer is unchanged, and
+        // nothing about a routine is added to its row.
+        val old = Schedule.parse(list)!!
+        assertTrue(old.jobs.none { it.steps.isNotEmpty() || it.stepsParts != 0 })
+        assertTrue(old.todo.none { it.steps.isNotEmpty() })
+        // The block the notifier draws is the part's own buttons.
+        val job = Schedule.parse(routine)!!.todo.single()
+        val ask = Schedule.partAsk(job.steps[2])!!
+        assertEquals(listOf("Locked", "Later"), ask.buttons.map { it.label })
+        assertEquals(job.steps[2].label, ask.question)
+        // A part with no buttons at all is handed no block, so the notifier
+        // falls back to its ordinary actions rather than inventing one.
+        assertNull(Schedule.partAsk(job.steps[0].copy(buttons = emptyList())))
+    }
 }

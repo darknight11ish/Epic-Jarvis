@@ -69,6 +69,14 @@ import kotlinx.serialization.json.doubleOrNull
  * alarm, and a "tell me when" marked urgent, keep ringing until seen
  * ([rings]; [com.jarvis.client.service.ScheduleNotifier]).
  *
+ * ROUTINES (2026-11-03, the owner's ask; Gemini's rulings Q8/Q9): a reminder
+ * may have up to [MAX_STEPS] PARTS - timed, or one after another - each with
+ * its own optional buttons and its own destination ([Part]). The phone DRAWS
+ * every part with the PC's own mark on it and answers ONE part's ONE button
+ * through the same `answer` verb with the part's index added ([answerBody]);
+ * it never creates or edits a routine, because a part's destination can be
+ * this PC's Obsidian vault or a goal/habit id.
+ *
  * Pure Kotlin, no Android types, so `ScheduleTest` runs it on a plain JVM.
  */
 object Schedule {
@@ -445,6 +453,29 @@ object Schedule {
          * verb, so no button is drawn rather than one that cannot work.
          */
         val asks: Boolean = false,
+        /**
+         * This reminder's PARTS, in the PC's order (2026-11-03), or empty for
+         * every ordinary reminder and every job written before this. Drawn as
+         * one line per part with that part's own buttons ([Part]); the phone
+         * reads and acts per part, and never creates or edits a routine.
+         */
+        val steps: List<Part> = emptyList(),
+        /** How many parts the PC says the routine has, for "2 of 4". */
+        val stepsParts: Int = 0,
+        /** The part the PC says is on now (0-based), or 0. */
+        val stepsCursor: Int = 0,
+        /**
+         * How many parts the PC suppressed because their moment was long past
+         * (`PART_LATE_MAX`) - 0 unless some were. The row says so in one line
+         * rather than leaving the owner to wonder where a part went.
+         */
+        val missedParts: Int = 0,
+        /**
+         * The PC HAS parts for this row but could not read them ([PARTS_UNREADABLE]),
+         * so it sent no `steps` at all. The row still fires as an ordinary
+         * reminder; this only lets the phone say why nothing is drawn.
+         */
+        val stepsUnreadable: Boolean = false,
     )
 
     /** A named list: its name as the PC keeps it, its title, how many open items. */
@@ -570,6 +601,14 @@ object Schedule {
             ask = ask(o["action"] as? JsonObject),
             answers = answers(o["answers"] as? JsonArray),
             asks = o.flag("asks") == true,
+            // A routine's parts (2026-11-03). Handed out only when the row has
+            // them, so an ordinary reminder grows no key at all - the same
+            // additive contract `ask` and `answers` keep.
+            steps = parts(o["steps"] as? JsonArray),
+            stepsParts = o.num("steps_parts")?.toInt() ?: 0,
+            stepsCursor = o.num("steps_cursor")?.toInt() ?: 0,
+            missedParts = o.num("missed_parts")?.toInt() ?: 0,
+            stepsUnreadable = o.flag("steps_unreadable") == true,
         )
     }
 
@@ -581,6 +620,16 @@ object Schedule {
      */
     fun ask(o: JsonObject?): Ask? {
         if (o?.text("kind") != "ask") return null
+        return askBlock(o)
+    }
+
+    /**
+     * The `ask` block itself, for a row (`kind: "ask"`, checked by [ask]) and
+     * for ONE part of a routine - whose block carries NO `kind` marker, because
+     * a part is an `ask` by sitting under that key (the PC's own `_view`).
+     */
+    private fun askBlock(o: JsonObject?): Ask? {
+        if (o == null) return null
         val question = o.text("question").orEmpty()
         if (question.isEmpty()) return null
         val buttons = (o["buttons"] as? JsonArray)?.mapNotNull { el ->
@@ -606,6 +655,230 @@ object Schedule {
         )
     }
 
+    // ---- a routine's PARTS (2026-11-03) -----------------------------------
+    //
+    // ONE reminder can be a ROUTINE of up to [MAX_STEPS] parts - timed ("at
+    // 08:30", "20 minutes after") or one after another - each with its own
+    // optional buttons and its own destination (the owner's ask; Gemini's
+    // rulings Q8/Q9). The PC keeps the shape and the moving state (backend
+    // `jarvis_schedule._clean_steps` / `_view`); this phone DRAWS what it is
+    // handed and answers ONE part at a time through the SAME
+    // `/api/schedule/act` `answer` verb, with the part's index added
+    // ([answerBody]).
+    //
+    // The phone NEVER creates or edits a routine. A part's destination can be
+    // the Obsidian vault on this PC or a goal/habit id (`ASK_DESTINATIONS`), so
+    // making one belongs on the PC exactly as making a question does
+    // (docs/ARCHITECTURE.md section 8, "One-sided on purpose"; the same
+    // sentence docs/JARVIS-API.md section 21.14 already carries).
+    //
+    // Every field below is the PC's, never worked out here: `when` is the PC's
+    // own words for the part's moment, `buttons` is the EFFECTIVE list it
+    // handed out - the part's own, or the ONE implicit Done
+    // (`_part_button_blocks`) - and `fired_at`/`done`/`missed` are its own
+    // marks. Nothing here rings a second scheduler: the PC is still the clock.
+
+    /** The most parts one routine may have (`jarvis_schedule.MAX_STEPS`). */
+    const val MAX_STEPS = 12
+
+    /**
+     * ONE part of a routine, as `GET /api/schedule` hands it out.
+     *
+     * [id] is the PC's stable name inside its row ("p1"), [label] the owner's
+     * own words for this part, and [current] marks the part the PC says is on
+     * now. [ask] is the part's own question (its `record` block included) or
+     * null for a plain checklist line; the buttons are ALWAYS in [buttons],
+     * because a part with no question is still something the owner can tick
+     * off.
+     *
+     * [canAnswer] is the phone's one rule for offering a control at all: the
+     * PC only takes an answer for a part it has SURFACED (fired, and not
+     * already done - `Scheduler.answer` refuses anything else with "That part
+     * has not come up yet."), so no button is drawn on a part that could only
+     * be refused.
+     */
+    data class Part(
+        val id: String,
+        val label: String,
+        /** The PC's words for this part's moment ("08:30"); "" when untimed. */
+        val whenWords: String = "",
+        /** Minutes after the routine's start, or null for an untimed part. */
+        val offsetMin: Int? = null,
+        /** "HH:MM" on the routine's own day, or "". */
+        val at: String = "",
+        /** This part's own question, or null for a plain checklist line. */
+        val ask: Ask? = null,
+        /** The buttons this part really offers - never a label invented here. */
+        val buttons: List<AskButton> = emptyList(),
+        /** When the PC surfaced this part (epoch seconds), or null. */
+        val firedAt: Double? = null,
+        /** The PC says this part is dealt with. */
+        val done: Boolean = false,
+        /** The PC suppressed this part's notice (its moment was long past). */
+        val missed: Boolean = false,
+        /** The part the PC says is on now. */
+        val current: Boolean = false,
+    ) {
+        /** See this class's own note: only a part the PC surfaced can be answered. */
+        val canAnswer: Boolean get() = firedAt != null && !done
+    }
+
+    /**
+     * The ONE button a part with no question of its own is handed
+     * (`jarvis_schedule._part_button_blocks`). Used only when the PC sent no
+     * `buttons` at all, so the owner is never left with a part that cannot be
+     * ticked off; the label is the PC's own word, not this phone's.
+     */
+    private val IMPLICIT_DONE = listOf(AskButton(DONE, "done"))
+
+    /**
+     * Every part the PC sent, in ITS order. An element this phone cannot read
+     * is kept in place with no words and no buttons rather than dropped: the
+     * part's INDEX is what an answer sends ([answerBody]), so a dropped part
+     * would shift every part after it and answer the wrong one.
+     */
+    fun parts(list: JsonArray?): List<Part> = list?.map { el ->
+        val o = el as? JsonObject
+        if (o == null) Part(id = "", label = "") else part(o)
+    } ?: emptyList()
+
+    /** ONE part as [Job.steps] carries it - never a shape this phone invents. */
+    fun part(o: JsonObject): Part {
+        val buttons = (o["buttons"] as? JsonArray)?.mapNotNull { el ->
+            val b = el as? JsonObject ?: return@mapNotNull null
+            val label = b.text("label").orEmpty()
+            val does = b.text("does").orEmpty()
+            if (label.isEmpty() || does !in ASK_DOES) return@mapNotNull null
+            val minutes = b.num("minutes")?.toInt() ?: 0
+            if (does == ASK_SNOOZE && minutes !in 1..MAX_ASK_MINUTES) return@mapNotNull null
+            AskButton(label, does, if (does == ASK_SNOOZE) minutes else 0)
+        }?.take(MAX_ASK) ?: emptyList()
+        return Part(
+            id = o.text("id").orEmpty(),
+            label = o.text("label").orEmpty(),
+            whenWords = o.text("when").orEmpty(),
+            offsetMin = o.num("offset_min")?.toInt(),
+            at = o.text("at").orEmpty(),
+            // A part's own question block carries no `kind` marker: a part is
+            // an `ask` by sitting under this key (see the PC's own `_view`).
+            ask = askBlock(o["ask"] as? JsonObject),
+            buttons = if (buttons.isEmpty()) IMPLICIT_DONE else buttons,
+            firedAt = o.num("fired_at"),
+            done = o.flag("done") == true,
+            missed = o.flag("missed") == true,
+            current = o.flag("current") == true,
+        )
+    }
+
+    /** How many parts a routine has, or 0 for a plain row and for no row at all. */
+    fun partCount(job: Job?): Int = when {
+        job == null -> 0
+        job.stepsParts > 0 -> job.stepsParts
+        else -> job.steps.size
+    }
+
+    /**
+     * "Part 2 of 4" - the one line over a routine's parts. "" for a plain row,
+     * so nothing about a routine is said about an ordinary reminder.
+     */
+    fun partCountLine(job: Job): String {
+        val count = partCount(job)
+        if (count <= 0) return ""
+        return "Part ${job.stepsCursor.coerceIn(0, count - 1) + 1} of $count"
+    }
+
+    /** One part's line: its own words, marked when the PC says done or next. */
+    fun partLine(part: Part): String {
+        val head = when {
+            part.done -> DONE
+            part.current -> "Next"
+            else -> ""
+        }
+        return when {
+            head.isEmpty() -> part.label
+            part.label.isEmpty() -> head
+            else -> "$head: ${part.label}"
+        }
+    }
+
+    /** How many parts were suppressed, in plain words - "" when none were. */
+    fun missedPartsLine(count: Int): String = when {
+        count <= 0 -> ""
+        count == 1 -> "1 part was missed while your PC was off or asleep."
+        else -> "$count parts were missed while your PC was off or asleep."
+    }
+
+    /** The one sentence a routine whose stored parts would not decode gets. */
+    const val PARTS_UNREADABLE =
+        "This routine's parts could not be read on your PC, so it shows as a plain reminder."
+
+    /**
+     * From a `schedule` event: WHICH part went off, or null for an ordinary
+     * job (and for a part index this build has no room for). The PC sends
+     * `"step"` beside the additive `"parts"` count - keys an older client
+     * ignores.
+     */
+    fun partFrom(data: JsonObject?): Int? {
+        if (data == null || data.text("state") != "fired") return null
+        val step = data.num("step")?.toInt() ?: return null
+        return if (step in 0 until MAX_STEPS) step else null
+    }
+
+    /**
+     * The block ONE part is handed to the notifier: the part's own buttons
+     * and, as the question, its own words (the label) - the notifier needs a
+     * question only to have a block at all.
+     */
+    fun partAsk(part: Part): Ask? {
+        if (part.buttons.isEmpty()) return null
+        return Ask(
+            question = part.label,
+            buttons = part.buttons,
+            record = part.ask?.record ?: AskRecord(),
+        )
+    }
+
+    /**
+     * (title, text) of ONE part's notification, or null when there is no job to
+     * name. [private]: App lock or "Hide memory lists and chat history" is on -
+     * then only the kind's own line, exactly as an ordinary reminder's notice
+     * does.
+     *
+     * The title is the routine's own name (the owner's words), because the same
+     * reminder is now several notices and "Reminder" would not say which; the
+     * text is the part's question when it asks one, its label otherwise, with
+     * where it sits ("keys (part 2 of 4)").
+     */
+    fun partNotification(
+        kind: String,
+        job: Job?,
+        part: Part,
+        index: Int,
+        count: Int,
+        private: Boolean,
+    ): Pair<String, String>? {
+        if (job == null) return null
+        val locked = if (part.ask != null) {
+            ASK_ON_LOCK_SCREEN
+        } else {
+            job.lockScreen.takeIf { it.isNotEmpty() } ?: lockScreen(kind)
+        }
+        if (private) return title(kind) to locked
+        val words = part.ask?.question?.takeIf { it.isNotEmpty() } ?: part.label
+        return titleOf(job) to partPosition(words, index, count)
+    }
+
+    /** "keys (part 2 of 4)"; the part's own words alone when there is no count. */
+    fun partPosition(words: String, index: Int, count: Int): String {
+        if (count <= 0 || index < 0 || index >= count) return words
+        val where = "part ${index + 1} of $count"
+        return if (words.isEmpty()) {
+            where.replaceFirstChar { it.uppercaseChar() }
+        } else {
+            "$words ($where)"
+        }
+    }
+
     /** The answers the PC logged, oldest first - never a shape this phone invents. */
     fun answers(list: JsonArray?): List<Answer> =
         list?.mapNotNull { el ->
@@ -626,10 +899,17 @@ object Schedule {
      * label (so a re-worded button cannot be answered by accident) and never a
      * target of any kind. The PC checks everything again. Null when it could not
      * be one button of one job.
+     *
+     * [step] (2026-11-03) is WHICH PART of a routine the button belongs to, also
+     * an index and never a label (`jarvis_schedule.Scheduler.answer`'s `step`).
+     * Null for an ordinary reminder's question, whose body is byte-for-byte what
+     * it always was - so an older PC that has no parts never sees a new key.
      */
-    fun answerBody(id: String, index: Int): String? {
+    fun answerBody(id: String, index: Int, step: Int? = null): String? {
         if (!validId(id) || index < 0 || index >= MAX_ASK) return null
-        return "{\"id\":\"$id\",\"do\":\"answer\",\"button\":$index}"
+        if (step == null) return "{\"id\":\"$id\",\"do\":\"answer\",\"button\":$index}"
+        if (step < 0 || step >= MAX_STEPS) return null
+        return "{\"id\":\"$id\",\"do\":\"answer\",\"button\":$index,\"step\":$step}"
     }
 
     /** `GET /api/schedule`, read - or null when it is not the list. */
@@ -699,13 +979,28 @@ object Schedule {
             }
             return "hidden-${i + 1}"
         }
-        return View(
-            jobs = v.jobs.map { it.copy(text = "", alert = "", broken = "", about = "", hidden = true) },
-            todo = v.todo.map {
-                it.copy(text = "", alert = "", broken = "", about = "", hidden = true, list = standIn(it.list))
-            },
+        /**
+         * ONE row with every word that is the owner's blanked - its own text and
+         * notices, and since 2026-11-03 every PART's label and question too: a
+         * part is the owner's words about his own life exactly as the row's text
+         * is. The part's BUTTONS stay, because they are the words he presses
+         * rather than a thing about him - the same line the notification's own
+         * rule already draws while the phone is locked (its buttons are his
+         * labels).
+         */
+        fun blank(job: Job): Job = job.copy(
+            text = "",
+            alert = "",
+            broken = "",
+            about = "",
             hidden = true,
-            wentOff = v.wentOff.map { it.copy(text = "", alert = "", broken = "", about = "", hidden = true) },
+            steps = job.steps.map { part -> part.copy(label = "", ask = null) },
+        )
+        return View(
+            jobs = v.jobs.map { blank(it) },
+            todo = v.todo.map { blank(it).copy(list = standIn(it.list)) },
+            hidden = true,
+            wentOff = v.wentOff.map { blank(it) },
             lists = v.lists.map { it.copy(name = standIn(it.name), title = "") },
             // The day headings are the PC's own words ("Friday (3d ago)"), and
             // an item's words are blanked here: while the lists are hidden there
@@ -1221,15 +1516,20 @@ object Schedule {
      */
     fun isFiredTag(tag: String?, jobId: String): Boolean = tag == jobId
 
+    /** `s0123456789#step2@…`: one PART's notification key (2026-11-03). */
+    private val STEP_TAG = Regex("^(s[0-9a-f]{10})#step\\d+[@#]")
+
     /**
      * The job id inside a notification KEY - the value
      * [ScheduleNotifier.EXTRA_JOB_ID] carries: the job's own id for a timer,
-     * alarm or reminder, and `id#match@<key>` for a "tell me when" match
-     * ([shownKey] with its `#match@` separator). Used to ask the PC's own
-     * `GET /api/schedule` whether the job behind a still-posted notification
-     * exists at all.
+     * alarm or reminder, `id#match@<key>` for a "tell me when" match
+     * ([shownKey] with its `#match@` separator), and `id#step2@<key>` for ONE
+     * part of a routine (2026-11-03 - so part 2 does not replace part 1). Used
+     * to ask the PC's own `GET /api/schedule` whether the job behind a
+     * still-posted notification exists at all.
      */
     fun jobIdFromTag(key: String): String {
+        STEP_TAG.find(key)?.let { return it.groupValues[1] }
         val cut = key.indexOf("#match@")
         return if (cut > 0) key.substring(0, cut) else key
     }
