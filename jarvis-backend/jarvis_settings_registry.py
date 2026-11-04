@@ -1096,8 +1096,8 @@ def set_briefing_senders(on: bool, *, peer=None, local=None) -> Outcome:
 #   each setter below calls the EXACT function the screen calls, and invents
 #   no tier of its own:
 #
-#     * the five notification switches ride jarvis_limits.change(), the same
-#       route the phone's Settings rows use. All seven of those rows are
+#     * the six notification switches ride jarvis_limits.change(), the same
+#       route the phone's Settings rows use. All eight of those rows are
 #       `loosening="none"` on purpose (jarvis_limits.py:406-414): a bigger
 #       quiet window or a switch turned on only changes when this PC shows its
 #       owner a toast, so nothing here raises a card - and an alarm must never
@@ -1111,31 +1111,35 @@ def set_briefing_senders(on: bool, *, peer=None, local=None) -> Outcome:
 #       through its OWN card (better_voice_enable) - unchanged here.
 # --------------------------------------------------------------------------
 
-#: The five notification switches, and the `jarvis_limits` key each one is.
+#: The six notification switches, and the `jarvis_limits` key each one is.
 _NOTIFY_LIMIT = {
     "pc_alarm_sounds": "notif_alarms",
     "pc_reminder_sounds": "notif_reminders",
     "pc_briefing_notification": "notif_briefing",
     "pc_handoff_notification": "notif_handoff",
+    # Wave B, "Personalize Jarvis" (2026-11-03): the reminder that the quiz is
+    # still unfinished. Same shape as the other five - cardless both ways.
+    "pc_setup_notification": "notif_setup",
     "pc_quiet_hours": "notif_quiet_enabled",
 }
 
-#: What each of the five is called in plain words, for the sentence when that
+#: What each of the six is called in plain words, for the sentence when that
 #: backend does not have the row (an older PC) - never invented here.
 _NOTIFY_PLAIN = {
     "pc_alarm_sounds": "alarm sounds on your PC",
     "pc_reminder_sounds": "reminder sounds on your PC",
     "pc_briefing_notification": "the briefing notification on your PC",
     "pc_handoff_notification": "the \"a website needs you\" notification",
+    "pc_setup_notification": "the \"Personalize Jarvis\" reminder",
     "pc_quiet_hours": "quiet hours on your PC",
 }
 
 
 def _set_notify(key: str, on: bool, *, peer=None, local=None) -> Outcome:
-    """One of the five `[notifications]` switches, through jarvis_limits.change.
+    """One of the six `[notifications]` switches, through jarvis_limits.change.
 
     The same route the phone's own Settings row calls. `loosening="none"` on
-    all five, so no card - a change here only moves when this PC speaks up."""
+    all six, so no card - a change here only moves when this PC speaks up."""
     try:
         import jarvis_limits as LIM
     except Exception:
@@ -1159,6 +1163,15 @@ def set_pc_briefing_notification(on: bool, *, peer=None, local=None) -> Outcome:
 
 def set_pc_handoff_notification(on: bool, *, peer=None, local=None) -> Outcome:
     return _set_notify("pc_handoff_notification", on, peer=peer, local=local)
+
+
+def set_pc_setup_notification(on: bool, *, peer=None, local=None) -> Outcome:
+    """The "Personalize Jarvis" reminder switch (Wave B, 2026-11-03).
+
+    The same route as the other five: `_set_notify` -> `jarvis_limits.change`,
+    `loosening="none"`, so OFF takes effect at once and no card stands between
+    the owner and their own choice."""
+    return _set_notify("pc_setup_notification", on, peer=peer, local=local)
 
 
 def set_pc_quiet_hours(on: bool, *, peer=None, local=None) -> Outcome:
@@ -1834,6 +1847,20 @@ SETTINGS_ROWS: tuple = (
         has_detail=True,
         checked=True),
     SettingRow(
+        "notif-setup",
+        "pc_setup_notification",
+        "notif-setup-row",
+        "",
+        "",
+        'Personalize Jarvis',
+        'Reminds you, once at launch, that the Personalize Jarvis quiz is still unfinished.',
+        15,
+        "notifications",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        checked=True),
+    SettingRow(
         "notif-quiet-enabled",
         "pc_quiet_hours",
         "notif-quiet-row",
@@ -1841,7 +1868,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Turn on quiet hours',
         "",
-        15,
+        16,
         "notifications",
         "desktop",
         indent=8,
@@ -1858,7 +1885,7 @@ SETTINGS_ROWS: tuple = (
         'opens the Jarvis bar ready to type. Off: the button is not drawn\n'
         'there. The chat box, its Send and the microphone button are\n'
         'unchanged, and Alt+Space still opens the Jarvis bar.\n'),
-        16,
+        17,
         "hud-window",
         "desktop",
         indent=8,
@@ -1871,7 +1898,7 @@ SETTINGS_ROWS: tuple = (
         "sec-app-lock-detail",
         'App lock',
         '',
-        17,
+        18,
         "security",
         "desktop",
         indent=8,
@@ -1885,7 +1912,7 @@ SETTINGS_ROWS: tuple = (
         "sec-private-detail",
         'Windows Hello for memory lists and chat history',
         '',
-        18,
+        19,
         "security",
         "desktop",
         indent=8,
@@ -1909,7 +1936,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Background learning',
         "",
-        19,
+        20,
         "learning",
         "desktop",
         indent=10,
@@ -1922,7 +1949,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Also remember sensitive topics automatically',
         "",
-        20,
+        21,
         "learning",
         "desktop",
         indent=10,
@@ -1935,7 +1962,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Save facts even when Jarvis had to reword them',
         "",
-        21,
+        22,
         "learning",
         "desktop",
         indent=10,
@@ -1948,7 +1975,7 @@ SETTINGS_ROWS: tuple = (
         "cv-face-detail",
         'Voice follows the face',
         '',
-        22,
+        23,
         "voices",
         "desktop",
         indent=12,
@@ -1962,7 +1989,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Make custom voices on the second graphics card',
         'A more natural copy of the voice. Turning it on shows you an approval card first; turning it off happens at once.',
-        23,
+        24,
         "voices",
         "desktop",
         indent=12,
@@ -1975,7 +2002,7 @@ SETTINGS_ROWS: tuple = (
         "ws-enabled-detail",
         'Web search',
         '',
-        24,
+        25,
         "web-search",
         "desktop",
         indent=10,
@@ -1989,7 +2016,7 @@ SETTINGS_ROWS: tuple = (
         "ws-ask-detail",
         'Ask before every web search',
         '',
-        25,
+        26,
         "web-search",
         "desktop",
         indent=10,
@@ -2003,7 +2030,7 @@ SETTINGS_ROWS: tuple = (
         "",
         '',
         "",
-        26,
+        27,
         "spending",
         "desktop",
         indent=12,
@@ -2020,7 +2047,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Turn on Picture mode (slow)',
         "",
-        27,
+        28,
         "screen-look",
         "desktop",
         indent=10,
@@ -2033,7 +2060,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis use the windowless browser (Obscura)',
         "",
-        28,
+        29,
         "browser-engine",
         "desktop",
         indent=10,
@@ -2062,7 +2089,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Making pictures',
         "",
-        29,
+        30,
         "pictures",
         "desktop",
         indent=10,
@@ -2075,7 +2102,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis Desktop start and stop Jarvis',
         "",
-        30,
+        31,
         "start-jarvis",
         "desktop",
         indent=10),
@@ -2087,7 +2114,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Start Jarvis Desktop when Windows starts',
         "",
-        31,
+        32,
         "more-options",
         "desktop",
         indent=10),
@@ -2103,7 +2130,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis run small Python scripts for sums and averages',
         "",
-        32,
+        33,
         "sandbox",
         "desktop",
         indent=10,
@@ -2359,6 +2386,14 @@ BOOL_SETTINGS: tuple = (
                 "notifications when a website needs me",
                 "the solve it here notification"),
                "notifications", set_pc_handoff_notification),
+    # Wave B, "Personalize Jarvis" (2026-11-03): the reminder that the setup
+    # quiz is still unfinished. One row beside the other five PC-notification
+    # switches, and cardless either way like them (`loosening="none"`).
+    BoolSetting("pc_setup_notification",
+               ("the personalize jarvis reminder", "personalize jarvis reminder",
+                "the personalize jarvis notification",
+                "the setup reminder", "the setup notification"),
+               "notifications", set_pc_setup_notification),
     BoolSetting("pc_quiet_hours",
                ("quiet hours", "the quiet hours", "quiet hours on the pc",
                 "the pc's quiet hours"),

@@ -8812,13 +8812,14 @@ CHANGE_BY_ASKING = frozenset({
     # read and not a claim. It is here because the suite derives the allow-list
     # from the table: a switch left out would be silently outside this lane.
     "one_moment",
-    # The five PC-notification switches. They ride `jarvis_limits.change`, and
-    # all seven of those rows are `loosening="none"` on purpose: a switch that
+    # The six PC-notification switches. They ride `jarvis_limits.change`, and
+    # all eight of those rows are `loosening="none"` on purpose: a switch that
     # only decides whether this PC shows its owner a toast may not wait behind
     # a card, because an alarm must never fail to ring (the registry's own
-    # header says this at `_NOTIFY_LIMIT`).
+    # header says this at `_NOTIFY_LIMIT`). "pc_setup_notification" is Wave B's
+    # "Personalize Jarvis" reminder (2026-11-03), the same shape.
     "pc_alarm_sounds", "pc_reminder_sounds", "pc_briefing_notification",
-    "pc_handoff_notification", "pc_quiet_hours",
+    "pc_handoff_notification", "pc_setup_notification", "pc_quiet_hours",
     # Everything below asks on ONE direction through its OWN module's card
     # (and is immediate on the narrowing direction). The lane does not decide
     # that - the setter does, exactly as it does for the Settings switch.

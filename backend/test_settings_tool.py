@@ -797,11 +797,12 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # as `flow.moment.enabled` - so the tool reaches exactly the switch they
     # obey. It LEFT NOT_BY_ASKING at the same time; t_the_one_moment_switch_is_
     # reachable_and_cardless below drives it for real.
-    check("the count is now 35: the 23 measured on 2026-10-19, the eight added"
+    check("the count is now 36: the 23 measured on 2026-10-19, the eight added"
           " by the universal-control pass on 2026-10-22, antislop on"
           " 2026-10-28, the Jarvis calendar on 2026-10-29, one moment on"
-          " 2026-11-01, and learn_paraphrase on 2026-11-02",
-          len(R.BOOL_SETTINGS) == 35, str(len(R.BOOL_SETTINGS)))
+          " 2026-11-01, learn_paraphrase on 2026-11-02, and Wave B's"
+          " pc_setup_notification on 2026-11-03",
+          len(R.BOOL_SETTINGS) == 36, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

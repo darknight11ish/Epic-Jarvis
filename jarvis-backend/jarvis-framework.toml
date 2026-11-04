@@ -2065,6 +2065,10 @@ briefing = true
 # A website or support chat has paused at a captcha or sign-in page and is
 # waiting for the owner ("Solve it here").
 handoff = true
+# The "Personalize Jarvis" reminder (Wave B, 2026-11-03): one toast at launch
+# while the setup questionnaire is still unfinished. Quiet hours hold it, and it
+# stops for good once the quiz is finished.
+setup = true
 # Quiet hours on or off. Off by default.
 quiet_enabled = false
 # The quiet window's two ends, "HH:MM" on the PC's own clock. It normally wraps

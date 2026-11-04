@@ -821,10 +821,12 @@ await check("the wiring is real: the card, the command, its permissions and the 
   assert.match(settingsHtml, /<script type="module" src="setup-settings.js"><\/script>/);
   assert.match(settingsHtml, /href="#setup-questionnaire">Personalize Jarvis</);
   // The notification switch's page row comes from the generated catalogue
-  // (`tools/gen_settings_cases.py`, from the backend registry), so this branch
-  // must NOT hand-write it: the Rust switch exists and the page seam is named.
-  assert.doesNotMatch(settingsHtml, /id="notif-setup"/,
-    "the notification row is generated, not hand-written");
+  // (`tools/gen_settings_cases.py`, from the backend registry). Wave B's
+  // backend half landed the registry row, so the row is on the page now: what
+  // this pins is that it is the GENERATED row, spelled the way the catalogue
+  // spells every other notification toggle.
+  assert.match(settingsHtml, /<input id="notif-setup" type="checkbox" checked \/>/,
+    "the notification switch's generated row is on the page");
 
   const lib = read("src-tauri/src/lib.rs");
   assert.match(lib, /pub mod setup_questionnaire;/);
