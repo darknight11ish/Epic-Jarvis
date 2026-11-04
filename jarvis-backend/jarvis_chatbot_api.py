@@ -254,6 +254,15 @@ class Preset:
     #: Whether hidden reasoning counts inside the cap: "inside" (the
     #: service's own words say so) or "not_stated".
     reasoning: str = "not_stated"
+    #: Whether THIS PC MEASURED the service's hidden reasoning to be billed
+    #: inside `max_tokens` (2026-11-03). Not the service's own words - a fact
+    #: from this project's field tests - so it is its own field and cannot
+    #: change how `reasoning_room()` prices a request. DeepSeek is the one
+    #: service measured: 2026-10-14 and again 2026-11-03, `max_tokens: 2048`
+    #: returned `reasoning_tokens: 2048` and `content: ""`. The relay therefore
+    #: sends the lane's cap PLUS REASONING_ROOM to that service, which is
+    #: exactly the worst case `reply_cap()` already priced for it.
+    thinking_inside: bool = False
 
     @property
     def host(self) -> str:
@@ -289,7 +298,11 @@ PRESETS: dict = {p.id: p for p in (
            cap_field="max_tokens",
            cap_source=("DeepSeek's own API reference, \"Create Chat Completion\" "
                        "(api-docs.deepseek.com/api/create-chat-completion, checked "
-                       "2026-10-06): max_tokens, 1 to 384K")),
+                       "2026-10-06): max_tokens, 1 to 384K"),
+           #: Measured on this PC, twice: thinking is on by default and is
+           #: billed INSIDE max_tokens (docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md
+           #: and the 2026-11-03 re-test). See the field's own comment.
+           thinking_inside=True),
     Preset("mistral_api", "mistral", "Mistral (API)", "Mistral AI",
            "https://api.mistral.ai/v1", "mistral-small-latest",
            "https://console.mistral.ai/api-keys",
@@ -759,6 +772,14 @@ NO_ANSWER_AT_ALL = "The cloud model did not send an answer this time."
 # byte, exactly as 2026-10-14 decided.
 CLOUD_ANSWERED_HERE = ("The cloud did not answer this one, so this PC answered it "
                        "instead:")
+#: 2026-11-03, the owner's decision on the blank cloud answer. The measured
+#: failure (2026-10-14, reproduced 2026-11-03) is `finish_reason: "length"` with
+#: `content: ""` and every token of the cap spent on `reasoning_tokens`. The
+#: decision replaces the 2026-10-14 "show the working-out" rule: a reply with no
+#: usable answer is answered on THIS PC under this one line, and the model's
+#: private working-out is never shown - on a clicked turn or an automatic one.
+CLOUD_USED_BUDGET = ("The cloud model used its whole answer budget thinking and sent "
+                     "nothing back; here is the local answer:")
 NO_CLOUD_ANSWER_HERE = ("The cloud did not answer this one, and this PC could not answer "
                         "it either. Nothing was shown, because the cloud sent only its "
                         "working-out and that is not an answer.")
@@ -1087,6 +1108,33 @@ def reasoning_room(p: Preset) -> int:
     """The word-pieces kept for hidden reasoning on top of the cap: none
     where the service's own words put reasoning inside its cap."""
     return 0 if (p.cap_field and p.reasoning == "inside") else REASONING_ROOM
+
+
+def cloud_request_cap(state: dict, asked: int) -> int:
+    """The `max_tokens` to send for ONE resolved cloud lane (added 2026-11-03).
+
+    A service whose hidden reasoning is billed INSIDE the cap must be given
+    room for the reasoning AND the answer. Measured on this PC twice - the
+    2026-10-14 field test and again on 2026-11-03 - `max_tokens: 2048` was spent
+    entirely on `reasoning_tokens` and the visible answer came back empty:
+    `finish_reason: "length"`, `content: ""`. The relay's 2048 default was never
+    the lane's own number; `lane_state()`'s `cap` is, and it is the answer cap
+    `money_check()` priced. Measured-inside services get that cap PLUS
+    `REASONING_ROOM` for the thinking - exactly the worst case `reply_cap()`
+    already assumed for a "not_stated" service, so it cannot pass the month's
+    limit:
+      * `Preset.thinking_inside` and cap > 0 -> `cap + REASONING_ROOM`
+      * every other service, or no cap      -> the caller's `asked`, untouched.
+    `state` is `lane_state()`'s answer; never raises."""
+    try:
+        p = PRESETS.get(str((state or {}).get("pid") or ""))
+        cap = int((state or {}).get("cap") or 0)
+        asked = int(asked or 0)
+    except (TypeError, ValueError):
+        return 0
+    if p is not None and getattr(p, "thinking_inside", False) and cap > 0:
+        return cap + REASONING_ROOM
+    return asked
 
 
 def reply_cap(pid: str, model: str, left: float, next_chars: int, next_messages: int,
@@ -1685,10 +1733,12 @@ class CloudAnswer:
       * a reply with visible text is passed through UNCHANGED, byte for byte,
         with nothing held back - an ordinary answer keeps the bytes and the
         latency it had before this existed;
-      * a reply whose only text is the working-out is given ONE line naming it
-        (`REASONING_NOT_ANSWER`), then that working-out;
-      * a reply with neither is given one plain sentence (`NO_ANSWER_AT_ALL`),
-        because an empty card is not a report;
+      * a reply whose only text is the working-out is NEVER shown as the
+        answer (2026-11-03): the PC answers instead under `CLOUD_USED_BUDGET`,
+        and the working-out is withheld;
+      * a reply with neither is given `NO_ANSWER_AT_ALL` (or
+        `NO_CLOUD_ANSWER_HERE` when it carried working-out), because an empty
+        card is not a report;
       * anything it cannot read is passed through untouched. A filter that lost
         an answer would be far worse than the blank it exists to fix.
 
@@ -1708,13 +1758,13 @@ class CloudAnswer:
     reply (not only a blank one) is what makes that possible; the bytes a
     client receives are the same, in the same order.
 
-    `auto=True` for a turn the PC escalated WITH NO CLICK (the standing switch
-    or a phrase in the message): then a reply with no usable answer shows the
-    LOCAL answer from `fallback()` under one honest line, never the
-    working-out. `answered_here` says the local turn's answer was used, and
-    `used_reasoning` stays False for those turns - it is a promise that the
-    owner is never shown working-out as an answer to a question he did not ask
-    to send anywhere. See CLOUD_ANSWERED_HERE above.
+    `auto=True` marks a turn the PC escalated WITH NO CLICK (the standing
+    switch or a phrase in the message). Since 2026-11-03 a reply with no usable
+    answer is handled the same way for a clicked turn AND an automatic one:
+    the LOCAL answer from `fallback()` is shown under one honest line, and the
+    working-out is never shown to either. `answered_here` says the local turn's
+    answer was used; `used_reasoning` is kept for callers that read it and is
+    never set True any more. See CLOUD_USED_BUDGET above.
     """
 
     def __init__(self, streamed: bool, *, auto: bool = False,
@@ -1756,12 +1806,13 @@ class CloudAnswer:
                 break
             self._raw = rest
             self._read_event(event)
-            if self.auto and _only_reasoning(event):
-                # An automatic turn never shows the working-out, so the events
-                # that carry ONLY it are withheld rather than written. That is
-                # the one exception to "never drop a byte": on a turn the owner
-                # clicked for, nothing is dropped at all, and what this drops is
-                # exactly the text the added line would otherwise print.
+            if _only_reasoning(event):
+                # 2026-11-03: the working-out is never shown as the answer, on
+                # a clicked turn or an automatic one (see CLOUD_USED_BUDGET).
+                # The events that carry ONLY it are withheld rather than
+                # written; what this drops is exactly the text the added line
+                # would otherwise print. Everything else - the answer, the
+                # finish_reason, the usage - is untouched.
                 self._withheld.append(event)
             elif self._ended:
                 # 2026-10-28: held for EVERY reply, not only a blank one, so
@@ -1793,8 +1844,7 @@ class CloudAnswer:
             text, reasoning = visible_and_reasoning(got)
             if text.strip():
                 return text
-            if reasoning.strip():
-                return REASONING_NOT_ANSWER + "\n\n" + reasoning
+            # 2026-11-03: the working-out is never the answer (CLOUD_USED_BUDGET).
             return ""
         shown = "".join(self._shown)
         if not shown.strip() and self.said:
@@ -1877,29 +1927,30 @@ class CloudAnswer:
     def _stand_in(self) -> str:
         """What to say when the model wrote no usable answer, in plain words.
 
-        ONE place for both framings (a streamed reply and a whole body), so
-        the two can never drift apart. The `auto` branch is the 2026-10-27
-        rule: a turn nobody clicked for is answered HERE, and the working-out
-        is not shown at all.
+        ONE place for both framings (a streamed reply and a whole body), so the
+        two can never drift apart. The 2026-11-03 rule (see
+        `CLOUD_USED_BUDGET`): no usable answer means the PC answers instead,
+        under ONE line naming what happened - and the model's private
+        working-out is never shown, whether or not the owner clicked for the
+        turn. The line names the budget failure when the reply really did carry
+        working-out, and the older "did not answer" wording when it carried
+        neither. If the local turn produced nothing either, one sentence says
+        so and nothing is invented.
         """
         said = "".join(self._hidden).strip()
-        if self.auto:
-            answer = ""
-            if self.fallback is not None:
-                try:
-                    answer = str(self.fallback() or "").strip()
-                except Exception:
-                    answer = ""
-            if answer:
-                self.answered_here = True
-                self.said = CLOUD_ANSWERED_HERE
-                return CLOUD_ANSWERED_HERE + "\n\n" + answer
+        answer = ""
+        if self.fallback is not None:
+            try:
+                answer = str(self.fallback() or "").strip()
+            except Exception:
+                answer = ""
+        if answer:
+            self.answered_here = True
+            self.said = CLOUD_USED_BUDGET if said else CLOUD_ANSWERED_HERE
+            return self.said + "\n\n" + answer
+        if said:
             self.said = NO_CLOUD_ANSWER_HERE
             return NO_CLOUD_ANSWER_HERE
-        if said:
-            self.used_reasoning = True
-            self.said = REASONING_NOT_ANSWER
-            return REASONING_NOT_ANSWER + "\n\n" + said
         self.said = NO_ANSWER_AT_ALL
         return NO_ANSWER_AT_ALL
 
