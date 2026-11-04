@@ -509,6 +509,24 @@ def t_observe_never_delivers_even_a_notice_a_crash_left_pending():
     check("promoting to active delivers it exactly once", len(sent) == 1, sent)
 
 
+def t_a_sender_that_cannot_answer_leaves_the_notice_owed():
+    """None is not "dropped": a sender that could not place the notice at all
+    (no arbiter, a missing module) must leave it in the outbox, while the
+    arbiter's own "dropped" settles it. Collapsing the two would turn a missing
+    module into a silently lost notice."""
+    st = fresh()
+    row = C.evaluate(trigger(), mode="active", now=now(), store=st,
+                     notify=lambda d: None)
+    check("a sender that cannot answer marks the delivery failed",
+          row["delivery"] == "failed" and row["outcome"] == "would_notify", row)
+    check("... and the notice is still owed", len(OUT.pending("pr_ci_notice")) == 1,
+          OUT.pending())
+    sent = []
+    C.evaluate(trigger(), mode="active", now=now() + 1, store=st,
+               notify=lambda d: sent.append(d) or "notify")
+    check("... so the next active run delivers it exactly once", len(sent) == 1, sent)
+
+
 # ==========================================================================
 #   7. The decisions route and the job body
 # ==========================================================================

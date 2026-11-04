@@ -33119,7 +33119,7 @@ old, because dropping it is the defect this module exists to prevent.
 
 ### 185.6 Tests
 
-`backend/test_watch_ci.py` (136 checks) and `backend/test_outbox.py` (60), both
+`backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
 plain Python with a fake clock, a fake `gh` runner and temp files - no network,
 no `gh`, no model. Between them: observe-vs-active (including that observe calls
 the notifier ZERO times), the quiet period, fail fast, the all-green settle,

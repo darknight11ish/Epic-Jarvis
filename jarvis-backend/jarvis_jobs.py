@@ -1483,16 +1483,27 @@ def _finish(job_id: str, state: str, result: Any = None,
                                  "handler": row.get("handler"),
                                  "attempts": row.get("attempts")})
         note = error[:120] if error else ""
+        # A COMPLETION NOTICE nobody was told about is the other half of the
+        # restart defect: written down first, published second, settled third,
+        # so a crash leaves one pending entry rather than silence. A cancelled
+        # job gets no notice - telling somebody about the interruption they
+        # asked to stop is the thing they were avoiding.
+        #
+        # A notification that could not be WRITTEN is not a reason to silence a
+        # job either: the fallback publishes the event exactly as this module
+        # always did, and the row's own `delivered` column still feeds
+        # `collect()` for the digest.
+        handled = False
         ob = _outbox() if row["state"] in ("done", "failed") else None
         if ob is not None:
-            # A COMPLETION NOTICE nobody was told about is the other half of
-            # the restart defect: written down first, published second, settled
-            # third, so a crash leaves one pending entry rather than silence.
-            # A cancelled job gets no notice - telling somebody about the
-            # interruption they asked to stop is the thing they were avoiding.
-            ob.deliver("job_done", done_key(job_id, row["state"]),
-                       _row_payload(row, note), _emit_entry)
-        else:
+            try:
+                handled = ob.deliver("job_done", done_key(job_id, row["state"]),
+                                     _row_payload(row, note), _emit_entry) in (
+                    "sent", "owed", "already")
+            except Exception as exc:                    # noqa: BLE001
+                _audit("jobs.outbox_failed", {"id": job_id,
+                                              "error": type(exc).__name__})
+        if not handled:
             _emit(row, note=note)
     return row
 
@@ -1513,15 +1524,25 @@ def _park(job_id: str, action: str, reason: str) -> Optional[dict]:
     if row:
         _audit("jobs.waiting", {"id": job_id, "action": action})
         note = reason[:120] or f"needs {action}"
+        # Written down BEFORE it is published: a restart between these lines
+        # re-announces the card instead of losing it. `deliver` answers "owed"
+        # for a card this process already announced, which is what stops a job
+        # that parks every 30 s from saying so every 30 s.
+        #
+        # A notification that could not be WRITTEN is not a reason to fail (or
+        # to silence) a job: the fallback publishes the event exactly as this
+        # module always did, and the row still says what is waiting.
+        handled = False
         ob = _outbox()
         if ob is not None:
-            # Written down BEFORE it is published: a restart between these two
-            # lines re-announces the card instead of losing it. `deliver`
-            # returns "owed" for a card this process already announced, which is
-            # what stops a job that parks every 30 s from saying so every 30 s.
-            ob.deliver("job_card", card_key(job_id, action),
-                       _row_payload(row, note), _emit_entry)
-        else:
+            try:
+                handled = ob.deliver("job_card", card_key(job_id, action),
+                                     _row_payload(row, note), _emit_entry) in (
+                    "sent", "owed", "already")
+            except Exception as exc:                    # noqa: BLE001
+                _audit("jobs.outbox_failed", {"id": job_id,
+                                              "error": type(exc).__name__})
+        if not handled:
             _emit(row, note=note)
     return row
 

@@ -441,6 +441,40 @@ def t_status_reports_what_is_owed_without_answering_it():
           len(J.pending_grants(jid)) == 1)
 
 
+def t_a_broken_outbox_does_not_stop_or_silence_a_job():
+    """The outbox is how the owner is TOLD, never what does the work.
+
+    A disk that will not take the write must not fail a job and must not make it
+    park silently: the fallback is the event this module published before the
+    outbox existed, and the row still says what is waiting.
+    """
+    fresh_queue()
+    announced = []
+    real_emit = J._emit
+    real_outbox = J._outbox
+
+    class Broken:
+        def deliver(self, *a, **k):
+            raise OSError("no space left on device")
+
+    J.register("outbox_broken", lambda ctx, p: ctx.require(PROBE))
+    J._emit = lambda row, note="", force=True: announced.append((row.get("id"), note))
+    J._outbox = lambda: Broken()
+    try:
+        jid = J.create("outbox_broken", {}, label="broken", caps=[])
+        J.run_due()
+    finally:
+        J._emit = real_emit
+        J._outbox = real_outbox
+    check("a broken outbox does not stop the job queue",
+          (J.get(jid) or {}).get("state") == "waiting_approval", J.get(jid))
+    check("... the job still parked with its one grant",
+          len(J.pending_grants(jid)) == 1, J.pending_grants(jid))
+    check("... and the card was still announced, not swallowed",
+          any(a[0] == jid and "outbox_probe_action" in a[1] for a in announced),
+          announced)
+
+
 # ==========================================================================
 
 def main() -> int:

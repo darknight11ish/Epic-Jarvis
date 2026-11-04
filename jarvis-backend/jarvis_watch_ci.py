@@ -458,16 +458,16 @@ def assess_failure(decision: dict, thread: dict, *, runner: Optional[Callable] =
 #   Delivering a notice, when the mode is active
 # --------------------------------------------------------------------------
 
-def _notify_arbiter(decision: dict) -> str:
+def _notify_arbiter(decision: dict) -> Optional[str]:
     """Hand one notice to the ONE authority that decides whether to interrupt.
 
     `jarvis_arbiter.deliver()` is that authority (`docs/ARCHITECTURE.md` section
     3): it owns the interruption budget, the digest and the mute switch, and it
-    answers with a channel. A failure is explicit (`"dropped"`), never a crash -
-    a watcher must not take the queue down because a notification could not be
-    placed. `can_defer=False` for a failure, because the arbiter's own docstring
-    says why: a stale "your build is failing" from yesterday is worse than
-    nothing.
+    answers with a channel. `None` means it could not be reached or could not
+    answer at all, and that is DELIBERATELY distinct from "dropped": None leaves
+    the outbox entry pending so the next active run (or the next start) delivers
+    it, while "dropped" is the arbiter's own decision and is settled. Collapsing
+    the two would turn a missing module into a silently lost notice.
     """
     failed = str(decision.get("reason_code") or "") == "ci_required_failed"
     try:
@@ -481,9 +481,9 @@ def _notify_arbiter(decision: dict) -> str:
             can_defer=not failed,
             ref=str(decision.get("thread_key") or ""),
         )
-        return str(getattr(got, "channel", "") or "")
+        return str(getattr(got, "channel", "") or "") or None
     except Exception:                                  # noqa: BLE001
-        return ""
+        return None
 
 
 def _deliver_pending(notify: Callable[[dict], object], *, now=None) -> list:
@@ -503,6 +503,8 @@ def _deliver_pending(notify: Callable[[dict], object], *, now=None) -> list:
             channel = notify(want or payload)
         except Exception:                              # noqa: BLE001
             continue
+        if channel is None:
+            continue            # still owed: the sender could not answer
         if channel == "dropped":
             outbox.resolve("pr_ci_notice", entry["key"], now=now, why="dropped")
         else:
