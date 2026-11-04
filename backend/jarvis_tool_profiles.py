@@ -547,10 +547,14 @@ PROFILES: dict = {
         "touches": "network service",
         "limits": [
             "Five results, and only title, link and snippet - not the page text",
-            "The search words leave this PC, so private details must never go in them",
+            "The search words leave this PC, so private details must never go in "
+            "them; a search whose words hold a secret is refused outright",
+            "Its own card is raised only when private things could slip into the "
+            "results - otherwise a search runs straight away, so most searches "
+            "ask nothing",
             "Switching web search off in Settings does not merely refuse it: the "
-            "model is never offered the tool at all",
-            "It must never claim a search that did not run",
+            "model is never offered the tool at all, and it must never claim a "
+            "search that did not run",
         ],
         "combines": {
             "read_web_page": "Search finds the address; read_web_page fetches that "
@@ -1425,6 +1429,7 @@ PROFILES: dict = {
         "gives": [
             "Close a goal by saying it is finished",
             "Keep the record of how it went, not just whether it ended",
+            "Find it afterwards among the done goals, with its progress log whole",
             "Retire a goal without losing what was written along the way",
         ],
         "touches": "settings",
@@ -1621,6 +1626,8 @@ PROFILES: dict = {
         ],
         "touches": "files",
         "limits": [
+            "It returns titles and dates only - never message text. Opening one is "
+            "conversation_open's job, and that boundary was decided on 2026-09-28",
             "Only conversations kept on this PC - with history switched off there "
             "is nothing to find beyond the live turns held in memory",
             "Read-only: it never deletes, edits or clears anything",
@@ -1641,18 +1648,24 @@ PROFILES: dict = {
     "conversation_open": {
         "id": "conversation_open",
         "title": "Open an old conversation",
-        "what": "Opens one kept conversation by the id conversation_find returned, "
-                "so Jarvis can read what was actually said in it.",
+        "what": "Opens one kept conversation by the id conversation_find returned "
+                "and hands its turns back - the newest few, bounded - so Jarvis can "
+                "read what was actually said instead of guessing.",
         "gives": [
             "Read a past conversation instead of guessing what was said",
             "Quote the owner's own earlier words",
             "Carry a decision from an old chat into the current one",
+            "Read the turns themselves, which conversation_find deliberately "
+            "never returns",
         ],
         "touches": "files",
         "limits": [
-            "It needs the id conversation_find gave - it will not invent one",
+            "It needs the id conversation_find gave - it will not invent one, and "
+            "an unknown id is refused as \"no such conversation\"",
+            "Only the newest few turns come back, not the whole transcript",
+            "It is refused while App lock, or \"Hide memory lists and chat "
+            "history\", is on",
             "Read-only: it cannot clear, delete or change a conversation",
-            "Only conversations this PC kept",
         ],
         "combines": {
             "conversation_find": "The other half of the same job: find, then open.",
@@ -1744,20 +1757,27 @@ PROFILES: dict = {
     "approve_web_search_for_conversation": {
         "id": "approve_web_search_for_conversation",
         "title": "Approve web search for this conversation",
-        "what": "Asks the owner, once, to let web searches run for the rest of this "
-                "conversation without a card for every search. It raises the card; "
-                "the person's yes is the permission.",
+        "what": "Asks the owner, once, to let web searches in this conversation run "
+                "without the search's own card. It raises the card; a person's yes "
+                "is the permission, and the approval is stored for this one "
+                "conversation with its own expiry.",
         "gives": [
-            "Do a research session without a card per search",
+            "Run a research session in one chat without the search's card "
+            "interrupting each search that would have raised one",
             "Answer a natural \"you have my approval to search the web\" with a real "
             "card instead of a claim",
-            "Keep the approval bounded to the conversation it was given in",
+            "Keep the approval bounded to the conversation it was given in, so a "
+            "new chat starts without it",
         ],
         "touches": "settings",
         "limits": [
-            "It grants nothing by itself - it only raises ONE card, and a person's "
-            "yes is what actually permits the searches",
-            "The approval is conversation-scoped: a new chat starts without it",
+            "It grants nothing by itself - it only raises ONE card, and only a "
+            "person's yes creates the approval",
+            "It only replaces the search's own card while it is live for this chat. "
+            "Everything else is untouched: a search whose words hold a secret, or "
+            "from a provider that is not ready, still does not run",
+            "The \"ask me before anything\" lockdown outranks it - while lockdown is "
+            "on, the approval does not cover a search",
             "It has no Settings switch of its own; it rides with web search, and "
             "turning web search off takes it too",
         ],
@@ -1776,19 +1796,22 @@ PROFILES: dict = {
     "stop_web_search_approval": {
         "id": "stop_web_search_approval",
         "title": "Stop web search approval",
-        "what": "Instantly takes away the conversation's web-search approval, so "
-                "the next search has to ask again. It only ever takes permission "
-                "away, so it needs no card.",
+        "what": "Takes away this conversation's web-search approval at once, so a "
+                "search that needs a card gets one again. It only ever takes "
+                "permission away, which is why it needs no card of its own.",
         "gives": [
             "Stop the searching now, in one sentence",
             "Take back an approval without waiting for the chat to end",
-            "Keep the owner in charge of a long research session",
+            "Hear plainly when there was nothing left to stop, instead of a pretend "
+            "success",
         ],
         "touches": "settings",
         "limits": [
             "It only removes permission - it can never grant anything",
-            "It raises no card, because nothing it does can loosen a rule",
+            "It runs with no card at all (its action is tier \"auto\"), which is safe "
+            "only because it can only take permission away",
             "It affects this conversation's approval, not the web search switch itself",
+            "A stop that finds no approval says so and changes nothing",
         ],
         "combines": {
             "web_search": "Stop the standing approval; each later search asks again.",
