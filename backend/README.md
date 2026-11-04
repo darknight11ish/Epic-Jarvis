@@ -20963,6 +20963,39 @@ against the copy that was opened, so no action claims to patch a file when only
 the session's memory changed. GDB sessions are Linux-only in REA, so on this
 Windows PC those four actions refuse before the card and say why.
 
+**The owner's Q1 guardrails, now enforced in code (2026-11-04).** The ruling that
+approved the full toolbox named five guardrails. Two were already code (the
+local-only scan of every setting, and the pinned install); the other three were
+the recorded residual and are now enforced in `jarvis_rea.py` before the card:
+
+1. **A credential store is never a target.** `lsass`, `vaultcmd`, Credential
+   Manager's own folders and the browser login stores (`Login Data`,
+   `cookies.sqlite`, `logins.json`, `key4.db`) are refused by process name, by
+   file name and by any part of a path. A live action is scanned in every
+   setting (a command or an `argv` list can name the store); any other action is
+   scanned where a setting names a file or a program.
+2. **Nothing is written in place.** Rizin's `w` family and `oo+`/`ood`, GDB's
+   `set write on` / `restore` / `dump ...` and Frida's `Memory.write*` /
+   `File.write` are refused unless the command names a NEW `.patched` output in
+   a listed folder, or the session's own file is already such a copy. Windows,
+   Windows Defender and `python.exe`/`jarvis-desktop.exe`/`ollama.exe` are never
+   a patch target. An allowed write leaves a before/after SHA-256 receipt
+   (`write_receipts()`), so "the original is untouched" is measured.
+3. **Every live session has a deadline.** `duration_limit_sec` (60 by default,
+   300 at most) is the module's own setting: named on the card, never sent to
+   REA, and it caps the call's own timeout. A watch window longer than it is
+   refused. A session that outlives the deadline is detached with REA's own
+   close tool, or by terminating the helper when that is the only way - in a
+   `finally`, so a failed or timed-out call detaches too.
+
+What is still not enforced is written down in `docs/JARVIS-API.md` section 148:
+a rizin `>file` text dump is not analysed, a Frida script passed by path is
+scanned up to 200 KB, the write-form list is the ruling's named list (a write
+through an unlisted primitive, or a command that sources another script, is not
+detected - the card still shows the command itself), the deadline registry is
+swept at the next live call, and the receipt proves the original's bytes are
+unchanged rather than describing the diff.
+
 **The model-facing cost, measured.** The tool's schema is **1,953 tokens**
 (`jarvis_agent.estimate_tokens`), 1,799 of them the 200-name `action` enum. It
 costs nothing on any turn until BOTH `[rea] enabled` and `[tools].enabled` name

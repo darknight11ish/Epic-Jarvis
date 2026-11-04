@@ -359,6 +359,9 @@ def t_the_action_list_the_schema_and_the_docs_name_is_the_code():
           "200" in section and "`install`" in section, section[:120])
     check("... and says the action list is ACTION_ORDER, not a second hand-kept table",
           "ACTION_ORDER" in section, "ACTION_ORDER missing")
+    for needle in ("duration_limit_sec", ".patched", "Login Data", "lsass", "SHA-256"):
+        check(f"JARVIS-API's REA section states the {needle!r} guardrail",
+              needle in section, "missing")
     skill = REPO / "skills" / "reverse-engineer-anything" / "SKILL.md"
     skill_text = skill.read_text(encoding="utf-8") if skill.is_file() else ""
     for needle in ("install", "doctor", "200 actions", "one approval card"):
@@ -1305,7 +1308,8 @@ def t_the_vetted_skill_names_the_pins_and_carries_no_shell():
               f"found {banned!r}")
     for required in ("rea_investigate", "rea-agents", R.PINNED_VERSION,
                      R.PINNED_INTEGRITY, "approval gate", "does not install",
-                     "four-point", "sha512", "preinstall", "egress", "doctor"):
+                     "four-point", "sha512", "preinstall", "egress", "doctor",
+                     "duration_limit_sec", ".patched", "credential store", "receipt"):
         check(f"the skill names {required!r}", required in text, "missing")
     check("the skill still says the skill itself installs nothing",
           "never install anything" in text.lower() or "does not install" in text.lower(),
@@ -1335,6 +1339,444 @@ def t_the_delivery_carries_it():
     check("the published base carries the same module, byte for byte",
           twin.is_file() and twin.read_bytes() == (HERE / "jarvis_rea.py").read_bytes(),
           str(twin))
+
+
+# --------------------------------------------------------------------------
+#   The Q1 guardrails (the owner's ruling, forwarded 2026-11-04):
+#   1. no credential store or OS credential process is ever a target
+#   2. no write ever changes the original file
+#   3. every live session has a deadline the owner sees, and is detached in a finally
+# --------------------------------------------------------------------------
+
+class Clock:
+    """A clock the test moves by hand, so a deadline is proved without waiting for one."""
+
+    def __init__(self, start=1_000.0):
+        self.now = float(start)
+
+    def __call__(self):
+        return self.now
+
+    def tick(self, seconds):
+        self.now += float(seconds)
+
+
+class FakeSessionConn(FakeConn):
+    """A REA session that also records being closed, so 'the helper was terminated' is an
+    observation rather than a claim."""
+
+    def close(self):
+        self.dead = "closed"
+        self.closed = True
+
+    def __init__(self, text='{"result": {"ok": true}}'):
+        super().__init__(text)
+        self.closed = False
+
+
+def _live_file(name="live.bin"):
+    path = TMP / "tools" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.exists():
+        path.write_bytes(b"MZ")
+    return str(path)
+
+
+def t_a_credential_store_is_never_a_target():
+    """Guardrail 1: LSASS, Windows Credential Manager and the browser login stores, by process
+    name, by file name and by any part of a path - refused before the card, on every live
+    action, and for a static read of the file too."""
+    stores = [
+        "lsass.exe",
+        "lsass",
+        r"C:\Windows\System32\lsass.exe",
+        "vaultcmd",
+        r"C:\Windows\System32\vaultcmd.exe",
+        r"C:\Users\me\AppData\Local\Google\Chrome\User Data\Default\Login Data",
+        r"C:\Users\me\AppData\Local\Microsoft\Edge\User Data\Default\Login Data For Account",
+        r"C:\Users\me\AppData\Roaming\Mozilla\Firefox\Profiles\x\key4.db",
+        r"D:\pulled\cookies.sqlite",
+        r"C:\Users\me\logins.json",
+        r"C:\ProgramData\Microsoft\Credentials\DFBE70A7E5B8",
+        r"C:\ProgramData\Microsoft\Protect\S-1-5-21",
+        r"C:\Windows\NTDS\ntds.dit",
+    ]
+    bomb = mock.Mock(side_effect=AssertionError("must not start"))
+    with mock.patch.object(R, "enabled", return_value=True), \
+            mock.patch.object(R, "_connect", bomb):
+        for store in stores:
+            refused = ""
+            try:
+                R.prepare({"action": "start_frida_session",
+                           "arguments": {"mode": "spawn", "program": store}})
+            except R.ReaRefused as exc:
+                refused = str(exc)
+            check(f"a live action refuses the credential target ...{store[-30:]!r}",
+                  refused == R.CREDENTIAL_REFUSED, refused)
+        refused = ""
+        try:
+            R.prepare({"action": "capture_process_scenario",
+                       "arguments": {"executable": _live_file(),
+                                     "argv": [_live_file(), "Login Data"]}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("... and a credential word inside an argv list is refused too",
+              refused == R.CREDENTIAL_REFUSED, refused)
+        refused = ""
+        try:
+            R.prepare({"action": "instrument_with_frida",
+                       "arguments": {"mode": "attach", "pid": 4, "source_kind": "source",
+                                     "source": "open('/x/cookies.sqlite')"}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("... and one named inside a Frida script", refused == R.CREDENTIAL_REFUSED, refused)
+    check("... and no credential target reached a session", bomb.call_count == 0,
+          str(bomb.call_count))
+    # An ordinary process and an ordinary file are still ordinary cards.
+    with mock.patch.object(R, "_documents", return_value=FakeDocs()), \
+            mock.patch.object(R, "enabled", return_value=True):
+        ordinary = ""
+        try:
+            _plan, words = R.prepare({"action": "start_frida_session",
+                                     "arguments": {"mode": "spawn",
+                                                   "program": _live_file("notepad.exe")}})
+        except R.ReaRefused as exc:
+            ordinary = str(exc)
+        check("an ordinary program is still an ordinary live card", ordinary == "" and bool(words),
+              ordinary or words)
+        # A static read of a saved-login FILE inside a listed folder is refused the same way.
+        vault = TMP / "bits" / "logins.json"
+        vault.parent.mkdir(parents=True, exist_ok=True)
+        vault.write_text("{}", encoding="utf-8")
+        refused = ""
+        try:
+            R.prepare({"action": "inspect_binary", "target": str(vault)})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("a static read of a saved-login file is refused", refused == R.CREDENTIAL_REFUSED,
+              refused)
+        app = TMP / "bits" / "app.asar"
+        app.write_bytes(b"x")
+        allowed = ""
+        try:
+            _plan, words = R.prepare({"action": "inspect_binary", "target": str(app)})
+        except R.ReaRefused as exc:
+            allowed = str(exc)
+        check("... while an ordinary file beside it is an ordinary card",
+              allowed == "" and bool(words), allowed or words)
+    # The rule is not a word filter: an analysis query may still name a credential file.
+    with mock.patch.object(R, "_documents", return_value=FakeDocs()), \
+            mock.patch.object(R, "enabled", return_value=True):
+        refused = ""
+        try:
+            R.prepare({"action": "search_strings_query", "arguments": {"path": _live_file()}})
+        except R.ReaRefused:
+            pass                                # that action does not exist; the point is below
+        refused = ""
+        try:
+            R.prepare({"action": "trace_feature", "arguments": {"query": "logins.json"}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("a search QUERY that names a credential file is not a credential target",
+              refused != R.CREDENTIAL_REFUSED, refused)
+
+
+def t_a_write_never_changes_the_original_file():
+    """Guardrail 2: every write-capable form a debugger or Frida command can carry is refused
+    unless it aims at a NEW `.patched` copy - and an allowed write leaves a measured receipt."""
+    original = TMP / "patchwork" / "app.exe"
+    original.parent.mkdir(parents=True, exist_ok=True)
+    original.write_bytes(b"MZ-original-bytes")
+    docs, on = _enabled_docs()
+    with docs, on:
+        for form in ("w", "wa nop", "wb", "wt", "wx 90", "wv 4", "wo", "wop",
+                     "oo+", "ood"):
+            refused = ""
+            try:
+                R.prepare({"action": "rizin_debug_command",
+                           "arguments": {"session_id": "s1", "command": form}})
+            except R.ReaRefused as exc:
+                refused = str(exc)
+            check(f"an in-place rizin write ({form!r}) is refused",
+                  refused == R.INPLACE_WRITE_REFUSED, refused)
+        for form in ("set write on", "restore saved.bin binary 0x1000",
+                     "dump binary memory out.bin 0x0 0x10"):
+            refused = ""
+            with mock.patch.object(R.sys, "platform", "linux"):
+                try:
+                    R.prepare({"action": "gdb_console",
+                               "arguments": {"session_id": "s1", "command": form}})
+                except R.ReaRefused as exc:
+                    refused = str(exc)
+            check(f"a GDB write form ({form!r}) is refused",
+                  refused == R.INPLACE_WRITE_REFUSED, refused)
+        for script in ("const p = ptr('0x1000'); Memory.writeByteArray(p, [1, 2]);",
+                       "Memory.writeU32(p, 0);", "File.write(handle, blob);"):
+            refused = ""
+            try:
+                R.prepare({"action": "instrument_with_frida",
+                           "arguments": {"mode": "attach", "pid": 4,
+                                         "source_kind": "source", "source": script}})
+            except R.ReaRefused as exc:
+                refused = str(exc)
+            check(f"a Frida write ({script[:24]!r}...) is refused",
+                  refused == R.INPLACE_WRITE_REFUSED, refused)
+        # Reading commands are untouched: this rule refuses writes, not debugging.
+        for form in ("afl", "pd 20", "s 0x401000; pdf", "db 0x401000", "info registers"):
+            refused = ""
+            with mock.patch.object(R.sys, "platform", "linux"):
+                try:
+                    R.prepare({"action": "gdb_console",
+                               "arguments": {"session_id": "s1", "command": form}}
+                              if form.startswith("info") else
+                              {"action": "rizin_debug_command",
+                               "arguments": {"session_id": "s1", "command": form}})
+                except R.ReaRefused as exc:
+                    refused = str(exc)
+            check(f"a read-only command ({form!r}) is not a write", refused == "", refused)
+        # The sanctioned form: a NEW .patched copy inside a listed folder.
+        out = TMP / "patchwork" / "app.patched.exe"
+        refused = ""
+        plan = None
+        try:
+            plan, _words = R.prepare({"action": "rizin_debug_command",
+                                      "arguments": {"session_id": "s1",
+                                                    "command": f"wt {out} 16"}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("a write aimed at a NEW .patched path is allowed", refused == "" and plan is not None,
+              refused)
+        # ... run it: the receipt is a measurement of the original, not a promise.
+        import hashlib
+        before = hashlib.sha256(original.read_bytes()).hexdigest()
+        conn = FakeConn()
+        with mock.patch.object(R, "_documents", return_value=FakeDocs()), \
+                mock.patch.object(R, "enabled", return_value=True), \
+                mock.patch.object(R, "_connect", return_value=(conn, {})):
+            R.reset_for_tests()
+            plan, _words = R.prepare({"action": "rizin_debug_command",
+                                      "arguments": {"session_id": "s1",
+                                                    "command": f"wt {out} 16"}})
+            plan["target"] = str(original)      # the file this session is working on
+            envelope_out = R.run(plan)
+        receipt = envelope_out.get("write_receipt") or {}
+        check("an allowed write leaves a before/after SHA-256 receipt",
+              receipt.get("original_before_sha256") == before
+              and receipt.get("original_after_sha256") == before, receipt)
+        check("... and the receipt says the original really is unchanged",
+              receipt.get("original_unchanged") is True, receipt)
+        check("... naming the new file it wrote",
+              str(receipt.get("output") or "").endswith("app.patched.exe"), receipt.get("output"))
+        check("... and the module can still see it afterwards",
+              any(str(item.get("output") or "").endswith("app.patched.exe")
+                  for item in R.write_receipts()), R.write_receipts())
+        check("the original file's bytes are untouched on disk",
+              original.read_bytes() == b"MZ-original-bytes", original.read_bytes()[:20])
+
+
+def t_windows_and_jarvis_programs_are_never_patched():
+    """Guardrail 2, second half: Windows, Windows Defender and the programs Jarvis itself runs
+    from are never a patch target - whichever way the write is aimed."""
+    docs, on = _enabled_docs()
+    cases = [
+        ("oo+", r"C:\Windows\System32\kernel32.dll"),
+        ("wx 90", r"C:\Program Files\Windows Defender\MpCmdRun.exe"),
+        ("wb", r"C:\Python311\python.exe"),
+        ("wt C:\\Windows\\System32\\copy.patched 16", ""),
+        ("wt C:\\Tools\\ollama.exe 16", ""),
+        ("wt C:\\Apps\\jarvis-desktop.exe 16", ""),
+    ]
+    with docs, on:
+        for form, session_file in cases:
+            R._STATE.setdefault("session_files", {})
+            if session_file:
+                R._STATE["session_files"]["s1"] = session_file
+            else:
+                R._STATE["session_files"].pop("s1", None)
+            refused = ""
+            try:
+                R.prepare({"action": "rizin_debug_command",
+                           "arguments": {"session_id": "s1", "command": form}})
+            except R.ReaRefused as exc:
+                refused = str(exc)
+            check(f"a patch aimed at {session_file or form[:20]!r} is refused",
+                  refused == R.SYSTEM_WRITE_REFUSED, refused)
+        R._STATE["session_files"].pop("s1", None)
+        R._STATE["session_files"]["s1"] = str(TMP / "patchwork" / "app.patched.exe")
+        refused = ""
+        try:
+            R.prepare({"action": "rizin_debug_command",
+                       "arguments": {"session_id": "s1", "command": "oo+"}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("a session whose own file is already a .patched copy may write to it",
+              refused == "", refused)
+        R._STATE.setdefault("session_files", {}).pop("s1", None)
+    check("a Windows path is never an in-place write target",
+          R.system_write_hit(r"C:\Windows\System32\x.dll") == "windows"
+          and R.system_write_hit(r"C:\Program Files\Windows Defender\MpCmdRun.exe")
+          == "program files/windows defender", R.system_write_hit(r"C:\Windows\x"))
+    check("... nor is one of Jarvis's own programs",
+          R.system_write_hit(r"C:\Python311\python.exe") == "python.exe"
+          and R.system_write_hit(r"C:\Tools\notepad.exe") == "",
+          R.system_write_hit(r"C:\Python311\python.exe"))
+
+
+def t_every_live_session_has_a_deadline_the_owner_sees():
+    """Guardrail 3: the duration is on the card, it is bounded, it is never sent to REA, and a
+    watch window longer than it is refused before the card."""
+    docs, on = _enabled_docs()
+    with docs, on:
+        plan, words = R.prepare({"action": "start_frida_session",
+                                 "arguments": {"mode": "attach", "pid": 4}})
+        check("the one card names the 60-second default", "60" in words
+              and "detach" in words.lower(), words)
+        check("... and the plan carries it", plan.get(R._DURATION_KEY) == 60, plan)
+        plan, words = R.prepare({"action": "start_frida_session",
+                                 "arguments": {"mode": "attach", "pid": 4,
+                                               "duration_limit_sec": 120}})
+        check("a longer approved duration is on the card too", "120" in words
+              and plan.get(R._DURATION_KEY) == 120, (words, plan.get(R._DURATION_KEY)))
+        check("the duration is this module's own setting and is never sent to REA",
+              R._DURATION_KEY not in plan.get("arguments", {}), plan.get("arguments"))
+        for bad in (0, -1, 301, 100000, "60", True, 1.5):
+            refused = ""
+            try:
+                R.prepare({"action": "start_frida_session",
+                           "arguments": {"mode": "attach", "pid": 4,
+                                         "duration_limit_sec": bad}})
+            except R.ReaRefused as exc:
+                refused = str(exc)
+            check(f"a duration of {bad!r} is refused with the ceiling named",
+                  refused == R.LIMIT_REFUSED.format(most=R.SESSION_LIMIT_MAX), refused)
+        refused = ""
+        try:
+            R.prepare({"action": "capture_process_scenario",
+                       "arguments": {"executable": _live_file(), "timeout_ms": 120_000}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("a watch window longer than the approved duration is refused",
+              refused == R.WINDOW_REFUSED.format(asked=120, limit=R.SESSION_LIMIT_DEFAULT),
+              refused)
+        refused = ""
+        try:
+            R.prepare({"action": "capture_process_scenario",
+                       "arguments": {"executable": _live_file(), "timeout_ms": 30_000}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("... while a window inside it is an ordinary card", refused == "", refused)
+    # No other action accepts the setting, so it cannot become a silent second meaning.
+    with docs, on:
+        refused = ""
+        try:
+            R.prepare({"action": "inspect_pe_resources",
+                       "arguments": {"path": str(TMP / "bits" / "app.asar"),
+                                     "duration_limit_sec": 300}})
+        except R.ReaRefused as exc:
+            refused = str(exc)
+        check("a static action does not take the setting at all", "no setting called" in refused,
+              refused)
+    check("every live family in the action table is under the deadline rule",
+          sorted(set(R._DYNAMIC_ACTIONS) - set(R.ACTIONS)) == [], "unknown name")
+    check("... and under the credential refusal",
+          sorted(set(R._DYNAMIC_ACTIONS) - set(R._LIVE_ACTIONS)) == [], "gap")
+    families = [name for name in R.ACTIONS
+                if name.startswith(("capture_", "observe_", "start_gdb", "start_rizin",
+                                    "start_frida", "instrument_", "load_frida", "unload_frida",
+                                    "close_frida", "close_gdb", "close_rizin", "gdb_",
+                                    "rizin_", "cutter_", "frida_session", "resume_frida",
+                                    "execute_rizin"))]
+    check("every capture/debug/Frida/process action is under the credential refusal",
+          sorted(set(families) - set(R._LIVE_ACTIONS)) == [], sorted(set(families)
+                                                                     - set(R._LIVE_ACTIONS)))
+
+
+def t_a_live_session_over_its_deadline_is_detached():
+    """Over the deadline it is detached by REA's own close tool; under it, it stays warm."""
+    clock = Clock()
+    conn = FakeSessionConn('{"result": {"session_id": "s1", "ok": true}}')
+    docs, on = _enabled_docs()
+    with docs, on, mock.patch.object(R, "_connect", return_value=(conn, {})), \
+            mock.patch.object(R, "_now", clock):
+        R.reset_for_tests()
+        plan, _words = R.prepare({"action": "start_frida_session",
+                                  "arguments": {"mode": "attach", "pid": 4}})
+        envelope_out = R.run(plan)
+        registered = R.status()["sessions"]
+        clock.tick(30)
+        first_sweep = R._sweep_sessions()
+        still = R.status()["sessions"]
+        clock.tick(31)
+        second_sweep = R._sweep_sessions()
+        gone = R.status()["sessions"]
+    check("a live session registers its deadline when it starts",
+          len(registered) == 1 and registered[0]["limit"] == R.SESSION_LIMIT_DEFAULT,
+          registered)
+    check("... the envelope says the duration and that nothing was detached",
+          envelope_out.get("duration_limit_sec") == R.SESSION_LIMIT_DEFAULT
+          and not (envelope_out.get("detached") or {}).get("expired"), envelope_out)
+    check("under its deadline the session stays", first_sweep == [] and len(still) == 1,
+          (first_sweep, still))
+    check("over its deadline it is detached", len(second_sweep) == 1 and gone == [],
+          (second_sweep, gone))
+    names = [(call[1].get("name"), call[1].get("arguments")) for call in conn.calls]
+    check("... with REA's own close tool aimed at that session",
+          ("close_frida_session", {"session_id": "s1"}) in names, names)
+
+
+def t_a_live_call_detaches_in_its_finally():
+    """The finally path: a call that ran past its deadline, and a call that failed, both leave
+    no session and no hook behind."""
+    clock = Clock()
+    calls = []
+
+    def slow_tool(tool, arguments, **_kwargs):
+        calls.append((tool, dict(arguments)))
+        clock.tick(90)                      # the call itself runs past the approved 60 seconds
+        return {"content": [{"type": "text", "text": '{"session_id": "s9"}'}]}
+
+    docs, on = _enabled_docs()
+    with docs, on, mock.patch.object(R, "_call_tool", side_effect=slow_tool), \
+            mock.patch.object(R, "_now", clock):
+        R.reset_for_tests()
+        plan, _words = R.prepare({"action": "start_rizin_debug_session",
+                                  "arguments": {"path": _live_file(), "inferior_tty": "tty"}})
+        envelope_out = R.run(plan)
+    names = [name for name, _args in calls]
+    check("a live call that ran past its deadline starts, then detaches",
+          names[:1] == ["start_rizin_debug_session"]
+          and "close_rizin_debug_session" in names, names)
+    check("... aimed at the session REA reported",
+          ("close_rizin_debug_session", {"session_id": "s9"}) in calls, calls)
+    check("... the envelope says the deadline was hit",
+          (envelope_out.get("detached") or {}).get("expired") is True, envelope_out)
+    check("... and nothing is left registered", R.status()["sessions"] == [],
+          R.status()["sessions"])
+    # A call that fails outright cannot leave an attached hook either.
+    class DeadConn(FakeSessionConn):
+        def request(self, method, params=None, timeout=0):
+            raise RuntimeError("the pipe died")
+
+    conn = DeadConn()
+    with docs, on, mock.patch.object(R, "_connect", return_value=(conn, {})), \
+            mock.patch.object(R, "_now", Clock()):
+        R.reset_for_tests()
+        plan, _words = R.prepare({"action": "start_frida_session",
+                                  "arguments": {"mode": "attach", "pid": 4}})
+        failed = R.run(plan)
+    check("a failed live call terminates the helper rather than leaving a hook",
+          conn.closed is True, conn.closed)
+    check("... reports the failure instead of a result", failed.get("ok") is False, failed)
+    check("... and leaves nothing registered", R.status()["sessions"] == [],
+          R.status()["sessions"])
+    check("the deadline also caps the call itself",
+          R._call_timeout("start_frida_session", {"duration_limit_sec": 45}) == 45.0
+          and R._call_timeout("start_frida_session", {"duration_limit_sec": 300})
+          == min(R._SLOW_CALL_TIMEOUT, 300.0)
+          and R._call_timeout("inspect_binary", {}) == R._timeout_for("inspect_binary"),
+          (R._call_timeout("start_frida_session", {"duration_limit_sec": 45}),
+           R._call_timeout("inspect_binary", {})))
+    R.reset_for_tests()
 
 
 def main():
@@ -1370,7 +1812,13 @@ def main():
                t_off_by_default_and_no_start_without_it,
                t_prepare_runs_before_the_card_and_starts_nothing,
                t_the_vetted_skill_names_the_pins_and_carries_no_shell,
-               t_the_delivery_carries_it):
+               t_the_delivery_carries_it,
+               t_a_credential_store_is_never_a_target,
+               t_a_write_never_changes_the_original_file,
+               t_windows_and_jarvis_programs_are_never_patched,
+               t_every_live_session_has_a_deadline_the_owner_sees,
+               t_a_live_session_over_its_deadline_is_detached,
+               t_a_live_call_detaches_in_its_finally):
         try:
             fn()
         except Exception as exc:                  # noqa: BLE001 - a broken test is a failure

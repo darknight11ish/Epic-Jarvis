@@ -26707,6 +26707,59 @@ local copy is done with a debugger session's own commands (`cutter_command`,
 file when only the session's memory changed. GDB sessions are Linux-only in REA, so on this
 Windows PC those four actions refuse before the card and say why.
 
+**The owner's Q1 guardrails, enforced in this module (2026-11-04).** The ruling approved the
+full toolbox with five guardrails; two were already code (rule 2's local-only scan of every
+setting, rule 5's pinned install). The other three were the recorded residual and are now
+enforced in `jarvis_rea.py`, before the card, not trusted to REA:
+
+1. **A credential store is never a target.** `lsass` (by name or `lsass.exe`), `vaultcmd`,
+   Windows Credential Manager's own folders (`Microsoft\Credentials`, `Microsoft\Protect`,
+   `Windows\NTDS\ntds.dit`), and the browser login stores (`Login Data`, `cookies.sqlite`,
+   `logins.json`, `key4.db`) are refused by process name, by file name and by any part of a
+   path. A live action (`capture_*`, `observe_*`, `start_*_session`, `instrument_with_frida`,
+   `load_frida_script`, `gdb_console`, `rizin_debug_command`, `cutter_command`,
+   `execute_rizin_command`, the process-memory reads) is scanned in **every** setting, because a
+   command, a script or an `argv` list can name the store instead of a plain path. Every other
+   action is scanned where a setting names a file or a program, so a static read of a copied
+   `logins.json` is refused the same way - while a search query that merely contains the word is
+   not, because a word is not a target. The sentence says which rule it serves and that nothing
+   was run: `CREDENTIAL_REFUSED`.
+2. **Nothing is written in place.** `cutter_command`, `rizin_debug_command`,
+   `execute_rizin_command`, `gdb_console`, `instrument_with_frida` and `load_frida_script` are
+   the write-capable surfaces. A command carrying a write form - rizin's `w` family (`w`, `wa`,
+   `wb`, `wt`, `wx`, `wo`, `wv`, `wop`, ...) and `oo+`/`ood`, GDB's `set write on`, `restore`,
+   `dump binary|ihex|srec|verilog|tekhex` and `set {type}addr`, Frida's `Memory.write*` /
+   `writeByteArray` / `writeUtf8String` / `writePointer` / `File.write` / `writeAll` - is refused
+   unless it names a NEW `<name>.patched<extension>` output inside a listed folder, or the
+   session's own file is already such a copy (remembered from `start_rizin_debug_session`).
+   `C:\Windows\`, `C:\Program Files\Windows Defender\`, and `python.exe` (and `pythonw.exe`),
+   `jarvis-desktop.exe`, `ollama.exe` are refused as patch targets outright. An allowed write
+   records a **before/after SHA-256 receipt** in the module (`write_receipts()`, and in the
+   result), so "the original is untouched" is a measurement: the original's hash before and
+   after, whether it changed, and the new file's hash.
+3. **Every live session has a deadline.** A live action takes `duration_limit_sec` - **60 by
+   default, 300 at most** - which is this module's own setting: it is never sent to REA, it is
+   named on the one card, and it caps the call's own timeout, so a live call cannot sit there
+   longer than the card said. A watch window setting (`duration_ms`, `observation_ms`,
+   `timeout_ms`) longer than the approved duration is refused before the card. The module keeps
+   a registry of live sessions with their deadlines; a session that outlives its deadline is
+   detached with REA's own `close_frida_session` / `close_gdb_session` /
+   `close_rizin_debug_session`, and when that cannot be done the REA helper itself is terminated
+   (which takes every hook and child with it). This happens in a `finally`, so a failed or
+   timed-out call detaches too.
+
+**Still not enforced, said plainly.** (a) Rizin's own `>file` redirection writes a text dump; it
+is not on the ruling's list and is not analysed as a write, because it cannot overwrite the file
+being analysed. (b) A Frida script given by path is read and scanned up to 200 KB; a longer
+script is only partly scanned, and an unreadable one is not scanned at all. (c) The write forms
+are the ruling's named list: a write reached through some other primitive (GDB's `call`, for one)
+is not detected, and a command that sources ANOTHER script by path (`rizin -i`, GDB's `source`)
+is not read - the card still shows the command itself, which is what the owner approves. (d) The
+deadline is enforced by the call's own timeout and by the registry sweep at the next live call;
+if the whole Jarvis process dies mid-call, the helper dies with it (a Windows Job Object) but no
+close tool is called. (e) The receipt proves the original's bytes did not change; it does not say
+what the `.patched` copy differs by.
+
 **Every call is ONE approval card.** `rea_investigate` is in `jarvis_agent.NEEDS_A_PERSON`, so a
 person's yes is required whatever the tier - including for `doctor` and `install`. `prepare()`
 validates the action, its settings, its engine and its target **before** the card, so a bad
@@ -26726,9 +26779,11 @@ That is why `capture_browser_scenario` can drive a local page but not a website,
 action not in the table is refused. Inside an action, a setting name that is not one of that
 tool's own top-level settings (read from the pinned catalogue) is refused with the list of the
 ones it does have, and a required setting that is missing is refused the same way - so nothing
-unexpected is ever sent, and no 724 KB of schemas has to be shipped to say so. The runtime
-identity check (`binary_session`) confirms the running program is `rea-agents@6.7.0` with the
-207-tool catalog and digest this build was written against; a mismatch closes the session.
+unexpected is ever sent, and no 724 KB of schemas has to be shipped to say so. One setting is
+this module's own and is never sent: `duration_limit_sec`, accepted on a live action only, taken
+out of the settings before the call and carried on the card instead. The runtime identity check
+(`binary_session`) confirms the running program is `rea-agents@6.7.0` with the 207-tool catalog
+and digest this build was written against; a mismatch closes the session.
 
 **What is refused, and the rule it serves.** ONE card per call (rule 4). Nothing leaves this PC
 (rules 1 and 2). The REA child receives `jarvis_child_env`'s allow-list plus only the provider
@@ -26738,7 +26793,10 @@ paths and switches the owner set - never `HUD_TOKEN`, `JARVIS_TOKEN`, any `*_KEY
 `start_adb_activity`, `stop_adb_app`), and that one is cross-module ownership rather than a core
 rule: phone changes already belong to `control_phone` / `[phone_apps]`, with their own card and
 allow-list. Debuggers, Frida, live capture, process memory, export and ADB reads are all ordinary
-card-gated actions now.
+card-gated actions - and every one of them is now under the three Q1 guardrails above: a
+credential store is refused as a target, a write is refused unless it lands on a new `.patched`
+copy, and a live session carries a duration the owner saw on the card and is detached when it
+runs out.
 
 **It installs itself (the owner's decision).** The `install` action runs
 `npm install --prefix <config>/tools/rea rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund`
@@ -26791,8 +26849,19 @@ install script or a telemetry host, the egress scan reads a fixture package, tim
 class, the child environment carries no Jarvis secret, the taint latch is called, markers
 stripped and secrets scrubbed and injections flagged, the bounded output, the Node version range
 (22.19+/24.11+/26+, never 23/25), missing-engine refusals before the card, one compact tool in
-exactly one group selected by the tool diet, and off-by-default gating on both switches. A real
-REA analysis is NOT-TESTABLE on CI (no engines, no pinned install) and is not claimed as tested.
+exactly one group selected by the tool diet, and off-by-default gating on both switches. The
+three Q1 guardrails have their own checks: each credential store (LSASS, `vaultcmd`, Credential
+Manager's folders, `Login Data`, `cookies.sqlite`, `logins.json`, `key4.db`) denied as a live
+target and a static one, an ordinary program and file still allowed, every rizin/GDB/Frida write
+form denied, a NEW `.patched` path allowed with its before/after SHA-256 receipt, Windows,
+Windows Defender and Jarvis's own programs denied as patch targets, the 60-second default and
+the 300-second ceiling on the card, a longer watch window refused, a fake clock proving a
+session under its deadline stays and over it is detached with the family's close tool, and the
+`finally` path detaching a call that timed out or failed (with the helper terminated when it
+cannot be detached by name). A real
+REA analysis is NOT-TESTABLE on CI (no engines, no pinned install) and is not claimed as tested;
+so is a real Frida attach, a real patch and a real deadline expiry on a live program - those are
+covered by fakes and a fake clock, and are not claimed as driven.
 
 ## 149. Searchable recordings and videos: readable words and a video's on-screen text kept on the PC, ON by the owner's decision (F5 S2+S3, added 2026-10-19/20)
 

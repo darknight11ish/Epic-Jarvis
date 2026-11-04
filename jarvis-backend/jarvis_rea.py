@@ -89,6 +89,7 @@ preinstall/install/postinstall hooks, and the install uses
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import os
 import re
@@ -780,7 +781,15 @@ _EGRESS_SUFFIXES = (".js", ".mjs", ".cjs")
 _EGRESS_MAX_FILES = 4000
 _EGRESS_MAX_BYTES = 64 * 1024 * 1024
 
-_STATE = {"conn": None, "last": 0.0, "install": None, "open_target": "", "identity": {}}
+_STATE = {"conn": None, "last": 0.0, "install": None, "open_target": "", "identity": {},
+          #: Every live session this module opened, keyed by `action:started`. See the Q1
+          #: guardrail section: a session that outlives its deadline is detached from here.
+          "sessions": {},
+          #: session id -> the file that session has open, so a write inside it can be checked
+          #: against the copy the owner approved rather than guessed at.
+          "session_files": {},
+          #: The last few before/after SHA-256 write receipts, "where the module can see it".
+          "receipts": {}}
 _LOCK = threading.RLock()
 
 
@@ -1250,7 +1259,9 @@ def _check_value(key: str, value, action: str = "") -> None:
 
 
 def _known_settings(action: str) -> str:
-    known = _ACTION_ARGUMENTS.get(action, ((), ()))[0]
+    known = list(_ACTION_ARGUMENTS.get(action, ((), ()))[0])
+    if action in _DYNAMIC_ACTIONS:
+        known.append(_DURATION_KEY)       # this module's own setting, never REA's
     return ", ".join(known) if known else "none (it takes no settings)"
 
 
@@ -1264,6 +1275,10 @@ def _arguments_for(action: str, args: dict) -> dict:
     if len(raw) > MAX_ARGUMENT_KEYS:
         raise ReaRefused(BAD_ARGUMENTS.format(why="too many settings"))
     allowed = _ACTION_ARGUMENTS.get(action, ((), ()))[0]
+    if action in _DYNAMIC_ACTIONS:
+        # The duration is this module's own setting, not REA's: it is taken out before the call
+        # and never sent. It is accepted here so the model can approve a longer live session.
+        allowed = tuple(allowed) + (_DURATION_KEY,)
     out = {}
     for key, value in raw.items():
         name = str(key or "").strip()
@@ -1371,10 +1386,14 @@ def _session_alive(conn) -> bool:
 
 
 def _close_session() -> None:
+    """Close the warm REA child. Every session it owns dies with it, so the deadline registry
+    is emptied here too - a tracked session that no longer exists is worse than no entry."""
     conn = _STATE.get("conn")
     _STATE["conn"] = None
     _STATE["last"] = 0.0
     _STATE["open_target"] = ""
+    _STATE["sessions"] = {}
+    _STATE["session_files"] = {}
     if conn is not None:
         try:
             conn.close()
@@ -1859,6 +1878,497 @@ def doctor(*, env: Optional[dict] = None, node_version: Optional[str] = None,
 
 
 # --------------------------------------------------------------------------
+#   The Q1 guardrails: no credential target, no in-place write, a real deadline
+# --------------------------------------------------------------------------
+#
+# The owner approved the full toolbox on 2026-11-04 with five guardrails. Two of them are
+# already enforced by the rest of this file (rule 2's local-only scan of every setting, and
+# rule 5's pinned install). These are the three that were still a recorded residual, and they
+# are enforced HERE rather than trusted to the REA package:
+#
+#   1. CREDENTIAL AND OS-PROCESS CAPTURE. A live action never names LSASS (the Windows process
+#      that holds logins), Windows Credential Manager, or a browser's saved-login store - by
+#      process name, by file name, or by any part of a path.
+#   2. NON-DESTRUCTIVE WRITES. A debugger or Frida command that can write is refused unless it
+#      writes a NEW `<name>.patched<extension>` file, or the session's own file is already such
+#      a copy. Windows, Windows Defender and the programs Jarvis itself runs from are never a
+#      patch target. An allowed write records the original's SHA-256 before and after, so
+#      "untouched" is a measurement rather than a promise.
+#   3. A DEADLINE ON EVERY LIVE SESSION. Each live action carries `duration_limit_sec`
+#      (60 by default, 300 at most) named on its one card; the call itself is capped at it, a
+#      watch window longer than it is refused, and a session that outlives it is detached in a
+#      `finally` - so a failed call detaches too.
+
+CREDENTIAL_REFUSED = (
+    "That target is a store of saved passwords, or the Windows process that holds your login "
+    "secrets. Jarvis will not read, attach to, hook, capture or patch one, whatever the action "
+    "asked for. Choose the program or file you want to study instead - nothing was run.")
+SYSTEM_WRITE_REFUSED = (
+    "That is a Windows system file, a Windows Defender file, or a program Jarvis itself runs "
+    "from, and none of them is ever patched. Copy the file somewhere else first and work on "
+    "the copy. Nothing was written.")
+INPLACE_WRITE_REFUSED = (
+    "That command can write to the file it has open, and this work never changes the original "
+    "file. Copy the file first - or open the copy - and write to a new name ending .patched, "
+    "like app.patched.exe. Nothing was run.")
+LIMIT_REFUSED = (
+    "A live session lasts at most {most} seconds. Ask for a whole number of seconds between 1 "
+    "and {most}. Nothing was started.")
+WINDOW_REFUSED = (
+    "That asks to watch for {asked} seconds, longer than the {limit} seconds this call was "
+    "approved for. Ask for a shorter window, or approve a longer session (up to {limit} "
+    "seconds). Nothing was started.")
+#: What the one card says about a live session's own deadline (the owner's ruling, rule 4).
+LIVE_SESSION_WORDS = (" This is a live session, not a file read: Jarvis detaches it after at "
+                      "most {limit} seconds, whatever happens in that time.")
+
+#: The default and the ceiling for one live session, in seconds (the owner's ruling: 60 by
+#: default, 300 at most).
+SESSION_LIMIT_DEFAULT = 60
+SESSION_LIMIT_MAX = 300
+#: The setting's name, taken from `arguments` and never sent to REA - it is this module's own.
+_DURATION_KEY = "duration_limit_sec"
+#: Settings that state how long a watch window lasts, in milliseconds. A window longer than the
+#: approved duration is refused before the card rather than cut short after it.
+_WINDOW_KEYS = ("duration_ms", "observation_ms", "timeout_ms")
+
+#: A LIVE action: it can attach to, hook, capture or drive a running program. These - and only
+#: these - carry a duration the owner sees on the card and are tracked by the deadline registry.
+_DYNAMIC_ACTIONS = frozenset({
+    # GDB
+    "start_gdb_session", "close_gdb_session", "gdb_console", "gdb_session_status",
+    # Rizin and Cutter debuggers
+    "start_rizin_debug_session", "close_rizin_debug_session", "rizin_debug_command",
+    "rizin_debug_session_status", "execute_rizin_command", "cutter_command",
+    # Frida
+    "start_frida_session", "close_frida_session", "load_frida_script", "unload_frida_script",
+    "instrument_with_frida", "resume_frida_session", "frida_session_status",
+    # a live process, window, browser or runtime being watched
+    "capture_process_scenario", "capture_native_ui_scenario", "capture_browser_scenario",
+    "capture_electron_scenario", "observe_native_ui", "observe_native_calls",
+    "observe_web_session", "observe_web_execution", "observe_javascript_runtime",
+})
+#: The live actions that START something which outlives the call. Only these keep a registry
+#: entry after their own call returns; the rest end their own window inside the call.
+_PERSISTENT_START = frozenset({"start_gdb_session", "start_rizin_debug_session",
+                               "start_frida_session"})
+#: Actions that read or drive a running thing, for the credential-target refusal. Wider than
+#: `_DYNAMIC_ACTIONS`: a memory read or a packet capture can reach a credential store too, even
+#: though it starts no session of its own. A static read of an app bundle is NOT here, because
+#: refusing an ordinary analysis word there would be the wrong trade.
+_LIVE_ACTIONS = _DYNAMIC_ACTIONS | frozenset({
+    "read_bytes", "search_bytes", "read_function_instructions", "trace_native_values",
+    "list_frida_processes", "inspect_packet_capture", "inspect_pcap_capture",
+    "capture_web_screenshot", "capture_adb_screen",
+})
+#: The actions whose own setting can carry a command or a script, and so can write.
+_RIZIN_COMMANDS = frozenset({"cutter_command", "rizin_debug_command", "execute_rizin_command"})
+_GDB_COMMANDS = frozenset({"gdb_console"})
+_FRIDA_COMMANDS = frozenset({"instrument_with_frida", "load_frida_script"})
+_WRITE_SURFACES = _RIZIN_COMMANDS | _GDB_COMMANDS | _FRIDA_COMMANDS
+
+#: Credential stores, by the words that name them. Matched lowercase against the whole target
+#: text with both path separators made the same, so a process name ("lsass.exe"), a file name
+#: ("Login Data") and any part of a path all hit the same way. The list is the ruling's own,
+#: written out rather than guessed at.
+_CREDENTIAL_NAMES = (
+    "lsass", "vaultcmd", "microsoft/credentials", "microsoft/protect", "windows/ntds/ntds.dit",
+    "login data", "cookies.sqlite", "logins.json", "key4.db",
+)
+#: The Windows places a patch never touches, and the programs Jarvis itself runs from.
+_SYSTEM_WRITE_ROOTS = ("windows/", "program files/windows defender/")
+_OWN_PROGRAMS = ("python.exe", "pythonw.exe", "jarvis-desktop.exe", "ollama.exe")
+#: Settings whose value names the file, folder or program a call works on. A credential store
+#: is refused there for EVERY action, not only a live one; the settings that are just words (a
+#: search pattern, a comment, a script) are left alone.
+_TARGET_KEYS = frozenset({"path", "paths", "capture_path", "input_path", "program", "argv",
+                          "executable", "executable_path", "application_path",
+                          "application_root", "snapshot_path", "device_path",
+                          "output_directory", "output_path", "inventory_evidence"})
+
+#: A rizin command that writes: its `w` family, and the two ways to reopen a file read-write.
+_RIZIN_WRITE_RX = re.compile(r"^w[a-z0-9+\-]{0,3}$")
+#: GDB's write-capable console forms (the ruling's list: `set write on`, `restore`, plus the
+#: memory dumps that write a file and the `set {type}addr` form that writes memory).
+_GDB_WRITE_RX = re.compile(r"\bset\s+write\s+on\b|\brestore\b|"
+                           r"\bdump\s+(?:binary|ihex|srec|verilog|tekhex)\b|\bset\s*\{")
+#: Frida's write-capable JavaScript: the Memory writers, and the File writers.
+_FRIDA_WRITE_RX = re.compile(
+    r"\bmemory\s*\.\s*write|\.write(?:uint8array|bytearray|utf8string|ansistring|pointer|"
+    r"[us](?:8|16|32|64)|double|float)\s*\(|\bfile\s*\.\s*(?:write|append)|"
+    r"\bwriteall\s*\(|\bappendfile\s*\(", re.IGNORECASE)
+#: A write that names its own NEW output: `<name>.patched<extension>`.
+_PATCHED_RX = re.compile(r"[^\s;'\"()<>|]+\.patched[^\s;'\"()<>|]*", re.IGNORECASE)
+#: The session id REA reports back, so the close tool can be aimed at the right one.
+_SESSION_ID_RX = re.compile(r'"(?:session_id|sessionId)"\s*:\s*"([A-Za-z0-9_.:\-]{1,80})"')
+#: Which REA tool detaches a session of each family. All three are ordinary allowed tools.
+_DETACH_TOOL = {"frida": "close_frida_session", "gdb": "close_gdb_session",
+                "rizin": "close_rizin_debug_session"}
+
+
+def _normalised(text) -> str:
+    """One string, lowercase, with the two path separators made the same. Pure."""
+    return str(text or "").replace("\\", "/").lower()
+
+
+def credential_hit(text) -> str:
+    """The credential-store name a piece of text names, or "". Pure and literal."""
+    low = _normalised(text)
+    if not low:
+        return ""
+    for needle in _CREDENTIAL_NAMES:
+        if needle in low:
+            return needle
+    return ""
+
+
+def system_write_hit(text) -> str:
+    """The Windows place or Jarvis program one path or command names, or "". Pure and literal.
+
+    A Windows root is only recognised with its drive in front (`C:/Windows/...`) or at the very
+    start of the text, so a script that merely says the word "windows" in a comment is not a
+    system path. A Jarvis program is recognised by an exact file name in any token."""
+    low = _normalised(text).strip().strip('"').strip("'")
+    if not low:
+        return ""
+    for root in _SYSTEM_WRITE_ROOTS:
+        if low.startswith(root) or f":/{root}" in low:
+            return root.rstrip("/")
+    for token in re.split(r"[\s;'\"()<>|]+", low):
+        leaf = token.rsplit("/", 1)[-1].split("?", 1)[0]
+        if leaf in _OWN_PROGRAMS:
+            return leaf
+    return ""
+
+
+def _strings_in(value, out=None) -> list:
+    """Every string inside one setting value, so a list or a nested object is scanned too."""
+    out = [] if out is None else out
+    if isinstance(value, str):
+        out.append(value)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _strings_in(item, out)
+    elif isinstance(value, dict):
+        for item in value.values():
+            _strings_in(item, out)
+    return out
+
+
+def _credential_target(action: str, target, arguments) -> str:
+    """The credential name one call names as a TARGET, or "".
+
+    A live action is scanned in every setting it has, because a command, a script or an argv
+    list can name the store instead of a plain path. Anything else is scanned only where a
+    setting names a file or a program: refusing an ordinary analysis word - a string being
+    searched for, one line of a script - would be the wrong trade."""
+    texts = [str(target or "")]
+    arguments = arguments if isinstance(arguments, dict) else {}
+    if action in _LIVE_ACTIONS:
+        texts += _strings_in(arguments)
+    else:
+        for key, value in arguments.items():
+            if str(key or "").lower() in _TARGET_KEYS:
+                texts += _strings_in(value)
+    for text in texts:
+        hit = credential_hit(text)
+        if hit:
+            return hit
+    return ""
+
+
+def _guard_credentials(action: str, target, arguments) -> None:
+    """Refuse a credential target before the card. Raises ReaRefused with one sentence."""
+    if _credential_target(action, target, arguments):
+        raise ReaRefused(CREDENTIAL_REFUSED)
+
+
+def _check_limit(raw) -> int:
+    """The approved duration: 1..SESSION_LIMIT_MAX, SESSION_LIMIT_DEFAULT when unset. Pure."""
+    if raw is None:
+        return SESSION_LIMIT_DEFAULT
+    if isinstance(raw, bool) or not isinstance(raw, int) or raw < 1 or raw > SESSION_LIMIT_MAX:
+        raise ReaRefused(LIMIT_REFUSED.format(most=SESSION_LIMIT_MAX))
+    return int(raw)
+
+
+def _plan_limit(action: str, plan: dict) -> int:
+    """The plan's own duration, read defensively: a tampered plan cannot exceed the ceiling."""
+    if action not in _DYNAMIC_ACTIONS:
+        return 0
+    try:
+        return _check_limit(plan.get(_DURATION_KEY))
+    except ReaRefused:
+        return SESSION_LIMIT_DEFAULT
+
+
+def _check_window(arguments: dict, limit: int) -> None:
+    """A watch window may not outlast the duration the owner approved. Raises."""
+    if limit <= 0:
+        return
+    for key in _WINDOW_KEYS:
+        value = arguments.get(key)
+        if isinstance(value, bool) or not isinstance(value, int):
+            continue
+        if value > limit * 1000:
+            raise ReaRefused(WINDOW_REFUSED.format(asked=int(round(value / 1000.0)),
+                                                   limit=limit))
+
+
+def write_forms(action: str, text: str) -> list:
+    """The write-capable forms one command or script names, in order. Pure."""
+    body = str(text or "")
+    if not body.strip():
+        return []
+    found = []
+    if action in _RIZIN_COMMANDS:
+        for segment in re.split(r"[;\n]", body):
+            words = segment.strip().split()
+            if not words:
+                continue
+            verb = words[0].lower()
+            if verb in ("oo+", "ood") or _RIZIN_WRITE_RX.match(verb):
+                found.append(verb)
+    elif action in _GDB_COMMANDS:
+        found = [match.group(0).split()[0].lower() for match in
+                 _GDB_WRITE_RX.finditer(body.lower())]
+    elif action in _FRIDA_COMMANDS:
+        found = [match.group(0) for match in _FRIDA_WRITE_RX.finditer(body)]
+    return found
+
+
+def _read_script(path: str, limit: int = 200_000) -> str:
+    """A Frida script named by path, read here so its words can be checked before the card."""
+    try:
+        with open(path, "rb") as handle:
+            return handle.read(limit).decode("utf-8", "replace")
+    except Exception:                                 # noqa: BLE001 - unreadable is not a write
+        return ""
+
+
+def _command_texts(action: str, arguments: dict) -> list:
+    """The command or script texts a write surface carries, plus a script named by path."""
+    texts = []
+    for key in ("command", "source"):
+        value = arguments.get(key)
+        if isinstance(value, str) and value.strip():
+            texts.append(value)
+    path = arguments.get("path")
+    if action in _FRIDA_COMMANDS and isinstance(path, str) and path.strip():
+        body = _read_script(path)
+        if body:
+            texts.append(body)
+    return texts
+
+
+def _session_file(session_id) -> str:
+    """The file a tracked session has open, or "" (the module only knows what it started)."""
+    sid = str(session_id or "")
+    if not sid:
+        return ""
+    return str((_STATE.get("session_files") or {}).get(sid) or "")
+
+
+def _patched_outputs(texts) -> list:
+    """The NEW `.patched` output paths a command names: full paths, inside a listed folder, and
+    not there yet. The listed-folder rule is `_check_path`'s, not a second copy of it."""
+    found = []
+    for text in texts:
+        for match in _PATCHED_RX.finditer(str(text or "")):
+            token = match.group(0).strip().strip('"').strip("'")
+            if not token or token in found or not _is_absolute_path(token):
+                continue
+            real = _check_path(token, must_exist=False)   # raises NOT_LISTED / SENSITIVE
+            if not os.path.exists(real):
+                found.append(real)
+    return found
+
+
+def _check_write(action: str, target: str, arguments: dict) -> dict:
+    """{forms, outputs, source} for one write-capable command, or a refusal. Raises.
+
+    Refuses in two cases, and both are about the ORIGINAL file: a Windows/Defender/Jarvis
+    program, or a write that is not aimed at a new `.patched` copy."""
+    if action not in _WRITE_SURFACES:
+        return {}
+    texts = _command_texts(action, arguments)
+    forms = []
+    for text in texts:
+        for form in write_forms(action, text):
+            if form not in forms:
+                forms.append(form)
+    if not forms:
+        return {}
+    session_file = _session_file(arguments.get("session_id"))
+    for text in ([str(target or ""), str(arguments.get("path") or ""), session_file] + texts):
+        if system_write_hit(text):
+            raise ReaRefused(SYSTEM_WRITE_REFUSED)
+    if ".patched" in _normalised(session_file):
+        return {"forms": forms, "outputs": [], "source": session_file}
+    outputs = _patched_outputs(texts)
+    if outputs:
+        return {"forms": forms, "outputs": outputs, "source": ""}
+    raise ReaRefused(INPLACE_WRITE_REFUSED)
+
+
+def _sha256(path: str) -> str:
+    """One file's SHA-256, or "" when it cannot be read (a hash is never a guess)."""
+    try:
+        digest = hashlib.sha256()
+        with open(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+    except Exception:                                 # noqa: BLE001 - "" is the honest answer
+        return ""
+
+
+def _write_receipt(action: str, target: str, info: dict, before: dict) -> dict:
+    """The before/after record for one allowed write, built from measurements only."""
+    original = str(target or "")
+    output = str((info.get("outputs") or [""])[0] or info.get("source") or "")
+    was = before.get(original, "") if original else ""
+    now = _sha256(original) if original else ""
+    unchanged = None if not (was and now) else was == now
+    return {"action": action, "forms": list(info.get("forms") or []),
+            "original": original, "original_before_sha256": was,
+            "original_after_sha256": now, "original_unchanged": unchanged,
+            "output": output, "output_sha256": _sha256(output) if output else ""}
+
+
+def _record_receipt(receipt: dict) -> dict:
+    """Keep the newest receipts where the module (and a later card) can see them."""
+    key = str(receipt.get("output") or receipt.get("original") or "")
+    if key:
+        store = _STATE.setdefault("receipts", {})
+        store[key] = dict(receipt)
+        while len(store) > 20:
+            store.pop(next(iter(store)))
+    return receipt
+
+
+def write_receipts() -> list:
+    """Every write receipt this module still holds, newest last. A copy, never the store."""
+    return [dict(item) for item in (_STATE.get("receipts") or {}).values()]
+
+
+def _now() -> float:
+    """The clock, one seam: the suite replaces it to drive the deadline without waiting."""
+    return time.monotonic()
+
+
+def _call_timeout(action: str, plan: dict) -> float:
+    """The per-action ceiling, cut to the duration the owner approved for a live session.
+
+    This is what makes `duration_limit_sec` real during a call and not only afterwards: a live
+    action can never sit there for longer than the card said."""
+    base = _timeout_for(action)
+    limit = _plan_limit(action, plan)
+    return float(min(base, limit)) if limit else base
+
+
+def _session_family(action: str) -> str:
+    if "frida" in action:
+        return "frida"
+    if "gdb" in action:
+        return "gdb"
+    if "rizin" in action or action in ("cutter_command", "list_cutter_sessions"):
+        return "rizin"
+    return ""
+
+
+def _session_id_of(text: str) -> str:
+    """The session id REA's own answer carries, or "". Never invented."""
+    match = _SESSION_ID_RX.search(str(text or ""))
+    return match.group(1) if match else ""
+
+
+def _begin_session(action: str, plan: dict) -> dict:
+    """Register one live session BEFORE its call, so the deadline covers the call itself."""
+    if action not in _DYNAMIC_ACTIONS:
+        return {}
+    _sweep_sessions()
+    limit = _plan_limit(action, plan)
+    started = _now()
+    entry = {"key": f"{action}:{started:.6f}", "action": action,
+             "family": _session_family(action), "limit": limit, "started": started,
+             "deadline": started + limit, "session_id": "",
+             "persistent": action in _PERSISTENT_START}
+    _STATE.setdefault("sessions", {})[entry["key"]] = entry
+    return entry
+
+
+def _detach_session(entry: dict, why: str = "deadline", force: bool = False) -> dict:
+    """Detach one session: REA's own close tool by name, or the helper itself when that cannot
+    be done - which terminates every hook and child the helper owns."""
+    key = str(entry.get("key") or "")
+    tool = _DETACH_TOOL.get(str(entry.get("family") or ""))
+    session_id = str(entry.get("session_id") or "")
+    closed = False
+    if not force and tool and session_id:
+        try:
+            _call_tool(tool, {"session_id": session_id}, timeout=_DEFAULT_CALL_TIMEOUT)
+            closed = True
+        except Exception:                             # noqa: BLE001 - the helper close follows
+            closed = False
+    (_STATE.get("sessions") or {}).pop(key, None)
+    if not closed:
+        _close_session()          # terminates the REA child: every session and hook goes with it
+    return {"closed": closed, "why": why, "helper_closed": not closed}
+
+
+def _end_session(entry: dict, *, failed: bool = False, session_id: str = "") -> dict:
+    """The `finally` half. Over the deadline, or the call failed: detached here, every time."""
+    if not entry:
+        return {}
+    if session_id:
+        entry["session_id"] = session_id
+    expired = _now() >= float(entry.get("deadline") or 0)
+    if failed:
+        return {**_detach_session(entry, why="failed", force=True), "expired": expired}
+    if expired:
+        return {**_detach_session(entry, why="deadline",
+                                  force=not str(entry.get("session_id") or "")),
+                "expired": True}
+    if not entry.get("persistent"):
+        (_STATE.get("sessions") or {}).pop(entry.get("key"), None)
+    return {"expired": False, "closed": False}
+
+
+def _sweep_sessions(now=None) -> list:
+    """Detach every session whose deadline has passed, and name them. The door a session that
+    nobody closed comes back through, called before each new live call."""
+    stamp = _now() if now is None else float(now)
+    live = _STATE.get("sessions") or {}
+    expired = [key for key, entry in live.items()
+               if stamp >= float(entry.get("deadline") or 0)]
+    for key in expired:
+        _detach_session(dict(live.get(key) or {}), why="deadline")
+    return expired
+
+
+def _forget_session(session_id) -> None:
+    """One session the owner closed by name: drop its file and its deadline entry."""
+    sid = str(session_id or "")
+    if not sid:
+        return
+    (_STATE.get("session_files") or {}).pop(sid, None)
+    for key, entry in list((_STATE.get("sessions") or {}).items()):
+        if str(entry.get("session_id") or "") == sid:
+            (_STATE.get("sessions") or {}).pop(key, None)
+
+
+def _remember_session_file(action: str, arguments: dict, session_id: str) -> None:
+    """Remember the file a started session has open, so a later write can be checked against
+    the copy the owner approved rather than guessed at."""
+    if not session_id:
+        return
+    path = arguments.get("path")
+    if action == "start_rizin_debug_session" and isinstance(path, str) and path.strip():
+        _STATE.setdefault("session_files", {})[session_id] = path
+
+
+# --------------------------------------------------------------------------
 #   Actions: prepare (before the card) and run (after a person's yes)
 # --------------------------------------------------------------------------
 
@@ -1923,8 +2433,11 @@ def _setting_names(extra: dict) -> str:
     return (" Settings: " + ", ".join(visible) + ".") if visible else ""
 
 
-def _card_words(action: str, target: str, extra: dict) -> str:
-    """What the owner reads on the one card. Plain words, always ending in what it touches."""
+def _card_words(action: str, target: str, extra: dict, limit: int = 0) -> str:
+    """What the owner reads on the one card. Plain words, always ending in what it touches.
+
+    A live action also says how long it may run: the duration is part of what is being
+    approved, so it is on the card rather than only in the module."""
     what = ACTIONS[action][1]
     tool = ACTIONS[action][0]
     if action == "doctor":
@@ -1947,10 +2460,13 @@ def _card_words(action: str, target: str, extra: dict) -> str:
         return (f"Inspect {target} with REA: {what}. It reads the file on this PC; the target is "
                 f"never run, nothing is written to your folders and nothing is sent anywhere.")
     where = f" on {target}" if target else ""
-    return (f"Run one REA step{where}: {what}. REA runs on this PC and touches local files and "
-            f"local programs only; nothing is sent anywhere."
-            + _setting_names(extra)
-            + f" You are approving this one REA step ({tool}).")
+    words = (f"Run one REA step{where}: {what}. REA runs on this PC and touches local files and "
+             f"local programs only; nothing is sent anywhere."
+             + _setting_names(extra)
+             + f" You are approving this one REA step ({tool}).")
+    if limit:
+        words += LIVE_SESSION_WORDS.format(limit=int(limit))
+    return words
 
 
 def _plan_for_legacy(action: str, args: dict) -> dict:
@@ -2022,10 +2538,23 @@ def prepare(args) -> tuple:
     _check_available(action)
     if action in _LEGACY_ACTIONS:
         plan = _plan_for_legacy(action, args)
+        _guard_credentials(action, plan["target"], plan.get("extra") or {})
         return plan, _card_words(action, plan["target"], plan["extra"])
+    # For a live action the credential refusal runs before ANY setting is validated, and against
+    # the RAW settings: validation would refuse a credential path with "not on your list" first,
+    # and the owner would never read the real reason.
+    if action in _LIVE_ACTIONS:
+        _guard_credentials(action, args.get("target"), args.get("arguments"))
     tool, _words = ACTIONS[action]
     plan = {"action": action, "target": "", "tool": tool, "arguments": {}, "extra": {}}
     arguments = _arguments_for(action, args)
+    limit = 0
+    if action in _DYNAMIC_ACTIONS:
+        # The duration is taken OUT of the settings here: REA has no such setting, and it must
+        # never be sent. It travels in the plan instead, and on the card.
+        limit = _check_limit(arguments.pop(_DURATION_KEY, None))
+        _check_window(arguments, limit)
+        plan[_DURATION_KEY] = limit
     raw_target = args.get("target")
     if isinstance(raw_target, str) and raw_target.strip():
         key = _ACTION_PATH.get(action)
@@ -2036,14 +2565,21 @@ def prepare(args) -> tuple:
         got = validate_target(raw_target)
         arguments[key] = got["real"]
         plan["target"] = got["display"]
+    # Every other action is checked once the target is a real path: an existing private-place
+    # rule (a browser profile folder) keeps its own sentence, and a credential FILE inside a
+    # listed folder is caught here.
+    _guard_credentials(action, plan["target"] or str(args.get("target") or ""), arguments)
     missing = _missing_settings(action, arguments)
     if missing:
         raise ReaRefused(MISSING_SETTING.format(action=action, names=", ".join(missing),
                                                 known=_known_settings(action)))
+    # The write rule is checked BEFORE the card: a command that would change the original file
+    # never gets as far as asking the owner to approve it.
+    _check_write(action, plan["target"], arguments)
     plan["arguments"] = arguments
     plan["extra"] = {k: v for k, v in arguments.items()
                      if isinstance(v, (str, int, float, bool))}
-    return plan, _card_words(action, plan["target"], plan["extra"])
+    return plan, _card_words(action, plan["target"], plan["extra"], limit)
 
 
 def run(plan: dict) -> dict:
@@ -2063,20 +2599,52 @@ def run(plan: dict) -> dict:
         _check_available(action)
         target = str(plan.get("target") or "")
         tool = str(plan.get("tool") or "")
-        result = _call_tool(tool, dict(plan.get("arguments") or {}),
-                            timeout=_timeout_for(action))
-        raw = _content_text(result)
-        envelope = sanitize(raw, source=f"rea:{tool}", action=action, target=target)
-        if isinstance(result, dict) and result.get("isError"):
-            envelope["ok"] = False
-            envelope["error"] = ("REA refused that request. Its own words are in the quoted "
-                                 "content; nothing was used.")
-        if envelope.get("ok") and tool == "open_binary":
-            _STATE["open_target"] = target
-        if envelope.get("ok") and tool == "close_binary":
-            _STATE["open_target"] = ""
-        if action == "query_native_binary":
-            envelope["query"] = dict(plan.get("extra") or {})
+        arguments = dict(plan.get("arguments") or {})
+        # The three refusals run AGAIN here: a plan that did not come from this module's own
+        # prepare() must not be able to skip them.
+        _guard_credentials(action, target, arguments)
+        limit = _plan_limit(action, plan)
+        if limit:
+            _check_window(arguments, limit)
+        write_info = _check_write(action, target, arguments)
+        before = {}
+        if write_info and target:
+            before = {target: _sha256(target)}
+        session = _begin_session(action, plan)
+        state = {"failed": True, "session_id": "", "ended": {}}
+        try:
+            result = _call_tool(tool, arguments, timeout=_call_timeout(action, plan))
+            raw = _content_text(result)
+            state["session_id"] = _session_id_of(raw)
+            envelope = sanitize(raw, source=f"rea:{tool}", action=action, target=target)
+            if isinstance(result, dict) and result.get("isError"):
+                envelope["ok"] = False
+                envelope["error"] = ("REA refused that request. Its own words are in the "
+                                     "quoted content; nothing was used.")
+            if write_info:
+                # Measured after the call, recorded whether REA said it worked or not: the
+                # point is what is on disk now, not what the tool claims it did.
+                envelope["write_receipt"] = _record_receipt(
+                    _write_receipt(action, target, write_info, before))
+            if envelope.get("ok") and tool == "open_binary":
+                _STATE["open_target"] = target
+            if envelope.get("ok") and tool == "close_binary":
+                _STATE["open_target"] = ""
+            if action == "query_native_binary":
+                envelope["query"] = dict(plan.get("extra") or {})
+            if envelope.get("ok"):
+                _remember_session_file(action, arguments, state["session_id"])
+                if action.startswith("close_"):
+                    _forget_session(arguments.get("session_id"))
+            state["failed"] = False
+        finally:
+            # THE FINALLY PATH: a session over its deadline, or whose call failed, is detached
+            # here - and the helper is terminated when it cannot be detached by name.
+            state["ended"] = _end_session(session, failed=state["failed"],
+                                          session_id=state["session_id"])
+        if session:
+            envelope["duration_limit_sec"] = int(limit)
+            envelope["detached"] = dict(state["ended"] or {})
         return envelope
     except ReaRefused as exc:
         return {"ok": False, "error": str(exc), "untrusted": True}
@@ -2099,6 +2667,11 @@ def status() -> dict:
         "running": _session_alive(conn),
         "open_target": str(_STATE.get("open_target") or ""),
         "identity": dict(_STATE.get("identity") or {}),
+        # The live sessions this module still holds, and the deadline each one is under.
+        "sessions": [dict(entry) for entry in (_STATE.get("sessions") or {}).values()],
+        "session_limit_default": SESSION_LIMIT_DEFAULT,
+        "session_limit_max": SESSION_LIMIT_MAX,
+        "write_receipts": write_receipts(),
         "actions": list(ACTION_ORDER),
         "action_count": len(ACTION_ORDER),
     }
@@ -2109,5 +2682,6 @@ def install_hint() -> str:
 
 
 def reset_for_tests() -> None:
-    """Drop the warm session (the suite's own gate; never called by the backend)."""
+    """Drop the warm session and everything it implied (the suite's own gate)."""
     _close_session()
+    _STATE["receipts"] = {}
