@@ -52,8 +52,11 @@ What is built but not yet connected, said plainly:
   deliberately not one of them.** `self_portrait`, `conversation_find` (titles
   and dates only, never the words), `conversation_open` (one kept chat's turns,
   local model only) and `refresh_abilities` are read-only model tools with no
-  card; on the shipped settings file each has to be switched on before it is
-  offered. **Clearing a kept conversation is never a model tool** (Gemini
+  card; since 2026-11-04 all four are in the shipped settings file, so a new
+  install is offered them without a hand edit. A PC that already has its own
+  settings file keeps the list it had - an update never overwrites it - and the
+  four can be added there by hand when you want them. **Clearing a kept
+  conversation is never a model tool** (Gemini
   ruling 1, 2026-11-03): an AI must never have an autonomous way to wipe the
   transcript, so clearing stays the REST route, an app UI action or the fast
   path, always behind its ONE card.
@@ -260,7 +263,9 @@ tap just yet. When they land, this is the flow they will use.
 
 ## Refreshing what Jarvis knows it can do
 
-Ask "refresh your abilities" (once the tool is switched on) and Jarvis re-reads
+Ask "refresh your abilities" (the tool is in the shipped settings file since
+2026-11-04, so a new install is offered it; an existing PC's own file keeps its
+list until the name is added there) and Jarvis re-reads
 its own inventory - settings, tools, places, plugins, abilities - and answers in
 one plain sentence: how many of each it can see now, and what changed since it
 last looked. The same thing is one address on the PC, `POST /api/self/refresh`.

@@ -12,7 +12,7 @@ repository chose, not the owner: the template is what
 `scripts/apply-patches.ps1` copies to the PC when there is no settings file.
 
 WHAT THIS PINS
-  1. BOTH SHIPPED TEMPLATES name the nine defaults. The repository's copy
+  1. BOTH SHIPPED TEMPLATES name the thirteen defaults. The repository's copy
      (`backend/rebuilt/jarvis-framework.toml`) and the published base's copy
      (`jarvis-backend/jarvis-framework.toml`) are byte-identical, and every
      name in the list is a real tool (`jarvis_agent.TOOLS`) - a name that is
@@ -20,10 +20,11 @@ WHAT THIS PINS
      default can look on and do nothing.
   2. A FRESH INSTALL OFFERS THEM. The template copied in as the settings file
      (exactly what apply-patches.ps1 installs) makes a turn's enabled set the
-     nine, and the model is offered the local ones - calculator, memory_search,
-     phone_apps, plugin_list, plugin_switch, web_search, change_setting and
-     feature_guide - plus the two web-search-grant tools that ride with web
-     search.
+     thirteen, and the model is offered the local ones - calculator,
+     memory_search, phone_apps, plugin_list, plugin_switch, web_search,
+     change_setting, feature_guide, refresh_abilities, self_portrait,
+     conversation_find and conversation_open - plus the two web-search-grant
+     tools that ride with web search.
   3. my_files IS STILL HIDDEN WITH NO FOLDER. It is in the list, but with no
      folder in "Folders Jarvis may look in" `offered_tools` omits it, so a
      fresh PC pays no tokens for it and reads nothing; once a folder is listed
@@ -87,18 +88,32 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    # would not be a chat door. Both stay on this PC and neither
                    # deletes a plugin; ON is one modify_own_code card, OFF is
                    # instant and cardless.
-                   "plugin_list", "plugin_switch"]
+                   "plugin_list", "plugin_switch",
+                   # The four read-only self/chat tools (2026-11-04, Gemini's
+                   # ruling Q2). Appended, so the comments above stay true; this
+                   # is the same order the template names them in.
+                   # `self_portrait` reads the registry, `refresh_abilities`
+                   # re-reads it, `conversation_find` returns titles and dates
+                   # only, and `conversation_open` hands one kept chat's turns to
+                   # this PC's local model. `conversation_clear` stays OUT: an AI
+                   # must never have an autonomous tool to wipe a transcript.
+                   "self_portrait", "conversation_find", "conversation_open",
+                   "refresh_abilities"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
-#: `phone_apps` is a shipped default (#1097, 2026-11-02). The last two ride
-#: with web search and are NOT in `[tools].enabled` (#1100, 2026-11-02,
-#: `jarvis_agent.GRANT_ASK_TOOLS`): the conversation web-search approval is
-#: an ASK, not a capability - its card is the permission - and the field
-#: test of 2026-11-02 found a Settings switch left it never offered at all.
+#: `phone_apps` is a shipped default (#1097, 2026-11-02). The four self/chat
+#: tools (2026-11-04) sit between `feature_guide` and the grant pair, which is
+#: where TOOLS puts them. The last two ride with web search and are NOT in
+#: `[tools].enabled` (#1100, 2026-11-02, `jarvis_agent.GRANT_ASK_TOOLS`): the
+#: conversation web-search approval is an ASK, not a capability - its card is
+#: the permission - and the field test of 2026-11-02 found a Settings switch
+#: left it never offered at all.
 OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                      "plugin_switch", "web_search",
                      "change_setting", "feature_guide",
+                     "refresh_abilities", "self_portrait",
+                     "conversation_find", "conversation_open",
                      "approve_web_search_for_conversation",
                      "stop_web_search_approval"]
 
@@ -106,13 +121,20 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
 OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                        "plugin_switch", "web_search",
                        "my_files", "change_setting", "feature_guide",
+                       "refresh_abilities", "self_portrait",
+                       "conversation_find", "conversation_open",
                        "approve_web_search_for_conversation",
                        "stop_web_search_approval"]
 
 #: Every tool that reaches off this PC, another program, an account or a file
-#: must stay OUT of the shipped list: a fresh install reads nothing and
+#: outside Jarvis's own store must stay OUT of the shipped list: a fresh
+#: install reads nothing of the owner's that Jarvis did not already keep, and
 #: controls nothing. (The calculator, memory search and my_files only became
-#: defaults because each one stays local and narrow - see the template.)
+#: defaults because each one stays local and narrow - see the template. The
+#: 2026-11-04 four are the same shape: `self_portrait` and `refresh_abilities`
+#: read Jarvis's own registry and modules, and `conversation_find`/
+#: `conversation_open` read only the conversations this PC already kept -
+#: clearing one is NOT a model tool.)
 FORBIDDEN = (
     "control_computer", "control_phone", "browser_control", "propose_plan",
     "send_email", "draft_email", "tidy_inbox", "read_web_page",
@@ -191,7 +213,7 @@ def t_a_fresh_install_offers_the_defaults():
     os.environ["JARVIS_FRAMEWORK_TOML"] = str(settings)
     try:
         enabled = AG.enabled_tools_for_turn()
-        check("a fresh install's turn reads the nine-name enabled set",
+        check("a fresh install's turn reads the thirteen-name enabled set",
               enabled == set(DEFAULT_ENABLED), enabled)
         offered = AG.offered_tools(enabled)
         check("...and the model is offered the local defaults, plus the grant ask "
@@ -249,7 +271,7 @@ def t_the_docs_say_the_same_as_the_template():
     section = text.split("## 149.", 1)[1][:14000] if "## 149." in text else ""
     flat = re.sub(r"\s+", " ", section)
     check("JARVIS-API.md section 149 is there", bool(section))
-    check("it names the shipped default list, all six, in order",
+    check("it carries the 2026-10-20 default-list sentence, its six names in order",
           "`web_search`, `change_setting`, `feature_guide`, `calculator`, "
           "`memory_search` and `my_files`" in flat, flat[:240])
     check("it says the shipped template now lists them",

@@ -47,9 +47,10 @@
 //!
 //! Since 2026-10-13 the same card also updates the **Python backend**, which had
 //! never been driven by anything but the owner's own hands. [`update_both`] runs
-//! the two halves in one deliberate order; it runs from the Settings button and,
-//! since 2026-10-26, from `run_approved_update` after an answered
-//! `desktop_update` card - never from a page, a timer or a setting.
+//! the two halves in one deliberate order; it runs from the Settings button,
+//! since 2026-10-26 from `run_approved_update` after an answered
+//! `desktop_update` card, and since 2026-11-04 from the tray's own update row
+//! (`install_from_tray`) - never from a page, a timer or a setting.
 //! [`crate::backend_update`] owns the backend half and its own refusals. The
 //! order, and why it is that order, is written out on [`update_both`] itself.
 //!
@@ -408,16 +409,20 @@ pub fn set_update_check_on_start(app: AppHandle, enabled: bool) -> Result<bool, 
     Ok(enabled)
 }
 
-/// Downloads, verifies and installs — and is reachable only from the button.
+/// Downloads, verifies and installs — and is reached only where the backend half
+/// cannot run.
 ///
 /// Separate from `check_for_update` rather than a flag on it, so that no future
 /// edit can make checking install something by passing `true`.
 ///
-/// The lone **Install** button is the second door into the desktop half, and it
-/// goes through the same ordered preparation as "update both halves": the
-/// package is downloaded and checked, the record is written, the backend is
-/// stopped, and only then is the installer called. Before this round it reached
-/// the installer with a supervised backend still running.
+/// It was the second door into the desktop half, and since 2026-11-04 it is the
+/// **fallback**: the Settings Install press and the tray's update row both run
+/// [`update_both`], and only turn here when [`backend_half_blocked`] says the
+/// backend half cannot run on this PC. The desktop half alone still goes through
+/// the same ordered preparation as "update both halves": the package is
+/// downloaded and checked, the record is written, the backend is stopped, and
+/// only then is the installer called. Before this round it reached the installer
+/// with a supervised backend still running.
 #[tauri::command]
 pub async fn install_update(app: AppHandle) -> Result<String, String> {
     let here = crate::backend_update::locate(&app);
@@ -430,17 +435,38 @@ pub async fn install_update(app: AppHandle) -> Result<String, String> {
     install_now(&app, ready).await
 }
 
-/// The tray's "Update Jarvis to <version>" row: the same install the Settings
-/// Install button runs, reached from the context menu.
+/// Why the BACKEND half cannot run on this PC, in the words the Settings
+/// Updates card shows - or `None` when it can.
+///
+/// It is [`crate::backend_update::locate`]'s `blocked` field, the same field
+/// [`crate::backend_update::backend_update_status`] - the command that card
+/// reads - is built from. Read here rather than invented, so the tray and the
+/// Settings card cannot take different views of whether the backend half can
+/// run.
+fn backend_half_blocked(app: &AppHandle) -> Option<String> {
+    crate::backend_update::locate(app).blocked
+}
+
+/// The tray's "Update Jarvis to <version>" row: the same both-halves update the
+/// Settings Install press runs, reached from the context menu.
 ///
 /// Not a second updater and not an automatic one. The row that fires it exists
 /// only while [`available_version`] answers `Some` (`tray::update_row` is that
 /// rule), and this function only runs because the owner pressed it.
 ///
+/// The owner's requirement of 2026-11-03 was that ONE Update press keeps both
+/// halves together, so the ordinary press runs [`update_both`] - the backend
+/// first, then Jarvis Desktop - and the desktop-only [`install_update`] survives
+/// only for a PC where the backend half cannot run at all
+/// ([`backend_half_blocked`]), which is the same check the Settings card makes
+/// before it chooses between its two branches. That fallback says plainly that
+/// the BACKEND was NOT updated and where to finish it; it is never silent, and
+/// it is never called "updated".
+///
 /// The row is turned into "Updating Jarvis to <version>…" and disabled FIRST, so
-/// a second press cannot start a second download. A failure re-reads the real
-/// state with the same command the Settings Check button uses, so the row is
-/// rebuilt from what is true now rather than left on "Updating…" for ever. On a
+/// a second press cannot start a second run. A failure re-reads the real state
+/// with the same command the Settings Check button uses, so the row is rebuilt
+/// from what is true now rather than left on "Updating…" for ever. On a
 /// successful Windows install this function never returns: the installer ends
 /// the process, and the next launch starts with no row because the new version
 /// is the one running.
@@ -458,23 +484,131 @@ pub async fn install_from_tray(app: AppHandle) {
         return;
     };
     crate::tray::update_started(&app, &version);
-    // The Settings card carries this sentence before its Install button. The
-    // tray has no card, so the toast is where it goes - the install closes
-    // Jarvis, and the owner deserves that before it starts, not after.
+    // ONE check decides which door this press takes, and it is the same one the
+    // Settings Install press makes before it chooses between its own branches.
+    match backend_half_blocked(&app) {
+        // The ordinary press, and the one the owner asked for: both halves,
+        // through the SAME runner Settings' Install press and an answered
+        // `desktop_update` card use.
+        None => update_both_from_tray(app, &version).await,
+        // The one honest exception, in the words the Settings card uses.
+        Some(why) => install_desktop_alone(app, why).await,
+    }
+}
+
+/// The ordinary tray press: both halves, through the one runner.
+///
+/// The tray has no card, so the toast before the run is where the owner is told
+/// what is about to happen: the backend is patched first, then Jarvis Desktop
+/// installs, and Jarvis closes and starts again - and it can take several
+/// minutes. Nothing here starts by itself; it runs because the row was pressed.
+async fn update_both_from_tray(app: AppHandle, version: &str) {
     commands::notify(
         &app,
+        "Jarvis update",
+        &format!(
+            "Updating both halves: the backend is patched first, then Jarvis Desktop \
+             {version} installs. This can take several minutes. {INSTALL_CLOSES_AND_RESTARTS}"
+        ),
+    );
+    let outcome = update_both(app.clone(), "responsive".to_string()).await;
+    // The row must not sit on "Updating…" for ever, and it must not name a
+    // version the endpoint no longer offers: re-read, and let `on_update_status`
+    // rebuild it from the answer. Every ending that reaches this line needs that
+    // - a desktop half that installed ends the process before it instead.
+    let _ = check_for_update(app.clone()).await;
+    match outcome {
+        Ok(outcome) if outcome.updated_both => {
+            commands::notify(
+                &app,
+                "Jarvis updated",
+                "Both halves are updated. Restart Jarvis to run the new version.",
+            );
+        }
+        Ok(outcome) => {
+            // A half that did not finish is not "updated", and the toast says
+            // which one rather than a green sentence the tray cannot justify.
+            // The Settings card says the rest when it is open; each half's own
+            // line goes to the log here, because the tray has no card to show it.
+            let not_done: Vec<&str> = outcome
+                .steps
+                .iter()
+                .filter(|step| step.state != "ok")
+                .map(|step| step.step.as_str())
+                .collect();
+            let needs_restart = if outcome.restart_needed {
+                " Jarvis needs a restart before the backend is back; Settings, then \
+                 Updates, has the Restart button."
+            } else {
+                ""
+            };
+            let plain = if not_done.is_empty() {
+                format!("The update did not finish, so the two halves may differ.{needs_restart}")
+            } else {
+                format!(
+                    "The update did not finish: {} did not. The two halves may differ \
+                     until it is finished.{needs_restart}",
+                    not_done.join(" and ")
+                )
+            };
+            let detail: Vec<String> = outcome
+                .steps
+                .iter()
+                .filter(|step| step.state != "ok")
+                .map(|step| step.detail.clone())
+                .collect();
+            commands::notify_failed(
+                &app,
+                "Jarvis update",
+                &plain,
+                &detail.join(" "),
+                commands::Details::Log,
+            );
+        }
+        Err(err) => commands::notify_failed(
+            &app,
+            "Jarvis update",
+            "The update was not started.",
+            &err,
+            commands::Details::Log,
+        ),
+    }
+}
+
+/// The one case where the desktop half runs alone, said in the same words the
+/// Settings Install press uses for that case.
+///
+/// "Both are always updated" is only promised where both can be, and pretending
+/// otherwise is the one thing neither door may do: the sentence before the
+/// install says what is happening and why, and the one after it says plainly
+/// that the BACKEND was NOT updated and where to finish it. Both sentences are
+/// guarded, because `why` can name a folder on this PC and a toast can be read
+/// from a locked screen.
+async fn install_desktop_alone(app: AppHandle, why: String) {
+    commands::notify_guarded(
+        &app,
         "Jarvis Desktop update",
-        &format!("Version {version} is installing. {INSTALL_CLOSES_AND_RESTARTS}"),
+        &format!(
+            "The backend half cannot run on this PC ({why}). Installing Jarvis Desktop on \
+             its own - the two may differ until the backend update is finished. \
+             {INSTALL_CLOSES_AND_RESTARTS}"
+        ),
+        None,
     );
     match install_update(app.clone()).await {
         Ok(installed) => {
             // Windows never reaches this: the installer ends the process. A
             // platform without that exit re-reads and says what is left.
             let _ = check_for_update(app.clone()).await;
-            commands::notify(
+            commands::notify_guarded(
                 &app,
                 "Jarvis Desktop updated",
-                &format!("Version {installed} is installed."),
+                &format!(
+                    "{installed} installed on the desktop. The BACKEND was NOT updated: \
+                     {why}. Finish it from \"Update both halves\" once the folders are in \
+                     place."
+                ),
+                None,
             );
         }
         Err(err) => {
@@ -485,9 +619,6 @@ pub async fn install_from_tray(app: AppHandle) {
                 &err,
                 commands::Details::Log,
             );
-            // The row must not sit on "Updating…" for ever, and it must not
-            // name a version the endpoint no longer offers: re-read, and let
-            // `on_update_status` rebuild it from the answer.
             let _ = check_for_update(app.clone()).await;
         }
     }
@@ -1445,9 +1576,12 @@ fn claim_update_both() -> Option<UpdateBothGuard> {
 
 ///
 /// Never automatic: this is a `#[tauri::command]` reachable from the Settings
-/// button and, since 2026-10-26, from `run_approved_update` after an answered
-/// `desktop_update` card - never from a page, a timer or a setting that turns it
-/// into a background job.
+/// button, since 2026-10-26 from `run_approved_update` after an answered
+/// `desktop_update` card, and since 2026-11-04 from the tray's update row - and
+/// only where the backend half can run there, because where it cannot the tray
+/// falls back to the desktop-only [`install_update`] and says the BACKEND was
+/// NOT updated. Never from a page, a timer or a setting that turns it into a
+/// background job.
 #[tauri::command]
 pub async fn update_both(app: AppHandle, mode: String) -> Result<BothOutcome, String> {
     // S3: one press at a time in this window, and no press while a run from
@@ -1943,14 +2077,17 @@ mod tests {
     }
 
     /// The tray's update row must be ADDED and REMOVED (never left disabled),
-    /// and pressing it must run THIS module's install - the same one the
-    /// Settings Install button calls.
+    /// and pressing it must run THIS module's **both-halves** update - the same
+    /// runner the Settings Install press and an answered `desktop_update` card
+    /// use - falling back to the desktop-only install ONLY where the backend
+    /// half cannot run, and there only with a sentence that says the BACKEND was
+    /// NOT updated.
     ///
     /// Source pins, because no pure test can reach a native menu or an
-    /// `AppHandle`. They are read from `tray.rs`, not from this file, so the
-    /// test's own text cannot satisfy them.
+    /// `AppHandle`. The needles are `concat!`-split, so this test's own text
+    /// cannot satisfy them: only the real code can.
     #[test]
-    fn the_tray_rows_update_press_installs_and_the_row_comes_and_goes() {
+    fn the_tray_rows_update_press_updates_both_halves_and_the_row_comes_and_goes() {
         let tray = include_str!("tray.rs");
         // Absence is the no-update state: the row is parented and unparented.
         assert!(
@@ -1967,8 +2104,7 @@ mod tests {
             tray.contains("crate::update::available_version(app)"),
             "the tray does not read the update check's own answer"
         );
-        // The press goes to this module, and this module goes to the same
-        // command the Settings Install button calls.
+        // The press goes to this module.
         assert!(
             tray.contains("ID_UPDATE => run_update_from_tray(app)"),
             "the update row is not dispatched"
@@ -1977,12 +2113,74 @@ mod tests {
             tray.contains("crate::update::install_from_tray(handle).await"),
             "the tray press no longer reaches update.rs's install"
         );
-        // `concat!` so this test's own words cannot satisfy the needle: the
-        // real call is the only place the two halves sit together.
-        let installs = concat!("match install_", "update(app.clone()).await");
+
+        // This module takes that press to ONE of two doors, and the choice is
+        // the same check the Settings card makes (`backend_update_status`'
+        // `blocked` field, from `backend_update::locate`).
+        let src = include_str!("update.rs");
+        let entrance = &src[src
+            .find(concat!("pub async fn install_from_", "tray"))
+            .expect("update.rs has no install_from_tray")..];
+        let entrance = &entrance[..entrance
+            .find(concat!("async fn update_both_", "from_tray"))
+            .expect("install_from_tray no longer chooses between the two doors")];
         assert!(
-            include_str!("update.rs").contains(installs),
-            "install_from_tray no longer runs the Settings Install command"
+            entrance.contains(concat!("backend_half_", "blocked(&app)")),
+            "the tray press no longer asks whether the backend half can run"
+        );
+        // Neither update runs from the deciding function itself: it chooses.
+        assert!(
+            !entrance.contains(concat!("install_", "update(app.clone()).await")),
+            "install_from_tray runs the desktop-only install itself"
+        );
+        assert!(
+            !entrance.contains(concat!(
+                "update_both(app.clone(), ",
+                "\"responsive\".to_string())"
+            )),
+            "install_from_tray runs the both-halves update itself instead of choosing"
+        );
+
+        // The ordinary door is `update_both`, at the pace the Settings Install
+        // press uses.
+        let both = &src[src
+            .find(concat!("async fn update_both_", "from_tray("))
+            .expect("update.rs has no update_both_from_tray")..];
+        let both = &both[..both
+            .find(concat!("async fn install_desktop_", "alone("))
+            .expect("update.rs has no install_desktop_alone")];
+        let both_call = concat!("update_both(app.clone(), ", "\"responsive\".to_string())");
+        assert!(
+            both.contains(both_call),
+            "the tray press no longer runs the SAME both-halves runner Settings' \
+             Install press runs, at the same default pace"
+        );
+        assert!(
+            !both.contains(concat!("install_", "update(app.clone()).await")),
+            "the both-halves arm still installs the desktop on its own"
+        );
+
+        // The fallback keeps `install_update` reachable, and says plainly what
+        // it did NOT do.
+        let fallback = &src[src
+            .find(concat!("async fn install_desktop_", "alone("))
+            .expect("update.rs has no install_desktop_alone")..];
+        let fallback = &fallback[..fallback.find("\n}\n").expect("it has no end")];
+        assert!(
+            fallback.contains(concat!("match install_", "update(app.clone()).await")),
+            "the blocked arm no longer runs the desktop-only install"
+        );
+        assert!(
+            fallback.contains("The BACKEND was NOT updated:"),
+            "the desktop-only fallback does not say the BACKEND was not updated"
+        );
+        assert!(
+            fallback.contains(concat!("The backend half cannot run on this ", "PC")),
+            "the desktop-only fallback does not say why it is running alone"
+        );
+        assert!(
+            !fallback.contains(both_call),
+            "the fallback runs the both-halves update too"
         );
     }
 
