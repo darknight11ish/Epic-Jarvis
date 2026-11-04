@@ -2823,7 +2823,7 @@ $SHIPPED = @(
     # measured rows, and asks the EXISTING switch/apply cards.
     'jarvis_model_knowledge.py'
     # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
-    # the owner's decision: "Read + actions"; JARVIS-API section 189). Fixed
+    # the owner's decision: "Read + actions"; JARVIS-API section 185). Fixed
     # api.github.com addresses only, the token in the header and never in a
     # result; every read and every action asks a person first, and it cannot
     # merge, push, commit, delete or close. github-tools.patch gives the gate
@@ -2868,7 +2868,19 @@ $SHIPPED = @(
     # patch. The same entry, in the same position, is in backend/_where.py's
     # SHIPPED list.
     'jarvis_mood.py'
-    'jarvis_phone_apps.py'
+    # What Jarvis is made of on this PC (jarvis_self_portrait.py, 2026-11-03;
+    # the owner's ask that it be aware of every setting, function and ability
+    # it has): the places it can open (imported from jarvis_settings_registry's
+    # SECTIONS and jarvis_menus' MENUS, never a hand-written list), its settings
+    # with their live values, what asks first, its abilities, its drop-in
+    # plugins, its stores' counts, and the installer's recorded identity - all
+    # fixed registry data and live state, never a secret, a path, a word of chat
+    # or a model sentence. GET /api/self, /api/self/version and /api/conversations
+    # come from its own install(), called by plugins\ready\self-portrait: NO
+    # patch, which is what the loader is for. The same entry, in the same
+    # position, is in backend/_where.py's SHIPPED list.
+    'jarvis_self_portrait.py'
+'jarvis_phone_apps.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

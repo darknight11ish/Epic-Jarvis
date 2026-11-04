@@ -7,8 +7,8 @@
     "core": 143,
     "missing": 0
   },
-  "folder_count": 20,
-  "ready_count": 48,
+  "folder_count": 21,
+  "ready_count": 49,
   "folders": [
     {
       "name": "skill-hub",
@@ -128,6 +128,14 @@
       "install": "handler",
       "stack_order": 164,
       "summary": "the owner's own mood log: one 1-5 tap a day with optional words, kept on this PC, never learned, never sent anywhere, and never turned into a score or a judgement.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "self-portrait",
+      "module": "jarvis_self_portrait",
+      "install": "handler",
+      "stack_order": 165,
+      "summary": "what Jarvis is made of on this PC: every place it can open (imported from the Settings and menu registries), every setting with its live on/off value, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only, never a secret, a path or a word of chat.",
       "why": "born as a folder: it replaces no patch"
     },
     {

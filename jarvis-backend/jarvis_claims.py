@@ -148,6 +148,12 @@ READ_ONLY_TOOLS = frozenset({
     # on/off state and the reason a plugin is off - and changes nothing. The
     # writing half is plugin_switch, in ACTING_TOOLS.
     "plugin_list",
+    # The self portrait and the conversation reads (2026-11-03): they only
+    # READ and change nothing, so an answer "I cannot tell you..." is never
+    # corrected for them and a claim that one did something is still caught by
+    # the acting half below.
+    "self_portrait", "refresh_abilities",
+    "conversation_find", "conversation_open",
 })
 
 #: The other half of the same classification (audit H4): every tool that can
@@ -207,6 +213,9 @@ ACTING_TOOLS = frozenset({
     # reason `send_email` is in this set. The three GitHub READS are in
     # READ_ONLY_TOOLS above.
     "github_comment", "github_open_issue", "github_rerun_workflow",
+    # Clearing a conversation is NOT a model tool: Gemini ruling 1 (2026-11-03)
+    # keeps it route/app/fast-path only, behind its one card, so it is in
+    # neither table here - the action still exists, the TOOL does not.
 })
 
 #: The line added to a typed answer that claimed an action nobody took.

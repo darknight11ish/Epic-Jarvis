@@ -426,18 +426,6 @@ TIER_UNLISTED = (
 TOOLS_SWITCHABLE = TIER_A + TIER_B
 #: Known tools that are NOT offered in-app by this slice (C + unlisted).
 TOOLS_TOML_ONLY = TIER_C + TIER_UNLISTED
-#: The page's groups, in order; every switchable tool exactly once.
-TOOL_GROUPS = (
-    ("Notes and reading",
-     ("calendar_read", "notes_search", "append_obsidian_daily",
-      "create_joplin_note", "append_logseq_journal")),
-    ("Timers, lists and plans",
-     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
-    ("Connected accounts & home", TIER_B),
-    ("Safety and sharing",
-     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
-)
-GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
 TOOL_NAME = {"email_read": "email_check"}
@@ -479,6 +467,26 @@ TOOL_GROUPS = (
     ("Safety and sharing",
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),
 )
+#: The storage self-scan's own tools, appended ONLY when its module is really
+#: on this PC (PR #1117's drop-in). The import is a PLAIN, GUARDED one on
+#: purpose, and the audits are told the truth rather than routed around:
+#: backend/test_shipped_modules.py lists ("jarvis_asks_first.py",
+#: "jarvis_storage_health") in REPO_ONLY_IMPORTS, and
+#: backend/test_base_matches_repo.py allows it in OPTIONAL_IMPORTS, both with
+#: this reason - jarvis_storage_health.py is not in this repository's shipped set
+#: yet (it lands as PR #1117), so the published base cannot carry it either.
+#: Both entries are removed when #1117 is in the shipped set and the base is
+#: re-taken. Until then a PC without the module has exactly the four shipped
+#: groups and its start-up line says the storage scan is not installed.
+_storage_health = None
+try:
+    import jarvis_storage_health as _storage_health
+except ImportError:                          # not installed on this PC (PR #1117)
+    _storage_health = None
+except Exception:                            # noqa: BLE001 - a damaged drop-in must
+    _storage_health = None                   # not take the ask-first page down
+if _storage_health is not None:
+    TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
@@ -533,7 +541,8 @@ HARD_LIMITS = frozenset({
     "app_build_android", "app_install_android",
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
-    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "chatbot_session", "memory_forget_range", "conversation_clear",
+    "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
@@ -565,7 +574,8 @@ MUST_ASK = frozenset({
     "restore_backup", "check_tool_updates", "desktop_update", "run_plan",
     "phone_notifications_read",
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
-    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "chatbot_session", "memory_forget_range", "conversation_clear",
+    "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "app_build_android", "app_install_android",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
@@ -749,7 +759,13 @@ GROUPS = (
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable",
         "learning_paraphrase_enable", "history_enable",
-        "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
+        "memory_manage", "memory_forget_range", "conversation_clear",
+        # The storage self-scan's ONE tidy (jarvis_storage_health.py, a separate
+        # 2026-11-03 drop-in): it deletes temporary files and moves old deploy
+        # backups, so its card is a page row the moment the tier line exists -
+        # even on a PC whose drop-in folder is not installed yet.
+        "storage_cleanup",
+        "user_profile_manage", "custom_voice",
         # Action receipts (jarvis_receipts.py, 2026-10-14): putting ONE recorded
         # change back - what changed, from the receipt Jarvis wrote before it
         # changed it. It sits in this group with the other actions over the

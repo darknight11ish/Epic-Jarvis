@@ -1104,6 +1104,24 @@
        "title": "Forget what it learned and delete chats from the days you chose"
       },
       {
+       "action": "conversation_clear",
+       "fixed": false,
+       "id": "conversation_clear",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clear Jarvis's temporary files"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -2755,6 +2773,24 @@
        "title": "Forget what it learned and delete chats from the days you chose"
       },
       {
+       "action": "conversation_clear",
+       "fixed": false,
+       "id": "conversation_clear",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clear Jarvis's temporary files"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -4401,6 +4437,24 @@
        "title": "Forget what it learned and delete chats from the days you chose"
       },
       {
+       "action": "conversation_clear",
+       "fixed": false,
+       "id": "conversation_clear",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clear Jarvis's temporary files"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -6042,6 +6096,24 @@
        "title": "Forget what it learned and delete chats from the days you chose"
       },
       {
+       "action": "conversation_clear",
+       "fixed": false,
+       "id": "conversation_clear",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clear Jarvis's temporary files"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -7681,6 +7753,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
+       "action": "conversation_clear",
+       "fixed": false,
+       "id": "conversation_clear",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",
@@ -9338,6 +9428,24 @@
        "title": "Forget what it learned and delete chats from the days you chose"
       },
       {
+       "action": "conversation_clear",
+       "fixed": false,
+       "id": "conversation_clear",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clear Jarvis's temporary files"
+      },
+      {
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
@@ -10982,6 +11090,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Forget what it learned and delete chats from the days you chose"
+      },
+      {
+       "action": "conversation_clear",
+       "fixed": false,
+       "id": "conversation_clear",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "storage_cleanup",
+       "fixed": false,
+       "id": "storage_cleanup",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Clear Jarvis's temporary files"
       },
       {
        "action": "user_profile_manage",

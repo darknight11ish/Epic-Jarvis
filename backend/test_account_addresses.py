@@ -142,9 +142,19 @@ def t_the_eight_and_the_secrets():
           not [f for f in ACC.FIELDS
                if re.search(r"key|password|token|secret|ics", f)])
     src = Path(ACC.__file__).read_text(encoding="utf-8")
-    check("the module never names the secrets' own environment variables",
+    # The appended family table NAMES these variables so a row can say "an
+    # environment variable that is set still wins"; it never reads a value.
+    # The addresses half must still never name them, so the scan below stops at
+    # the marker that opens the appended section - and the marker's presence is
+    # itself checked, so a renamed marker cannot silently widen the scan back to
+    # the whole file and let a real leak through.
+    marker = "THE ACCOUNTS JARVIS CAN USE - appended 2026-11-03"
+    check("the appended accounts section carries the marker this scan relies on",
+          marker in src, marker)
+    head = src.split(marker, 1)[0]
+    check("the addresses half never names the secrets' own environment variables",
           not [v for v in (EMAIL.USER_ENV, EMAIL.PASSWORD_ENV, CAL.ICS_URL_ENV,
-                           HOME.TOKEN_ENV) if v in src])
+                           HOME.TOKEN_ENV) if v in head])
     check("the three TLS modes are jarvis_email_send's own list, not a copy "
           "that can drift",
           ACC.TLS_MODES == SEND.TLS_MODES, (ACC.TLS_MODES, SEND.TLS_MODES))

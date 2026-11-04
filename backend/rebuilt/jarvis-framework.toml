@@ -633,6 +633,24 @@ learning_paraphrase_enable = "ask"
 # without this line asks too (unknown_action_tier).
 memory_forget_range       = "ask"
 
+# "Clear one conversation" (2026-11-03, the owner's ask that Jarvis can clear
+# any conversation on request): deleting ONE kept chat from this PC, named on
+# the card by its title and message count, with the facts Jarvis learned from
+# it KEPT. One card, one conversation - there is no bulk form and no cardless
+# form (jarvis_self_portrait.py refuses any other tier rather than let this
+# line become your yes, exactly as Forget a time frame does). A file without
+# this line asks too (unknown_action_tier).
+conversation_clear        = "ask"
+
+# "Tidy up storage" (2026-11-03, the owner's ask that Jarvis be as capable as it
+# reasonably can be; the storage self-scan module jarvis_storage_health.py, a
+# separate drop-in folder): after a read-only scan and a plan the owner sees,
+# ONE card lists every file the tidy would touch and it runs only on that card.
+# Must stay "ask": a cleanup deletes files, so the module refuses any other
+# tier rather than let this line become the yes. A file without this line asks
+# too (unknown_action_tier).
+storage_cleanup           = "ask"
+
 # --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
 # Adding a voice (a recording of someone reading a sentence, kept on this
 # PC) is one approval card, and switching Jarvis to speak in one is

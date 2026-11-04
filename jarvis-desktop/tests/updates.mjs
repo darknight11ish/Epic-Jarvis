@@ -344,17 +344,16 @@ await check("CONTROL: only one endpoint, and it is the releases URL", async () =
     "the endpoint carries a query string, so it is sending something");
 });
 
-/* ── The tray's "Update available" row lands on THIS card (2026-10-27) ───── */
+/* ── The place opens THIS card (2026-10-27; the tray row's own press stopped
+   naming it on 2026-11-03, when that row began installing instead) ─────────── */
 
 await check("the place Rust names opens Settings scrolled to the Updates card", async () => {
-  // The owner: "when i right click the jarvis tray icon, click on update
-  // available, it only opens the settings page". `windows.rs`'s
-  // `show_settings_at` now builds a NEW window at `settings.html#updates`, and
-  // `settings.js` consumes that fragment. The tray row really names this place
-  // (the Rust half is pinned in source here so the two halves cannot drift).
-  const tray = read("src-tauri/src/tray.rs");
-  assert.match(tray, /ID_UPDATE => Some\("updates"\)/,
-    "the tray's Update row no longer names the Updates place");
+  // The owner, 2026-10-27: "when i right click the jarvis tray icon, click on
+  // update available, it only opens the settings page". `windows.rs`'s
+  // `show_settings_at` builds a NEW window at `settings.html#updates`, and
+  // `settings.js` consumes that fragment. The tray's own row now INSTALLS
+  // rather than naming this place (`tray.rs`, 2026-11-03); the place itself is
+  // still the destination every other route uses, and is what this checks.
   const page = await K.open(browser, base, "settings.html#updates",
     { update: { ...K.UPDATE_NONE, ...FOUND } }, VIEW);
   await page.waitForFunction(() => {
