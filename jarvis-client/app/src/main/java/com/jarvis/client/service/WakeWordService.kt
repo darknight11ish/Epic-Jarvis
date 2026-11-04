@@ -198,7 +198,15 @@ class WakeWordService : Service() {
             while (running) {
                 // The talk button owns the microphone while it records, and
                 // Jarvis Live while it is on on this phone (LiveService).
-                if (voice.phase.value == VoiceSession.Phase.CAPTURING || JarvisRuntime.liveOnHere()) {
+                // And the hands-free answer window, which is neither a turn nor
+                // a Live session and opens by itself when a card arrives
+                // (2026-11-04) - asked of the one ledger, so a fourth user of
+                // the microphone did not have to be remembered in a fourth
+                // place.
+                if (voice.phase.value == VoiceSession.Phase.CAPTURING ||
+                    JarvisRuntime.liveOnHere() ||
+                    !com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.WAKE)
+                ) {
                     _state.value = WakeListen.Paused
                     delay(200)
                     continue
@@ -211,7 +219,12 @@ class WakeWordService : Service() {
                     _state.value = WakeListen.Listening
                     goForeground(getString(R.string.wake_listening_text))
                     val buf = ShortArray(WakeSpotter.CHUNK)
-                    while (running && voice.phase.value == VoiceSession.Phase.OFF && !JarvisRuntime.liveOnHere()) {
+                    while (running && voice.phase.value == VoiceSession.Phase.OFF &&
+                        !JarvisRuntime.liveOnHere() &&
+                        // The hands-free answer window: the recorder is dropped
+                        // for it on the next step rather than read through it.
+                        com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.WAKE)
+                    ) {
                         if (!readFully(rec, buf)) return fail("The microphone stopped.")
                         ring.push(buf)
                         val threshold = WakeRules.threshold(voice.status.value)

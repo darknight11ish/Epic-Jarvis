@@ -4059,6 +4059,64 @@ class JarvisApi(
     suspend fun setWakeWord(enabled: Boolean): ApiResult<Unit> =
         postJson("/api/voice/wake", """{"enabled":$enabled}""")
 
+    // ----------------------------------------------------------- hands-free ----
+    // The owner's request of 2026-11-04. net/Handsfree.kt carries the whole
+    // frozen contract, every line of plain words, and the honest degradation
+    // against a PC that does not have the feature yet; this is only the wire.
+    //
+    // All four routes are the phone's half of one feature: the PC decides
+    // (it is the one with the voice print and the transcription), the phone
+    // reads out, listens and sends the text. `probe` and `postVoice` are used
+    // rather than new plumbing because both already have the shape these
+    // answers need - the PC's own sentence on a refusal, and the raw status
+    // where 202 means "a card is waiting" rather than "done".
+
+    /**
+     * `GET /api/handsfree` - the state.
+     *
+     * A 404 is the honest "this PC does not have hands-free yet"
+     * ([ApiError.NotFound]), and every surface says [Handsfree.NOT_HERE] for
+     * it rather than drawing a switch that does nothing. Nothing here claims
+     * the mode is on: [Handsfree.readOf] is what turns the body into that.
+     */
+    suspend fun handsfree(): ApiResult<kotlinx.serialization.json.JsonObject> = probe(Handsfree.PATH)
+
+    /**
+     * `POST /api/handsfree/enabled {"enabled": bool}`.
+     *
+     * The contract's asymmetry is kept exactly: ON may answer 202 with a card
+     * waiting ([Handsfree.Enabled.waiting] - the mode is NOT on yet), OFF is
+     * 200 and immediate. A PC without the route answers 404, which stays a
+     * failure and is shown as [Handsfree.NOT_HERE].
+     */
+    suspend fun setHandsfree(enabled: Boolean): ApiResult<Handsfree.Enabled> =
+        postVoice(Handsfree.ENABLED_PATH, Handsfree.enabledBody(enabled))
+            .map { (status, body) -> Handsfree.Enabled.of(status, body) }
+
+    /**
+     * `POST /api/handsfree/answer` - one recorded clip, base64 in JSON.
+     *
+     * The body is the owner's voice and is never logged. A refusal the PC
+     * explains comes back as [Handsfree.Answer] with `ok = false` and its own
+     * sentence, because those words are written for the owner and are the most
+     * useful thing to show; 401/403/404 stay failures, because a bad token and
+     * "this PC has no hands-free" are not the desktop's words to relay.
+     */
+    suspend fun answerHandsfree(cardId: String, wav: ByteArray): ApiResult<Handsfree.Answer> =
+        postVoice(Handsfree.ANSWER_PATH, Handsfree.answerBody(cardId, wav))
+            .map { (_, body) -> Handsfree.answerOf(body) }
+
+    /**
+     * `POST /api/phone/result` - what happened to a `phone_command`.
+     *
+     * Sent for every command, including the ones this phone refused and the
+     * ones it could not carry out at all: a PC that asked for a text and heard
+     * nothing back would have no way to tell "not sent" from "still working".
+     */
+    suspend fun phoneResult(id: String, ok: Boolean, receipt: String, why: String): ApiResult<Unit> =
+        postJson(Handsfree.RESULT_PATH, Handsfree.resultBody(id, ok, receipt, why))
+
+
     /**
      * "Train my voice": sends the owner's recorded clips to the desktop.
      *

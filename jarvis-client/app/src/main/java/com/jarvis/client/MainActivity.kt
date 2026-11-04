@@ -4287,7 +4287,31 @@ class MainActivity : FragmentActivity() {
                                     // words only; shared text stays in its chip
                                     // for the next question.
                                     val note = NoteCapture.prefixed(text)
-                                    if (note != null) {
+                                    // "Turn on/off hands-free" (the owner's
+                                    // request, 2026-11-04): the ONE sentence this
+                                    // phone answers itself. It is checked before
+                                    // every other branch, including a note, and
+                                    // answered from the PC's own state - the
+                                    // words are `Handsfree.command`'s, the same
+                                    // parser Jarvis Live uses, so the two
+                                    // surfaces cannot drift. Nothing is sent to
+                                    // the model for it.
+                                    val handsfree = com.jarvis.client.net.Handsfree.command(text)
+                                    if (handsfree != null) {
+                                        scope.launch {
+                                            JarvisRuntime.setNotice(
+                                                JarvisRuntime.handsfreeCommand(handsfree),
+                                            )
+                                            // The words stay in the box if they
+                                            // changed under us while the PC was
+                                            // answering - the same rule the note
+                                            // branch follows.
+                                            if (draft == text) {
+                                                draft = ""
+                                                draftPasted = false
+                                            }
+                                        }
+                                    } else if (note != null) {
                                         scope.launch {
                                             if (JarvisRuntime.fileChatNote(note) && draft == text) {
                                                 draft = ""

@@ -28,6 +28,16 @@ object NotificationIds {
     const val AVATAR_OVERLAY = 0x4A58
     const val SCREEN_WATCH = 0x4A59
 
+    // Hands-free (the owner's request, 2026-11-04): the service's own ongoing
+    // line, the card waiting to be answered, and the one line about a text
+    // message. Three numbers, never one: cancelling the card's notification
+    // must not take the service's own with it (a foreground service whose
+    // notification is cancelled is killed by Android on some builds), and a
+    // "sent to Alex" line must survive the card that prompted it.
+    const val HANDSFREE = 0x4A5A
+    const val HANDSFREE_CARD = 0x4A5B
+    const val HANDSFREE_SMS = 0x4A5C
+
     // Reminders and alarms (also given a tag per job, but kept distinct anyway).
     const val SCHEDULE = 0x3100
 
@@ -50,6 +60,9 @@ object NotificationIds {
         "WAKE_WORD" to WAKE_WORD,
         "AVATAR_OVERLAY" to AVATAR_OVERLAY,
         "SCREEN_WATCH" to SCREEN_WATCH,
+        "HANDSFREE" to HANDSFREE,
+        "HANDSFREE_CARD" to HANDSFREE_CARD,
+        "HANDSFREE_SMS" to HANDSFREE_SMS,
         "SCHEDULE" to SCHEDULE,
         "CHATBOT" to CHATBOT,
         "SUPPORT_CHAT" to SUPPORT_CHAT,

@@ -2750,6 +2750,32 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
+  is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
+  setting he can turn OFF from chat, Jarvis Live, or Settings ... ANY approval
+  card ... automatically READ OUT, and he can answer 'confirm' or 'deny'
+  verbally ... he specifically wants Jarvis to WRITE TEXT MESSAGES to
+  contacts"*). The feature splits along the device line, and the split is the
+  point rather than an accident of time: **the PC keeps the authority and the
+  phone keeps the body.** The PC transcribes the recorded answer, checks it
+  against the owner's voice print and decides - the phone cannot, because a
+  client never does speech-to-text (CLAUDE.md), and because "is this the
+  owner?" must be answered where the print lives. The phone reads the card out
+  through its own speaker, records the ten-second answer window, and sends the
+  text message, because a Windows PC has no phone's speaker, no microphone in
+  a pocket and no SMS service. So the four routes
+  (`GET /api/handsfree`, `POST /api/handsfree/enabled`,
+  `POST /api/handsfree/answer`, `POST /api/phone/result`) are classified
+  `phone-only` in `tools/check_parity.py` for as long as the desktop does not
+  call them; the desktop's own half of the same frozen contract (its own
+  setting, its own read of the mode) is another lane's, and the day it calls
+  the first two of those routes the checker's rule 6 fails by name and the two
+  move to `ported`, which is the right change then. Nothing else about the
+  feature is one-sided: a card raised for something the owner asked is answered
+  on the SAME card either way, `handsfree_card` and `phone_command` ride the
+  one existing event stream, and the spoken audio is the existing
+  `POST /api/voice/say` - no second speech path exists for this feature.
+
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
   open at once"*; JARVIS-API §184.5). The desktop opens extra copies of its own

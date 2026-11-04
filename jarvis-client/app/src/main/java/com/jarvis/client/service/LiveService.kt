@@ -456,6 +456,18 @@ class LiveService : Service() {
                     delay(IDLE_MS)
                     continue
                 }
+                if (!com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.LIVE)) {
+                    // The hands-free answer window has the microphone (2026-11-04):
+                    // closed here rather than merely skipped, for exactly the
+                    // reasons in the branch above, and reopened by the next pass
+                    // once the ten seconds are over. The ledger is what "pause
+                    // your recorder while the answer window is open and resume
+                    // after" means in code.
+                    close()
+                    stopRoute()
+                    delay(IDLE_MS)
+                    continue
+                }
                 if (speaking && !inVoiceCall) {
                     // The reply is playing: as a voice call, so the echo
                     // canceller can take Jarvis's own voice back out.
@@ -664,7 +676,14 @@ class LiveService : Service() {
             audioMode(),
             voice.speaker.voiceCall,
             ownMicCall = route?.callMode == true,
-        )
+        ) &&
+            // Hands-free (2026-11-04): the answer window has the microphone,
+            // and this window closes for it. It is the same question the two
+            // conditions above answer - "may the microphone stay open" - and it
+            // is asked of the ONE ledger (voice/MicOwner.kt) rather than of
+            // another feature's state, so every part that records obeys one
+            // rule. Live reopens on the next pass once the window is over.
+            com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.LIVE)
     }
 
     private suspend fun send(clip: ShortArray) {
