@@ -2818,6 +2818,18 @@ $SHIPPED = @(
     # patch. The same entry, in the same position, is in backend/_where.py's
     # SHIPPED list.
     'jarvis_mood.py'
+    # What Jarvis is made of on this PC (jarvis_self_portrait.py, 2026-11-03;
+    # the owner's ask that it be aware of every setting, function and ability
+    # it has): the places it can open (imported from jarvis_settings_registry's
+    # SECTIONS and jarvis_menus' MENUS, never a hand-written list), its settings
+    # with their live values, what asks first, its abilities, its drop-in
+    # plugins, its stores' counts, and the installer's recorded identity - all
+    # fixed registry data and live state, never a secret, a path, a word of chat
+    # or a model sentence. GET /api/self, /api/self/version and /api/conversations
+    # come from its own install(), called by plugins\ready\self-portrait: NO
+    # patch, which is what the loader is for. The same entry, in the same
+    # position, is in backend/_where.py's SHIPPED list.
+    'jarvis_self_portrait.py'
 'jarvis_phone_apps.py'
 )
 

@@ -704,6 +704,43 @@ def t_the_guide_answers_a_choice_too():
           out.get("ok") is False and out.get("kind") == "unknown", out)
 
 
+def t_the_compound_where_and_value_question_answers_once():
+    """Q7 (Gemini's ruling, 2026-11-03): "where do I change X, and what is it set to?"
+
+    ONE question asking for BOTH halves - the place and the value - and
+    `explain_setting_words` already prints both, so it must reach the SAME
+    `setting_explain` the plain "where do I change X" reaches. Measured before
+    this: the compound sentence matched NOTHING and went to the local model,
+    which invented a `configuration.yaml` place for the weather source.
+    """
+    for subject, kind in (("the weather source", "weather"),
+                          ("the voice speed", "choice"),
+                          ("the personality", "choice")):
+        plain = Q.match(f"where do I change {subject}")
+        check(f"{subject}: the plain question is setting_explain",
+              plain is not None and plain.name == "setting_explain"
+              and (plain.f or {}).get("kind") == kind, plain)
+        for wanted in (f"where do I change {subject}, and what is it set to",
+                       f"where do i change {subject} and what is it set to",
+                       f"where do I set {subject}, and what is it set to?"):
+            got = Q.match(wanted)
+            check(f"{subject}: the compound question answers too: {wanted!r}",
+                  got is not None and got.name == "setting_explain"
+                  and got.f == (plain.f if plain is not None else None), got)
+        # ...and the answer really carries both halves.
+        got = Q.match(f"where do I change {subject}, and what is it set to")
+        said = R.explain_setting_words(got.f or {}) if got is not None else ""
+        check(f"{subject}: the answer names a Settings place",
+              bool(said) and "Settings" in said, said)
+        check(f"{subject}: the answer carries the current value",
+              "Right now:" in said, said)
+    # A name nothing knows still falls through to the model, exactly as the
+    # plain question does - the exact-name gate is unchanged.
+    check("an unknown setting stays the model's",
+          Q.match("where do I change my wifi password, and what is it set to") is None,
+          Q.match("where do I change my wifi password, and what is it set to"))
+
+
 def main():
     tests = [v for k, v in sorted(globals().items())
              if k.startswith("t_") and callable(v)]

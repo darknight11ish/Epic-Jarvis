@@ -114,6 +114,11 @@ READERS = {
     "rebuilt/jarvis_initiative.py": ("mentions", "no fact reads (checked 2026-09-30)"),
     "selftest.py": ("mentions", "the owner-run self test"),
     "jarvis_second_card.py": ("mentions", "names memory in a docstring"),
+    # The self portrait (2026-11-03): imports jarvis_memory only to read
+    # store().status()'s COUNTS (facts/current/retired/entities) for the
+    # stores block - no fact text, no fact id, no search, so nothing from a
+    # private topic can reach a model, a screen or a voice through it.
+    "jarvis_self_portrait.py": ("mentions", "store().status() counts only; reads no fact"),
 }
 
 SEARCH_RECEIVER = re.compile(r"(?:^|\.)(?:store|st|_store)(?:\(\))?$|store\(\)$")

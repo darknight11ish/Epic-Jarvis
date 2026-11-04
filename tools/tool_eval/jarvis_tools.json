@@ -1208,6 +1208,67 @@
  {
   "type": "function",
   "function": {
+   "name": "refresh_abilities",
+   "description": "Re-read what Jarvis can do and has right now, and say in one plain sentence what changed. Use when: the owner asks you to refresh your abilities or your awareness of your own functions, or says something you can do is missing or newly available. Do NOT use it to explain one feature (that is feature_guide). It only re-reads: nothing is restarted, nothing is changed and no approval is needed.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "self_portrait",
+   "description": "Read what Jarvis is made of on this PC right now: how many places (Settings cards and menus) it can open, how many settings, ask-first actions, abilities and drop-in plugins it has, which stores exist and how to clear them, and which version it runs. Use when: the owner asks what you can do, what you have, what is connected, or where a kind of setting lives. Do NOT use it to explain one feature in words (that is feature_guide) or to change anything. Read-only: no card, nothing changed.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "conversation_find",
+   "description": "Find the owner's own kept conversations on this PC by words they were about, or list the newest ones when no words are given. Returns each chat's ID, title and date - never its message text. Use when: the owner asks which old chat was about something, or wants to open one by name. Do NOT use it for their notes, files or the public web. Read-only: no card, nothing changed.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "query": {
+      "type": "string",
+      "description": "words the chat was about; leave out to list the newest chats"
+     },
+     "limit": {
+      "type": "integer",
+      "description": "how many chats, at most 10"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "conversation_open",
+   "description": "Open ONE kept conversation by the ID conversation_find gave, and read its messages so you can answer about them. Use when: the owner asked to open, read or bring up one of their old conversations. Never invent an ID; if you do not have one, call conversation_find first. Read-only: no card, nothing changed. The words come from this PC's own kept chat and stay on this PC.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "description": "the conversation id conversation_find gave"
+     }
+    },
+    "required": [
+     "id"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "connect_account",
    "description": "Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the owner asks to connect, set up or link one. The OWNER types the token, private link or username and password into that card on this PC; it is saved into Windows Credential Manager and tested for real. NEVER take a password, token or private link in the chat and never pass one here: this tool has no field for a value. For any other account say Settings-only.",
    "parameters": {

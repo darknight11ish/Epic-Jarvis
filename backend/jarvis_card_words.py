@@ -222,6 +222,16 @@ TITLES = {
     "chat_tag_suggest": "file one chat under a tag it suggests",
     # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
     "memory_forget_range": "forget what it learned and delete chats from the days you chose",
+    # jarvis_self_portrait.py (2026-11-03): deliberately NOT a Forget-a-time-frame
+    # relative - ONE kept conversation from this PC, after ONE card that names it
+    # (title and message count) and says the facts it taught are kept.
+    "conversation_clear": "delete one conversation from this PC",
+    # jarvis_storage_health.py (2026-11-03, a separate drop-in): ONE card listing
+    # every path in full before anything is deleted or moved. The wording is
+    # #1117's (the feature owner's) deliberately - #1116 must not carry a second
+    # title for the same action into the merge; #1117 drops its own duplicate
+    # line when it rebases after this PR.
+    "storage_cleanup": "clear Jarvis's temporary files",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",
@@ -486,6 +496,12 @@ SUMMARY = {
     "unprotect_item": "stop protecting a folder, file or program",
     # --- the Obsidian notes editor (2026-10-31): one save, one card
     "edit_vault_note": "change a note in your Obsidian vault",
+    # jarvis_self_portrait.py (2026-11-03): ONE kept conversation from this PC,
+    # after ONE card; the learned facts are kept.
+    "conversation_clear": "delete one conversation",
+    # jarvis_storage_health.py's ONE tidy (PR #1117): temporary files and old
+    # deploy backups, listed in full on the card first.
+    "storage_cleanup": "clear temporary files",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
