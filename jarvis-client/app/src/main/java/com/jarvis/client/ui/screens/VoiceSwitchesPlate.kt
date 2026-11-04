@@ -65,6 +65,10 @@ internal fun WakeWordSwitchesCard(
     onOneMoment: ((Boolean) -> Unit)? = null,
     heardSound: Boolean? = null,
     onHeardSound: ((Boolean) -> Unit)? = null,
+    /** "Check my voice on my locked phone" (2026-11-03): null = the PC has not answered. */
+    voiceCheck: Boolean? = null,
+    onVoiceCheck: ((Boolean) -> Unit)? = null,
+    voiceCheckNotice: String? = null,
 ) {
     val chrome = LocalChrome.current
     val tint = when {
@@ -216,6 +220,64 @@ internal fun WakeWordSwitchesCard(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onOneMoment(!oneMoment) },
             )
+        }
+
+        // THE OWNER'S 2026-11-03 ASK - ONE setting over the ONE voice-check
+        // rule (voice/VoiceCheckRule.kt, the PC's own copy is
+        // jarvis_live.voice_check_needed). ON (the default) is the EXEMPTION
+        // the owner asked for: only "hi Jarvis" on a LOCKED phone checks, and
+        // Live started on an unlocked phone does not. OFF withdraws that
+        // exemption and gives the OLD, FULL checks back, with the phone's
+        // unlock then ignored - it is never "no checks", which is why OFF is
+        // the stricter direction and applies at once while ON asks first (ONE
+        // card on the PC). THE WAKE-WORD HALF IS NOT APPLIED YET (DEF-033):
+        // "hi Jarvis" is still checked on an unlocked phone until a later PC
+        // update, which is MORE checking than the rule asks, never less, and
+        // this switch says so in its own words rather than claiming it.
+        // `null` is "the PC has not answered", never "off" - it says so and
+        // offers nothing to press.
+        if (onVoiceCheck != null) {
+            Gap(12)
+            Text(
+                "Only check my voice on a locked phone",
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            Gap(4)
+            Text(
+                when (voiceCheck) {
+                    true -> "Jarvis checks your voice when you say \"hi Jarvis\" on a " +
+                        "locked phone, and when Jarvis Live starts on a locked phone. " +
+                        "Pressing the mic never checks, and Live started on an unlocked " +
+                        "phone does not either. Saying \"hi Jarvis\" on an unlocked phone " +
+                        "is still checked for now - a later PC update stops that."
+                    false -> "Jarvis checks your voice every time you say \"hi Jarvis\", " +
+                        "and every time Jarvis Live starts, locked or not. Pressing the " +
+                        "mic never checks."
+                    null -> "Your PC has not answered yet, so this is not shown as off. " +
+                        "The microphone buttons and Live work either way."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            if (voiceCheck != null) {
+                Gap(6)
+                Secondary(
+                    text = if (voiceCheck) "Check it on my unlocked phone too"
+                    else "Only check it on my locked phone",
+                    enabled = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onVoiceCheck(!voiceCheck) },
+                )
+            }
+            if (voiceCheckNotice != null) {
+                Gap(4)
+                Text(
+                    voiceCheckNotice,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            }
         }
 
         // Beside "One moment", and like it about any spoken question (the

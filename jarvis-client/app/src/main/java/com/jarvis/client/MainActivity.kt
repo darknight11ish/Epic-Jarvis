@@ -1107,6 +1107,12 @@ class MainActivity : FragmentActivity() {
         val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
         val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
+        // THE ONE VOICE-CHECK SETTING (2026-11-03): the rule is the PC's
+        // (jarvis_live.voice_check_needed); this reads its answer over the
+        // existing Live route, so the switch shows the PC's value and never a
+        // guess. null = the PC has not answered.
+        val voiceCheckOn by JarvisRuntime.voiceCheck.collectAsState()
+        val voiceCheckNotice by JarvisRuntime.voiceCheckNotice.collectAsState()
         // Asked once: whether this phone has an echo canceller at all. It
         // decides the barge-in default.
         val echoCanceller = remember {
@@ -1132,6 +1138,9 @@ class MainActivity : FragmentActivity() {
         }
         // Asked on arrival: a stale answer is the wrong thing to be reassured by.
         LaunchedEffect(Unit) { voice.refreshStatus() }
+        // The one voice-check setting: read the PC's answer when the card is
+        // shown. A read only - nothing is changed by opening Settings.
+        LaunchedEffect(Unit) { JarvisRuntime.voiceCheckRead() }
 
         WakeWordSwitchesCard(
             state = wakeWord,
@@ -1191,6 +1200,11 @@ class MainActivity : FragmentActivity() {
             // And whether the "I heard you" sound plays.
             heardSound = heardSoundOn,
             onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
+            // The owner's 2026-11-03 switch. Asked on arrival like the wake
+            // word's own state: a stale answer would show the wrong thing.
+            voiceCheck = voiceCheckOn,
+            onVoiceCheck = { on -> lifecycleScope.launch { JarvisRuntime.setVoiceCheck(on) } },
+            voiceCheckNotice = voiceCheckNotice,
         )
     }
 
