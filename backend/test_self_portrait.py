@@ -291,9 +291,20 @@ def tool_counts_are_the_real_tools():
           "51 tools (13 switched on in your settings)" in said
           and "136 ask-first actions" in said, said)
     # THE SETTINGS FILE IS THE SOURCE. Write a one-tool [tools].enabled into
-    # the throwaway config folder (the first place jarvis_framework looks),
-    # clear the caches, and watch both numbers move.
-    own = Path(os.environ["OPENJARVIS_CONFIG_DIR"]) / "jarvis-framework.toml"
+    # the file the reader really opens, clear the caches, and watch both
+    # numbers move.
+    #
+    # WHICH FILE THAT IS (2026-11-04, phase-2 gate). This used to write into
+    # OPENJARVIS_CONFIG_DIR and pass when the suite was run on its own - and
+    # FAIL under `backend/run_suites.py`, because the runner pins the reader
+    # to its own copy of the shipped file through JARVIS_FRAMEWORK_TOML
+    # (run_suites.py:680-684). `jarvis_framework.config_path()` honours that
+    # override FIRST, so the write below changed a file nobody read. A suite
+    # that is green alone and red in the runner is the expensive case, so the
+    # test follows the same order the reader does.
+    override = str(os.environ.get("JARVIS_FRAMEWORK_TOML") or "").strip()
+    own = (Path(override) if override else
+           Path(os.environ["OPENJARVIS_CONFIG_DIR"]) / "jarvis-framework.toml")
     had = own.read_bytes() if own.is_file() else None
     try:
         own.parent.mkdir(parents=True, exist_ok=True)
