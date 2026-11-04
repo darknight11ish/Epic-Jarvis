@@ -145,6 +145,9 @@ const ID_SHOW_HUD: &str = "show-hud";
 const ID_SHOW_BRAIN: &str = "show-brain";
 /// "Chat history…" (the chat audit, 2026-09-28): the Brain, on History.
 const ID_CHAT_HISTORY: &str = "chat-history";
+/// A second (or third, or...) conversation window (2026-11-03, the owner's
+/// ask: "have multiple conversation windows open at once").
+const ID_NEW_CHAT_WINDOW: &str = "new-chat-window";
 const ID_SHOW_FACES: &str = "show-faces";
 /// "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, 2026-10-08): the
 /// whole feature set, in plain words, read-only.
@@ -385,6 +388,13 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let show_brain = MenuItem::with_id(app, ID_SHOW_BRAIN, "Open the Brain", true, None::<&str>)?;
     let chat_history =
         MenuItem::with_id(app, ID_CHAT_HISTORY, "Chat history…", true, None::<&str>)?;
+    let new_chat_window = MenuItem::with_id(
+        app,
+        ID_NEW_CHAT_WINDOW,
+        "New chat window",
+        true,
+        None::<&str>,
+    )?;
     let show_faces = MenuItem::with_id(app, ID_SHOW_FACES, "Faces…", true, None::<&str>)?;
     // The whole feature set in one window (2026-10-08). It used to sit in the
     // windows group beside Faces, needing no separator of its own; the tray
@@ -521,6 +531,9 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         &toggle_floating,
         &floating_bigger,
         &floating_smaller,
+        // 2aa9c6492 (F6 desktop): a second conversation window, first among
+        // the destinations because it is the everyday one.
+        &new_chat_window,
         &chat_history,
         &show_faces,
         &show_features,
@@ -1756,6 +1769,23 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                     "Jarvis",
                     "The Brain could not open.",
                     &err.to_string(),
+                    commands::Details::Log,
+                );
+            }
+        }
+
+        ID_NEW_CHAT_WINDOW => {
+            // A second conversation window (2026-11-03). Each one is its own
+            // window and its own conversation; closing it never closes the
+            // others. The window list, the per-conversation dedupe and the
+            // label set live in chat_windows.rs.
+            if let Err(err) = crate::chat_windows::open_for(app, None) {
+                eprintln!("[jarvis] tray: a new chat window would not open: {err}");
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "A new chat window could not open.",
+                    &err,
                     commands::Details::Log,
                 );
             }

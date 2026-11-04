@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-shell-version-sync"
+description = "Enables the shell_version_sync command without any pre-configured scope."
+commands.allow = ["shell_version_sync"]
+
+[[permission]]
+identifier = "deny-shell-version-sync"
+description = "Denies the shell_version_sync command without any pre-configured scope."
+commands.deny = ["shell_version_sync"]

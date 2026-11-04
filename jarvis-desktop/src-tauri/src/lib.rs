@@ -27,10 +27,17 @@ pub mod appearance;
 pub mod asks_first;
 pub mod attention;
 pub mod autostart;
+// The version handshake between this executable and the backend on this PC
+// (backend_self.rs; the owner's ask of 2026-11-03 that one Update click leaves
+// both halves in step, and that the two versions are read back in words).
+pub mod backend_self;
 pub mod backend_update;
 pub mod backup;
+// Extra chat windows (chat_windows.rs; the owner's ask of 2026-11-03: "have
+// multiple conversation windows open at once").
 pub mod brain;
 pub mod browser_engine;
+pub mod chat_windows;
 pub mod chatbot_money;
 pub mod clipboard_privacy;
 pub mod clipboard_time_machine;
@@ -46,6 +53,7 @@ pub mod hardware;
 pub mod hotkeys;
 pub mod hud_calendar;
 pub mod hud_layout;
+pub mod hud_nav;
 pub mod hud_proxy;
 pub mod hud_schedule;
 pub mod hud_secret_handoff;
@@ -435,7 +443,28 @@ pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, paylo
     }
 }
 
-/// Pushes a value into the HUD page by evaluating a call to its feed.
+/// Every window that loads the HUD page: the main HUD and the extra chat
+/// windows (`chat_windows.rs`). One page, one feed, one set of rules.
+pub fn hud_page_labels(app: &AppHandle) -> Vec<String> {
+    app.webview_windows()
+        .keys()
+        .filter(|label| label.as_str() == HUD_LABEL || crate::chat_windows::is_chat_window(label))
+        .cloned()
+        .collect()
+}
+
+/// Pushes a value into every HUD page by evaluating a call to its feed.
+///
+/// The main HUD and every extra chat window load the same page and hold the
+/// same conversation states, so the link, the appearance document, the Jarvis
+/// bar's state and the one event stream all have to reach all of them - a chat
+/// window that heard none of those would draw a stale link and miss approvals.
+/// Each window is evaluated separately (there is no broadcast eval in Tauri),
+/// and a window that fails is logged and skipped, not fatal for the rest.
+///
+/// `push_to_hud_main` is the exception: a NAVIGATION must never move a window
+/// the owner was not asking about, so the areas a phone or the backend names go
+/// to the one main HUD only (`hud_nav.rs`, RESEARCH.md F4).
 ///
 /// Why a feed and not a Tauri event: this comment used to say `listen` and
 /// `invoke` are both refused inside the HUD, because `jarvis_hud.html`'s own
@@ -452,7 +481,25 @@ pub fn emit_all<S: serde::Serialize + Clone>(app: &AppHandle, event: &str, paylo
 /// by the serialiser, spliced into a call to a function the initialisation
 /// script defined. Nothing here is concatenated by hand.
 pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload: &S) {
-    let Some(hud) = app.get_webview_window(HUD_LABEL) else {
+    for label in hud_page_labels(app) {
+        push_to_hud_label(app, &label, channel, payload);
+    }
+}
+
+/// Pushes to the MAIN HUD window only. For things that must not move another
+/// window: a navigation, and the honest "the desktop has no such screen" line.
+pub fn push_to_hud_main<S: serde::Serialize>(app: &AppHandle, channel: &str, payload: &S) {
+    push_to_hud_label(app, HUD_LABEL, channel, payload);
+}
+
+/// One feed push into one window.
+fn push_to_hud_label<S: serde::Serialize>(
+    app: &AppHandle,
+    label: &str,
+    channel: &str,
+    payload: &S,
+) {
+    let Some(hud) = app.get_webview_window(label) else {
         return;
     };
     let (Ok(channel), Ok(payload)) = (
@@ -464,33 +511,32 @@ pub fn push_to_hud<S: serde::Serialize>(app: &AppHandle, channel: &str, payload:
     let script =
         format!("if (window.__jarvisFeed) {{ window.__jarvisFeed({channel}, {payload}); }}");
     if let Err(err) = hud.eval(&script) {
-        // A dropped push is the HUD's only path to the shell's event stream: it
+        // A dropped push is a HUD page's only path to the shell's event stream: it
         // keeps whatever it last had, with no indicator and no retry. The
         // minimum is that the drop is not silent - and `eprintln!` IS silence
         // in a release build, which has no console (logfile.rs's own doc). The
         // page-side gap detector the audit also asks for (T8) is not in this
         // change; see the PR's limits.
         logfile::log(&format!(
-            "[jarvis] unable to push `{channel}` to the HUD: {err}"
+            "[jarvis] unable to push `{channel}` to `{label}`: {err}"
         ));
     }
 }
 
-/// Gives the HUD page the current base, if it holds a different one - and
+/// Gives every HUD page the current base, if it holds a different one - and
 /// never a token.
 ///
-/// The page used to be given the pairing token here and in the bootstrap,
-/// so any script running in it could call the whole API (apps security
-/// audit M2). Now its requests go through `hud_proxy.rs`, which adds the
-/// token in Rust, and the page is configured with an EMPTY token, on every
-/// page load and every link change, so a token some earlier version or a
-/// browser session left in the page is wiped too. The base is still set:
-/// the page builds its URLs from it, and the bootstrap's `fetch` shim reads
-/// the path back out of them.
+/// The page used to be given the pairing token here and in the bootstrap, so
+/// any script running in it could call the whole API (apps security audit M2).
+/// Now its requests go through `hud_proxy.rs`, which adds the token in Rust,
+/// and the page is configured with an EMPTY token, on every page load and every
+/// link change, so a token some earlier version or a browser session left in
+/// the page is wiped too. The base is still set: the page builds its URLs from
+/// it, and the bootstrap's `fetch` shim reads the path back out of them.
+///
+/// Applied to EVERY HUD page - the main HUD and each extra chat window
+/// (`chat_windows.rs`) - because they are one page with one rule.
 pub fn configure_hud(app: &AppHandle) {
-    let Some(hud) = app.get_webview_window(HUD_LABEL) else {
-        return;
-    };
     let base = commands::jarvis_base(app);
     let Ok(base) = serde_json::to_string(&base) else {
         return;
@@ -504,8 +550,13 @@ pub fn configure_hud(app: &AppHandle) {
          if (typeof JARVIS.forget === 'function') JARVIS.forget(); \
          JARVIS.set({base}, '', false); }}"
     );
-    if let Err(err) = hud.eval(&script) {
-        eprintln!("[jarvis] unable to configure the HUD page: {err}");
+    for label in hud_page_labels(app) {
+        let Some(hud) = app.get_webview_window(&label) else {
+            continue;
+        };
+        if let Err(err) = hud.eval(&script) {
+            eprintln!("[jarvis] unable to configure the HUD page `{label}`: {err}");
+        }
     }
 }
 
@@ -705,6 +756,39 @@ fn summon_quick_note(app: &AppHandle) {
 /// See the file itself for what it does and why it has to run this early.
 const HUD_BOOTSTRAP: &str = include_str!("hud_bootstrap.js");
 
+/// The initialisation script one HUD page gets: the bootstrap, with the API
+/// base filled in and - for an extra chat window - the conversation it opens.
+///
+/// One builder for both kinds of window (`build_hud_window` below and
+/// `chat_windows.rs`) so the main HUD and every extra chat window can never
+/// get different shell behaviour. The base is a value a user typed into a
+/// settings field and it is spliced into JavaScript, so `serde_json` is what
+/// makes that safe: a JSON string literal escapes quotes and backslashes.
+/// No token: the page does not get one (apps security audit M2; hud_proxy.rs
+/// makes its requests).
+pub(crate) fn hud_page_script(base: &str, conversation: Option<&str>) -> String {
+    let mut script = HUD_BOOTSTRAP.replace(
+        "__JARVIS_BASE__",
+        &serde_json::to_string(base).unwrap_or_else(|_| "\"\"".into()),
+    );
+    if let Some(conv) = conversation {
+        // Serialised, so an id cannot break out of the literal. The bootstrap
+        // reads this and the page's own History host opens that chat in this
+        // window only (`chat_windows.rs`).
+        script.push_str("\ntry { window.__jarvisConversation = ");
+        script.push_str(&serde_json::to_string(conv).unwrap_or_else(|_| "\"\"".into()));
+        script.push_str("; } catch (e) {}\n");
+    }
+    script.push_str("\ntry { window.__jarvisChatWindow = ");
+    script.push_str(if conversation.is_some() {
+        "true"
+    } else {
+        "false"
+    });
+    script.push_str("; } catch (e) {}\n");
+    script
+}
+
 /// Creates the HUD window with its initialisation script.
 ///
 /// Everything here mirrors what `tauri.conf.json` used to declare for the `hud`
@@ -769,11 +853,9 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
     // into a settings field, and it is spliced into JavaScript. Serialising
     // it as a JSON string literal is exactly the escaping that needs, quotes
     // and backslashes included. No token: the page does not get one (apps
-    // security audit M2; hud_proxy.rs makes its requests).
-    let script = HUD_BOOTSTRAP.replace(
-        "__JARVIS_BASE__",
-        &serde_json::to_string(&base).unwrap_or_else(|_| "\"\"".into()),
-    );
+    // security audit M2; hud_proxy.rs makes its requests). The one builder is
+    // `hud_page_script`, shared with every extra chat window (chat_windows.rs).
+    let script = hud_page_script(&base, None);
 
     // Started by hand, the HUD is what you came for, so it opens focused.
     // Started by Windows at login it must not: a 1280x820 window taking focus
@@ -954,6 +1036,13 @@ pub fn run() {
         // type that was never managed.
         .manage(setup_offer::SetupOfferState::default())
         .manage(window_memory::PendingMaximize::default())
+        // The extra chat windows' conversation -> label map (chat_windows.rs).
+        // Managed here like every other state: a command that reads it would
+        // PANIC on a type that was never managed.
+        .manage(chat_windows::ChatWindows::default())
+        // The last version handshake this process ran (backend_self.rs), so
+        // Settings can open on the answer the start-up read already has.
+        .manage(backend_self::LastSync::default())
         .manage(RouteState::default())
         // Registered here with every other managed type, not inside setup: the
         // shortcut handler reads it and would panic on an unregistered state
@@ -1014,6 +1103,20 @@ pub fn run() {
             hud_proxy::hud_get,
             hud_proxy::hud_chat,
             hud_proxy::hud_chat_cancel,
+            // Taking the owner where Jarvis said it would (2026-11-03). The
+            // route-field path and a `ui.navigate` event both land in
+            // `hud_nav::dispatch`, so the areas the app can honestly open are
+            // ONE table: a plain "the desktop has no such screen" sentence is
+            // drawn when it cannot. Navigation only - no setting, no card.
+            hud_nav::open_jarvis_area,
+            // More than one conversation window at once (2026-11-03, the
+            // owner's ask). The second command focuses the window already
+            // showing that conversation instead of opening a second copy.
+            chat_windows::new_chat_window,
+            chat_windows::open_conversation_window,
+            // What this executable is and what the backend says it is
+            // (backend_self.rs). A read of ONE route, no update, no write.
+            backend_self::shell_version_sync,
             // The HUD Reminders tab's writes (2026-10-21, the owner's
             // request): add ONE item or change ONE job, on the same backend
             // routes the Brain uses, held on a stale link. HUD window only.
@@ -1751,7 +1854,7 @@ pub fn run() {
         if payload.event() != tauri::webview::PageLoadEvent::Finished {
             return;
         }
-        if webview.label() != HUD_LABEL {
+        if webview.label() != HUD_LABEL && !crate::chat_windows::is_chat_window(webview.label()) {
             return;
         }
         let app = webview.app_handle();
@@ -1831,6 +1934,13 @@ pub fn run() {
                     "[jarvis] the HUD window could not be created: {err}"
                 ));
             }
+
+            // The version handshake (backend_self.rs, the owner's ask of
+            // 2026-11-03): one read of GET /api/self a few seconds after start,
+            // so a desktop newer than its backend says so once in the HUD's own
+            // log instead of pretending all is well. Read-only; it starts no
+            // update and changes nothing.
+            backend_self::spawn_startup_handshake(&handle);
 
             // Vibrancy (Acrylic on the quickbar, Mica on the HUD) plus the
             // focus-loss auto-hide listener for the spotlight bar.

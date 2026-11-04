@@ -35,6 +35,13 @@ const calls = (page) => page.evaluate(() => window.__calls.map((c) => c[0]));
 
 const FOUND = { available: "0.2.0", notes: "Fixed the thing.", date: "2026-09-20" };
 
+/* The desktop-only fallback (2026-11-03). The Install button now runs BOTH
+ * halves; on a PC where the backend half cannot run at all it still installs
+ * Jarvis Desktop alone, and it must say the backend was NOT updated. Every test
+ * that drives the desktop download/progress/restart path therefore opens a PC
+ * with the backend half blocked - the path those tests were written for. */
+const BLOCKED = { where: { blocked: "The backend folder could not be found." } };
+
 /* ── The rule ────────────────────────────────────────────────────────────── */
 
 await check("a check never installs", async () => {
@@ -51,20 +58,45 @@ await check("a check never installs", async () => {
 await check("nothing installs without a press, even with one available", async () => {
   // Open the window with an update already known, wait well past anything that
   // could be a debounce, and confirm the app just sits there.
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(1200);
   const seen = await calls(page);
   await page.close();
   assert.ok(!seen.includes("__installed"), "an update installed itself");
 });
 
-await check("CONTROL: the button does install, so the negatives mean something", async () => {
+await check("CONTROL: the button runs BOTH halves, so the negatives mean something", async () => {
+  // The owner's requirement (2026-11-03): one Update press moves the desktop
+  // AND the backend together. The default scenario has both backend folders, so
+  // the press must go through update_both - through the ONE runner the
+  // "Update both halves" control also uses - and never the desktop-only install.
   const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
   await page.locator("#update-install").click();
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(500);
   const seen = await calls(page);
+  const status = await page.locator("#update-status").innerText();
+  await page.close();
+  assert.ok(seen.includes("__updatedBoth"), "the Install button did not update both halves");
+  assert.ok(!seen.includes("__installed"),
+    "the desktop-only install ran while the backend half was available");
+  assert.match(status, /backend/i, `the ending did not name the backend half: "${status}"`);
+});
+
+await check("CONTROL: on a PC whose backend half cannot run, the desktop installs alone and says so", async () => {
+  // The one honest exception: the desktop half still installs where the
+  // backend half cannot run at all, and the card must say the backend was NOT
+  // updated instead of painting a half-updated machine as done.
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
+  await page.locator("#update-install").click();
+  await page.waitForTimeout(400);
+  const seen = await calls(page);
+  const status = await page.locator("#update-status").innerText();
+  const tone = await page.locator("#update-status").getAttribute("data-tone");
   await page.close();
   assert.ok(seen.includes("__installed"), "the Install button does not install");
+  assert.ok(!seen.includes("__updatedBoth"), "update_both ran with the backend half blocked");
+  assert.match(status, /BACKEND was NOT updated/i, `the fallback read as a clean update: "${status}"`);
+  assert.equal(tone, "bad", "a half-updated PC was painted as a good state");
 });
 
 await check("CONTROL: Rust keeps checking and installing as separate commands", async () => {
@@ -99,7 +131,7 @@ await check("no update says so, with the version", async () => {
 });
 
 await check("an available update names both versions", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(300);
   const state = await page.locator("#update-state").innerText();
   const label = await page.locator("#update-install").innerText();
@@ -109,9 +141,63 @@ await check("an available update names both versions", async () => {
   assert.match(label, /0\.2\.0/, `the button says "${label}"`);
 });
 
+await check("the two versions are read back and said as IN SYNC", async () => {
+  // 2026-11-03, the owner's requirement: after an update the card shows what
+  // each half says it is. The default bridge answers the in-sync shape the
+  // real both-halves update leaves.
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  await page.waitForTimeout(400);
+  const sync = await page.locator("#update-sync").innerText();
+  const tone = await page.locator("#update-sync").getAttribute("data-tone");
+  const hidden = await page.locator("#update-sync").isHidden();
+  await page.close();
+  assert.equal(hidden, false, "the version handshake line never showed");
+  assert.match(sync, /IN SYNC/, `said "${sync}"`);
+  assert.equal(tone, "ok", "in sync was not painted as the one good state");
+});
+
+await check("a backend behind the desktop reads as a MISMATCH with what to do", async () => {
+  const page = await open({
+    update: { ...K.UPDATE_NONE, ...FOUND },
+    versionSync: {
+      desktop: "0.2.0",
+      backend: "0.1.0",
+      state: "backend-older",
+      words: "MISMATCH: the backend 0.1.0, but this HUD expects 0.2.0. " +
+        "Finish the backend update - Settings, then Updates.",
+    },
+  });
+  await page.waitForTimeout(400);
+  const sync = await page.locator("#update-sync").innerText();
+  const tone = await page.locator("#update-sync").getAttribute("data-tone");
+  await page.close();
+  assert.match(sync, /MISMATCH/, `said "${sync}"`);
+  assert.match(sync, /Finish the backend update/, "the mismatch does not say what to do");
+  assert.equal(tone, "bad", "a mismatched pair was painted as fine");
+});
+
+await check("a backend that is unreachable is said, and the card still works", async () => {
+  const page = await open({
+    update: { ...K.UPDATE_NONE, ...FOUND },
+    versionSync: {
+      desktop: "0.2.0",
+      backend: null,
+      state: "unreachable",
+      words: "Jarvis Desktop 0.2.0: backend unreachable, so the two versions " +
+        "cannot be compared. Nothing was changed.",
+    },
+  });
+  await page.waitForTimeout(400);
+  const sync = await page.locator("#update-sync").innerText();
+  const state = await page.locator("#update-state").innerText();
+  await page.close();
+  assert.match(sync, /backend unreachable/i, `said "${sync}"`);
+  assert.match(state, /0\.2\.0/, "the updates card stopped working when the backend was down");
+});
+
 await check("release notes are shown, but folded away", async () => {
   // Published text of arbitrary length, and not ours.
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(300);
   const open_ = await page.evaluate(() => document.getElementById("update-notes").open);
   // `textContent`, not `innerText`: a closed <details> renders nothing, so
@@ -194,6 +280,7 @@ await check("the update endpoint is the desktop's own rolling release, and the w
 await check("a failed install is reported, not swallowed", async () => {
   const page = await open({
     update: { ...K.UPDATE_NONE, ...FOUND },
+    updateBoth: BLOCKED,
     installFails: "signature verification failed",
   });
   await page.locator("#update-install").click();
@@ -208,7 +295,7 @@ await check("a failed install is reported, not swallowed", async () => {
 /* ── Download progress and restart ───────────────────────────────────────── */
 
 await check("the progress bar is hidden until a download starts", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(300);
   const hidden = await page.evaluate(() => document.getElementById("update-progress").hidden);
   await page.close();
@@ -216,7 +303,7 @@ await check("the progress bar is hidden until a download starts", async () => {
 });
 
 await check("a progress event with a total paints a percentage", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.locator("#update-install").click();
   // Exact multiples of a MiB, so the rendered text has no rounding to guess at.
   const mib = 1024 * 1024;
@@ -238,7 +325,7 @@ await check("a progress event with a total paints a percentage", async () => {
 });
 
 await check("a progress event with no total says so instead of guessing", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.locator("#update-install").click();
   await page.evaluate(() => window.__emit("update-progress", { downloaded: 500_000, total: null }));
   await page.waitForTimeout(100);
@@ -251,7 +338,7 @@ await check("a progress event with no total says so instead of guessing", async 
 });
 
 await check("a finished install swaps Install for Restart, not back to a status line alone", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.locator("#update-install").click();
   await page.waitForTimeout(300);
   const installHidden = await page.locator("#update-install").isHidden();
@@ -264,7 +351,7 @@ await check("a finished install swaps Install for Restart, not back to a status 
 });
 
 await check("pressing Restart calls the one command that can restart the app", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.locator("#update-install").click();
   await page.waitForTimeout(300);
   await page.locator("#update-restart").click();
@@ -277,6 +364,7 @@ await check("pressing Restart calls the one command that can restart the app", a
 await check("a restart that could not even be requested is reported, not silent", async () => {
   const page = await open({
     update: { ...K.UPDATE_NONE, ...FOUND },
+    updateBoth: BLOCKED,
     restartFails: "no window left to restart from",
   });
   await page.locator("#update-install").click();
@@ -303,7 +391,7 @@ await check("a result found at startup is still there when Settings opens", asyn
   // The window is opened LATER — after a startup check has already found
   // something. Without a cache, `update_status` rebuilt a blank answer and the
   // window said "the newest published" while the tray said 0.2.0.
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(300);
   const seen = await calls(page);
   const state = await page.locator("#update-state").innerText();
@@ -385,7 +473,7 @@ await check("an OPEN window hears the place instead of being reloaded", async ()
   // `settings-place` rather than building a new one, which would lose whatever
   // was typed in it. The page must move; a place it does not have must be
   // ignored rather than throwing.
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(300);
   await page.evaluate(() => window.scrollTo(0, 0));
   // A search in the box filters the page and hides this card. A place names one
@@ -425,7 +513,7 @@ await check("an OPEN window hears the place instead of being reloaded", async ()
 });
 
 await check("CONTROL: no page threw", async () => {
-  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND } });
+  const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(400);
   assert.deepEqual(page.__errors, [], page.__errors.join(" | "));
   await page.close();
@@ -435,3 +523,5 @@ await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe updater holds its line");
 process.exit(fails.length ? 1 : 0);
+
+

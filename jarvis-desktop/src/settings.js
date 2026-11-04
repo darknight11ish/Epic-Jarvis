@@ -171,6 +171,10 @@ const dom = {
   updateIntroOn: $("update-intro-on"),
   updateNotes: $("update-notes"),
   updateNotesBody: $("update-notes-body"),
+  // The version handshake (2026-11-03): this executable against the backend's
+  // own `backend.version`, read back from GET /api/self. Its own line, because
+  // it is about BOTH halves - the two cards above each describe one.
+  updateSync: $("update-sync"),
 
   // "Update both halves" (2026-10-13). Its own ids, because it is its own
   // control: the halves it drives are the same two the two cards above drive,
@@ -1821,6 +1825,48 @@ async function loadUpdate() {
   } catch (error) {
     report(dom.updateStatus, String(error.message || error), "bad");
   }
+  // The other half of the owner's 2026-11-03 requirement: the two versions,
+  // read back from both sides, on the same card as the Install button.
+  loadVersionSync();
+}
+
+/** The version handshake's answer, drawn. `sync` is `backend_self.rs`'s
+ *  VersionSync: desktop, backend, state and one plain sentence. A backend that
+ *  is down is a sentence, not an error card - the rest of Settings still
+ *  works. */
+function paintVersionSync(sync) {
+  if (!dom.updateSync || !sync || typeof sync !== "object") return;
+  const state = String(sync.state || "");
+  dom.updateSync.textContent = String(sync.words || "");
+  // "in-sync" is the only state allowed to paint green. Everything else is
+  // either a warning (older) or neutral information (newer/different/unknown);
+  // an unreachable backend is a warning, because a version it cannot report
+  // must not be presented as if it were fine.
+  const tone = state === "in-sync"
+    ? "ok"
+    : state === "backend-older" || state === "unreachable" || state === "unavailable"
+      ? "bad"
+      : "";
+  dom.updateSync.dataset.tone = tone;
+  dom.updateSync.hidden = false;
+}
+
+/** Reads the two versions back. Never throws: a backend that is down has its
+ *  own sentence, so the Updates card can never be blocked by it. */
+async function loadVersionSync() {
+  if (!dom.updateSync) return;
+  if (!IS_TAURI) {
+    dom.updateSync.hidden = true;
+    return;
+  }
+  try {
+    paintVersionSync(await invoke("shell_version_sync"));
+  } catch (error) {
+    dom.updateSync.textContent =
+      "Could not compare the two versions: " + String((error && error.message) || error);
+    dom.updateSync.dataset.tone = "bad";
+    dom.updateSync.hidden = false;
+  }
 }
 
 dom.updateCheck.addEventListener("click", async () => {
@@ -1869,18 +1915,81 @@ function paintProgress({ downloaded, total }) {
 dom.updateInstall.addEventListener("click", async () => {
   // No confirmation dialog, because the button is the confirmation: it only
   // appears once a check has found something, and it names the version.
-  report(dom.updateStatus, "Downloading and verifying…", "");
+  //
+  // 2026-11-03, the owner's requirement: "when i click update on the jarvis
+  // hud i want it linked to the back end so both are always updated at the
+  // same time". This ONE press therefore runs `update_both` - the backend
+  // first, then this executable - instead of the desktop-only `install_update`.
+  // The order, the pace check and the "a half that did not run is skipped, not
+  // a pass" rule all live in update.rs; this page cannot reorder them.
+  //
+  // The ONE case where the desktop half runs alone is a PC where the backend
+  // half cannot run at all (the two folders are not set, or the patch program
+  // is missing). That is not silent and not called "updated": the sentence
+  // below says the backend was NOT updated and where to finish it, and the
+  // version line underneath still names both versions.
+  report(dom.updateStatus, "Checking both halves…", "");
   dom.updateInstall.disabled = true;
   dom.updateCheck.disabled = true;
   dom.updateProgress.hidden = false;
   dom.updateProgress.dataset.indeterminate = "true";
   dom.updateProgressFill.style.width = "";
+  let where = null;
   try {
-    const version = await invoke("install_update");
-    dom.updateProgress.hidden = true;
-    report(dom.updateStatus, `${version} installed.`, "ok");
-    announce(dom.updateStatus.textContent, "assertive");
+    where = await invoke("backend_update_status");
+  } catch (error) {
+    where = null;
+  }
+  const bothPossible = Boolean(where && !where.blocked);
+  try {
+    if (bothPossible) {
+      report(
+        dom.updateStatus,
+        "Updating both halves. The backend is patched first, then Jarvis Desktop. " +
+          "This can take several minutes; Jarvis closes and starts again when the " +
+          "desktop half installs.",
+        ""
+      );
+      // Through the SAME runner the "Update both halves" control uses - the
+      // one place that starts an update - so the press cannot take a second
+      // path with its own order. This card has no pace picker, so it takes the
+      // default pace; the run reports in the both-halves card above and is
+      // mirrored here in one sentence.
+      const outcome = await runBoth("responsive");
+      const steps = (outcome && outcome.steps) || [];
+      const updated = Boolean(outcome && outcome.updatedBoth);
+      report(
+        dom.updateStatus,
+        steps.map((s) => s.detail).filter(Boolean).join(" ") ||
+          (dom.ubState && dom.ubState.textContent) ||
+          (updated ? "Both halves are updated." : "Not everything updated."),
+        updated ? "ok" : "bad"
+      );
+      if (outcome && outcome.restartNeeded) dom.updateRestart.hidden = false;
+      announce(dom.updateStatus.textContent, "assertive");
+    } else {
+      // The backend half cannot run on this PC, so the desktop half runs ALONE
+      // and says so. "Both are always updated" is only promised where both can
+      // be; pretending otherwise is the one thing this card must not do.
+      const why = (where && where.blocked) || "the backend folders are not set up";
+      report(
+        dom.updateStatus,
+        `The backend half cannot run on this PC (${why}). Installing Jarvis Desktop ` +
+          `on its own - the two may differ until the backend update is finished.`,
+        "bad"
+      );
+      const version = await invoke("install_update");
+      dom.updateProgress.hidden = true;
+      report(
+        dom.updateStatus,
+        `${version} installed on the desktop. The BACKEND was NOT updated: ${why}. ` +
+          `Finish it from "Update both halves" once the folders are in place.`,
+        "bad"
+      );
+      announce(dom.updateStatus.textContent, "assertive");
+    }
     dom.updateInstall.hidden = true;
+    dom.updateProgress.hidden = true;
     dom.updateRestart.hidden = false;
   } catch (error) {
     // A signature that does not verify lands here, and it is the one failure
@@ -1891,6 +2000,10 @@ dom.updateInstall.addEventListener("click", async () => {
     dom.updateInstall.disabled = false;
   } finally {
     dom.updateCheck.disabled = false;
+    // The two versions, read back: whichever half just moved, the line says
+    // whether the two are in step now. Never a second read that could fail
+    // silently - `loadVersionSync` has its own words for every failure.
+    loadVersionSync();
   }
 });
 
@@ -2514,8 +2627,16 @@ async function runBoth(modeId) {
   // afterwards, so it never becomes something the eye skips.
   showFallback(true);
   report(dom.ubState, "Working. Do not close this window.", "");
+  let outcome = null;
   try {
-    paintBothOutcome(await invoke("update_both", { mode: modeId }));
+    // THE one place that starts an update. Both the "Update both halves"
+    // control and the Updates card's Install press come through here, so
+    // there is a single call site and no second way to start one
+    // (tests/update-both.mjs's CONTROL pins exactly that). The outcome is
+    // returned so a caller with its OWN card (the Updates card) can report the
+    // same ending without a second run.
+    outcome = await invoke("update_both", { mode: modeId });
+    paintBothOutcome(outcome);
   } catch (error) {
     // The command itself refused — a build with no update key, a pace this
     // build does not have, or a bridge that would not answer. Say so, and
@@ -2531,6 +2652,7 @@ async function runBoth(modeId) {
     // The Start-backend button was disabled for the duration; repaint it now.
     paintBackend();
   }
+  return outcome;
 }
 
 if (dom.ubGo) {
@@ -4487,3 +4609,4 @@ loadCapabilities();
 
 loadUpdate();
 loadBoth();
+

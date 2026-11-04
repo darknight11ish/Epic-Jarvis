@@ -1018,8 +1018,8 @@ await check("the wiring is real: the card, the command, its permissions and the 
   // names the writes to prove they are refused, which is not the same thing as
   // allowing them.
   const proxy = read("src-tauri/src/hud_proxy.rs");
-  assert.match(proxy, /HUD_GET_PATHS: \[&str; 12\]/);
-  const arrayAt = proxy.indexOf("HUD_GET_PATHS: [&str; 12]");
+  assert.match(proxy, /HUD_GET_PATHS: \[&str; 15\]/);
+  const arrayAt = proxy.indexOf("HUD_GET_PATHS: [&str; 15]");
   const arrayEnd = proxy.indexOf("];", arrayAt);
   const allowed = proxy.slice(arrayAt, arrayEnd);
   assert.match(allowed, /"\/api\/setup",/);
