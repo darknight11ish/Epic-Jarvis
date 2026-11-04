@@ -2778,6 +2778,25 @@ backend routes, in both directions; the rest are listed here only.
   handshake side beyond the read both apps may make; `tools/check_parity.py`
   classifies no new phone surface.
 
+- **A scheduled task's own words (`job`) can be sent by neither app's Reminders
+  screen yet, and that is one-sided on purpose** (2026-11-03; the owner's
+  decision of 2026-11-02 that a scheduled task may run any job in his own words,
+  JARVIS-API §21.11; `backend/test_schedule_any_job.py` holds the whole slice).
+  The ABILITY is in the backend and works from any client that sends the field:
+  a reminder's `run-task` action may carry `job` (the owner's phrase, up to 240
+  characters) instead of the closed `task` name, resolved through
+  `jarvis_quick.match` at save and again at fire, refused when it would raise its
+  own approval card, and run through `jarvis_quick.run`. What is deliberately
+  one-sided is the screen: the desktop's reminder editor still sends only the
+  closed name (`jarvis-desktop/src/jarvis_hud.html:11125` returns
+  `{kind: "run-task", task: <the fixed "Then" select>}`), and the phone has no
+  `run-task` equivalent at all (`git grep run-task -- jarvis-client` finds
+  nothing). A UI on both apps is the named follow-up, not a silent omission; it
+  was kept out of this slice so the backend contract, the refusal and their
+  tests could land first. Nothing here adds a route, a Rust command, a
+  permission or a patch-carried file, so `tools/check_parity.py` has nothing new
+  to classify.
+
 - **Plugins are listed and switched by chat, and neither app has a screen for
   it - one-sided on purpose** (2026-11-02; the owner's decision: *"Jarvis may
   list plugins and turn them on/off by chat, one card per change"*; JARVIS-API
@@ -2807,6 +2826,19 @@ backend routes, in both directions; the rest are listed here only.
   therefore answers a question and never creates one, and it says so rather than
   offering a control that would have to guess. No route was added, so
   `tools/check_parity.py` has nothing new to classify.
+
+- **A routine's PARTS are answered on both apps and created only on the PC, and
+  that is one-sided on purpose** (2026-11-03, the owner's ask; JARVIS-API §21.15;
+  the same rule as the entry above, one wave later). A reminder may carry up to
+  twelve parts, each with its own time and its own buttons; the PC draws one row
+  per part under "Just went off" and the phone one notification action set per
+  part, both through the same `POST /api/schedule/act {"do": "answer", "step": k}`,
+  so answering a part is not one-sided at all. What IS one-sided is creating and
+  editing one: a part's destination can be a file on this PC's Obsidian vault or a
+  goal/habit id, and a phone cannot read this PC's folders. The phone therefore
+  answers parts, reads them, and never creates or edits a routine - and the routine
+  itself is still ONE job, so nothing about the phone's list changed shape. No
+  route was added, so `tools/check_parity.py` has nothing new to classify.
 
 - **Approving a card from a notification is the phone's surface, and that is
   one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
@@ -3462,10 +3494,21 @@ delete-all** (Ruling 15 keeps "clear named list" in the Brain window). Phase 1
 is view, add, and the EXISTING one-job actions - snooze, add time, pause,
 resume, done, delete. Editing an item's words/time/repeat, moving it between
 lists and reordering are Phase 2: they need backend actions and a rank column,
-so they need a later deploy, and they are not faked in the page. The phone is
+so they need a later deploy, and they are not faked in the page. **Since
+2026-11-03 that Phase 2 sentence is out of date and is corrected here**: the rank
+column and the `edit`/`move`/`reorder` verbs landed on the PC on 2026-10-22, and
+`EDIT_KEYS` now also carries a reminder's `action` and its routine `steps`
+(JARVIS-API §21.14, §21.15), so the page's editor has a backend to call. The parts
+editor itself landed on 2026-11-03: ONE builder inside the page's existing script
+block serves both doors - the Add form for a new routine and a row's own editor
+for an existing one - because a fifth inline `<script>` would break the CSP/hash
+rule, and it is copied to all three copies of `jarvis_hud.html` byte for byte.
+The phone is
 not missing a control: its own app already reads and acts on the same
-schedule. `tools/check_parity.py` has nothing new to classify, because no
-backend route is added and the phone's read of `/api/schedule` is unchanged.
+schedule, and it answers a routine's parts without creating or editing one (see
+"One-sided on purpose" above). `tools/check_parity.py` still has nothing new to
+classify, because no backend route is added and the phone's read of
+`/api/schedule` is unchanged.
 
 **The phone's Home row gained a Reminders button on 2026-11-02, and since that
 afternoon it opens the phone's OWN Reminders screen - the Brain's Coming up

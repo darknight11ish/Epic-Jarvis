@@ -5960,8 +5960,8 @@ repeating job then moves to its next time - never once per missed time.
 |---|---|---|---|
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
-| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` · `{"kind": "reminder", ..., "action": {...}}` (a reminder that opens something or asks to run one task: 21.11) | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
-| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, and since 2026-10-14 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-14 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` · `{"kind": "reminder", ..., "action": {...}}` (a reminder that opens something or asks to run one task: 21.11) · `{"kind": "reminder", ..., "steps": [...]}` (a reminder with PARTS - a routine, 21.15) | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. Since 2026-11-03 a REMINDER may carry `"steps"` - up to twelve parts, each with its own time and its own buttons (21.15); a routine is still ONE job and still needs no card. |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` · `{"do": "answer", "id", "button": <index>, "step"?: <index>}` (21.14, and 21.15 for `step`) · `{"do": "edit", "id", "steps"?: [...]\|null, "action"?: {...}\|null, ...}` (21.14) | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already; `answer` adds `"step"` for a routine); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, a part that has not come up yet, and since 2026-10-14 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-14 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
 
 A `job`:
 
@@ -5996,6 +5996,14 @@ A `job`:
                                   answer (21.14). ABSENT on every other job.
  "answers": [{...}],              the answers already given, oldest first (21.14).
                                   ABSENT until the first one.
+ "steps": [{...}],                a routine's PARTS, in order (21.15). ABSENT when there
+                                   are none, which is every job written before 2026-11-03.
+ "steps_parts": 4,                how many parts there are, for "2 of 4" in a title
+ "steps_cursor": 1,               which part is current, 0-based
+ "missed_parts": 2,               how many parts were skipped while the PC was away
+                                   (21.15). ABSENT when none were.
+ "steps_unreadable": true,        the stored parts could not be read, so the row fires as
+                                   an ordinary reminder and draws no part UI
  "created", "source": "quick"|"tool"|"app"}
 ```
 
@@ -6013,7 +6021,9 @@ first time it goes off, and `times` appears only when there is more than one -
 an ordinary rule's block is byte for byte what it was. Limits: 300
 characters of words, 100 timers and reminders, 300 open to-do items, a
 timer up to 24 hours, a time up to a year ahead - each said in a sentence
-when reached.
+when reached. Since 2026-11-03 a routine adds its own ceiling, reported in
+`limits` beside the rest: `"steps": 12`, how many parts one reminder may
+have (21.15).
 
 ### 21.3 The card for a repeat that reads (the briefing, "tell me when")
 
@@ -6317,6 +6327,11 @@ the times stay, so a timer still counts down.
   as new kinds (`register_kind`), not as schedulers of their own. Sleep mode
   now has, as the standby schedule (21.8), and so has the morning briefing
   (section 22).
+- **A routine (21.15) has its own gaps, all of them small and all of them
+  stated there**: the Windows toast names the part only in words (it has no
+  per-part buttons), the phone shows a part only while connected, and a part
+  whose question is never answered keeps its routine waiting instead of
+  silently moving on.
 
 ### 21.10 "Also on my phone" (added 2026-09-26, the phone only)
 
@@ -6711,7 +6726,29 @@ written before it.
 {"kind": "open-webpage", "url":  "https://example.com/invoice-42"}
 {"kind": "open-file",    "path": "C:\\Users\\you\\Pictures\\taxes.png"}
 {"kind": "run-task",     "task": "briefing"}
+{"kind": "run-task",     "job":  "add milk to my shopping list"}
 ```
+
+A `run-task` carries **exactly one** of two keys, never both: `task` is the
+closed name (the two-name list below, unchanged) and `job` is **the owner's own
+words** for the job, up to 240 characters of plain words (added 2026-11-03; the
+owner's decision: *"scheduled tasks may run any job in his own words - at fire
+time Jarvis starts it and raises ONE card naming exactly what it will do"*).
+`job` is resolved through `jarvis_quick.match()` - the same pure parse half chat's
+fast path uses - **when the reminder is saved** and **again when it fires**, so a
+phrase that no longer means what it did is refused at 07:00 instead of running
+something else. A phrase asking for a program, a command or a script is refused
+outright: there is still no shell/command/script kind, and none is ever created
+from the owner's words. A phrase that resolves to **an intent that raises its own
+approval card** (`forget_range`, `update_start`, a setting change that asks, a
+repeating briefing, "read this link", …) is **refused when the reminder is
+saved**, in one plain sentence that says it needs the owner's approval each time,
+that it therefore cannot be scheduled as one card, and which action the words
+matched; nothing is written. The refusal is repeated at fire time for any row
+that got in before the rule (or from an older build): it raises **no** second
+card, runs nothing, writes `schedule.action_refused` with `outcome:
+"needs_approval"`, and its own row view carries `action_problem` saying it did
+not run and why. A job that raises no card of its own is unchanged.
 
 No other kind exists in this slice. `open-app` was evaluated and is deliberately
 NOT shipped: the only resolver for a program is the desktop's own Start-menu
@@ -6765,13 +6802,16 @@ folder Jarvis may look in. Add its folder in Settings, Folders.").
   `PC_ONLY_ACTIONS` because it is local and reversible. A denial, an expiry, a
   refusal, a tier that is not "ask", a gate that raised, and a reminder edited
   while the card waited all run nothing, and the audit says which. Its `detail`
-  carries the job id, `due`, `what`, the closed-list task name and
-  `leaves_this_pc: false` - **never** the reminder's words, the address, the path
-  or the note, because `_redact` returns `detail` verbatim when redaction is off
-  and `detail` is handed to both apps on `/api/pending`. The target the owner
-  needs is in the card's own text.
+  carries the job id, `due`, `what`, **one of the two payloads** - the closed-list
+  task name as `task`, or the resolved intent name as `intent` for a `job` - and
+  `leaves_this_pc: false` - **never** the reminder's words, the owner's `job`
+  sentence, the address, the path or the note, because `_redact` returns `detail`
+  verbatim when redaction is off and `detail` is handed to both apps on
+  `/api/pending`. The target the owner needs is in the card's own text, which for
+  a `job` names the action in plain words (and the resolved intent beside it) -
+  e.g. "What it will do: add it to your to-do list (todo add)".
 
-**The task list is two names and nothing else:** `briefing` and `backup`.
+**The `task` list is two names and nothing else:** `briefing` and `backup`.
 `briefing` calls `jarvis_briefing.make` and rings the existing `schedule` ->
 `"ready"` event, so a briefing made by a reminder appears exactly like one made by
 a briefing job. **`backup` is refused when the reminder is saved, with its
@@ -6781,7 +6821,11 @@ past the response that shows it once"), and a reminder that fired at 07:00 has
 nobody to show it to - so it would write an archive nobody could ever open. The
 sentence says that and points at "Back up now" in the Brain. `switch_model` is
 deliberately not on the list either: a reminder must not be able to pre-approve a
-loosening that has its own card.
+loosening that has its own card. **`job` is the other door, and it reaches no
+executor of its own:** it runs through `jarvis_quick.run`, the same chat path, so
+every job that runs without a card of its own can be scheduled, and every job
+that would raise one is refused by the rule above. `backup` remains unreachable
+this way too: "back up now" is not a `jarvis_quick` intent at all.
 
 **The desktop command: `open_reminder_target(id)`.** ONE new Tauri command, and it
 takes the reminder's **id and nothing else** - never a URL, never a path, so no
@@ -6821,7 +6865,12 @@ id only.
 `schedule.action_asked {"id","kind","what"}`, `schedule.action_refused
 {"id","outcome"}`, `schedule.action_ran {"id","what"}`, `schedule.action_failed
 {"id","what","error": <ExceptionName>}`, `schedule.action_unreadable {"id"}`.
-Never the words, the address, the path or the note.
+Never the words, the address, the path, the note or the `job` sentence. A
+`job`'s `what` is the resolved intent name (a closed token), never the owner's
+words. `schedule.action_refused`'s `outcome` is `refused`, `denied`,
+`timed_out`, `withdrawn`, `unknown` (the phrase stopped resolving, or asked for
+a shell/command/script) or `needs_approval` (the phrase resolved to a job that
+raises its own card, so the one-card guard did not run it).
 
 **Phone.** It creates and edits nothing in this slice (a phone cannot read the
 PC's folders, and a client must not edit deep configuration). It shows a fired
@@ -7109,10 +7158,19 @@ and the `ask` kind (it refuses the block at save rather than storing something i
 cannot draw), so a code rollback leaves every job readable.
 
 **Not in this slice, said plainly:** a button that opens a file or a page (see
-above), editing an existing reminder's question or buttons (the form adds one;
-the editor does not change it yet), a builder on the phone (it answers; it does
-not create — the reason is in `docs/ARCHITECTURE.md` §8), and answer buttons on
-the Windows toast.
+above), a builder on the phone (it answers; it does not create — the reason is in
+`docs/ARCHITECTURE.md` §8), and answer buttons on the Windows toast.
+
+**Editing one, since 2026-11-03.** The one gap this paragraph used to name —
+*"editing an existing reminder's question or buttons (the form adds one; the
+editor does not change it yet)"* — is **closed**. `POST /api/schedule/act
+{"id", "do": "edit", "action": {...}}` revalidates through the same `_clean_action`
+the add door uses, so a question that could only be fixed by deleting the
+reminder and retyping it can now be edited in place. It is **cardless**, like the
+buttons themselves: changing a question changes nothing about what the owner is
+allowed to do, and the block was already cardless when it was created. `"action":
+null` takes it away. A `repeat` change still raises its ONE `schedule_repeat` card
+(202) and is unchanged. The same edit door carries a routine's `steps` (21.15).
 
 **The repeat grammar the same request asked for** (this section's other half).
 On top of `every day`, `every weekday`, `every week on chosen days` and `every N
@@ -7139,7 +7197,7 @@ it was not there (`jarvis_schedule.check_rule` knew four kinds, none of them
 monthly); it is here now, and `RULES`' own refusal sentence names every kind so a
 mistake is answerable.
 
-Tests: `backend/test_schedule_ask.py` — 152 checks over the block at save and at
+Tests: `backend/test_schedule_ask.py` — 155 checks over the block at save and at
 read, the three button verbs, the rails, firing with no card, every answer path,
 a snoozed question coming back as a question, the four destinations (with the
 journal faked, so nothing on the owner's PC is touched), the 40-answer bound, the
@@ -7147,6 +7205,185 @@ route, the audit never carrying a word, and the whole grammar with its plain
 words and its end date really stopping a repeat.
 The PC's own half is pinned in `hud_schedule.rs` and `brain/schedule.rs`; the
 phone's in `ScheduleTest`.
+
+### 21.15 A reminder with PARTS — routines (added 2026-11-03)
+
+The owner asked for multi-part reminders and routines on 2026-11-02; Gemini's
+rulings Q8/Q9 chose **Option A**: one reminder holds up to twelve PARTS, each
+with its own time and its own buttons, in the **same row** of `schedule.db` — not
+a parent job with children. One row means every path that already walks a row
+(snooze, the repeat card, `next_due`, the HUD's Coming up, the phone's list) keeps
+working untouched; a parent with children would have needed a cascade rule in
+every one of them.
+
+**The stored shape** — two nullable columns on `jobs`, appended to the migration
+list exactly as the sixteen before them were:
+
+```
+steps = [                                   2..12 parts, in order
+  {"id": "p1",                              stable inside this row, "p" + 1-based index
+   "label": "start the laundry",             the owner's words for THIS part, one line
+   "offset_min": 0,                          minutes after the occurrence, or null
+   "at": null,                               "HH:MM" on the occurrence's own day, or null
+   "ask": {...}}                             OPTIONAL - the existing action block
+]
+step_state = {"anchor": <epoch>, "cursor": 1,
+              "parts": [{"fired": <epoch>|null, "done": <epoch>|null, "missed"?: true}]}
+```
+
+`steps` is the immutable shape and `step_state` the moving part, which is why they
+are two columns and not one: a read door decodes the shape without trusting the
+state. Both are NULL on every other row, so an old file opens, an old reader
+ignores them, and a code rollback stays safe — the same contract `action` and
+`answers` came in on. `parts` is always the same length as `steps`; a stored pair
+that disagrees is treated as unreadable (§ below).
+
+**A part's block is the existing one, not a second one.** `ask` is checked by
+`_clean_action` — the same validator a reminder's own `action` uses — so a part is
+either a QUESTION (the 21.14 block: one to three buttons, the 24-character label,
+the no-duplicate-labels rule, a `record` button with one of the four destinations
+from `_clean_record`) or one `run-task` (the closed task, or since #1119 the
+owner's own words). Nothing about a part is parsed twice or reimplemented. A part
+with no block is a plain checklist line and gets the ONE implicit button
+`{"label": "Done", "does": "done"}`, so both apps draw the same thing and no new
+verb is needed.
+
+**Two kinds of part, and a mixed routine is legal.**
+
+* **TIMED** — `offset_min` (minutes after the occurrence's anchor) or `at` (a
+  clock time on the occurrence's own day). Its own moment is its own notification.
+* **UNTIMED** — `offset_min: null`, `at: null`. It never touches `due`; it is
+  surfaced by the answer to the part before it. The FIRST part is the exception:
+  the start time is the moment the routine begins, so part 1 is what the start
+  announces.
+
+In a mixed routine the timed parts fire **by the clock whether or not the untimed
+one was answered** — said here rather than left to be discovered.
+
+**One notification per part, with no second scheduler.** `due` means *the next
+moment this row has something to say*: it is the earliest part's moment on
+creation, moves to the next timed part's moment at each fire, and goes NULL when
+nothing is left on the clock. `tick` therefore fires part 2 and part 3 through the
+same loop that fires a plain reminder, and `next_due` — what the loop sleeps on —
+needs no change at all. The event carries two additive keys an old client ignores:
+`"step": 2` and `"parts": 4`, so both apps can say "Morning routine · 2 of 4" and
+put THAT part's buttons on the notification.
+
+**Dedupe is on disk.** `step_state.parts[i].fired` is the mark, written in the same
+`UPDATE` as `due`, so a restart, a second process or a retry inside one process
+cannot notify the same part twice. The in-memory `_acted` set is **not** used for
+parts: it is for the (job, due) pair a *card* was asked about.
+
+**A part that was missed while the PC was away.** A part is a distinct action
+(laundry → dryer → fold), not a repeat occurrence, so the 2026-09-26 "once, late,
+never once per missed time" rule does not literally apply to it: each part gets its
+own notification, marked `missed at 08:45`. But unbounded catch-up is how a feature
+becomes a nuisance, so there is a hard guard: a part whose moment is more than
+`PART_LATE_MAX` (**12 hours**) before now is marked `missed`, **not** notified, and
+counted in the row's `missed_parts`. A week-long shutdown times twelve parts times
+a daily rule is therefore not eighty-four notifications.
+
+**Answering a part.** `POST /api/schedule/act {"id", "do": "answer", "button": n,
+"step": k}` — one optional index, no new verb and no new route. `k` is an index
+into `steps`, never a label, the same rule `button` keeps. `step` may be left out,
+and then the part that is current is answered. Each answer is ONE log line in the
+existing `answers` column with a `step` key: one log, one bound (`MAX_ANSWERS`),
+one `_view` field, no second history. Answering an untimed part surfaces the next
+one immediately — that tick of the log **is** the sequencing. 409 "That part has not
+come up yet." when the part has not fired.
+
+**Only a `run-task` part raises a card.** A part that asks a question raises
+nothing — an answer is a log line, cardless — and a part that runs a task raises
+the existing `schedule_action` card, once, for THAT part, through `_fire_action`
+unchanged. Its `(jid, due)` dedupe pair carries the part's index (`(jid, due,
+step)`), or a routine's second `run-task` part at another time would be refused as
+a duplicate and silently never ask. The card's `prompt` names which part it is for;
+its `detail` carries ids, the closed-name task and the index — never the owner's
+words.
+
+**A repeat re-seeds each occurrence.** After the last part a repeating routine
+starts its next occurrence with a fresh `step_state` anchored at that occurrence,
+so yesterday's parts are never "done" today. A routine's LAST part Done ends the
+routine exactly as any repeating reminder's Done does — one button, one meaning
+(Q3). A snoozed routine's copy carries `steps` verbatim and a **fresh** state
+anchored at the copy's own `due`, so a snoozed routine runs again from part 1.
+
+**Creating one in chat is cardless, and leaves one Undo receipt.** Two sentence
+forms, one intent, no card:
+
+* a **timed chain** — *"remind me at 8 to start the laundry, then at 8:30 move it
+  to the dryer, then at 9 fold it"* — each clause becomes a timed part; `+45m` and
+  *"45 minutes later"* work too;
+* a **checklist** — *"morning routine at 7: 1. meds 2. keys 3. badge"*, also
+  *"routine: meds, keys, badge"* and *"checklist …"* — part 1 is the start time and
+  the rest are untimed. **With no time anywhere the answer is ONE question**
+  ("When should the first part come up?") rather than a guess: a routine that fired
+  at midnight because the sentence had no time is the worst failure this feature
+  can have.
+
+The reply is the numbered echo, built by one function (`_step_words`) so chat and
+both apps say the same words:
+
+```
+Morning routine set for 08:00 today, in 3 parts:
+  1. meds - 07:00
+  2. keys - after 1
+  3. badge - after 2
+Say "cancel that" to undo, or edit it under Coming up.
+```
+
+Creating is cardless because a one-off reminder has needed no card since
+2026-09-25. It also writes **ONE `jarvis_receipts` entry** (`tool_name`
+`schedule_routine_create`), so **Undo outlives the 120-second "cancel that"
+window** and survives a restart through the registered restorer. That entry is
+written AFTER the row exists — a deliberate, stated deviation from `record()`'s
+"before the change" docstring, because a creation has nothing to snapshot before
+it and the id is what the receipt needs; if `record()` returns `""` nothing is
+lost, because "cancel that" still works for its own two minutes. **Pressing Undo
+raises the ordinary `undo_action` card**: creation is cardless, undoing it is a
+mutating action, and the one permission model is not bypassed.
+
+**Editing one.** `POST /api/schedule/act {"id", "do": "edit", "steps": [...]}` —
+the same `EDIT_KEYS` door as `text`/`when`/`repeat`, checked by the same
+`_clean_steps` the add door uses, all-or-nothing, and cardless. `"steps": null`
+clears the parts, leaving an ordinary reminder. One edit may not say both a
+`repeat` and its `steps`: both move where the occurrence starts, and one edit
+cannot say which wins.
+
+**The phone answers parts and never creates or edits one** — the standing
+one-sided rule in `docs/ARCHITECTURE.md` §8, and for the reason written there: a
+part's destination can be this PC's Obsidian vault or a goal/habit id.
+
+**Privacy.** The audit line for an answered part carries the id, the INDEX and what
+the button does — never the question, a label or a written line. A part's label is
+the owner's own words like the row's `text`, so App lock and the hidden lists blank
+it exactly the same way.
+
+**Honest limits, said plainly.** The PC is still the clock (21.1): a part that
+would have gone off while the phone was away is not pushed later, it is simply
+later. The Windows toast names the part in words and carries no per-part buttons in
+this build — the HUD's row and the phone's notification are where a part is
+answered. A part with three buttons leaves no Stop on the Android notification,
+which is already true of an `ask` reminder (21.14). A part whose question is never
+answered keeps its routine waiting rather than guessing that it was done: the
+routine's own Done on the last part is what ends it. And a routine whose parts
+never get answered does not roll on to the next occurrence — say Done on it, or
+delete it.
+
+**Back-compat and rollback.** A job with no parts carries **no new key at all**, in
+the payload or in the event, and `status()` gains the additive marker `"steps":
+true` beside `"phase2"`, `"actions"` and `"asks"` — an older backend would
+silently drop `steps`, so a newer UI hides the parts editor instead of pretending.
+`limits.steps` is 12.
+
+Tests: `backend/test_schedule_steps.py` — 214 checks in named groups: the schema
+and its all-or-nothing ALTER, every save refusal, a damaged block firing as an
+ordinary reminder, one notification per part with `due` walking, the missed-policy
+both ways, sequential surfacing, the on-disk dedupe across a restart, the repeat
+re-seed, `step` routing and its 400/409, one card per `run-task` part and none for
+anything else, the edit door, the additive view, the audit never carrying a word,
+both chat forms with the numbered echo and the Undo receipt (including undo after
+a restart), and a reminder with no parts behaving exactly as it did before.
 
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
