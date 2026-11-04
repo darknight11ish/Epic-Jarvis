@@ -7692,9 +7692,14 @@ _FILES_READ = re.compile(
     r"(?:files|documents|folders|docs)\b.*"
     r"|do\s+you\s+have\s+access\s+to\s+(?:my|the)\s+(?:files|documents|folders)\b.*")
 _SCREEN_SEE = re.compile(
-    # "look at my screen" is DELIBERATELY absent: it belongs to the Live read
-    # (#691) and this fast path must not intercept it.
-    r"(?:see|read)\s+(?:my|the)\s+(?:screen|desktop|monitor)\b.*"
+    # "look at my screen" AND "read my screen" are DELIBERATELY absent: both
+    # are PR #691's own Live reads (JARVIS-API.md section 153; the phrases are
+    # pinned in test_voice_reflex.py's READS_691 through
+    # jarvis_voice_ui.SCREEN_ASK) and this fast path must not intercept them.
+    # What is left is the CAPABILITY question - "can you see my screen", "do
+    # you have access to my screen" - which #691 does not answer and the model
+    # used to invent. An imperative "read" is #691's, never this one's.
+    r"see\s+(?:my|the)\s+(?:screen|desktop|monitor)\b.*"
     r"|do\s+you\s+have\s+access\s+to\s+(?:my|the)\s+(?:screen|desktop|monitor)\b.*")
 _CALENDAR_ACCESS = re.compile(
     r"(?:read|see|check|access)\s+(?:my|the)\s+(?:calendar|calendars|schedule)\b.*"
@@ -9963,11 +9968,17 @@ _SELF_MEMORY = re.compile(
 #: one disk reader and one sentence, not a second one in this file. The
 #: "my storage" forms are deliberately ABSENT: "what is my storage on Google"
 #: is not this PC's disk.
+#:
+#: The "is there" form is a WHOLE SENTENCE here, with no tail. A sentence that
+#: names a device - "how much free disk space is there ON MY PC" - is PC help's
+#: own disk question (`_PC_HELP` "disk", which answers free GB and % per drive),
+#: and `_self_answers` runs BEFORE `_pc_help`, so `.*` there intercepted it
+#: (test_pc_help.py). Without the tail it falls through to that existing route.
 _SELF_STORAGE = re.compile(
     r"how\s+much\s+(?:free\s+)?(?:storage|space|disk\s+space|disk|room)\s+"
     r"(?:is\s+(?:left|free|available)|do\s+(?:you|we)\s+have|have\s+you\s+got)\b.*"
     r"|how\s+much\s+(?:free\s+)?(?:storage|space|disk\s+space|disk)\s+"
-    r"(?:is\s+there|remains?|left)\b.*"
+    r"(?:is\s+there|remains?|left)(?:\s+(?:left|available|free))?"
     # The bare question: "how much disk space", "how much storage left".
     r"|how\s+much\s+(?:free\s+)?(?:storage|space|disk\s+space|disk)(?:\s+left)?\s*$")
 
@@ -13688,7 +13699,8 @@ def _pair_sensitive_say(v: dict) -> str:
                 "wait for you.")
     return ("Background learning is on and \"Also remember sensitive topics "
             "automatically\" is off: an ordinary fact is saved without asking, and a "
-            "sensitive one is not saved at all until you say yes on its own card. "
+            "sensitive one waits for its own card instead - approving that card saves "
+            "it. "
             "Turning the sensitive switch on would save those without a per-fact "
             "yes - and it loosens a rule, so it raises one card first.")
 

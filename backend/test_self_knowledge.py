@@ -205,8 +205,18 @@ def answers_are_the_owners_own_read():
     for card in cards:
         check(f"the hardware answer names the real card {card.get('name')!r}",
               str(card.get("name") or "") in reply, reply[:300])
-    check("... and counts them from the same read",
-          f"{len(cards)} graphics" in reply, reply[:200])
+    if cards:
+        check("... and counts them from the same read",
+              f"{len(cards)} graphics" in reply, reply[:200])
+    else:
+        # A CI runner (Linux, no NVIDIA card) has no count to check, and the
+        # hardware read honestly reports none. The property under test is "the
+        # answer follows the read", so it is asserted on that platform too:
+        # the count is never invented, and the answer says it could not read a
+        # card rather than claiming "0 graphics".
+        check("... and with no card readable it says so instead of counting",
+              "could not read this PC's graphics cards" in reply
+              and "0 graphics" not in reply, reply[:200])
 
     # -- speed: jarvis_model_knowledge.bench_for is the record it quotes.
     real_model = Q._model_record
@@ -267,8 +277,19 @@ def answers_are_the_owners_own_read():
     direct = PC.answer("space_all")
     check("the storage answer is the pc_facts disk answer, character for character",
           said("how much storage is left") == direct, said("how much storage is left"))
-    check("... and that answer has a real free-space figure in it",
-          "GB free of" in direct, direct)
+    disks = (PC.collect() or {}).get("disks")
+    if isinstance(disks, list) and disks:
+        check("... and that answer has a real free-space figure in it",
+              "GB free of" in direct, direct)
+    else:
+        # jarvis_pc_help._read_disks is Windows-only (`os.name != "nt"` -> None),
+        # so on the Linux CI runner there is no drive to quote and the same
+        # answer is the honest "could not read your drives" sentence. That is
+        # the property to assert there: no invented figure, and the answer says
+        # it could not read one - never a number typed into this file.
+        check("... and with no drive readable it says so and quotes no figure",
+              "could not read your drives" in direct and "GB free of" not in direct,
+              direct)
     real_answer = PC.answer
     try:
         PC.answer = lambda shape, drive="", facts=None: f"SENTINEL {shape}"
