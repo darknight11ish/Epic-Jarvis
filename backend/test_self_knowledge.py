@@ -155,16 +155,35 @@ def every_family_answers_without_the_model():
 
 def answers_are_the_owners_own_read():
     """A FIXTURE FLIP AT THE READER'S OWN SEAM MOVES THE ANSWER."""
-    # -- hardware: every card the hardware read names must be in the answer.
-    cards = [c for c in (HW.status().get("cards") or ()) if isinstance(c, dict)]
-    reply = said("what hardware do you have")
-    for card in cards:
-        check(f"the hardware answer names the real card {card.get('name')!r}",
-              str(card.get("name") or "") in reply, reply[:300])
-    check("... and counts them from the same read",
-          f"{len(cards)} graphics" in reply, reply[:200])
+    # -- context and speed: the preset CHOICE is the real file, so flip it.
+    choice = Path(PR._choice_path())
+    had = choice.read_bytes() if choice.is_file() else None
+    try:
+        choice.parent.mkdir(parents=True, exist_ok=True)
+        choice.write_text(json.dumps({"preset": "coding"}), encoding="utf-8")
+        ctx = said("what is your context window")
+        coding = Q._preset_row("coding") or {}
+        want_ctx = int(coding.get("context") or 0)
+        check("the context answer is the chosen preset's own number",
+              f"{want_ctx:,} tokens" in ctx, f"{ctx} / {want_ctx}")
+        check("... and names the preset it came from", "Coding" in ctx, ctx)
+        running = said("what are you running on")
+        check("the running answer names the same preset's model",
+              str(coding.get("model") or "") in running, running[:300])
+        want_speed = K.bench_for(str(coding.get("model") or "")) or {}
+        speed = said("how fast are you")
+        if isinstance(want_speed.get("tok_s"), (int, float)):
+            check("the speed answer quotes the chosen model's measured tokens a second",
+                  f"{float(want_speed['tok_s']):.1f}" in speed, f"{speed} / {want_speed}")
+            check("... and says where that figure came from",
+                  str(want_speed.get("source") or "")[:20] in speed, speed)
+    finally:
+        if had is None:
+            choice.unlink(missing_ok=True)
+        else:
+            choice.write_bytes(had)
 
-    # -- context and speed: the preset row is the source, so a fake row moves it.
+    # -- context also follows a preset row the PC is handed, not a constant.
     real_row, real_model = Q._preset_row, Q._model_record
     try:
         Q._preset_row = lambda _pid: {"title": "Probe", "model": "probe:1b",
@@ -172,14 +191,22 @@ def answers_are_the_owners_own_read():
                                       "context": 123456}
         Q._model_record = lambda: "probe:1b"
         ctx = said("what is your context window")
-        check("the context answer is the preset row's own number",
+        check("a flipped preset row moves the context answer",
               "123,456 tokens" in ctx, ctx)
-        check("... and names the preset it came from", "Probe" in ctx, ctx)
         running = said("what are you running on")
-        check("the running answer uses the same row",
+        check("... and the running answer too",
               "probe:1b" in running and "Probe card" in running, running[:300])
     finally:
         Q._preset_row, Q._model_record = real_row, real_model
+
+    # -- hardware: the hardware read is the source, and it names every card.
+    cards = [c for c in (HW.status().get("cards") or ()) if isinstance(c, dict)]
+    reply = said("what hardware do you have")
+    for card in cards:
+        check(f"the hardware answer names the real card {card.get('name')!r}",
+              str(card.get("name") or "") in reply, reply[:300])
+    check("... and counts them from the same read",
+          f"{len(cards)} graphics" in reply, reply[:200])
 
     # -- speed: jarvis_model_knowledge.bench_for is the record it quotes.
     real_model = Q._model_record

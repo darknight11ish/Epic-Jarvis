@@ -14888,14 +14888,30 @@ def _how_running_words() -> str:
         ctx = 0
     title = str((row or {}).get("title") or "")
     if model or title:
-        head = f"I am running {model or 'a model this PC does not name'}"
-        if card:
-            head += f" on the {card}"
-        if title:
-            head += f' under the "{title}" preset'
-        if ctx:
-            head += f", with {ctx:,} tokens of context"
-        bits.append(head + ".")
+        if model:
+            head = f"I am running {model}"
+            if card:
+                # The Coding preset's lane card is the words "both cards", so
+                # "on the both cards" must read "across both cards".
+                head += (f" across {card}" if card.lower().startswith("both")
+                         else f" on the {card}")
+            if title:
+                head += f' under the "{title}" preset'
+            if ctx:
+                head += f", with {ctx:,} tokens of context"
+            bits.append(head + ".")
+        else:
+            # No running record: name the chosen preset's model as the PLAN -
+            # never as the model that is running (the same split
+            # `_run_model_current` makes).
+            plan = str((row or {}).get("model") or "")
+            said = (f'This PC does not record which model is running. The preset '
+                    f'chosen is "{title}"'
+                    + (f", which uses {plan}" if plan else "")
+                    + (f" on the {card}" if card and not card.lower().startswith("both")
+                       else (f" across {card}" if card else ""))
+                    + (f", with {ctx:,} tokens of context" if ctx else "") + ".")
+            bits.append(said)
     else:
         bits.append("This PC does not record which model or preset is loaded, so I "
                     "cannot name what I am running on right now.")
