@@ -421,6 +421,27 @@ def main():
           got is not None and got.name == "model_current", got)
 
     # ------------------------------------------------------------------
+    #  7b. The owner's own words for the same fact (Q7, 2026-11-03)
+    # ------------------------------------------------------------------
+    # Measured before this: "which model is answering me" matched NOTHING and
+    # went to the local model, which guessed; the question is the same fact
+    # "which model are you using" already answers from this PC's own records.
+    for text in ("which model is answering me",
+                 "which model is answering me, and why",
+                 "which model is answering",
+                 "what model is answering me"):
+        got = Q.match(text)
+        check(f"'{text}' is model_current, not the model",
+              got is not None and got.name == "model_current", got)
+    got = Q.match("which model is answering me")
+    said = Q.run(got, sched, 1793505565.0).reply if got is not None else ""
+    check("...and it answers with the real running model",
+          "qwen3.5:9b" in said, said)
+    check("near miss: 'which model answered that' keeps its own intent",
+          (Q.match("which model answered that") or types.SimpleNamespace(name=None)).name
+          == "model_answerer", Q.match("which model answered that"))
+
+    # ------------------------------------------------------------------
     #  8. No card, no switch, no cloud call, no socket
     # ------------------------------------------------------------------
     check("no card: jarvis_presets.apply_from_body was never called",

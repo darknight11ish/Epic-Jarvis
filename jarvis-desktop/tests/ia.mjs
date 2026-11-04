@@ -263,11 +263,17 @@ await check("the menu is sentence case and grouped", async () => {
   // the top level are in the one "More…" submenu, each still the same handle
   // `Rows` re-labels. A row that quietly vanished would otherwise look exactly
   // like a tidy menu.
-  const more = tray.slice(tray.indexOf("let more = Submenu::with_items"));
-  const moreItems = more.slice(more.indexOf('"More…"'), more.indexOf(")?;"));
+  //
+  // The rows live in `more_items` and are handed to `Submenu::with_items`
+  // rather than written inline, because `update` is parented only while an
+  // update exists (2026-11-03) - so the slice starts at the list. `&row,` is
+  // the plain rows; `&update)` is the one pushed conditionally.
+  const at = tray.indexOf("let mut more_items");
+  const moreItems = tray.slice(at, tray.indexOf("let more = Submenu::with_items", at));
   for (const row of ["waiting", "watch", "toggle_widget", "toggle_floating", "chat_history",
     "show_faces", "show_features", "backend", "reconnect", "status_check", "update"]) {
-    assert.match(moreItems, new RegExp(`&${row},`), `${row} left the menu instead of moving into More…`);
+    assert.match(moreItems, new RegExp(`&${row}[,)]`),
+      `${row} left the menu instead of moving into More…`);
   }
   // The top level itself is the trimmed shape, in order. Every row here is
   // rebuilt only by editing this list on purpose - which is what stops the
