@@ -72,6 +72,14 @@ os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "config" / "receipts.db")
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
+# The framework module the real backend ships beside these modules lives in
+# `backend/rebuilt/` in a checkout; putting it on the path is what makes
+# jarvis_asks_first.tools_enabled_set() read the shipped
+# `jarvis-framework.toml` here exactly as it does on an install (the same
+# arrangement test_reach.py uses). Without it the framework import is absent
+# and the tool counts would honestly say "unknown" instead of 13.
+if str(HERE / "rebuilt") not in sys.path:
+    sys.path.append(str(HERE / "rebuilt"))
 from _where import require_shipped, BACKEND  # noqa: E402
 
 require_shipped("jarvis_self_portrait.py")
@@ -173,6 +181,139 @@ def settings_match_the_registry():
           and bool(face.get("options")) == _spec_beside_backend(),
           f"face options={bool(face and face.get('options'))}, "
           f"spec beside backend={_spec_beside_backend()}")
+
+
+def choice_values_are_read_not_assumed():
+    """THE TEN CHOICES REPORT THEIR REAL VALUE (2026-11-04 audit gap 2).
+
+    The portrait used to hard-code value:null / value_known:false for every
+    choice row. The reader existed - `jarvis_settings_registry.current_value`,
+    the same one the Settings explainer has used since 2026-11-03 - and only
+    this page did not call it. This drives that one reader first, then flips
+    three REAL stored files in the throwaway config folder and watches the
+    portrait move with each of them, so a constant cannot pass.
+    """
+    rows = {r["id"]: r for r in SP.settings() if r["kind"] == "choice"}
+    check("all ten choice rows are in the portrait",
+          len(rows) == len(REG.CHOICE_SETTINGS))
+    mismatched = [key for key in rows
+                  if rows[key]["value"] != REG.current_value(
+                      next(c for c in REG.CHOICE_SETTINGS if c.key == key))]
+    check("every choice's value is the registry reader's own answer, word for word",
+          not mismatched, str(mismatched))
+    known = [k for k, r in rows.items() if r["value_known"]]
+    check("at least nine of the ten choices report a live value on this tree",
+          len(known) >= 9, f"known={sorted(known)}")
+    check("a known value is a non-empty string",
+          all(isinstance(rows[k]["value"], str) and rows[k]["value"]
+              for k in known))
+    check("an unknown choice says why, and never invents a value",
+          all(rows[k]["value"] is None and rows[k]["value_why"]
+              for k in rows if not rows[k]["value_known"]))
+    check("the unreadable choice here is the face, with its own honest reason",
+          [k for k, r in rows.items() if not r["value_known"]] == ["face"],
+          str([k for k, r in rows.items() if not r["value_known"]]))
+    # THE FILE IS THE SOURCE: three settings, three different stores. Each is
+    # written by the module's OWN path function, so the test cannot pass by
+    # writing somewhere the reader does not look.
+    import jarvis_handoff_mode as HM
+    import jarvis_antislop as AS
+    import jarvis_manner as MN
+    flips = ((HM.settings_path(), {"mode": "keep_offering"}, "handoff_mode",
+              "keep offering"),
+             (AS.state_path(), {"mode": "after"}, "antislop_mode", "after"),
+             (MN.settings_path(), {"personality": "dry_wit"}, "personality",
+              "Dry & Deadpan"))
+    saved = {p: (p.read_bytes() if p.is_file() else None)
+             for p, _doc, _key, _want in flips}
+    try:
+        for path, doc, _key, _want in flips:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(doc), encoding="utf-8")
+        SP._clear_caches()
+        after = {r["id"]: r for r in SP.settings() if r["kind"] == "choice"}
+        for _path, _doc, key, want in flips:
+            check(f"changing {key}'s own stored file changes the portrait's answer",
+                  after[key]["value"] == want and after[key]["value_known"] is True,
+                  f"{after[key]['value']!r} != {want!r}")
+        for path, _doc, _key, _want in flips:
+            if saved[path] is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(saved[path])
+        SP._clear_caches()
+        back = {r["id"]: r for r in SP.settings() if r["kind"] == "choice"}
+        check("putting the stored files back puts the portrait back",
+              all(back[k]["value"] == rows[k]["value"] for k in rows))
+    finally:
+        for path, _doc, _key, _want in flips:
+            if saved[path] is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(saved[path])
+        SP._clear_caches()
+
+
+def tool_counts_are_the_real_tools():
+    """`counts()["tools"]` IS THE TOOL COUNT (2026-11-04 audit gap 3).
+
+    It used to be the asks-first row count - 136 on the audit tree - which the
+    model's own self_portrait tool repeated as its tool count. The real pair is
+    jarvis_agent.TOOLS (registered) and the owner's [tools].enabled (enabled);
+    this drives both and then flips the settings file to prove neither is a
+    constant.
+    """
+    import jarvis_agent as A
+    import jarvis_asks_first as AF
+    inv = SP.tool_inventory()
+    check("the registered count is jarvis_agent.TOOLS' own length",
+          inv["registered"] == len(A.TOOLS) == 51, str(inv["registered"]))
+    check("the enabled count is the settings file's own list",
+          inv["enabled"] == len(AF.tools_enabled_set()) == 13,
+          f"{inv['enabled']} vs {len(AF.tools_enabled_set())}")
+    check("the names are the registries' own, not a label list",
+          sorted(inv["enabled_names"]) == sorted(AF.tools_enabled_set())
+          and sorted(inv["registered_names"]) == sorted(A.TOOLS))
+    c = SP.counts(SP.build(refresh=True))
+    check("counts()['tools'] is the enabled tool count, not the asks-first rows",
+          c["tools"] == 13 and c["tools"] == c["tools_enabled"]
+          and c["tools_registered"] == 51 and c["asks_first_rows"] > 100, str(c))
+    check("the old number kept its true name and its true size",
+          c["asks_first_rows"]
+          == sum(len(g["rows"]) for g in SP.asks_first()["groups"]))
+    counted = A._run_self_portrait({})
+    check("the model tool's dict carries both true counts, never 136",
+          counted["counts"]["tools"] == 13
+          and counted["counts"]["tools_registered"] == 51
+          and counted["counts"]["asks_first_rows"] > 100, str(counted["counts"]))
+    said = SP.refresh_sentence({}, c)
+    check("the refresh sentence names tools as tools, not as ask-first actions",
+          "51 tools (13 offered to the AI model)" in said
+          and "136 ask-first actions" in said, said)
+    # THE SETTINGS FILE IS THE SOURCE. Write a one-tool [tools].enabled into
+    # the throwaway config folder (the first place jarvis_framework looks),
+    # clear the caches, and watch both numbers move.
+    own = Path(os.environ["OPENJARVIS_CONFIG_DIR"]) / "jarvis-framework.toml"
+    had = own.read_bytes() if own.is_file() else None
+    try:
+        own.parent.mkdir(parents=True, exist_ok=True)
+        own.write_text('[tools]\nenabled = ["web_search"]\n', encoding="utf-8")
+        SP._clear_caches()
+        inv2 = SP.tool_inventory()
+        c2 = SP.counts(SP.build(refresh=True))
+        check("changing [tools].enabled changes the enabled count",
+              inv2["enabled"] == 1 and inv2["enabled_names"] == ["web_search"]
+              and c2["tools"] == 1,
+              f"{inv2['enabled']} / {inv2['enabled_names']} / {c2['tools']}")
+    finally:
+        if had is None:
+            own.unlink(missing_ok=True)
+        else:
+            own.write_bytes(had)
+        SP._clear_caches()
+    check("putting the settings file back puts the shipped list back",
+          SP.tool_inventory()["enabled"] == 13,
+          str(SP.tool_inventory()["enabled"]))
 
 
 def abilities_and_ask_match_their_modules():
@@ -1049,6 +1190,8 @@ def main() -> int:
     try:
         places_match_the_two_registries()
         settings_match_the_registry()
+        choice_values_are_read_not_assumed()
+        tool_counts_are_the_real_tools()
         abilities_and_ask_match_their_modules()
         resolving_words_never_guesses()
         api_self_is_safe_and_complete()

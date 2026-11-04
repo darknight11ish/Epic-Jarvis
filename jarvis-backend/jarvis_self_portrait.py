@@ -347,15 +347,31 @@ def _feature_guide():
         return None
 
 
+#: Said for a choice whose stored value could not be read on this PC just now.
+#: Fixed text, and never a default dressed up as the value (see settings()).
+CHOICE_VALUE_UNKNOWN = ("The value could not be read on this PC just now - the module that "
+                        "owns it is missing or did not answer. It is not guessed here.")
+
+
 def settings() -> list:
     """Every setting a person can find, with its live value where one is known.
 
     The rows are the registry's own BOOL_SETTINGS (a switch) and CHOICE_SETTINGS
     (a named choice), so this list cannot name a setting that does not exist.
     A switch's value is jarvis_feature_guide.read_state() - None when it cannot
-    be read here, which is said as `null` and never as "off". A choice's value
-    has no public reader yet: it says `null` and `value_known: false` rather
-    than inventing one, and its `options` are the registry's own choices.
+    be read here, which is said as `null` and never as "off".
+
+    A CHOICE'S VALUE IS READ TOO (2026-11-04). It used to be hard-coded
+    `null` / `value_known: false` for all ten, on the belief that no public
+    reader existed; one does, and the Settings explainer has used it since
+    2026-11-03: `jarvis_settings_registry.current_value()` ->
+    `ChoiceSetting.now()`, whose branches call the module that OWNS each value
+    (jarvis_handoff_mode, jarvis_handoff_front, jarvis_voices, jarvis_manner,
+    jarvis_presets, jarvis_antislop, jarvis_owner_check, jarvis_schedule, the
+    HUD's appearance view). This module stores nothing and defaults nothing: it
+    asks that one reader, so the portrait and the settings answer cannot say two
+    different values. A read that fails stays `value_known: false` with
+    `value_why` naming the reason - never a default pretending to be the value.
     """
     R = _registry()
     FG = _feature_guide()
@@ -388,13 +404,20 @@ def settings() -> list:
             options = sorted(str(k) for k in (c.options() or {}))[:24]
         except Exception:                   # noqa: BLE001 - absent module
             options = []
+        value = None
+        try:
+            value = R.current_value(c)
+        except Exception:                   # noqa: BLE001 - said as unknown
+            value = None
+        known = isinstance(value, str) and bool(value.strip())
         rows.append({
             "id": str(c.key), "kind": "choice",
             "label": (names[0] if names else str(c.key)),
             "names": list(names),
             "section": str(getattr(c, "where", "") or ""),
-            "value": None,
-            "value_known": False,
+            "value": value if known else None,
+            "value_known": known,
+            "value_why": "" if known else CHOICE_VALUE_UNKNOWN,
             "options": options,
             "changeable": True,
             "how_to_change": ("Say \"set <the setting> to <one of its own "
@@ -473,6 +496,49 @@ def abilities() -> list:
                     "title": str(row.get("title") or ""),
                     "surface": str(row.get("surface") or "both")})
     return out
+
+
+def tool_inventory() -> dict:
+    """The tools this backend registers, and the ones the AI model is offered.
+
+    THE NUMBER THAT USED TO BE WRONG (the 2026-11-04 self-awareness audit).
+    `counts()["tools"]` held the ASKS-FIRST ROW COUNT - 136 permission rows -
+    and the model's own self_portrait tool handed that dict straight back, so
+    "how many tools do you have" could be answered "136" with total confidence
+    while this backend had 51 tools and 13 switched on. The two real counts are
+    here, each from the registry that owns it:
+
+      * `registered` - `jarvis_agent.TOOLS`, the tools this backend has built;
+      * `enabled`    - the names in `[tools].enabled` of the owner's own
+        settings file, through `jarvis_asks_first.tools_enabled_set()` - the
+        SAME read the "What asks first" page makes, never a second copy and
+        never a default.
+
+    `enabled` is None (never 0) when the settings file cannot be read: a PC
+    without the framework module, or with a damaged file, is said as unknown
+    rather than as "no tools", exactly like an unread switch.
+    """
+    registered = None
+    try:
+        import jarvis_agent as A
+        registered = sorted(str(n) for n in (A.TOOLS or {}))
+    except Exception:                       # noqa: BLE001 - said as unknown
+        registered = None
+    enabled = None
+    try:
+        import jarvis_asks_first as AF
+        enabled = sorted(str(n) for n in (AF.tools_enabled_set() or ()))
+    except Exception:                       # noqa: BLE001 - said as unknown
+        enabled = None
+    why = "" if enabled is not None else (
+        "The settings file could not be read, so which tools are offered is unknown.")
+    return {"registered": len(registered) if registered is not None else None,
+            "registered_names": registered or [],
+            "enabled": len(enabled) if enabled is not None else None,
+            "enabled_names": enabled or [],
+            "source": ("jarvis_agent.TOOLS and "
+                       "jarvis_asks_first.tools_enabled_set()"),
+            "why": why}
 
 
 def plugins() -> list:
@@ -810,6 +876,7 @@ def build(*, client: str = "", app_locked=None,
         "settings": settings(),
         "asks_first": asks_first(),
         "abilities": abilities(),
+        "tools": tool_inventory(),
         "plugins": plugins(),
         "stores": stores(lock=lock),
         "private": {"locked": locked,
@@ -837,6 +904,13 @@ def counts(portrait: Optional[dict] = None) -> dict:
 
     Counts only: no name, no title, no setting value. `stored_*` is the three
     stores' own count where it can be read here and None otherwise.
+
+    THE `tools` KEY IS THE TOOLS (2026-11-04). It used to hold the asks-first
+    row count (136 on the audit tree), which read as "136 tools" and was handed
+    to the model verbatim. It is now `tools_enabled` - the number of tools the
+    owner's settings file really offers - with `tools_registered` beside it and
+    the old number kept under its true name, `asks_first_rows`. A caller that
+    only knows the old key keeps working; it now gets the true number.
     """
     p = portrait if isinstance(portrait, dict) else build()
     ask = p.get("asks_first") or {}
@@ -844,10 +918,17 @@ def counts(portrait: Optional[dict] = None) -> dict:
     stores = {s.get("id"): s.get("count") for s in p.get("stores") or ()
               if isinstance(s, dict)}
     version = p.get("version") or {}
+    tools = p.get("tools")
+    if not isinstance(tools, dict):
+        tools = tool_inventory()
     return {
         "places": len(places),
         "settings": len(p.get("settings") or ()),
-        "tools": sum(len(g.get("rows") or ()) for g in (ask.get("groups") or ())),
+        "tools": tools.get("enabled"),
+        "tools_enabled": tools.get("enabled"),
+        "tools_registered": tools.get("registered"),
+        "asks_first_rows": sum(len(g.get("rows") or ())
+                               for g in (ask.get("groups") or ())),
         "abilities": len(p.get("abilities") or ()),
         "plugins": len(p.get("plugins") or ()),
         "settings_places": sum(1 for r in places
@@ -906,15 +987,27 @@ def refresh_sentence(changed: dict, now: dict) -> str:
 
     Names the numbers it read and, when something moved, exactly which
     number or the version; never claims a capability it cannot count.
+    `tools_registered` and `tools_enabled` are named as what they are, so the
+    old 136-row confusion cannot come back through this sentence either.
     """
-    base = (f"{now.get('places', 0)} places, {now.get('settings', 0)} settings, "
-            f"{now.get('tools', 0)} ask-first actions, {now.get('plugins', 0)} "
-            f"plugins and {now.get('abilities', 0)} abilities")
+    def _n(value) -> str:
+        return "unknown" if value is None else str(value)
+
+    base = (f"{_n(now.get('places'))} places, {_n(now.get('settings'))} settings, "
+            f"{_n(now.get('tools_registered'))} tools "
+            f"({_n(now.get('tools_enabled'))} offered to the AI model), "
+            f"{_n(now.get('asks_first_rows'))} ask-first actions, "
+            f"{_n(now.get('plugins'))} plugins and "
+            f"{_n(now.get('abilities'))} abilities")
     if not changed:
         return (f"I re-read what I can do and have now: {base}. Everything "
                 f"matches what I had. Nothing was restarted.")
     moved = []
     for key, pair in changed.items():
+        # `tools` is the same number as `tools_enabled` (kept because the key
+        # has always been there), so it is not named twice.
+        if key == "tools" and "tools_enabled" in changed:
+            continue
         if key in ("started_at", "app_version"):
             moved.append(f"the version ({pair['before']} -> {pair['after']})")
         elif key.startswith("stored_"):
