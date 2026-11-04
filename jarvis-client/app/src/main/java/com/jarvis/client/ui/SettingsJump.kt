@@ -130,12 +130,13 @@ object SettingsJump {
         // same switches the Brain's Memory tab draws. Its own row on the
         // screen, right after the sandbox, so its entry goes here too.
         Entry("Learning", "learning"),
-        // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
-        // fourteen questions and its READ-ONLY plan. It is the last row on the
-        // screen, so it is the last entry here too - the label is the desktop
-        // jump list's own words for the same section (settings.html,
-        // `#setup-questionnaire`).
-        Entry("First-time setup", "setup-questionnaire"),
+        // "Personalize Jarvis" (S2, 2026-10-20, renamed 2026-11-03;
+        // JARVIS-API section 147): the PC's twenty-five questions in seven
+        // sections, its READ-ONLY plan and one progress line. It is the last row
+        // on the screen, so it is the last entry here too - the label is the
+        // section's own heading (SettingsScreen.kt; the desktop's jump list
+        // renames the same section in this wave).
+        Entry("Personalize Jarvis", "setup-questionnaire"),
         Entry("All features and abilities", "all-features"),
         // "Jarvis Calendar" (2026-10-29): the feature's own ON/OFF switch, ON by
         // default. It is the last row on the screen, so it is the last entry

@@ -115,12 +115,14 @@ object MenuPlaces {
         // checks both halves, and Find anything lists every phone menu with a
         // place.
         "learning" to "settings.learning",
-        // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
-        // fourteen questions and its read-only plan. Its own Settings row on the
-        // phone (SettingsScreen.kt, item "setup-questionnaire") and a menu that
-        // is never hideable on either app - a start-here card - so the row still
-        // needs its PLACE here: Find anything lists every phone menu with a
-        // place, and MenuVisibilityTest holds this map to the screen's rows.
+        // "Personalize Jarvis" (S2, 2026-10-20, renamed 2026-11-03;
+        // JARVIS-API section 147): the PC's twenty-five questions in seven
+        // sections, its read-only plan and one progress line. Its own Settings
+        // row on the phone (SettingsScreen.kt, item "setup-questionnaire") and a
+        // menu that is never hideable on either app - a start-here card - so the
+        // row still needs its PLACE here: Find anything lists every phone menu
+        // with a place, and MenuVisibilityTest holds this map to the screen's
+        // rows.
         "setup-questionnaire" to "settings.setup-questionnaire",
         // "All features and abilities" (2026-10-23, #749): the phone's own
         // directory row (SettingsScreen.kt, `item(key = "all-features")`), and

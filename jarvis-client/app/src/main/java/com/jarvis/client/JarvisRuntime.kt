@@ -2730,11 +2730,12 @@ object JarvisRuntime {
     // JARVIS-API.md section 147. BOTH calls here are READS on the PC: the
     // reading, and the plan - which writes nothing and raises no card - so
     // neither is held on a stale link (rule 4 holds ACTING). The phone never
-    // applies anything: the apply works through the PC's existing setters one
-    // at a time and several of those changes are PC-only
+    // applies anything and never records where the card is: the apply works
+    // through the PC's existing setters one at a time, several of those changes
+    // are PC-only, and `POST /api/setup/progress` is the card's own state
     // (docs/ARCHITECTURE.md section 8).
 
-    /** `GET /api/setup` - the fourteen questions, values and last outcomes. */
+    /** `GET /api/setup` - the questions, the values, the progress and last outcomes. */
     suspend fun setupQuestionnaire(): ApiResult<JsonObject> = api.setupQuestionnaire()
 
     /**

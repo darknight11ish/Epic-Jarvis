@@ -10,17 +10,26 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.put
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
- * The setup questionnaire on the phone (docs/JARVIS-API.md section 147; the
- * PC's module is `backend/jarvis_setup.py`, its routes are installed by
+ * "Personalize Jarvis" on the phone (docs/JARVIS-API.md section 147; the PC's
+ * module is `backend/jarvis_setup.py`, its routes are installed by
  * `setup.patch`).
  *
- * READ-ONLY, ON PURPOSE. The phone reads the same fourteen questions, the
- * current values and the last accepted answers, and it may ask the PC for the
- * read-only plan (`POST /api/setup/plan` writes nothing and raises no card), so
- * the owner can see what their answers would change and what each change
- * costs: instant, one of the PC's own approval cards, or blocked on this PC.
+ * READ-ONLY, ON PURPOSE. The phone reads the same twenty-five questions in
+ * seven sections, the current values and the last accepted answers, and it may
+ * ask the PC for the read-only plan (`POST /api/setup/plan` writes nothing and
+ * raises no card), so the owner can see what their answers would change and
+ * what each change costs: instant, one of the PC's own approval cards, or
+ * blocked on this PC. It also reads the answered count and where the PC's own
+ * card has got to ([progressWords]) - a reading of the card's state, never a
+ * write to it: `POST /api/setup/progress` is deliberately not in this file,
+ * because where the owner is in the card is the card's own state, and the
+ * phone shows it and does not move it.
  *
  * IT NEVER APPLIES ANYTHING. `POST /api/setup/apply` is deliberately not in
  * this file: applying works through the changes one at a time, waits on each
@@ -29,7 +38,7 @@ import kotlinx.serialization.json.put
  * fail halfway or sit for minutes behind cards it cannot answer. So the last
  * step stays on the PC, and this screen says so in plain words ([PLAIN_ONLY]).
  * `SetupQuestionnaireTest` reads this file back as text and fails if an apply
- * path or a `confirm` body ever appears.
+ * path, a `confirm` body or a progress write ever appears.
  *
  * Pure Kotlin, no Android types and no HTTP: `JarvisApi` sends the two reads,
  * `JarvisRuntime` holds them behind the link, and `SetupQuestionnairePlate`
@@ -38,15 +47,15 @@ import kotlinx.serialization.json.put
  * its own, the same shape [PromptCoach] uses.
  */
 object SetupQuestionnaire {
-    /** The reading, and the read-only plan. There is no apply path here. */
+    /** The reading, and the read-only plan. There is no apply or progress write here. */
     const val PATH = "/api/setup"
     const val PLAN_PATH = "/api/setup/plan"
 
-    // This screen's own words. Every question and choice is the PC's.
-    const val HEADING = "First-time setup"
-    const val TITLE = "First-time setup"
+    // This screen's own words. Every question, choice and section title is the PC's.
+    const val HEADING = "Personalize Jarvis"
+    const val TITLE = "Personalize Jarvis"
     const val KICKER =
-        "Fourteen questions about how you want Jarvis to behave. Every answer " +
+        "Twenty-five questions about how you want Jarvis to behave. Every answer " +
             "changes settings that already exist; nothing here is a new kind of rule."
     const val HELP =
         "Pick the answers that sound like you, then read what would change. " +
@@ -75,6 +84,12 @@ object SetupQuestionnaire {
     const val PLAN_ACTION = "See what this would change"
     const val PLAN_READING = "Working out what would change…"
 
+    // Sections and the one progress line. The data is the PC's; only these
+    // connecting words are this screen's own.
+    const val ALL_SECTIONS = "All sections"
+    const val NOT_FINISHED = "Not finished"
+    const val FINISHED = "Finished"
+
     /** The PC decides which of these a change has. */
     val EFFECT_WORDS: Map<String, String> = mapOf(
         "instant" to "Instant",
@@ -102,7 +117,19 @@ object SetupQuestionnaire {
         val multi: Boolean,
         val allNone: Boolean,
         val options: List<Option>,
+        /** The PC's own `section` id. Empty on a PC from before sections existed. */
+        val section: String = "",
     )
+
+    /** One of the PC's sections, with the questions it holds in the PC's order. */
+    data class Section(
+        val id: String,
+        val title: String,
+        val questions: List<Question>,
+    )
+
+    /** Where the PC's own card is: the question it is showing, if it names one. */
+    data class Progress(val section: String, val question: String)
 
     data class Outcome(
         val setting: String,
@@ -116,12 +143,19 @@ object SetupQuestionnaire {
         val available: Boolean,
         val reason: String,
         val questions: List<Question>,
+        val sections: List<Section>,
         val answers: Map<String, List<String>>,
         val completedAt: Double?,
         val lastOutcomes: List<Outcome>,
         val cardWaitS: Int?,
         val about: String,
         val storage: String,
+        /** The PC's question-set version, and the one the owner last finished. */
+        val version: Int?,
+        val completedVersion: Int?,
+        /** How many questions the PC has an answer for, saved or drafted. */
+        val answeredCount: Int?,
+        val progress: Progress?,
     )
 
     data class Change(
@@ -193,6 +227,7 @@ object SetupQuestionnaire {
         val questions = (body["questions"] as? JsonArray).orEmpty().mapNotNull { row ->
             question(row)
         }
+        val declared = sectionTitles(body["sections"])
         return View(
             available = available,
             reason = if (available) {
@@ -201,6 +236,7 @@ object SetupQuestionnaire {
                 body.text("why") ?: UPDATE_WORDS
             },
             questions = questions,
+            sections = groupSections(questions, declared),
             answers = answers(body["answers"]),
             completedAt = (body["completed_at"] as? JsonPrimitive)
                 ?.takeIf { !it.isString }?.contentOrNull?.toDoubleOrNull(),
@@ -210,6 +246,10 @@ object SetupQuestionnaire {
                 ?.takeIf { !it.isString }?.intOrNull,
             about = body.text("about") ?: "",
             storage = body.text("storage") ?: "",
+            version = body.integer("version"),
+            completedVersion = body.integer("completed_version"),
+            answeredCount = body.integer("answered_count"),
+            progress = inProgress(body["in_progress"]),
         )
     }
 
@@ -227,7 +267,74 @@ object SetupQuestionnaire {
             multi = multi,
             allNone = body.flag("all_none") == true || multi,
             options = options,
+            section = body.text("section")?.trim().orEmpty(),
         )
+    }
+
+    /**
+     * The PC's declared section titles, by id, in its own order. Three shapes
+     * are read because the PC's own shape is the PC's to choose:
+     * `[{"id": …, "title": …}]`, `[[id, title]]` and `{"id": "title"}`. A PC
+     * that sends none simply has one unnamed group.
+     */
+    private fun sectionTitles(body: JsonElement?): Map<String, String> {
+        val out = LinkedHashMap<String, String>()
+        when (body) {
+            is JsonArray -> for (row in body) {
+                when (row) {
+                    is JsonObject -> {
+                        val id = row.text("id")?.trim().orEmpty()
+                        if (id.isNotEmpty()) out[id] = row.text("title")?.trim().orEmpty()
+                    }
+                    is JsonArray -> {
+                        val id = (row.getOrNull(0) as? JsonPrimitive)
+                            ?.takeIf { it.isString }?.contentOrNull?.trim().orEmpty()
+                        val title = (row.getOrNull(1) as? JsonPrimitive)
+                            ?.takeIf { it.isString }?.contentOrNull?.trim().orEmpty()
+                        if (id.isNotEmpty()) out[id] = title
+                    }
+                    else -> Unit
+                }
+            }
+            is JsonObject -> for ((id, value) in body) {
+                val key = id.trim()
+                if (key.isEmpty()) continue
+                out[key] = (value as? JsonPrimitive)?.takeIf { it.isString }
+                    ?.contentOrNull?.trim().orEmpty()
+            }
+            else -> Unit
+        }
+        return out
+    }
+
+    /**
+     * The questions split by the PC's `section` value, in the PC's own order: a
+     * declared section stays where the PC declared it even while it holds no
+     * question; a section the PC did not declare comes where its first question
+     * does. A question with no section is ONE unnamed group, so a PC from
+     * before sections existed draws exactly as it did then.
+     */
+    private fun groupSections(
+        questions: List<Question>,
+        declared: Map<String, String>,
+    ): List<Section> {
+        val groups = LinkedHashMap<String, MutableList<Question>>()
+        for (id in declared.keys) groups[id] = mutableListOf()
+        for (question in questions) {
+            groups.getOrPut(question.section) { mutableListOf() }.add(question)
+        }
+        return groups.mapNotNull { (id, rows) ->
+            if (rows.isEmpty()) null else Section(id, declared[id] ?: "", rows)
+        }
+    }
+
+    /** `in_progress`, when the PC says where its card is. */
+    private fun inProgress(body: JsonElement?): Progress? {
+        val row = body as? JsonObject ?: return null
+        val question = row.text("question")?.trim().orEmpty()
+        val section = row.text("section")?.trim().orEmpty()
+        if (question.isEmpty() && section.isEmpty()) return null
+        return Progress(section = section, question = question)
     }
 
     private fun option(row: JsonElement?): Option? {
@@ -357,6 +464,76 @@ object SetupQuestionnaire {
     fun answeredCount(draft: Map<String, List<String>>): Int =
         draft.values.count { it.isNotEmpty() && !(it.size == 1 && it[0] == "none") }
 
+    // -- Sections, and the one progress line (all readings) --------------------
+
+    /** A section's word on a tab or a heading: the PC's title, else the id it sent. */
+    fun sectionWords(section: Section): String =
+        section.title.ifBlank { section.id }.ifBlank { ALL_SECTIONS }
+
+    /** The 1-based place of the question the PC's card is on, or null when it says none. */
+    fun questionNumber(view: View): Int? {
+        val id = view.progress?.question.orEmpty()
+        if (id.isEmpty()) return null
+        val index = view.questions.indexOfFirst { it.id == id }
+        return if (index >= 0) index + 1 else null
+    }
+
+    /**
+     * Is the question set the PC has NOW finished? `completed_version` against
+     * the PC's `version` is the truth while both are sent: a file completed
+     * before the new questions (1 against 2) is NOT finished, which is the
+     * same re-offer the desktop's card makes. A PC from before versions
+     * existed sends neither, so its `completed_at` is the only sign it has.
+     */
+    fun finished(view: View): Boolean {
+        val done = view.completedVersion
+        val current = view.version
+        return when {
+            done != null && current != null -> done >= current
+            // The PC names one of the two but not both: no version can be
+            // compared, so this never claims "finished".
+            done != null || current != null -> false
+            else -> view.completedAt != null
+        }
+    }
+
+    /**
+     * The ONE read-only progress line: whether the PC's question set is
+     * finished (and when), how many of its questions have an answer, and which
+     * question its own card is on. Empty when the PC sends nothing to say - an
+     * older backend - so this screen never invents a position or a count.
+     */
+    fun progressWords(view: View): String {
+        val total = view.questions.size
+        if (finished(view)) {
+            val on = dateText(view.completedAt)
+            return if (on != null) "$FINISHED $on." else "$FINISHED."
+        }
+        val at = questionNumber(view)
+        val answered = view.answeredCount
+        if (at == null && answered == null) return ""
+        val head = if (answered != null && total > 0) {
+            "$NOT_FINISHED - $answered of $total answered"
+        } else {
+            NOT_FINISHED
+        }
+        val where = if (at != null && total > 0) {
+            "On the PC this is at question $at of $total."
+        } else {
+            ""
+        }
+        return if (where.isEmpty()) "$head." else "$head. $where"
+    }
+
+    /** Seconds since 1970 as "31 Oct 2026", or null when there is no time. */
+    fun dateText(epochSeconds: Double?): String? {
+        if (epochSeconds == null || !epochSeconds.isFinite() || epochSeconds <= 0) return null
+        return runCatching {
+            DateTimeFormatter.ofPattern("d MMM yyyy", Locale.ENGLISH)
+                .format(Instant.ofEpochSecond(epochSeconds.toLong()).atZone(ZoneId.systemDefault()))
+        }.getOrNull()
+    }
+
     /**
      * `POST /api/setup/plan`'s body. READ-ONLY on the PC: the answers and
      * nothing else. There is no `confirm` field in it at all, so this body can
@@ -440,4 +617,11 @@ private fun JsonObject.flag(key: String): Boolean? {
     val prim = this[key] as? JsonPrimitive ?: return null
     if (prim is JsonNull || prim.isString) return null
     return prim.booleanOrNull
+}
+
+/** A whole number, never a string that looks like one. */
+private fun JsonObject.integer(key: String): Int? {
+    val prim = this[key] as? JsonPrimitive ?: return null
+    if (prim is JsonNull || prim.isString) return null
+    return prim.intOrNull
 }
