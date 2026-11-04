@@ -432,8 +432,10 @@ export function extraToolsView(tools) {
 }
 
 /**
- * One "Let the AI use this" row's own switch for a tool item. The item carries
- * its group, so the page can draw the tiered groups (Tier A + Tier B).
+ * Every "Let the AI use this" row, in the PC's own groups and order (seven
+ * groups since 2026-11-04: the four that were there, plus "Raw and powerful",
+ * "Everyday helpers" and "Jarvis's own tools"). The item carries its group, so
+ * an older PC that sends no `groups` still draws every row.
  */
 export function toolGroupsView(tools) {
   if (!tools || !Array.isArray(tools.items)) return [];
