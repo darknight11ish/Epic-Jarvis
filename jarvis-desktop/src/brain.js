@@ -1297,6 +1297,28 @@ async function showView(name, { reload = true } = {}) {
   if (reload) await load(sectionsFor(name));
   render(name);
   if (name === "galaxy") fitCanvas();
+  if (name === "memory") landOnWaitingCards();
+}
+
+/**
+ * The Memory view opens on the cards waiting for you.
+ *
+ * The HUD's "N memory cards waiting for you" notice is the way in to this tab
+ * (the owner's report of 2026-11-03), and after this change "Waiting for you"
+ * IS the first card on the page. The window keeps the scroll position it had
+ * though, so a Memory tab last left halfway down its saved facts would still
+ * hide the pending cards. This puts the view back on them every time it is
+ * shown - which is also simply the top of the page, so nothing is lost.
+ *
+ * Deliberately no focus() here: the rail's tab already has it, and moving it
+ * into the card would make a screen reader read the heading a second time.
+ * Something that needs the owner AT a card (forget-range's own place) moves
+ * focus itself, in forget-range-panel.js.
+ */
+function landOnWaitingCards() {
+  const card = $("memory-waiting-card");
+  if (!card || card.hidden) return;
+  card.scrollIntoView({ block: "start" });
 }
 
 /** Paints whichever view is showing from `state.data`. */

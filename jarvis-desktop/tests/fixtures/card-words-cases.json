@@ -99,6 +99,10 @@
       "title": "Jarvis wants to tap and type on your phone"
     },
     {
+      "action": "conversation_clear",
+      "title": "Jarvis wants to delete one conversation from this PC"
+    },
+    {
       "action": "create_joplin_note",
       "title": "Jarvis wants to add a note in Joplin"
     },
@@ -751,6 +755,18 @@
         "summary": "Jarvis wants to tap and type on your phone.",
         "full": "tapping the phone can send a message or complete a purchase. nothing has happened yet.",
         "body": "tapping the phone can send a message or complete a purchase. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "conversation_clear",
+      "notice": {
+        "title": "Jarvis wants to delete one conversation from this PC",
+        "summary": "Jarvis wants to delete one conversation.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

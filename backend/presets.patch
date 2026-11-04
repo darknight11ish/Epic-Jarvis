@@ -51,9 +51,7 @@ index f134133..41781f1 100644
  FACTS_FILE = CONFIG_DIR / "memory_facts.jsonl"
  DOCS_DB = CONFIG_DIR / "memory.db"
  KG_DB = CONFIG_DIR / "knowledge_graph.db"
-@@ -5169,6 +5211,6 @@ class Handler(BaseHTTPRequestHandler):
-             if _state.get("url"):
-                 body["model"] = _state["model"]
+@@ -5171,4 +5213,4 @@ class Handler(BaseHTTPRequestHandler):
                  return _state["url"]
 -            return f"{OLLAMA_URL}/v1/chat/completions"
 +            return f"{active_ollama_url()}/v1/chat/completions"

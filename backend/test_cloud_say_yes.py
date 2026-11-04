@@ -107,8 +107,10 @@ this branch): `Projects._delete` clears the mode file, measured end-to-end in
 The guard reads the project's Shareable flag through `jarvis_projects`, and
 it does its own `import` inside the inserted line, so `backend/`'s copy of
 this file never needs `jarvis_projects` to be an importable name at module
-scope. No active project, an id that is not a string, and no
-`jarvis_projects.py` at all all end in `[]` - local.
+scope. Since 2026-11-03, an ordinary turn with NO project active KEEPS the
+lanes (the router's own gates and the PC's standing switch still decide); an
+ACTIVE project that is not Shareable still ends in `[]` - local; and a missing
+`jarvis_projects.py`, or one with no `active_project_id`, also answers `[]`.
 
 What is still NOT proven here: that the owner's file at that point in the
 stack is byte-for-byte `_PRE`. Only a PC holding his jarvis_hud.py can say
@@ -180,6 +182,9 @@ _PRE = '''\
 
 #: The same real lines with the `owner_said_yes` block AND the Project Mode
 #: gate now in them, which is what applying the patch to `_PRE` must produce.
+#: The gate's 2026-11-03 shape (the owner's decision after the field test): an
+#: ordinary turn with NO project active keeps its lanes; only an ACTIVE project
+#: that is not Shareable zeroes them.
 #: The gate is deliberately NOT a second `lanes=` argument: a repeated keyword
 #: argument is a SyntaxError ("keyword argument repeated"), so the backend
 #: would not start at all - `t_the_patch`s own "still valid Python" check is
@@ -198,10 +203,16 @@ _POST = '''\
                 # argument is a SyntaxError ("keyword argument repeated"), so
                 # the backend would not start at all. `[]` is the one value
                 # that can only ever REMOVE a lane, so empty lanes stay empty
-                # and the lanes that were passed are never added to. Nothing
-                # leaves this PC from a project until the owner has turned
-                # that project's Shareable switch on himself
-                # (docs/PROJECTS-DESIGN.md).
+                # and the lanes that were passed are never added to.
+                #
+                # 2026-11-03 (the owner's decision, after the field test): an
+                # ORDINARY turn with NO project active KEEPS its cloud lanes -
+                # the router's own gates (private, tainted, picture, no-lane,
+                # complexity, budget) and the PC's standing escalation switch
+                # still decide, exactly as they do for every turn, and a lane
+                # is never added here that was not offered before. An ACTIVE
+                # project that is NOT Shareable still zeroes the lanes: that
+                # privacy promise is unchanged (docs/PROJECTS-DESIGN.md).
                 #
                 # THE ID IS TESTED BEFORE IT IS USED, and that is not
                 # tidiness: Projects.get() RAISES KeyError for an id that is
@@ -209,12 +220,13 @@ _POST = '''\
                 # str) ... raise KeyError(pid)"), and active_project_id() is
                 # None on EVERY ordinary turn. Handing that None to get() is
                 # a KeyError out of the chat turn - measured against the real
-                # module, not assumed. So no active project, an empty id and
-                # a non-string id all answer "local" without ever reaching
-                # get(). An id that IS a string but is not a row would still
-                # raise; jarvis_projects' own delete path clears the mode file
-                # when it deletes the active project, so no such id is left.
-                lanes=[] if jarvis_side_memory else (lanes if (lambda m: hasattr(m, "active_project_id") and isinstance((p := m.active_project_id()), str) and bool(p) and bool((m.get().get(p) or {}).get("shareable")))(__import__("jarvis_projects")) else []),
+                # module, not assumed. A module with no active_project_id at
+                # all answers "local", the direction that cannot send words
+                # anywhere. An id that IS a string but is not a row would
+                # still raise; jarvis_projects' own delete path clears the
+                # mode file when it deletes the active project, so no such id
+                # is left.
+                lanes=[] if jarvis_side_memory else (lambda m: ([] if (not hasattr(m, "active_project_id") or (isinstance((p := m.active_project_id()), str) and bool(p) and not bool((m.get().get(p) or {}).get("shareable")))) else lanes))(__import__("jarvis_projects")),
                 has_image=bool(body.get("has_image")),
                 conversation_tainted=tainted,
                 budget=budget,
@@ -723,7 +735,9 @@ def t_the_ordinary_turn_does_not_raise():
         check(f"{label}: the guard does not raise", raised is None,
               f"{type(raised).__name__}: {raised}" if raised else "")
         check(f"{label}: and the store is never asked for that id", asked == [], asked)
-        check(f"{label}: so the turn stays local", got == [], got)
+        check(f"{label}: so the ordinary turn keeps its cloud lanes "
+              "(2026-11-03 decision: the router's own gates still decide)",
+              got == list(LANES), got)
 
 
 def t_the_stub_the_old_suite_used_could_not_see_it():
@@ -815,7 +829,8 @@ def t_the_old_expression_fails_this_suite():
     id first. With the stub now modelling the real store, it raises
     `KeyError(None)` on the ordinary no-Project-Mode turn - which is exactly
     what the real `Projects.get()` does, measured in this tree. The fixed line
-    answers `[]`. If the old shape ever passes these checks again, the stub has
+    answers the lanes it was given (2026-11-03: no active project no longer
+    zeroes them). If the old shape ever passes these checks again, the stub has
     gone back to being a rubber stamp."""
     old_expr = ('([] if jarvis_side_memory else (lanes if (lambda m: hasattr(m,'
                 ' "active_project_id") and bool((m.get().get(m.active_project_id())'
@@ -843,10 +858,12 @@ def t_the_old_expression_fails_this_suite():
         _restore_modules(saved)
     check("the OLD line raises KeyError(None) on the no-project turn (the 500)",
           isinstance(old_raised, KeyError), old_raised)
-    check("the FIXED line answers [] on the same state",
-          fixed_raised is None and fixed == [], (fixed_raised, fixed))
+    check("the FIXED line answers the lanes it was given on the same state "
+          "(2026-11-03 decision)",
+          fixed_raised is None and fixed == list(LANES), (fixed_raised, fixed))
     check("so the fix is measurable on this stub, not just asserted",
-          isinstance(old_raised, KeyError) and fixed == [], (old_raised, fixed))
+          isinstance(old_raised, KeyError) and fixed == list(LANES),
+          (old_raised, fixed))
 
 
 def t_the_deleted_active_project_clears_project_mode():
@@ -890,9 +907,12 @@ def t_the_deleted_active_project_clears_project_mode():
         mod.get().delete_full(pid)
         check("deleting the ACTIVE project leaves Project Mode (no dead id)",
               mod.active_project_id() is None, mod.active_project_id())
-        # And now the guard's own read on that state answers local, no raise.
-        check("... so the guard's read answers local on that state",
-              _lanes_from_patch(pid=None, rows={}) == [], "guard did not answer []")
+        # And now the guard's own read on that state, no raise: no project is
+        # active, so since 2026-11-03 the lanes are KEPT for the router's own
+        # gates to decide on - and the store is never asked for the dead id.
+        check("... so the guard's read keeps the lanes on that state, no raise",
+              _lanes_from_patch(pid=None, rows={}) == list(LANES),
+              "guard did not answer the lanes it was given")
     finally:
         if saved_home is None:
             os.environ.pop("OPENJARVIS_HOME", None)

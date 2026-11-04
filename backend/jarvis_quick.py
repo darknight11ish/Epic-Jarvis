@@ -1143,10 +1143,17 @@ def _restore(original, piece: str) -> str:
     return out.strip(" ,.;:!?")
 
 
-def match(text, now: Optional[float] = None) -> Optional[Intent]:
-    """The intent of a sentence, or None when it is not one of ours."""
+def match(text, now: Optional[float] = None,
+          conversation: Optional[str] = None) -> Optional[Intent]:
+    """The intent of a sentence, or None when it is not one of ours.
+
+    `conversation`: the request's conversation_id, read by the read-a-link
+    follow-up alone (Q2, 2026-11-03) - one page per chat is kept for 15 minutes
+    after a read, and a question about it is answered from the kept words with
+    no card and no fetch. Optional, so every older caller is unchanged.
+    """
     now = time.time() if now is None else now
-    got = _match(text, now)
+    got = _match(text, now, conversation)
     if got is not None and got.f.get("text"):
         got.f["text"] = _restore(text, got.f["text"])
     if got is not None and got.f.get("about"):
@@ -1171,7 +1178,7 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
     return got
 
 
-def _match(text, now: float) -> Optional[Intent]:
+def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Intent]:
     s = normalize_spoken_command(text)
     if not s or len(s) > 400 or "\n" in s:
         return None
@@ -1205,6 +1212,14 @@ def _match(text, now: float) -> Optional[Intent]:
         return Intent("note_location", {"context": "last"})
     if _NOTE_LOCATION_VAULT.fullmatch(s):
         return Intent("note_location", {"context": "vault"})
+    # The phone's app allow-list, from the RAW sentence (Q7, 2026-11-03).
+    # BEFORE the generic capability lane on purpose: "what can you open on my
+    # phone" used to be answered by `_feature_capability_question` with the
+    # feature catalogue's capability sentence, which names no app, while the
+    # catalogue's own phone-apps row says that question lists them.
+    got = _phone_apps_question(text)
+    if got is not None:
+        return got
     # The capability questions (2026-10-31, the pass-9 field test) are read
     # BEFORE the tidied sentence, because "can you add something to my
     # calendar?" loses its "can you" on the way in and would otherwise be
@@ -1600,7 +1615,13 @@ def _match(text, now: float) -> Optional[Intent]:
     # "approve", "deny", "yes", "no" as the WHOLE message. He typed one, and
     # the app answered him as ordinary chat - which reads as a broken app
     # rather than a deliberate rule. This says where the control is instead.
-    if _TYPED_DECISION.fullmatch(s):
+    #
+    # ONLY WHILE A CARD IS WAITING (D1, 2026-11-03). Without `_card_is_pending`
+    # a bare "yes" or "no" was answered with the canned approval sentence even
+    # when nothing was pending, which hijacked ordinary conversation; with it,
+    # the sentence appears exactly when it can point at a real card, and the
+    # rest of the time "yes" is the model's like any other sentence.
+    if _TYPED_DECISION.fullmatch(s) and _card_is_pending():
         return Intent("approval_where")
 
     # --- "open <a settings section>", and "turn on/off <a setting>" ------------
@@ -1728,6 +1749,15 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- "tell me when ..." (jarvis_tellme.py) ------------------------------------------
     got = _tellme(s, text, now)
+    if got is not None:
+        return got
+
+    # --- "read this link" (2026-11-03) -----------------------------------------
+    # AFTER `_tellme`, and that order is the rule, not a preference: "tell me
+    # when this page changes" is a WATCH on a page, so the watcher must have
+    # first refusal. `_read_link_intent` refuses a watch-shaped sentence itself
+    # too, so the two orders agree rather than merely happening to work.
+    got = _read_link_intent(text, s, conversation)
     if got is not None:
         return got
 
@@ -3423,6 +3453,232 @@ TELLME_MISSING = ("Your PC's Jarvis cannot do \"tell me when\" yet - run apply-p
                   "on the PC.")
 
 
+# --------------------------------------------------------------------------
+#   "read this link" - one link, one card, a read and nothing else (2026-11-03)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S WORDS: "read this link", "read this YouTube video and tell me
+# about it", "summarise this page: <url>". A link and a read verb in the
+# owner's own sentence, and nothing else in this file claims it.
+#
+# WHAT IT IS, AND WHAT IT IS NOT. It is a FAST PATH into the two readers the
+# PC already ships - `jarvis_youtube` (captions only, its own card,
+# `youtube_captions_read`) and `jarvis_readpage` (`read_web_page`) - and it
+# adds no route, no model tool, no gate action and no tier of its own. Each
+# reader still owns its own card wording, its own action and its own rules;
+# this matcher only decides WHICH reader, and the runner in the "Acting"
+# section below only asks and then reads.
+#
+# ONE CARD PER LINK, ALWAYS. The card is raised inside the turn (the same way
+# every spoken setting change raises its own), so a decline, a timeout or an
+# unreadable gate fetches NOTHING and says so in the reader's own words. No
+# standing permission is created: a second link in the same sentence is left
+# alone entirely, and a later link is a later card.
+#
+# IT YIELDS TO `tellme_page`. "tell me when this page changes" is a WATCH on a
+# page (jarvis_tellme.py keeps looking for the owner), not a read of it, so
+# the matcher is asked AFTER `_tellme` has had its turn AND refuses a
+# watch-shaped sentence itself - two independent reasons it cannot take that
+# sentence away.
+
+#: The link as the owner typed it. Case is kept (a path is case-sensitive),
+#: and a trailing sentence mark is dropped by the match below only.
+_READ_LINK_URL = re.compile(r"https?://[^\s<>\"']+", re.I)
+
+#: The verbs that mean "read this and tell me", never "watch this for me".
+#: Whole words only: "read"/"reading", "summarise"/"summarize", "sum up", and
+#: the owner's own "tell me about it".
+_READ_LINK_VERB = re.compile(
+    r"\b(?:read|reading|summari[sz]e|summari[sz]ing|sum\s+up|"
+    r"tell\s+me\s+about|what(?:'s|\s+is)\s+in)\b")
+
+#: A sentence that is a WATCH, not a read: "tell me when ...", "let me know
+#: when ...", "notify me when ...". Refused here as well as by the order in
+#: `_match` (the tellme grammar runs first), so the sentence reaches the
+#: watcher whichever way the two are ever reordered.
+_READ_LINK_WATCH = re.compile(
+    r"\b(?:tell|let|notify|text|message|ping|mail|email)\s+me\s+(?:when|if)\b")
+
+#: A sentence that is a STATEMENT, not a request (2026-11-03 audit, BUG 3).
+#: "don't read https://x" and "i already read https://x yesterday" are the
+#: owner telling Jarvis something, not asking it - and each one used to raise a
+#: real approval card. Refused here, beside the watch guard, in the same shape:
+#:
+#:   * a negation or a completed-action word BEFORE a read verb
+#:     ("don't ... read", "already ... read", "never ... summarise"); and
+#:   * a first/third-person subject directly before "read" ("i read ...",
+#:     "she already read ..."), which is the past tense spelled like the
+#:     imperative.
+#:
+#: The order matters: "read https://x, not the other one" is still a request,
+#: because the "not" comes after the verb, and so is "not sure, read ..." - a
+#: bare "not" only refuses when the read verb follows it within one word
+#: ("not read", "not to read"), never when it starts another clause.
+_READ_LINK_STATEMENT = re.compile(
+    r"(?:\b(?:do\s+not|don'?t|did\s+not|didn'?t|does\s+not|doesn'?t|never|"
+    r"no\s+longer|already)\b[^.!?]{0,40}?"
+    r"\b(?:read|reading|summari[sz]e|summari[sz]ing|sum\s+up)\b)"
+    r"|(?:\bnot\s+(?:\w+\s+){0,1}?(?:read|reading|summari[sz]e|summari[sz]ing|"
+    r"sum\s+up)\b)"
+    r"|(?:\b(?:i|we|he|she|they)\s+(?:already\s+|just\s+|once\s+)?read\b)")
+
+#: "read this link" with NO address (2026-11-03 audit, BUG 5). The runner's own
+#: sentence (`READ_LINK_NO_URL`) tells the owner how to give one, and until this
+#: was matched that constant could never be printed. Only a read verb plus one
+#: of the nouns that cannot mean anything else is matched: a bare "read this"
+#: is still the model's, because it may mean anything.
+_READ_LINK_WANT = re.compile(
+    r"\b(?:read|reading|summari[sz]e|summari[sz]ing|sum\s+up)\b"
+    r"[^.!?]{0,40}?\b(?:link|url|address|web\s*page|webpage|page|article|video)\b")
+
+#: A pasted link with NO read verb is still a request (Q2, Gemini's ruling of
+#: 2026-11-03). Measured before this: "https://example.com/kettle" and
+#: "https://example.com/kettle what is this about?" both matched NOTHING and
+#: went to the local model, which cannot open a page on this PC (the page tool
+#: is not offered), so the owner got a guess about an address nothing read.
+#:
+#: THE RULE IS NARROW, because a link pasted to talk ABOUT is a real thing:
+#:   * the message is ONLY the link; or
+#:   * the link plus a QUESTION about it - the message ends with "?" or opens
+#:     with a question word / "tell me" / "explain".
+#: A statement ("here is a link <url>"), a browser command ("open <url> in my
+#: browser", which is `_open`'s own) and a watch ("tell me when <url> changes",
+#: refused above) are NOT reads. The one card is still the guard: nothing is
+#: fetched until a person answers it, and a decline fetches nothing.
+_READ_LINK_QUESTION_LEAD = re.compile(
+    r"^(?:what|what's|whats|whatever|which|who|whom|whose|when|where|why|how|"
+    r"is|are|was|were|does|do|did|can|could|would|should|will|tell\s+me|"
+    r"explain|summari[sz]e|anything|something)\b")
+
+#: How long ONE read page is kept for follow-up questions (Q2, 2026-11-03):
+#: 900 seconds, per conversation. Long enough for the questions that follow a
+#: read ("what does it say about pricing?"), short enough that the words do not
+#: linger; a restart clears it, a new page in the same chat replaces it, and a
+#: PRIVATE turn never keeps one (`answer()` refuses the whole fast path there
+#: before this is ever reached).
+READ_LINK_KEEP_SECONDS = 900
+#: At most this many conversations keep a page at once: the cap is a bound, not
+#: a feature - the oldest goes.
+READ_LINK_KEEP_MAX = 8
+#: conversation_id -> {"url", "title", "text", "at"}. MEMORY ONLY: nothing is
+#: written to disk, and the text kept is the window the reader already handed
+#: back (its own MAX_TEXT_CHARS), never the page.
+_READ_LINK_KEPT: dict = {}
+_READ_LINK_KEPT_LOCK = threading.Lock()
+#: Said when a follow-up names a page but this chat kept none (a restart, more
+#: than 15 minutes, another conversation, or a private chat).
+READ_LINK_NOTHING_KEPT = "Say the address to read, starting with http:// or https://."
+
+#: The follow-up shapes answered from the page this chat already read: a word
+#: about the page's CONTENT ("say", "mention", "about") next to a reference to
+#: it, or "summarise it". Narrow on purpose - "where is it" and "what about
+#: tomorrow" are not questions about the page, and a shape this does not match
+#: keeps the model, exactly as it did before there was a cache.
+_READ_LINK_KEPT_Q = re.compile(
+    r"\b(?:say|says|said|mention|mentions|mentioned|talk\s+about|talks\s+about|"
+    r"cover|covers|name|names|mean|means|about)\b[^.!?]{0,60}?\b"
+    r"(?:it|that|this|the\s+page|the\s+article|the\s+link|the\s+site)\b"
+    r"|\b(?:it|that|this|the\s+page|the\s+article|the\s+link|the\s+site)\b"
+    r"[^.!?]{0,60}?\b(?:say|says|said|mention|mentions|mean|means)\b"
+    r"|\bwhat\s+(?:is|was|'s)\s+(?:it|that|this)\s+about\b"
+    r"|\b(?:summari[sz]e|quote)\s+(?:it|that|the\s+page|the\s+article)\b")
+
+
+def _read_link_pasted(raw: str, url: str) -> bool:
+    """Is this sentence JUST the link, or the link plus a question about it?
+
+    The one gate `_read_link_intent` uses for a paste with no read verb. `raw`
+    is the message as it arrived (the "?" and the capital letters are only
+    there), `url` the address as matched.
+    """
+    rest = str(raw or "")
+    at = rest.find(url)
+    if at >= 0:
+        rest = rest[:at] + " " + rest[at + len(url):]
+    rest = " ".join(rest.lower().split()).strip(" \t,;:-.")
+    if not rest:
+        return True                 # the message is the address and nothing else
+    if str(raw or "").rstrip().endswith("?"):
+        return True                 # "https://x ... what is this about?"
+    return bool(_READ_LINK_QUESTION_LEAD.match(rest))
+
+
+def _read_link_remember(conversation, url: str, title: str, text: str,
+                        now: Optional[float] = None) -> None:
+    """Keep ONE page for this conversation, for READ_LINK_KEEP_SECONDS.
+
+    Memory only, capped, and never raising: the read already happened and its
+    answer must not depend on this. A private turn never reaches here.
+    """
+    if not conversation:
+        return
+    when = time.time() if now is None else now
+    with _READ_LINK_KEPT_LOCK:
+        _READ_LINK_KEPT[str(conversation)] = {
+            "url": str(url or ""), "title": str(title or ""),
+            "text": str(text or ""), "at": when}
+        while len(_READ_LINK_KEPT) > READ_LINK_KEEP_MAX:
+            _READ_LINK_KEPT.pop(next(iter(_READ_LINK_KEPT)), None)
+
+
+def _read_link_kept(conversation, now: Optional[float] = None) -> Optional[dict]:
+    """The page this conversation read, or None when there is none or it is old.
+
+    Expiry is read here rather than on a timer: nothing runs in the background,
+    and a page past READ_LINK_KEEP_SECONDS is gone the moment anyone asks.
+    """
+    if not conversation:
+        return None
+    when = time.time() if now is None else now
+    with _READ_LINK_KEPT_LOCK:
+        kept = _READ_LINK_KEPT.get(str(conversation))
+        if not kept:
+            return None
+        if when - float(kept.get("at") or 0) > READ_LINK_KEEP_SECONDS:
+            _READ_LINK_KEPT.pop(str(conversation), None)
+            return None
+        return dict(kept)
+
+
+def _read_link_intent(text, s: str,
+                      conversation: Optional[str] = None) -> Optional[Intent]:
+    """`Intent("read_link", {"url", "words"})`, or None - the sentence is not
+    a request to read a link.
+
+    `conversation` is only read for the FOLLOW-UP: when this chat kept a page
+    recently (Q2, 2026-11-03), "what does it say about pricing?" is answered
+    from that page with no card and no fetch. With no address and no kept page
+    the sentence is left alone exactly as before.
+    """
+    raw = str(text or "")
+    low = str(s or "").lower()
+    if _READ_LINK_WATCH.search(low):
+        return None              # a watch on a page, not a read of it
+    if _READ_LINK_STATEMENT.search(low):
+        return None              # a statement, not a request (BUG 3)
+    m = _READ_LINK_URL.search(raw)
+    if m is None:
+        # No address at all: only "read this link"-shaped words reach the
+        # runner, so its own "say the address" sentence is reachable (BUG 5).
+        if _READ_LINK_WANT.search(low):
+            return Intent("read_link", {"url": "", "words": low})
+        # A follow-up about the page this chat already read (Q2): no card, no
+        # fetch, nothing new leaves the PC - the words are already here.
+        if _read_link_kept(conversation) is not None and _READ_LINK_KEPT_Q.search(low):
+            return Intent("read_link_q", {"words": low})
+        return None
+    url = m.group(0).rstrip(".,;:!?]}'\u2019\u201d\"")
+    # A closing bracket that OPENS inside the link is part of it
+    # (`.../Kettle_(appliance)`), and one that does not is the sentence's.
+    while url.endswith(")") and url.count(")") > url.count("("):
+        url = url[:-1].rstrip(".,;:!?]}")
+    if not url or len(url) > 500:
+        return None
+    if not _READ_LINK_VERB.search(low) and not _read_link_pasted(raw, url):
+        return None              # pasted to talk about, not to read
+    return Intent("read_link", {"url": url, "words": low})
+
+
 def _run_tellme(intent: Intent, sched, now: float) -> Result:
     """"Tell me when ...": ONE approval card, raised by the scheduler. A
     device named in words ("the washing machine") is looked up first: one
@@ -4968,6 +5224,21 @@ _FEATURE_WHERE = re.compile(
     # model rather than being hijacked.
     r"|how\s+do\s+i\s+change\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|where\s+in\s+jarvis\s+is\s+(?:the\s+|my\s+)?(.+)")
+#: "where do I change <setting>, and what is it set to?" (Q7, 2026-11-03).
+#: ONE question that asks for BOTH halves - the place and the value - and the
+#: settings registry already answers both together: `explain_setting_words`
+#: prints the real Settings card AND its current value ("Right now: normal").
+#: Measured before this: the compound sentence matched nothing at all and went
+#: to the local model, which invented a `configuration.yaml` place, while the
+#: plain "where do I change <setting>" answered correctly.
+#:
+#: So the clause is taken OFF here and the rest of the sentence is read by
+#: `_FEATURE_WHERE` below: no new intent, no new words, and the SAME exact-name
+#: gate - a name nothing knows still falls through to the model exactly as the
+#: plain question does.
+_WHERE_AND_VALUE = re.compile(
+    r"where\s+do\s+i\s+(?:change|set|edit|adjust)\s+(?:the\s+|my\s+|a\s+|an\s+)?"
+    r"(?P<setting>.+?)\s*,?\s*and\s+what(?:'s|\s+is)\s+it\s+set\s+to\s*\??")
 #: "can I change <feature>", "how do I change <feature>", "is it adjustable" -
 #: answered from the five owner-facing labels and the real switch table, never
 #: by changing anything (2026-10-26).
@@ -5738,6 +6009,7 @@ PLUGIN_CATALOGUE = (
     ('screen-attach', '"look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it.'),
     ('secret-handoff', 'the host half of the owner-secret hand-off.'),
     ('self-improve', "two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling..."),
+    ('self-portrait', "what Jarvis is made of on this PC: every place it can open (imported from the Settings and menu registries), every setting with its live on/off value, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only, never a secret, a path or a word of chat."),
     ('send-file', "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaq..."),
     ('setup', 'the setup questionnaire: a guided path through settings that already exist.'),
     ('skill-hub', "the skill library's other doors: a reference manual read only when it is asked for, leading /skill and /bundle chains, a project's own skills, and..."),
@@ -5862,6 +6134,15 @@ def _plugins_question(raw) -> Optional[Intent]:
         return None
     if re.search(r"\b(?:turn|switch)\s+(?:on|off)\b|\b(?:enable|disable)\b", text):
         return None
+    # "list my plugins" / "show all plugins" (Q7, 2026-11-03, Gemini's ruling).
+    # The owner's own words for the list, and they matched NOTHING before this:
+    # the shapes below all want "what"/"which"/"do you have" first, so the
+    # natural imperative fell through to the local model, which has no plug-in
+    # tool. Additive only - the older "what plugins do you have" still answers
+    # through them, and the switch guard above already refused "turn on ...".
+    if re.fullmatch(r"(?:list|show)\s+(?:me\s+)?(?:my\s+|all\s+|the\s+|your\s+|all\s+my\s+)?"
+                    r"(?:installed\s+|available\s+)?plug-?ins?", text):
+        return Intent("plugin_list")
     if re.search(r"\b(?:what|which)\b.*\b(?:plug-?ins?)\b.*\b(?:integrated|installed|ready)\b", text) \
             or re.search(r"\b(?:integrated|built)\b.*\bplug-?ins?\b", text) \
             or re.search(r"\b(?:what|which)\s+plug-?ins?\b", text) \
@@ -6035,6 +6316,82 @@ def _android_question(raw) -> Optional[Intent]:
         return Intent("android_capability")
     return None
 
+
+# --------------------------------------------------------------------------
+#   "which apps on my phone may you open?" (Q7, 2026-11-03)
+#
+# THE GAP, MEASURED. `jarvis_phone_apps.py` keeps the owner's own allow-list
+# ([phone_apps] in jarvis-framework.toml) and the feature catalogue's own row
+# says the question lists them: "Ask in chat on the PC or the phone - "which
+# apps can you open on my phone?" lists them" (features.json, phone-apps). It
+# did not: "which apps on my phone may you open" matched nothing and reached the
+# local model, which has no phone-apps tool at all, and "what can you open on my
+# phone" was answered by the generic feature CAPABILITY sentence, which names no
+# app.
+#
+# ONE READ, NO CARD. `jarvis_phone_apps.view()` is the same read-only view the
+# route serves (GET /api/phone/apps); it lists names and never a package id,
+# writes nothing, and changes no setting. Adding or removing an app is the
+# ordinary `change_own_config` card and is NOT reachable from here.
+#
+# The forms are the owner's own words plus the catalogue's example, and nothing
+# else: every alternative below names BOTH "apps" and "phone", so "open the app
+# store on my phone" and "can you open the front door" keep their own paths.
+# --------------------------------------------------------------------------
+
+_PHONE_APPS_ASK = re.compile(
+    r"(?:which|what)\s+apps?\s+(?:on\s+)?(?:my\s+|the\s+)?phone\s+"
+    r"(?:may|can|could|might|will|would|do|does)\s+(?:you\s+|jarvis\s+)?"
+    r"(?:open|launch|use|start|run)\b.*"
+    r"|(?:which|what)\s+apps?\s+(?:may|can|could|might|will|would)\s+"
+    r"(?:you|jarvis)\s+(?:open|launch|use|start|run)\s+(?:on|from)\s+"
+    r"(?:my|the)\s+phone\b.*"
+    r"|what\s+(?:can|could|may)\s+you\s+(?:open|launch|use|start|run)\s+on\s+"
+    r"(?:my|the)\s+phone\b.*"
+    r"|what\s+apps?\s+(?:do|does)\s+(?:you|jarvis)\s+(?:have|allow|support)"
+    r"[^.!?]{0,20}\bphone\b.*")
+
+
+def _phone_apps_question(raw) -> Optional[Intent]:
+    """The phone-app allow-list question, from the RAW sentence."""
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if not _PHONE_APPS_ASK.fullmatch(text):
+        return None
+    return Intent("phone_apps_list")
+
+
+PHONE_APPS_MISSING = ("Your PC's Jarvis cannot read the phone's app list yet - run "
+                      "apply-patches.ps1 on the PC.")
+
+
+def _run_phone_apps() -> Result:
+    """The allow-list, in the module's own rows. Reads only; no card, no write.
+
+    An empty list is a real answer and is said as one: the table ships empty, so
+    nothing can be opened until the owner adds an app, and that add is the one
+    card. No package id is printed - the name is what he says out loud, and the
+    list is his own settings file, not a screen either app draws yet.
+    """
+    try:
+        import jarvis_phone_apps as PA
+        view = PA.view()
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(PHONE_APPS_MISSING, "phone_apps_list")
+    rows = [r for r in (view.get("apps") or []) if isinstance(r, dict)]
+    where = ("Each one is a line under [phone_apps] in jarvis-framework.toml on this PC, "
+             "and adding or removing one raises one approval card. There is no Settings "
+             "screen for the list yet.")
+    if not rows:
+        return Result("No apps are allowed yet, so I cannot open any app on your phone. "
+                      + where, "phone_apps_list")
+    names = ", ".join(str(r.get("name") or "").strip() for r in rows if r.get("name"))
+    count = len(rows)
+    said = (f"Your phone allows me to open {count} app{'s' if count != 1 else ''}: "
+            f"{names}. " + where)
+    return Result(said, "phone_apps_list")
 
 
 # --------------------------------------------------------------------------
@@ -8084,7 +8441,14 @@ def _feature_lookup_exact(target: str):
 
 
 def _feature_setting(target: str):
-    """The one plain switch a fixed phrase names exactly, or None."""
+    """The one plain switch - or named choice - a fixed phrase names exactly.
+
+    M4, wired end to end on 2026-11-03. The guide half (`jarvis_feature_guide.
+    state` / `how_to`) learned to answer a CHOICE first, but this producer stayed
+    bool-only, so "is the personality on?" fell through to the local model and
+    was answered from nowhere while every bool answered on the PC. Both tables
+    are exact-name matchers and both rows carry `key` and `names`, so the one
+    lookup below is the whole fix."""
     if not target:
         return None
     try:
@@ -8092,7 +8456,7 @@ def _feature_setting(target: str):
     except Exception:
         return None
     try:
-        return R.find_bool_setting(target)
+        return R.find_bool_setting(target) or R.find_choice_setting(target)
     except Exception:
         return None
 
@@ -8805,6 +9169,15 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         if not target:
             return None
         return _feature_explain_intent(s, raw, target, said_guide)
+    m = _WHERE_AND_VALUE.fullmatch(s)
+    if m:
+        # "where do I change <setting>, and what is it set to?" - ONE question,
+        # two halves, and `setting_explain` already prints both (the real
+        # Settings place and "Right now: ..."). The clause is taken off and the
+        # rest is read by `_FEATURE_WHERE` directly below, so the exact-name
+        # gate, the registry fallback and the honest refusals are all the ones
+        # the plain question already uses.
+        s = "where do i change " + m.group("setting")
     m = _FEATURE_WHERE.fullmatch(s)
     if m:
         target = _feature_target(next(g for g in m.groups() if g is not None))
@@ -9212,6 +9585,16 @@ _OPEN_CHAT = re.compile(
 #: card's own button, and a risky one adds Windows Hello on this PC. The
 #: `approval_where` reply below only says WHERE the control is, and carries
 #: no id, no "approved", nothing a client could action.
+#:
+#: AND IT ONLY ANSWERS WHILE A CARD IS REALLY WAITING (D1, 2026-11-03). Until
+#: this guard existed the intent was returned for a bare "yes"/"no" with
+#: nothing pending at all, so ordinary conversation got the canned "approvals
+#: are decided on the card itself" sentence instead of an answer - measured:
+#: "yes", "Yes", "yes please" and "no" all did. `yes` and `no` are the two most
+#: ordinary words in a chat; the sentence is only ever useful when it has a card
+#: to point at. `_card_is_pending` asks this PC's own approvals table, and a
+#: bare decision word with nothing waiting is now left to the model like every
+#: other sentence this file does not own.
 _TYPED_DECISION = re.compile(
     r"approve(?:\s+it)?"
     r"|approve\s+it\s+please"
@@ -9221,6 +9604,28 @@ _TYPED_DECISION = re.compile(
     r"|yes"
     r"|no"
     r"|yes,?\s+please")
+
+
+def _card_is_pending() -> bool:
+    """Is an approval card really waiting on this PC right now?
+
+    THE ONE PLACE THIS FILE ASKS. `jarvis_gate.pending()` is the same reader the
+    approval window and the phone poll (`GET /api/approvals`), read through the
+    module's ONE lazy gate import (`_gate_module`, defined below) so no second
+    gate door appears in this file. Called ONLY after a whole message has
+    matched `_TYPED_DECISION`, so it costs one small SELECT on the few turns
+    whose entire text is "yes", "no" or "approve" - never on ordinary chat.
+
+    False when the gate is not here (this repository's own suites, a backend
+    without the approvals table) or when the read fails: nothing waiting is the
+    safe direction, because the sentence changes nothing either way, and a
+    healthy gate must never be replaced by a canned non-answer to "yes". It
+    cannot approve anything: `pending()` only reads.
+    """
+    try:
+        return bool(_gate_module().pending())
+    except Exception:                   # noqa: BLE001 - no gate here = none waiting
+        return False
 
 
 # --------------------------------------------------------------------------
@@ -12127,7 +12532,14 @@ MODEL_CARD_WORDS = ("Nothing switches until you answer the ONE approval card on 
 
 _K_MODEL_CURRENT = re.compile(
     r"(?:what|which)\s+(?:ai\s+)?model\s+(?:are\s+you\s+(?:running|using|on)|"
-    r"do\s+you\s+have|are\s+you|is\s+this)\b.*")
+    r"do\s+you\s+have|are\s+you|is\s+this)\b.*"
+    # "which model is answering me?" (Q7, 2026-11-03) - the owner's own words
+    # for the same fact, answered by the same sentence as "which model are you
+    # using" (a second intent would be a second wording for one fact). The
+    # optional "and why" tail is tolerated and NOT invented on: the preset the
+    # answer already names is the honest reason this PC has.
+    r"|(?:what|which)\s+(?:ai\s+)?model\s+is\s+answering(?:\s+(?:me|this|that|you))?"
+    r"(?:\s*,?\s*and\s+why\b.*)?")
 _K_MODEL_ANSWERED = re.compile(
     r"(?:which|what)\s+model\s+(?:answered|wrote|gave|produced|said)\s+"
     r"(?:that|this|it|the\s+answer)\b.*")
@@ -13475,6 +13887,300 @@ def _run_send_file_chat(f: dict, *, prepare=None, gate=None, tier_of=None,
     return Result(str(card).strip() + SEND_FILE_SAID, "send_file")
 
 
+# --------------------------------------------------------------------------
+#   "read this link": the runner (2026-11-03)
+# --------------------------------------------------------------------------
+#
+# ONE READER OR THE OTHER, CHOSEN BY THE LINK ITSELF, and each reader's own
+# card raised by each reader's own action. `jarvis_youtube` (captions only,
+# the Quiz page's own card text, `youtube_captions_read`) is asked first; any
+# other http(s) address goes to `jarvis_readpage.prepare` / `run`
+# (`read_web_page`). Nothing here re-words a card, invents an action, adds a
+# tier or keeps a permission: a card that is declined, timed out or could not
+# be raised fetches NOTHING, and says so in the reader's own sentence.
+#
+# The gate call is SYNCHRONOUS, exactly like a spoken setting change
+# (`_run_settings_bool`): the turn waits for the person's answer, which is what
+# lets the same code answer in Live and in a typed chat, and is what makes the
+# Live pause (`jarvis_live.tick`) see the card while it waits. A page or a
+# video is never read inside the card.
+
+#: What a read-link card's refusal says. The three YouTube sentences are that
+#: module's own (`jarvis_youtube.STATE_WORDS`); the page reader has none of its
+#: own, so the same three are repeated here once for it.
+READ_LINK_NO = {
+    "denied": "You said no, so nothing was fetched.",
+    "timed_out": "Nobody answered the card in time, so nothing was fetched.",
+    "refused": "The card could not be answered, so nothing was fetched.",
+}
+
+#: `jarvis_youtube.STATE_WORDS` has no "the tier is not ask" refusal of its
+#: own, but its `CLASSES["tier_not_ask"]` does - byte for byte this sentence
+#: (test_read_link.py asserts the equality, so they cannot drift).
+READ_LINK_TIER_NOT_ASK = ("This needs your yes every time, but the settings file says "
+                          "otherwise, so it is switched off.")
+
+READ_LINK_NO_URL = "Say the address to read, starting with http:// or https://."
+
+READ_LINK_UNAVAILABLE = ("Your PC's Jarvis does not have the link reader yet - run "
+                         "apply-patches.ps1 on the PC.")
+
+#: The caption reader's own outside-text sentence, FIRST SENTENCE ONLY. Its
+#: second sentence ("Your answers are marked by the model on this PC") is about
+#: the Quiz page's quiz, and a chat read has no quiz - saying it here would
+#: describe something that did not happen. This constant is the module's own
+#: words, cut, not re-written (test_read_link.py pins the prefix).
+READ_LINK_CAPTIONS_OUTSIDE = ("The captions are treated as outside text: Jarvis never learns "
+                              "facts from them.")
+
+#: How much of the page or the captions one answer quotes: enough to be worth
+#: asking for, small enough for one chat bubble and for Live to read out.
+READ_LINK_EXCERPT = 900
+
+_READ_LINK_HOST = re.compile(r"^[a-z][a-z0-9+.-]*://([^/?#]+)", re.I)
+
+
+def _read_link_host(url: str) -> str:
+    """The host of a link, lower-cased: "" when it has none. Shape only."""
+    m = _READ_LINK_HOST.match(str(url or ""))
+    if m is None:
+        return ""
+    host = m.group(1).rsplit("@", 1)[-1]
+    if host.startswith("["):                     # an IPv6 literal
+        return host.split("]", 1)[0] + "]"
+    return host.split(":", 1)[0].strip(".").lower()
+
+
+def _read_link_excerpt(text: str, limit: int = READ_LINK_EXCERPT) -> str:
+    """`text` in one paragraph, cut at a word boundary and never mid-word."""
+    flat = " ".join(str(text or "").split())
+    if len(flat) <= limit:
+        return flat
+    cut = flat[:limit]
+    if " " in cut:
+        cut = cut[:cut.rfind(" ")]
+    return cut.rstrip(" ,.;:") + "..."
+
+
+def _read_link_yes(verdict) -> bool:
+    """A person's yes - the Quiz page's own rule (`_person_said_yes`).
+
+    `allowed` alone is not a yes: `check()` also returns allowed=True at the
+    "notify" tier, where nobody was asked. The tier must really be "ask", and
+    an outcome that is present must really be "approved".
+    """
+    if getattr(verdict, "allowed", False) is not True:
+        return False
+    if str(getattr(verdict, "tier", "unknown") or "unknown") != "ask":
+        return False
+    outcome = getattr(verdict, "outcome", None)
+    return True if outcome is None else outcome == "approved"
+
+
+def _read_link_no_words(verdict, words=None) -> str:
+    """The refusal sentence for a card that was not approved."""
+    table = words or READ_LINK_NO
+    outcome = getattr(verdict, "outcome", None)
+    key = outcome if outcome in ("denied", "timed_out") else "refused"
+    return str(table.get(key) or READ_LINK_NO["refused"])
+
+
+def _read_link_ask(action: str, detail: dict, card: str, gate, tier_of):
+    """(verdict, "") or (None, refusal sentence). Never fetches anything."""
+    try:
+        tier = str(tier_of(action))
+    except Exception:
+        tier = "ask"
+    if tier != "ask":
+        return None, READ_LINK_TIER_NOT_ASK
+    try:
+        verdict = gate(action, detail, card)
+    except Exception:
+        return None, READ_LINK_NO["refused"]
+    if not _read_link_yes(verdict):
+        return None, _read_link_no_words(verdict)
+    return verdict, ""
+
+
+def _read_youtube_link(parsed: dict, *, gate, tier_of, YT) -> Result:
+    """One card built from `jarvis_youtube.card` and one read of the captions."""
+    card = YT.card(parsed)
+    detail = {"text": card, "what": "read a YouTube video's captions",
+              "to": parsed.get("canonical", ""), "leaves_this_pc": True}
+    verdict, no = _read_link_ask(YT.ACTION, detail, card, gate, tier_of)
+    if verdict is None:
+        return Result(no, "read_link")
+    try:
+        body, _minutes, truncated = YT.fetch_captions(parsed["video_id"],
+                                                      YT.DEFAULT_LANGUAGES)
+    except YT.YouTubeError as exc:
+        # Its own sentence: "No captions for this video...", a refused request,
+        # a missing library. Nothing is invented on top of it.
+        return Result(str(exc.message), "read_link")
+    except Exception:
+        return Result(YT.CLASSES["youtube_failed"][1], "read_link")
+    if not str(body or "").strip():
+        return Result(YT.CLASSES["no_captions"][1], "read_link")
+    said = f'Read the captions from that video. They begin: "{_read_link_excerpt(body)}"'
+    if truncated:
+        said += " The video is long, so that is the first part of it."
+    said += " " + READ_LINK_CAPTIONS_OUTSIDE
+    return Result(said, "read_link", read=["youtube_captions_read"])
+
+
+def _read_web_link(url: str, *, gate, tier_of,
+                   conversation: Optional[str] = None) -> Result:
+    """One card built from `jarvis_readpage.describe` and one GET of it.
+
+    The FIRST LINE of the answer carries the canonical address the card showed
+    (`page.url`, never one taken from the page), because that is the one fact
+    the owner needs to check what was read - and both apps already make a bare
+    `http(s)` address tappable with no rendering change (Q2, 2026-11-03).
+    `conversation` only decides whether the words are kept for a follow-up.
+    """
+    try:
+        import jarvis_readpage as RP
+    except Exception:
+        return Result(READ_LINK_UNAVAILABLE, "read_link")
+    try:
+        page = RP.prepare(url)
+    except RP.ReadError as exc:
+        return Result(str(exc), "read_link")     # the module's own words
+    except Exception:
+        return Result(READ_LINK_UNAVAILABLE, "read_link")
+    detail = {"what": "read one web page out loud", "url": page.url,
+              "to": page.url, "leaves_this_pc": True}
+    verdict, no = _read_link_ask(RP.ACTION, detail, RP.describe(page), gate, tier_of)
+    if verdict is None:
+        return Result(no, "read_link")
+    try:
+        got = RP.run(page)
+    except Exception:
+        return Result(READ_LINK_UNAVAILABLE, "read_link")
+    why = str((got or {}).get("why") or "").strip() if isinstance(got, dict) else ""
+    if not isinstance(got, dict) or not got.get("ok"):
+        return Result(why or READ_LINK_UNAVAILABLE, "read_link")
+    text = str(got.get("text") or "")
+    if not text.strip():
+        return Result(why or "That page has no readable words on it, so there was nothing "
+                             "to read.", "read_link")
+    title = " ".join(str(got.get("title") or "").split())
+    head = f"Read from {page.url}"
+    if title:
+        head += f' - "{title}"'
+    said = f'{head}. It says: "{_read_link_excerpt(text)}"'
+    if got.get("more") is not None:
+        said += " That is the first part of it."
+    said += f" {RP.ONE_PAGE_LINE} {RP.OUTSIDE_LINE}"
+    # Kept for this chat only, for 15 minutes, so a follow-up needs no second
+    # card and no second fetch. Memory only; the reader wrote nothing.
+    _read_link_remember(conversation, page.url, title, text)
+    return Result(said, "read_link", read=["read_web_page"])
+
+
+def _read_link_needle(words: str) -> str:
+    """The words a follow-up asks the kept page about, or "" for all of it."""
+    m = re.search(r"\b(?:about|mention|mentions|say\s+on|says\s+about|say\s+about|"
+                  r"on|regarding|part)\s+(.+)$", " ".join(str(words or "").split()))
+    if not m:
+        return ""
+    needle = m.group(1).strip(" ?.!,")
+    return needle if len(needle) >= 3 else ""
+
+
+def _read_link_find(text: str, needle: str, span: int = 400) -> str:
+    """A quote around `needle` in `text`, or "" when it is not there.
+
+    A word-find, not understanding - and the answer says so when it finds
+    nothing. The whole phrase is tried first, then its longest word, so "what
+    does it say about the pricing of the kettle" still finds "pricing".
+    """
+    flat = " ".join(str(text or "").split())
+    tries = [needle] + [w for w in sorted(needle.split(), key=len, reverse=True)
+                        if len(w) >= 5][:3]
+    low = flat.lower()
+    for needle_try in tries:
+        at = low.find(needle_try.lower())
+        if at < 0:
+            continue
+        start = max(0, at - span // 3)
+        end = min(len(flat), at + len(needle_try) + span)
+        piece = flat[start:end]
+        if start:
+            piece = piece.split(" ", 1)[-1]
+        if end < len(flat):
+            piece = piece.rsplit(" ", 1)[0]
+        return _read_link_excerpt(piece, span)
+    return ""
+
+
+def _run_read_link_q(f: dict, conversation: Optional[str] = None,
+                     now: Optional[float] = None) -> Result:
+    """A follow-up answered from the page this chat already read.
+
+    NO CARD AND NO FETCH: the words are already on this PC, so nothing new
+    leaves it - the asymmetry with a fresh read is the point of Q2's ruling.
+    It answers with the address and how long ago the page was read, quotes
+    around the asked words when they are there, and says plainly when they are
+    not, naming the limit of what was kept.
+    """
+    kept = _read_link_kept(conversation, now)
+    if kept is None:
+        return Result(READ_LINK_NOTHING_KEPT, "read_link_q")
+    when = time.time() if now is None else now
+    minutes = max(1, int((when - float(kept.get("at") or when)) // 60))
+    head = (f'From {kept.get("url")}'
+            + (f' ("{kept.get("title")}")' if kept.get("title") else "")
+            + f", read {minutes} minute{'s' if minutes != 1 else ''} ago")
+    text = str(kept.get("text") or "")
+    needle = _read_link_needle(str(f.get("words") or ""))
+    if not needle:
+        return Result(f'{head}. It says: "{_read_link_excerpt(text)}"', "read_link_q")
+    hit = _read_link_find(text, needle)
+    if hit:
+        return Result(f'{head}. It says: "{hit}"', "read_link_q")
+    return Result(f'{head}. Its first {len(" ".join(text.split()))} characters do not '
+                  f'mention "{needle}", and that is all I kept of it - ask me to read '
+                  f'the address again for more.', "read_link_q")
+
+
+def _run_read_link(f: dict, *, gate=None, tier_of=None,
+                   conversation: Optional[str] = None) -> Result:
+    """"read this link": YouTube's captions or a page's words, one card first.
+
+    Yields to `tellme_page` in the matcher (a watch is not a read). A link that
+    IS on YouTube but does not parse as one video answers with the caption
+    reader's own refusal rather than being fetched as a page: "read this
+    playlist address" must not quietly become a page read.
+
+    `conversation` goes to the PAGE reader only, which keeps the words for a
+    follow-up (Q2, 2026-11-03); the caption path is unchanged.
+    """
+    n = "read_link"
+    url = str((f or {}).get("url") or "").strip()
+    if not url:
+        return Result(READ_LINK_NO_URL, n)
+    gate = gate or _update_gate
+    tier_of = tier_of or _update_tier
+    try:
+        import jarvis_youtube as YT
+    except Exception:
+        YT = None
+        return _read_web_link(url, gate=gate, tier_of=tier_of,
+                              conversation=conversation)
+    try:
+        parsed = YT.parse_link(url)
+    except YT.YouTubeError as exc:
+        if _read_link_host(url) in YT.HOSTS:
+            return Result(str(exc.message), n)
+        return _read_web_link(url, gate=gate, tier_of=tier_of,
+                              conversation=conversation)
+    except Exception:
+        return _read_web_link(url, gate=gate, tier_of=tier_of,
+                              conversation=conversation)
+    return _read_youtube_link(parsed, gate=gate, tier_of=tier_of, YT=YT)
+
+
 def _forget_range(s: str, now: float) -> Optional[Intent]:
     """"forget what you learned last week", "delete my chats from 1 to 15
     September" - jarvis_forget_range.parse_phrase. Without that module, or
@@ -14269,26 +14975,398 @@ def _run_menu_visibility(f: dict) -> Result:
     return Result(reply, "menu_visibility", menu_visibility=route)
 
 
-def _run_settings_bool(f: dict, peer, local) -> Result:
+#: The receipt tool name for a settings change made by talking (2026-11-03).
+#: One name, so the restorer, the receipt row and the undo lookup cannot drift.
+SETTINGS_RECEIPT_TOOL = "change_setting"
+
+#: conversation_id -> the newest CARDLESS settings change that "undo" may take
+#: back in that chat, exactly once. In memory on purpose: the row itself is in
+#: the receipts database (so both apps can list it), while "undo" out loud is
+#: the same chat's own record, like "cancel that".
+_SETTINGS_UNDO: dict = {}
+#: conversation_id -> the settings change this chat has ALREADY put back, so a
+#: second "undo" refuses in words that say what really happened.
+_SETTINGS_UNDONE: dict = {}
+_SETTINGS_UNDO_MAX = 200
+
+#: The device that asked for the undo IN FLIGHT. The receipts module calls a
+#: receipt's own reversal with no arguments, so the address travels here and
+#: nowhere else - one thread at a time, so two undos cannot read each other's
+#: caller. It matters: a setting the PC only may change (the small-approvals
+#: fingerprint) must not be put back by a phone either.
+_SETTINGS_UNDO_CALLER = threading.local()
+
+#: Said when "undo" found a receipt it could not put back and the setting's own
+#: setter gave no words at all. Never a claim that the setting changed, and
+#: never a claim that a card exists - a plain setter refusal is not a card.
+SETTINGS_UNDO_FAILED = "I could not put {label} back, so nothing was changed."
+
+#: Said ONLY when the reversal really raised that setting's own approval card
+#: and it was not answered (2026-11-03 audit, BUG 2). One case, one sentence:
+#: before this, every failure - including a setter that refused outright and
+#: raised no card at all - was reported as an unanswered card.
+SETTINGS_UNDO_CARD = ("I could not put {label} back, so nothing was changed. Undo raised "
+                      "its own card and it was not answered.")
+
+
+class _UndoRefused(RuntimeError):
+    """A reversal the setting's own setter refused, carrying its own words.
+
+    `waiting` is True ONLY when that setter raised its own approval card, so
+    "undo" can say the card thing for a card and quote the setter otherwise.
+    """
+
+    def __init__(self, said: str, waiting: bool = False):
+        super().__init__(str(said or ""))
+        self.said = str(said or "")
+        self.waiting = bool(waiting)
+
+
+#: The words of the LAST refusal in this thread, and whether a card is what
+#: stopped it. `_restore_settings_change` writes it before raising, so "undo"
+#: can quote a refusal whichever way it was reached: the live closure this
+#: process registered, or - after a restart, when the receipts module falls back
+#: to the snapshot restorer - the same function by name. A failed undo releases
+#: its claim but NOT its closure, so the second try arrives by that second path.
+_SETTINGS_UNDO_LAST = threading.local()
+
+
+def _settings_refuse(said: str, waiting: bool = False):
+    """Raise the refusal AND remember its words for the answer in this thread."""
+    err = _UndoRefused(said, waiting)
+    _SETTINGS_UNDO_LAST.said = err.said
+    _SETTINGS_UNDO_LAST.waiting = err.waiting
+    raise err
+
+
+def _settings_undo_words(label: str, said: str, waiting: bool = False) -> str:
+    """What "undo" says when the reversal did NOT happen - one honest case each.
+
+    A real, unanswered card says the card thing (`SETTINGS_UNDO_CARD`). A plain
+    setter refusal quotes the setter's own words (`choice_bad_words`,
+    `_SMALL_APPROVALS_PC_ONLY`, ...), prefixed by the one fact that is always
+    true - nothing was changed - and never mentions a card it did not raise.
+    With no words from anyone, `SETTINGS_UNDO_FAILED` says only what is known.
+    """
+    said = " ".join(str(said or "").split())
+    if waiting:
+        return SETTINGS_UNDO_CARD.format(label=label)
+    if not said:
+        return SETTINGS_UNDO_FAILED.format(label=label)
+    low = said.lower()
+    if "nothing was changed" in low or "nothing has changed" in low:
+        return said
+    return f"{SETTINGS_UNDO_FAILED.format(label=label)} {said}"
+
+
+def _setting_label(setting) -> str:
+    """The setting's own first name, in one line, for an answer about it."""
+    names = tuple(getattr(setting, "names", ()) or ())
+    if names:
+        name = " ".join(str(names[0]).split())
+        if name:
+            return name
+    return str(getattr(setting, "key", "") or "that setting")
+
+
+def _settings_waiting_line(setting) -> str:
+    """ONE calm line for a Live turn whose setting now waits on a card.
+
+    Live speaks its answer aloud, so a carded change gets one sentence with no
+    card id, no list, no question back, and nothing that could be heard as
+    "say yes" - there is no spoken approval anywhere in this project.
+    """
+    return (f"A card is waiting for {_setting_label(setting)}, so approve it on your "
+            f"phone or PC and it changes.")
+
+
+def _settings_row(key: str, kind: str = ""):
+    """`(kind, row)` for a stored receipt's `before` snapshot.
+
+    The KIND is written into the snapshot for the rows that are not a setting
+    object (the animal switches, the sun and moon, the weather source). A
+    receipt written before 2026-11-03 carries no kind, so the key alone finds
+    the row - which is what the registry's unique keys are for.
+    """
+    import jarvis_settings_registry as R
+    if kind in ("", "bool"):
+        row = next((b for b in R.BOOL_SETTINGS if b.key == key), None)
+        if row is not None:
+            return "bool", row
+    if kind in ("", "choice"):
+        row = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
+        if row is not None:
+            return "choice", row
+    if kind in ("", "number"):
+        row = next((n for n in R.NUMBER_SETTINGS if n.key == key), None)
+        if row is not None:
+            return "number", row
+    return str(kind or ""), None
+
+
+def _choice_value(setting, value):
+    """The VALUE this row's setter takes, from a snapshot's stored value.
+
+    A snapshot written by the first version of this receipt stored the row's
+    own DISPLAY WORDS (`ChoiceSetting.now()`), and handing those to a setter is
+    the 2026-11-03 audit's BUG 1. They are resolved through the row's own
+    `options()` - `choice_from_words`, the same step the write path makes,
+    never a second hand-typed mapping - so an older receipt is repaired too.
+    A value that is already a value (a bool, or an id the row does not list as
+    an alias) is left exactly as it is.
+    """
+    if not isinstance(value, str):
+        return value
+    try:
+        import jarvis_settings_registry as R
+        got = R.choice_from_words(setting, value)
+    except Exception:                       # noqa: BLE001 - the value is the answer
+        got = None
+    return value if got is None else got
+
+
+def _restore_settings_change(before, peer=None, local=None):
+    """Put one settings receipt's `before` value back, through its OWN setter.
+
+    This is BOTH the restorer the receipts module keeps for a new process
+    (registered just before the receipt is written) and the function a spoken
+    "undo" ends in. It goes through the same setter every other change uses,
+    so a "put it back" that loosens something raises that setting's own card
+    like any other change - and one that only the PC may change still refuses
+    from the phone.
+
+    The snapshot holds the VALUE, not the words the answer prints: a named
+    choice is resolved back through the row's own `options()` (`_choice_value`),
+    and the number, the animal switches, the sun and moon and the weather
+    source each reach the same registry setter their own runner calls. A
+    refusal from any of them is a refusal here - nothing is marked undone.
+
+    Raises `_UndoRefused` when the setting did NOT really go back, carrying the
+    setter's own sentence (and whether a card is what stopped it), so the answer
+    can quote it.
+    """
+    got = dict(before or {})
+    key = str(got.get("key") or "")
+    value = got.get("value")
+    import jarvis_settings_registry as R
+    kind, setting = _settings_row(key, str(got.get("kind") or ""))
+    if kind in ("bool", "choice", "number") and setting is not None:
+        if kind == "bool":
+            value = bool(value)
+        elif kind == "choice":
+            value = _choice_value(setting, value)
+        else:
+            try:
+                value = int(round(float(value)))
+            except (TypeError, ValueError):
+                _settings_refuse(f"the receipt did not hold a number for {key}, so "
+                                 f"nothing was changed")
+        out = setting.set(value, peer=peer, local=local)
+    elif kind == "animal_switch":
+        out = R.set_animal_switch(key, bool(value), peer=peer, local=local)
+    elif kind == "sky_show":
+        out = R.set_sky_show(bool(value), peer=peer, local=local)
+    elif kind == "weather_source":
+        out = R.set_weather_source(str(value or ""), peer=peer, local=local)
+    else:
+        _settings_refuse("that setting is not on this PC any more, so nothing was "
+                         "changed")
+    if getattr(out, "waiting", False) or not getattr(out, "ok", False):
+        _settings_refuse(str(getattr(out, "said", "") or "").strip()
+                         or "the setting did not go back",
+                         waiting=bool(getattr(out, "waiting", False)))
+    return out
+
+
+def _setting_before(setting, f: dict):
+    """{"kind", "key", "value"} - the setting's VALUE before this change, or None.
+
+    A bool needs no reader: it has two states, so the value it just changed
+    FROM is the other one, exactly. A named-choice setting DOES need one, and
+    the registry's own reader answers in the row's own WORDS - so the word is
+    resolved back to the VALUE its setter takes, through that row's own
+    `options()` (`choice_from_words`), the same step the write path makes.
+
+    Storing the word instead was the 2026-11-03 audit's BUG 1: `small_approvals`
+    was handed "skip" (a truthy string, so the stricter branch ran and the
+    fingerprint stayed on) and the face, both hand-off rows, the voice, the
+    personality and the focus preset were refused. `small_approvals` now stores
+    the bool its setter's signature asks for.
+
+    None means "not readable, OR not a value this row can be put back TO", and
+    then NO receipt is written rather than one whose "before" is a guess. The
+    face with no face chosen and the focus preset with no preset applied are
+    that second case: the row reads, but nothing in its own list is the value
+    that means "none" - applying a preset or a face is one-way.
+    """
+    key = str((f or {}).get("key") or "")
+    if "on" in (f or {}):
+        return {"kind": "bool", "key": key, "value": not bool(f.get("on"))}
+    now = None
+    try:
+        import jarvis_settings_registry as R
+        fn = getattr(R, "current_value", None)
+        if callable(fn):
+            now = fn(setting)
+    except Exception:
+        now = None
+    if now is None:
+        for name in ("now", "current_value", "current"):
+            if not hasattr(setting, name):
+                continue
+            try:
+                now = getattr(setting, name)
+                if callable(now):
+                    now = now()
+            except Exception:
+                now = None
+            break
+    if now is None:
+        return None
+    kind = "choice"
+    try:
+        import jarvis_settings_registry as R
+        if isinstance(setting, R.ChoiceSetting):
+            value = R.choice_from_words(setting, now)
+        elif isinstance(setting, R.NumberSetting):
+            kind, value = "number", now
+        else:
+            kind, value = "bool", bool(now)
+    except Exception:                       # noqa: BLE001 - None is the answer
+        value = None
+    if value is None:
+        return None                         # the row has no such value to go back to
+    return {"kind": kind, "key": key, "value": value}
+
+
+def _newest_receipt_id() -> str:
+    """The id of the newest receipt, or "" - read cheaply, never raising.
+
+    Used for ONE thing: noticing that the setting's own module already wrote a
+    receipt for this change. The Anti-Slop setters do exactly that
+    (`jarvis_antislop._change` records one after every write), and a spoken
+    change must leave ONE receipt, not two.
+    """
+    try:
+        import jarvis_receipts as RC
+        rows = RC.recent(1)
+        return str((rows[0] or {}).get("receipt_id") or "") if rows else ""
+    except Exception:
+        return ""
+
+
+def _settings_receipt(conversation, setting, before, after, summary: str,
+                      since: str = "", label: str = "") -> None:
+    """One receipt for a CARDLESS settings change, and the record "undo" reads.
+
+    `changeable_words()` has told the owner 'say "undo" in the same chat if you
+    change your mind' since the registry was written, and until now no settings
+    change wrote a receipt. Only a change that REALLY happened is receipted: a
+    carded one has changed nothing yet, so it writes none - nothing happened,
+    so there is nothing to take back. Never raises: a receipts database that is
+    not there just means no receipt, and then "undo" honestly says so.
+
+    `since` is the newest receipt's id read BEFORE the setter ran: when the
+    setting's own module has written one in between, that receipt is the one
+    the apps show and this function writes nothing.
+
+    `label` names the change for the answer and the row's summary. The rows
+    that are not a setting object (an animal switch, the sun and moon, the
+    weather source, the Live timeout) have no `names`, so their own runner
+    passes the label the Settings page shows.
+    """
+    if _newest_receipt_id() != str(since or ""):
+        return                          # the setting's own module already receipted it
+    entry: dict = {"receipt_id": "", "before": dict(before or {}), "said": {},
+                   "label": label or _setting_label(setting), "at": time.time()}
+
+    def undo() -> None:
+        peer = getattr(_SETTINGS_UNDO_CALLER, "peer", None)
+        local = getattr(_SETTINGS_UNDO_CALLER, "local", None)
+        # A refusal raises `_UndoRefused` and records its own words in
+        # `_SETTINGS_UNDO_LAST`; nothing is captured here, so the after-a-restart
+        # snapshot path (which never reaches this closure) says the same thing.
+        out = _restore_settings_change(before, peer=peer, local=local)
+        entry["said"] = {"said": str(getattr(out, "said", "") or ""), "waiting": False}
+
+    try:
+        import jarvis_receipts as RC
+        RC.register_restorer(SETTINGS_RECEIPT_TOOL, _restore_settings_change)
+        rid = RC.record(SETTINGS_RECEIPT_TOOL, summary, before=before, after=after,
+                        undo=undo)
+    except Exception:
+        return
+    if not rid or not conversation:
+        return
+    entry["receipt_id"] = str(rid)
+    key = str(conversation)
+    _SETTINGS_UNDONE.pop(key, None)
+    _SETTINGS_UNDO.pop(key, None)
+    _SETTINGS_UNDO[key] = entry
+    while len(_SETTINGS_UNDO) > _SETTINGS_UNDO_MAX:
+        _SETTINGS_UNDO.pop(next(iter(_SETTINGS_UNDO)), None)
+
+
+def _settings_said(setting, out, live: bool) -> str:
+    """What the owner hears about ONE settings change.
+
+    The setter's own sentence is the source of truth and is returned
+    unchanged - except in a Live turn where a card is now waiting, which gets
+    one calm line instead (Q5, 2026-11-02: Live speaks the answer, so a card id
+    or a list read aloud is noise, and a spoken "yes" is not heard anyway).
+    A READ-ONLY answer never takes this branch, so the two doors still answer
+    PC-state questions identically (test_live_parity.py pins that).
+    """
+    if live and getattr(out, "waiting", False):
+        return _settings_waiting_line(setting)
+    return str(getattr(out, "said", "") or "")
+
+
+def _run_settings_bool(f: dict, peer, local, live: bool = False,
+                       conversation: Optional[str] = None) -> Result:
+    """"Turn <a switch> on/off" - the setting's own setter, one card or none.
+
+    `live` is the turn's own mark (see `_live_body`). It changes only the
+    WORDING of a carded change's answer; the card, the tier and the value are
+    the setter's, exactly as before. `conversation` is where "undo" finds the
+    receipt of a change that really happened.
+    """
     import jarvis_settings_registry as R
     setting = next((b for b in R.BOOL_SETTINGS if b.key == f["key"]), None)
     if setting is None:
         return Result(SETTINGS_MISSING, "settings_bool")
+    before = _setting_before(setting, f)
+    # Read BEFORE the setter runs: a setting whose own module records its own
+    # receipt (the Anti-Slop mode does) must not end up with two.
+    since = _newest_receipt_id()
     out = setting.set(f["on"], peer=peer, local=local)
-    return Result(out.said, "settings_bool")
+    if getattr(out, "ok", False) and not getattr(out, "waiting", False):
+        _settings_receipt(conversation, setting, before,
+                          {"kind": "bool", "key": f["key"], "value": bool(f["on"])},
+                          f"Turned {_setting_label(setting)} "
+                          f"{'on' if f['on'] else 'off'}", since=since)
+    return Result(_settings_said(setting, out, live), "settings_bool")
 
 
-def _run_settings_choice(f: dict, peer, local) -> Result:
+def _run_settings_choice(f: dict, peer, local, live: bool = False,
+                         conversation: Optional[str] = None) -> Result:
     """One named-choice setting, through its own setter (2026-10-22).
 
     The setter is the EXACT function the Settings control/route calls, so its
-    card, tier, stale-link hold and PC-only refusal are the control's own."""
+    card, tier, stale-link hold and PC-only refusal are the control's own.
+    `live` only shortens the answer to a carded change (see the bool runner)."""
     import jarvis_settings_registry as R
     setting = next((c for c in R.CHOICE_SETTINGS if c.key == f["key"]), None)
     if setting is None:
         return Result(SETTINGS_MISSING, "settings_choice")
+    before = _setting_before(setting, f)
+    since = _newest_receipt_id()
     out = setting.set(f["value"], peer=peer, local=local)
-    return Result(out.said, "settings_choice")
+    if getattr(out, "ok", False) and not getattr(out, "waiting", False):
+        _settings_receipt(conversation, setting, before,
+                          {"kind": "choice", "key": f["key"], "value": f["value"]},
+                          f"Set {_setting_label(setting)} to {f['value']}", since=since)
+    return Result(_settings_said(setting, out, live), "settings_choice")
 
 
 def _run_settings_choice_bad(f: dict) -> Result:
@@ -14565,12 +15643,20 @@ def _run_settings_card_mode(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_card_mode")
 
 
-def _run_animal(n: str, f: dict, peer, local) -> Result:
+def _run_animal(n: str, f: dict, peer, local,
+                conversation: Optional[str] = None) -> Result:
     """Animal options by asking - the same functions the switches call, so
     the same rules: the shared switches and the sun and moon at once, the
     weather off or Home Assistant at once, Open-Meteo ONE approval card
     (jarvis_sky raises it; nothing changes until it is approved); sharpness
-    and frame rate on the device that asked, named in X-Jarvis-Route."""
+    and frame rate on the device that asked, named in X-Jarvis-Route.
+
+    Every one of these is CARDLESS except Open-Meteo's card, so every one of
+    them leaves the same ONE undo receipt a switch does (2026-11-03, the
+    audit's BUG 6 - "a cardless change leaves one receipt" was false for
+    exactly the settings this slice's headline names). The snapshot holds the
+    VALUE each setter takes, read from the owning module's own table.
+    """
     if n == "animal_ask":
         return Result(ANIMAL_QUESTIONS.get(f.get("about"), ANIMAL_QUESTIONS["animal"]), n)
     if n == "animal_device":
@@ -14585,17 +15671,55 @@ def _run_animal(n: str, f: dict, peer, local) -> Result:
     except Exception:
         return Result(SETTINGS_MISSING, n)
     if n == "animal_switch":
-        out = R.set_animal_switch(f["key"], f["on"], peer=peer, local=local)
+        key = str(f.get("key") or "")
+        before = R.animal_switch_value(key)
+        since = _newest_receipt_id()
+        out = R.set_animal_switch(key, f["on"], peer=peer, local=local)
+        if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+                and before is not None and before != bool(f["on"])):
+            label = R.animal_switch_label(key)
+            _settings_receipt(
+                conversation, None,
+                {"kind": "animal_switch", "key": key, "value": before},
+                {"kind": "animal_switch", "key": key, "value": bool(f["on"])},
+                f"Turned {label} {'on' if f['on'] else 'off'}", since=since,
+                label=label)
     elif n == "animal_sky":
+        before = R.sky_show_value()
+        since = _newest_receipt_id()
         out = R.set_sky_show(f["on"], peer=peer, local=local)
+        if (getattr(out, "ok", False) and not getattr(out, "waiting", False)
+                and before is not None and before != bool(f["on"])):
+            label = "the sun and moon"
+            _settings_receipt(
+                conversation, None,
+                {"kind": "sky_show", "key": "the sun and moon", "value": before},
+                {"kind": "sky_show", "key": "the sun and moon",
+                 "value": bool(f["on"])},
+                f"Turned {label} {'on' if f['on'] else 'off'}", since=since,
+                label=label)
     elif n == "animal_weather":
-        out = R.set_weather_source(f["source"], peer=peer, local=local)
-        if out.ok and out.waiting:
+        source = str(f.get("source") or "")
+        before = R.weather_source_id()
+        since = _newest_receipt_id()
+        out = R.set_weather_source(source, peer=peer, local=local)
+        if getattr(out, "ok", False) and getattr(out, "waiting", False):
             # jarvis_sky's own two sentences, in one: the card is up and
             # nothing has changed (the card is the only yes - a spoken one
             # approves nothing).
             return Result("An approval card is up - nothing is sent to Open-Meteo until you "
                           "approve it, on your PC or phone.", n)
+        if (getattr(out, "ok", False) and before and before != source):
+            # THE VALUE, NOT THE WORDS: `set_weather_source` takes the id
+            # ("home_assistant") while the answer prints the label.
+            _settings_receipt(
+                conversation, None,
+                {"kind": "weather_source", "key": "the weather source",
+                 "value": before},
+                {"kind": "weather_source", "key": "the weather source",
+                 "value": source},
+                f"Set the weather source to {R.weather_source_label(source)}",
+                since=since, label="the weather source")
     else:
         return Result(ANIMAL_QUESTIONS["animal"], "animal_ask")
     return Result(out.said, n)
@@ -14959,7 +16083,8 @@ def _run_live_idle_ask() -> Result:
         "live_idle_ask")
 
 
-def _run_live_idle_set(f: dict, peer, local) -> Result:
+def _run_live_idle_set(f: dict, peer, local,
+                       conversation: Optional[str] = None) -> Result:
     """Change how long Jarvis Live waits, or refuse and change nothing.
 
     THE ONE WRITER IS THE ROUTE'S OWN. `setting.set` is
@@ -14969,6 +16094,11 @@ def _run_live_idle_set(f: dict, peer, local) -> Result:
     plate. So the range check, the write and the sentence are the ones the owner
     already gets from Settings; this runner adds no rule of its own except
     reading the value back before it says it worked.
+
+    A change that really happened leaves the SAME ONE undo receipt a switch
+    does (2026-11-03, the audit's BUG 6): a before/after pair of the NUMBER in
+    seconds - the value `set_live_idle` takes, not the words "3 minutes" - so
+    "undo" puts the old window back through that same writer.
 
     WHAT IT SAYS, in order:
       * a length that is not a number -> ask for one, change nothing;
@@ -15002,6 +16132,7 @@ def _run_live_idle_set(f: dict, peer, local) -> Result:
     if before == seconds:
         return Result(f"Jarvis Live already waits {want} before it turns off. "
                       f"Nothing was changed.", "live_idle_set")
+    since = _newest_receipt_id()
     try:
         out = setting.set(seconds, peer=peer, local=local)
     except Exception as exc:                # noqa: BLE001 - said, never swallowed
@@ -15024,6 +16155,12 @@ def _run_live_idle_set(f: dict, peer, local) -> Result:
         return Result("I asked the PC to change how long Jarvis Live waits, but it "
                       f"does not read that back, so I will not say it worked. "
                       f"Nothing was changed.", "live_idle_set")
+    _settings_receipt(
+        conversation, setting,
+        {"kind": "number", "key": setting.key, "value": before},
+        {"kind": "number", "key": setting.key, "value": int(seconds)},
+        f"Changed how long Jarvis Live waits to {want}", since=since,
+        label=str(setting.title()))
     return Result(
         f"Okay - Jarvis Live will now wait {want} before turning off when it "
         f"hears nothing. It can be anything {setting.range_words()}, and you can "
@@ -15049,7 +16186,7 @@ def _run_setting_explain(f: dict) -> Result:
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
         peer=None, local=None, messages=None, desktop=None,
-        client_surface: Optional[str] = None) -> Optional[Result]:
+        client_surface: Optional[str] = None, live: bool = False) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
@@ -15060,7 +16197,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     truly come from this PC (jarvis_settings_registry.py, 2026-09-27).
     `client_surface`: "hud" or "phone" when the caller really knows which
     device asked (2026-10-30, the parking answer's two lengths); otherwise
-    `_client_surface` infers it from `peer`/`local`."""
+    `_client_surface` infers it from `peer`/`local`. `live`: this turn was
+    SPOKEN in Jarvis Live (2026-11-03) - the one thing that changes an answer
+    here is a carded setting change, which says one calm line instead of the
+    setter's own sentence, because Live speaks the answer aloud."""
     n, f = intent.name, intent.f
     # The local calendar's own read, and the honest answers for abilities that
     # are off, built only in the apps, or not built at all (2026-10-31, pass
@@ -15084,6 +16224,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_reminders(n, _client_surface(peer, local, client_surface))
     if n in _PLUGIN_INTENTS:
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
+    if n == "phone_apps_list":
+        # Q7 (2026-11-03): the owner's own allow-list, read-only. Both apps get
+        # the same sentence - the list lives on the PC and the phone shows it
+        # there, so this is not a one-sided answer.
+        return _run_phone_apps()
     if n in _ANDROID_INTENTS:
         return _run_android(n, _android_state())
     if n in _GOAL_INTENTS:
@@ -15121,6 +16266,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # card, raised under its own action - nothing re-implemented here.
     if n == "send_file":
         return _run_send_file_chat(f)
+
+    # "read this link" (2026-11-03): YouTube's captions or one page's words,
+    # ONE card per link, raised through the reader's own action. It adds no
+    # route and no model tool, and it never follows a link it read.
+    if n == "read_link":
+        return _run_read_link(f, conversation=conversation)
+    if n == "read_link_q":
+        # A follow-up about the page this chat already read (Q2, 2026-11-03):
+        # no card, no fetch - the words are on this PC already.
+        return _run_read_link_q(f, conversation, now)
 
     # The HUD field test's three answers (2026-10-29): Google/Gmail paths,
     # which voice speaks, and how a phone is paired. Every one is read-only:
@@ -15200,7 +16355,7 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "menu_visibility":
         return _run_menu_visibility(f)
     if n == "settings_bool":
-        return _run_settings_bool(f, peer, local)
+        return _run_settings_bool(f, peer, local, live=live, conversation=conversation)
     # How long Jarvis Live waits before it turns itself off (2026-11-01). The
     # read changes nothing; the change goes through
     # jarvis_settings_registry.set_live_idle -> jarvis_limits.change, the same
@@ -15208,9 +16363,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "live_idle_ask":
         return _run_live_idle_ask()
     if n == "live_idle_set":
-        return _run_live_idle_set(f, peer, local)
+        return _run_live_idle_set(f, peer, local, conversation=conversation)
     if n == "settings_choice":
-        return _run_settings_choice(f, peer, local)
+        return _run_settings_choice(f, peer, local, live=live,
+                                    conversation=conversation)
     if n == "settings_choice_bad":
         return _run_settings_choice_bad(f)
     if n == "settings_choice_help":
@@ -15305,11 +16461,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "setting_explain":
         return _run_setting_explain(f)
     if n == "feature_switch":
-        return _run_settings_bool({"key": f["key"], "on": f["on"]}, peer, local)
+        return _run_settings_bool({"key": f["key"], "on": f["on"]}, peer, local,
+                                  live=live, conversation=conversation)
     if n == "feature_switch_refused":
         return _run_feature_switch_refused(f)
     if n.startswith("animal_"):
-        return _run_animal(n, f, peer, local)
+        return _run_animal(n, f, peer, local, conversation=conversation)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
     if n == "personality_set":
@@ -15340,7 +16497,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "snooze":
         return _run_snooze(f, sched, now)
     if n == "undo":
-        return _run_undo(f, sched, now, conversation)
+        # `peer`/`local`: a spoken settings undo re-applies a value through the
+        # setting's own setter, which must see the SAME device the owner is
+        # asking from (a phone cannot put back a PC-only setting).
+        return _run_undo(f, sched, now, conversation, peer=peer, local=local)
     if n in ("list_clear", "lists_which"):
         return _run_lists(intent, sched)
     if n.startswith("briefing_"):
@@ -15407,6 +16567,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # WHICH card is waiting (its own approval window knows), or that none
         # is. That is why this half needs nothing from the live backend's
         # gate, which this repository does not carry.
+        #
+        # Since D1 (2026-11-03) the matcher asks the PC's own approvals table
+        # first and returns this intent ONLY while a card is waiting, so the
+        # "or that none is" half is unreachable from this file: an owner who
+        # types "yes" with nothing pending now gets an ordinary answer instead.
         return Result(
             "Approvals are decided on the card itself - the Jarvis approval "
             "window on this PC, with your fingerprint for a risky one. "
@@ -15843,7 +17008,13 @@ UNDO_NOTHING_LEFT = "It is not on the list any more, so there was nothing to can
 #: Said when there is genuinely nothing of this fast path's to take back, and
 #: the owner said a COMMAND ("cancel that", "undo") rather than "never mind" -
 #: which is ordinary words too and still goes to the model (D6, 2026-10-25).
-UNDO_NOTHING_SAID = "Nothing of mine to cancel."
+#:
+#: The wording moved on 2026-11-03, when a spoken settings change began leaving
+#: a receipt: "Nothing of mine to cancel." read as "you changed nothing", which
+#: is exactly wrong after a carded setting was approved (that change is real and
+#: has no receipt, because a receipt is only written for a change this path
+#: made at once). "nothing here for me to take back" claims only what is true.
+UNDO_NOTHING_SAID = "There is nothing here for me to take back."
 
 #: The answers that change NOTHING at all - so they must not take away what
 #: "cancel that" would take back (D6, the live campaign of 2026-10-25).
@@ -15894,6 +17065,15 @@ READ_ONLY_INTENTS = frozenset({
     "goal_capability", "goal_list", "goal_state", "goal_about", "goal_update",
     "android_capability", "android_howto", "android_needs", "android_build_install",
     "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    # "which apps on my phone may you open?" (Q7, 2026-11-03) reads the
+    # owner's own [phone_apps] table through jarvis_phone_apps.view() - the
+    # same read-only view the route serves. It changes nothing, so it must not
+    # take away what "cancel that" would undo.
+    "phone_apps_list",
+    # A follow-up about the page this chat already read (Q2, 2026-11-03): it
+    # quotes words already on this PC and raises no card, so it must not clear
+    # what "cancel that" would take back.
+    "read_link_q",
     "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
@@ -15983,9 +17163,97 @@ READ_ONLY_INTENTS = frozenset({
     "update_ask", "update_notes"})
 
 
-def _run_undo(f: dict, sched, now: float, conversation) -> Optional[Result]:
+def _settings_undone_recently(conversation, now: float) -> Optional[Result]:
+    """The second "undo": the setting is already back, so say that and change
+    nothing. None when this chat has not put a setting back recently."""
+    key = str(conversation or "")
+    entry = _SETTINGS_UNDONE.get(key)
+    if not entry:
+        return None
+    try:
+        import jarvis_schedule as S
+        window = float(S.UNDO_WINDOW)
+    except Exception:
+        window = 600.0
+    if float(now) - float(entry.get("at") or 0.0) > window:
+        _SETTINGS_UNDONE.pop(key, None)
+        return None
+    label = str(entry.get("label") or "that setting")
+    return Result(f"I already put {label} back in this chat, so there is nothing left to "
+                  f"undo.", "undo")
+
+
+def _run_settings_undo(conversation, peer=None, local=None) -> Optional[Result]:
+    """Take back the newest CARDLESS settings change in this chat, ONCE.
+
+    None means "this chat has no settings change to take back" - the caller then
+    answers as it always did. The take is the receipts module's own `undo`,
+    which claims the row with one conditional UPDATE, so even two callers at
+    once cannot put the same change back twice. What it says afterwards is the
+    SETTER's own sentence when the reversal reached it (the same words the owner
+    would hear saying the change the other way), and an honest sentence
+    otherwise - a setter's refusal quotes the setter, and only a real card that
+    was not answered says the card thing (`_settings_undo_words`). A receipt
+    whose reversal raises its own approval card is NOT reported as undone.
+
+    A FAILED reversal keeps this chat's pointer (`_SETTINGS_UNDO`), so "undo"
+    can be tried again and the receipt, which is still undoable in the store, is
+    still reachable (2026-11-03 audit, BUG 4: the pointer used to be popped
+    first, so the second "undo" said there was nothing to take back).
+
+    `peer`/`local` are THIS request's own address, handed to the setter exactly
+    as the change itself would hand them: a phone cannot put back a setting the
+    PC only may change, and gets the setter's own refusal saying so.
+    """
+    key = str(conversation or "")
+    entry = _SETTINGS_UNDO.get(key)
+    if not entry:
+        return None
+    n = "undo"
+    label = str(entry.get("label") or "that setting")
+    # Clear what a PREVIOUS attempt said, so a failure that never reached the
+    # setter cannot quote the last one's words.
+    entry["said"] = {}
+    _SETTINGS_UNDO_LAST.said = ""
+    _SETTINGS_UNDO_LAST.waiting = False
+    _SETTINGS_UNDO_CALLER.peer, _SETTINGS_UNDO_CALLER.local = peer, local
+    try:
+        import jarvis_receipts as RC
+        out = RC.undo(str(entry.get("receipt_id") or ""))
+    except Exception:
+        return Result(_settings_undo_words(label, ""), n)
+    finally:
+        _SETTINGS_UNDO_CALLER.peer = _SETTINGS_UNDO_CALLER.local = None
+    said = str((entry.get("said") or {}).get("said")
+               or getattr(_SETTINGS_UNDO_LAST, "said", "") or "").strip()
+    waiting = bool((entry.get("said") or {}).get("waiting")
+                   or getattr(_SETTINGS_UNDO_LAST, "waiting", False))
+    if out.get("ok"):
+        _SETTINGS_UNDO.pop(key, None)
+        _SETTINGS_UNDONE[key] = {"label": label, "at": time.time()}
+        return Result(said or f"Put {label} back the way it was.", n)
+    if out.get("already_undone"):
+        _SETTINGS_UNDO.pop(key, None)
+        _SETTINGS_UNDONE[key] = {"label": label, "at": time.time()}
+        return Result(f"{label[:1].upper()}{label[1:]} was already back the way it was, so "
+                      f"nothing was changed.", n)
+    # NOT undone: keep the pointer so the next "undo" can try again.
+    return Result(_settings_undo_words(label, said, waiting), n)
+
+
+def _run_undo(f: dict, sched, now: float, conversation, peer=None,
+              local=None) -> Optional[Result]:
     """"Cancel that": the last thing the fast path set in THIS conversation,
-    within UNDO_WINDOW, once. Nothing else, ever."""
+    within UNDO_WINDOW, once. Nothing else, ever.
+
+    Since 2026-11-03 it also takes back the newest CARDLESS settings change made
+    in this chat: a setting creates nothing in the scheduler, so it can never
+    appear as the scheduler's own record - it keeps a receipt instead, and the
+    registry has promised that undo since it was written. A scheduler record
+    always wins, so "cancel that" after a reminder still cancels the reminder.
+    `peer`/`local` are the request's own address, passed on to the setting's
+    setter when a setting is what is being put back.
+    """
     import jarvis_schedule as S
     n = "undo"
     noun = f.get("noun")
@@ -15994,6 +17262,10 @@ def _run_undo(f: dict, sched, now: float, conversation) -> Optional[Result]:
         rec = sched.last_set(conversation, now) if conversation else None
     except Exception:
         rec = None
+    if rec is None and noun is None and not f.get("soft"):
+        taken = _run_settings_undo(conversation, peer, local)
+        if taken is not None:
+            return taken
     fits = rec is not None and (noun is None or noun in (rec.get("nouns") or ()))
     if rec is None or not fits:
         # Nothing of ours to take back. "cancel that timer" / "... alarm"
@@ -16010,10 +17282,13 @@ def _run_undo(f: dict, sched, now: float, conversation) -> Optional[Result]:
         # back is answered here, in one line, instead of being handed to the
         # model for a minute of guessing. "never mind" keeps going to the
         # model: it is ordinary words as well as a command, and a chat that
-        # answers it with "Nothing of mine to cancel." would read as a machine
-        # that did not listen.
+        # answers it with UNDO_NOTHING_SAID would read as a machine that did not
+        # listen.
         if f.get("soft"):
             return None
+        again = _settings_undone_recently(conversation, now)
+        if again is not None:
+            return again
         return Result(UNDO_NOTHING_SAID, n)
     minutes = int(S.UNDO_WINDOW // 60)
     if rec["age"] > S.UNDO_WINDOW:
@@ -16315,7 +17590,8 @@ def answer(text, *, sched=None, now: Optional[float] = None,
            conversation: Optional[str] = None, seen: Optional[float] = None,
            temporary: bool = False, private: bool = False, peer=None, local=None,
            messages=None, desktop=None,
-           client_surface: Optional[str] = None) -> Optional[Result]:
+           client_surface: Optional[str] = None,
+           live: bool = False) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
     in it; `seen`: when the owner last talked to Jarvis before this turn;
@@ -16326,7 +17602,10 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     a read-only intent goes to the model instead, so this path opens no
     scheduler and writes nothing. An ordinary chat is untouched. `peer`/
     `local`: the request's own address, for a setting on jarvis_owner_check.
-    PC_ONLY_ACTIONS (jarvis_settings_registry.py, 2026-09-27)."""
+    PC_ONLY_ACTIONS (jarvis_settings_registry.py, 2026-09-27). `live`: the turn
+    was spoken in Jarvis Live (2026-11-03) - passed straight down, read once by
+    `_live_body` in `answer_turn`, and used only for a carded setting change's
+    one calm line."""
     now = time.time() if now is None else now
     # Chat co-creation of a personality (2026-10-25, jarvis_personality_creator.py):
     # "make me a personality like ..." drafts it with the LOCAL model in the
@@ -16342,7 +17621,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     if _made is not None:
         return Result(str(_made.get("reply") or ""),
                       str(_made.get("intent") or "personality_draft"))
-    intent = match(text, now)
+    intent = match(text, now, conversation)
     if intent is None:
         # GOOGLE CALENDAR: READS AND EVENT CHANGES, AND ONLY THOSE (2026-10-28).
         # Asked HERE - after the fast path has declined - so one sentence has
@@ -16377,7 +17656,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
         sched = jarvis_schedule.get()
     res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary,
              peer=peer, local=local, messages=messages, desktop=desktop,
-             client_surface=client_surface)
+             client_surface=client_surface, live=live)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -16587,13 +17866,19 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     # in Rust (commands.rs `chat_extras`) and never by a page. The update
     # answers need it, and nothing else reads it (2026-10-26).
     desktop = body.get("desktop") if isinstance(body, dict) else None
+    # `live` (2026-11-03): read ONCE, here, with the same rule jarvis_agent's
+    # own `_TurnWatch` makes - `provenance: "voice"` AND `live: true` on the
+    # newest user message. It is never inferred from the text and never from
+    # the app's say-so alone, so a typed chat cannot become a Live turn.
+    live = _live_body(body)
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
                                            temporary=temporary, private=private,
                                            peer=peer, local=local,
                                            messages=body.get("messages"),
                                            desktop=desktop,
-                                           client_surface=client_surface)
+                                           client_surface=client_surface,
+                                           live=live)
     if res is None and conversation and not private:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
@@ -16665,6 +17950,28 @@ def _temporary_body(body) -> bool:
         return bool(jarvis_intake.temporary_body(body))
     except Exception:
         return isinstance(body, dict) and body.get("temporary") is True
+
+
+def _live_body(body) -> bool:
+    """Is this request a JARVIS LIVE turn (2026-11-03)?
+
+    The same reading jarvis_agent's own `_TurnWatch` makes (and the same one
+    test_live_parity.py pins for the marks both apps send): the NEWEST user
+    message carries `provenance: "voice"` AND `live: true`. A `live` mark on a
+    typed message is not a Live turn, and a spoken message without the mark is
+    not one either. Anything unreadable counts as NOT Live, so a broken request
+    can never make the spoken-shortening path fire in a typed chat.
+    """
+    if not isinstance(body, dict):
+        return False
+    msgs = body.get("messages")
+    if not isinstance(msgs, list):
+        return False
+    users = [m for m in msgs if isinstance(m, dict) and m.get("role") == "user"]
+    if not users:
+        return False
+    last = users[-1]
+    return last.get("provenance") == "voice" and last.get("live") is True
 
 
 def _forget_set(sched, conversation) -> None:

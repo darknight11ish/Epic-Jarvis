@@ -426,18 +426,6 @@ TIER_UNLISTED = (
 TOOLS_SWITCHABLE = TIER_A + TIER_B
 #: Known tools that are NOT offered in-app by this slice (C + unlisted).
 TOOLS_TOML_ONLY = TIER_C + TIER_UNLISTED
-#: The page's groups, in order; every switchable tool exactly once.
-TOOL_GROUPS = (
-    ("Notes and reading",
-     ("calendar_read", "notes_search", "append_obsidian_daily",
-      "create_joplin_note", "append_logseq_journal")),
-    ("Timers, lists and plans",
-     ("set_timer", "set_reminder", "todo_add", "todo_done", "coming_up")),
-    ("Connected accounts & home", TIER_B),
-    ("Safety and sharing",
-     ("protect_from_jarvis", "github_search", "send_file_to_phone")),
-)
-GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
 TOOL_NAME = {"email_read": "email_check"}
@@ -479,7 +467,45 @@ TOOL_GROUPS = (
     ("Safety and sharing",
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),
 )
+#: The storage self-scan's own tools, appended ONLY when its module is really
+#: on this PC (it ships since PR #1117 merged: the module is in _where.py's
+#: SHIPPED set and the base carries it). The import stays PLAIN and GUARDED on
+#: purpose - a PC whose install predates the module, or whose copy is damaged,
+#: must not take this page down: it then has exactly the four shipped groups
+#: and its start-up line says the storage scan is not installed. The two audit
+#: exemptions this comment used to name (test_shipped_modules.py's
+#: REPO_ONLY_IMPORTS and test_base_matches_repo.py's OPTIONAL_IMPORTS) were
+#: removed in the same change, because the module is shipped now.
+_storage_health = None
+try:
+    import jarvis_storage_health as _storage_health
+except ImportError:                          # not installed on this PC (PR #1117)
+    _storage_health = None
+except Exception:                            # noqa: BLE001 - a damaged drop-in must
+    _storage_health = None                   # not take the ask-first page down
+if _storage_health is not None:
+    TOOL_GROUPS = TOOL_GROUPS + tuple(_storage_health.TOOL_ROWS)
 GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
+
+
+def _app_can_switch(tool: str) -> bool:
+    """True when POST /api/asks_first/tools accepts this row - the same three
+    tests request_tool_enable applies. A group row can be appended for a tool
+    that raises a card but must never be switched from an app:
+    jarvis_storage_health.py's scan and cleanup are one (a cleanup is a
+    deletion, so storage_cleanup is in MUST_ASK)."""
+    return (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
+            or real_tool(tool) in SWITCHABLE_TOOL_NAMES)
+
+
+#: TOOL_GROUPS narrowed to what an app may really switch. `tools_status` is the
+#: SWITCH list and its own docstring promises "Only TIER_A + TIER_B tools are
+#: here"; without this, PR #1117's appended storage rows appeared as two
+#: switches whose POST answers 403 TOOLS_NOT_ON_LIST. A group with nothing
+#: switchable in it is not shown at all.
+SWITCHABLE_GROUPS = tuple((title, tuple(t for t in tools if _app_can_switch(t)))
+                          for title, tools in TOOL_GROUPS)
+SWITCHABLE_GROUPS = tuple((title, tools) for title, tools in SWITCHABLE_GROUPS if tools)
 
 
 
@@ -533,7 +559,8 @@ HARD_LIMITS = frozenset({
     "app_build_android", "app_install_android",
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
-    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "chatbot_session", "memory_forget_range", "conversation_clear",
+    "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
@@ -565,7 +592,8 @@ MUST_ASK = frozenset({
     "restore_backup", "check_tool_updates", "desktop_update", "run_plan",
     "phone_notifications_read",
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
-    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "chatbot_session", "memory_forget_range", "conversation_clear",
+    "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "app_build_android", "app_install_android",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
@@ -740,7 +768,13 @@ GROUPS = (
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable",
         "learning_paraphrase_enable", "history_enable",
-        "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
+        "memory_manage", "memory_forget_range", "conversation_clear",
+        # The storage self-scan's ONE tidy (jarvis_storage_health.py, a separate
+        # 2026-11-03 drop-in): it deletes temporary files and moves old deploy
+        # backups, so its card is a page row the moment the tier line exists -
+        # even on a PC whose drop-in folder is not installed yet.
+        "storage_cleanup",
+        "user_profile_manage", "custom_voice",
         # Action receipts (jarvis_receipts.py, 2026-10-14): putting ONE recorded
         # change back - what changed, from the receipt Jarvis wrote before it
         # changed it. It sits in this group with the other actions over the
@@ -1998,7 +2032,7 @@ def tools_status(*, here: bool = False) -> dict:
         last_all = dict(_T_STATE["last"])
     pending_tool = real_tool(str(pending.get("tool") or "")) if pending else ""
     items = []
-    for title, tools in TOOL_GROUPS:
+    for title, tools in SWITCHABLE_GROUPS:
         for tool in tools:
             waiting = bool(pending) and pending_tool == real_tool(tool)
             last = dict(last_all) if (last_all.get("tool")
@@ -2009,7 +2043,7 @@ def tools_status(*, here: bool = False) -> dict:
     return {"label": TOOLS_LABEL, "detail": TOOLS_DETAIL, "can_enable": bool(here),
             "items": items,
             "groups": [{"title": title, "ids": list(tools)}
-                       for title, tools in TOOL_GROUPS],
+                       for title, tools in SWITCHABLE_GROUPS],
             "vault": _vault_switch_status(here),
             "not_offered": {
                 "tier_c": list(TIER_C), "not_this_slice": list(TIER_UNLISTED),

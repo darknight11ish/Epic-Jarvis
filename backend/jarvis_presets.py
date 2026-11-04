@@ -22,7 +22,7 @@ Lanes (this PC, 2026-10-10 measurements):
   pooled  both cards, port 11450 - the Coding preset's own lane (2026-11-02)
 The owner's choices: Fast runs qwen3.5:4b on the coding lane at the window that
 lane serves (16,384) while the 2060 keeps the general model warm; Coding starts
-the coding lane on demand.
+its own pooled both-card lane on demand.
 
 Coding is the ONE heavy row, and since 2026-11-02 it has a lane that can really
 hold it: a 14.8 GB model fits neither card alone, so its lane is ONE Ollama on
@@ -170,16 +170,21 @@ PRESETS = (
         what="For writing and fixing code, reading a project, and long tool-driven "
              "coding jobs: the 30B coding model on ONE lane that sees both cards, "
              "started on demand by this apply.",
-        cost="HEAVY MODE: it holds BOTH GPUs (14.9 GB of video memory) and pauses the "
-             "other lanes' models while it works, for about 32 s on a cold load. "
-             "Measured 2026-11-02 at 16,384 tokens: 85.3 tok/s median on three coding "
-             "prompts, zero spill. It is not a single-card model.",
+        cost="HEAVY MODE: it fills BOTH GPUs (16.2 GB of video memory here, and "
+             "another 0.3 GB in system RAM at this window) and pauses the other "
+             "lanes' models while it works, for about 36 s on a cold load. "
+             "Measured 2026-11-02 at 16,384 tokens: 85.3 tok/s median on three "
+             "coding prompts, zero spill. Re-measured 2026-11-03 at 32,768 tokens: "
+             "80.4 tok/s median on the same three prompts (79.9 at 16,384, inside "
+             "this model's own run-to-run noise), with 323.5 MiB of it in system "
+             "RAM instead of video memory - measured and accepted for this window "
+             "alone. It is not a single-card model.",
         worse="Applying it makes it the model chat uses, so the Fast/Live and "
               "Agentic+Vision models are NOT resident while it runs - they come back "
               "when you apply another preset, and that switch costs a reload. It is "
               "not a quick helper: it takes both cards for as long as it is on, and "
               "nothing else can be loaded beside it.",
-        model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="pooled", context=16384,
+        model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="pooled", context=32768,
         prompt="coding", diet="coding", heavy_mode=True,
         heavy_words="This preset needs both cards at once as one pooled lane. While "
                     "it runs, the everyday and Fast models are paused - they come "
@@ -188,13 +193,26 @@ PRESETS = (
         tools=("code", "files"),
         measured={"tok_s": 76.2, "rubric": "6/6 coding rubric", "size_gib": 14.0,
                   "gpu_use": "100% GPU across both cards", "cold_load_s": 32.1,
-                  "spill_gib": 0.0, "context_zero_spill": 16384,
+                  "spill_gib": 0.3, "context_zero_spill": 16384,
+                  "context_measured": 32768,
                   "source": "measurement 2026-10-18 at 28,672 tokens: 76.2 tok/s "
                             "median eval, 6/6 coding rubric, no CPU spill. The "
                             "28,672-token rung was re-measured on 2026-11-02 and no "
                             "longer loads with zero spill on this PC (212 MiB went "
-                            "to the CPU); 16,384 is the largest rung that loaded "
-                            "with none, and it is the one this preset asks for."},
+                            "to the CPU); 16,384 was the largest rung that loaded "
+                            "with none, and is kept above as that historical fact. "
+                            "From 2026-11-03 the preset asks for 32,768: the whole "
+                            "ladder was measured again through the same shipped path "
+                            "and every rung above 16,384 spills (20,480: 203.5 MiB, "
+                            "24,576: 207.5, 28,672: 211.5, 32,768: 323.5). At 32,768 "
+                            "it loaded 16,513.7 MiB with 323.5 MiB (0.3 GiB) in "
+                            "system RAM, 79.88 -> 80.36 tok/s median on the three "
+                            "prompts (inside noise), cold load 36.0 s against 37.0 s. "
+                            "That 323.5 MiB is accepted for THIS window only, capped "
+                            "at 352 MiB by jarvis_model_lanes.POOLED_SPILL_ALLOWANCE; "
+                            "every other load still refuses any spill "
+                            "(docs/MEASURED-2026-11-02-POOLED-LANE.md, 2026-11-03 "
+                            "amendment)."},
         words=("code", "coding", "program", "android", "app", "debug", "bug",
                "kotlin", "python", "script", "compile", "repository", "git"),
         strong=("writing code", "fix a bug", "build an app", "app development",
@@ -1342,9 +1360,10 @@ def _default_adopt(ref: str):
 
     NOTHING ELSE CALLS IT, it raises no card, and it is only reached from the
     heavy-mode branch of `apply_preset` - after that card was approved and
-    after the model really loaded (a load that spills is undone before this
-    runs). If the model steward on this PC cannot be read or written, this says
-    so and the apply rolls everything back rather than pretending.
+    after the model really loaded (a load that spills past this lane's one
+    measured allowance is undone before this runs). If the model steward on
+    this PC cannot be read or written, this says so and the apply rolls
+    everything back rather than pretending.
     """
     try:
         import time as _time

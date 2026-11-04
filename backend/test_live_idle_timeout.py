@@ -64,6 +64,8 @@ TMP = Path(tempfile.mkdtemp(prefix="jarvis-live-idle-"))
 os.environ["JARVIS_FRAMEWORK_TOML"] = str(TMP / "jarvis-framework.toml")
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(TMP)
 os.environ["JARVIS_CONFIG_DIR"] = str(TMP)
+# The undo receipt's own store: never the owner's real receipts.db (2026-11-03).
+os.environ["JARVIS_RECEIPTS_DB"] = str(TMP / "receipts.db")
 
 SHIPPED = REPO / "backend" / "rebuilt" / "jarvis-framework.toml"
 
@@ -465,6 +467,52 @@ def t_the_grammar_is_narrow():
           [k for k in R.capability_keys() if k.startswith("limit:")])
 
 
+def t_a_cardless_change_leaves_one_receipt_and_undo_puts_it_back():
+    """BUG 6, the number half (2026-11-03 audit).
+
+    *"A cardless change leaves ONE undo receipt"* was false for exactly the
+    settings this slice's headline names: this runner set the number and wrote
+    no receipt, so "say undo in the same chat" had nothing to take back.
+
+    Now the change leaves one row under `change_setting` holding the NUMBER in
+    seconds - the value `set_live_idle` takes, not the words "3 minutes" - and
+    "undo" puts the old window back through the same writer.
+    """
+    import jarvis_receipts as RC
+
+    class Sched:
+        def last_set(self, cid, now):
+            return None
+
+    fresh()
+    rows = len(RC.recent(200))
+    intent = Q.match("make jarvis live wait three minutes")
+    check("the sentence reaches the setting",
+          intent is not None and intent.name == "live_idle_set",
+          None if intent is None else intent.name)
+    out = Q.run(intent, None, 1_800_000_000.0, conversation="live-idle-undo")
+    check("...the window really moved to 180 s", LIVE.quiet_seconds() == 180,
+          (LIVE.quiet_seconds(), None if out is None else out.reply))
+    now_rows = RC.recent(200)
+    check("...and it left exactly ONE receipt", len(now_rows) == rows + 1,
+          (rows, len(now_rows)))
+    newest = now_rows[0] if now_rows else {}
+    check("...under the settings tool's own name",
+          newest.get("tool_name") == Q.SETTINGS_RECEIPT_TOOL, newest.get("tool_name"))
+    check("...holding the NUMBER it changed from, never the words",
+          (newest.get("before") or {}).get("value") == 90, newest.get("before"))
+    undo = Q._run_undo({"noun": None, "soft": False}, Sched(),
+                       1_800_000_000.0, "live-idle-undo")
+    check("'undo' puts the old window back through the same writer",
+          LIVE.quiet_seconds() == 90,
+          (LIVE.quiet_seconds(), None if undo is None else undo.reply))
+    check("...and the settings file says so", quiet_line() == "quiet_s = 90",
+          quiet_line())
+    check("...and the receipt is marked undone",
+          RC.get(str(newest.get("receipt_id") or "")).get("undone") is True,
+          RC.get(str(newest.get("receipt_id") or "")))
+
+
 def main():
     for fn in (t_the_default_is_the_behaviour_live_always_had,
                t_asking_changes_it_and_the_engine_uses_the_new_number,
@@ -473,6 +521,7 @@ def main():
                t_the_desktop_and_phone_catalogues_carry_it,
                t_the_change_goes_through_the_same_path_and_the_row_owns_the_card,
                t_a_hand_edited_value_is_clamped_or_ignored,
+               t_a_cardless_change_leaves_one_receipt_and_undo_puts_it_back,
                t_the_grammar_is_narrow):
         print(f"\n--- {fn.__name__} ---")
         fn()

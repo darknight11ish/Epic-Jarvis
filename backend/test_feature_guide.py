@@ -2423,6 +2423,98 @@ def t_every_rows_where_names_a_real_place():
           settings_places >= 60 and brain_places >= 40, (settings_places, brain_places))
 
 
+# ------------------------------------- 8. a named CHOICE setting answers too (2026-11-03)
+def t_a_named_choice_answers_state_and_how_to():
+    """M4: `feature_state_setting` / `feature_howto_setting` work for a choice.
+
+    `_setting_target` used to be bool-only, so the two intents that carry a
+    setting KEY (`jarvis_quick._run_feature_state_setting` /
+    `_run_feature_howto_setting`) could never fire for any of the ten
+    CHOICE_SETTINGS rows: "is the personality set to warm?" and "how do I
+    change the anti-slop mode?" were answered from the catalogue or not at all.
+
+    WHY THE VALUES HERE ARE STAND-INS. The registry's choice readers reach nine
+    different modules, several of which WRITE when they are opened (the voices
+    state, the schedule database). This suite's own rule - its docstring says
+    every read/write here is a temp folder or a recording stand-in - is kept by
+    standing the ROW and the ONE reader (`current_value`) in for the duration,
+    so what is proved is the guide's own logic: it resolves the choice, prints
+    whatever the one reader answered, and prints NO value when it answered
+    nothing. The readers themselves are driven for real in
+    backend/test_setting_explain.py, which points those modules at a temp folder
+    before importing them.
+    """
+    real = tuple(R.CHOICE_SETTINGS)
+    check("ten named-choice settings to answer", len(real) == 10, len(real))
+    # 1. The real rows are RESOLVED by their own key and their own name - no
+    #    module is read for this half.
+    for choice in real:
+        check(f"{choice.key}: resolved by its own KEY (what the intent carries)",
+              FG._choice_by_key(choice.key) is choice, FG._choice_by_key(choice.key))
+        got, label = FG._setting_target(choice.names[0])
+        if choice.key == "antislop_mode":
+            # "mode" is one of `_GENERIC`'s own filler words, so the name "the
+            # anti-slop mode" folds to "anti slop" and `_setting_target` finds
+            # the ANTI-SLOP SWITCH first. That is the existing switch order, not
+            # a choice regression, and it is why the intent carries the KEY: the
+            # check above is what makes this row answerable.
+            check("antislop_mode: its NAME folds to the switch (a generic word), "
+                  "so the KEY is what identifies the choice",
+                  got is not None and getattr(got, "key", "") == "antislop", got)
+        else:
+            check(f"{choice.key}: resolved by its own registered NAME",
+                  got is choice, got)
+            check(f"{choice.key}: ...with a spoken label",
+                  bool(str(label).strip()), label)
+
+    # 2. The stand-in half: the guide's answer follows the ONE reader.
+    stand_ins = tuple(dataclasses.replace(c, choices={"alpha": "alpha",
+                                                      "beta": "beta"})
+                      for c in real)
+    answered = {c.key: "alpha" for c in stand_ins}
+    answered["face"] = None                  # the unreadable case
+    backup = R.CHOICE_SETTINGS, R.current_value
+    try:
+        R.CHOICE_SETTINGS = stand_ins
+        R.current_value = lambda setting: answered.get(getattr(setting, "key", ""))
+        for choice in stand_ins:
+            out = FG.state(choice.key)
+            check(f"state({choice.key!r}) answers as that setting",
+                  out.get("ok") is True and out.get("kind") == "setting"
+                  and out.get("setting") == choice.key, out)
+            words = str(out.get("words") or "")
+            if answered[choice.key] is None:
+                check(f"state({choice.key!r}) says it could not read the value",
+                      "could not read" in words and "guess" in words, words)
+                check(f"state({choice.key!r}) claims no value at all",
+                      out.get("state") is None and "alpha" not in words, words)
+            else:
+                check(f"state({choice.key!r}) carries the reader's own value",
+                      out.get("state") == "alpha" and "alpha" in words, words)
+            how = FG.how_to(choice.key, True)
+            hwords = str(how.get("words") or "")
+            check(f"how_to({choice.key!r}) answers as that setting",
+                  how.get("ok") is True and how.get("setting") == choice.key, how)
+            check(f"how_to({choice.key!r}) prints a real set-to phrase",
+                  f'set {choice.names[0]} to alpha' in hwords, hwords)
+            check(f"how_to({choice.key!r}) does NOT offer a turn on/off phrase",
+                  f"turn on {choice.names[0]}" not in hwords, hwords)
+            if answered[choice.key] is None:
+                check(f"how_to({choice.key!r}) names no value it did not read",
+                      "It is set to" not in hwords, hwords)
+    finally:
+        R.CHOICE_SETTINGS, R.current_value = backup
+
+    # 3. Nothing widened: an unknown name is still unknown, and a SWITCH is
+    #    still answered by the switch branch (its own wording is untouched).
+    out = FG.state("nonsense xyz")
+    check("an unknown name is still unknown after the choice branch",
+          out.get("ok") is False and out.get("kind") == "unknown", out)
+    out = FG.state("prompt coach")
+    check("a switch still answers through its own reader",
+          out.get("kind") in ("setting", "feature"), out)
+
+
 if __name__ == "__main__":
     for fn in (t_every_row_is_looked_up_and_its_facts_equal_the_json,
                t_unknown_and_ambiguous_never_guess,
@@ -2469,7 +2561,8 @@ if __name__ == "__main__":
                t_every_row_with_a_switch_reads_it_and_writes_it,
                t_every_switch_is_explained_by_a_row_or_its_own_label,
                t_an_unreadable_module_says_could_not_read,
-               t_every_rows_where_names_a_real_place):
+               t_every_rows_where_names_a_real_place,
+               t_a_named_choice_answers_state_and_how_to):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

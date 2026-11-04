@@ -1276,12 +1276,25 @@ object Schedule {
      * section id `SettingsScreen.kt`'s own `item(key = ...)` rows already
      * use ("web-search", "manner", ...), or null when this answer named
      * none. Pure navigation - nothing here changes a setting.
+     *
+     * Since F6 (2026-11-03) the same field can name a WHOLE PLACE rather than
+     * only a settings row - the PC's deterministic path answers "open live",
+     * "open history", "open memory" the same way it answers "open help"
+     * (`OpenPlace` decides per id, including the ids this app has no screen
+     * for). The field name for that is not pinned down on this side yet, so
+     * the four spellings the backend could reasonably use are all read here
+     * rather than silently dropping the request. A backend that keeps sending
+     * `open_settings` needs no change at all - the phone resolves its value
+     * through the same table.
      */
     fun openSettingsFromRoute(header: String?): String? {
         if (header.isNullOrBlank()) return null
         val o = runCatching { JarvisJson.parseToJsonElement(header.trim()) as? JsonObject }.getOrNull()
             ?: return null
         return o.text("open_settings")
+            ?: o.text("open_place")
+            ?: o.text("open_area")
+            ?: o.text("open_screen")
     }
 
     private fun JsonObject.num(key: String): Double? =

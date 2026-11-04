@@ -5273,8 +5273,17 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    - a tool ran in that turn or earlier in the conversation: "the
      conversation read outside text (a tool ran)"
 
-   **One turn that fails makes every proposal of that pass a card.** The
-   model read every turn, and nothing says which turn a fact came from.
+   **Per-fact attribution, since 2026-11-03.** A turn that fails no longer
+   cards every proposal of the pass: each fact is attributed to the clean
+   turns that hold its words, and only a fact that needs a failing turn's
+   words keeps that reason. The words must fit **one** clean turn, or **two
+   consecutive** clean turns with no other turn between them - never stitched
+   across a turn that read outside text, so a tool output in the middle
+   cannot supply half of a fact (Gemini's Q1 hardening on the memory review).
+   The conversation-wide taint still counts as the card's reason for a fact
+   that cannot be attributed. A turn's own `read_outside` is what makes it
+   unclean; a typed turn after an earlier tool turn is still the owner's
+   words.
 5. **Voice** (GUARDS L8) counts only when the voice check that let it in was
    `very_strict`, decided by the stronger voice model, in mode `owner`. Else:
    "said aloud, but the voice check was not at its strictest ...".
@@ -5309,7 +5318,9 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    not grounded by only a past or -ing form ("hated" does not ground "hat");
    a date counts when it is the real date of a relative date the owner used
    ("yesterday"). Negations ("not", "no longer") must be there word for
-   word. Else: "not in your own words".
+   word. Else: "not in your own words". **Since 2026-11-03** the fact's words
+   must all be in **one** clean turn, or in **two consecutive** clean turns -
+   never stitched across a turn that read outside text (point 4).
    **And the fact leaves out nothing that changed what was said** (red team
    R2, 2026-09-24). Each sentence the fact shares a word with is read for:
    a negation or change of state (not, n't, no, never, no longer, any more,
@@ -5430,7 +5441,14 @@ ALL of these, or it stays a card. The words in quotes are what the card's
      nothing (or only another person, above), for a one-line JSON verdict. Its "unsure", an answer that is
      not that JSON, no answer within 8 seconds, Ollama not reachable, no
      model known, or a model that is not on this PC or is a cloud model: a
-     card (fail closed).
+     card (fail closed). **Since 2026-11-03** a check that could not RUN (a
+     timeout, an unreachable model, an unreadable answer - never a topic it
+     flagged) is asked once more after a 1.5 s pause with a 30 s deadline
+     (`SENSITIVE_RETRY_TIMEOUT` / `SENSITIVE_RETRY_BACKOFF`): a clean second
+     answer saves the fact, and a second failure is still a card, still
+     counted as the fault it is. (The learner's model is often busy right
+     after an answer - measured on the owner's PC, two of six carded facts
+     were exactly this 8-second timeout.)
 
    The reason is one per topic: "about health, a sensitive topic", "about
    money, ...", "about passwords or account details, ...", "about ID
@@ -5592,6 +5610,22 @@ saved this way in one learning pass (`REWORDED_MAX_PER_PASS`); the rest stay
 cards whose reason says it is a ceiling. A wrong paraphrase can then be stored
 and recalled - the card says so in those words before it is turned on.
 
+**It cannot relax a pass that read outside text** (2026-11-03, Gemini Q1):
+when any turn of the pass is not learnable from - a tool ran, or its words
+were re-sent - the extractor was fed those turns too, so a reworded fact in
+that pass still cards.
+
+**Turning it on also rechecks the pending cards** (2026-11-03, Gemini Q3): a
+pending card whose ONLY reason was "not in your own words" is saved with
+`meta.reworded` when the switch is turned on, and again on every later
+learning pass (`recheck_pending_proposals`). At most five such cards per call,
+and the same checks the pass runs still apply (source, correction, instruction,
+forgotten-before, contradiction, sensitive - a check that cannot run leaves the
+card alone). The other two old card reasons - a sensitive check that could not
+run, and the old pass-wide "the conversation read outside text" - need the
+turns of the pass that was carded, which were never stored, so they stay cards
+rather than be guessed at.
+
 `GET /api/memory/auto?limit=30&before=<saved_at>`
 
 ```json
@@ -5698,14 +5732,22 @@ wait for your yes, even with this on."
 ### 19.6 Known gaps, said plainly
 
 - **Strict on purpose, so many real facts stay cards.** A fact the model
-  rewords ("prefers" for "likes better") is not grounded; a conversation
-  with one pasted message, one shared text, one tool run or one voice turn at
-  the balanced voice setting makes every later pass of that conversation
-  cards; and the sensitive-topic check flags anything private about another
-  person (an everyday fact about someone saves since 2026-09-26, but only
-  on the local model's clear "no"), and asks the local model about
-  everything else (a card when it is unsure
-  or does not answer in 8 seconds).
+  rewords ("prefers" for "likes better") is not grounded unless the third
+  switch is on; a turn that fails - a pasted or shared message, an
+  unverifiable voice turn - still cards the facts whose words it holds
+  (2026-11-03: no longer the whole pass, only the facts that need it); and the
+  sensitive-topic check flags anything private about another person (an
+  everyday fact about someone saves since 2026-09-26, but only on the local
+  model's clear "no"), and asks the local model about everything else (a card
+  when it is unsure or does not answer in 8 seconds - after one more patient
+  30-second ask when the check itself could not run).
+- **Old cards were not all recheckable.** The pending cards made before
+  2026-11-03 by the reworded and sensitive-timeout bugs can only be rechecked
+  for the "not in your own words" reason (turning the switch on saves those by
+  itself). The other two reasons need the turns of the pass that was carded,
+  which were never stored, so they stay cards for the owner's yes; the two
+  repairs stop new ones being made. Said here so nobody expects every old live
+  card to vanish.
 - **The registry is in memory.** After a backend restart, the rest of an
   ongoing conversation is cards (the earlier turns are "not seen arrive"). An
   app that sends no `conversation_id` gets cards only.
@@ -20972,6 +21014,15 @@ the address in full; `read_web_page` is `ask` in `jarvis-framework.toml`, in
 **What raises no card:** nothing else. This module has no settings, no
 switch, no route and no file of its own.
 
+**The same reader from a bare pasted address (2026-11-03).** The chat fast path
+in `jarvis_quick` hands a message that is only an `http(s)` address, or an
+address plus a question about it, to this same `prepare` -> `describe` -> `run`
+flow, so the card is this card and the outside-text rule above is unchanged; the
+words are kept in memory for that conversation for 900 seconds so a follow-up
+needs no second card. It keeps **no source row** for now: "Where this came from"
+lists model-tool reads only, and adding this one needs the turn-id seam in
+`jarvis_hud.py` (a later change).
+
 ### 115.5 Tests
 
 `backend/test_readpage.py` - the address's shape (and that no socket is
@@ -25344,10 +25395,16 @@ What an apply does, in order, and what it never does:
    leaves it running).
 2. The pause is ANNOUNCED (event bus + audit log) before the first unload, both
    lane models are unloaded and proved gone from `/api/ps`, the model is loaded
-   **naming 16,384 tokens**, and `/api/ps` must show it present, at that
-   context and with **zero spill**. A load that spills or comes up elsewhere is
-   unloaded again, both lanes are restored and the answer says why (503) - the
-   refusal is the machine's own words, never a canned one.
+   **naming 32,768 tokens** (since 2026-11-03; 16,384 before it), and `/api/ps`
+   must show it present, at that context and with no spill beyond this one
+   window's measured allowance - **352 MiB**
+   (`jarvis_model_lanes.POOLED_SPILL_ALLOWANCE`: the 323.5 MiB measured at
+   32,768 on 2026-11-03 plus about 9%). A load that comes up elsewhere, spills
+   past the allowance, or does not report its spill is unloaded again, both
+   lanes are restored and the answer says why (503) - the refusal is the machine's own
+   words, never a canned one. **That allowance is the ONE exception:**
+   `load_coder` with no allowance still refuses any spill at all, and that is
+   every other caller, the big-coder mode's own 28,672-token load included.
 3. The model is then recorded as the one chat uses. It is NOT a second card and
    NOT `switch_to`: `jarvis_models.switch_to` runs its tripwire smoke test at
    `jarvis_models.OLLAMA`, which is a single-card lane, so asking it for a
@@ -25389,9 +25446,38 @@ RTX 2080 SUPER while it ran, and both lane models proved back afterwards at
 start took 69.9 s and the stop 59.1 s, the pause and the restores included.
 **The 28,672-token rung the 2026-10-18 measurement used no longer fits this
 PC**: 28,672, 24,576 and 20,480 all spilled 204-212 MiB, and 16,384 was the
-largest rung that loaded with none, which is why the preset asks for 16,384.
-`jarvis_big_coder.NUM_CTX` (28,672) is that mode's own measured rung and was
-not changed.
+largest rung that loaded with none, which is why the preset asked for 16,384
+from 2026-11-02 until the amendment below. `jarvis_big_coder.NUM_CTX` (28,672)
+is that mode's own measured rung and was not changed.
+
+**2026-11-03 amendment: the preset now asks for 32,768, and the allowance is
+still one window's.** The same day's read-only measurement on this PC, through
+the same shipped path, put the whole context ladder on one table: 16,384 at
+14,886.2 MiB with **no spill** (still the zero-spill ceiling), then 20,480 at
+203.5 MiB spilled, 24,576 at 207.5, 28,672 at 211.5 and **32,768 at 323.5 MiB**
+(16,513.7 MiB in all, 16,190.1 of it in video memory). Above 16,384 every rung
+spills; the 8 GB card is what runs out first (7,591 of 8,192 MiB at 32,768),
+which is why the top rung's spill jumps by 112 MiB rather than growing smoothly.
+The owner chose 32,768, the largest rung measured to load on this PC: cold load
+36.0 s against 37.0 s at 16,384, and a decode median of 80.36 against 79.88
+tokens a second on the three prompts, inside the model's own run-to-run noise.
+The owner accepted the 323.5 MiB of the model in system RAM, so the preset's
+`context` is now **32,768** (`jarvis_model_lanes.POOLED_CTX`, pinned to it by
+test; `POOLED_SPILL_MEASURED_MIB` is 323.5, `context_measured` is 32,768, and
+`context_zero_spill` stays 16,384 as the historical fact), and the start passes
+`load_coder(..., allow_spill=...)` the cap of **352 MiB** - the 323.5 MiB
+measurement plus about 9%. **Nothing else relaxes:** no allowance is the default
+and still means any spill is refused; `jarvis_big_coder.start()` never passes
+one; the big-coder mode's 28,672 rung and its zero-spill check are unchanged;
+and a load above the cap, or one that does not report its spill, is still
+refused (503) with both the actual spill and the allowance named. The extra
+16,384 tokens over the old window were not filled by the measurement (all
+prompts were 40-43 tokens), so a genuinely long conversation is still
+unmeasured - the decode speed of a nearly-full 32,768-token window was not
+measured either; a 15-minute real coding test runs after deployment. Full
+numbers: `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment; raw
+output: `.dsh-scratch/CODING-TAKEOVER-2026-11-03/WINDOW-20480.md` and
+`WINDOW-HIGHER-RUNGS.md`.
 
 **The HUD's left rail renders this contract too** (the owner's request of
 2026-10-21: "i would like this part of the jarvis HUD to have the presets we
@@ -25554,14 +25640,45 @@ this project has reads named keys.
 **A cloud answer nobody asked for is not dressed up as one.** The measured
 failure on exactly the questions that escalate is `finish_reason: "length"`
 with empty `content` and the whole cap spent on DeepSeek's hidden reasoning
-(four of four, `docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`). On an
-`auto: true` turn, `jarvis_chatbot_api.CloudAnswer` withholds the
-`reasoning_content` events and, if there is no usable answer, shows ONE honest
-line - "The cloud did not answer this one, so this PC answered it instead:" -
-followed by the local model's own answer (`jarvis_agent.answer_here`), or, if
-the local turn produced nothing either, one line saying so and **no
-working-out**. The 2026-10-14 rule is untouched for a turn the owner clicked
-for: that turn still shows the working-out, marked, byte for byte.
+(four of four, `docs/FIELD-TEST-CLOUD-ESCALATION-2026-10-14.md`; reproduced by
+the 2026-11-03 field test at Jarvis's own 2,048-token default - HTTP 200,
+`content: ""`, `reasoning_tokens: 2048/2048`). **Changed 2026-11-03 (the
+owner's decision after the second field test):** the working-out is never
+shown as an answer, on a clicked turn or an automatic one.
+`jarvis_chatbot_api.CloudAnswer` withholds the `reasoning_content` events and,
+when there is no usable answer, shows ONE honest line followed by the local
+model's own answer (`jarvis_agent.answer_here`):
+
+- the reply carried working-out and spent the budget: `CLOUD_USED_BUDGET` -
+  "The cloud model used its whole answer budget thinking and sent nothing
+  back; here is the local answer:";
+- the reply carried neither visible text nor working-out:
+  `CLOUD_ANSWERED_HERE` - "The cloud did not answer this one, so this PC
+  answered it instead:";
+- the local turn produced nothing either: `NO_CLOUD_ANSWER_HERE` says so and
+  nothing is invented (`NO_ANSWER_AT_ALL` remains the no-working-out case).
+
+This replaces the 2026-10-14 "a clicked turn still shows the working-out,
+marked" rule. `used_reasoning` is kept for callers that read it and is never
+set True any more.
+
+**The request cap (2026-11-03).** A service this PC measured to bill hidden
+reasoning INSIDE `max_tokens` is marked `Preset.thinking_inside = True`
+(DeepSeek today); its relay call is sent
+`cloud_request_cap(lane_state, asked)` = the lane's own answer cap PLUS
+`REASONING_ROOM` (`jarvis_chatbot_api.py`: `REASONING_ROOM = 8000`) - on this
+PC's DeepSeek lane an 8,000-token cap is sent as **16,000**, the same worst
+case `reply_cap()` already priced, so it cannot pass the month's limit. Every
+other service, or a lane with no cap, gets the caller's `max_tokens` untouched
+(the relay's 2,048 default is not changed). The relay applies it once, in
+`jarvis_hud.py`'s `_open`, via `ollama-direct.patch`:
+`body["max_tokens"] = _api.cloud_request_cap(_state, int(body.get("max_tokens") or 0))`,
+inside a `try/except` that changes nothing on a backend without the module.
+
+Tests: `backend/test_reasoning_fallback.py` (the withheld `reasoning_content`
+events, both framings, `t_cloud_request_cap` and
+`t_the_twins_match`) and `backend/test_cloud_say_yes.py` (the
+ordinary-turn lanes and the PC-only gate).
 
 **The one lane.** `jarvis_router.cloud_lanes()` keeps only `jarvis-escalate`
 and drops every other name, so an older `litellm-proxy.yaml` listing
@@ -30619,6 +30736,11 @@ never runs an adb command.
 package is left out of `apps` (the reader's rule, the same one the phone tool
 uses) and counted in `note` - it is not silently hidden.
 
+**By chat (2026-11-03).** The sentences `which apps on my phone may you open`
+and `what can you open on my phone` (and their close phrasings) list this same
+allow-list, read-only, through `jarvis_phone_apps.view()` - no card, no write,
+and no package id printed.
+
 ### 176.3 `POST /api/phone/apps` - ONE change, and its card
 
 `{"action": "add", "name": "YouTube Music", "package": "com.google.android.apps.youtube.music"}`
@@ -31387,3 +31509,939 @@ model call, no scheduler job of its own, no delete from chat, and no change to
 the plan/check-in half of §59. `backend/test_goals_progress.py` proves the
 routes (with the origin and token refusals), the append-only log, the states
 and the four tools; `backend/test_goals.py` still proves §59 unchanged.
+
+## 183. Every setting explains itself with its value, and "read this link" reads one link behind one card (added 2026-11-03)
+
+The owner's ask of 2026-11-03: for **any** feature, function or setting, Jarvis
+must say what it is, where it lives, **what it is set to right now**, and the
+**exact phrase** that changes it - in a typed chat and in Jarvis Live. Two halves
+land here and neither adds a route. The first is the explain door: it reads the
+same settings tables the setters use (§130, §132), so an answer cannot describe a
+setting the write path does not have. The second is a chat path that reads a link
+the owner pastes (below) - which is deliberately **not** a new model tool and
+does **not** make the page reader switchable (the last two paragraphs).
+
+**THE FOUR FACTS, AND WHERE EACH COMES FROM.** `find_explain_setting(words)` in
+`jarvis_settings_registry.py` names the ONE setting a how/where/explain question
+names; `explain_setting_words(found)` builds the answer. It has nine kinds:
+`page` (a Settings row with no spoken route), `bool`, `choice`, `number`,
+`animal` (a shared animal switch), `device` (the per-device automatic quality),
+`sky` (show the sun and moon), `weather` (the weather source) and `area` (a
+desktop-only control such as the theme). The order
+is safety order: a page-only refusal first, then a plain switch, then a named
+choice, then the animal switch and the per-device auto quality, then the sun and
+moon, then the weather source, then the number, then the two desktop-only
+areas. A subject no table owns returns `None`, and the turn carries
+on to whatever answered it before - so an unknown sentence is never given a
+made-up setting.
+
+Every value is read through ONE entry point, `current_value(setting)`: a switch
+through `jarvis_feature_guide.STATE_READERS` (the table that already answers "is
+it on?"), a named choice through `ChoiceSetting.now()`, the number through
+`NumberSetting.now()` (which reads `jarvis_live.quiet_seconds()`, the reader the
+engine itself obeys), an animal switch through `jarvis_animal.values()`, the sun
+and moon through `jarvis_sky.view()["show"]`, and the weather source through
+`jarvis_sky.view()["weather"]["source"]`, in the sky module's own label. Nothing
+is stored twice and nothing is defaulted here: a module that is missing, a read
+that raises, or a reader that answers nothing all give `None`.
+
+**THE WORDING, EXACTLY.** Four answers as the shipped code builds them:
+
+```
+"web search" is an on/off setting in Settings, web search. Right now: on. Say
+"turn on web search" or "turn off web search" and I will do it; a change that
+loosens a rule still asks on a card first.
+
+The personality is a choice in Settings, how jarvis talks. Right now: Warm
+Collaborator. Say "set the personality to advocate" and I will do it; a change
+that needs approval still asks on a card first. To hear every value, ask "what
+are the choices for the personality?".
+
+"How long Jarvis Live waits before it turns off" is a number in Settings, limits.
+Right now: 1 minute and 30 seconds. Say "set the jarvis live timeout to 3
+minutes" to change it. It can be anything from 30 seconds to 10 minutes.
+
+"Show the sun and moon behind the face" is an on/off option in Settings, animal
+options. Right now: off. Say "turn on the sun and moon" or "turn off the sun and
+moon" and I will do it at once - it is cosmetic, so no card is needed.
+```
+
+An animal switch and the weather source use that same shape:
+`"Listening nods" is an on/off option in Settings, animal options. Right now:
+on. ...`, and `"Weather behind the face" is a choice in Settings, animal options.
+Right now: Off (default). Say one of: "set the weather source to off"; "set the
+weather source to home assistant"; "set the weather source to open meteo" - and
+turning Open-Meteo on asks on a card first, because it sends your rough position
+to the internet.` The choice answer's example value is the row's own first option
+in sorted order, so it is a value `change_setting` accepts; the answer says how
+to hear all of them, and the phrase it prints is checked against the real
+matcher rather than typed twice.
+
+One answer is honest rather than complete: the per-device automatic quality.
+*"Auto adjust" is the automatic sharpness and frame rate for one device, in
+Settings, animal options. It covers sharpness and frame rate. Right now: I could
+not read its current value on this PC, so I will not guess. Say "turn on auto
+adjust" (or "set the sharpness back to auto") and it changes at once, on that
+device only - it is cosmetic, so no card is needed.* The value is kept by the
+app that draws the face, per device, and this backend has no reader for it - so
+that answer gives the fixed sentence instead of a default, while still naming a
+phrase that really changes it.
+
+**TEXT CHAT AND JARVIS LIVE READ THE SAME ANSWER.** The explain answer is the
+read-only `setting_explain` intent, listed in `READ_ONLY_INTENTS`, so it raises
+no card, changes nothing, and cannot take back what "cancel that" would. Both
+doors get that same text: a Live turn is an ordinary `/api/chat` turn marked
+`live: true` with `provenance: "voice"` (§63), its answer is spoken as it is
+written, and there is no shortened Live rendering of an explain answer.
+`backend/test_live_parity.py` keeps a read-only turn's typed and spoken answers
+identical. The ONE place the two doors differ is a **carded change**, where Live
+says one calm sentence instead of the setter's own sentence (below) - and that
+branch fires only when a card is really waiting, never for a read.
+
+**THE HONEST GAP: "I COULD NOT READ IT".** When a reader cannot answer, the
+sentence is exactly
+
+> I could not read its current value on this PC, so I will not guess.
+
+One constant, `UNREADABLE_VALUE_WORDS`, is used by every kind, so the promise
+cannot be worded three ways. It is never a default dressed up as the value, and
+the word `None` never reaches an answer. A reader's own normalisation (a damaged
+hand-edited file read through the module's own "this is the default I would use"
+rule) is not this case: that is the value the product itself acts on, not a
+guess made here. `backend/test_setting_explain.py` replaces
+every reader and every setter to prove both halves - the fixed sentence instead
+of a guess, and no setter called at all, so explaining cannot change anything.
+
+**WHAT CANNOT BE CHANGED BY ASKING STILL SAYS SO.** `theme` and `hud layout` are
+desktop-only areas: the answer names the Settings card they are drawn in and says
+"I cannot change it by asking". Every one of the nine `NOT_BY_ASKING` rows gets
+that registry's own refusal, naming the page and the exact row to open - and it
+is decided FIRST, on filler-tolerant words, so "turn off the Windows Hello for
+memory lists setting" is the page-only refusal and never `chat_history` (the
+word those sentences contain). `face-auto` ("Auto adjust") is deliberately NOT
+one of them, because "turn on auto adjust" really does change it: it has its own
+`device` kind (quoted above) rather than a refusal that would be false.
+
+**A CARDLESS CHANGE LEAVES ONE UNDO RECEIPT.** A setting that loosens nothing is
+immediate, and that change now writes ONE row in `jarvis_receipts` (§132) under
+the tool name `change_setting`: the summary in the owner's own words ("Turned
+web search off"), a before snapshot of `{"kind": ..., "key": ..., "value": ...}`
+and an after one. That is true for every cardless change this section names: a
+switch, a named choice, the one number setting (`live_idle_seconds`), every
+animal switch, the sun-and-moon switch and the weather source (its two cardless
+directions, off and Home Assistant - switching to Open-Meteo is the carded one
+and follows the card rule below). A
+change that is waiting on a card writes **none**, because nothing has happened
+yet - there is nothing to take back, and the answer says so. A restorer is
+registered just before the receipt is written, so a new process can put the
+change back through the store's snapshot path (§132.5) and not only this one.
+
+**THE SNAPSHOT HOLDS THE VALUE, NEVER THE WORDS THE ANSWER PRINTS.** A switch's
+before value is exact, because it has two states. A named choice's is read
+through the registry's own reader (`ChoiceSetting.now`) and then resolved back
+to the value its setter takes through **that row's own `options()`**
+(`choice_from_words`) - the same step the write path makes. Handing the display
+word to the setter was a real bug the 2026-11-03 audit found: `small_approvals`
+stored the word "skip", a truthy string, so its undo re-entered the stricter
+branch and left the fingerprint required on every small card while answering as
+though it had worked. `small_approvals` is a bool row, and now stores the bool.
+The face (whose reader returns the display **name** while its setter wants the
+**id**) and both hand-off rows were refused outright by the same mistake; they
+work now. The weather source stores the **source id** (`home_assistant`), never
+the label the answer prints. A row whose current value has no corresponding
+value in its own list - the face with no face chosen, the focus preset with no
+preset applied - writes no receipt, because applying a preset or a face is
+one-way and "put it back to none" is not an operation its setter has.
+
+**WHAT "UNDO" DOES, AND WHAT IT REFUSES.** Saying "undo" (or "cancel that") in
+the same chat takes back the newest **cardless settings change made by talking in
+that chat**, once. A scheduler record always wins, so "cancel that" after a
+reminder still cancels the reminder. The reversal goes through the setting's own
+setter - the same `BoolSetting.set` / `ChoiceSetting.set` every other change
+uses - so a reversal that loosens something raises that setting's own card, and
+if that card is not answered the change is NOT reported as undone. A second
+"undo" in the same
+window says *"I already put <the setting> back in this chat, so there is nothing
+left to undo."*; a receipt the store has already undone says *"<the setting> was
+already back the way it was, so nothing was changed."*
+
+**A FAILED REVERSAL SAYS WHICH FAILURE IT WAS, AND KEEPS THE POINTER.** Three
+sentences, one per real case, and none of them ever claims the setting went
+back:
+
+* the setter's own card was raised and not answered -
+  *"I could not put <the setting> back, so nothing was changed. Undo raised its
+  own card and it was not answered."*;
+* the setter REFUSED and raised no card (`handoff_mode`'s "Choose …", the
+  fingerprint's PC-only sentence, the small-approvals refusal) - *"I could not
+  put <the setting> back, so nothing was changed."* followed by **the setter's
+  own words**, quoted;
+* nothing said anything at all - only *"I could not put <the setting> back, so
+  nothing was changed."*
+
+The 2026-11-03 audit found the single old sentence asserted a card for both of
+the last two cases, where no card exists. A failed reversal also **keeps** this
+chat's pointer: the receipt is still undoable in the store, so the next "undo"
+tries again (and the store gives the claim back), rather than answering "there
+is nothing here for me to take back". It takes back one change, not a list, and
+never another chat's. The receipt row itself is in the receipts database; the
+pointer "undo" follows is in memory, keyed by the conversation, so the spoken
+undo belongs to the chat that made the change in the process that made it. After
+a backend restart that pointer is gone (the row is not), and the same chat's
+"undo" answers "there is nothing here for me to take back".
+
+**ONE CALM LINE IN JARVIS LIVE.** A carded settings change in a Live turn answers
+with one sentence -
+
+```
+A card is waiting for <the setting>, so approve it on your phone or PC and it changes.
+```
+
+It has no card id, no list and no question back. It is one sentence and it does
+not ask the owner to say yes: the card is answered by tapping, and there is no
+spoken approval anywhere in this project. The typed answer is unchanged
+(the setter's own sentence). The pause is not new code: `jarvis_live.tick()` sees
+the card in the gate's queue and pauses, and resumes on the first tick after the
+card leaves it (§63). Nothing is approved by voice anywhere, and
+`backend/test_live_parity.py` keeps both halves pinned: identical answers for a
+read-only turn, one calm sentence and no "approve or deny" for a carded one.
+
+**THE READ-A-LINK CHAT PATH.** A sentence naming **one** `http://` or `https://`
+address plus a read verb ("read", "reading", "summarise"/"summarize", "sum up",
+"tell me about", "what's in") is matched by `jarvis_quick._read_link_intent` and
+run by `_run_read_link`. It is placed after the "tell me when ..." watcher, and a
+watch-shaped sentence ("tell me when/if ...") is refused by the matcher as well,
+so "tell me when this page changes" stays a watch on a page (§30.3.1) and is
+never a read. A sentence with a link and no read verb is left alone **unless the
+message is that address and nothing else, or the address plus a question about
+it** (2026-11-03, below).
+
+**A PASTED ADDRESS IS A REQUEST, AND THE ANSWER'S FIRST LINE CARRIES IT.** A
+message that is only an `http(s)` address, or an address plus a question about it
+("https://... what is this about?"), reaches this same path: ONE card per
+address, nothing fetched before the yes. The answer's first line carries the
+canonical address the card showed - `Read from <url> - "<title>". It says:
+"..."` - so both apps make it tappable with no rendering change. The page's words
+are then kept **in memory, for that conversation only, for 900 seconds** (one page
+per conversation, at most eight conversations, replaced by a new page in the same
+chat, cleared by a restart, never kept on a private turn), so a follow-up that
+refers to the page ("what does it say about ...?") is answered from the words
+already on this PC with **no second card and no second fetch**. It is a word-find,
+not reasoning: it quotes around what it finds and says plainly when the kept
+characters do not mention it. A statement ("here is a link ..."), a browser
+command ("open <url> in my browser") and a watch ("tell me when <url> changes")
+are not reads. There is still no source row for a fast-path page read ("Where
+this came from" lists model-tool reads only).
+
+**A STATEMENT IS NOT A REQUEST.** The matcher also refuses a sentence whose read
+verb is preceded by a negation or a completed-action word - "don't read
+https://x", "do not …", "didn't …", "never summarise …", "i already read https://x
+yesterday", "i read https://x yesterday" - because those are things the owner is
+telling Jarvis, not asking it, and each used to raise a real approval card
+(2026-11-03 audit). The order matters: "read https://x, not the other one" is
+still a request, because the "not" comes after the verb. This is a word guard,
+not a grammar: a statement with no such marker ("he read … yesterday") still
+matches, and nothing here claims otherwise.
+
+**"READ THIS LINK" WITH NO ADDRESS.** A read verb plus one of the nouns that
+cannot mean anything else ("link", "url", "address", "page", "web page",
+"article", "video") reaches the same runner with an empty address, and the
+runner answers *"Say the address to read, starting with http:// or https://."*
+Before 2026-11-03 that sentence existed but was unreachable, because the matcher
+required an address first; a bare "read this" is still the model's, because it
+may mean anything. Nothing is fetched and no card is raised for the no-address
+case. Only the FIRST address in one message is
+used: a message carrying two links reads the first, and the second is read when
+it is sent as its own message, under its own card.
+
+The link picks the reader: a YouTube host goes to `jarvis_youtube`
+(`parse_link` → `card` → `fetch_captions` → `clean_text`, §112); any other
+address goes to `jarvis_readpage` (`prepare` → `describe` → `run`, §115). A
+YouTube host whose link is not one video (a playlist, a channel, a search) is
+answered in the caption reader's own refusal and fetches nothing - it is never
+quietly fetched as a page.
+
+**One card per link, before anything is fetched.** Each link is one call, and each
+call raises exactly one card through that reader's own gate action -
+`youtube_captions_read` for a video, `read_web_page` for a page. The card's text
+is the reader's own, byte for byte: `jarvis_youtube.card(parsed)` is the Quiz
+page's card (§112.1), which carries its own terms sentence - *"This breaks
+YouTube's terms and may be blocked. YouTube may refuse the request, and it may
+block this PC's address for a while. You chose to accept that."* - and
+`jarvis_readpage.describe(page)` is §115's card. The
+YouTube card also still says the video is read "then quiz you on it" - that line
+is the Quiz page's wording, reused unchanged here, although this chat path only
+reads the captions. Another link is another message and another card, never a
+standing permission;
+a declined, timed-out or unraisable card fetches nothing and answers in plain
+words - the YouTube reader's own three refusal sentences, used for both readers,
+because the page reader has none of its own; and if the settings file gives that
+action a tier other than
+`ask`, no card is raised and the answer is *"This needs your yes every time, but
+the settings file says otherwise, so it is switched off."*
+
+The gate call is synchronous, the same shape as a spoken settings change: the
+turn waits for the person's answer, so nothing is fetched before a yes, and the
+card is in the gate's queue while it waits - which is the queue `jarvis_live.tick`
+reads to pause Live. After a yes, a video's captions are fetched once for that
+one video (never its sound, never the video itself, never the comments) and a
+page is read with ONE plain GET of that one address. The answer quotes at most
+900 characters of what was read, cut at a word boundary, and adds the reader's
+own outside-text sentence; a page answer also carries `ONE_PAGE_LINE` -
+*"One card covers this one address. Another page is another card."* - and no link
+on the page is ever followed.
+
+**The turn is marked as having read outside text.** The `Result` carries
+`read=["youtube_captions_read"]` or `read=["read_web_page"]`, which is the same
+mark every reading tool sets, so the turn is recorded as shaped by outside text.
+That is why `change_setting` refuses in the same turn with `SETTINGS_AFTER_OUTSIDE`
+(§130's rule): outside text does not get to shape a settings change. It is a rule
+to keep, not to fight, and a decline or a playlist refusal carries no read mark
+because it read nothing.
+
+**NO NEW ROUTE, NO NEW TOOL, NO NEW GATE ACTION.** `read_link` is answered by the
+fast path and is not in `jarvis_agent.TOOLS`; no `read_youtube` tool exists; the
+two gate actions are the readers' own, unchanged; the `read_link` intent is NOT
+in `READ_ONLY_INTENTS` (it can raise a card, so "cancel that" must not reach back
+past it); and `jarvis_quick.py` still has exactly one `jarvis_gate` import. There
+is no app screen and no route to poll, because the answer is an ordinary chat
+answer in both apps - the phone posts `/api/chat`, the PC answers, and a card is a
+card either way.
+
+**THE PAGE READER IS NOT MADE SWITCHABLE, ON PURPOSE.** `read_web_page` is a model
+tool (§115) and it stays exactly where it was: off by default (not in
+`[tools].enabled`), in `jarvis_asks_first.TIER_C` and out of `TOOLS_SWITCHABLE`,
+still in `HARD_LIMITS` and `MUST_ASK`, so `request_tool_enable` keeps answering
+`403` with `TOOLS_TOML_ONLY_NOTE` for it and no app may turn it on. Hand-editing
+`[tools].enabled` on this PC remains the only way to offer it to the model, and
+that is the decision of 2026-11-03
+(`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`), not an omission.
+The chat path above does not need that switch: it calls `jarvis_readpage`'s own
+prepare/run behind the same `ask` card, so reading a link works today with the
+model tool still off. `backend/test_reach.py`'s "no app may switch it on"
+assertion is unchanged and still passes.
+
+**WHAT IT DOES NOT DO.** No in-app switch for the page reader, no `read_youtube`
+tool, no quiz from chat, no playlists or channels, no several links in one card,
+no following a link on a page, no download of video or audio, no new route, no
+new tier, and no change to either reader's own module beyond being called. The
+captions path is proved with a stubbed fetch; it has not been driven against the
+real YouTube site here, the same limit §112 records.
+
+**TESTS AND FILES.** `backend/test_setting_explain.py` (every one of the 35
+switches, 10 named choices and one number row explains with its own reader's
+value or the ONE fixed sentence; every printed phrase resolves through the real
+matcher; the animal, sun-and-moon and weather options explain; the page-only rows
+answer honestly; explaining calls no setter) and `backend/test_read_link.py`
+(exactly one card per link under the reader's own action, the card's words byte
+for byte, a declined card fetching nothing, no captions and non-page bodies said
+plainly, the watch still winning, and the outside-text mark refusing a settings
+change in that turn). Extended in the same slice: `backend/test_live.py`,
+`backend/test_live_parity.py`, `backend/test_settings_registry.py`,
+`backend/test_settings_tool.py` and `backend/test_feature_guide.py`. Nothing here
+is generated, so no fixture or catalogue needed regenerating, and
+`docs/ARCHITECTURE.md` §8 carries the one-sided half: the settings receipt has no
+screen in either app, so "say undo in the same chat" is the only way back.
+
+## 184. What Jarvis knows about itself: the self portrait, opening a place, clearing ONE conversation, a storage self-scan and a refresh (added 2026-11-03)
+
+The owner's ask of 2026-11-03, in his own words: *"Jarvis must be as flexible and
+versatile as it reasonably can be - open any menu or setting area on request,
+pull up any old conversation, have multiple conversation windows open at once,
+clear any memory or conversation on request, and know every setting/function/
+ability it has"* - plus a second ask the same day, *"when i click update on the
+jarvis hud i want it linked to the back end so both are always updated at the
+same time"*, and a third the same day - *"take inventory of storage and to see
+if it can clear any temporary files up safely also refresh its function and
+capabilities awareness"*. What was built is ONE read-only portrait, a wider
+vocabulary on the navigation field both apps already read, more than one
+conversation window on the desktop, ONE carded way to clear ONE conversation, a
+version handshake for the Updates card, a bounded storage inventory with a dry
+run and ONE card before anything is cleared, and a refresh that re-reads the
+portrait without restarting anything. The research pass that shaped it
+(`.dsh-scratch/F6-2026-11-03/RESEARCH.md`) said two things plainly, and the
+build follows them rather than the first sketch:
+
+- **No fourth list of screens.** The place ids are `jarvis_settings_registry.
+  SECTIONS` and `jarvis_menus.MENUS`, imported. A hand-written list would
+  disagree with the real UI within a week.
+- **No new event kind.** Navigation stays on the existing per-answer
+  `X-Jarvis-Route` field. An event cannot name a webview label, and a
+  doorbell with no reader is a known defect in this codebase
+  (`docs/ARCHITECTURE.md` section 6).
+
+The decision is `decisions.d/2026-11-03-self-portrait-imported-and-clear-one-card.md`.
+
+**Where it lives, and why there is no patch.** `backend/jarvis_self_portrait.py`
+(shipped whole, in `backend/` and `jarvis-backend/`) exports `install()`, which
+wraps the running server's `do_GET`/`do_POST` for exactly its own five paths
+(its own `ROUTES` tuple) and passes every other request straight through.
+It is installed by the drop-in folder `plugins/ready/self-portrait/`
+(`plugin.json` names the module, `install: "handler"`, `stack_order: 165`), so
+the routes arrive with the normal plugin copy and **`jarvis_hud.py` is not
+patched at all** - which is what the plugin loader exists for. The routes check
+the origin and the pairing token with the server's own two checks before
+answering (its `install`'s own origin-and-token check), like every other private route,
+and a caller that fails one gets the ordinary 403/401.
+
+### 184.1 The routes
+
+| Route | Method | Answers | Card |
+|---|---|---|---|
+| `/api/self` | GET | the portrait (184.2). Optional `?app_locked=1` / `?hide_memory_lists=1` can only WITHHOLD the private counts (184.4). `X-Jarvis-Client` is echoed back in `client`; it decides nothing, the same rule `/api/version` states | none - read only |
+| `/api/self/version` | GET | the `version` block alone (184.7): `app_version`, `app_version_source`, `api_version`, `server`, **`pid`**, `started_at`, `deploy` and the `_jarvis-state.json` **`manifest`** summary (`recorded`, `written`, `files_recorded`, `files_verified`, `resealed`). Cheap on purpose - it reads no big module and is cached for 60 s | none - read only |
+| `/api/conversations` | GET | the SAME body `GET /api/history` answers, including `limit`/`before`/`kind`/`tag`/`archived`, and the same App-lock withholding. It is an adapter onto `jarvis_chat_log`'s own handler, not a second list | none - read only |
+| `/api/conversations/<id>` | GET | the SAME body `GET /api/history/conversation?id=` answers, with the same `400`/`404`/`423`/`503` | none - read only |
+| `/api/conversations/clear` | POST | **202** `{"ok", "waiting": true, "id", "title", "messages", "action": "conversation_clear", "message"}` and ONE approval card; phase two deletes that one id only after a person approves (184.6) | **ONE** `conversation_clear` card (tier `ask`) |
+| `/api/self/refresh` | POST | re-reads the inventory NOW and answers `{ok, schema, client, counts, changed, said}` (184.9); a GET is `405 {"error": "use POST to refresh the self portrait"}` | none - it re-reads, it changes nothing |
+
+**The storage self-scan's own routes** are served by the same plugin when
+`jarvis_storage_health.py` is on this PC (the storage module owns them; the
+self-portrait module only proxies them, `jarvis_self_portrait.py`'s `storage_routes()` and
+its `_storage_get`/`_storage_post`). Without that module the paths fall through to the server's own
+handler and answer 404 exactly as if they had never been registered - there is
+no half-route:
+
+| Route | Method | Answers | Card |
+|---|---|---|---|
+| `/api/storage/scan` | GET | the bounded storage inventory (184.8): disks, the folders Jarvis uses, the cleanup candidates with exact bytes, the build caches it will NOT touch, and what it refused | none - read only |
+| `/api/storage/cleanup/plan?categories=` | GET | the DRY-RUN plan for `?categories=` (default `pycache`, 184.8): the exact absolute paths, bytes, one single-use token good for 15 minutes, and every candidate it refused with the reason. Touches nothing | none - read only |
+| `/api/storage/cleanup` | POST | `{"categories": [...]}`: **202** and ONE `storage_cleanup` approval card listing every path in full; only a person's yes deletes or moves anything. `200` with `nothing_to_clear` when the plan is empty, `409` while a card waits, `503` when the action's tier is not `ask` | **ONE** `storage_cleanup` card (tier `ask`) |
+
+The two conversation reads are adapters by design (its `conversation_list` and `conversation_get`): one list, one reader and one delete in the codebase, so the new names
+can never disagree with the route the apps have used since 2026-09-24.
+
+### 184.2 The portrait
+
+One answer, built fresh from the registries and the live state, cached for 20 s
+(the module's `TTL`) so a HUD that reads it on a timer does
+not re-import every module once a second:
+
+```json
+{"schema": "jarvis-self-portrait/1", "client": "hud",
+ "version": {"app_version": "...", "app_version_source": "...",
+   "api_version": 1, "server": "jarvis-hud", "started_at": 1790000000.0,
+   "deploy": {"recorded": true, "schema": "jarvis-updater-manifest/1",
+     "written": "...", "run": "...", "files_recorded": 232,
+     "files_verified": 123,
+     "resealed": {"at": "...", "ref": "", "commit": ""},
+     "identity": {"jarvis_gate.py": "<sha256>", "jarvis_hud.py": "<sha256>",
+                  "jarvis_skills.py": "<sha256>"},
+     "why_not": ""}},
+ "places": [{"id": "voice", "kind": "settings_section", "title": "...",
+             "apps": ["both"], "where": "settings", "openable": true},
+            {"id": "brain.tab.memory", "kind": "menu", "title": "Memory",
+             "apps": ["desktop"], "area": "brain", "view": "memory",
+             "group": "", "openable": true}],
+ "settings": [{"id": "background_learning", "kind": "switch", "label": "...",
+               "names": ["..."], "section": "learning", "value": true,
+               "value_known": true, "changeable": true,
+               "how_to_change": "..."},
+              {"id": "face", "kind": "choice", "label": "...", "names": ["..."],
+               "section": "appearance-card", "value": null,
+               "value_known": false, "options": ["..."],
+               "changeable": true, "how_to_change": "..."}],
+ "asks_first": {"available": true, "why": "",
+   "groups": [{"group": "Reading your own things",
+               "rows": [{"id": "calendar_read", "title": "...",
+                         "tier": "auto|ask|never|fixed", "says": "..."}]}]},
+ "abilities": [{"id": "typing", "group": "Talking",
+                "title": "Type a message and read the answer",
+                "surface": "both"}],
+ "plugins": [{"id": "mood", "module": "jarvis_mood", "on": true,
+              "loaded": true, "why_not": ""}],
+ "stores": [{"id": "memory", "label": "What Jarvis learned", "available": true,
+             "count": 42, "counts": {"facts": 50, "current": 42,
+             "retired": 8, "entities": 7}, "how_to_clear": "..."},
+            {"id": "conversations", "label": "Chat history", "available": true,
+             "count": 31, "recording": true, "enabled": true,
+             "how_to_clear": "..."},
+            {"id": "receipts", "label": "Action receipts", "available": true,
+             "count": null, "count_why": "...", "how_to_clear": "..."}],
+ "private": {"locked": false, "why": ""}}
+```
+
+| Key | Where its rows come from | What it never carries |
+|---|---|---|
+| `version` | the `VERSION` file beside the backend when there is one, `jarvis_events`' own `_STARTED`/`API_VERSION`, and the installer's `_jarvis-state.json` (184.7) | a path into the owner's folders; `identity` is sha256 only and `resealed` accepts a 7-40 character hex ref |
+| `places` | `jarvis_settings_registry.SECTIONS` (one row each, kind `settings_section`) and `jarvis_menus.MENUS` (kind `menu`) - imported, never typed here (the module's `places()`) | an id the two registries do not have |
+| `settings` | `BOOL_SETTINGS` (kind `switch`), `CHOICE_SETTINGS` (kind `choice`) and `NUMBER_SETTINGS` (kind `number`, the one shipped row `live_idle_seconds` with its `low`/`high`/`unit`); a switch's `value` is `jarvis_feature_guide.read_state()`, "the one public reader"; a number's is `jarvis_limits.value_of()` where it can be read; a choice's `value` says `null` with `value_known: false` because no public reader exists for it yet. Measured on the tree this was written from: **46 rows** = 35 switches + 10 choices + 1 number | a value that could not be read: it is `null`, never "off" |
+| `asks_first` | `jarvis_asks_first.view(here=False)` - the same page both apps draw, not reworded | a permission the gate does not keep |
+| `abilities` | `jarvis_feature_guide.features()` - the feature rows both apps' Features pages show; only id/group/title/surface, because the PROSE stays in `jarvis_feature_guide`, the one module allowed to explain a feature | a sentence a model or a plugin wrote |
+| `plugins` | `jarvis_plugins.available()`/`status()`: the drop-in folders, whether each is on, loaded, and why not | a plugin's own body or summary |
+| `stores` | memory counts from `jarvis_memory.store().status()`; conversation count by one read-only `SELECT COUNT(*)`; receipts say the store exists but keeps no total it can answer | a path, a title, a turn, a word of memory or chat |
+| `private` | `jarvis_private_view.effective(app_locked=, hide_memory_lists=)`: App lock and "Hide memory lists and chat history" | anything while locked: `locked: true` is said, and the counts are withheld |
+
+**A fixed portrait, not a prose one.** This answer is the inventory and the live
+state; it does not explain a feature and it does not decide anything. "What is
+feature X / how do I use it?" stays with `jarvis_feature_guide.py` (and the
+`feature_guide` tool), "change setting X" stays with `jarvis_settings_registry.py`,
+and the model's own summary of it is the model's, not this route's. That split
+is written into the module's header (the module's own header) and is
+what keeps a self-description from becoming a fourth source of truth that drifts.
+
+**What it deliberately never contains** (the module's own header): the
+pairing token, an API key, an account secret, a word of stored memory or chat,
+an email or web page, an owner folder path, or any model-written sentence. A
+row whose value cannot be read says `null` (or `count: null` with `why_not` /
+`count_why`) rather than guessing, and an unread switch is never reported as
+off. This is the injection-surface rule the research called F10: a self-model
+is text that reaches the model, so it is fixed data or nothing.
+
+### 184.3 The ids come from the two registries, not from a fourth list
+
+`places` is built by importing the registries every time (`jarvis_self_portrait.
+py:146-215`):
+
+- **59 Settings sections** (`SECTIONS`, kind `settings_section`) - the same ids
+  `settings.html`'s `<section class="card" id=...>` and `SettingsScreen.kt`'s
+  `item(key = ...)` rows use, already held to both files by
+  `test_settings_registry.py`'s `t_sections_match_the_real_ui` and
+  `t_every_real_settings_card_is_listed`, and reflected into the desktop's
+  generated `settings-catalog.js`.
+- **131 menus** (`MENUS`, kind `menu`) - the ids "Show or hide menus" lists,
+  with `area` (settings / brain / entry / safety), `view` and `group`, already
+  held to the phone by `tools/check_registry_phone.py` and the generated
+  `menu-catalog.js` / `MenuCatalog.kt`.
+
+That is **190 places** (the counts are the inventory audit's, measured on
+`origin/main`'s two files; `backend/test_self_portrait.py` is the authority and
+fails if one real section or menu is missing from the portrait). Adding a
+Settings card or a menu therefore adds a place with no edit to this feature -
+and removing one removes it. There is no `screens.json`, no hand-written list in
+the HUD page and no second registry to drift.
+
+**`resolve_place(words)`** (the module's `resolve_place`) is the one
+lookup that turns an "open ..." tail into the existing `X-Jarvis-Route` field:
+exact aliases only, from the same two registries (never a fuzzy guess), and it
+answers either `{"route": "settings", "id": <section id>}` or
+`{"route": "brain", "id": <view>}`. A settings-area menu maps to the section of
+the same name when one exists; a brain-area menu maps to its own `view`; a tail
+that names no place returns `None` and the sentence falls through to the model,
+exactly as "open the door" already does.
+
+**Said plainly, on the tree this was written from:** `resolve_place` is the hook
+for the wider vocabulary, and the two apps already read that wider field - but
+no backend caller in this change uses `resolve_place` yet (it is not wired into
+`jarvis_quick.py`'s settings-open path here), and the portrait is what a client
+or the model can read today. The navigation that works end to end is the
+existing `open_settings`/`open_brain` field the apps have read since
+2026-09-27/2026-10-31 plus the wider table below; the backend emitting
+`open_area` for every place is the next wiring step, not a claim made here.
+
+### 184.4 "Open <a place>": display only, and honest when the app has no screen
+
+Navigation rides the **existing per-answer route field**, not a new route and
+not a new event kind. The field already in production:
+
+- `open_settings` - a Settings section id (section 58.1, the "open" grammar);
+- `open_brain` - one of the Brain's own places (the "Continue this chat" /
+  Forget-a-time-frame answers, section 18.6);
+- `open_app_kind: "jarvis"` with `open_place` - the older "Show me where" shape.
+
+The wider vocabulary both apps now understand in the same field is
+**`open_area`** (a place id from 184.3) with an optional **`open_anchor`**
+(a row inside it). It is additive: a backend that sends only `open_settings`
+behaves exactly as before on both apps.
+
+**Desktop** (`jarvis-desktop/src-tauri/src/hud_nav.rs`). ONE table maps an area
+word to the real surface (`AREA_ALIASES`, 22 aliases, `hud_nav.rs:74`):
+a HUD view (`talk`, `galaxy`), a Studio tab (`today`, `reminders`, `memory`,
+`telemetry`), a HUD panel (`history`, `presets`), the Settings window at a
+section (`settings`), the Brain window at `history`/`tutorials` (`brain`),
+Faces, the feature list, `updates` (the Settings card the tray row opens), or a
+new chat window. The injected HUD chrome reads the answer's route and invokes
+one command, `open_jarvis_area` (`hud_nav.rs:341`; granted as the `hud-nav` set,
+`capabilities/hud.json`, with `allow-open-jarvis-area`); an older page that does
+not know the wide field keeps its tested `open_settings` behaviour
+(`hud_bootstrap.js`, `actOnOpenRoute`). Rules the code keeps:
+
+- **Display only.** `dispatch` changes no setting, raises no card and approves
+  nothing; every window it opens goes through the same App-lock check as the
+  tray row that opens it (the table plus `dispatch`'s own match).
+- **An area this desktop does not have says so**, in the HUD's own chat log:
+  *Jarvis asked to open "dashboard", but the desktop has no "dashboard". Nothing
+  was opened.* (`unknown_words`, `hud_nav.rs:177`). Never a dead control and
+  never silence.
+- **Only the main HUD is told.** `push_to_hud_main` (`lib.rs:490`) evaluates into
+  that one window; the extra chat windows never hear a navigation, so a request
+  made elsewhere cannot move a conversation the owner is reading.
+
+**Phone** (`jarvis-client`). The same answer field, resolved by a tested
+decision table rather than opening a wrong screen (`ui/OpenPlace.kt`):
+`openSettingsFromRoute` reads `open_settings` first and also `open_place`,
+`open_area` and `open_screen` (`net/Schedule.kt:1290`), because the backend's
+spelling for the wider field is not pinned on that side; `OpenPlace.whereFor`
+(`OpenPlace.kt:447`) resolves, in order: the settings-registry ids it has always
+decided; whole screens and Brain plates by area name (`AREAS`,
+`OpenPlace.kt:331`); the shared menu ids from `MenuPlaces` (`forMenu`,
+`OpenPlace.kt:431`); the honest refusal for a real place this build has no
+screen for (`PHONE_MISSING`: habits, mood and plugins say "There is no ... screen
+in this app yet"); the PC-only sentence; and finally the old harmless behaviour.
+It adds no `Screen` enum entry and no second navigation mechanism: the existing
+one-time `openSettings` request carries the id to `MainActivity`, which
+navigates once and consumes it, and the screen's own `initialSection` scrolls to
+the row. Nothing on the phone changes a setting by navigating.
+
+### 184.5 More than one conversation window (desktop)
+
+`jarvis-desktop/src-tauri/src/chat_windows.rs` (new) opens extra copies of the
+**same** HUD page - same bootstrap, same dark theme, same minimum size - each a
+separate `WebviewWindow` with its own conversation. A window may be asked for
+one conversation id (`?conversation=<id>`, also injected as
+`window.__jarvisConversation`); with no id it starts a fresh chat.
+
+- **Labels are `chat-1`..`chat-8`** (`CHAT_LABELS`, `chat_windows.rs:58`); the
+  cap is the length of that fixed list (8). The main HUD keeps the `hud` label.
+- **One conversation, one window.** `open_for` keeps a conversation-id → label
+  map and FOCUSES the window already showing that chat instead of building a
+  second one; the entry is dropped when the window is destroyed
+  (`open_for`). A conversation id is trimmed, control characters
+  are refused and the length is capped, and a window's title is never the id.
+- **Nothing is restored at start-up.** Extra windows are something the owner
+  asked for in this session; silently reopening eight of them at login is not
+  the same request (`chat_windows.rs:1-40`). Their size and place ARE
+  remembered (`window_memory.rs` treats `chat-*` like the HUD).
+- **The page opens the chat through its own History host** - the same
+  `host.open(conv)` its History sidebar calls - so a window's conversation lives
+  in that window's own memory and two windows cannot append one transcript.
+- **App lock covers them exactly as it covers the HUD** (`lock.rs:156-170` and
+  the sweep): a locked PC hides them, and they join the screen-capture exclusion
+  list. They also get the same permission file: `capabilities/hud.json` lists
+  `"windows": ["hud", "chat-*"]`, and two commands a page may invoke -
+  `new_chat_window` and `open_conversation_window` - are granted by the same
+  `hud-nav` set. A rail button ("New chat window", "Open this chat in a new
+  window") and a tray row ("New chat window") are the owner's two doors.
+- **Two windows on one conversation cannot happen.** Pressing "open this chat in
+  a new window" twice focuses the first; the second window is never built.
+
+The phone has no extra windows: it is one screen at a time by design. That is
+recorded in `docs/ARCHITECTURE.md` section 8.
+
+### 184.6 Clearing ONE conversation: two-phase, ONE card, never bulk
+
+`POST /api/conversations/clear {"id": "<one conversation id>"}` is **two
+phases** (the module's `clear_request`):
+
+1. **Phase one, the request.** The body must be exactly `{"id"}` - anything else
+   is a `400` saying there is no bulk clear. The route reads that one
+   conversation through `jarvis_chat_log`'s own handler (so a locked PC answers
+   `423` and an unknown id `404`, exactly as the list does), builds the card's
+   words, and raises **ONE** approval card under the action
+   **`conversation_clear`**, which is tier **`ask`** in both shipped
+   `jarvis-framework.toml` copies (`backend/rebuilt/` and `jarvis-backend/`).
+   Any other tier is refused with a `503` rather than obeyed - the same fail-closed
+   rule "Forget a time frame" applies to its own action. A second request while
+   a card is waiting is `409`.
+2. **Phase two, the person's yes.** Only an approved card deletes anything, and
+   the id is re-read before deleting, so a chat already gone deletes nothing and
+   says so. Denial, a timeout, a refused gate or a failed read deletes nothing.
+   The delete is `jarvis_chat_log.delete` - the one delete the History routes
+   already use - and it **never touches the memory store**: the facts Jarvis
+   learned from that chat survive (proven by `backend/test_self_portrait.py`).
+
+The card's words are fixed (`clear_card_text`)
+and consequence-first: the conversation's title and message count as the PC has
+them, *"It is removed from this PC and this cannot be undone."*, *"The facts
+Jarvis learned from it are KEPT - deleting a chat never forgets them. To forget
+those too, use Forget a time frame."*, *"Copies in older backups stay until they
+age out."*, and an Approve label that names the one thing it does. A title
+cannot carry a newline (a card is lines), and no other text from the chat is
+quoted. Three outcomes get fixed sentences (`_LAST_WORDS`): done, denied, timed
+out, refused; the audit log gets counts only (`conversations.clear.asked` with a
+message count, `conversations.clear.done`), never a title or a word.
+
+**What is NOT changed, said plainly.** The existing `POST /api/history/delete`
+keeps its old shape - one conversation, the app's own confirm, no server card -
+and nothing here adds a bulk route, a cardless route, or a memory-clear route.
+Forgetting memory keeps its existing doors: `/api/memory/erase` (one fact),
+`/api/memory/forget`, and "Forget a time frame" with its own ONE card, preview
+and 10-minute Undo (section 64/79). A cleared chat and a forgotten fact are two
+decisions; the History screen's own "delete the facts it taught" flow still
+starts with none ticked (section 79).
+
+### 184.7 The Update button: both halves read back, or it says they do not match
+
+The version block is in the portrait (184.2) and alone at `GET
+/api/self/version`. Its two parts are different on purpose:
+
+- `app_version` is the short `VERSION` file beside the backend when the folder
+  has one; a checkout answers `"unknown"` with `app_version_source` naming why,
+  because a deployed backend folder carries modules, not repository files.
+- `deploy` is the installer's OWN record (`_jarvis-state.json` beside
+  `jarvis_hud.py`, read at most once per 60 s): `recorded`, the run's schema and
+  time, how many deployed files were recorded and verified, the sha256 of the
+  three identity modules (`jarvis_gate.py`, `jarvis_hud.py`,
+  `jarvis_skills.py`), and - after a reseal - the repository commit
+  (`resealed.commit`, hex only). A missing or damaged record answers
+  `recorded: false` with `why_not`, never an exception and never a guess.
+
+**Provenance (Gemini ruling 3, 2026-11-03).** The block also names the process
+that is answering and the manifest it agrees with, so a stage check can compare
+what it reads with the live folder without patching `jarvis_hud.py`'s own
+`/api/version` (which is deliberately untouched): **`pid`** is `os.getpid()` of
+the server, **`started_at`** is the epoch seconds that same process started
+(same value the portrait's footer uses), and **`manifest`** is the
+`_jarvis-state.json` summary - `recorded`, `written`, `files_recorded`,
+`files_verified` and `resealed` (`at`/`ref`/`commit`). All are read-only,
+counts and identifiers only, no path and no secret; the out-of-band
+`Get-FileHash` + `Get-NetTCPConnection` proof remains the primary Stage V
+evidence.
+
+The desktop's handshake is `jarvis-desktop/src-tauri/src/backend_self.rs`. It
+reads `/api/self` (5 s timeout, no proxy, no redirects), compares the
+executable's own package version with the backend's `version.app_version`, and
+answers ONE state with ONE plain sentence (`backend_self.rs:131-190`):
+
+| State | When | What the owner is told |
+|---|---|---|
+| `in-sync` | both parse to the same version (`1` and `1.0` are the same) | both versions named, "IN SYNC" |
+| `backend-older` | the backend is lower **or has no `/api/self` at all** (a 404 is an answer: that backend predates this build) | "MISMATCH", both versions, and the update path to press |
+| `backend-newer` | the backend is higher | safe to keep working; the route is additive |
+| `different` | both answered but not one numbering scheme | they cannot be compared - never a made-up sync |
+| `unavailable` | answered, no version this build can read | says so and points at the update |
+| `unreachable` | nothing listening or the read failed | says so; nothing was changed |
+
+**The button and the line that goes with it.** The Settings card's Install
+button now runs that `update_both` (the backend half first, then this
+executable) rather than the desktop-only `install_update`; the desktop-only
+path survives in exactly ONE case - a PC where the backend half cannot run at
+all - and that case says in words that the backend was NOT updated and where to
+finish it, never that both halves moved. The same card carries a new
+`#update-sync` line, drawn from the handshake, so the sentence sits beside the
+button that acts. And when an update is found, the HUD's own chat log also says
+that one Update press installs BOTH halves
+(`say_available_in_hud`, `jarvis-desktop/src-tauri/src/update.rs`) - a
+sentence, not a click; the click stays on the card.
+
+The rules: **"up to date" is only ever said when both sides parse the same**
+(`backend_self.rs`'s own test `only_the_in_sync_sentence_says_in_sync`), no
+window waits on it, and the read is display-only. At start-up one handshake runs
+after 8 s and only the `backend-older` answer is spoken in the HUD's chat log
+(`spawn_startup_handshake`, `backend_self.rs:296`), so a build that is ahead of
+its backend says so once instead of pretending all is well; the Updates card can
+ask on demand (`shell_version_sync`, granted as `allow-shell-version-sync` in
+the `hud-nav` set). The update itself is the existing `update.rs` `update_both`
+- backend half first, then this executable - and this handshake is the read-back
+that says whether both halves really moved together. Nothing here checks GitHub
+for a newer version, and nothing auto-updates.
+
+**Said plainly, on the tree this was written from:** the desktop's parser reads
+the version STRING out of the portrait (`version.app_version`) in the final
+build; a pointer list that read `/backend/version` would never match the
+portrait's object shape, and that mismatch was caught during this change rather
+than shipped. If the tree that lands differs, the PR says so rather than this
+section claiming a handshake that cannot read.
+
+### 184.8 Storage: a bounded self-scan, a dry run, and ONE card before anything is cleared
+
+`backend/jarvis_storage_health.py` (new, shipped whole, with its
+`jarvis-backend/` twin; its routes come through the self-portrait plugin's
+handler) answers the owner's second ask of the same day - *"take inventory of
+storage and to see if it can clear any temporary files up safely"*. It is NOT
+`jarvis_storage.py`, which answers "can this PC hold another model?"; the two do
+not overlap and the new module imports nothing from the old one.
+
+**The scan is bounded and never follows a link** (`scan()`, schema
+`jarvis-storage-health/1`). One answer carries:
+
+- `disks` - free/used/total for the drives the roots are on;
+- `roots` - the folders Jarvis itself uses (the live program folder, this
+  repository, `~/.openjarvis`, the Ollama folder, `%TEMP%`), each with file
+  count, bytes, oldest/newest time and its top five subfolders, walked to a
+  fixed depth with an entry and time budget. A folder that hits the budget says
+  `bounded: true` and the `notes` say its counts are not exact; `.git`,
+  `.dsh-scratch` and the build caches are left out of a root's totals and said
+  so. A symlink, junction or other reparse point is skipped and counted -
+  nothing is ever followed;
+- `candidates` - the things that LOOK temporary, per category, with exact
+  bytes, file counts and oldest/newest times;
+- `regenerable` - the build caches (`node_modules`, `target`, `build`, `out`,
+  `dist`, `.gradle`) reported as "regenerable, slow to rebuild" and never
+  planned: rebuilding can take tens of minutes, so that is the owner's call and
+  not a temporary file;
+- `not_safe_to_clear` - candidates that failed a safety check, with the reason,
+  rather than being silently dropped;
+- `summary` - one plain-words line, and `wrote_anything: false`.
+
+The four categories, and what each does when cleared:
+
+| Category | What it is | Action | Planned by default |
+|---|---|---|---|
+| `pycache` | `__pycache__` folders and `.pyc`/`.pyo` files | **delete** (they rebuild themselves) | **yes** - the only default |
+| `logs` | Jarvis's own `_jarvis-logs` folder | **move to quarantine** - never deleted | no; ask for it by name |
+| `old_deploy_snapshots` | `_jarvis-deploy-backup-*` folders and `.before-*`/`.backup-*`/`.old-*` copies an update left behind (a plain `.bak` is deliberately NOT on the list: it may be the only copy of something) | **move to quarantine** - never deleted | no; ask for it by name |
+| `temp_files` | scratch files with Jarvis's own prefixes (`jarvis-`, `f6-`, `openjarvis-`) in `%TEMP%` | **delete** | no; ask for it by name |
+
+**The dry run names every path.** `GET /api/storage/cleanup/plan?categories=`
+builds the exact list of absolute paths, bytes and per-category totals, one
+single-use token good for 15 minutes, the quarantine folder a move would use,
+and every candidate it refused with the reason. It writes nothing at all
+(`plan_cleanup()`'s docstring and the tests). A plan of more than 60 items is
+refused rather than summarised - "clear one category at a time" - because a card
+that cannot list what it authorises is not a card. Only Python cache is planned
+when no category is named: the other three are offered, never assumed.
+
+**Nothing happens without ONE card.** `POST /api/storage/cleanup` builds a fresh
+plan and raises ONE approval card under the action `storage_cleanup`, which is
+tier `ask` in both shipped `jarvis-framework.toml` copies; any other tier is
+refused with a `503` rather than obeyed. The card says, in full: every category
+with its item count and bytes and a plain-words line about what it is; then
+**"Exactly this, nothing else"** followed by one line per path - `delete <path>
+(<size>)` or `move <path> -> <quarantine folder>` - and what saying no means
+(*"A deleted file cannot be undone. Moved files are kept in the quarantine
+folder above so you can put them back."*, *"Nothing of yours - no memory, chat
+history, approvals, receipts or notes - is touched. If you say no, nothing
+changes at all."*). One plan is in flight at a time (`409` while one waits). A
+plan with nothing to clear raises no card and answers `200 nothing_to_clear` with
+the refusals that stopped it.
+
+**On a yes, the plan is carried out exactly as shown** (`apply_cleanup`). The
+token must be the one the plan minted, single-use, and the categories must still
+match; an expired plan is refused. Before touching each item it re-checks the
+path (absolute, no `..`, inside the category's allowlisted roots, not a link,
+the right shape for its category) and, for a deletion, that its file count, size
+and newest time are exactly what was planned. **The first discrepancy stops the
+whole run** and the result says where and what was already done. Python cache and
+`%TEMP%` scratch files are DELETED; logs and old deploy snapshots are MOVED into
+`_jarvis-quarantine-<yyyy-mm-dd>` beside the live program, never deleted. The
+receipt is exact: `freed_bytes` counts only what was really deleted, `moved_bytes`
+is reported separately because it is still on disk, `deleted` and `quarantined`
+name every path (`quarantined[].moved_to` says where it went), `stopped_at` is
+null on a clean run, and `message` is one plain sentence - "Done: 3 items
+deleted, freeing 12.4 MB; 2 items moved into ... (still on disk)."
+
+**What it refuses, before anything else.** `~/.openjarvis` (memory, chat history,
+approvals, receipts, the voiceprint and projects), the Downloads folder, a
+relative path, a path with a `..` step, a link or junction anywhere between the
+root and the file, anything outside the allowlisted roots for its category, and
+**any file the repository tracks in git** (read with `git ls-files`; when that
+cannot be known it refuses with "Jarvis cannot prove this repository does not
+track this file"). The live program's own files are on the same list. There is
+no network, no socket, no elevation and no subprocess except that read-only
+`git ls-files`, and `backend/test_storage_health.py` proves the user-data folder
+is byte-identical before and after a cleanup.
+
+**No app screen, said plainly.** Neither app draws a storage page and the HUD's
+fixed read allowlist does not carry the storage routes; the model's tools are the
+owner's door once they are wired (§184.10 says exactly what is and is not built
+on the tree this was written from).
+
+### 184.9 Refreshing its own abilities awareness
+
+The owner's ask *"refresh its function and capabilities awareness"* is two small
+pieces, and neither restarts anything.
+
+**`POST /api/self/refresh`** (GET answers `405` with a sentence saying to use
+POST) re-reads the inventory NOW: it clears the 20-second portrait cache and the
+60-second installer-identity cache, rebuilds the portrait, compares the counts
+before and after, and answers one small document
+(`refresh()`):
+
+```json
+{"ok": true, "schema": "jarvis-self-portrait/1", "client": "hud",
+ "counts": {"places": 190, "settings": 46, "tools": 21, "abilities": 140,
+            "plugins": 48, "settings_places": 59, "menu_places": 131,
+            "stored_memory": 42, "stored_conversations": 31,
+            "app_version": "...", "started_at": 1790000000.0},
+ "changed": {"<key>": {"before": ..., "after": ...}},
+ "said": "I re-read what I can do and have now: ... Everything matches what I
+          had. Nothing was restarted."}
+```
+
+The sentence names every number it read, says "Nothing was restarted" in both
+cases, and when something moved names each key that changed - a setting count, a
+plugin, the version, a store's count. `started_at` is carried straight through,
+so a reader can see it is the same process. **No card**, because it writes
+nothing, changes no setting, reads nothing outside this PC and restarts nothing.
+A refresh never touches a pending card or a store.
+
+**The `refresh_abilities` chat tool** (`backend/jarvis_agent.py`'s `REFRESH_ABILITIES_TOOL` block,
+its `_run_refresh_abilities`, and its `Tool(...)` definition) is the same thing by asking: no arguments, a
+read-only tool that calls the refresh and hands its `said` sentence and counts
+back. It is decided under the gate's existing `skill_list` action ("listing what
+Jarvis can do", tier `auto`) exactly like `feature_guide`, so no new action, tier
+or card wording is invented; it is in the `settings` tool group beside
+`feature_guide` and `change_setting`, and it is NOT recorded as reading outside
+text (nothing outside is read). Its own description says what it is not: not the
+feature explainer, nothing restarted, nothing changed, no approval needed.
+Whether it is OFFERED on a given PC is `[tools].enabled`'s business like every
+other tool, and §184.10 says what the shipped list names on this tree.
+
+### 184.10 What is not built, and what is not proved
+
+- **The conversation tools: `conversation_find` and `conversation_open` ARE
+  built** (read-only, under the gate's own `skill_list`, no card).
+  `conversation_clear` is DELIBERATELY NOT a model tool (Gemini ruling 1,
+  2026-11-03): an LLM must never have an autonomous tool to wipe the
+  transcript, because an injected or hallucinated "clear that up for me" would
+  delete chat history. Clearing stays the REST route (`POST
+  /api/conversations/clear`), an app UI action, or the fast path - always
+  behind its ONE `conversation_clear` card. The explainer and `open_area` from
+  the first sketch are still NOT built; the portrait's routes and the existing
+  `feature_guide` answer that side.
+- **The storage routes have no chat tools and no app screen yet**, on the tree
+  this was written from: `/api/storage/scan`, `/api/storage/cleanup/plan` and
+  `/api/storage/cleanup` answer and are fully tested, but no `storage_scan`/
+  `storage_cleanup` model tool is registered and neither app draws a storage
+  page. The storage module itself carries the exact tool names its wiring
+  worker is to add (`TOOL_ROWS`), and its card wording is already built; this
+  section says what is real, not what is next.
+- **`refresh_abilities` is defined and grouped, but it is not in the shipped
+  `[tools].enabled` list on this tree** - the same list that ships
+  `feature_guide`, `change_setting`, `plugin_list` and the rest. A tool that is
+  not in that list is not offered, so a PC with the shipped settings file has
+  the POST route but not the tool by asking until the list names it (or the
+  owner adds the name).
+- **The backend does not yet emit `open_area`.** Both apps accept it and the
+  desktop's table can act on it; `resolve_place` is the hook with no caller yet
+  (184.3).
+- **No new event kind is added, and there is deliberately no stream listener
+  for a navigation frame.** The contract is the per-answer route field; the
+  desktop's `hud_nav.rs` header says plainly that a `ui.navigate` listener with
+  no publisher would be "a doorbell into an empty room", so none is wired.
+  If a navigation frame is ever added it must be label-filtered and ship with
+  a real publisher and a client handler together (the F6 research's F5).
+- **Not driven on hardware.** No real phone, no installed desktop app and no
+  live backend were run for this section; the routes, the portrait, the card,
+  the conversation adapters and the clear are proved by their suites, the
+  desktop's navigation and window code by its own tests, and the phone's tables
+  by JVM tests. What is proved is code and tests, not a field test.
+
+### 184.11 Both apps, the one-sided parts, and the tests
+
+| Piece | Desktop | Phone | Why |
+|---|---|---|---|
+| `/api/self`, `/api/self/version`, `/api/conversations` | **on this tree: NOT yet reachable from the page** - `hud_proxy.rs` carries none of the three (`HUD_GET_PATHS` has 12 paths and no `/api/self`); the desktop's own PR #1115 adds `/api/self`, `/api/conversations` and - after this branch's `/api/self/version` - its allowlist becomes 14 paths. The version STRING is read by the shell's version handshake, not only the page | can read them like any route; the phone has no self screen | it is a read; both apps' chats already reach the PC |
+| "Open a place" | `hud_nav.rs` table + `open_jarvis_area` | `OpenPlace` table + the one-time settings request | same field, each app's own surfaces |
+| More than one conversation window | **desktop only** - the extra `chat-*` windows | one screen at a time | recorded in `docs/ARCHITECTURE.md` section 8 |
+| Clearing one conversation | the card is answered in any window (Windows Hello where the gate asks) | the card is answered on Home like any card; its History delete keeps its own confirm | one action, one decision, everywhere |
+| The version handshake / Update | **desktop only** | none | a phone cannot patch this PC's backend (the existing one-sided decision, ARCHITECTURE section 8) |
+| Storage scan and cleanup (184.8) | **no screen, no tool on this tree** | **no screen, no tool on this tree** | the routes and the ONE card are built and tested; the door is the model tool the wiring worker adds, never a client-side clear |
+| Refreshing the abilities (184.9) | the `refresh_abilities` tool in either app's chat, once `[tools].enabled` names it; `POST /api/self/refresh` is a route both apps may call | same | one read of this PC's own modules; no card and nothing restarted |
+
+**Tests.** `backend/test_self_portrait.py` (added with the module; it is what
+holds the portrait to the two registries, the settings' live values, the refresh
+endpoint and its sentence, the clear card's four phases, the adapters'
+one-truth rule, the fail-closed tier, the "a cleared chat does not forget a
+fact" proof, and the never-in-it list), `backend/test_storage_health.py` (the
+bounded scan, every refusal, the plan's token and expiry, the ONE card, the
+re-check that stops a changed item, the delete-vs-quarantine split, the freed
+bytes, and the user-data folder byte-identical before and after),
+`backend/test_asks_first.py` and the shipped-whole twin checks
+(`backend/test_base_matches_repo.py`, `backend/test_base_regeneration.py`,
+`tools/check_stale_twins.py`) for the new modules and their `jarvis-backend/`
+copies; the desktop's `cargo test` unit tests in `hud_nav.rs`, `chat_windows.rs`
+and `backend_self.rs`; the phone's `OpenPlaceTest`, `OpenPlaceAreasTest` and
+`ConversationClearTest`. The two
+checkers named by the parity rule do NOT classify nothing: `tools/check_parity.py`
+adds **nine `BACKEND_ONLY` entries** for this feature - `/api/self`,
+`/api/self/version`, `/api/self/refresh`, `/api/conversations`,
+`/api/conversations/{id}`, `/api/conversations/clear`, and the storage
+self-scan's `/api/storage/scan`, `/api/storage/cleanup/plan`,
+`/api/storage/cleanup` - each carrying its follow-up lane in the reason, because
+neither app calls any of them on this tree. `tools/check_event_names.py`
+classifies nothing new because no event kind is added (navigation stays on the
+existing per-answer `X-Jarvis-Route` field). **No `features/features.json` entry
+is added by this work** - that row is still waiting on the app lanes; the PR
+says exactly what each checker reported.

@@ -77,6 +77,12 @@ REPO_ONLY_IMPORTS = {
     ("import_history.py", "_where"): "the command line, run from this repository, finds "
                                      "the backend through _where.py; shipped beside "
                                      "jarvis_hud.py it uses its own folder instead",
+    # The storage self-scan (2026-11-03) used to be named here: it was PR
+    # #1117's drop-in and not in this repository's shipped set yet, so the two
+    # optional call sites (jarvis_self_portrait.py and jarvis_asks_first.py)
+    # were listed with the reason instead of the dependency being hidden. Both
+    # entries were removed when #1117 put the module in the shipped set and the
+    # base was re-taken - it is a shipped module now, so it needs no exemption.
 }
 
 # Third-party packages: import name -> pip name. Each must appear in

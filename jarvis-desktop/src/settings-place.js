@@ -2,10 +2,11 @@
  * Where Settings was asked to open.
  *
  * WHY THIS EXISTS (the owner, 2026-10-27): "when i right click the jarvis tray
- * icon, click on update available, it only opens the settings page". The tray's
- * "Update available — v…" row now asks Rust for Settings *at the Updates
- * card* (`windows.rs`'s `show_settings_at`), and Rust tells this window in one
- * of two ways:
+ * icon, click on update available, it only opens the settings page". The
+ * Updates card got a name a surface can ask for - the tray's row asked for it
+ * until 2026-11-03, when that row began installing instead - and Rust asks this
+ * window for Settings *at the Updates card* (`windows.rs`'s `show_settings_at`)
+ * in one of two ways:
  *
  *   - a NEW window is built at `settings.html#updates`, so the place arrives as
  *     the fragment;

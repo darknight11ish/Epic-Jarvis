@@ -59,6 +59,8 @@ os.environ["JARVIS_CONFIG_DIR"] = str(TMP)
 _TOML = TMP / "jarvis-framework.toml"
 shutil.copyfile(HERE / "rebuilt" / "jarvis-framework.toml", _TOML)
 os.environ["JARVIS_FRAMEWORK_TOML"] = str(_TOML)
+# The undo receipt's own store: never the owner's real receipts.db (2026-11-03).
+os.environ["JARVIS_RECEIPTS_DB"] = str(TMP / "receipts.db")
 
 import _stack  # noqa: E402
 import jarvis_animal as AN  # noqa: E402
@@ -507,12 +509,93 @@ def t_the_patch():
     fresh()
 
 
+def t_a_cardless_change_leaves_one_receipt_and_undo_puts_it_back():
+    """BUG 6, the animal half (2026-11-03 audit).
+
+    *"A cardless change leaves ONE undo receipt"* was false for every animal
+    switch, the sun-and-moon switch and the weather source: their runner wrote
+    none, so "say undo in the same chat" had nothing to take back - for exactly
+    the settings this slice's headline names.
+
+    Each shape now leaves ONE `change_setting` row holding the VALUE its setter
+    takes - a bool for a switch, and for the weather the SOURCE ID, never the
+    label the answer prints - and "undo" puts the old value back through the
+    same setter.
+    """
+    import jarvis_receipts as RC
+
+    class Sched:
+        def last_set(self, cid, now):
+            return None
+
+    def change(text, conv):
+        intent = Q.match(text)
+        check(f"{text!r} reaches the animal runner",
+              intent is not None and intent.name.startswith("animal_"),
+              None if intent is None else intent.name)
+        return Q.run(intent, None, time.time(), conversation=conv)
+
+    fresh()
+    # 1. A shared animal switch.
+    rows = len(RC.recent(200))
+    change("keep the animal still", "animal-undo-switch")
+    check("an animal switch really changed", AN.values()["still"] is True,
+          AN.values())
+    now_rows = RC.recent(200)
+    check("...and it left exactly ONE receipt", len(now_rows) == rows + 1,
+          (rows, len(now_rows)))
+    newest = now_rows[0] if now_rows else {}
+    check("...under the settings tool's own name, holding the BOOL it changed from",
+          newest.get("tool_name") == Q.SETTINGS_RECEIPT_TOOL
+          and (newest.get("before") or {}).get("value") is False,
+          (newest.get("tool_name"), newest.get("before")))
+    undo = Q._run_undo({"noun": None, "soft": False}, Sched(), time.time(),
+                       "animal-undo-switch")
+    check("'undo' puts the animal switch back",
+          AN.values()["still"] is False,
+          (AN.values(), None if undo is None else undo.reply))
+    # 2. The sun and moon.
+    fresh()
+    rows = len(RC.recent(200))
+    change("turn on the sun and moon", "animal-undo-sky")
+    check("the sun and moon really changed", SK.load()["show"] is True, SK.load())
+    check("...and it left exactly ONE receipt", len(RC.recent(200)) == rows + 1,
+          (rows, len(RC.recent(200))))
+    undo = Q._run_undo({"noun": None, "soft": False}, Sched(), time.time(),
+                       "animal-undo-sky")
+    check("'undo' puts the sun and moon back", SK.load()["show"] is False,
+          (SK.load(), None if undo is None else undo.reply))
+    # 3. The weather source - the one whose answer prints a LABEL and whose
+    #    setter takes an ID, so a receipt holding the label would be refused.
+    fresh()
+    SK.handle_post({"place": "Denver"}, here=True)
+    SK.handle_post({"weather": "home_assistant"}, here=True)
+    rows = len(RC.recent(200))
+    change("turn off the weather", "animal-undo-weather")
+    check("the weather source really changed", SK.load()["weather"] == "off",
+          SK.load()["weather"])
+    now_rows = RC.recent(200)
+    check("...and it left exactly ONE receipt", len(now_rows) == rows + 1,
+          (rows, len(now_rows)))
+    newest = now_rows[0] if now_rows else {}
+    check("...holding the SOURCE ID, not the label the answer prints",
+          (newest.get("before") or {}).get("value") == "home_assistant",
+          newest.get("before"))
+    undo = Q._run_undo({"noun": None, "soft": False}, Sched(), time.time(),
+                       "animal-undo-weather")
+    check("'undo' puts the weather source back, through the same setter",
+          SK.load()["weather"] == "home_assistant",
+          (SK.load()["weather"], None if undo is None else undo.reply))
+    fresh()
+
+
 if __name__ == "__main__":
     for fn in (t_defaults, t_changes_at_once, t_still_has_its_own_change_time,
                t_device_words_and_steps,
                t_every_switch_by_every_name, t_asking_changes_the_pc,
                t_open_meteo_still_raises_its_card, t_per_device_goes_in_the_header,
                t_unclear_is_asked_never_guessed, t_only_the_owners_own_words,
+               t_a_cardless_change_leaves_one_receipt_and_undo_puts_it_back,
                t_registry_and_sections, t_install_wraps_the_route, t_the_patch):
         print(f"\n--- {fn.__name__} ---")
         try:

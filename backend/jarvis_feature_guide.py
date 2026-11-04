@@ -2045,28 +2045,76 @@ def _setting_by_own_label(text):
     when they are equal: it widens punctuation and case, never the words. It
     cannot hand back a different setting, because a name is that setting's own.
     """
+    R = _registry()
+    return _own_label_match(getattr(R, "BOOL_SETTINGS", ()) if R else (), text)
+
+
+def _own_label_match(rows, text):
+    """The row in `rows` one of whose OWN names is `text`, folded, or None."""
     want = _norm(text)
     if not want:
         return None
-    R = _registry()
-    if R is None:
-        return None
-    for setting in getattr(R, "BOOL_SETTINGS", ()):
+    for setting in rows or ():
         for name in getattr(setting, "names", ()) or ():
             if _norm(name) == want:
                 return setting
     return None
 
 
-def _setting_target(words):
-    """(setting, label) for a plain on/off setting named exactly, or (None, "").
+def _choice_by_own_label(text):
+    """The named-choice setting whose OWN registered name is `text`, or None.
 
-    Two looks, in this order: the registry's own exact alias match (the
-    vocabulary the spoken phrases are built on), then the switch's own
-    registered LABEL with case and punctuation folded - so the words printed on
+    The same fold, and the same reason, as `_setting_by_own_label` above: a
+    choice's name may carry a capital or an apostrophe ("the anti-slop mode",
+    "jarvis's personality"), and the exact registry lookup compares it as
+    written. Added 2026-11-03 with the choice branch of `_setting_target`, so a
+    label the owner reads on a Settings card answers for a choice exactly as it
+    already did for a switch."""
+    R = _registry()
+    return _own_label_match(getattr(R, "CHOICE_SETTINGS", ()) if R else (), text)
+
+
+def _is_choice(setting) -> bool:
+    """Is this registry row a named-choice setting (rather than a switch)?"""
+    R = _registry()
+    kind = getattr(R, "ChoiceSetting", None) if R is not None else None
+    return bool(kind is not None and isinstance(setting, kind))
+
+
+def _section_place(section_id) -> str:
+    """`Settings, <the card's own first name>` - or plain `Settings`.
+
+    The same words `jarvis_settings_registry._section_place` answers with, read
+    from the one SECTIONS table, so a choice's "where" and a switch's "where"
+    are never two different phrases for the same card."""
+    R = _registry()
+    sec = None
+    if R is not None and section_id:
+        try:
+            sec = R.section_by_id(str(section_id))
+        except Exception:                   # noqa: BLE001 - plain "Settings"
+            sec = None
+    if sec is not None and getattr(sec, "names", ()):
+        return f"Settings, {sec.names[0]}"
+    return "Settings"
+
+
+def _setting_target(words):
+    """(setting, label) for a plain on/off setting OR a named-choice setting
+    named exactly, or (None, "").
+
+    Two looks per kind, in this order: the registry's own exact alias match
+    (the vocabulary the spoken phrases are built on), then the setting's own
+    registered NAME with case and punctuation folded - so the words printed on
     the Settings card always answer, even when they carry an apostrophe or a
     capital the exact index does not hold. Neither look guesses: both require
     the whole name.
+
+    CHOICES ANSWER TOO, SINCE 2026-11-03 (M4). It used to be bool-only, so
+    `feature_state_setting` / `feature_howto_setting` could never fire for any
+    of the ten CHOICE_SETTINGS rows: "is the personality set to warm?" and "how
+    do I change the anti-slop mode?" answered from the catalogue or not at all.
+    A switch is still tried FIRST, so no existing answer changes meaning.
     """
     R = _registry()
     if R is None:
@@ -2075,9 +2123,97 @@ def _setting_target(words):
     setting = R.find_bool_setting(text)
     if setting is None:
         setting = _setting_by_own_label(words)
-    if setting is None:
+    if setting is not None:
+        return setting, _setting_words(setting)
+    choice = R.find_choice_setting(text)
+    if choice is None:
+        choice = _choice_by_own_label(words)
+    if choice is None:
         return None, ""
-    return setting, _setting_words(setting)
+    return choice, _setting_words(choice)
+
+
+def _choice_value(setting):
+    """The choice's value in words right now, or None when it cannot be read.
+
+    Through the registry's ONE reader for the row (`current_value` ->
+    `ChoiceSetting.now`), so the state shown here is the same value the explain
+    answer shows and the same one the clarifying question prints."""
+    R = _registry()
+    if R is None:
+        return None
+    try:
+        return R.current_value(setting)
+    except Exception:                       # noqa: BLE001 - said as unreadable
+        return None
+
+
+def _choice_by_key(words):
+    """The ChoiceSetting whose registry KEY is `words`, folded, or None.
+
+    WHY THE KEY IS A SIGNAL OF ITS OWN (2026-11-03). `feature_state_setting` /
+    `feature_howto_setting` carry `setting.key` ("personality",
+    "antislop_mode"), not a sentence, so the answer must be about THAT row. The
+    feature catalogue is matched first for a person's words, and it would win
+    here for the wrong reason: "personality" is a loose alias of the "How
+    Jarvis talks" row, whose own switch is HUMOUR - so asking about the
+    personality preset would have answered "on right now (humour)".
+    Only a choice key is treated this way, never a switch key, so every
+    existing bool answer keeps the wording its own tests pin.
+    """
+    R = _registry()
+    if R is None:
+        return None
+    want = _norm(words)
+    if not want:
+        return None
+    for choice in getattr(R, "CHOICE_SETTINGS", ()) or ():
+        if _norm(choice.key) == want:
+            return choice
+    return None
+
+
+def _choice_state(setting) -> dict:
+    """The "is it on?" answer for a named-choice setting: its real value."""
+    label = _setting_words(setting)
+    here = _choice_value(setting)
+    if not here:
+        return {"ok": True, "kind": "setting", "setting": setting.key,
+                "label": label, "state": None,
+                "words": (f"I could not read which value {label} has - the "
+                          f"module that owns it is not answering on this PC. "
+                          f"I will not guess.")}
+    return {"ok": True, "kind": "setting", "setting": setting.key,
+            "label": label, "state": here,
+            "words": f"{label.capitalize()} is set to {here} right now."}
+
+
+def _choice_how_to(setting, label: str, on: bool) -> dict:
+    """The "how do I change it?" answer for a named-choice setting.
+
+    A CHOICE HAS NO ON/OFF (2026-11-03, M4): "how do I turn it on?" is the
+    wrong sentence for a value picked from a list, so the answer names the
+    place, its value and a real `set <name> to <value>` phrase built from the
+    row's OWN value list - the same vocabulary jarvis_quick's settings_choice
+    grammar accepts, so the phrase offered is a phrase that works."""
+    where = _section_place(getattr(setting, "where", None))
+    here = _choice_value(setting)
+    try:
+        options = sorted(set(setting.options().keys()))
+    except Exception:                       # noqa: BLE001 - no list to name
+        options = []
+    clause = ("" if not here else f" It is set to {here} right now.")
+    if not options:
+        return {"ok": True, "kind": "setting", "setting": setting.key,
+                "label": label, "state": here,
+                "words": (f"{label.capitalize()} is in {where}.{clause} There is "
+                          f"no value to name on this PC yet, so ask \"what are "
+                          f"the choices for {label}?\" to check.")}
+    return {"ok": True, "kind": "setting", "setting": setting.key,
+            "label": label, "state": here,
+            "words": (f"{label.capitalize()} is in {where}. Say \"set {label} to "
+                      f"{options[0]}\" and I will do it; a change that needs "
+                      f"approval still asks on a card first.{clause}")}
 
 
 def state(words) -> dict:
@@ -2093,6 +2229,11 @@ def state(words) -> dict:
     if _cloud_sync_asked(words):
         return {"ok": True, "kind": "note", "state": None,
                 "words": CLOUD_SYNC_WORDS}
+    # A registry KEY (what the intent carries) is answered as that row, before
+    # the catalogue - see `_choice_by_key`.
+    choice_key = _choice_by_key(words)
+    if choice_key is not None:
+        return _choice_state(choice_key)
     got = find(words, loose=True)
     if got["kind"] == "feature":
         row = got["row"]
@@ -2127,6 +2268,8 @@ def state(words) -> dict:
                 "words": _ambiguous_words(got["rows"])}
     setting, label = _setting_target(words)
     if setting is not None:
+        if _is_choice(setting):
+            return _choice_state(setting)
         value = read_state(setting.key)
         if not isinstance(value, bool):
             return {"ok": True, "kind": "setting", "setting": setting.key,
@@ -2150,6 +2293,11 @@ def how_to(words, on: bool) -> dict:
     if CATALOGUE is None:
         return {"ok": False, "kind": "missing",
                 "words": "The feature list is not installed on this PC, so I cannot read it."}
+    # A registry KEY (what the intent carries) is answered as that row, before
+    # the catalogue - see `_choice_by_key`.
+    choice_key = _choice_by_key(words)
+    if choice_key is not None:
+        return _choice_how_to(choice_key, _setting_words(choice_key), bool(on))
     got = find(words, loose=True)
     if got["kind"] == "feature":
         row = got["row"]
@@ -2183,6 +2331,8 @@ def how_to(words, on: bool) -> dict:
                 "words": _ambiguous_words(got["rows"])}
     setting, label = _setting_target(words)
     if setting is not None:
+        if _is_choice(setting):
+            return _choice_how_to(setting, label, bool(on))
         section = getattr(setting, "section", None)
         where = f"Settings, {section}" if section else "Settings"
         value = read_state(setting.key)

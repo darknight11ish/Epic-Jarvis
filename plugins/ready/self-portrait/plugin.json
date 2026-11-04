@@ -1,0 +1,7 @@
+{
+  "name": "self-portrait",
+  "summary": "what Jarvis is made of on this PC: every place it can open (imported from the Settings and menu registries), every setting with its live on/off value, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only, never a secret, a path or a word of chat.",
+  "module": "jarvis_self_portrait",
+  "install": "handler",
+  "stack_order": 165
+}

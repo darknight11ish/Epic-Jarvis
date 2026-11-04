@@ -562,6 +562,150 @@ def t_a_setting_transcript_cannot_bypass_a_card():
           acc["ok"], acc)
 
 
+class _SchedStub:
+    """The three scheduler calls `answer()` makes, and nothing else.
+
+    This suite must write nothing anywhere: a carded setting change creates no
+    job, so the only thing the scheduler sees is `mark_command` and
+    `forget_set` - and a real one would write the owner's own schedule."""
+
+    def __init__(self):
+        self.commands, self.forgotten = [], []
+
+    def mark_command(self, text):
+        self.commands.append(text)
+
+    def forget_set(self, cid):
+        self.forgotten.append(cid)
+
+    def last_set(self, cid, now):
+        return None
+
+
+def t_a_carded_setting_change_says_one_calm_line_in_live():
+    """M7 (2026-11-03): the card-waiting flag reaches the answer.
+
+    `_run_settings_bool` used to drop `Outcome.waiting`, so nothing downstream
+    could tell "done" from "a card is up". Now a Live turn whose setting change
+    is WAITING answers in ONE calm sentence - Live speaks its answer, so a card
+    id, a list or a question back is noise, and there is no spoken approval to
+    offer. A turn that is not Live keeps the setter's own sentence, unchanged.
+    """
+    import dataclasses
+
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+
+    said = "Waiting for your yes on the approval card. Nothing has changed yet."
+    calls = []
+
+    def waiting_set(on, *, peer=None, local=None):
+        calls.append(bool(on))
+        return R.Outcome(True, said, waiting=True)
+
+    real = next(b for b in R.BOOL_SETTINGS if b.key == "lights_without_card")
+    stub = dataclasses.replace(real, set=waiting_set)
+    saved = R.BOOL_SETTINGS
+    R.BOOL_SETTINGS = tuple(stub if b.key == real.key else b for b in saved)
+    try:
+        typed = Q._run_settings_bool({"key": "lights_without_card", "on": True},
+                                     None, None)
+        live = Q._run_settings_bool({"key": "lights_without_card", "on": True},
+                                    None, None, live=True)
+        by_answer = Q.answer("turn on lights without asking", sched=_SchedStub(),
+                             live=True)
+        by_answer_typed = Q.answer("turn on lights without asking",
+                                   sched=_SchedStub(), live=False)
+    finally:
+        R.BOOL_SETTINGS = saved
+
+    check("the setter really did report a waiting card",
+          len(calls) == 4 and typed is not None, calls)
+    check("a carded change on a NON-Live turn returns the setter's said, unchanged",
+          typed is not None and typed.reply == said, None if typed is None else typed.reply)
+    check("...and Live's answer is not that sentence",
+          live is not None and typed is not None and live.reply != said
+          and live.reply != typed.reply, None if live is None else live.reply)
+    one = None if live is None else live.reply
+    check("Live's answer is ONE sentence, and it never asks a question",
+          one is not None and one.count(".") == 1 and one.endswith(".")
+          and "?" not in one, one)
+    check("...it says a card is waiting, and never claims the change was made",
+          one is not None and "A card is waiting for" in one
+          and "it changes" in one, one)
+    check("...with no card id and no list in it",
+          one is not None and not re.search(r"\b[0-9a-f]{8,}\b", one)
+          and len(one) < 140, one)
+    check("...and no approval-by-voice wording (Live hears no 'yes')",
+          one is not None and "approve or deny" not in one
+          and not re.search(r"\bsay (?:yes|no|approve)\b", one), one)
+    check("the live flag really is read from the REQUEST, not hardcoded",
+          by_answer is not None and by_answer.reply == one
+          and by_answer_typed is not None and by_answer_typed.reply == said,
+          (None if by_answer is None else by_answer.reply,
+           None if by_answer_typed is None else by_answer_typed.reply))
+
+    def body(text, live):
+        msg = {"role": "user", "content": text, "provenance": "voice"}
+        if live:
+            msg["live"] = True
+        return {"messages": [msg], "conversation_id": "live-card-words"}
+
+    check("a spoken message with the Live mark is a Live turn",
+          Q._live_body(body("hi", True)) is True)
+    check("...the same mark on a TYPED message is not",
+          Q._live_body({"messages": [{"role": "user", "content": "hi",
+                                      "provenance": "typed", "live": True}]}) is False)
+    check("...and a spoken message without the mark is not",
+          Q._live_body({"messages": [{"role": "user", "content": "hi",
+                                      "provenance": "voice"}]}) is False)
+
+    # The pause half: the card this turn produced is the card that pauses Live,
+    # and deciding it lets Live carry on - the same pause every other card gets.
+    w = World()
+    e = w.engine
+    e.start("phone")
+    w.card(age=1)
+    acc = e.accepts("phone")
+    check("the card a Live setting change waits on PAUSES the session",
+          not acc["ok"] and acc["code"] == "card" and acc["words"] == L.PAUSE_WORDS["card"],
+          acc)
+    w.cards = []
+    check("...and deciding that card lets Live carry on",
+          e.accepts("phone")["ok"])
+
+
+def t_the_settings_waiting_line_names_the_setting_and_no_card():
+    """The one line's own words, checked without a setter at all."""
+    import dataclasses
+
+    import jarvis_quick as Q
+    import jarvis_settings_registry as R
+
+    real = next(b for b in R.BOOL_SETTINGS if b.key == "lights_without_card")
+    line = Q._settings_waiting_line(real)
+    check("the calm line names the setting in its own registered words",
+          "lights without asking" in line, line)
+    check("...it is one sentence", line.count(".") == 1 and line.endswith("."), line)
+    check("...and it promises only the card",
+          "approve it on your phone or PC" in line and "changes" in line, line)
+    setting = dataclasses.replace(real, names=())
+    check("a setting with no spoken name keeps its key in the sentence",
+          "lights_without_card" in Q._settings_waiting_line(setting),
+          Q._settings_waiting_line(setting))
+    nameless = dataclasses.replace(real, names=(), key="")
+    check("a setting with neither name nor key still gets a sentence, never 'None'",
+          "None" not in Q._settings_waiting_line(nameless)
+          and "that setting" in Q._settings_waiting_line(nameless),
+          Q._settings_waiting_line(nameless))
+    check("...and the label follows the same order: name, then key, then a plain word",
+          Q._setting_label(real) == "lights without asking"
+          and Q._setting_label(setting) == "lights_without_card"
+          and Q._setting_label(nameless) == "that setting",
+          (Q._setting_label(real), Q._setting_label(setting),
+           Q._setting_label(nameless)))
+
+
 def t_other_voices():
     w = World()
     e = w.engine
