@@ -45,13 +45,18 @@
 //! (`Submenu::remove`). Tauri 2.12's `MenuItem` has no `set_visible`, which is
 //! why the menu itself is where absence lives.
 //!
-//! Pressing it **installs** the update: `update::install_from_tray` calls the
-//! same `install_update` the Settings Install button calls, after turning the
+//! Pressing it **updates both halves**: `update::install_from_tray` runs the same
+//! `update_both` the Settings Install press and an answered chat card run - the
+//! backend is patched first, then Jarvis Desktop installs - after turning the
 //! row into "Updating Jarvis to <version>…" so a second press cannot start a
-//! second download. It is never automatic and there is no second updater. On
-//! Windows a successful install ends this process (the installer restarts the
-//! app), so the next launch starts with the row absent because the new version
-//! is the running one - the row cannot linger after an install.
+//! second run. Only where the backend half cannot run at all (the two folders
+//! are not set, or the patch program is missing) does it fall back to the
+//! desktop-only `install_update`, and then it says plainly that the BACKEND was
+//! NOT updated and where to finish it. It is never automatic and there is no
+//! second updater. On Windows a successful install ends this process (the
+//! installer restarts the app), so the next launch starts with the row absent
+//! because the new version is the running one - the row cannot linger after an
+//! install.
 //!
 //! Jarvis Live keeps a group of its own: it sat right under "Stop everything",
 //! and a click one row off started or ended it (the Live review, 2026-09-28).
@@ -1497,9 +1502,9 @@ fn first_sentence(text: &str) -> String {
 /// and removed from it rather than disabled, because a greyed row saying
 /// "Jarvis Desktop 0.2.0" is the shape the owner asked to be rid of (2026-11-03).
 ///
-/// Pressing the row starts the SAME install the Settings Install button starts
-/// (`update::install_from_tray`); this function only decides whether the row
-/// exists and what it says.
+/// Pressing the row starts the SAME both-halves update the Settings Install press
+/// starts (`update::install_from_tray`); this function only decides whether the
+/// row exists and what it says.
 pub fn on_update_status(app: &AppHandle, available: Option<&str>) {
     let label = update_row(available);
     if let Some(rows) = app
@@ -1826,9 +1831,12 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_BACKEND => run_backend_action(app),
 
         // The row exists only while a newer version is known (`on_update_status`
-        // adds it, `update_row` is the rule), and pressing it INSTALLS that
-        // version - the same `install_update` the Settings Install button runs,
-        // never a second updater and never anything automatic.
+        // adds it, `update_row` is the rule), and pressing it updates BOTH
+        // halves - the backend first, then Jarvis Desktop - through the same
+        // runner the Settings Install press and an answered chat card use. The
+        // desktop-only `install_update` is reached only where the backend half
+        // cannot run at all, and then the toast says the BACKEND was NOT
+        // updated. Never a second updater and never anything automatic.
         //
         // Spawned, not awaited: this handler already runs on the main thread,
         // and the press re-labels the row - menu work is POSTED to the main
@@ -1909,11 +1917,13 @@ fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
     }
 }
 
-/// The tray's "Update Jarvis to <version>" row: the Settings Install button,
-/// pressed from the context menu.
+/// The tray's "Update Jarvis to <version>" row: the same both-halves update the
+/// Settings Install press runs, from the context menu. Where the backend half
+/// cannot run on this PC, `install_from_tray` still says so and runs the desktop
+/// half alone rather than pretending.
 ///
 /// Off the main thread on purpose. The press must turn the row into "Updating
-/// Jarvis to <version>…" (so a second press cannot start a second download), and
+/// Jarvis to <version>…" (so a second press cannot start a second run), and
 /// Tauri posts every menu call to the main thread and waits for it - so doing
 /// that from inside a menu handler would wait on the thread that is running it.
 fn run_update_from_tray(app: &AppHandle) {
