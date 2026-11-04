@@ -1,0 +1,26 @@
+                # that can only ever REMOVE a lane, so empty lanes stay empty
+                # and the lanes that were passed are never added to.
+                #
+                # 2026-11-03 (the owner's decision, after the field test): an
+                # ORDINARY turn with NO project active KEEPS its cloud lanes -
+                # the router's own gates (private, tainted, picture, no-lane,
+                # complexity, budget) and the PC's standing escalation switch
+                # still decide, exactly as they do for every turn, and a lane
+                # is never added here that was not offered before. An ACTIVE
+                # project that is NOT Shareable still zeroes the lanes: that
+                # privacy promise is unchanged (docs/PROJECTS-DESIGN.md).
+                #
+                # THE ID IS TESTED BEFORE IT IS USED, and that is not
+                # tidiness: Projects.get() RAISES KeyError for an id that is
+                # not a string (Projects._project_row: "if not isinstance(pid,
+                # str) ... raise KeyError(pid)"), and active_project_id() is
+                # None on EVERY ordinary turn. Handing that None to get() is
+                # a KeyError out of the chat turn - measured against the real
+                # module, not assumed. A module with no active_project_id at
+                # all answers "local", the direction that cannot send words
+                # anywhere. An id that IS a string but is not a row would
+                # still raise; jarvis_projects' own delete path clears the
+                # mode file when it deletes the active project, so no such id
+                # is left.
+                lanes=[] if jarvis_side_memory else (lambda m: ([] if (not hasattr(m, "active_project_id") or (isinstance((p := m.active_project_id()), str) and bool(p) and not bool((m.get().get(p) or {}).get("shareable")))) else lanes))(__import__("jarvis_projects")),
+                has_image=bool(body.get("has_image")),
