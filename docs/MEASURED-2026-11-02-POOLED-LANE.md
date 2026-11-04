@@ -71,6 +71,10 @@ the machine's own words) rather than loading a model that spills. The
 not changed - what changed is which rung the PRESET asks for, and the reason is
 this table.
 
+**2026-11-03 amendment, below:** this paragraph records the 2026-11-02 state.
+The preset has since moved to 20,480 with a measured, capped spill allowance -
+read the amendment at the end of this page before relying on the numbers above.
+
 ## The state of the PC afterwards
 
 The measurement evicted both lane models (that is the feature's own cost, and
@@ -129,3 +133,98 @@ answering on 11450, its model is what holds the cards; unload it with
 `OLLAMA_HOST=127.0.0.1:11450 ollama stop qwen3-coder-30b-a3b-ud-q3-k-xl` (in
 PowerShell: `$env:OLLAMA_HOST="127.0.0.1:11450"; ollama stop
 qwen3-coder-30b-a3b-ud-q3-k-xl`). Nothing else needs undoing.
+
+## 2026-11-03 amendment: the pooled window becomes 20,480, with a measured allowance
+
+The owner asked for the Coding preset's window to be 20,480 tokens rather than
+16,384, and accepted the measured cost of doing so. This section is that
+measurement, taken on this PC on 2026-11-03 16:07-16:17, read-only: no live
+module and no settings file was edited, the Jarvis backend on 4719 and the
+desktop app were not stopped or restarted, no approval card was raised or
+answered, and no preset was switched.
+
+**Method - the 2026-11-02 measurement above, reused.** Both rungs were loaded
+through the shipped `jarvis_big_coder.load` on the pooled lane's own Ollama at
+11450, with `/api/ps` empty on every server, one cold load per rung. The three
+small fixed coding prompts from 2026-11-02 were reconstructed from their
+description above (a `median(xs)` function; a bug fix for a function dividing by
+`len(items)`; SQL for the two newest rows of `events`) and run through
+`/api/generate` at `temperature 0`, `seed 42`, `num_predict 192`. Decode speed is
+Ollama's own `eval_count / eval_duration`; memory is `/api/ps` (`size` against
+`size_vram`) and `nvidia-smi`. The 16,384 control load was reproduced exactly:
+**14,886.2 MiB with zero spill**, against the 2026-11-02 table's 14,886 MiB /
+zero spill.
+
+### The two windows, side by side
+
+Model `qwen3-coder-30b-a3b-ud-q3-k-xl` on port 11450, one cold load per rung.
+
+| | **16,384 (shipped then)** | **20,480** |
+|---|---|---|
+| Cold load, wall clock | **37.0 s** | **34.9 s** |
+| Loaded size (`size`) | 14,886.2 MiB | 15,326.2 MiB |
+| In video memory (`size_vram`) | 14,886.2 MiB | 15,122.7 MiB |
+| **Spilled to system RAM** | **0.0 MiB** | **203.5 MiB** |
+| Context `/api/ps` reports | 16,384 | 20,480 |
+| Prompt 1 - `median(xs)` - prompt / output tokens | 40 / 101 | 40 / 101 |
+| Prompt 1 - decode tok/s | 81.75 | 81.47 |
+| Prompt 2 - empty-list fix - prompt / output tokens | 42 / 24 | 42 / 24 |
+| Prompt 2 - decode tok/s | 78.69 | 79.08 |
+| Prompt 3 - newest-2-rows SQL - prompt / output tokens | 43 / 14 | 43 / 14 |
+| Prompt 3 - decode tok/s | 79.88 | 81.44 |
+| **Median of the three** | **79.88 tok/s** | **81.44 tok/s** |
+| Time to first token, p1 / p2 / p3 | 0.423 / 0.128 / 0.142 s | 0.347 / 0.139 / 0.133 s |
+| GPU used during the runs | 2060 8,918 - 2080 7,606 MiB | 2060 9,252 - 2080 7,486 MiB |
+| Unload to an empty `/api/ps` | 0.33 s | 0.32 s |
+| Longer probe - 41-token prompt, ~333-token answer | **81.23 tok/s** (332 out) | **77.95 tok/s** (333 out) |
+
+Every prompt named `num_ctx` in its own request. Without it, Ollama silently
+reloads the model at its default 8,192 - the trap `jarvis_big_coder.load`
+documents, and it was hit once in a discarded first pass here.
+
+### What was accepted, and why
+
+**The 203.5 MiB is real and is paid to system RAM.** It is 1.3% of the model,
+and 20,480 is the only rung measured so far where any part of the model is
+outside the two cards. Speed is not measurably worse: the three bench prompts
+were 79.88 -> 81.44 tok/s median (2.0% faster), the 333-token probe was 81.23 ->
+77.95 tok/s (4.0% slower), and all six generations pooled to about 80.4 vs 80.0
+tok/s (0.5% slower). Two runs that were actually identical (both at 8,192, same
+prompts, same model) had medians 7% apart, so a 2-4% difference is inside this
+model's own run-to-run noise: **no speed cost this instrument can resolve.**
+Cold load is the same (34.9 s against 37.0 s, noise) and first-token latency is
+the same (0.13-0.44 s both). Nothing failed, timed out, or behaved differently
+on load and unload.
+
+**So the code now says so honestly, and the rule is narrow:**
+
+- `jarvis_model_lanes.POOLED_CTX` is **20,480** and the Coding preset's own
+  `context` is pinned to it by test.
+- `jarvis_model_lanes.POOLED_SPILL_ALLOWANCE` is **224 MiB** - the 203.5 MiB
+  measurement plus about 10%, so the same split reported slightly differently
+  still loads. The pooled start passes it to
+  `jarvis_big_coder.load_coder(..., allow_spill=...)`.
+- **`allow_spill` is one number for one window.** `load_coder`'s default is
+  `None`, which keeps the original rule exactly: ANY spill is refused. Every
+  other caller - `jarvis_big_coder.start()` and its own mode included - passes
+  no allowance, and the big-coder mode's 28,672-token rung is unchanged. A load
+  that spills past the allowance is still refused and unloaded, and the refusal
+  names both the actual spill and the allowance. A row that does not report
+  `size`/`size_vram` is refused too, allowance or not.
+
+**What is still unmeasured, and said plainly:** the extra 4,096 tokens were
+never filled here - every prompt was 40-43 tokens, so the window was loaded but
+not used. The KV cache grows with real context and part of it could also end up
+in RAM in a genuinely long conversation; that was not measured, so whether the
+window holds up when a 15-minute coding session fills it is still an open
+question. A 15-minute real coding test runs after this change is deployed, and
+its result is not claimed in advance.
+
+**How this was measured.** Both rungs through the shipped
+`jarvis_big_coder.load`/`ps` on 11450, memory from `/api/ps` and `nvidia-smi`,
+with the three lane models evicted first (`keep_alive: 0`) because the 2026-11-02
+ladder was taken on an otherwise empty PC. After the last unload the 11450 server
+was stopped, nothing of the coding model was left loaded, and the three
+everyday/lane models that were evicted were left unloaded on purpose so the
+owner's everyday model reloads on its next turn. The measurement is read-only on
+the owner's PC and is not a live coding session.

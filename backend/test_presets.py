@@ -82,6 +82,14 @@ def main() -> int:
           and cod.measured["tok_s"] == 76.2 and cod.measured["rubric"] == "6/6 coding rubric"
           and cod.measured["size_gib"] == 14.0 and cod.measured["cold_load_s"] == 32.1
           and "BOTH GPUs" in cod.cost, cod.model)
+    check("Coding asks for the 20,480-token window the pooled lane measured, and "
+          "records both that window and the old zero-spill rung honestly",
+          cod.context == 20480
+          and cod.measured["context_measured"] == 20480
+          and cod.measured["context_zero_spill"] == 16384
+          and cod.measured["spill_gib"] == 0.2
+          and "20,480" in cod.cost and "203.5 MiB" in cod.cost,
+          (cod.context, cod.measured))
     check("... its words say the other models are PAUSED and name the honest cost, "
           "never that a lane is still arriving",
           "pauses the other lanes' models" in cod.cost

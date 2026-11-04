@@ -259,10 +259,13 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #      the two lane models it is about to pause;
 #   4. the pause is ANNOUNCED (event bus + audit log) BEFORE the first unload;
 #   5. the both-cards server is started, BOTH lane models are unloaded and
-#      proved gone from `/api/ps`, and only then is the model loaded - at
-#      28,672 tokens, the largest context measured to fit both cards with zero
-#      spill. A load that spills or comes up at another context is unloaded
-#      again and every lane is put back;
+#      proved gone from `/api/ps`, and only then is the model loaded - at THIS
+#      lane's own measured rung (20,480 tokens since 2026-11-03; 16,384 before
+#      it), with the spill that measurement accepted passed to `load_coder` as
+#      `allow_spill`. A load that comes up at another context, spills past this
+#      one measured cap, or does not say how much it spilled, is unloaded again
+#      and every lane is put back. A caller that passes no allowance - every
+#      other one - still gets the zero-spill rule exactly as before;
 #   6. any failure AFTER the card puts back what it took: the lanes, the model
 #      and the server. `changed: false` is only ever said beside the restores
 #      that were really seen.
@@ -302,11 +305,29 @@ POOLED_PORT = 11450
 #: big-coder mode's 28,672: measured on this PC on 2026-11-02 with every model
 #: unloaded, the zero-spill ceiling had moved - 20,480 / 24,576 / 28,672 all
 #: spilled 204-212 MiB, and 16,384 loaded with none (14,886 MiB, all of it in
-#: video memory). So this lane asks for the largest window measured to fit
-#: TODAY, and the preset's own `context` is pinned to it by test. The same
-#: number the owner's own `OLLAMA_CONTEXT_LENGTH` already uses.
+#: video memory). The preset ran at 16,384 until 2026-11-03; on that day a
+#: second measurement put 20,480 at 15,326 MiB with 203.5 MiB in system RAM and
+#: speed inside the same noise, and the owner accepted that measured cost - so
+#: the preset now runs at 20,480 and accepts those 203.5 MiB through
+#: `POOLED_SPILL_ALLOWANCE` below, which is one number for THIS window only.
+#: The preset's own `context` is pinned to it by test.
 POOLED_MODEL = "qwen3-coder-30b-a3b-ud-q3-k-xl"
-POOLED_CTX = 16384
+POOLED_CTX = 20480
+
+#: The spill this one window is allowed to have, in BYTES. Measured 203.5 MiB
+#: at 20,480 on 2026-11-03 (source: `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s
+#: 2026-11-03 amendment). 224 MiB is that measurement plus about 10%, so the
+#: same split reported slightly differently still loads; nothing larger is
+#: accepted. It is a MEASUREMENT, not a guess, and it is deliberately the only
+#: allowance in this code base: every other caller of `load_coder` -
+#: `jarvis_big_coder.start()` included - passes none and keeps the exact
+#: zero-spill rule.
+POOLED_SPILL_ALLOWANCE = 224 * 1024 * 1024
+
+#: The spill that measurement really saw, in MiB. The card and the docs quote
+#: this number; it is kept beside the cap so the two cannot drift, and the test
+#: proves the cap is this plus about 10% and nothing more.
+POOLED_SPILL_MEASURED_MIB = 203.5
 
 #: What the contract calls it. `card` is "both cards" on purpose: there is no
 #: single card this lane lives on, and saying the 2060 would be a lie.
@@ -422,13 +443,20 @@ def _publish_pooled(data: dict) -> None:
 def pooled_card_text(*, engine=None) -> str:
     """The card the owner reads before anything is unloaded, in plain words.
 
-    The measured half is `jarvis_big_coder.card_text_start()`'s own sentence -
-    the same model, the same cards, the same two lane models and contexts -
-    because it is the same pause, and two descriptions of one action would
-    drift. The last line is this lane's own: what changes about chat.
+    The pause half is `jarvis_big_coder.card_text_start()`'s own words - the
+    same model, the same cards, the same two lane models and contexts - because
+    it is the same pause, and two descriptions of one action would drift. What
+    this lane passes it is what is THIS lane's own measurement: the window it
+    asks for and the spill that measurement accepted, so the card describes the
+    load that will really happen (20,480 tokens with 203.5 MiB in system RAM,
+    2026-11-03) and never the big-coder mode's 28,672-token zero-spill rung.
+    The last line is this lane's own: what changes about chat.
     """
     eng = _engine(engine)
-    return (eng.card_text_start()
+    measured = (f"the window measured on this PC on 2026-11-03, where "
+                f"{POOLED_SPILL_MEASURED_MIB:g} MiB of it spilled out of video memory "
+                f"into system RAM and is accepted for this window alone")
+    return (eng.card_text_start(num_ctx=POOLED_CTX, measured_words=measured)
             + "\n\nWhile it runs, chat uses it. Applying another preset, or "
               "stopping it, unloads it and puts both models back exactly as "
               "they were.")
@@ -499,7 +527,8 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
             out["error"] = out["error"] + " " + back["why"]
         return 409, out
 
-    loaded = eng.load_coder(port=port, num_ctx=POOLED_CTX)
+    loaded = eng.load_coder(port=port, num_ctx=POOLED_CTX,
+                            allow_spill=POOLED_SPILL_ALLOWANCE)
     if not loaded["ok"]:
         eng.unload_coder(port=port)
         back = eng.restore_lanes()

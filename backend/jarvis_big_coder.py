@@ -59,8 +59,11 @@ REFUSED, WITH THE REASON, NEVER SILENTLY
   * a multi-step task is running (pausing the lanes under it would break it);
   * a lane is still resident after being asked to unload - the mode will not
     run beside it, and nothing is loaded;
-  * the model loads with any spill (`size_vram < size`) or at the wrong
-    context - it is unloaded again and the lanes are restored;
+  * the model loads with any spill (`size_vram < size`) beyond the caller's own
+    measured allowance - or at the wrong context - and it is unloaded again and
+    the lanes are restored. This mode never passes an allowance, so for it that
+    is any spill at all; the one measured exception is the Coding preset's
+    pooled lane, which passes its own cap to `load_coder` (2026-11-03);
   * a lane does not come back exactly as it was - said plainly, with what
     /api/ps shows instead.
 
@@ -510,18 +513,36 @@ def cards_words(cards: Optional[list]) -> str:
             "first, and they are put back exactly as they are when you stop:")
 
 
-def cards_note(cards: Optional[list]) -> str:
-    """One sentence for a PC with more than the measured two cards, else ""."""
+def cards_note(cards: Optional[list], *, num_ctx: Optional[int] = None) -> str:
+    """One sentence for a PC with more than the measured two cards, else "".
+
+    `num_ctx` is the window the caller's own text names, so the extra-card
+    sentence can never quote a different number from the sentence beside it.
+    """
     n = None if cards is None else len(cards)
     if n is None or n <= NEEDS_CARDS:
         return ""
-    return (f" The extra card is used automatically, but {NUM_CTX:,} tokens is the setting "
+    ctx = int(num_ctx or NUM_CTX)
+    return (f" The extra card is used automatically, but {ctx:,} tokens is the setting "
             "measured on two cards: it is not raised for a third one until a new "
             "measurement on this PC says it fits.")
 
 
-def card_text_start() -> str:
+def card_text_start(*, num_ctx: Optional[int] = None,
+                    measured_words: Optional[str] = None) -> str:
+    """The card the owner reads, naming the window THIS start will ask for.
+
+    The big-coder mode calls this with no arguments and gets the sentence it
+    always had: `NUM_CTX` (28,672) and the largest measured to fit both cards
+    with no spill. The Coding preset's pooled lane passes its own measured rung
+    and the plain words for what that measurement accepted, because it asks for
+    a different window with a measured, bounded spill (2026-11-03). One card
+    text, one copy of the pause and the lane lines, each start's own number.
+    """
     cards = cards_in_pc()
+    ctx = int(num_ctx or NUM_CTX)
+    measured = measured_words or ("the largest measured to fit both cards with "
+                                  "no spill")
     return "\n".join([
         "Use the big coding model: qwen3-coder-30b-a3b-ud-q3-k-xl.",
         "",
@@ -529,8 +550,8 @@ def card_text_start() -> str:
         "",
         *[f"  - pausing {line}" for line in lane_lines()],
         "",
-        f"It loads at {NUM_CTX:,} tokens - the largest measured to fit both cards "
-        f"with no spill - and it stays until you stop it." + cards_note(cards),
+        f"It loads at {ctx:,} tokens - {measured} - and it stays until you stop it."
+        + cards_note(cards, num_ctx=ctx),
         "Nothing else changes, nothing leaves this PC, and nothing is downloaded.",
     ])
 
@@ -601,10 +622,12 @@ def pause_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
 
 
 def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
-               num_ctx: Optional[int] = None) -> dict:
+               num_ctx: Optional[int] = None,
+               allow_spill: Optional[int] = None) -> dict:
     """Load the 30B on the both-cards server and prove from /api/ps that it
-    fits: present, at the context asked for, and with ZERO spill. On anything
-    else it is unloaded again and `ok` is False.
+    fits: present, at the context asked for, and with no spill beyond what the
+    caller has measured and accepted. On anything else it is unloaded again and
+    `ok` is False.
 
     `num_ctx` is the caller's own measured rung, and it defaults to this
     mode's `NUM_CTX`. It exists because a context is a MEASUREMENT, not a
@@ -613,6 +636,18 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     lane loads its own rung through this same function rather than a second
     copy of it. The requested name is what the answer is checked against, so a
     lane can never quietly come up at a different window than it asked for.
+
+    `allow_spill` is a byte count of spill the CALLER has measured and accepts
+    for its own measured rung. `None` - the default - keeps this function's
+    exact original rule: ANY spill at all is refused, and every caller that
+    does not pass an allowance still gets that rule. The number is a
+    measurement, never a guess: a caller that passes it must be able to point
+    at the measurement that produced it (the Coding preset's pooled lane
+    passes 224 MiB for the 203.5 MiB measured at 20,480 tokens on 2026-11-03,
+    `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment). It is
+    one number for one window, not a general "spill is fine" switch: a load
+    that spills past it, or that does not say how much it spilled, is still
+    refused and unloaded.
     """
     ctx_wanted = int(num_ctx or NUM_CTX)
     url = url_for(port)
@@ -628,13 +663,26 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     ctx = row.get("context_length")
     proof = [f"port {port}: {MODEL} ctx={ctx} size={row.get('size')} "
              f"size_vram={row.get('size_vram')} spill={spill}"]
-    if spill is None or spill > 0:
+    allowed = int(allow_spill or 0)
+    if spill is None or spill > allowed:
         unload(url, MODEL)
-        return {"ok": False,
-                "why": (f"{MODEL} loaded with spill ({spill} B not in video memory) - it "
-                        f"needs both cards and this machine could not give it both, so it "
-                        f"was unloaded again"),
-                "proof": proof}
+        if spill is None:
+            why = (f"{MODEL} loaded and the server did not say how much of it was in "
+                   f"video memory - " +
+                   (f"the {allowed} B measured allowance for {ctx_wanted} tokens could "
+                    f"not be checked" if allow_spill is not None else
+                    f"this caller accepts no spill, so it could not be proved to fit") +
+                   ", and it was unloaded again")
+        elif allow_spill is not None:
+            why = (f"{MODEL} loaded with {spill} B of spill, over the {allowed} B "
+                   f"measured allowance for {ctx_wanted} tokens - it needs both cards, "
+                   f"and this machine gave it less video memory than that measurement, "
+                   f"so it was unloaded again")
+        else:
+            why = (f"{MODEL} loaded with spill ({spill} B not in video memory) - it "
+                   f"needs both cards and this machine could not give it both, so it "
+                   f"was unloaded again")
+        return {"ok": False, "why": why, "proof": proof}
     try:
         if ctx is not None and int(ctx) != ctx_wanted:
             unload(url, MODEL)

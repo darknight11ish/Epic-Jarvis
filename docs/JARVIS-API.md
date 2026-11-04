@@ -25344,10 +25344,16 @@ What an apply does, in order, and what it never does:
    leaves it running).
 2. The pause is ANNOUNCED (event bus + audit log) before the first unload, both
    lane models are unloaded and proved gone from `/api/ps`, the model is loaded
-   **naming 16,384 tokens**, and `/api/ps` must show it present, at that
-   context and with **zero spill**. A load that spills or comes up elsewhere is
-   unloaded again, both lanes are restored and the answer says why (503) - the
-   refusal is the machine's own words, never a canned one.
+   **naming 20,480 tokens** (since 2026-11-03; 16,384 before it), and `/api/ps`
+   must show it present, at that context and with no spill beyond this one
+   window's measured allowance - **224 MiB**
+   (`jarvis_model_lanes.POOLED_SPILL_ALLOWANCE`: the 203.5 MiB measured on
+   2026-11-03 plus about 10%). A load that comes up elsewhere, spills past the
+   allowance, or does not report its spill is unloaded again, both lanes are
+   restored and the answer says why (503) - the refusal is the machine's own
+   words, never a canned one. **That allowance is the ONE exception:**
+   `load_coder` with no allowance still refuses any spill at all, and that is
+   every other caller, the big-coder mode's own 28,672-token load included.
 3. The model is then recorded as the one chat uses. It is NOT a second card and
    NOT `switch_to`: `jarvis_models.switch_to` runs its tripwire smoke test at
    `jarvis_models.OLLAMA`, which is a single-card lane, so asking it for a
@@ -25389,9 +25395,27 @@ RTX 2080 SUPER while it ran, and both lane models proved back afterwards at
 start took 69.9 s and the stop 59.1 s, the pause and the restores included.
 **The 28,672-token rung the 2026-10-18 measurement used no longer fits this
 PC**: 28,672, 24,576 and 20,480 all spilled 204-212 MiB, and 16,384 was the
-largest rung that loaded with none, which is why the preset asks for 16,384.
-`jarvis_big_coder.NUM_CTX` (28,672) is that mode's own measured rung and was
-not changed.
+largest rung that loaded with none, which is why the preset asked for 16,384
+from 2026-11-02 until the amendment below. `jarvis_big_coder.NUM_CTX` (28,672)
+is that mode's own measured rung and was not changed.
+
+**2026-11-03 amendment: the preset now asks for 20,480, and the allowance is
+still one window's.** A second read-only measurement on the same PC, through the
+same shipped path, loaded 20,480 at **15,326.2 MiB with 203.5 MiB in system
+RAM** (16,384: 14,886.2 MiB, no spill); cold load was 34.9 s against 37.0 s, and
+decode was 79.88 -> 81.44 tokens a second median on the three prompts - inside
+the model's own run-to-run noise, with one ~333-token probe 4% slower. The owner
+accepted that measured cost, so the preset's `context` is now **20,480**
+(`jarvis_model_lanes.POOLED_CTX`, pinned to it by test), and the start passes
+`load_coder(..., allow_spill=...)` the cap of **224 MiB**. **Nothing else
+relaxes:** no allowance is the default and still means any spill is refused;
+`jarvis_big_coder.start()` never passes one; the big-coder mode's 28,672 rung
+and its zero-spill check are unchanged; and a load above the cap, or one that
+does not report its spill, is still refused (503) with both the actual spill and
+the allowance named. The extra 4,096 tokens were not filled by the measurement
+(all prompts were 40-43 tokens), so a genuinely long conversation is still
+unmeasured; a 15-minute real coding test runs after deployment. Full numbers:
+`docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment.
 
 **The HUD's left rail renders this contract too** (the owner's request of
 2026-10-21: "i would like this part of the jarvis HUD to have the presets we
