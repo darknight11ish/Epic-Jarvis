@@ -1542,11 +1542,20 @@ def _detect_cards() -> dict:
     for i, row in enumerate(rows if isinstance(rows, list) else []):
         if isinstance(row, dict):
             name = row.get("name") or row.get("model") or f"card {i}"
-            vram = row.get("vram_gib") or row.get("memory_gib") or row.get("vram")
+            # `total_gib` LAST, not first: it is what jarvis_hardware.detect()
+            # actually puts on a card row (jarvis_hardware.py's `rows.append`,
+            # "total_gib": s.total_mb / 1024), and it was missing from this
+            # tuple until 2026-11-04 - so every card's vram_gib came out None
+            # and the hardware screen showed the count with blank sizes. The
+            # other three keys are kept first so a caller that already speaks
+            # this block's own vocabulary still wins.
+            vram = (row.get("vram_gib") or row.get("memory_gib") or row.get("vram")
+                    or row.get("total_gib"))
             uuid = row.get("uuid") or row.get("id") or ""
         else:
             name = str(getattr(row, "name", "") or f"card {i}")
-            vram = getattr(row, "vram_gib", None) or getattr(row, "memory_gib", None)
+            vram = (getattr(row, "vram_gib", None) or getattr(row, "memory_gib", None)
+                    or getattr(row, "total_gib", None))
             uuid = str(getattr(row, "uuid", "") or "")
         cards.append({"index": i, "name": str(name),
                       "vram_gib": (round(float(vram), 1) if isinstance(vram, (int, float)) else None),

@@ -51,6 +51,69 @@ def t_the_live_route_matches_the_generated_contract():
           and isinstance(live["auto"], bool) and live["auto"] is False
           and live["apply_path"] == "/api/work/apply")
 
+def t_every_installed_card_reports_its_own_vram():
+    """Defect B, measured 2026-11-04 and fixed the same day: the hardware block
+    reported the card COUNT and every card's `vram_gib` was null, so the
+    owner's preset screen showed two cards with blank sizes.
+
+    The check above it only ever asserted field NAMES, so it passed happily on
+    a null: that is the gate this function closes. It runs the REAL producer
+    (`jarvis_presets._detect_cards()`) over the shape `jarvis_hardware.detect()`
+    really builds a card row in - `"total_gib": s.total_mb / 1024`, and NOT
+    `vram_gib` - which is why the reader used to find nothing: the producer
+    looked for three keys, none of them the one on the row.
+
+    A SYNTHETIC two-card fixture, never live data: the numbers are the audit's
+    saved nvidia-smi sample of 2026-11-04 (2060 = 12,288 MiB, 2080 SUPER =
+    8,192 MiB), so this runs the same on CI as on the owner's PC. Fails on the
+    base commit (`[None, None]`, total 0) and passes after the fix
+    (`[12.0, 8.0]`, total 20.0).
+    """
+    import jarvis_hardware
+
+    rows = {"cards": [
+        # Exactly detect()'s own row keys (jarvis_hardware.py's `rows.append`).
+        {"name": "NVIDIA GeForce RTX 2060", "total_gib": 12288 / 1024,
+         "vendor": "nvidia", "route": "CUDA", "compute": "7.5",
+         "uuid": "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee",
+         "pci_id": "00000000:04:00.0", "monitor": False,
+         "free_gib": (12288 - 11919) / 1024, "share_gib": None, "share_how": "",
+         "used": True, "why_unused": "", "sources": ["nvidia-smi"], "index": 0,
+         "key": "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee"},
+        {"name": "NVIDIA GeForce RTX 2080 SUPER", "total_gib": 8192 / 1024,
+         "vendor": "nvidia", "route": "CUDA", "compute": "7.5",
+         "uuid": "GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6",
+         "pci_id": "00000000:07:00.0", "monitor": True,
+         "free_gib": (8192 - 6037) / 1024, "share_gib": None, "share_how": "",
+         "used": True, "why_unused": "", "sources": ["nvidia-smi"], "index": 1,
+         "key": "GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6"},
+    ], "planned": [], "sources": {}, "found": "", "log": None}
+
+    real = jarvis_hardware.detect
+    jarvis_hardware.detect = lambda fresh=False: rows
+    try:
+        P._clear_detect_cache()
+        block = P.hardware_block()["detected"]
+    finally:
+        jarvis_hardware.detect = real
+        P._clear_detect_cache()
+
+    cards = block["cards"]
+    got = [c["vram_gib"] for c in cards]
+    check("two cards on this PC: the block reports a count of two",
+          block["count"] == 2 and len(cards) == 2, block)
+    check("DEFECT B: every installed card reports its MEASURED VRAM in GiB, not null",
+          got == [12.0, 8.0], got)
+    check("DEFECT B: the two cards' VRAM adds up to a real number (20.0 GiB)",
+          all(isinstance(v, (int, float)) for v in got)
+          and round(sum(got), 1) == 20.0, got)
+    check("... and each card keeps its own identity, so the sizes cannot swap",
+          [(c["index"], c["name"], c["uuid"]) for c in cards]
+          == [(0, "NVIDIA GeForce RTX 2060", "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee"),
+              (1, "NVIDIA GeForce RTX 2080 SUPER", "GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6")],
+          cards)
+
+
 def main() -> int:
     fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
     check("exactly nine presets, in the owner's order",
@@ -158,6 +221,7 @@ def main() -> int:
           and isinstance(hw["detected"]["count"], int)
           and all(set(c) == {"index", "name", "vram_gib", "uuid"} for c in hw["detected"]["cards"]),
           hw["detected"])
+    t_every_installed_card_reports_its_own_vram()
     check("questionnaire: the nine focus ids and the four priorities",
           hw["questionnaire"]["focus_choices"] == [p["id"] for p in fixture["presets"]]
           and hw["questionnaire"]["priority_choices"] == ["speed", "quality", "long_context", "vision"]
