@@ -12989,6 +12989,32 @@ def _resolve_model(text) -> str:
     return want if looks_ref else ""
 
 
+def _preset_name_is_a_setting(name: str) -> bool:
+    """True when `name` is a real SETTING's own name, not a preset's.
+
+    "what is the focus preset" is a question about the 22-option choice
+    `focus_preset`; `_K_PRESET_DETAIL` read it as a preset called "focus" and
+    answered "There is no preset called focus" - a denial of something that
+    really exists (2026-11-04 self-awareness audit, gap 6). The settings
+    registry's own exact matcher decides, so no name is typed here, and the
+    sentence falls through to the settings answer that already knows how to
+    explain a choice and read its value.
+    """
+    if not name:
+        return False
+    try:
+        import jarvis_settings_registry as R
+        # The pattern's own name is the word BEFORE "preset" ("focus"), while
+        # the registry's setting is "the focus preset"; try both spellings and
+        # let the registry's exact matcher decide.
+        return any(
+            find(candidate) is not None
+            for find in (R.find_choice_setting, R.find_bool_setting)
+            for candidate in (name, f"{name} preset"))
+    except Exception:                       # noqa: BLE001 - older PC
+        return False
+
+
 def _model_chat(s: str) -> Optional[Intent]:
     """The model/preset question shapes. Never a switch unless the words name one."""
     # FIRST, deliberately: "what model are you using in the coding preset"
@@ -13023,7 +13049,11 @@ def _model_chat(s: str) -> Optional[Intent]:
         return Intent("models_list")
     m = _K_PRESET_DETAIL.fullmatch(s)
     if m:
-        return Intent("preset_detail", {"name": m.group(1) or m.group(2) or ""})
+        name = m.group(1) or m.group(2) or ""
+        # A real SETTING called "<name> preset" is not a preset: let the
+        # settings registry explain it instead of denying it exists.
+        if not _preset_name_is_a_setting(name):
+            return Intent("preset_detail", {"name": name})
     m = _K_PRESET_SWITCH.fullmatch(s)
     if m:
         return Intent("preset_switch", {"name": m.group(1) or m.group(2) or ""})

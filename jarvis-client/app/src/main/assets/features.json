@@ -3100,7 +3100,9 @@
     ],
     "aliases": [
       "read a web page",
-      "read a page"
+      "read a page",
+      "read a link",
+      "reading a link"
     ],
     "must_mention": [
       "page",

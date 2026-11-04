@@ -5445,11 +5445,31 @@ def changeable_words(rows=None, count=None) -> str:
                 "lives in Settings in the app.")
     if count is None:
         count = len(rows)
+    # THE TWO NUMBERS ARE RECONCILED HERE (2026-11-04 self-awareness audit,
+    # gap 9). "What can I change?" says 79 because a family row stands for
+    # several settings and the permission/tool rows are real changes too;
+    # GET /api/self lists 47 because the Settings cards carry exactly the
+    # registry's 36 switches + 10 choices + 1 number. Both are true, and the
+    # owner heard both from two doors with nothing saying how they relate, so
+    # the sentence now says the difference out loud: 47 of the 79 are the
+    # registry's own rows, and the rest are the permission rules, tool offers
+    # and extra controls those cards do not list. The numbers are counted from
+    # the tables, never typed.
+    registry_rows = len(BOOL_SETTINGS) + len(CHOICE_SETTINGS) + len(NUMBER_SETTINGS)
+    extra = count - registry_rows
+    reconciliation = (f" {registry_rows} of them are the switches, named choices "
+                      f"and numbers on the Settings cards themselves")
+    if extra > 0:
+        reconciliation += (f"; the other {extra} are permission rules, tool "
+                           f"offers and controls those cards do not list.")
+    else:
+        reconciliation += "."
     names = [f"{name} ({where})" if where else name for name, where in rows]
     return (f"You can change {count} settings by asking. Here is what they "
             "cover: " + "; ".join(names) +
-            ". A family that names a number covers that many separate settings. "
-            "Anything that loosens a rule still shows you a card first, and "
+            ". A family that names a number covers that many separate settings."
+            + reconciliation +
+            " Anything that loosens a rule still shows you a card first, and "
             "say \"undo\" in the same chat if you change your mind.")
 
 

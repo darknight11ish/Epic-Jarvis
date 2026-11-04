@@ -64,9 +64,11 @@ require_shipped("jarvis_quick.py", "jarvis_self_portrait.py", "jarvis_asks_first
 sys.path.append(str(HERE / "rebuilt"))
 
 import jarvis_asks_first as ASK  # noqa: E402
+import jarvis_feature_guide as FG  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
 import jarvis_reach as REACH  # noqa: E402
 import jarvis_self_portrait as SP  # noqa: E402
+import jarvis_settings_registry as REG  # noqa: E402
 
 PASSED, FAILED = [], []
 DOC = (REPO / "docs" / "SELF-AWARENESS.md").read_text(encoding="utf-8")
@@ -270,6 +272,91 @@ def refresh_answer_is_the_portraits_own_refresh():
 
 
 # ---------------------------------------------------------------------------
+#   6. Two answers that used to deny something real (audit gaps 5 and 6)
+# ---------------------------------------------------------------------------
+
+
+def read_a_link_is_the_feature_it_names():
+    """"compare web search and read a link" denied the row read-web-page.
+
+    The row's own names were "read a web page" and "read a page"; "read a link"
+    was answered "The feature list has no 'reading a link' row" - a limit that
+    sounded honest and was false.
+    """
+    good = FG.find("read a link", loose=True)
+    check('"read a link" names the real read-web-page row',
+          good.get("kind") == "feature" and good["row"]["id"] == "read-web-page",
+          str(good)[:200])
+    check('"reading a link" names it too',
+          FG.find("reading a link", loose=True).get("kind") == "feature")
+    got = Q.match("compare web search and read a link")
+    check("the comparison resolves to the real row, not a bare phrase",
+          got is not None and got.name == "feature_difference"
+          and got.f.get("second") == "read-web-page",
+          str(got.f if got else None))
+    r = answer("compare web search and read a link")
+    check("the comparison answers with both real features",
+          r is not None and "Read one web page out loud" in r.reply
+          and "Web search" in r.reply, r and r.reply[:200])
+    check("... and never repeats the false 'no reading a link row' limit",
+          r is not None and "nothing to compare it with" not in r.reply)
+
+
+def the_focus_preset_is_a_real_setting():
+    """"what is the focus preset" denied a real 22-option setting.
+
+    The preset-detail grammar read the words as a preset called "focus" and
+    answered "There is no preset called focus" - while `focus_preset` is a real
+    choice in the settings registry. A REAL preset must still answer as one.
+    """
+    got = Q.match("what is the focus preset")
+    check("it is a SETTING question, not a preset detail",
+          got is not None and got.name == "setting_explain"
+          and got.f.get("key") == "focus_preset",
+          f"{got.name if got else None} {getattr(got, 'f', None)}")
+    r = answer("what is the focus preset")
+    check("the answer never denies it exists",
+          r is not None and "There is no preset called" not in r.reply,
+          r and r.reply)
+    check("... it names the setting, its place and its live value",
+          r is not None and "focus preset is a choice in Settings" in r.reply
+          and "Right now:" in r.reply, r and r.reply[:300])
+    got = Q.match("what is the coding preset")
+    check("a REAL preset still answers as a preset",
+          got is not None and got.name == "preset_detail"
+          and got.f.get("name") == "coding", str(getattr(got, "f", None)))
+
+
+def the_two_settings_numbers_reconcile():
+    """79 vs 47: "what can I change?" and /api/self used to disagree.
+
+    Both numbers are honest - the spoken answer counts permission rules, tool
+    offers and family rows; the portrait counts the Settings cards' own rows -
+    but two doors gave two numbers with nothing relating them (audit gap 9).
+    The spoken sentence now states the difference, and both counts are derived
+    from the tables rather than typed.
+    """
+    data = REG.changeable_settings()
+    registry_rows = (len(REG.BOOL_SETTINGS) + len(REG.CHOICE_SETTINGS)
+                     + len(REG.NUMBER_SETTINGS))
+    check("the registry's own row count is 47", registry_rows == 47,
+          str(registry_rows))
+    check("the spoken answer names how many of its count are those rows",
+          f"{registry_rows} of them are the switches, named choices and numbers" in
+          data["words"], data["words"][-500:])
+    check("the spoken answer names the other half as what it is",
+          data["count"] > registry_rows
+          and f"the other {data['count'] - registry_rows} are permission rules" in
+          data["words"], data["words"][-500:])
+    p = SP.counts(SP.build(refresh=True))
+    check("the portrait's settings count IS the registry's own row count",
+          p["settings"] == registry_rows, str(p["settings"]))
+    check("the visible settings list has the same size",
+          len([r for r in SP.settings() if r["kind"] in
+               ("switch", "choice", "number")]) == registry_rows)
+
+
+# ---------------------------------------------------------------------------
 
 
 def main() -> int:
@@ -282,6 +369,9 @@ def main() -> int:
         asking_answer_is_the_pages_own_rows()
         connected_answer_is_the_reach_pages_on_rows()
         refresh_answer_is_the_portraits_own_refresh()
+        the_two_settings_numbers_reconcile()
+        read_a_link_is_the_feature_it_names()
+        the_focus_preset_is_a_real_setting()
     except Exception:
         traceback.print_exc()
         FAILED.append("the suite itself raised")
