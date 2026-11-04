@@ -1484,8 +1484,10 @@ PROFILES: dict = {
         "id": "feature_guide",
         "title": "Explain one of Jarvis's features",
         "what": "Answers \"what is this feature?\", \"where is it?\" and \"is it "
-                "on?\" from the owner's own feature list - 140 rows turned into a "
-                "shipped module - rather than from a guess.",
+                "on?\" from the owner's own feature list - 175 rows in 9 groups, "
+                "turned into a shipped module - rather than from a guess. The "
+                "counts in this sentence are checked against that module by the "
+                "suite, so they cannot go stale here.",
         "gives": [
             "Explain what a feature is and where it is switched on, in the owner's "
             "own words",
