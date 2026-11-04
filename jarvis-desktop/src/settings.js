@@ -983,10 +983,12 @@ $("open-faces").addEventListener("click", async () => {
  * away) is opened first, then the place is scrolled to. Nothing is
  * changed - the owner still makes the change, or presses Start, themselves.
  *
- * The tray's "Update available — v…" row uses the same road (2026-10-27),
- * through one of two doors: a NEW window is built at `settings.html#updates`,
- * and an OPEN one hears SETTINGS_PLACE_EVENT. `settings-place.js` is the pure
- * half that reads both; `applyPlace` is the half that moves the page.
+ * The tray's update row used this road for the Updates card (2026-10-27) and
+ * stopped using it on 2026-11-03, when that row began installing instead. The
+ * road is still how a named destination arrives, through one of two doors: a
+ * NEW window is built at `settings.html#updates`, and an OPEN one hears
+ * SETTINGS_PLACE_EVENT. `settings-place.js` is the pure half that reads both;
+ * `applyPlace` is the half that moves the page.
  */
 
 /** The controls a place lands the keyboard on, in the order they are drawn. */

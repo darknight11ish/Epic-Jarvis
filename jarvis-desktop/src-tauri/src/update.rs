@@ -342,6 +342,20 @@ pub fn update_status(app: AppHandle) -> Status {
     }
 }
 
+/// The version a check has found and not installed, read from the cache the
+/// Settings card reads.
+///
+/// **The tray's only source of "is there an update?"** (owner, 2026-11-03): one
+/// read of [`UpdateState`], never a second network check. Two finders would
+/// eventually disagree, and then the menu row and the Updates card would name
+/// different versions. `None` means "no update is known" - which for the tray
+/// means the row is not in the menu at all.
+pub fn available_version(app: &AppHandle) -> Option<String> {
+    app.state::<UpdateState>()
+        .get()
+        .and_then(|status| status.available)
+}
+
 /// Checks now, because someone pressed Check.
 #[tauri::command]
 pub async fn check_for_update(app: AppHandle) -> Status {
@@ -385,6 +399,69 @@ pub async fn install_update(app: AppHandle) -> Result<String, String> {
     say_in_hud(&app, "running", INSTALL_CLOSES_AND_RESTARTS);
     let ready = prepare_desktop_half(&app, None, backend_commit).await?;
     install_now(&app, ready).await
+}
+
+/// The tray's "Update Jarvis to <version>" row: the same install the Settings
+/// Install button runs, reached from the context menu.
+///
+/// Not a second updater and not an automatic one. The row that fires it exists
+/// only while [`available_version`] answers `Some` (`tray::update_row` is that
+/// rule), and this function only runs because the owner pressed it.
+///
+/// The row is turned into "Updating Jarvis to <version>…" and disabled FIRST, so
+/// a second press cannot start a second download. A failure re-reads the real
+/// state with the same command the Settings Check button uses, so the row is
+/// rebuilt from what is true now rather than left on "Updating…" for ever. On a
+/// successful Windows install this function never returns: the installer ends
+/// the process, and the next launch starts with no row because the new version
+/// is the one running.
+pub async fn install_from_tray(app: AppHandle) {
+    let Some(version) = available_version(&app) else {
+        // A check cleared the availability between the right-click and the
+        // click, so the row is already gone from the menu this same cache
+        // feeds. Say so rather than doing nothing at all: the owner did press
+        // something, and silence reads as a broken row.
+        commands::notify(
+            &app,
+            "Jarvis Desktop update",
+            "There is no newer version to install now, so nothing was changed.",
+        );
+        return;
+    };
+    crate::tray::update_started(&app, &version);
+    // The Settings card carries this sentence before its Install button. The
+    // tray has no card, so the toast is where it goes - the install closes
+    // Jarvis, and the owner deserves that before it starts, not after.
+    commands::notify(
+        &app,
+        "Jarvis Desktop update",
+        &format!("Version {version} is installing. {INSTALL_CLOSES_AND_RESTARTS}"),
+    );
+    match install_update(app.clone()).await {
+        Ok(installed) => {
+            // Windows never reaches this: the installer ends the process. A
+            // platform without that exit re-reads and says what is left.
+            let _ = check_for_update(app.clone()).await;
+            commands::notify(
+                &app,
+                "Jarvis Desktop updated",
+                &format!("Version {installed} is installed."),
+            );
+        }
+        Err(err) => {
+            commands::notify_failed(
+                &app,
+                "Jarvis Desktop update",
+                "The update did not install.",
+                &err,
+                commands::Details::Log,
+            );
+            // The row must not sit on "Updating…" for ever, and it must not
+            // name a version the endpoint no longer offers: re-read, and let
+            // `on_update_status` rebuild it from the answer.
+            let _ = check_for_update(app.clone()).await;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1834,6 +1911,50 @@ mod tests {
         assert!(!is_update_card(&serde_json::json!({"id": "abc"})));
         assert!(!is_update_card(&serde_json::json!({"action": 7})));
         assert!(!is_update_card(&serde_json::json!(null)));
+    }
+
+    /// The tray's update row must be ADDED and REMOVED (never left disabled),
+    /// and pressing it must run THIS module's install - the same one the
+    /// Settings Install button calls.
+    ///
+    /// Source pins, because no pure test can reach a native menu or an
+    /// `AppHandle`. They are read from `tray.rs`, not from this file, so the
+    /// test's own text cannot satisfy them.
+    #[test]
+    fn the_tray_rows_update_press_installs_and_the_row_comes_and_goes() {
+        let tray = include_str!("tray.rs");
+        // Absence is the no-update state: the row is parented and unparented.
+        assert!(
+            tray.contains("rows.more.append(&rows.update)"),
+            "the update row is never added to the menu"
+        );
+        assert!(
+            tray.contains("rows.more.remove(&rows.update)"),
+            "the update row is never removed from the menu, so it would stay \
+             there when no update exists"
+        );
+        // It is fed from the one real check, not a second network path.
+        assert!(
+            tray.contains("crate::update::available_version(app)"),
+            "the tray does not read the update check's own answer"
+        );
+        // The press goes to this module, and this module goes to the same
+        // command the Settings Install button calls.
+        assert!(
+            tray.contains("ID_UPDATE => run_update_from_tray(app)"),
+            "the update row is not dispatched"
+        );
+        assert!(
+            tray.contains("crate::update::install_from_tray(handle).await"),
+            "the tray press no longer reaches update.rs's install"
+        );
+        // `concat!` so this test's own words cannot satisfy the needle: the
+        // real call is the only place the two halves sit together.
+        let installs = concat!("match install_", "update(app.clone()).await");
+        assert!(
+            include_str!("update.rs").contains(installs),
+            "install_from_tray no longer runs the Settings Install command"
+        );
     }
 
     #[test]
