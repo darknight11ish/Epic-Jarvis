@@ -65,6 +65,10 @@ internal fun WakeWordSwitchesCard(
     onOneMoment: ((Boolean) -> Unit)? = null,
     heardSound: Boolean? = null,
     onHeardSound: ((Boolean) -> Unit)? = null,
+    /** "Check my voice on my locked phone" (2026-11-03): null = the PC has not answered. */
+    voiceCheck: Boolean? = null,
+    onVoiceCheck: ((Boolean) -> Unit)? = null,
+    voiceCheckNotice: String? = null,
 ) {
     val chrome = LocalChrome.current
     val tint = when {
@@ -216,6 +220,54 @@ internal fun WakeWordSwitchesCard(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { onOneMoment(!oneMoment) },
             )
+        }
+
+        // THE OWNER'S 2026-11-03 ASK - ONE setting over the ONE voice-check
+        // rule (voice/VoiceCheckRule.kt, the PC's own copy is
+        // jarvis_live.voice_check_needed): the mic press never checks, Live
+        // started on an unlocked phone does not check, and "hi Jarvis" on a
+        // LOCKED phone does - the only check left. ON raises ONE approval card
+        // on the PC; OFF is at once. `null` is "the PC has not answered", never
+        // "off" - it says so and offers nothing to press.
+        if (onVoiceCheck != null) {
+            Gap(12)
+            Text(
+                "Check my voice on my locked phone",
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            Gap(4)
+            Text(
+                when (voiceCheck) {
+                    true -> "Your voice is checked only when you say \"hi Jarvis\" on a " +
+                        "locked phone. Pressing the mic never checks, and Live started on " +
+                        "an unlocked phone does not either."
+                    false -> "Your voice is not checked for \"hi Jarvis\" on a locked " +
+                        "phone. The mic button never checks it either, and Jarvis Live " +
+                        "started here does not."
+                    null -> "Your PC has not answered yet, so this is not shown as off. " +
+                        "The microphone buttons and Live work either way."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            if (voiceCheck != null) {
+                Gap(6)
+                Secondary(
+                    text = if (voiceCheck) "Stop checking my voice" else "Check my voice again",
+                    enabled = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onVoiceCheck(!voiceCheck) },
+                )
+            }
+            if (voiceCheckNotice != null) {
+                Gap(4)
+                Text(
+                    voiceCheckNotice,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            }
         }
 
         // Beside "One moment", and like it about any spoken question (the

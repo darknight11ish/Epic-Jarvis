@@ -375,11 +375,19 @@ fun LiveScreen(
                         onClick = { act { JarvisRuntime.liveStart(resume = sign.resume); null } },
                     )
                     Gap(6)
+                    // THE OWNER'S RULE OF 2026-11-03, said as it is. This
+                    // sentence used to promise the 2026-11-01 behaviour -
+                    // "every full sentence is checked ... once this session is
+                    // verified" - which is no longer what happens: only "hi
+                    // Jarvis" on a LOCKED phone checks the voice print, and
+                    // starting Live here does not. It also says where the one
+                    // setting lives, because the owner asked for one.
                     Text(
                         "Jarvis listens after every answer until you end it, say \"Okay Jarvis, " +
-                            "that's all for now\", or it has been quiet for 90 seconds. Every full " +
-                            "sentence is checked for your voice on your PC; once this session is " +
-                            "verified, a short reply is trusted without a check.",
+                            "that's all for now\", or it has been quiet for 90 seconds. Your " +
+                            "voice is checked only when you say \"hi Jarvis\" on a locked phone; " +
+                            "starting Live here and pressing the mic do not check it. You can " +
+                            "change that in Settings, Voice.",
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textMid,
                     )

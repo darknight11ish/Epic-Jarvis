@@ -1239,6 +1239,31 @@ def set_one_moment(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+def set_voice_check_locked(on: bool, *, peer=None, local=None) -> Outcome:
+    """`jarvis_live.request_voice_check`: OFF at once, ON is ONE card.
+
+    THE OWNER'S 2026-11-03 ASK, in their words: "my voice should only need to
+    be confirmed if i say hi jarvis when the phone is locked ... when i start
+    jarvis live on my unlocked phone i dont want it to need to confirm my
+    voice. make this a setting i can change". The rule itself is
+    `jarvis_live.voice_check_needed()` - ONE function, read by the phone and
+    by the PC - and this switch changes the ONE answer it is allowed to
+    change: whether a wake word said on a LOCKED phone still checks the
+    owner's voice. Nothing here re-implements the rule: the phone's own
+    Settings switch and the Live route call the SAME function, so the card
+    and the "off is at once" are the ones that switch has always had."""
+    try:
+        import jarvis_live as LV
+    except Exception:
+        return _missing("the voice check on your phone")
+    try:
+        code, out = LV.request_voice_check({"enabled": bool(on)})
+    except Exception as exc:
+        return Outcome(False, f"That could not be saved ({type(exc).__name__}), "
+                              f"so nothing was changed.")
+    return _say(code, out)
+
+
 # --- the universal-control pass (2026-10-22) ------------------------------
 # The owner's requirement: every function or feature can be turned on or off
 # by typing at Jarvis on either app. These switches already had a real route
@@ -2402,6 +2427,29 @@ BOOL_SETTINGS: tuple = (
                 "the one moment sound", "say one moment if i am kept waiting",
                 "the one moment clip", "one moment while you think"),
                None, set_one_moment),
+    # "Check my voice when my phone is locked" (the owner's ask of 2026-11-03;
+    # the rule is jarvis_live.voice_check_needed()). OFF is at once; ON is ONE
+    # card (the project's standing rule), which is why the setter above calls
+    # the Live route's own function rather than writing the file itself.
+    #
+    # `section` IS None ON PURPOSE, and this is the THIRD switch where that is
+    # the reason (see the one-moment entry above and the anti-slop entry): the
+    # "voice" Settings card this switch is drawn on is ALSO the section the
+    # feature "Say Hey Jarvis" covers, and `jarvis_feature_guide.switches_for()`
+    # reads `section` to decide WHICH SWITCHES A FEATURE ROW COVERS - so naming
+    # "voice" here would put this switch under "turn on Say Hey Jarvis" and
+    # teach that phrase to change the wrong setting. `tools/
+    # check_feature_controls.py` caught exactly that when this row first
+    # carried "voice". The row link (`SETTINGS_ROWS`) is what "where is this
+    # row" reads; `section` is not a place.
+    BoolSetting("voice_check_locked",
+               ("checking my voice when my phone is locked",
+                "check my voice when the phone is locked",
+                "the locked phone voice check",
+                "the voice check on my phone",
+                "confirming my voice on my phone",
+                "asking for my voice when my phone is locked"),
+               None, set_voice_check_locked),
     # --- the universal-control pass (2026-10-22): switches that had a real
     # route/control but no spoken name. See the setters above; every section
     # is the Settings card that already draws the control.

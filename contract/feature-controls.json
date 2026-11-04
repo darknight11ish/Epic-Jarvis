@@ -10050,6 +10050,25 @@
       "reason": "switch present on the desktop Settings page"
     },
     {
+      "key": "voice_check_locked",
+      "names": [
+        "checking my voice when my phone is locked",
+        "check my voice when the phone is locked",
+        "the locked phone voice check",
+        "the voice check on my phone",
+        "confirming my voice on my phone",
+        "asking for my voice when my phone is locked"
+      ],
+      "section": "voice",
+      "desktop_row": null,
+      "turn_on": "turn on checking my voice when my phone is locked",
+      "turn_off": "turn off checking my voice when my phone is locked",
+      "resolved": true,
+      "status": "planned",
+      "owner": "setup-ui",
+      "reason": "the typed phrases and the phone Voice switch work; no SETTINGS_ROWS row puts it on the desktop page (2026-11-03)"
+    },
+    {
       "key": "web_search",
       "names": [
         "web search",

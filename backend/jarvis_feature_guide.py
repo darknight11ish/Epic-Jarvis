@@ -484,6 +484,15 @@ def _read_one_moment():
     return M.one_moment_enabled() is True
 
 
+def _read_voice_check_locked():
+    """2026-11-03: "Check my voice when my phone is locked", read from the
+    module that owns the rule - jarvis_live.voice_check_setting() is the same
+    answer `GET /api/voice/live` reports and the same one
+    jarvis_live.voice_check_needed() acts on, never a second copy."""
+    import jarvis_live as M
+    return M.voice_check_setting() is True
+
+
 def _read_sandbox():
     import jarvis_sandbox_exec as M
     return M.enabled() is True
@@ -612,6 +621,10 @@ STATE_READERS = {
     # by asking (the owner's own ask), so it needs its state reader like every
     # other switch in the table above.
     "one_moment": _read_one_moment,
+    # 2026-11-03: "Check my voice when my phone is locked" (the owner's ask).
+    # Its one rule lives in jarvis_live.voice_check_needed(); this reads the
+    # same answer the PC acts on, never a second copy.
+    "voice_check_locked": _read_voice_check_locked,
 }
 
 

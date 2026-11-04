@@ -169,12 +169,15 @@ def _all_rows():
 #   What the reader is
 # --------------------------------------------------------------------------
 def t_the_counts_and_the_readers_are_the_registrys_own():
-    """35 switches, 10 choices, 1 number - and a reader for every one of them.
+    """36 switches, 10 choices, 1 number - and a reader for every one of them.
 
     The numbers are the plan's own count on this tree; if a row is added
     without a reader, the "every row explains with a value" checks below fail
-    and this check names the row before they do."""
-    check("35 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 35,
+    and this check names the row before they do.
+
+    Thirty-six since 2026-11-03: "Check my voice when my phone is locked" (the
+    owner's ask), whose reader is jarvis_live's own voice_check_setting()."""
+    check("36 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 36,
           len(R.BOOL_SETTINGS))
     check("10 CHOICE_SETTINGS", len(R.CHOICE_SETTINGS) == 10, len(R.CHOICE_SETTINGS))
     check("1 NUMBER_SETTINGS", len(R.NUMBER_SETTINGS) == 1, len(R.NUMBER_SETTINGS))
