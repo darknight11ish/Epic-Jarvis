@@ -1512,14 +1512,29 @@ stt_engine = "sherpa-onnx"
 # window ends rather than snapping back a moment later.
 [power]
 enabled = true
-# What "auto after idle" and "quiet hours" were meant to drop TO. NOT READ
-# (checked 2026-09-23): in the rebuilt jarvis_power.py quiet hours always
-# mean Quiet, and the idle check (should_standby) always means Standby,
-# whatever these two say.
-schedule_mode = "quiet"            # not read
-idle_mode = "quiet"                # not read
+# What "auto after idle" and "quiet hours" drop TO: "quiet" or "standby".
+#
+# READ SINCE 2026-11-03. Until then this comment said NOT READ, and it was
+# right: the rebuilt jarvis_power.py hard-coded "quiet" for quiet hours and
+# never called should_standby() at all, so neither key could do anything. Now
+# the window below drops to whatever `schedule_mode` says, and the idle timer
+# to whatever `idle_mode` says. A word this file cannot mean (a typo,
+# "active", an empty string) reads as "quiet", so a mistake in here cannot
+# free a graphics card the owner did not ask to free.
+#
+# "standby" is the one that matters to the owner: when the hours begin it
+# unloads EVERY model from every card, and the next question loads it again (a
+# few seconds slower). Both are changeable from either app in plain words,
+# under Settings > Limits: "Keep Jarvis quiet during my hours", "Unload the
+# graphics cards during my hours", "My hours start", "My hours end". Changing
+# any of them asks first (change_own_config) - see jarvis_power.py's docstring
+# for why the RULES wait while the mode itself does not.
+schedule_mode = "quiet"
+idle_mode = "quiet"
 
-# Scheduled quiet hours. Local time, and a window may cross midnight.
+# Scheduled quiet hours / standby hours. Local time, and a window may cross
+# midnight. Off by default: until `schedule_enabled` is true the window is not
+# looked at at all, which is what the shipped value means.
 schedule_enabled = false
 quiet_start = "23:00"
 quiet_end = "07:00"

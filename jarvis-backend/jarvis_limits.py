@@ -354,6 +354,25 @@ class Limit:
     card_more: str = ""          # the card's last line: what the loosening lets
                                  # through (RAISE_MORE when empty)
     says: Optional[Callable[[object], str]] = None
+    #: A switch whose key holds a WORD rather than true/false. `on_text` is
+    #: what the file holds when the row is on, `off_text` when it is off; the
+    #: row is still `kind="bool"` on the wire, so both apps draw it with the
+    #: switch they already have and neither needs a line of client code. The
+    #: first two of these are the standby hours' "drop to" row, whose key is
+    #: `[power] schedule_mode` - a word the file already held and that nothing
+    #: read until 2026-11-03.
+    on_text: str = ""
+    off_text: str = ""
+    #: This row asks the owner EVERY time it changes, whichever direction, and
+    #: whether or not the value is bigger. `loosening` asks "does this let
+    #: Jarvis do more?"; this asks "does this change the rules that put Jarvis
+    #: under on their own?", which `jarvis_power`'s own docstring says is a
+    #: config change and waits. A window's times and its switch are exactly
+    #: that, in either direction - moving quiet hours from 23:00 to 03:00 does
+    #: not loosen anything, and it still decides when a graphics card is freed.
+    #: False on every row written before 2026-11-03, so nothing already there
+    #: changed its behaviour.
+    always_asks: bool = False
 
     @property
     def loosen_up(self) -> bool:
@@ -512,6 +531,90 @@ def _notify_rows() -> tuple:
     return tuple(out)
 
 
+# ---------------------------------------------------------------------------
+#   The standby hours - GPUs freed in a window the owner sets
+# ---------------------------------------------------------------------------
+# THE OWNER'S REQUEST, 2026-11-03, in his own words: "jarvis should have the
+# ability to offload the gpus during standby hours: can i set standby hours for
+# you?" Asked which behaviour he wanted, he chose "Unload the GPUs in my hours":
+# the hours he sets free the graphics cards, and the next question wakes the
+# model (a few seconds slower).
+#
+# THE KEYS ARE ALREADY IN HIS FILE, AND WERE READ BY NOTHING. `[power]` has
+# carried `schedule_enabled`, `quiet_start`, `quiet_end`, `schedule_mode` and
+# `idle_mode` since before this change, with the comment "what quiet hours drop
+# TO". `jarvis_power.current()` hard-coded "quiet" and `schedule_mode` was
+# marked "# not read" in the file itself. These four rows are the front end for
+# the keys `jarvis_power` now honours, which is why no new key is invented here
+# and no second copy of any value is kept: the number this row writes is the
+# number `jarvis_power` acts on.
+#
+# WHY TWO WAYS TO DO THIS AND NOT ONE. A window on the one scheduler already
+# exists (jarvis_standby_schedule.py, kind "standby") and is untouched. It is
+# the job-shaped way: a row in Coming up, set up by asking for it, deleted to
+# stop it. This is the settings-shaped way, which is what the owner asked for
+# ("can I set standby hours for you"): four rows on the screen both apps already
+# draw, no job to create, and it reads as a setting rather than a reminder.
+# Both end in the same place - `jarvis_power_switch.set_mode("standby")`, the
+# one function in this repository that unloads a model - so there is one unload
+# path, not two.
+#
+# WHY THESE ASK, WHEN THE NOTIFICATION ROWS ABOVE DO NOT. `jarvis_power`'s own
+# docstring draws the line: changing the MODE is free, changing the RULES that
+# put Jarvis under on its own is a config change and waits. A window that
+# decides when a graphics card is freed is a rule, and it is the owner's RULES
+# he is setting, so all four rows carry `always_asks` and go to the
+# `change_own_config` card (tier "ask") - in both directions and for a time as
+# well as a switch. `card_more` says what the card is really about, because the
+# default line ("That lets Jarvis do more") would be the opposite of the truth:
+# this lets Jarvis do LESS, and that is the point.
+_CARD_MORE_HOURS = ("That is when Jarvis stops answering from the graphics card, "
+                    "so the next question after the window is slower while the model "
+                    "loads again.")
+
+#: The four rows. Appended to LIMITS below, so both apps draw them from the one
+#: table (the desktop's limits card and the phone's plate draw any "bool" and
+#: any "time" row the table sends, so neither app needs a line of client code).
+_STANDBY_ROWS: tuple = (
+    # `[power].schedule_enabled` - the switch. OFF is the shipped value and
+    # means today's behaviour exactly: the window is not looked at at all.
+    Limit("standby_hours_on", "power", "schedule_enabled",
+          "Keep Jarvis quiet during my hours",
+          "bool", False, app="both", always_asks=True,
+          action="change_own_config",
+          note="Off by default. While it is off, the hours below decide nothing.",
+          card_more=_CARD_MORE_HOURS),
+    # `[power].schedule_mode` - what the window drops TO. A word in the file
+    # ("standby"/"quiet"), drawn as the one switch both apps already have.
+    # OFF (quiet) is the shipped value; ON is what frees the graphics cards.
+    Limit("standby_hours_unload", "power", "schedule_mode",
+          "Unload the graphics cards during my hours",
+          "bool", False, app="both", always_asks=True,
+          action="change_own_config",
+          on_text="standby", off_text="quiet",
+          note="On: every model is unloaded when the hours begin, and the next "
+               "question loads it again (a few seconds slower). Off: Jarvis is "
+               "only quiet, and the models stay on the cards.",
+          card_more=_CARD_MORE_HOURS),
+    # `[power].quiet_start` / `quiet_end` - the same two keys the window has
+    # always used. A window may cross midnight (23:00 to 07:00 is the normal
+    # case), and `jarvis_power.in_quiet_hours` is what handles that.
+    Limit("standby_hours_start", "power", "quiet_start",
+          "My hours start",
+          KIND_TIME, "23:00", app="both", always_asks=True,
+          action="change_own_config",
+          note="On this PC's own clock. The window may cross midnight.",
+          card_more=_CARD_MORE_HOURS),
+    Limit("standby_hours_end", "power", "quiet_end",
+          "My hours end",
+          KIND_TIME, "07:00", app="both", always_asks=True,
+          action="change_own_config",
+          note="The hour Jarvis stops being quiet - and, if the graphics cards "
+               "were unloaded for these hours, loads the chat model again.",
+          card_more=_CARD_MORE_HOURS),
+)
+
+
 LIMITS: tuple = (
     # `[undo].ttl_hours` - how long an Undo stays possible. LONGER keeps more
     # of the owner's own files recoverable on disk, so UP is the direction
@@ -660,7 +763,7 @@ LIMITS: tuple = (
                "you on the PC first.",
           source=VOICE_BAR_SOURCE, action=LOWER_ACTION,
           card_more="That lets more clips count as your voice."),
-) + _notify_rows()
+) + _notify_rows() + _STANDBY_ROWS
 
 
 def find(key: str) -> Optional[Limit]:
@@ -701,6 +804,11 @@ def value_of(limit: Limit):
     raw = _table(_config(), limit.section).get(limit.name, limit.default)
     try:
         if limit.kind == "bool":
+            if limit.on_text:
+                # A switch over a WORD: "standby" vs "quiet", not true vs
+                # false. Anything else in the file reads as off, which is the
+                # shallower of the two and the one that frees no card.
+                return str(raw).strip().lower() == limit.on_text.strip().lower()
             return raw is True or str(raw).strip().lower() in ("true", "1", "on", "yes")
         if limit.kind == KIND_TIME:
             # Read through the owning module's own check, so a hand-edited
@@ -774,12 +882,38 @@ def _is_loosening(limit: Limit, now, want) -> bool:
 
 def _literal(limit: Limit, value) -> str:
     if limit.kind == "bool":
+        if limit.on_text:
+            return '"{}"'.format(limit.on_text if value else (limit.off_text or "quiet"))
         return "true" if value else "false"
     if limit.kind == KIND_TIME:
         # A QUOTED string, so what the file holds is what the owner reads and
         # what the owning module parses - never a bare 22:00 TOML would read as
         # something else.
         return '"{}"'.format(value)
+    return _words(value)
+
+
+def _must_ask(limit: Limit, now, want) -> bool:
+    """Does this change go to the owner on a card?
+
+    Two ways to say yes, and they answer two different questions:
+    `loosening` - "does this let Jarvis do more?"; `always_asks` - "does this
+    change the rules that put Jarvis under on their own?". The standby hours
+    are the second: moving the window does not loosen anything, and it still
+    decides when the graphics cards are freed.
+    """
+    if want == now:
+        return False
+    return bool(limit.always_asks) or _is_loosening(limit, now, want)
+
+
+def _change_words(limit: Limit, value) -> str:
+    """One value as the card's own sentence says it: "on"/"off" for a switch,
+    the time itself for a clock, the number for a number."""
+    if limit.kind == "bool":
+        return "on" if value else "off"
+    if limit.kind == KIND_TIME:
+        return str(value)
     return _words(value)
 
 
@@ -851,7 +985,7 @@ def set_limit(key: str, value, *, path: Optional[Path] = None) -> dict:
         raise SettingsFileError("That is not a limit Jarvis knows.")
     want = _coerced(limit, value)
     now = value_of(limit)
-    asks = _is_loosening(limit, now, want)
+    asks = _must_ask(limit, now, want)
     if limit.source:
         if want == now:
             return {"ok": True, "key": key, "from": now, "to": want,
@@ -966,8 +1100,12 @@ def _loosening_card(limit: Limit, old, new) -> tuple:
     entry's own when it names one, so the card cannot promise "Jarvis does more"
     about a lower bar, which lets more CLIPS through instead."""
     action = limit.asked_action
-    prompt = (f"{limit.title}: change it from {_words(old)} to {_words(new)} "
-              f"({limit.words(new)})? {limit.card_more or RAISE_MORE}")
+    if limit.always_asks:
+        prompt = (f"{limit.title}: change it from {_change_words(limit, old)} to "
+                  f"{_change_words(limit, new)}? {limit.card_more or RAISE_MORE}")
+    else:
+        prompt = (f"{limit.title}: change it from {_words(old)} to {_words(new)} "
+                  f"({limit.words(new)})? {limit.card_more or RAISE_MORE}")
     detail = {"text": prompt, "what": limit.title.lower(),
               "was": old, "now": new, "limit": limit.key,
               "leaves_this_pc": False}
@@ -988,7 +1126,7 @@ def _loosening_card(limit: Limit, old, new) -> tuple:
                               "changed."}
         return (409, {"ok": False, "error": words.get(
             outcome, "That was not approved, so nothing was changed.")}), ""
-    return None, f"{limit.title} is now {limit.words(new)}."
+    return None, _done_words(limit, new)
 
 
 def view(*, app: Optional[str] = None) -> dict:
@@ -1058,7 +1196,7 @@ def change(body, *, peer=None, local=None) -> tuple:
     except SettingsFileError as exc:
         return 400, {"ok": False, "error": str(exc)}
     now = value_of(limit)
-    asks = _is_loosening(limit, now, want)
+    asks = _must_ask(limit, now, want)
     said = ""
     if asks:
         refused, said = _loosening_card(limit, now, want)

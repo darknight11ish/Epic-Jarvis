@@ -2502,6 +2502,91 @@ link and let going quieter through.
   or during the hours, stays; and a tap on Standby while already on standby
   (`"Already standby."`) records nothing.
 
+### The standby hours - `[power]` in the owner's settings file (2026-11-03)
+
+The owner asked for this in his own words: *"jarvis should have the ability to
+offload the gpus during standby hours: can i set standby hours for you?"*, and
+chose "Unload the GPUs in my hours" - in the hours he sets, Jarvis unloads the
+model from the cards, and the next question wakes it (a few seconds slower).
+
+**The keys were already there and were read by nothing.** `[power]` has carried
+`schedule_enabled`, `quiet_start`, `quiet_end`, `schedule_mode` and `idle_mode`
+since before this change, and the file itself said so: `schedule_mode` and
+`idle_mode` were annotated `# not read`. `jarvis_power.current()` returned a
+hard-coded `"quiet"` inside the window and never called `should_standby()` at
+all, so neither key could do anything. `jarvis_power` now honours both: inside
+the window it returns `schedule_mode` (`"quiet"` or `"standby"`), when the idle
+timer runs out it returns `idle_mode`. A word the file cannot mean (a typo,
+`"active"`, an empty string) reads as `"quiet"`, so a bad edit cannot free a
+card the owner did not ask to free.
+
+**A mode the owner CHOSE always wins.** The rules only apply on top of
+`active`, so Quiet chosen by hand is never deepened to Standby, and an explicit
+Standby is never softened. A change made by anything other than the clock sets
+a `manual` flag that stops the window overruling it until the clock's answer
+next changes - which is what the settings file already promises at line 1492
+("a person's explicit choice always beats an automatic one").
+
+**`jarvis_power.enforce()` is what actually frees a card.** `current()` stays a
+pure function of the clock; a mode reading "standby" unloads nothing by itself.
+`enforce()` asks `jarvis_power_switch.set_mode("standby", why="the standby
+hours")` - the one function in this repository that unloads, the same call a tap
+on the Standby button makes - and passes `force=True`, because inside the
+window `current()` already READS standby while the stored mode is still
+`active`; without it, `set_mode` answers "Already standby." and frees nothing.
+At the window's end it wakes only a standby its own rules made
+(`status()["why"] == "the standby hours"`), the same ownership rule §21.8 uses,
+and that wake runs the same warm-up.
+
+**Nothing is unloaded while something is using it.** `jarvis_power.in_flight()`
+returns a reason or `None`: a multi-step task (`jarvis_task_control.running()`),
+a turn being answered (`jarvis_events.activity()` says `thinking`, `speaking` or
+`working`), a Live conversation (`jarvis_chatbot`'s session in the states
+`jarvis_chatbot_routes.LIVE` names, plus the comparison and support lanes), or a
+waiting approval card (`jarvis_gate.pending()`). When one holds, `enforce()`
+changes nothing, records the reason in `status()["last_hold"]`, and tries again
+on the next tick. The same guard is in `jarvis_power_switch.set_mode()`, before
+the card and again after it, so a tap on Standby is refused for the same reason
+- 409 with a plain sentence, and nothing unloaded.
+
+**`/api/status` and `jarvis_power.status()` gained keys (additive).**
+`asked_for` (`"quiet"`/`"standby"`/`""`) and `asked_why` say what the clock
+wants now; `schedule_mode` and `idle_mode` say what the file would drop to;
+`keeper` says whether the ticker is running; `last_unload` carries what the last
+standby freed (`unloaded`, `still_loaded`, `also`, `note`, `at`) and
+`last_hold` why a standby was held off (`held`, `said`, `at`). Every one is
+optional and additive; a client that ignores them behaves exactly as before.
+
+**The setting is four rows in `jarvis_limits.LIMITS`**, so both apps draw it
+from the one table with no client change (`kind` is `bool` or `time`, `app` is
+`"both"`, `pc_only` is False):
+
+| Row key | `[power]` key | Default | The owner reads |
+|---|---|---|---|
+| `standby_hours_on` | `schedule_enabled` | `false` | "Keep Jarvis quiet during my hours" |
+| `standby_hours_unload` | `schedule_mode` | `"quiet"` | "Unload the graphics cards during my hours" |
+| `standby_hours_start` | `quiet_start` | `"23:00"` | "My hours start" |
+| `standby_hours_end` | `quiet_end` | `"07:00"` | "My hours end" |
+
+`standby_hours_unload` is a switch over a WORD: `on_text="standby"`,
+`off_text="quiet"`. All four carry `always_asks=True`, so a change goes to the
+`change_own_config` card (tier `ask`) in either direction - including a time -
+because `jarvis_power`'s own docstring says changing the RULES waits while
+changing the mode does not. Setting a value to what it already is raises no
+card. **On a PC that never touches it nothing changes:** `schedule_enabled` is
+`false`, so the window is not looked at and the ticker is never started.
+
+**Honest limits.** The window frees the cards through the existing standby path,
+so everything §21.8 says about standby applies: the first question after the
+hours is slower while the model loads (measured 5-15 s on this PC's card), Live
+cannot start while standby is unloading, and a window that begins mid-answer
+waits for the answer. "Notifications go quiet" is what standby already does to
+Jarvis's own speech (the arbiter refuses to speak in `quiet` or `standby`,
+`jarvis_arbiter.py:181`); the PC's toast notifications are a SEPARATE feature
+(the `notif_quiet_*` rows, §"the quiet hours (on your PC)") and this setting does
+not touch them. The ticker checks the clock every 30 s, so an edge is acted on
+within half a minute rather than exactly on the minute.
+
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->
 
 ---
@@ -22177,11 +22262,11 @@ The limits are not a module each: they are **rows in one table**
 (`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
-the owner's own words for it. Ten of them (`jarvis_limits.LIMITS` holds these
-ten written by hand, and `_notify_rows()` appends **seven more** notification
+the owner's own words for it. Fourteen of them (`jarvis_limits.LIMITS` holds these
+fourteen written by hand, and `_notify_rows()` appends **seven more** notification
 rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
-the three Quiet-hours rows - so the table a client receives is seventeen rows
-long. Only the ten are listed here; the seven are built from
+the three Quiet-hours rows - so the table a client receives is twenty-one rows
+long. Only the fourteen are listed here; the seven are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
@@ -22197,6 +22282,17 @@ no-second-copy reason as the numbers below):
 | `tag_suggest_age` | how long a chat must sit untouched before the overnight tag suggester may read it | neither direction asks | desktop |
 | `memory_people` | whether a model reads what the owner saves, looking for people and things | turning it ON | phone |
 | `voice_bar` | how sure the voice check must be that it is the owner's voice | a SMALLER number (a lower bar means more clips count as the owner's voice) | both |
+| `standby_hours_on` | whether the owner's hours apply at all (`[power].schedule_enabled`, "Power" in the same section) | **neither** - but it asks in BOTH directions: it changes the RULES that put Jarvis under on their own, which `jarvis_power`'s docstring says waits | both |
+| `standby_hours_unload` | whether those hours unload the graphics cards (`[power].schedule_mode`, a word - `standby` or `quiet`) | **neither** - asks in both directions, same reason | both |
+| `standby_hours_start` | when the hours begin (`[power].quiet_start`) | **neither**, and a time is not a number: asks in both directions | both |
+| `standby_hours_end` | when the hours end (`[power].quiet_end`) | **neither** - asks in both directions | both |
+
+The four `standby_hours_*` rows are the one group whose "loosening" column says
+nothing useful, so each carries `always_asks` instead: moving a window frees no
+card and loosens nothing, and it still decides when one is freed, so the row
+goes to the `change_own_config` card either way (see the standby-hours section
+under Power). Their `kind` is `bool` or `time`, the two kinds both clients
+already draw, which is why adding them needed no client change at all.
 
 Two fields, two different jobs, and the difference is worth knowing when you add a
 row: **`app` is what each screen draws** (`"desktop"` never reaches the phone at all,
