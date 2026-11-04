@@ -87,7 +87,10 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: 32 since "Save facts even when Jarvis had to reword them" joined that card
 #: (2026-11-02, option C1 of the memory-card research): one more toggle row,
 #: one more spoken setting, both generated from SETTINGS_ROWS.
-EXPECTED_ROWS = 32
+#: 33 since Wave B's "Personalize Jarvis" (2026-11-03) gave the setup reminder
+#: its switch in Notification Preferences (`notif-setup`, Ruling Q4): one more
+#: toggle row, one more spoken setting, both generated from SETTINGS_ROWS.
+EXPECTED_ROWS = 33
 
 #: The rows that are not settings switches, with the reason. These are in
 #: SETTINGS_ROWS (so the page and the table still agree) but carry
@@ -164,12 +167,12 @@ def t_the_count_is_what_it_is():
           f"re-count and update EXPECTED_ROWS and SETTINGS_ROWS together")
     bare = len(re.findall(r'^[ \t]*<label class="toggle">[ \t]*$',
                           SETTINGS_HTML.read_text(encoding="utf-8"), re.M))
-    # 2026-11-02: the new row carries a label id, so 24 bare + 8 with an id.
-    check("25 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
-          bare == 25 and len(page) - bare == 7,
+    # 2026-11-03: the setup row carries a label id too, so 25 bare + 8 with id.
+    check("25 of them are bare `<label class=\"toggle\">`, 8 carry a label id",
+          bare == 25 and len(page) - bare == 8,
           f"bare={bare}, with-id={len(page) - bare} - this is the trap that "
           f"produced the wrong '19'")
-    check("all 32 desktop rows are described",
+    check("all 33 desktop rows are described",
           len(R.DESKTOP_ROWS) == EXPECTED_ROWS, str(len(R.DESKTOP_ROWS)))
     check("the three phone rows are described too",
           len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 3, str(len(R.SETTINGS_ROWS)))
@@ -195,7 +198,7 @@ def t_indent_matches_the_page():
 
 
 def t_label_ids_match_the_page():
-    """The seven label ids are how a module hides or relabels a whole row
+    """The eight label ids are how a module hides or relabels a whole row
     (`briefing-settings.js:115` and friends), and the six span ids are how the
     PC's own words are written in. Both are read off the page."""
     page = {dom: row_id for dom, _, row_id in page_rows()}
@@ -203,7 +206,7 @@ def t_label_ids_match_the_page():
              for r in R.DESKTOP_ROWS if page.get(r.dom_id, "") != r.row_id]
     check("every row's <label> id is the page's own", not wrong, "; ".join(wrong))
     with_ids = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.row_id)
-    check("seven rows carry a <label> id", len(with_ids) == 7, str(with_ids))
+    check("eight rows carry a <label> id", len(with_ids) == 8, str(with_ids))
 
 
 def t_setting_links_are_real():
@@ -218,8 +221,8 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("twenty desktop rows are the same switch as a spoken setting",
-          len(linked) == 20, f"{linked} - if this grew, the row was given a setter")
+    check("twenty-one desktop rows are the same switch as a spoken setting",
+          len(linked) == 21, f"{linked} - if this grew, the row was given a setter")
     # TWENTY SINCE 2026-11-02: `learning-paraphrase` joined the linked
     # rows with its own spoken setting, `learn_paraphrase`.
     # NINETEEN SINCE 2026-11-01: `voice-one-moment` ("Say \"One moment\" if I'm
@@ -366,9 +369,14 @@ def t_bool_settings_is_the_measured_thirteen():
     was missing. Its `section` is None, like antislop's, because that field
     says which FEATURE a switch belongs to and the "voice" card is the wake
     word's; its own comment says so.
+
+    Thirty-six since 2026-11-03: `pc_setup_notification`, Wave B's
+    "Personalize Jarvis" reminder. It is one of the twenty-one linked rows
+    above, because `notif-setup` joined the page with its setter - the same
+    shape as the other five PC-notification switches.
     """
-    check("BOOL_SETTINGS holds its thirty-five spoken settings",
-          len(R.BOOL_SETTINGS) == 35, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-six spoken settings",
+          len(R.BOOL_SETTINGS) == 36, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

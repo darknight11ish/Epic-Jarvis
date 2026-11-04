@@ -10,6 +10,7 @@ import {
   NOTIF_REMINDERS_KEY,
   NOTIF_BRIEFING_KEY,
   NOTIF_HANDOFF_KEY,
+  NOTIF_SETUP_KEY,
   NOTIF_QUIET_ENABLED_KEY,
   NOTIF_QUIET_START_KEY,
   NOTIF_QUIET_END_KEY,
@@ -40,6 +41,7 @@ assert.equal(def.alarms, true, "alarms on by default");
 assert.equal(def.reminders, true, "reminders on by default");
 assert.equal(def.briefing, true, "briefing on by default");
 assert.equal(def.handoff, true, "handoff on by default");
+assert.equal(def.setup, true, "the Personalize Jarvis reminder on by default");
 assert.equal(def.quietEnabled, false, "quiet hours off by default");
 assert.equal(def.quietStart, DEFAULT_QUIET_START, "default quiet start 22:00");
 assert.equal(def.quietEnd, DEFAULT_QUIET_END, "default quiet end 07:00");
@@ -51,6 +53,7 @@ saveNotificationPrefs(
     reminders: false,
     briefing: false,
     handoff: true,
+    setup: false,
     quietEnabled: true,
     quietStart: "23:00",
     quietEnd: "06:30",
@@ -63,9 +66,11 @@ assert.equal(saved.alarms, true);
 assert.equal(saved.reminders, false);
 assert.equal(saved.briefing, false);
 assert.equal(saved.handoff, true);
+assert.equal(saved.setup, false);
 assert.equal(saved.quietEnabled, true);
 assert.equal(saved.quietStart, "23:00");
 assert.equal(saved.quietEnd, "06:30");
+assert.equal(store.get(NOTIF_SETUP_KEY), "false", "the setup switch has its own cache key");
 
 console.log("ok    prefs load and save with localStorage");
 
@@ -77,6 +82,7 @@ assert.ok(html.includes('id="notif-alarms"'), "alarms checkbox present");
 assert.ok(html.includes('id="notif-reminders"'), "reminders checkbox present");
 assert.ok(html.includes('id="notif-briefing"'), "briefing checkbox present");
 assert.ok(html.includes('id="notif-handoff"'), "handoff checkbox present");
+assert.ok(html.includes('id="notif-setup"'), "Personalize Jarvis checkbox present");
 assert.ok(html.includes('id="notif-quiet-enabled"'), "quiet enabled checkbox present");
 assert.ok(html.includes('id="notif-quiet-times"'), "quiet times container present");
 assert.ok(html.includes('id="notif-quiet-start"'), "quiet start input present");
@@ -99,6 +105,10 @@ assert.ok(
 assert.ok(
   norm.includes("Quiet hours never silence urgent alerts or decisions waiting for you"),
   "quiet hours note present"
+);
+assert.ok(
+  norm.includes("Reminds you, once at launch, that the Personalize Jarvis quiz is still unfinished."),
+  "the Personalize Jarvis row's detail is present"
 );
 
 console.log("ok    settings.html markup and notes verified");

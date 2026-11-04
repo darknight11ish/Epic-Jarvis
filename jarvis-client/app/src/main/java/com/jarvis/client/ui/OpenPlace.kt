@@ -101,7 +101,7 @@ object OpenPlace {
         "phone-notify" to Where.Go(Screen.SETTINGS, "phone-notify"),
         // "Notifications" (2026-10-29, the settings wrong-app audit's finding 7):
         // the registry now says this section is on BOTH apps, because the phone
-        // changes the PC's own seven notification kinds in its "Notifications
+        // changes the PC's own eight notification settings in its "Notifications
         // from Jarvis" row (SettingsScreen.kt's PcNotifySection, every line saying
         // "(on your PC)"). So "open notifications" lands on that row rather than
         // answering "only in Jarvis on your PC" - which is what it used to do
@@ -388,7 +388,7 @@ object OpenPlace {
         "people-and-things" to Where.Go(Screen.BRAIN, "people-and-things"),
         // ----------------------------------- Settings rows named as areas ---
         // A Settings ROW the PC can name as a place. "notifications" is the
-        // row that changes the PC's own seven notification kinds; the rest
+        // row that changes the PC's own eight notification settings; the rest
         // are rows this app already has under the same name.
         "notifications" to Where.Go(Screen.SETTINGS, "jarvis-notify"),
         "model-lane" to Where.Go(Screen.SETTINGS, "model-lane"),

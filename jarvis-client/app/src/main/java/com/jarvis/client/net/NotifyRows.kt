@@ -3,14 +3,14 @@ package com.jarvis.client.net
 import kotlinx.serialization.json.JsonObject
 
 /**
- * The PC's Notifications card, on the phone: the same seven values the
+ * The PC's Notifications card, on the phone: the same eight values the
  * desktop's own card draws, read and written through the same route.
  *
  * WHERE THESE COME FROM, AND WHY THAT IS THE HONEST ANSWER. The desktop's
- * "Notifications" card (`jarvis-desktop/src/settings.html` :1073-1153) covers
- * seven values - four per-kind switches, the quiet-hours switch and its two
- * times. Since the owner's decision of 2026-10-08 those seven are rows in the
- * PC's OWN limits table (`backend/jarvis_limits.py`'s `_NOTIFY_ROWS`,
+ * "Notifications" card covers eight values - five per-kind switches (the four
+ * toasts and Wave B's "Personalize Jarvis" reminder), the quiet-hours switch
+ * and its two times. Since the owner's decision of 2026-10-08 those eight are
+ * rows in the PC's OWN limits table (`backend/jarvis_limits.py`'s `_NOTIFY_ROWS`,
  * `backend/jarvis_notify_prefs.py` owns the file), and BOTH apps reach them
  * through the one limits route:
  *
@@ -20,7 +20,7 @@ import kotlinx.serialization.json.JsonObject
  * The desktop's card reads and writes exactly that route
  * (`jarvis-desktop/src/notifications-prefs.js`'s `NOTIF_ROWS`,
  * `readFromBackend`, `writeToBackend`), which is why this phone card invents no
- * API of its own: it draws the same seven rows, in the same order, from the
+ * API of its own: it draws the same eight rows, in the same order, from the
  * same answer, and posts its changes to the same place.
  *
  * WHAT IS NOT COPIED. The rows' titles and notes are NOT repeated here: they
@@ -81,7 +81,7 @@ object NotifyRows {
             "working. The PC has its own test button, on the PC: nothing on this phone can make " +
             "Windows show a notification."
 
-    /** A PC whose limits table answers, but without these seven rows (an older table). */
+    /** A PC whose limits table answers, but without these eight rows (an older table). */
     const val NO_ROWS =
         "Your PC's Jarvis does not have its notification settings in this table yet - run " +
             "apply-patches.ps1 on the PC."
@@ -90,9 +90,14 @@ object NotifyRows {
     fun readFailed(reason: String): String = "Couldn't read the PC's notification settings: $reason"
 
     /**
-     * The seven rows, in the desktop card's own order and under the keys the
+     * The eight rows, in the desktop card's own order and under the keys the
      * desktop's card uses (`notifications-prefs.js`'s `NOTIF_ROWS`), which are
      * also the PC's table keys (`jarvis_limits.py`'s `f"notif_{pref_key}"`).
+     *
+     * "notif_setup" is Wave B's "Personalize Jarvis" reminder (2026-11-03):
+     * the same switch as the desktop's `notif-setup` row and Rust's
+     * `NotificationPrefs.setup`. It sits after the website hand-off because
+     * that is where the desktop card draws it.
      *
      * THIS LIST IS THE WIRING. One added, renamed or reordered key here would
      * point the phone's card at something the desktop's card does not own, and
@@ -104,19 +109,26 @@ object NotifyRows {
         "notif_reminders",
         "notif_briefing",
         "notif_handoff",
+        "notif_setup",
         "notif_quiet_enabled",
         "notif_quiet_start",
         "notif_quiet_end",
     )
 
-    /** The five on/off rows: the four kinds, then quiet hours itself. */
-    val SWITCHES: List<String> = KEYS.take(5)
-
     /** The two clock-time rows, the quiet window's ends. */
-    val TIMES: List<String> = KEYS.drop(5)
+    val TIMES: List<String> = listOf("notif_quiet_start", "notif_quiet_end")
+
+    /** The six on/off rows: the five kinds, then quiet hours itself. */
+    val SWITCHES: List<String> = KEYS - TIMES
+
+    /** The five kinds, drawn above the quiet group. */
+    val KINDS: List<String> = SWITCHES - "notif_quiet_enabled"
+
+    /** The quiet group: its switch and its two times. */
+    val QUIET: List<String> = SWITCHES - KINDS + TIMES
 
     /**
-     * The seven rows as the PC sent them, in [KEYS] order, and only the rows
+     * The eight rows as the PC sent them, in [KEYS] order, and only the rows
      * the PC lets this phone draw ([Limits.offered]: a row marked `pc_only` can
      * never appear, even if a PC sends one).
      *
@@ -130,8 +142,8 @@ object NotifyRows {
         return KEYS.mapNotNull { offered[it] }
     }
 
-    /** The four kinds, then the quiet group (its switch and its two times). */
-    fun kindRows(rows: List<Limits.Row>): List<Limits.Row> = rows.filter { it.key in KEYS.take(4) }
+    /** The five kinds, then the quiet group (its switch and its two times). */
+    fun kindRows(rows: List<Limits.Row>): List<Limits.Row> = rows.filter { it.key in KINDS }
 
-    fun quietRows(rows: List<Limits.Row>): List<Limits.Row> = rows.filter { it.key in KEYS.drop(4) }
+    fun quietRows(rows: List<Limits.Row>): List<Limits.Row> = rows.filter { it.key in QUIET }
 }

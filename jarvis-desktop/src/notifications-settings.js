@@ -3,7 +3,7 @@
  * set quiet hours, and test Windows notifications.
  *
  * The owner's decisions of 2026-09-30, and of 2026-10-08: THE PC IS THE ONE
- * SOURCE OF TRUTH. The seven values live in the owner's `[notifications]` table
+ * SOURCE OF TRUTH. The eight values live in the owner's `[notifications]` table
  * in `jarvis-framework.toml` (`backend/jarvis_notify_prefs.py`) and both apps
  * change them through the one limits route, because a phone can never read this
  * window's `localStorage` and the phone must be able to change them.
@@ -51,6 +51,7 @@ const dom = {
   reminders: $("notif-reminders"),
   briefing: $("notif-briefing"),
   handoff: $("notif-handoff"),
+  setup: $("notif-setup"),
   quietEnabled: $("notif-quiet-enabled"),
   quietTimes: $("notif-quiet-times"),
   quietStart: $("notif-quiet-start"),
@@ -65,6 +66,7 @@ const SWITCHES = {
   reminders: () => dom.reminders,
   briefing: () => dom.briefing,
   handoff: () => dom.handoff,
+  setup: () => dom.setup,
   quietEnabled: () => dom.quietEnabled,
 };
 
@@ -77,7 +79,7 @@ function say(text, tone) {
   else delete dom.status.dataset.tone;
 }
 
-/** The seven values as the card is showing them right now. */
+/** The eight values as the card is showing them right now. */
 function shownPrefs() {
   const prefs = {};
   for (const [name, get] of Object.entries(SWITCHES)) {
@@ -92,7 +94,7 @@ function shownPrefs() {
 export function initNotificationsSettings() {
   if (!dom.section) return;
 
-  /** Paint the seven values, and remember them as this window's last reading. */
+  /** Paint the eight values, and remember them as this window's last reading. */
   function paint(prefs) {
     for (const [name, get] of Object.entries(SWITCHES)) {
       const el = get();
@@ -154,7 +156,7 @@ export function initNotificationsSettings() {
   /**
    * Write ONE row to the PC, then push the PC's own answer to Rust.
    *
-   * ONE row, not all seven: sending all seven on a single click would overwrite
+   * ONE row, not all eight: sending all eight on a single click would overwrite
    * a change the owner made on the phone in the meantime with this window's
    * copy of the others. The backend owns each value on its own.
    */
