@@ -8586,6 +8586,13 @@ CHANGE_BY_ASKING = frozenset({
     # 2026-11-02: "Save facts even when Jarvis had to reword them" - ON is one
     # card (learning_paraphrase_enable), OFF is immediate.
     "learn_paraphrase",
+    # 2026-11-03: "Only check my voice on a locked phone". ON is the LOOSER
+    # direction - it grants the exemption - so ON is ONE card through
+    # jarvis_live.request_voice_check; OFF takes the exemption away, is the
+    # stricter direction, and applies at once. Its reader
+    # (`_read_voice_check_locked`) answers a real True/False, so the receipt is
+    # a read and not a claim.
+    "voice_check_locked",
     "web_search", "smartwatch_notifications", "phone_notifications",
     "screen_picture", "headless_browser", "sandbox_exec", "media_index",
     "briefing_senders", "big_coder", "better_voice", "chat_history",
