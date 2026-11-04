@@ -1,19 +1,26 @@
 /**
- * The three calls the Settings questionnaire makes to the PC - and the only
+ * The four calls the Settings questionnaire makes to the PC - and the only
  * file that names the desktop's bridge command or the body fields it sends.
  *
- * Commands (Tauri): ONE command, `setup_questionnaire`, with three verbs:
+ * Commands (Tauri): ONE command, `setup_questionnaire`, with four verbs:
  *
- *   read   - `GET /api/setup`: the questions, the current values, the last
- *            answers, the last outcomes and the card patience time.
- *   plan   - `POST /api/setup/plan {"answers": {...}}`: READ-ONLY on the PC.
- *            It writes nothing and raises no card, so this page may ask for it
- *            whenever an answer changes.
- *   apply  - `POST /api/setup/apply {"answers": {...}, "confirm": true}`: the
- *            one write. It changes settings through the PC's EXISTING setters,
- *            one at a time, and every loosening change raises its own existing
- *            approval card. `confirm: true` is sent only from
- *            `applySetup()`; `readSetup()` and `planSetup()` never carry it.
+ *   read     - `GET /api/setup`: the questions (with their sections and
+ *              versions), the current values, the last answers, the last
+ *              outcomes, where the owner was, and the card patience time.
+ *   plan     - `POST /api/setup/plan {"answers": {...}}`: READ-ONLY on the PC.
+ *              It writes nothing and raises no card, so this page may ask for
+ *              it whenever an answer changes.
+ *   progress - `POST /api/setup/progress`: where the owner is in the card
+ *              (`{section, question, draft_answers}`), a dismissal
+ *              (`{dismiss: true}`), or "Keep current settings"
+ *              (`{keep_current: true}`). Cardless and gateless on the PC: it
+ *              records the owner's own Option ids and one timestamp, calls no
+ *              setter and can change no setting.
+ *   apply    - `POST /api/setup/apply {"answers": {...}, "confirm": true}`: the
+ *              one write. It changes settings through the PC's EXISTING
+ *              setters, one at a time, and every loosening change raises its
+ *              own existing approval card. `confirm: true` is sent only from
+ *              `applySetup()`; nothing else here carries it.
  *
  * NOTHING HERE DECIDES, APPROVES OR RETRIES. A refusal is returned as the
  * PC's own words; a card waiting is reported by the answer itself. There is no
@@ -42,12 +49,14 @@ import {
 export const COMMAND = "setup_questionnaire";
 
 /** The verbs it takes. Nothing else reaches it. */
-export const VERBS = ["read", "plan", "apply"];
+export const VERBS = ["read", "plan", "progress", "apply"];
 
 /** One small backend read (the Rust side allows 15 s). */
 export const READ_BUDGET = READ_BUDGET_MS;
 /** The plan is a read on the PC too, but it walks every answer (Rust: 30 s). */
 export const PLAN_BUDGET_MS = 60_000;
+/** A progress note is one small file write on the PC (Rust: 15 s). */
+export const PROGRESS_BUDGET_MS = 30_000;
 /** The apply works through changes one at a time, each waiting on its own
  *  card. The Rust command allows 3,600 s; this is a little longer again, so a
  *  real card can still be answered before the page stops waiting. */
@@ -103,6 +112,25 @@ export async function planSetup(body) {
     return await call({ action: "plan", answers: body && body.answers }, PLAN_BUDGET_MS);
   } catch (error) {
     return { ok: false, error: words(error) || "The plan could not be read." };
+  }
+}
+
+/**
+ * The progress note (`POST /api/setup/progress`) - Wave B, ruling Q6. Call it
+ * from the stepper (where the owner is), from "Not now" and from "Keep current
+ * settings". `body` is `setup-questionnaire.js`'s `progressBody(...)`, which is
+ * one of three small shapes and never carries `confirm`.
+ *
+ * It is NOT held on a stale link: it records where the owner is, which is not a
+ * change, and a catching-up stream must not stop the card remembering. A
+ * refusal comes back as words so the page can say them; it is never retried and
+ * never turned into an apply.
+ */
+export async function progressSetup(body) {
+  try {
+    return await call({ action: "progress", progress: body || {} }, PROGRESS_BUDGET_MS);
+  } catch (error) {
+    return { ok: false, error: words(error) || "The progress note could not be sent." };
   }
 }
 

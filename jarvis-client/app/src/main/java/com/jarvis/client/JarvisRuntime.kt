@@ -2730,11 +2730,12 @@ object JarvisRuntime {
     // JARVIS-API.md section 147. BOTH calls here are READS on the PC: the
     // reading, and the plan - which writes nothing and raises no card - so
     // neither is held on a stale link (rule 4 holds ACTING). The phone never
-    // applies anything: the apply works through the PC's existing setters one
-    // at a time and several of those changes are PC-only
+    // applies anything and never records where the card is: the apply works
+    // through the PC's existing setters one at a time, several of those changes
+    // are PC-only, and `POST /api/setup/progress` is the card's own state
     // (docs/ARCHITECTURE.md section 8).
 
-    /** `GET /api/setup` - the fourteen questions, values and last outcomes. */
+    /** `GET /api/setup` - the questions, the values, the progress and last outcomes. */
     suspend fun setupQuestionnaire(): ApiResult<JsonObject> = api.setupQuestionnaire()
 
     /**
@@ -6774,7 +6775,8 @@ object JarvisRuntime {
                 // `changed` event does the same, for a change made anywhere.
                 if (changed && action in setOf("snooze", "delete", "done")) {
                     appContext?.let { ctx ->
-                        runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                        // Every notice for this job, a routine's part notices too.
+                        runCatching { com.jarvis.client.service.ScheduleNotifier.cancelAll(ctx, id) }
                     }
                 }
             }
@@ -6799,12 +6801,22 @@ object JarvisRuntime {
      *
      * [button] is the button's INDEX, never its label: the PC reads the question
      * and its buttons back from its own row, so this call can never name what is
-     * written. @return whether it was kept, and the sentence to show.
+     * written. [step] (2026-11-03) is WHICH PART of a routine the button belongs
+     * to - also an index, also never a label - or null for an ordinary
+     * reminder's question. [tag] is the notification's own tag when the press
+     * came from one, so the notice that was answered is the one taken away (a
+     * routine posts one notice per part). @return whether it was kept, and the
+     * sentence to show.
      */
-    suspend fun scheduleAnswer(id: String, button: Int): Pair<Boolean, String> {
+    suspend fun scheduleAnswer(
+        id: String,
+        button: Int,
+        step: Int? = null,
+        tag: String? = null,
+    ): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         if (screenLocked()) return false to ANSWER_NEEDS_UNLOCK
-        val body = com.jarvis.client.net.Schedule.answerBody(id, button)
+        val body = com.jarvis.client.net.Schedule.answerBody(id, button, step)
             ?: return false to "That is not one button of this reminder."
         return when (val r = api.scheduleWrite(com.jarvis.client.net.Schedule.ACT_PATH, body)) {
             is ApiResult.Ok -> com.jarvis.client.net.Schedule.said(r.value).also { (kept, _) ->
@@ -6814,7 +6826,16 @@ object JarvisRuntime {
                 // row still show it - nothing is lost with the notification.
                 if (kept) {
                     appContext?.let { ctx ->
-                        runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                        // The notice that was answered: the one that sent this
+                        // press (its own tag), or - answering from the ROW, where
+                        // nothing carries a tag - the notice of THAT PART, and
+                        // never its neighbour's.
+                        val at = tag ?: step?.let {
+                            com.jarvis.client.service.ScheduleNotifier.tagForPart(ctx, id, it)
+                        }
+                        runCatching {
+                            com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id, at ?: id)
+                        }
                     }
                 }
             }
@@ -7998,7 +8019,9 @@ object JarvisRuntime {
         com.jarvis.client.net.Schedule.changedFrom(obj)?.let { (id, kind) ->
             if (com.jarvis.client.net.Schedule.cancelsOnChange(kind)) {
                 appContext?.let { ctx ->
-                    runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(ctx, id) }
+                    // A routine posts one notice per part (2026-11-03), so the
+                    // whole job's notices go, not only the one tagged with its id.
+                    runCatching { com.jarvis.client.service.ScheduleNotifier.cancelAll(ctx, id) }
                 }
             }
             return
@@ -8016,6 +8039,11 @@ object JarvisRuntime {
             return
         }
         val (id, kind) = com.jarvis.client.net.Schedule.firedFrom(obj) ?: return
+        // WHICH PART of a routine went off (2026-11-03), or null for an ordinary
+        // job. The PC sends it beside the count, and each part is its own
+        // notification - its own tag, its own buttons - so part 2 never replaces
+        // part 1 on the shade.
+        val step = com.jarvis.client.net.Schedule.partFrom(obj)
         val context = appContext ?: return
         // Written at once, not within two seconds: if the process is killed
         // now, a restart must not replay this event and ring it again.
@@ -8026,32 +8054,53 @@ object JarvisRuntime {
                 is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
                 is ApiResult.Failed -> null
             }
+            // The part this event is about, when the PC sent one and the row
+            // really carries it. A part index this phone cannot see falls back to
+            // the ordinary notice rather than to nothing.
+            val part = step?.let { s -> job?.steps?.getOrNull(s) }
             // Once per job going off: a replayed event after a reconnect
             // must not ring twice. A job that could not be read is told apart
-            // by its event, not taken for every other unreadable firing.
-            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.firedAt, eventId, arrived)
+            // by its event, not taken for every other unreadable firing. Each
+            // PART keys itself by its index and the PC's own mark on it.
+            val shown = com.jarvis.client.net.Schedule.shownKey(
+                id, part?.firedAt ?: job?.firedAt, eventId, arrived,
+                if (part != null) "#step$step@" else "@",
+            )
             val fresh = synchronized(scheduleShown) {
                 if (scheduleShown.size > 500) scheduleShown.clear()
-                scheduleShown.add(key)
+                scheduleShown.add(shown)
             }
             if (!fresh) return@launch
+            // The notification's TAG: every ordinary notice keeps the job id it
+            // has always had (Snooze and the Answer path cancel by it), and ONE
+            // PART's notice carries its own tag, so part 2 never replaces part 1.
+            val key = if (part != null) shown else id
             val security = settings.security.value
             // A notification is outside the app: a lock that is ON counts,
             // whether or not the lists were shown a moment ago.
             val locked = notificationsLocked(security)
-            val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
+            val (title, text) = part?.let {
+                com.jarvis.client.net.Schedule.partNotification(
+                    kind, job, it, step ?: 0,
+                    com.jarvis.client.net.Schedule.partCount(job),
+                    locked,
+                )
+            } ?: com.jarvis.client.net.Schedule.notification(kind, job, locked)
             val lockScreen = job?.lockScreen?.takeIf { it.isNotEmpty() }
                 ?: com.jarvis.client.net.Schedule.lockScreen(kind)
             // Heard more than ten minutes after it went off (the phone was
             // out of reach, or restarted): a silent "Missed at 07:00." notice,
             // never an alarm ringing as if it were now (the owner, 2026-09-26).
-            val late = com.jarvis.client.net.Schedule.heardLate(job?.firedAt, arrived / 1000.0, job?.ageSeconds)
+            val late = com.jarvis.client.net.Schedule.heardLate(
+                part?.firedAt ?: job?.firedAt, arrived / 1000.0, job?.ageSeconds,
+            )
             com.jarvis.client.service.ScheduleNotifier.post(
                 context, id, kind, title,
                 if (late) com.jarvis.client.net.Schedule.missedWords(job?.wentOffAt.orEmpty(), text) else text,
                 lockScreen,
                 // An alarm keeps ringing until seen (2026-09-25).
                 ring = com.jarvis.client.net.Schedule.rings(kind, urgent = false),
+                key = key,
                 quiet = late,
                 // A job "going off": a notification whose job the PC no longer
                 // lists at all is taken away by the reconcile pass.
@@ -8059,8 +8108,12 @@ object JarvisRuntime {
                 // A question's own buttons (2026-11-02), in the owner's words.
                 // A late notice is quiet and carries no action - the owner's own
                 // decision of 2026-09-26 for a missed one - and an older PC never
-                // sends the block at all.
-                ask = if (late) null else job?.ask,
+                // sends the block at all. A PART's own buttons (2026-11-03) are
+                // the block: its question, or the ONE implicit Done.
+                ask = if (late) null else (part?.let {
+                    com.jarvis.client.net.Schedule.partAsk(it)
+                } ?: job?.ask),
+                step = if (late) null else step,
             )
         }
     }

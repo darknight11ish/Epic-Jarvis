@@ -1,14 +1,16 @@
 {
-  "version": 1,
+  "version": 2,
   "generated_by": "tools/gen_setup_questions.py",
   "source": "backend/jarvis_setup.py",
   "note": "both apps render these same questions; regenerate, never hand-edit",
-  "count": 14,
+  "count": 25,
   "questions": [
     {
       "id": "talk_style",
       "title": "How should Jarvis talk?",
       "help": "This changes only how answers are worded. It never changes what Jarvis does or what it asks you first.",
+      "section": "talking",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -28,6 +30,8 @@
       "id": "humour",
       "title": "Should Jarvis use a little humour?",
       "help": "Occasional light humour when it fits. Never on cards, errors, or serious topics.",
+      "section": "talking",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -47,6 +51,8 @@
       "id": "carefulness",
       "title": "How careful should Jarvis be before it acts?",
       "help": "Which of your things Jarvis may read, and whether it asks first. Making it MORE careful happens at once; making it LESS careful asks you on its own card, one for each thing.",
+      "section": "reading",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -71,6 +77,8 @@
       "id": "learning",
       "title": "How should Jarvis learn?",
       "help": "Facts about you and your projects are learned from YOUR own words only. Turning learning on, or letting sensitive topics be learned automatically, asks you on a card. Turning things off is instant.",
+      "section": "learning",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -95,6 +103,8 @@
       "id": "reading_tools",
       "title": "Which of your things may the AI model read when you ask?",
       "help": "These are the tools Jarvis may be offered at all. Turning one on shows its own approval card and asks for Windows Hello, on the PC; turning one off is instant. All / None applies to the whole list.",
+      "section": "reading",
+      "version": 1,
       "multi": true,
       "options": [
         {
@@ -124,6 +134,8 @@
       "id": "web_search",
       "title": "Should Jarvis be able to search the web?",
       "help": "A search still shows its exact words on a card first when private things could slip in. Turning web search on raises its one card; turning it off is instant.",
+      "section": "reading",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -143,6 +155,8 @@
       "id": "search_asking",
       "title": "How often should Jarvis ask before a web search?",
       "help": "By default a search asks only when it could include something private. Asking before EVERY search is stricter and instant; turning that back off raises a card.",
+      "section": "reading",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -162,6 +176,8 @@
       "id": "search_provider",
       "title": "Which search service should Jarvis use?",
       "help": "The service only sees the words of a search Jarvis decides to make. Some need a key you add later in Settings; changing this is instant.",
+      "section": "reading",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -201,6 +217,8 @@
       "id": "screen_pictures",
       "title": "What may Jarvis look at or draw on this PC?",
       "help": "Each of these has its own existing card or switch. Picture mode and the headless browser each raise their own card when turned on. All / None applies to the whole list.",
+      "section": "screen",
+      "version": 1,
       "multi": true,
       "options": [
         {
@@ -230,6 +248,8 @@
       "id": "notifications",
       "title": "Which notifications do you want?",
       "help": "Each switch only changes when this PC or your phone speaks up; none of them raises a card, and none of them is ever a way out of your own devices. All / None applies to the whole list.",
+      "section": "notifications",
+      "version": 1,
       "multi": true,
       "options": [
         {
@@ -279,6 +299,8 @@
       "id": "card_size",
       "title": "How much of an approval card should be shown at first?",
       "help": "This only changes how much of the card is open when it appears: the same card, the same words underneath, the same buttons. Instant either way.",
+      "section": "talking",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -298,6 +320,8 @@
       "id": "voice",
       "title": "Which voice options should be on?",
       "help": "These only change how Jarvis sounds. This questionnaire never starts voice training - that stays your own step, in Settings. All / None applies to the whole list.",
+      "section": "voice",
+      "version": 1,
       "multi": true,
       "options": [
         {
@@ -322,6 +346,8 @@
       "id": "animal_faces",
       "title": "How should the animal faces behave?",
       "help": "Small cosmetic switches, shared by the PC and the phone. None of them raises a card. All / None applies to the whole list.",
+      "section": "screen",
+      "version": 1,
       "multi": true,
       "options": [
         {
@@ -371,6 +397,8 @@
       "id": "main_use",
       "title": "What will you mostly use Jarvis for?",
       "help": "This recommends one of the existing work presets. It changes NO model by itself: a preset is only applied by choosing it in the preset selector, where its own ONE card asks you.",
+      "section": "models",
+      "version": 1,
       "multi": false,
       "options": [
         {
@@ -397,9 +425,320 @@
           "id": "quick",
           "label": "Quick, short answers",
           "detail": ""
+        },
+        {
+          "id": "reflect",
+          "label": "Talking things through and coaching",
+          "detail": ""
+        },
+        {
+          "id": "pictures",
+          "label": "Making and reading pictures",
+          "detail": ""
+        },
+        {
+          "id": "documents",
+          "label": "Documents, notes and long writing",
+          "detail": ""
+        },
+        {
+          "id": "browser",
+          "label": "Using websites and filling in forms, step by step",
+          "detail": ""
         }
       ],
       "all_none": false
+    },
+    {
+      "id": "personality",
+      "title": "Which personality should Jarvis have?",
+      "help": "The personality changes how Jarvis words things - its tone and character - and nothing else: not what it does, not what it asks you first, and no approval card. It is the same choice the Personality control in Settings makes.",
+      "section": "talking",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "warm_peer",
+          "label": "Warm Collaborator",
+          "detail": "Friendly and on your side - the default."
+        },
+        {
+          "id": "classic_butler",
+          "label": "Classic British Butler",
+          "detail": "Formal, precise and discreet."
+        },
+        {
+          "id": "tactical_ops",
+          "label": "Tactical Mission Control",
+          "detail": "Short, clipped and operational."
+        },
+        {
+          "id": "dry_wit",
+          "label": "Dry & Deadpan",
+          "detail": "Understated humour, never at your expense."
+        },
+        {
+          "id": "friday_partner",
+          "label": "Sharp Tech Partner",
+          "detail": "Direct, technical and quick to the point."
+        },
+        {
+          "id": "socratic_mentor",
+          "label": "Socratic Coach & Tutor",
+          "detail": "Asks the next question and teaches as it goes."
+        },
+        {
+          "id": "devils_advocate",
+          "label": "No-Nonsense Critic",
+          "detail": "Finds the weak spot and says so plainly."
+        },
+        {
+          "id": "calm_stoic",
+          "label": "Calm & Grounded",
+          "detail": "Steady and unhurried, even under pressure."
+        },
+        {
+          "id": "advocate",
+          "label": "Patient Advocate",
+          "detail": "Takes your side and explains the options."
+        },
+        {
+          "id": "reflect",
+          "label": "Reflective Coach",
+          "detail": "Helps you think it through before deciding."
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "antislop",
+      "title": "Should Jarvis avoid AI-sounding writing?",
+      "help": "The Anti-Slop filter takes out the phrases that make writing sound machine-made. It changes only the words, so neither direction asks on a card. \"During\" filters as Jarvis writes; \"after\" audits the answer and lists what it would change instead.",
+      "section": "talking",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "off",
+          "label": "No, leave the writing as it is (default)",
+          "detail": ""
+        },
+        {
+          "id": "during",
+          "label": "Yes, filter it as Jarvis writes",
+          "detail": "The filter works while the answer is written."
+        },
+        {
+          "id": "after",
+          "label": "Yes, but only list what it would change first",
+          "detail": "Jarvis answers normally, then audits its own wording."
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "lights_without_card",
+      "title": "May Jarvis switch lights, plugs and fans without a card?",
+      "help": "On means a light, plug or fan in your home can be switched without a card each time. Turning that on raises ONE approval card first; turning it back off is instant. Nothing else in your home changes.",
+      "section": "reading",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "on",
+          "label": "Yes, switch them without a card each time",
+          "detail": "Turning this on raises its own card once."
+        },
+        {
+          "id": "off",
+          "label": "No, ask me first every time (default)",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "reworded_memories",
+      "title": "Should Jarvis save a fact when it had to reword it?",
+      "help": "Facts are normally learned from your own words. With this on, Jarvis may also save a fact whose words are its own - which is how it can keep something you implied rather than said. Off by default; turning it on raises its own card.",
+      "section": "learning",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "on",
+          "label": "Yes, save a reworded fact too",
+          "detail": "Turning this on raises its own card once."
+        },
+        {
+          "id": "off",
+          "label": "No, only my own words (default)",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "chat_history",
+      "title": "Should Jarvis keep your chats and voice transcripts on this PC?",
+      "help": "On keeps the conversation on this PC so Jarvis can pick it up later; it is kept encrypted. Off means nothing is written. Turning it back on raises its own card; turning it off is instant.",
+      "section": "learning",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "on",
+          "label": "Yes, keep them on this PC (default)",
+          "detail": ""
+        },
+        {
+          "id": "off",
+          "label": "No, do not keep them",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "media_index",
+      "title": "Should recordings and videos be searchable by their words?",
+      "help": "On keeps readable words from recordings and videos in the folders you listed, so Jarvis can find them later. Off stops keeping them and is instant; turning it back on raises its own card.",
+      "section": "learning",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "on",
+          "label": "Yes, make them searchable (default)",
+          "detail": ""
+        },
+        {
+          "id": "off",
+          "label": "No, do not keep their words",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "small_approvals",
+      "title": "Should the small approvals ask for your fingerprint too?",
+      "help": "A small read-only card - a web search, a page, the news - can be approved by the card alone, or every card can ask for your fingerprint as well. Turning the fingerprint on is instant; turning it off can only be done on this PC.",
+      "section": "learning",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "ask",
+          "label": "Yes, ask for my fingerprint on the small cards too",
+          "detail": ""
+        },
+        {
+          "id": "skip",
+          "label": "No, the card alone is enough (default)",
+          "detail": "This can only be chosen on the PC itself."
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "voice_speed",
+      "title": "How fast should Jarvis speak?",
+      "help": "This only changes how fast spoken answers are read. It never changes what Jarvis says, and no card either way.",
+      "section": "voice",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "slower",
+          "label": "Slower",
+          "detail": ""
+        },
+        {
+          "id": "normal",
+          "label": "Normal (default)",
+          "detail": ""
+        },
+        {
+          "id": "faster",
+          "label": "Faster",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "one_moment",
+      "title": "Should Jarvis say \"One moment\" while it thinks?",
+      "help": "The short spoken line before a slower answer. Off hides it everywhere both apps speak, and no card either way.",
+      "section": "voice",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "on",
+          "label": "Yes, say \"One moment\" (default)",
+          "detail": ""
+        },
+        {
+          "id": "off",
+          "label": "No, stay quiet while it thinks",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "live_idle_seconds",
+      "title": "How long should Jarvis Live wait before it turns itself off?",
+      "help": "How long Live keeps listening after it last hears you. This never starts Live and never opens the microphone; no card either way.",
+      "section": "voice",
+      "version": 2,
+      "multi": false,
+      "options": [
+        {
+          "id": "60",
+          "label": "1 minute",
+          "detail": ""
+        },
+        {
+          "id": "120",
+          "label": "2 minutes",
+          "detail": ""
+        },
+        {
+          "id": "300",
+          "label": "5 minutes",
+          "detail": ""
+        },
+        {
+          "id": "600",
+          "label": "10 minutes",
+          "detail": ""
+        }
+      ],
+      "all_none": false
+    },
+    {
+      "id": "bigger_model_hints",
+      "title": "Should Jarvis offer the bigger model when it would help?",
+      "help": "These only decide whether Jarvis OFFERS a bigger model at a moment it might help. Every offer still needs your yes, and no model is switched by this answer. All / None applies to the whole list.",
+      "section": "models",
+      "version": 2,
+      "multi": true,
+      "options": [
+        {
+          "id": "struggle",
+          "label": "When I seem to be struggling",
+          "detail": ""
+        },
+        {
+          "id": "correction",
+          "label": "After I correct it",
+          "detail": ""
+        }
+      ],
+      "all_none": true
     }
   ]
 }

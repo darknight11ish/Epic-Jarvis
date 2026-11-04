@@ -508,6 +508,46 @@ def t_phase2_management_cases():
                   (out or {}).get("waiting") is True, out)
 
 
+def t_a_routine_payload_keeps_the_additive_contract():
+    """2026-11-03: a reminder may carry PARTS (JARVIS-API section 21.15). This is
+    the file that pins the payload shape both apps read, so the two halves that
+    matter here are pinned here: a job with no parts grows NO new key at all, and
+    a job WITH parts grows exactly the keys the section names."""
+    at = NOW + 3600
+    plain = SCHEDULER.add_at("reminder", at, "no parts at all")
+    for key in ("steps", "steps_parts", "steps_cursor", "missed_parts",
+                "steps_unreadable"):
+        check(f"a reminder with no parts carries no `{key}`", key not in plain,
+              sorted(plain))
+    routine = SCHEDULER.add_at("reminder", at, "a routine", steps=[
+        {"label": "one", "offset_min": 0},
+        {"label": "two", "offset_min": 10,
+         "ask": {"question": "Done?", "buttons": [{"label": "Yes", "does": "done"}]}}])
+    check("a routine's payload carries `steps`, `steps_parts` and `steps_cursor`",
+          isinstance(routine.get("steps"), list) and routine.get("steps_parts") == 2
+          and routine.get("steps_cursor") == 0,
+          {k: routine.get(k) for k in ("steps_parts", "steps_cursor")})
+    part = (routine.get("steps") or [{}])[0]
+    check("a part carries its words, its time and its EFFECTIVE buttons",
+          part.get("label") == "one" and part.get("offset_min") == 0
+          and part.get("buttons") == [{"label": "Done", "does": "done"}], part)
+    check("every part carries its live marks, so an app never invents them",
+          {"fired_at", "done", "missed", "current"} <= set(part), sorted(part))
+    check("a part that asks carries its own block and marks the row answerable",
+          (routine["steps"][1].get("ask") or {}).get("question") == "Done?"
+          and routine.get("asks") is True, routine["steps"][1])
+    check("`missed_parts` and `steps_unreadable` are absent on a healthy routine",
+          "missed_parts" not in routine and "steps_unreadable" not in routine,
+          sorted(routine))
+    check("`status()` carries the additive `steps` marker beside the others",
+          SCHEDULER.status().get("steps") is True
+          and SCHEDULER.status()["limits"].get("steps") == S.MAX_STEPS,
+          SCHEDULER.status()["limits"])
+    check("`steps` and `action` are both EDIT_KEYS (the 21.14 gap is closed)",
+          "steps" in S.Scheduler.EDIT_KEYS and "action" in S.Scheduler.EDIT_KEYS,
+          S.Scheduler.EDIT_KEYS)
+
+
 # ==========================================================================
 #  4. the cross-surface checker: real files, pending gaps named, strict flips
 # ==========================================================================
@@ -585,6 +625,7 @@ def main():
         ("2. the real act() authority matches the contract rules", t_act_authority_matches_the_contract_rules),
         ("2b. the contract verb set equals Scheduler.act's accepted set", t_act_verb_set_matches_the_contract),
         ("2c. the Phase-2 management cases match the real act()", t_phase2_management_cases),
+        ("2d. a routine's payload keeps the additive contract", t_a_routine_payload_keeps_the_additive_contract),
         ("3. Wave D-1 ready_for_review", t_ready_for_review_half),
         ("4. the cross-surface checker", t_cross_surface_checker),
     )

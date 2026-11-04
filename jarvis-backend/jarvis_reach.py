@@ -208,6 +208,15 @@ TOOL_NAMES = {
                          "(read-only, titles and dates only)",
     "conversation_open": "Opening one of your old conversations to read it "
                          "(read-only, on this PC)",
+    # The Personalize Jarvis quiz's own chat tool (Wave B, 2026-11-03): it lists
+    # the questions, explains one from the real plan, and stages ONE answer as
+    # a draft in the open desktop card. It applies nothing - the owner presses
+    # Apply on the Settings card - and raises no card of its own, so its plain
+    # words say where the applying happens. Listed here because test_reach.py
+    # requires every tool to have plain words for the page.
+    "setup_quiz": "Going through the Personalize Jarvis questions: what they "
+                  "ask and what each answer would change (read-only; an answer "
+                  "is only drafted for the Settings card, which applies it)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

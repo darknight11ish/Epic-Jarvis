@@ -184,11 +184,13 @@ object OpenPlace {
         // rather than the top of Settings. Before this the section did not
         // exist and the switches could only be found in the Brain.
         "learning" to Where.Go(Screen.SETTINGS, "learning"),
-        // "First-time setup" (S2, 2026-10-20; JARVIS-API section 147): the PC's
-        // fourteen questions and its read-only plan. An ordinary Settings row
-        // on the phone (SettingsScreen.kt, item "setup-questionnaire", always
-        // drawn), so "open first time setup" lands on it rather than the top of
-        // Settings; the changes themselves are made on the PC.
+        // "Personalize Jarvis" (S2, 2026-10-20, renamed 2026-11-03;
+        // JARVIS-API section 147): the PC's twenty-five questions in seven
+        // sections, its read-only plan and one progress line. An ordinary
+        // Settings row on the phone (SettingsScreen.kt, item
+        // "setup-questionnaire", always drawn), so "open personalize jarvis"
+        // lands on it rather than the top of Settings; the changes themselves
+        // are made on the PC.
         "setup-questionnaire" to Where.Go(Screen.SETTINGS, "setup-questionnaire"),
         // "All features and abilities" (2026-10-22, #749): the phone's own
         // directory row (SettingsScreen.kt, item "all-features"), so "open all

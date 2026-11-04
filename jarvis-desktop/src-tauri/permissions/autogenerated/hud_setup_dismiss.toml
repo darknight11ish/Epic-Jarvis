@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hud-setup-dismiss"
+description = "Enables the hud_setup_dismiss command without any pre-configured scope."
+commands.allow = ["hud_setup_dismiss"]
+
+[[permission]]
+identifier = "deny-hud-setup-dismiss"
+description = "Denies the hud_setup_dismiss command without any pre-configured scope."
+commands.deny = ["hud_setup_dismiss"]

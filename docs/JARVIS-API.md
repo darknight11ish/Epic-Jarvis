@@ -2502,6 +2502,91 @@ link and let going quieter through.
   or during the hours, stays; and a tap on Standby while already on standby
   (`"Already standby."`) records nothing.
 
+### The standby hours - `[power]` in the owner's settings file (2026-11-03)
+
+The owner asked for this in his own words: *"jarvis should have the ability to
+offload the gpus during standby hours: can i set standby hours for you?"*, and
+chose "Unload the GPUs in my hours" - in the hours he sets, Jarvis unloads the
+model from the cards, and the next question wakes it (a few seconds slower).
+
+**The keys were already there and were read by nothing.** `[power]` has carried
+`schedule_enabled`, `quiet_start`, `quiet_end`, `schedule_mode` and `idle_mode`
+since before this change, and the file itself said so: `schedule_mode` and
+`idle_mode` were annotated `# not read`. `jarvis_power.current()` returned a
+hard-coded `"quiet"` inside the window and never called `should_standby()` at
+all, so neither key could do anything. `jarvis_power` now honours both: inside
+the window it returns `schedule_mode` (`"quiet"` or `"standby"`), when the idle
+timer runs out it returns `idle_mode`. A word the file cannot mean (a typo,
+`"active"`, an empty string) reads as `"quiet"`, so a bad edit cannot free a
+card the owner did not ask to free.
+
+**A mode the owner CHOSE always wins.** The rules only apply on top of
+`active`, so Quiet chosen by hand is never deepened to Standby, and an explicit
+Standby is never softened. A change made by anything other than the clock sets
+a `manual` flag that stops the window overruling it until the clock's answer
+next changes - which is what the settings file already promises at line 1492
+("a person's explicit choice always beats an automatic one").
+
+**`jarvis_power.enforce()` is what actually frees a card.** `current()` stays a
+pure function of the clock; a mode reading "standby" unloads nothing by itself.
+`enforce()` asks `jarvis_power_switch.set_mode("standby", why="the standby
+hours")` - the one function in this repository that unloads, the same call a tap
+on the Standby button makes - and passes `force=True`, because inside the
+window `current()` already READS standby while the stored mode is still
+`active`; without it, `set_mode` answers "Already standby." and frees nothing.
+At the window's end it wakes only a standby its own rules made
+(`status()["why"] == "the standby hours"`), the same ownership rule §21.8 uses,
+and that wake runs the same warm-up.
+
+**Nothing is unloaded while something is using it.** `jarvis_power.in_flight()`
+returns a reason or `None`: a multi-step task (`jarvis_task_control.running()`),
+a turn being answered (`jarvis_events.activity()` says `thinking`, `speaking` or
+`working`), a Live conversation (`jarvis_chatbot`'s session in the states
+`jarvis_chatbot_routes.LIVE` names, plus the comparison and support lanes), or a
+waiting approval card (`jarvis_gate.pending()`). When one holds, `enforce()`
+changes nothing, records the reason in `status()["last_hold"]`, and tries again
+on the next tick. The same guard is in `jarvis_power_switch.set_mode()`, before
+the card and again after it, so a tap on Standby is refused for the same reason
+- 409 with a plain sentence, and nothing unloaded.
+
+**`/api/status` and `jarvis_power.status()` gained keys (additive).**
+`asked_for` (`"quiet"`/`"standby"`/`""`) and `asked_why` say what the clock
+wants now; `schedule_mode` and `idle_mode` say what the file would drop to;
+`keeper` says whether the ticker is running; `last_unload` carries what the last
+standby freed (`unloaded`, `still_loaded`, `also`, `note`, `at`) and
+`last_hold` why a standby was held off (`held`, `said`, `at`). Every one is
+optional and additive; a client that ignores them behaves exactly as before.
+
+**The setting is four rows in `jarvis_limits.LIMITS`**, so both apps draw it
+from the one table with no client change (`kind` is `bool` or `time`, `app` is
+`"both"`, `pc_only` is False):
+
+| Row key | `[power]` key | Default | The owner reads |
+|---|---|---|---|
+| `standby_hours_on` | `schedule_enabled` | `false` | "Keep Jarvis quiet during my hours" |
+| `standby_hours_unload` | `schedule_mode` | `"quiet"` | "Unload the graphics cards during my hours" |
+| `standby_hours_start` | `quiet_start` | `"23:00"` | "My hours start" |
+| `standby_hours_end` | `quiet_end` | `"07:00"` | "My hours end" |
+
+`standby_hours_unload` is a switch over a WORD: `on_text="standby"`,
+`off_text="quiet"`. All four carry `always_asks=True`, so a change goes to the
+`change_own_config` card (tier `ask`) in either direction - including a time -
+because `jarvis_power`'s own docstring says changing the RULES waits while
+changing the mode does not. Setting a value to what it already is raises no
+card. **On a PC that never touches it nothing changes:** `schedule_enabled` is
+`false`, so the window is not looked at and the ticker is never started.
+
+**Honest limits.** The window frees the cards through the existing standby path,
+so everything §21.8 says about standby applies: the first question after the
+hours is slower while the model loads (measured 5-15 s on this PC's card), Live
+cannot start while standby is unloading, and a window that begins mid-answer
+waits for the answer. "Notifications go quiet" is what standby already does to
+Jarvis's own speech (the arbiter refuses to speak in `quiet` or `standby`,
+`jarvis_arbiter.py:181`); the PC's toast notifications are a SEPARATE feature
+(the `notif_quiet_*` rows, §"the quiet hours (on your PC)") and this setting does
+not touch them. The ticker checks the clock every 30 s, so an edge is acted on
+within half a minute rather than exactly on the minute.
+
 <!-- ===== task controls, notes, power (2026-09-23) - end ===== -->
 
 ---
@@ -5960,8 +6045,8 @@ repeating job then moves to its next time - never once per missed time.
 |---|---|---|---|
 | `GET /api/schedule` | - | 200 `{"available": true, "now", "tz", "jobs": [job], "todo": [job], "went_off": [job], "lists": [{"name", "title", "open"}], "running", "limits"}`; 503 `{"available": false, "error": <exception name>}` without `jarvis_schedule.py` | Token + origin. `jobs`: timers, alarms, reminders and repeating jobs that are active, paused or waiting for a card, soonest first. `todo`: the open to-do items of every list, oldest first (each with its `list`). Since 2026-09-25 (21.9): `went_off` - timers, alarms and reminders that went off in the last hour and are not snoozed, newest first, at most five; `lists` - the named lists with open items. An older PC sends neither. |
 | `GET /api/schedule?id=<id>` | - | 200 `{"available": true, "job": job}`; 404 `{"reason": "no_such_job"}` | ONE job - also one that went off in the last day (kept 24 hours). How an app reads a notification's words. |
-| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` · `{"kind": "reminder", ..., "action": {...}}` (a reminder that opens something or asks to run one task: 21.11) | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. |
-| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, and since 2026-10-14 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-14 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
+| `POST /api/schedule/add` | `{"kind": "todo", "text", "list"?}` (`list`: a named list, 21.9) · `{"kind": "timer", "seconds", "text"?}` · `{"kind": "alarm" \| "reminder", "at": <epoch seconds>, "text"?}` · `{"kind": "alarm" \| "reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}` (since 2026-09-28, section 83: read on THIS PC's clock; 200 adds `"said"`, "Reminder set for 14:00 on Monday 12 October."; 400 for a time that has passed or a date not on the calendar) · `{"kind": "alarm" \| "reminder", "repeat": rule, "text"?}` · `{"kind": "reminder", ..., "action": {...}}` (a reminder that opens something or asks to run one task: 21.11) · `{"kind": "reminder", ..., "steps": [...]}` (a reminder with PARTS - a routine, 21.15) | 200 `{"ok": true, "job"}` - since 2026-09-26 also for a plain repeating alarm or reminder and the standby schedule, with `"waiting": false` and `"said"` naming the next times; **202** `{"ok": true, "waiting": true, "job", "said"}` for a repeat that waits for its card (a briefing); 400 `{"ok": false, "error": <sentence>}`; 409 a list is full | No card for anything that goes off once, and (2026-09-26) none for a plain repeating alarm, reminder or standby schedule. A repeating briefing or "tell me when" raises ONE card and is set up only on its yes. Both apps add a to-do item here, a one-off reminder from "Photo to reminder" (section 83, the owner's tap),, and (since 2026-09-25) a morning briefing that repeats - `{"kind": "briefing", "repeat": rule}`, section 22; timers and reminders are said or typed to Jarvis. Since 2026-11-03 a REMINDER may carry `"steps"` - up to twelve parts, each with its own time and its own buttons (21.15); a routine is still ONE job and still needs no card. |
+| `POST /api/schedule/act` | `{"id", "do": "pause" \| "resume" \| "delete" \| "done" \| "add_time" \| "snooze", "seconds"?}` · `{"do": "clear_list", "list", "count"}` · `{"do": "answer", "id", "button": <index>, "step"?: <index>}` (21.14, and 21.15 for `step`) · `{"do": "edit", "id", "steps"?: [...]\|null, "action"?: {...}\|null, ...}` (21.14) | 200 `{"ok": true, "id", "said"}` (`snooze` adds `"job"`: the copy, and `"already": true` when it was snoozed already; `answer` adds `"step"` for a routine); 404 `{"reason": "no_such_job"}`; 409 not possible for that job (`done` on a timer, pause on a to-do, time below nothing, snooze on something that has not gone off, a part that has not come up yet, and since 2026-10-14 every verb but `snooze` and `delete` on a job that has already gone off - "It has already gone off."); 400 anything else | ONE job, at once, no card - it only makes things quieter, or (snooze) sets the same thing to go off once more. **No "delete all"**: `id` must be one job id (`s` and ten hex digits). The one other form is `clear_list` (21.9): every item on ONE named list, only with the `count` the app showed, never the to-do list. Both apps hold every one on a stale link. Deleting a repeat whose card is still up withdraws it: approving that card then sets nothing up. Since 2026-10-14 (DEF-008, the owner's decision) **`delete` also acts on a job that has gone off**: it is one the apps SHOW under "Just went off", and it is kept for `FIRED_KEEP` (a day), so the route reaches back the same day `snooze` does. `snooze` and `delete` are the two verbs routed before the scheduler's state gate; nothing else changed. |
 
 A `job`:
 
@@ -5996,6 +6081,14 @@ A `job`:
                                   answer (21.14). ABSENT on every other job.
  "answers": [{...}],              the answers already given, oldest first (21.14).
                                   ABSENT until the first one.
+ "steps": [{...}],                a routine's PARTS, in order (21.15). ABSENT when there
+                                   are none, which is every job written before 2026-11-03.
+ "steps_parts": 4,                how many parts there are, for "2 of 4" in a title
+ "steps_cursor": 1,               which part is current, 0-based
+ "missed_parts": 2,               how many parts were skipped while the PC was away
+                                   (21.15). ABSENT when none were.
+ "steps_unreadable": true,        the stored parts could not be read, so the row fires as
+                                   an ordinary reminder and draws no part UI
  "created", "source": "quick"|"tool"|"app"}
 ```
 
@@ -6013,7 +6106,9 @@ first time it goes off, and `times` appears only when there is more than one -
 an ordinary rule's block is byte for byte what it was. Limits: 300
 characters of words, 100 timers and reminders, 300 open to-do items, a
 timer up to 24 hours, a time up to a year ahead - each said in a sentence
-when reached.
+when reached. Since 2026-11-03 a routine adds its own ceiling, reported in
+`limits` beside the rest: `"steps": 12`, how many parts one reminder may
+have (21.15).
 
 ### 21.3 The card for a repeat that reads (the briefing, "tell me when")
 
@@ -6317,6 +6412,11 @@ the times stay, so a timer still counts down.
   as new kinds (`register_kind`), not as schedulers of their own. Sleep mode
   now has, as the standby schedule (21.8), and so has the morning briefing
   (section 22).
+- **A routine (21.15) has its own gaps, all of them small and all of them
+  stated there**: the Windows toast names the part only in words (it has no
+  per-part buttons), the phone shows a part only while connected, and a part
+  whose question is never answered keeps its routine waiting instead of
+  silently moving on.
 
 ### 21.10 "Also on my phone" (added 2026-09-26, the phone only)
 
@@ -7143,10 +7243,19 @@ and the `ask` kind (it refuses the block at save rather than storing something i
 cannot draw), so a code rollback leaves every job readable.
 
 **Not in this slice, said plainly:** a button that opens a file or a page (see
-above), editing an existing reminder's question or buttons (the form adds one;
-the editor does not change it yet), a builder on the phone (it answers; it does
-not create — the reason is in `docs/ARCHITECTURE.md` §8), and answer buttons on
-the Windows toast.
+above), a builder on the phone (it answers; it does not create — the reason is in
+`docs/ARCHITECTURE.md` §8), and answer buttons on the Windows toast.
+
+**Editing one, since 2026-11-03.** The one gap this paragraph used to name —
+*"editing an existing reminder's question or buttons (the form adds one; the
+editor does not change it yet)"* — is **closed**. `POST /api/schedule/act
+{"id", "do": "edit", "action": {...}}` revalidates through the same `_clean_action`
+the add door uses, so a question that could only be fixed by deleting the
+reminder and retyping it can now be edited in place. It is **cardless**, like the
+buttons themselves: changing a question changes nothing about what the owner is
+allowed to do, and the block was already cardless when it was created. `"action":
+null` takes it away. A `repeat` change still raises its ONE `schedule_repeat` card
+(202) and is unchanged. The same edit door carries a routine's `steps` (21.15).
 
 **The repeat grammar the same request asked for** (this section's other half).
 On top of `every day`, `every weekday`, `every week on chosen days` and `every N
@@ -7173,7 +7282,7 @@ it was not there (`jarvis_schedule.check_rule` knew four kinds, none of them
 monthly); it is here now, and `RULES`' own refusal sentence names every kind so a
 mistake is answerable.
 
-Tests: `backend/test_schedule_ask.py` — 152 checks over the block at save and at
+Tests: `backend/test_schedule_ask.py` — 155 checks over the block at save and at
 read, the three button verbs, the rails, firing with no card, every answer path,
 a snoozed question coming back as a question, the four destinations (with the
 journal faked, so nothing on the owner's PC is touched), the 40-answer bound, the
@@ -7181,6 +7290,185 @@ route, the audit never carrying a word, and the whole grammar with its plain
 words and its end date really stopping a repeat.
 The PC's own half is pinned in `hud_schedule.rs` and `brain/schedule.rs`; the
 phone's in `ScheduleTest`.
+
+### 21.15 A reminder with PARTS — routines (added 2026-11-03)
+
+The owner asked for multi-part reminders and routines on 2026-11-02; Gemini's
+rulings Q8/Q9 chose **Option A**: one reminder holds up to twelve PARTS, each
+with its own time and its own buttons, in the **same row** of `schedule.db` — not
+a parent job with children. One row means every path that already walks a row
+(snooze, the repeat card, `next_due`, the HUD's Coming up, the phone's list) keeps
+working untouched; a parent with children would have needed a cascade rule in
+every one of them.
+
+**The stored shape** — two nullable columns on `jobs`, appended to the migration
+list exactly as the sixteen before them were:
+
+```
+steps = [                                   2..12 parts, in order
+  {"id": "p1",                              stable inside this row, "p" + 1-based index
+   "label": "start the laundry",             the owner's words for THIS part, one line
+   "offset_min": 0,                          minutes after the occurrence, or null
+   "at": null,                               "HH:MM" on the occurrence's own day, or null
+   "ask": {...}}                             OPTIONAL - the existing action block
+]
+step_state = {"anchor": <epoch>, "cursor": 1,
+              "parts": [{"fired": <epoch>|null, "done": <epoch>|null, "missed"?: true}]}
+```
+
+`steps` is the immutable shape and `step_state` the moving part, which is why they
+are two columns and not one: a read door decodes the shape without trusting the
+state. Both are NULL on every other row, so an old file opens, an old reader
+ignores them, and a code rollback stays safe — the same contract `action` and
+`answers` came in on. `parts` is always the same length as `steps`; a stored pair
+that disagrees is treated as unreadable (§ below).
+
+**A part's block is the existing one, not a second one.** `ask` is checked by
+`_clean_action` — the same validator a reminder's own `action` uses — so a part is
+either a QUESTION (the 21.14 block: one to three buttons, the 24-character label,
+the no-duplicate-labels rule, a `record` button with one of the four destinations
+from `_clean_record`) or one `run-task` (the closed task, or since #1119 the
+owner's own words). Nothing about a part is parsed twice or reimplemented. A part
+with no block is a plain checklist line and gets the ONE implicit button
+`{"label": "Done", "does": "done"}`, so both apps draw the same thing and no new
+verb is needed.
+
+**Two kinds of part, and a mixed routine is legal.**
+
+* **TIMED** — `offset_min` (minutes after the occurrence's anchor) or `at` (a
+  clock time on the occurrence's own day). Its own moment is its own notification.
+* **UNTIMED** — `offset_min: null`, `at: null`. It never touches `due`; it is
+  surfaced by the answer to the part before it. The FIRST part is the exception:
+  the start time is the moment the routine begins, so part 1 is what the start
+  announces.
+
+In a mixed routine the timed parts fire **by the clock whether or not the untimed
+one was answered** — said here rather than left to be discovered.
+
+**One notification per part, with no second scheduler.** `due` means *the next
+moment this row has something to say*: it is the earliest part's moment on
+creation, moves to the next timed part's moment at each fire, and goes NULL when
+nothing is left on the clock. `tick` therefore fires part 2 and part 3 through the
+same loop that fires a plain reminder, and `next_due` — what the loop sleeps on —
+needs no change at all. The event carries two additive keys an old client ignores:
+`"step": 2` and `"parts": 4`, so both apps can say "Morning routine · 2 of 4" and
+put THAT part's buttons on the notification.
+
+**Dedupe is on disk.** `step_state.parts[i].fired` is the mark, written in the same
+`UPDATE` as `due`, so a restart, a second process or a retry inside one process
+cannot notify the same part twice. The in-memory `_acted` set is **not** used for
+parts: it is for the (job, due) pair a *card* was asked about.
+
+**A part that was missed while the PC was away.** A part is a distinct action
+(laundry → dryer → fold), not a repeat occurrence, so the 2026-09-26 "once, late,
+never once per missed time" rule does not literally apply to it: each part gets its
+own notification, marked `missed at 08:45`. But unbounded catch-up is how a feature
+becomes a nuisance, so there is a hard guard: a part whose moment is more than
+`PART_LATE_MAX` (**12 hours**) before now is marked `missed`, **not** notified, and
+counted in the row's `missed_parts`. A week-long shutdown times twelve parts times
+a daily rule is therefore not eighty-four notifications.
+
+**Answering a part.** `POST /api/schedule/act {"id", "do": "answer", "button": n,
+"step": k}` — one optional index, no new verb and no new route. `k` is an index
+into `steps`, never a label, the same rule `button` keeps. `step` may be left out,
+and then the part that is current is answered. Each answer is ONE log line in the
+existing `answers` column with a `step` key: one log, one bound (`MAX_ANSWERS`),
+one `_view` field, no second history. Answering an untimed part surfaces the next
+one immediately — that tick of the log **is** the sequencing. 409 "That part has not
+come up yet." when the part has not fired.
+
+**Only a `run-task` part raises a card.** A part that asks a question raises
+nothing — an answer is a log line, cardless — and a part that runs a task raises
+the existing `schedule_action` card, once, for THAT part, through `_fire_action`
+unchanged. Its `(jid, due)` dedupe pair carries the part's index (`(jid, due,
+step)`), or a routine's second `run-task` part at another time would be refused as
+a duplicate and silently never ask. The card's `prompt` names which part it is for;
+its `detail` carries ids, the closed-name task and the index — never the owner's
+words.
+
+**A repeat re-seeds each occurrence.** After the last part a repeating routine
+starts its next occurrence with a fresh `step_state` anchored at that occurrence,
+so yesterday's parts are never "done" today. A routine's LAST part Done ends the
+routine exactly as any repeating reminder's Done does — one button, one meaning
+(Q3). A snoozed routine's copy carries `steps` verbatim and a **fresh** state
+anchored at the copy's own `due`, so a snoozed routine runs again from part 1.
+
+**Creating one in chat is cardless, and leaves one Undo receipt.** Two sentence
+forms, one intent, no card:
+
+* a **timed chain** — *"remind me at 8 to start the laundry, then at 8:30 move it
+  to the dryer, then at 9 fold it"* — each clause becomes a timed part; `+45m` and
+  *"45 minutes later"* work too;
+* a **checklist** — *"morning routine at 7: 1. meds 2. keys 3. badge"*, also
+  *"routine: meds, keys, badge"* and *"checklist …"* — part 1 is the start time and
+  the rest are untimed. **With no time anywhere the answer is ONE question**
+  ("When should the first part come up?") rather than a guess: a routine that fired
+  at midnight because the sentence had no time is the worst failure this feature
+  can have.
+
+The reply is the numbered echo, built by one function (`_step_words`) so chat and
+both apps say the same words:
+
+```
+Morning routine set for 08:00 today, in 3 parts:
+  1. meds - 07:00
+  2. keys - after 1
+  3. badge - after 2
+Say "cancel that" to undo, or edit it under Coming up.
+```
+
+Creating is cardless because a one-off reminder has needed no card since
+2026-09-25. It also writes **ONE `jarvis_receipts` entry** (`tool_name`
+`schedule_routine_create`), so **Undo outlives the 120-second "cancel that"
+window** and survives a restart through the registered restorer. That entry is
+written AFTER the row exists — a deliberate, stated deviation from `record()`'s
+"before the change" docstring, because a creation has nothing to snapshot before
+it and the id is what the receipt needs; if `record()` returns `""` nothing is
+lost, because "cancel that" still works for its own two minutes. **Pressing Undo
+raises the ordinary `undo_action` card**: creation is cardless, undoing it is a
+mutating action, and the one permission model is not bypassed.
+
+**Editing one.** `POST /api/schedule/act {"id", "do": "edit", "steps": [...]}` —
+the same `EDIT_KEYS` door as `text`/`when`/`repeat`, checked by the same
+`_clean_steps` the add door uses, all-or-nothing, and cardless. `"steps": null`
+clears the parts, leaving an ordinary reminder. One edit may not say both a
+`repeat` and its `steps`: both move where the occurrence starts, and one edit
+cannot say which wins.
+
+**The phone answers parts and never creates or edits one** — the standing
+one-sided rule in `docs/ARCHITECTURE.md` §8, and for the reason written there: a
+part's destination can be this PC's Obsidian vault or a goal/habit id.
+
+**Privacy.** The audit line for an answered part carries the id, the INDEX and what
+the button does — never the question, a label or a written line. A part's label is
+the owner's own words like the row's `text`, so App lock and the hidden lists blank
+it exactly the same way.
+
+**Honest limits, said plainly.** The PC is still the clock (21.1): a part that
+would have gone off while the phone was away is not pushed later, it is simply
+later. The Windows toast names the part in words and carries no per-part buttons in
+this build — the HUD's row and the phone's notification are where a part is
+answered. A part with three buttons leaves no Stop on the Android notification,
+which is already true of an `ask` reminder (21.14). A part whose question is never
+answered keeps its routine waiting rather than guessing that it was done: the
+routine's own Done on the last part is what ends it. And a routine whose parts
+never get answered does not roll on to the next occurrence — say Done on it, or
+delete it.
+
+**Back-compat and rollback.** A job with no parts carries **no new key at all**, in
+the payload or in the event, and `status()` gains the additive marker `"steps":
+true` beside `"phase2"`, `"actions"` and `"asks"` — an older backend would
+silently drop `steps`, so a newer UI hides the parts editor instead of pretending.
+`limits.steps` is 12.
+
+Tests: `backend/test_schedule_steps.py` — 214 checks in named groups: the schema
+and its all-or-nothing ALTER, every save refusal, a damaged block firing as an
+ordinary reminder, one notification per part with `due` walking, the missed-policy
+both ways, sequential surfacing, the on-disk dedupe across a restart, the repeat
+re-seed, `step` routing and its 400/409, one card per `run-task` part and none for
+anything else, the edit door, the additive view, the audit never carrying a word,
+both chat forms with the numbered echo and the Undo receipt (including undo after
+a restart), and a reminder with no parts behaving exactly as it did before.
 
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
@@ -22177,11 +22465,11 @@ The limits are not a module each: they are **rows in one table**
 (`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
-the owner's own words for it. Ten of them (`jarvis_limits.LIMITS` holds these
-ten written by hand, and `_notify_rows()` appends **seven more** notification
+the owner's own words for it. Fourteen of them (`jarvis_limits.LIMITS` holds these
+fourteen written by hand, and `_notify_rows()` appends **seven more** notification
 rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
-the three Quiet-hours rows - so the table a client receives is seventeen rows
-long. Only the ten are listed here; the seven are built from
+the three Quiet-hours rows - so the table a client receives is twenty-one rows
+long. Only the fourteen are listed here; the seven are built from
 `_NOTIFY_ROWS` and are not copied into this document, for the same
 no-second-copy reason as the numbers below):
 
@@ -22197,6 +22485,17 @@ no-second-copy reason as the numbers below):
 | `tag_suggest_age` | how long a chat must sit untouched before the overnight tag suggester may read it | neither direction asks | desktop |
 | `memory_people` | whether a model reads what the owner saves, looking for people and things | turning it ON | phone |
 | `voice_bar` | how sure the voice check must be that it is the owner's voice | a SMALLER number (a lower bar means more clips count as the owner's voice) | both |
+| `standby_hours_on` | whether the owner's hours apply at all (`[power].schedule_enabled`, "Power" in the same section) | **neither** - but it asks in BOTH directions: it changes the RULES that put Jarvis under on their own, which `jarvis_power`'s docstring says waits | both |
+| `standby_hours_unload` | whether those hours unload the graphics cards (`[power].schedule_mode`, a word - `standby` or `quiet`) | **neither** - asks in both directions, same reason | both |
+| `standby_hours_start` | when the hours begin (`[power].quiet_start`) | **neither**, and a time is not a number: asks in both directions | both |
+| `standby_hours_end` | when the hours end (`[power].quiet_end`) | **neither** - asks in both directions | both |
+
+The four `standby_hours_*` rows are the one group whose "loosening" column says
+nothing useful, so each carries `always_asks` instead: moving a window frees no
+card and loosens nothing, and it still decides when one is freed, so the row
+goes to the `change_own_config` card either way (see the standby-hours section
+under Power). Their `kind` is `bool` or `time`, the two kinds both clients
+already draw, which is why adding them needed no client change at all.
 
 Two fields, two different jobs, and the difference is worth knowing when you add a
 row: **`app` is what each screen draws** (`"desktop"` never reaches the phone at all,
@@ -26031,22 +26330,27 @@ and the phone's read-only card call these routes now, and nothing about the
 permission model changes.
 
 **It is a GUIDE, not a second settings system.** `backend/jarvis_setup.py`
-(shipped whole, twin in `jarvis-backend/`) holds 14 ordered questions and their
-options as pure data. Every option maps to an EXISTING setter: the
-`BoolSetting`s and named setters in `jarvis_settings_registry.py` (which call
-the exact function the matching Settings control calls, with the same tier
-check and the same words), plus `jarvis_asks_first.py` for the "how careful"
-bundle and the reading tools. It invents no gate action or tier, adds no latch,
+(shipped whole, twin in `jarvis-backend/`) holds 25 ordered questions in seven
+sections, and their options, as pure data. Every option maps to an EXISTING
+setter: the `BoolSetting`s and named setters in `jarvis_settings_registry.py`
+(which call the exact function the matching Settings control calls, with the
+same tier check and the same words), plus `jarvis_asks_first.py` for the "how
+careful" bundle and the reading tools. It invents no gate action or tier, adds no latch,
 switches no model, and never calls a preset's apply route: the "what will you
 mostly use it for" answer is a **recommendation** only (its `id`/`title` come
 from `jarvis_presets.PRESETS`; applying one stays the preset selector's own
 `POST /api/work/apply` and its ONE `switch_model` card).
 
+**Wave B (2026-11-03) renamed the card "Personalize Jarvis"** and widened the
+question set to these 25 in seven sections. The answers already saved still
+prefill it, and a partial retake now keeps every earlier answer: the PC merges
+what was submitted into what was saved instead of replacing it.
+
 **The switch/flag:** none of its own. The routes are installed by
 `backend/setup.patch` (ONE install block, after `presets.patch` and
 `app-control.patch`, immediately before `plugin-loader.patch`, whose hunk is
 re-anchored onto setup.patch's last two printed lines). When `jarvis_setup.py`
-is missing, the three routes are simply absent and the boot banner says so.
+is missing, the four routes are simply absent and the boot banner says so.
 Nothing about the questionnaire is on by itself: it is only read when an app
 asks, and an app that never calls it changes nothing.
 
@@ -26054,8 +26358,11 @@ asks, and an app that never calls it changes nothing.
 
 Read-only, behind the same origin and token checks as every route:
 
-    {"available",
-     "questions": [{"id", "title", "help", "multi",
+    {"available", "version": 2, "completed_version": 1, "runs": 3,
+     "dismissed_at": <float or null>, "answered_count": 9,
+     "in_progress": {"section", "question", "started_at", "draft_answers"},
+     "sections": [{"id", "title"}],
+     "questions": [{"id", "title", "help", "section", "version", "multi",
                     "options": [{"id", "label", "detail"}], "all_none"}],
      "current": {"<change key>": <current value>},
      "answers": {<question id>: <option id> | [<option id>...]},
@@ -26069,6 +26376,24 @@ read is LEFT OUT rather than guessed. For the "what asks first" rows it is a
 boolean: `true` means that action asks first today (its tier in
 `jarvis-framework.toml` is `ask`). `answers` and `completed_at` are the last
 accepted run, for a re-run's prefill and for a first-run offer to show once.
+
+`version` is the question-set version (`2` today), and `completed_version` is
+the one the owner last finished or accepted (`0` when never, `1` for a file
+completed before the new questions - so the first launch after deploy offers
+the new ones once, instead of claiming the old file is current). `runs` is how
+many applies have been accepted. `dismissed_at` is when "Not now" was last
+pressed, or `null`. `in_progress` is where the desktop card is
+(`{section, question, started_at, draft_answers}`), or `{}` when it has not
+said. A file from before versioning reads as `version 1`, with
+`completed_version 1` when it has a `completed_at` and `0` when it does not;
+reading never writes.
+
+`sections` is the seven `{id, title}` pairs in card order, and every question
+carries its own `section` and `version`, so neither app types a section id or a
+question count. The PC holds 25 questions in seven sections. `answered_count`
+counts the question ids that have an answer in `answers` or in the card's draft
+- it is the one number both apps and the HUD say "9 of 25" from, and an id that
+is no longer in the quiz does not count.
 
 **GET is metadata only** (audited 2026-10-20, Gemini Area 1B): it returns
 question text and setting values, and it reads no folder, no account and no
@@ -26155,56 +26480,151 @@ closed when the PC cannot tell where the request came from. `peer is None` is
 only the project's documented in-process convention, never how a routed
 request is treated.
 
-### The apps (S2, added 2026-10-20)
+### `POST /api/setup/progress` - where the owner is in the card (desktop only)
 
-**Desktop Settings → "First-time setup".** Three new files and one Rust command
+One of three small bodies:
+
+    {"section": "learning", "question": "reworded_memories",
+     "draft_answers": {"reworded_memories": "on"}}
+        -> 200 {"ok": true, "in_progress": {...}}
+    {"dismiss": true}
+        -> 200 {"ok": true, "dismissed_at": 1793...}
+    {"keep_current": true}
+        -> 200 {"ok": true, "completed_version": 2, "dismissed_at": 1793...}
+
+The first records where the owner is: the section and question the card has
+open, and the answers drafted so far. `section` is optional, and a value that
+is not one of the seven falls back to the question's own section. Every draft
+answer is cleaned to the questionnaire's own question ids, and only a string or
+a list of strings/numbers is kept - an unknown id or a value of another shape
+is dropped, never stored. An explicit empty `draft_answers` (`{}`) clears the
+stored draft; a non-empty one is merged, so a choice staged in chat and the
+card's own answer both survive.
+
+`{"dismiss": true}` stores `dismissed_at` - the 24-hour "Not now".
+`{"keep_current": true}` stores `completed_version = QUIZ_VERSION` and the same
+timestamp without touching one answer or one setting: it is "Keep current
+settings", not a quiz answer. Both answer `{"ok": true}` with the fields they
+recorded.
+
+**It records the owner's own Option ids; it calls no setter, raises no card and
+never applies.** It is cardless and gateless on the PC: no approval card, no
+taint check, no gate action and no setter. The only file it writes is
+`setup.json`, through the module's one save, and the whole read document is
+written back, so `answers`, `completed_at`, `outcomes`, `completed_version`,
+`runs` and `dismissed_at` are preserved by construction. The draft is never
+applied: applying stays `POST /api/setup/apply`, the card's two-press action.
+
+**It is desktop-only.** A request from another device is **`403`** with
+`"pc_only": true` and writes nothing - the same `from_this_pc` rule
+`/api/setup/apply` uses for its PC-only answers. The desktop card is the
+route's only caller for a place and for the two buttons. The HUD banner's
+"Not now" reaches it through the shell's `hud_setup_dismiss` command, because
+the HUD holds no token and cannot POST. The phone reads progress from
+`GET /api/setup` and never moves it.
+
+A body that is not a JSON object, or one that carries neither a known
+`question` nor `dismiss`/`keep_current`, is **`400`** in plain words. A missing
+or wrong token is **`401`**, before anything is read. **`503`** means the
+progress could not be saved, so nothing was recorded.
+
+### The apps (S2, added 2026-10-20; "Personalize Jarvis" from 2026-11-03)
+
+**Desktop Settings → "Personalize Jarvis".** The same card, upgraded in place:
+no new window and no second page. Three files and one Rust command
 (`jarvis-desktop/src/setup-questionnaire.js`, `setup-bridge.js`,
-`setup-settings.js`, `src-tauri/src/setup_questionnaire.rs`). The card shows all
-fourteen questions in the PC's order, with the last accepted answers as the
-prefill; changing an answer asks `POST /api/setup/plan` and draws every change
+`setup-settings.js`, `src-tauri/src/setup_questionnaire.rs`). The card shows
+the PC's 25 questions in its own order, split by its seven sections behind a
+row of section tabs, with the last accepted answers as the prefill. It opens
+stepped one question at a time ("Step through one by one"), with Back, Skip and
+Next; "Show all" draws the whole list instead. Skip leaves the question out of
+the submitted body, so the earlier answer survives. A "show only new /
+unanswered" filter shows a question that has no answer yet, or whose own
+`version` is newer than `completed_version`, and the count in its label is
+computed from that data, never typed. A "8 of 25 answered" line is counted from
+the draft. "Take it again" clears the draft and starts at the first question,
+and a partial retake now keeps every earlier answer, because the PC merges the
+submitted answers into the saved ones instead of replacing them.
+
+Changing an answer asks `POST /api/setup/plan` and draws every change
 in the PC's own sentence with its effect - **Instant**, **Asks you on a card**
 or **Blocked** - plus everything the PC says would not change and why, and the
 preset answer labelled a recommendation only. **A plan writes nothing and
-raises no card**, so it is asked whenever the answers change. The one write is
-a two-press action: "Apply these changes", then "Yes, apply them now". Only the
-second press builds and sends `confirm: true`; loading the card, reconnecting
-the link and changing an answer never apply anything. Applying is held while
-the event stream is stale (rule 4). The card says how long one approval card
-may wait, and while it runs it says the PC works through the changes one at a
-time. An outcome the PC reports as `asked-no-answer` is drawn as **still
-waiting** - never as done, never as failed - and the last run's outcomes are
-drawn from `GET /api/setup` exactly as the PC saved them. The Rust command
-sends only the three bodies, refuses `apply` unless its `confirm` argument is
-exactly `true`, and puts `confirm` in no other body; the page itself names no
-route and no gate action, so nothing here invents an action or a tier.
+raises no card**, so it is asked whenever the answers change. The one write to
+a setting is a two-press action: "Apply these changes", then "Yes, apply them
+now". Only the second press builds and sends `confirm: true`; loading the card,
+reconnecting the link and changing an answer never apply anything. Applying is
+held while the event stream is stale (rule 4). The card says how long one
+approval card may wait, and while it runs it says the PC works through the
+changes one at a time. An outcome the PC reports as `asked-no-answer` is drawn
+as **still waiting** - never as done, never as failed - and the last run's
+outcomes are drawn from `GET /api/setup` exactly as the PC saved them. The Rust
+command sends only the four bodies, refuses `apply` unless its `confirm`
+argument is exactly `true`, and puts `confirm` in no other body; the page
+itself names no route and no gate action, so nothing here invents an action or
+a tier. A plan or a progress note can never carry `confirm`.
+
+**Two buttons write progress, not settings.** "Not now" sends
+`{"dismiss": true}`, and "Keep current settings" sends `{"keep_current": true}`:
+neither carries an answer, calls a setter or raises a card, and the second is
+how the owner says they are happy as they are in one press. The stepper's own
+position is sent the same way, debounced, so the phone and the HUD can say
+where the PC's card is. None of this is held on a stale link: a position or a
+dismissal is not a change.
+
+**The rest of the desktop is the offer, never a second control.** While
+`completed_version` is behind `version`, the shell raises ONE quiet
+notification per launch - after the app has been up for a minute, and only if
+the notification store's `Setup` switch says yes (on by default; quiet hours
+hold it, because the quiz can wait). Its body is two counts and nothing else
+("9 of 25 answered. Finish now from the Settings card, or press Not now.") -
+never a question, never an answer. The HUD draws a banner with the same counts
+and two buttons: "Finish now" opens Settings at the card through the HUD's
+already-granted navigation, and "Not now" hides the banner for this launch and
+records the same 24-hour dismissal through the shell's `hud_setup_dismiss`
+command. The tray carries a "Setup unfinished — 9 of 25" row that opens the
+same card, and the row is absent, not greyed, once the quiz is done. Nothing
+steals focus: the Settings window opens only after the first-run walkthrough
+and when the owner presses "Finish now".
 
 **Phone: the same questions, read-only.** `net/SetupQuestionnaire.kt` and
 `ui/screens/SetupQuestionnairePlate.kt`, on Settings. It reads
-`GET /api/setup`, prefills the last accepted answers and may ask the read-only
-plan on one button, drawing the same effects and the same "would not change"
-reasons. **It has no apply path at all and never posts `/api/setup/apply`**, and
-the card says the changes are made on the PC. That is a decision, not a missing
-screen: applying calls the existing setters one at a time and waits on each
-existing card (a pass can take minutes), and several of those changes are
-PC-only by rules that already exist - `jarvis_asks_first` refuses a loosening
-request from any device but the PC. A phone button would either fail halfway or
-sit behind cards it cannot answer. `tools/check_parity.py` classifies
-`/api/setup` and `/api/setup/plan` as `ported` and `/api/setup/apply` as
-`deliberate`; `docs/ARCHITECTURE.md` section 8 records it with the reason.
+`GET /api/setup`, prefills the last accepted answers and draws the same 25
+questions split by the PC's own seven sections, behind a row of section tabs
+("All sections" first, then the PC's order). It may ask the read-only plan on
+one button, drawing the same effects and the same "would not change" reasons.
+ONE line says where the PC is: "Not finished - 9 of 25 answered. On the PC this
+is at question 8 of 25." while the set is unfinished, or "Finished <date>."
+once `completed_version` has reached `version`. It reads the answered count and
+`in_progress` from GET and never moves them: **it has no apply path and no
+progress path at all**, never posts `/api/setup/apply` or
+`/api/setup/progress`, and the card says the changes are made on the PC. That
+is a decision, not a missing screen: applying calls the existing setters one at
+a time and waits on each existing card (a pass can take minutes), and several
+of those changes are PC-only by rules that already exist - `jarvis_asks_first`
+refuses a loosening request from any device but the PC. A phone button would
+either fail halfway or sit behind cards it cannot answer.
+`tools/check_parity.py` classifies `/api/setup` and `/api/setup/plan` as
+`ported` and `/api/setup/apply` and `/api/setup/progress` as `deliberate` (the
+403 from another device is the enforcement, not this sentence);
+`docs/ARCHITECTURE.md` section 8 records it with the reason.
 
 **The questions are the PC's, in both apps.** Neither app hardcodes a question
-id, title or option. Both tests read the generated
+id, title, section or option. Both tests read the generated
 `backend/fixtures/setup_questions.json` (`tools/gen_setup_questions.py`, written
 from `backend/jarvis_setup.py`'s own `QUESTIONS`; the desktop suite runs
 `--check` and compares it to the live module), so a reworded question fails a
 test until the fixture is regenerated. The desktop suite is
-`jarvis-desktop/tests/setup-questionnaire.mjs` (the PC's real fourteen
-questions, the draft and "All"/"None", the read-only plan body, the one apply
-body, the stale-link gate, honest outcomes, the bridge's three calls, and
-source pins that no route or gate action is in the page and nothing applies on
-load); the Rust module carries its own body/timeout tests; the phone's is
-`SetupQuestionnaireTest.kt` (the same fixture, the prefill, the read-only plan
-and a pin that no apply path exists in the two phone files).
+`jarvis-desktop/tests/setup-questionnaire.mjs` (the PC's real 25 questions, the
+seven sections, the stepper's next-question rule, the "new / unanswered" filter,
+the draft and "All"/"None", the read-only plan body, the one apply body, the
+three progress bodies, the stale-link gate, honest outcomes, the bridge's four
+calls, and source pins that no route or gate action is in the page, nothing
+applies on load, and the HUD's one dismissal command is the only write the
+banner needs); the Rust module carries its own body/timeout tests; the phone's
+is `SetupQuestionnaireTest.kt` (the same fixture, the prefill, the read-only
+plan, the sections and the one progress line, and a pin that no apply or
+progress path exists in the two phone files).
 
 `backend/test_setup.py` is the proof, with no network, no model, no
 microphone and no owner's PC: every question/option maps to a real setter;
@@ -26216,8 +26636,21 @@ only the answers, and round-trips them for prefill; the module imports no
 model lane and no network, reads the gate's taint latch and never sets or
 clears it; the taint refusal (409) and the remote PC-only whole-refusal (403)
 happen before any setter; `pc_only` marks exactly the three PC-only families;
-GET exposes no path or account id; and the three routes keep the origin/token
+GET exposes no path or account id; and the four routes keep the origin/token
 order.
+
+`backend/test_setup_quiz.py` is the Wave B proof, with the same no-network,
+no-PC rule: the question set is 25 in seven sections with the 14 existing ids
+unchanged and in their order; every new `choice`/`number` change names a real
+Settings row and one of its own Option ids; a partial retake keeps every
+earlier answer, and an old three-key file reads as version 1 with
+`completed_version` 1; `progress()` writes only `in_progress` and preserves
+every other key, refuses a non-object and a body with nothing to record, cleans
+a bogus draft answer away, and is refused with 403 from another device; the
+progress route keeps the origin/token order and a bad body is 400;
+`{"keep_current": true}` sets `completed_version` without touching an answer or
+calling `apply()`; and the module still imports no model lane, switches no
+model, and `_run_setup_quiz` carries no `confirm`.
 
 typed text, and the patch's own pins (two routes, harness position, no
 install-block line, `_stack.py`'s RATCHET unchanged).

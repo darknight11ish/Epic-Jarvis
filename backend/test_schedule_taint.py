@@ -164,11 +164,13 @@ def t_the_column_is_declared_once():
     # appended: the list names every column added AFTER source_taint, in order,
     # so source_taint itself is pinned where it was and a column inserted
     # BEFORE it (the re-ordering this check is about) still fails.
+    # 2026-11-03: `steps` and `step_state` (multi-part reminders / routines) are
+    # appended after `answers`, in that order, for the same reason.
     order = [name for name, _typ in S._ADDED_COLUMNS]
     check("...and it is not a re-ordering of the columns before it",
-          order.index("source_taint") == len(order) - 4
-          and order[-3:] == ["action", "created_date", "answers"],
-          order[-4:])
+          order.index("source_taint") == len(order) - 6
+          and order[-5:] == ["action", "created_date", "answers", "steps", "step_state"],
+          order[-6:])
 
 
 def t_a_legacy_database_reads_trusted():

@@ -154,6 +154,13 @@ READ_ONLY_TOOLS = frozenset({
     # the acting half below.
     "self_portrait", "refresh_abilities",
     "conversation_find", "conversation_open",
+    # The Personalize Jarvis quiz tool (Wave B, 2026-11-03): it lists the
+    # questions, explains one from the real plan, and may stage ONE answer as a
+    # draft in the open desktop card. It never applies a setting - the owner
+    # presses Apply on the Settings card - so an answer that claims a setting
+    # was changed after only a draft was staged is exactly the false claim this
+    # set must not silence.
+    "setup_quiz",
 })
 
 #: The other half of the same classification (audit H4): every tool that can

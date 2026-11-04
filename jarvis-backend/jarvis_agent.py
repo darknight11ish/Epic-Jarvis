@@ -3224,6 +3224,158 @@ def _run_feature_guide(args: dict) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   "Personalize Jarvis" - the setup quiz, read and staged from chat
+#   (Wave B, 2026-11-03; architect ruling Q5)
+# --------------------------------------------------------------------------
+#
+# THE SAME SHAPE AS FEATURE_GUIDE_TOOL, and for the same reason: it lists what
+# this program already has and how a change would behave, so it is decided
+# under the gate's own read-only `skill_list` action (tier "auto", NO card) - no
+# new gate action, no new tier, no new patch.
+#
+# IT CANNOT APPLY ANYTHING. Its schema has no field that means "go ahead", and
+# its body never calls `jarvis_setup.apply()`. It reads the quiz (`state()` and
+# the real `plan()` for each option, so the effects it reports are the PC's own
+# sentences, never a paraphrase of a document), and it may STAGE a draft
+# answer through `jarvis_setup.progress()` - which writes only
+# `in_progress.draft_answers` in setup.json, changes no setting and raises no
+# card. The owner still presses Apply on the desktop Settings card.
+#
+# CLOUD TURNS CANNOT REACH IT: a cloud turn makes no tool calls at all (see
+# `postscript_lines`' own note about the relay), so this is offered to the
+# local model only - which is also where the owner's configuration belongs.
+SETUP_QUIZ_TOOL = "setup_quiz"
+
+
+def _setup_quiz_tool_text() -> str:
+    """The setup_quiz description, kept short like every tool text (the suite
+    holds every tool to 300 tokens). It says WHEN to call and, more
+    importantly, what it must not promise: chat explains and stages; the
+    Settings card is where answers are applied."""
+    return ("Explain the owner's Personalize Jarvis quiz and stage a choice in "
+            "it. Use when: the owner asks what the quiz asks, what a question "
+            "means, which option does what, where they left off, or says to pick "
+            "an option. Leave \"question\" out to list them; otherwise it is a "
+            "question id or the owner's words. \"staged_answer\" is one option "
+            "id: it stages the choice in the open desktop card only. It never "
+            "applies anything - the owner presses Apply on the PC.")
+
+
+def _setup_quiz_find(SU, words: str):
+    """The one question `words` names - by id, by title, or as a phrase inside
+    a title - or None. Never guesses: an ambiguous phrase matches nothing."""
+    text = " ".join(str(words or "").lower().split())
+    if not text:
+        return None
+    for q in SU.QUESTIONS:
+        if text == str(q["id"]).lower():
+            return q
+    for q in SU.QUESTIONS:
+        if text == " ".join(str(q["title"]).lower().split()):
+            return q
+    found = [q for q in SU.QUESTIONS
+             if text in " ".join(str(q["title"]).lower().split())
+             or text in str(q["id"]).lower()]
+    return found[0] if len(found) == 1 else None
+
+
+def _run_setup_quiz(args: dict) -> dict:
+    """Read the quiz, explain one question from its real plan, stage a draft.
+
+    READ-ONLY plus ONE cardless progress write. It lists the sections and the
+    questions (with the owner's current place and answer count), explains a
+    question's every option from `jarvis_setup.plan()` - the exact `effect` and
+    `pc_only` the PC's own setters imply - and may record the owner's choice as
+    a DRAFT through `jarvis_setup.progress()`. It never applies a setting,
+    never calls `jarvis_setup.apply()`, and raises no approval card.
+    """
+    try:
+        import jarvis_setup as SU
+    except Exception as exc:                       # noqa: BLE001
+        return {"ok": False,
+                "error": f"the setup questionnaire is not installed here "
+                         f"({type(exc).__name__})"}
+    try:
+        st = SU.state()
+    except Exception as exc:                       # noqa: BLE001
+        return {"ok": False,
+                "error": f"the questionnaire could not be read ({type(exc).__name__})"}
+    wanted = str((args or {}).get("question") or "").strip()
+    staged = str((args or {}).get("staged_answer") or "").strip()
+    out = {
+        "ok": True,
+        "version": st.get("version"),
+        "completed_version": st.get("completed_version"),
+        "answered_count": st.get("answered_count"),
+        "total": len(SU.QUESTIONS),
+        "in_progress": st.get("in_progress") or {},
+        "answers": st.get("answers") or {},
+        "note": ("Nothing is applied from chat. The owner presses Apply in the "
+                 "desktop Settings card."),
+    }
+    if not wanted and not staged:
+        out["sections"] = st.get("sections") or []
+        out["questions"] = [{
+            "id": q["id"], "title": q["title"], "section": q["section"],
+            "version": q["version"],
+            "answered": bool((st.get("answers") or {}).get(q["id"])
+                             or ((st.get("in_progress") or {})
+                                 .get("draft_answers") or {}).get(q["id"])),
+        } for q in SU.QUESTIONS]
+        return out
+    q = _setup_quiz_find(SU, wanted)
+    if q is None:
+        out["ok"] = False
+        out["error"] = (f"no single question matches {wanted!r}; leave \"question\" "
+                        "out to list them")
+        out["questions"] = [{"id": q2["id"], "title": q2["title"]}
+                            for q2 in SU.QUESTIONS]
+        return out
+    out["question"] = {"id": q["id"], "title": q["title"], "help": q["help"],
+                       "section": q["section"], "version": q["version"],
+                       "multi": bool(q["multi"])}
+    rows = []
+    for option in q["options"]:
+        row = {"id": option["id"], "label": option["label"],
+               "detail": option.get("detail", ""), "effects": [], "skipped": []}
+        try:
+            planned = SU.plan({q["id"]: option["id"]})
+        except Exception as exc:                   # noqa: BLE001
+            row["error"] = (f"its plan could not be read "
+                            f"({type(exc).__name__})")
+            rows.append(row)
+            continue
+        row["effects"] = [{"sentence": c.get("sentence", ""),
+                           "effect": c.get("effect", ""),
+                           "pc_only": bool(c.get("pc_only"))}
+                          for c in planned.get("changes") or ()]
+        row["skipped"] = [s.get("reason", "") for s in planned.get("skipped") or ()]
+        if planned.get("recommendation"):
+            row["recommendation"] = planned["recommendation"]
+        rows.append(row)
+    out["options"] = rows
+    if not staged:
+        return out
+    ids = [str(o["id"]) for o in q["options"]]
+    if staged not in ids:
+        out["ok"] = False
+        out["error"] = (f"{staged!r} is not one of this question's options; they "
+                        "are: " + ", ".join(ids))
+        return out
+    try:
+        code, got = SU.progress({"section": q["section"], "question": q["id"],
+                                 "draft_answers": {q["id"]: staged}})
+    except Exception as exc:                       # noqa: BLE001
+        out["ok"] = False
+        out["error"] = f"the choice could not be staged ({type(exc).__name__})"
+        return out
+    got = got if isinstance(got, dict) else {}
+    out["staged"] = {"option": staged, "recorded": code == 200,
+                     "in_progress": got.get("in_progress")}
+    if code != 200:
+        out["ok"] = False
+        out["error"] = str(got.get("error") or "the choice could not be staged")
+    return out
 #   Refreshing Jarvis's own capabilities awareness (2026-11-03)
 # --------------------------------------------------------------------------
 # The owner's ask: *"refresh its function and capabilities awareness"*. The
@@ -4544,6 +4696,26 @@ TOOLS: dict = {
                                        "to list the groups"}}},
         _plain_prepare("Explain feature"),
         lambda args, state, **_: _run_feature_guide(args),
+        gate_lookup_name=lambda args: "skill_list"),
+    # The Personalize Jarvis quiz (Wave B, 2026-11-03) - read and stage, never
+    # apply. Same read-only reasoning as FEATURE_GUIDE_TOOL above, so it is
+    # decided under the gate's own `skill_list` action too: the arguments are a
+    # question name and one of its option ids, and nothing here changes a
+    # setting or raises a card. `staged_answer` is optional on purpose - the
+    # listing call and the explain call both leave it out.
+    SETUP_QUIZ_TOOL: Tool(
+        SETUP_QUIZ_TOOL, _setup_quiz_tool_text(),
+        {"type": "object", "properties": {
+            "question": {"type": "string",
+                         "description": "a question id or the owner's words for one; "
+                                        "\"\" (or left out) lists the sections and "
+                                        "questions"},
+            "staged_answer": {"type": "string",
+                              "description": "one of that question's option ids to "
+                                             "stage as the owner's choice; leave it "
+                                             "out to only explain"}}},
+        _plain_prepare("Explain the setup quiz"),
+        lambda args, state, **_: _run_setup_quiz(args),
         gate_lookup_name=lambda args: "skill_list"),
     # Re-read Jarvis's own abilities (REFRESH_ABILITIES_TOOL, 2026-11-03): the
     # owner asked to "refresh its function and capabilities awareness". Read-only
@@ -7654,6 +7826,12 @@ _NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retire
                 # listing as a read would make a later note write wait for a
                 # person for no reason.
                 PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL,
+                # SETUP_QUIZ_TOOL (Wave B, 2026-11-03): the questions ship WITH
+                # the program and the answers are this PC's own Option ids - the
+                # same argument the FEATURE_GUIDE_TOOL entry above makes. Marking
+                # its result as outside text would make the answer that explains
+                # a question look like a page Jarvis had read.
+                SETUP_QUIZ_TOOL,
                 # Re-reading Jarvis's own abilities (REFRESH_ABILITIES_TOOL,
                 # 2026-11-03): it re-reads THIS PC's own modules and switches
                 # and its answer is this file's sentence. Nothing outside is
@@ -8959,7 +9137,12 @@ TOOL_GROUPS = (
       # move. `plugin_list` reads and `plugin_switch` turns one plugin on (one
       # modify_own_code card) or off (instant) - the same "Jarvis's own
       # switches" subject the group's own description names.
-      PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL,
+      #
+      # SETUP_QUIZ_TOOL (Wave B, 2026-11-03) shares it too: the quiz is a guided
+      # path through those same switches, and a group's members are free in the
+      # enum. It also HAS to be in a group: test_short_tool_list.py fails on a
+      # tool that is in neither the core nor exactly one group.
+      PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL, SETUP_QUIZ_TOOL,
       # Re-reading the self portrait (REFRESH_ABILITIES_TOOL, 2026-11-03)
       # shares this group for the same reason: it is a read of Jarvis's own
       # abilities and settings, and a group's members cost nothing extra in
@@ -9226,6 +9409,13 @@ TOOL_HINTS = {
         r"no longer authori", r"\brevoke\b", r"\byou don'?t have approval\b",
         r"no approval to search", r"\bask me before (?:you )?search",
         r"without asking any ?more"),
+    # SETUP_QUIZ_TOOL (Wave B, 2026-11-03): the "Personalize Jarvis" quiz's own
+    # words. Narrow on purpose: a bare "quiz" is jarvis_quiz.py's own fast path
+    # ("quiz me on a text"), so every pattern here names the setup/customization
+    # quiz or a question only it asks.
+    "setup_quiz": (r"\bpersonaliz", r"\bsetup quiz\b", r"\bquestionnaire\b",
+                   r"\bsetup questions?\b", r"\bhow should jarvis talk\b",
+                   r"\bwhich personality\b", r"\bwhere did i leave off\b"),
     # The self portrait, the ability refresh and the owner's own conversations
     # (2026-11-03, jarvis_self_portrait.py). Written from those tools' own
     # descriptions, so the diet list offers them exactly when the question is
@@ -12423,6 +12613,54 @@ def with_cloud_state_note(msgs: list) -> list:
     return list(msgs[:at]) + [msg] + list(msgs[at:])
 
 
+def setup_state_note() -> Optional[str]:
+    """ONE honest line: is the Personalize Jarvis quiz unfinished, and where is
+    the owner in it? None when it is complete, so a finished owner pays no
+    tokens (the same cost rule `cloud_state_note` follows).
+
+    It reads `setup.json` through `jarvis_setup._read_saved()` - the same saved
+    document `jarvis_setup.state()` wraps. It deliberately does NOT call
+    `state()` here: that also reads the CURRENT value of every setting the quiz
+    covers (tens of module reads), which is far more than this one line needs on
+    every single turn. No module, no line - never a guess.
+    """
+    try:
+        import jarvis_setup as SU
+        saved = SU._read_saved()
+        if int(saved.get("completed_version") or 0) >= int(SU.QUIZ_VERSION):
+            return None
+        where = saved.get("in_progress") or {}
+        question = SU._QUESTIONS_BY_ID.get(str(where.get("question") or ""))
+        line = (f"Personalize Jarvis: the setup quiz is unfinished - "
+                f"{SU.answered_count(saved)} of {len(SU.QUESTIONS)} answered")
+    except Exception:                                       # noqa: BLE001
+        return None
+    if question:
+        line += f"; the owner has it open at \"{question['title']}\""
+    line += (". The desktop Settings card is where answers are applied; "
+             "nothing in chat may apply them.")
+    return line
+
+
+def with_setup_state_note(msgs: list) -> list:
+    """A new list with the setup-quiz line as a system message.
+
+    The same placement as `with_cloud_state_note`: just before the newest user
+    message, never first, so the rules stay first. `msgs` is not changed; no
+    line or no user message returns a plain copy. The line appears only while
+    the quiz is unfinished.
+    """
+    note = setup_state_note()
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if note is None or not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": note}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
 _PC_FACT_WORDS = re.compile(
     r"\b(?:disk|drives?|storage|ram|cpu|processor|gpu|graphics\s+card|uptime|"
     r"been\s+on|specs?|hardware)\b", re.I)
@@ -12671,6 +12909,12 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # A web-search approval that really IS in force, from the store (2026-11-02;
     # empty on every ordinary turn, so no tokens and the same bytes as before).
     out = with_grant_note(out, grant_note)
+    # The Personalize Jarvis quiz (Wave B, 2026-11-03): ONE line only while the
+    # quiz is unfinished, so a finished owner pays no tokens and the warm-up
+    # (no user message) gets a plain copy. After the grant note and before the
+    # manner note: further from the question than the notes that say HOW to
+    # answer, nearer than anything stale.
+    out = with_setup_state_note(out)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
     out = with_manner_note(out, manner, crisis=crisis)

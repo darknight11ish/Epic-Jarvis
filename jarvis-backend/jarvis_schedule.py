@@ -735,6 +735,62 @@ ASK_NOT_FIRED = "That reminder has not gone off yet, so there is nothing to answ
 ASK_WRONG_KIND = "That reminder does not ask a question."
 ASK_GONE = "That reminder has gone - the answer was not kept."
 
+# ---- multi-part reminders / routines (2026-11-03) ---------------------------
+#
+# The owner's ask, and Gemini's rulings Q8/Q9 (Option A): ONE reminder may hold
+# up to twelve PARTS, each with its own time and its own buttons, in the SAME
+# row - not a parent job with children. `steps` is the immutable shape (what the
+# parts are) and `step_state` the moving part (which one is current, when each
+# fired, when each was answered). They are two columns and not one so a read
+# door can decode the shape without trusting the state.
+#
+# A part is TIMED (`offset_min`: minutes after the occurrence's anchor, or `at`:
+# an "HH:MM" on the anchor's own calendar day) or UNTIMED (`offset_min: null`
+# and `at: null`), which never touches `due` and is surfaced by the answer to
+# the part before it. Both forms live in the one schema, and a mixed routine is
+# legal: the timed parts fire by the clock whether or not the untimed one was
+# answered.
+
+#: The ruling's ceiling. Android draws three notification actions per part and a
+#: routine is answered one part at a time, so twelve is already generous.
+MAX_STEPS = 12
+#: A routine of one part is just a reminder with a longer name, and it would
+#: break the "the last part ends the row" rule before it ever started.
+MIN_STEPS = 2
+#: A part's words, one line - the same order of length as a button's label.
+MAX_STEP_LABEL = 80
+#: A day: a part is minutes after the start, and a routine never runs for more
+#: than a day in one occurrence (a repeat starts the next one).
+MAX_STEP_OFFSET = 1440
+#: A part whose moment is further back than this is marked `missed` and NOT
+#: notified. Without it a week-long shutdown times twelve parts times a daily
+#: rule is eighty-four notifications, which is how a feature becomes a nuisance.
+#: A part is a distinct action (laundry, dryer, fold), not a repeat occurrence,
+#: so the 2026-09-26 "once, late" rule does not literally apply - but unbounded
+#: catch-up is worse than saying "two parts were missed".
+PART_LATE_MAX = 12 * 3600.0
+#: What a part may hold. `id` is written by this code ("p1", "p2", ...), never
+#: read from a request; `label`, `offset_min`, `at` and `ask` are the owner's.
+STEP_KEYS = frozenset({"id", "label", "offset_min", "at", "ask"})
+
+#: The receipt's tool name, for a routine created cardlessly in chat: one entry
+#: per routine, so Undo outlives the 120-second "cancel that" window.
+STEPS_TOOL = "schedule_routine_create"
+
+#: Refusals, each ONE plain sentence, in the shape of the `ask` block's.
+STEPS_NEED_TWO = ("A routine needs at least two parts - a single part is just a reminder.")
+STEPS_TOO_MANY = "A routine has up to 12 parts."
+STEPS_NOT_REMINDER = "Only a reminder can have parts."
+STEP_NEEDS_WORDS = "Every part needs its words - write what it is."
+STEP_LABEL_LONG = f"A part's words are up to {MAX_STEP_LABEL} characters."
+STEP_ONE_TIME = "A part is either a clock time or minutes after the start, not both."
+STEP_AT_SHAPE = "A part's time looks like 09:30."
+STEP_OFFSET_RANGE = f"A part is 0 to {MAX_STEP_OFFSET} minutes after the start."
+STEP_ORDER = "Part {0} starts before Part {1}."
+STEP_KEYS_ONLY = "That is not something a part can hold."
+#: 409 when a part has not been surfaced yet (the `ASK_NOT_FIRED` family below).
+STEP_NOT_YET = "That part has not come up yet."
+
 #: How many future times the card and the list show for a repeating job.
 NEXT_SHOWN = 3
 
@@ -1036,7 +1092,21 @@ _ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "
                   # and the row itself is deleted FIRED_KEEP after it last went
                   # off, so the log goes with it. Old code ignores the column, so
                   # a code rollback stays safe - the contract `action` came in on.
-                  ("answers", "TEXT"))
+                  ("answers", "TEXT"),
+                  # Multi-part reminders / routines (2026-11-03, the owner's ask;
+                  # Gemini's rulings Q8/Q9, Option A): ONE reminder's parts as
+                  # JSON, NULL for every row with no parts - which is every row
+                  # written before this and every job that is not a reminder.
+                  # `steps` is the immutable shape (the parts, their times and
+                  # their buttons) and `step_state` the moving part (which part
+                  # is current, when each fired, when each was answered); they
+                  # are two columns and not one so a read door can decode the
+                  # shape without trusting the state. Both are NULL on every
+                  # other row, `_view` hands them out only when they decode to a
+                  # valid block, and old code ignores them, so a code rollback
+                  # stays safe: the same contract `action` and `answers` came in
+                  # on.
+                  ("steps", "TEXT"), ("step_state", "TEXT"))
 
 #: The one value `jobs.source_taint` holds. It is a value, not a boolean, so
 #: a later reason (a pasted-text job, say) can be added without a rewrite.
@@ -1082,6 +1152,22 @@ def _row_action(row) -> str:
     makes, for the same reason (a row read before the migration ran)."""
     try:
         return str(row["action"] or "")
+    except (IndexError, KeyError):
+        return ""
+
+
+def _row_steps(row) -> str:
+    """One row's stored parts JSON, "" for none - `_row_action`'s guard."""
+    try:
+        return str(row["steps"] or "")
+    except (IndexError, KeyError):
+        return ""
+
+
+def _row_step_state(row) -> str:
+    """One row's stored parts STATE JSON, "" for none - `_row_action`'s guard."""
+    try:
+        return str(row["step_state"] or "")
     except (IndexError, KeyError):
         return ""
 
@@ -1777,6 +1863,35 @@ def repeat_set_words(job: dict, now: float) -> str:
                              next=nxt)
 
 
+def _step_words(steps: list, anchor: float) -> list:
+    """A routine's parts as numbered lines, ONE string each - the echo chat
+    prints and both apps show under the row, from the same function so they
+    cannot drift.
+
+        ["  1. meds - 08:00", "  2. keys - after 1", "  3. leave - 08:30, asks ..."]
+
+    A timed part names the moment on the PC's own clock; an untimed one says
+    which part it follows, because that is when it will actually come up. The
+    part's own question is quoted, never paraphrased."""
+    lines: list = []
+    for index, part in enumerate(steps or ()):
+        moment = _step_moment(part, anchor)
+        if moment is not None:
+            when = clock(moment)
+        elif index:
+            when = f"after {index}"
+        else:
+            when = "when the routine starts"
+        said = f"  {index + 1}. {part.get('label') or ''} - {when}"
+        action = _part_action(part)
+        if action.get("kind") == ASK_KIND and action.get("question"):
+            said += f', asks "{action["question"]}"'
+        elif action.get("kind") == "run-task":
+            said += ", runs a task"
+        lines.append(said)
+    return lines
+
+
 def _digest(text: str) -> str:
     norm = " ".join(str(text or "").lower().split())
     return hashlib.sha256(norm.encode("utf-8")).hexdigest()
@@ -2163,17 +2278,31 @@ class Scheduler:
                 condition_target: Optional[str] = None,
                 rank: Optional[int] = None,
                 source_taint: Optional[str] = None,
-                action: Optional[dict] = None) -> str:
+                action: Optional[dict] = None,
+                steps: Optional[list] = None,
+                step_state: Optional[dict] = None) -> str:
         """The ONE insert. Every creation path (timer, alarm, reminder, to-do,
         repeat, both snooze copies) comes through here, so the creation-time
         taint mark is recorded in exactly one place.
 
         `source_taint`: an explicit mark to carry over (a snooze copy of a
         tainted row). When it is None the row is marked iff the private latch
-        is on at this moment."""
+        is on at this moment.
+
+        `steps`/`step_state` (2026-11-03): a routine's parts and its state for
+        the FIRST occurrence. `steps` has already been through `_clean_steps`
+        by the caller, which is the only thing that knows the anchor; when a
+        state is given without one it is anchored at the row's own `due`.
+        Neither is written for an ordinary job, so every other row is byte for
+        byte what it was."""
         jid = "s" + uuid.uuid4().hex[:10]
         now = self.now()
         taint = source_taint or _taint_mark()
+        steps = list(steps or ())
+        if steps and step_state is None and due is not None:
+            step_state = _empty_step_state(len(steps), due)
+        if not steps:
+            step_state = None
         with self._lock, self._db() as c:
             if kind == "todo" and rank is None:
                 # Phase 2: a new to-do appends to the end of its list, so the
@@ -2185,8 +2314,9 @@ class Scheduler:
                 rank = int(top) + 1
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
                       "changed, source, list_name, snooze_of, extra, context_bundle, trigger, "
-                      "condition_kind, condition_target, rank, source_taint, action, created_date) "
-                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "condition_kind, condition_target, rank, source_taint, action, created_date, "
+                      "steps, step_state) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
                        json.dumps(rule) if rule else None, duration, now, now, source,
                        list_name, snooze_of, json.dumps(extra) if extra else None,
@@ -2196,7 +2326,9 @@ class Scheduler:
                        # The day this row was written, set ONCE here and never
                        # written again by any path (2026-11-02). An item's age is
                        # measured from it for as long as it stays open.
-                       _day_of(now)))
+                       _day_of(now),
+                       json.dumps(steps) if steps else None,
+                       json.dumps(step_state) if step_state else None))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -2247,7 +2379,8 @@ class Scheduler:
                extra: Optional[dict] = None, *, context_bundle: Optional[dict] = None,
                trigger: Optional[str] = None, condition_kind: Optional[str] = None,
                condition_target: Optional[str] = None,
-               action: Optional[dict] = None) -> dict:
+               action: Optional[dict] = None,
+               steps: Optional[list] = None) -> dict:
         """A one-off alarm, reminder or to-do with a time. No card. `extra`: a
         kind's own small state (the `extra` column), for a kind whose module
         keeps one (jarvis_next_time.py).
@@ -2264,7 +2397,14 @@ class Scheduler:
         the one task it may ask to run (see `_clean_action`). It is checked
         HERE, once, so a bad target is refused before a row exists; it is
         checked again at the moment it is used (`_action_problem`, and the
-        desktop's own re-check before it opens anything)."""
+        desktop's own re-check before it opens anything).
+
+        REMINDERS ONLY, 2026-11-03: `steps` is the routine's parts (see
+        `_clean_steps`), checked HERE so a bad part is refused before a row
+        exists. The row's `due` is the EARLIEST part's own moment, so the
+        existing loop, `next_due`, snooze and both apps' rows keep working
+        unchanged - a routine is one job with a moving cursor, not a second
+        scheduler."""
         if kind not in KINDS or kind == "timer":
             raise ValueError("that kind of job needs a time: alarm, reminder or to-do")
         try:
@@ -2285,12 +2425,24 @@ class Scheduler:
             # to a reminder, and a timer or a to-do that carried one would be a
             # target nothing can show, open or ask about.
             raise ValueError("only a reminder can carry an action")
+        if kind != "reminder" and steps:
+            raise ValueError(STEPS_NOT_REMINDER)
         action = _clean_action(action)
+        steps = _clean_steps(steps, starts_at=at) if kind == "reminder" else []
         if trigger is not None and trigger not in TRIGGERS:
             raise ValueError("trigger is one of: " + ", ".join(TRIGGERS))
         with self._lock, self._db() as c:
             self._room(c, kind)
-        jid = self._insert(kind, text=text, state="active", due=at, rule=None,
+        due = at
+        if steps:
+            # The cursor starts at the earliest part's own moment, so a routine
+            # whose first part is "+15 min" does not wake the PC pointlessly at
+            # the anchor. An untimed first part keeps the anchor: that IS the
+            # moment the routine starts and says "part 1".
+            first = _step_moment(steps[0], at)
+            if first is not None:
+                due = first
+        jid = self._insert(kind, text=text, state="active", due=due, rule=None,
                            duration=None, source=source, extra=extra,
                            context_bundle=scrub_context_bundle(context_bundle)
                            if context_bundle else None,
@@ -2298,7 +2450,8 @@ class Scheduler:
                            condition_kind=str(condition_kind) if condition_kind else None,
                            condition_target=_clean_condition_target(condition_target)
                            if condition_target else None,
-                           action=action)
+                           action=action, steps=steps,
+                           step_state=_empty_step_state(len(steps), at) if steps else None)
         return self.job(jid)
 
     # ---- a kind's own small state (the `extra` column) --------------------------
@@ -2401,7 +2554,8 @@ class Scheduler:
         return self.job(jid)
 
     def add_repeat(self, kind: str, rule, text: str = "", source: str = "app",
-                   action: Optional[dict] = None) -> dict:
+                   action: Optional[dict] = None,
+                   steps: Optional[list] = None) -> dict:
         """A repeating job. A plain alarm, reminder or standby schedule
         (Kind.plain_repeat) is set up at once, with no card; any other kind
         WAITS until one approval card is approved.
@@ -2409,7 +2563,12 @@ class Scheduler:
         `action` (2026-10-27): a repeating REMINDER may carry one action, and
         then it goes off - and acts, or offers its Open button - EVERY time.
         A repeating action reminder asks again at every occurrence, never once
-        and then silent: "never auto-approved" means every time is a decision."""
+        and then silent: "never auto-approved" means every time is a decision.
+
+        `steps` (2026-11-03): a repeating REMINDER may be a routine. The parts
+        are checked HERE, and each occurrence re-seeds its own `step_state`
+        anchored at that occurrence's first run (`tick`), so yesterday's parts
+        are never "done" today."""
         k = KINDS.get(kind)
         window = bool(k is not None and k.window)
         if not _repeatable(kind) and not window:
@@ -2422,7 +2581,16 @@ class Scheduler:
         text = self._clean_text(text, kind) if (k is None or k.has_text) else ""
         if kind != "reminder" and action:
             raise ValueError("only a reminder can carry an action")
+        if kind != "reminder" and steps:
+            raise ValueError(STEPS_NOT_REMINDER)
         action = _clean_action(action)
+        anchor = now if (k is not None and k.plain_repeat and k.first_now) \
+            else next_run(rule, now)
+        steps = _clean_steps(steps, starts_at=anchor) if kind == "reminder" else []
+        if steps:
+            first = _step_moment(steps[0], anchor)
+            if first is not None:
+                anchor = first
         with self._lock, self._db() as c:
             self._room(c, kind)
             if k.single and c.execute(
@@ -2446,9 +2614,12 @@ class Scheduler:
             # No card (Kind.plain_repeat): on the list at once, due at its
             # first time. The next times are in the answer (repeat_set_words)
             # and under the job in Coming up, where the card used to list them.
-            due = now if k.first_now else next_run(rule, now)
+            due = anchor
             jid = self._insert(kind, text=text, state="active", due=due, rule=rule,
-                               duration=None, source=source, action=action)
+                               duration=None, source=source, action=action,
+                               steps=steps,
+                               step_state=_empty_step_state(len(steps), anchor)
+                               if steps else None)
             return self.job(jid)
         jid = self._insert(kind, text=text, state="waiting", due=None, rule=rule,
                            duration=None, source=source, action=action)
@@ -2671,14 +2842,19 @@ class Scheduler:
     # ---- a reminder's action, at the moment it goes off (2026-10-27) ------------
 
     def _action_card_text(self, row, action: dict, now: float,
-                          what_words: Optional[str] = None) -> str:
+                          what_words: Optional[str] = None,
+                          part_words: Optional[str] = None) -> str:
         """The ONE card's words, in the shape of the repeat card: what the
         reminder is, when it went off, and exactly what will happen.
 
         The reminder's own words are in HERE (the owner reads them on screen,
         and `decide()` NULLs the prompt the moment the card is answered); the
         TARGET never is, and neither the URL nor the path is in `detail` - see
-        `_fire_action`. A repeating reminder also says it will ask again."""
+        `_fire_action`. A repeating reminder also says it will ask again.
+
+        `part_words` (2026-11-03) names WHICH part of a routine this card is
+        for: two `run-task` parts of one routine are two different things to do,
+        and two cards that read alike would be a card the owner cannot judge."""
         words = str(row["text"] or "").strip()
         due = row["fired_due"] if row["fired_due"] is not None else row["due"]
         when = clock(float(due)) if due is not None else "now"
@@ -2687,6 +2863,8 @@ class Scheduler:
         lines = ["A reminder you set wants to do something.", ""]
         if words:
             lines.append(f"Reminder: {words}")
+        if part_words:
+            lines.append(f"Part: {part_words}")
         lines.append(f"When: {when} today")
         lines.append(f"What it will do: {what_words}")
         lines.append("")
@@ -2697,7 +2875,9 @@ class Scheduler:
                      "stays in your list as it was.")
         return "\n".join(lines)
 
-    def _fire_action(self, jid: str, due: float) -> None:
+    def _fire_action(self, jid: str, due: float, *,
+                     part: Optional[int] = None,
+                     action: Optional[dict] = None) -> None:
         """ONE reminder's `run-task` action, raised as ONE card, on its own
         thread (so a fifteen-minute wait never blocks the tick loop).
 
@@ -2713,12 +2893,19 @@ class Scheduler:
         `_redact`), so a target there would land in the audit log in the clear
         the day someone turns redaction off to debug something; and `detail` is
         handed to BOTH apps on `/api/pending`. The target that the owner needs
-        is in `prompt`, which is the card's own text."""
+        is in `prompt`, which is the card's own text.
+
+        `part`/`action` (2026-11-03) are a ROUTINE's part and the block THAT
+        part carries, so a routine's own `run-task` part asks for itself and
+        not for the row's action. `due` is the PART's moment, and the pair the
+        dedupe remembers carries the part's index: without it a routine's
+        second `run-task` part at another time would be refused as a duplicate
+        and silently never ask."""
         with self._lock, self._db() as c:
             row = self._row(c, jid)
         if row is None:
             return
-        action = _decode_action(_row_action(row))
+        action = _decode_action(_row_action(row)) if action is None else action
         if not action or action["kind"] not in ACTING_ACTION_KINDS:
             return
         task = str(action.get("task") or "")
@@ -2753,7 +2940,7 @@ class Scheduler:
             # for something that would do nothing.
             _audit("schedule.action_refused", {"id": jid, "outcome": "unknown"})
             return
-        pair = (jid, float(due))
+        pair = (jid, float(due), int(part) if part is not None else -1)
         if pair in self._acted:
             # A retry inside this process cannot run or ask twice. A restart
             # cannot re-fire: the row is no longer 'active'.
@@ -2763,7 +2950,17 @@ class Scheduler:
             # A config line is never the owner's yes.
             _audit("schedule.action_refused", {"id": jid, "outcome": "refused"})
             return
-        prompt = self._action_card_text(row, action, self.now(), what_words=what_words)
+        action = dict(action) if part is not None else action
+        part_words = None
+        if part is not None:
+            # The card names WHICH part: two `run-task` parts of one routine are
+            # two different things to do, and two cards that read alike would be
+            # a card the owner cannot judge.
+            steps_here = _decode_steps(_row_steps(row))
+            if 0 <= int(part) < len(steps_here):
+                part_words = str(steps_here[int(part)].get("label") or "")
+        prompt = self._action_card_text(row, action, self.now(), what_words=what_words,
+                                        part_words=part_words or None)
         if job:
             # The owner's own words are NEVER in `detail`; the resolved intent
             # name is a closed token and the card's `prompt` carries the words.
@@ -2773,6 +2970,8 @@ class Scheduler:
         else:
             detail = {"job": jid, "due": float(due), "what": "run-task", "task": task,
                       "leaves_this_pc": False}
+        if part is not None:
+            detail["step"] = int(part)
         _audit("schedule.action_asked", {"id": jid, "kind": action["kind"],
                                          "what": task or str(getattr(intent, "name", ""))})
         try:
@@ -2866,13 +3065,17 @@ class Scheduler:
             row = c.execute("SELECT answers FROM jobs WHERE id = ?", (str(jid),)).fetchone()
         return _decode_answers(row["answers"] if row is not None else None)
 
-    def answer(self, jid: str, index, *, source: str = "app") -> tuple:
-        """Press ONE button of an `ask` reminder: (code, answer).
+    def answer(self, jid: str, index, *, source: str = "app",
+               step: Optional[int] = None) -> tuple:
+        """Press ONE button of an `ask` reminder, or of ONE part of a routine.
 
         `index` is the button's position in the stored block, 0-based - never
         its label, so a re-worded button cannot be answered by accident.
-        Nothing is written unless the whole thing is valid and the reminder has
-        actually gone off: the same order `_fire_action` refuses in.
+        `step` (2026-11-03) is the PART's index into a routine's parts, also
+        0-based and also never a label; it is ignored by a reminder with no
+        parts. Nothing is written unless the whole thing is valid and the part
+        (or the reminder) has actually gone off: the same order `_fire_action`
+        refuses in.
 
         What is written, in order:
           1. the reminder's own history, when `record.history` is on - EVERY
@@ -2881,14 +3084,44 @@ class Scheduler:
              from a `record` button, and each one that cannot be written is
              reported in ONE sentence while the rest still happens;
           3. what the button itself does: `done` (it stops), or `snooze`.
-        """
+
+        A part is answered in the SAME way and through the same code: one log
+        line with a `step` key, then the one thing the button does. The answer
+        is also what surfaces the next UNTIMED part, so "marking part 1 Done
+        immediately brings up part 2" is a property of the log, not a second
+        scheduler."""
         now = self.now()
         with self._lock, self._db() as c:
             row = self._row(c, jid)
         if row is None:
             return 404, {"ok": False, "reason": "no_such_job", "error": ASK_GONE}
         action = _decode_action(_row_action(row))
-        if not action or action.get("kind") != ASK_KIND:
+        steps = _decode_steps(_row_steps(row))
+        state = _routine_state(steps, _row_step_state(row))
+        part_index = None
+        if state:
+            if step is None:
+                part_index = int(state["cursor"])
+            elif isinstance(step, bool) or not isinstance(step, int):
+                return 400, {"ok": False, "error": STEP_NOT_YET}
+            else:
+                part_index = int(step)
+            if not 0 <= part_index < len(steps):
+                return 400, {"ok": False,
+                             "error": f"Which part? Say its number, from 0 to "
+                                      f"{len(steps) - 1}."}
+            if state["parts"][part_index].get("fired") is None:
+                return 409, {"ok": False, "error": STEP_NOT_YET}
+            # A part's own block, or the ONE implicit Done a plain checklist
+            # line gets - the same buttons both apps draw, so a part that only
+            # RUNS a task is still something the owner can tick off.
+            own = _part_action(steps[part_index])
+            block = own if own.get("kind") == ASK_KIND else {
+                "kind": ASK_KIND,
+                "buttons": [{"label": "Done", "does": "done"}]}
+        else:
+            block = action
+        if not block or block.get("kind") != ASK_KIND:
             return 409, {"ok": False, "error": ASK_WRONG_KIND}
         fired = row["fired_at"]
         if (fired is None or row["state"] not in ("fired", "active", "paused")
@@ -2896,14 +3129,14 @@ class Scheduler:
             # Not due yet, or so long ago that the row is about to be deleted
             # (FIRED_KEEP) - an answer written now would go with it unseen.
             return 409, {"ok": False, "error": ASK_NOT_FIRED}
-        buttons = action.get("buttons") or []
+        buttons = block.get("buttons") or []
         if isinstance(index, bool) or not isinstance(index, int) \
                 or not 0 <= index < len(buttons):
             return 400, {"ok": False,
                          "error": f"Which button? Say its number, from 0 to {len(buttons) - 1}."}
         button = buttons[index]
         does = str(button.get("does") or "")
-        record = action.get("record") if isinstance(action.get("record"), dict) else {}
+        record = block.get("record") if isinstance(block.get("record"), dict) else {}
         wrote: list = []
         problems: list = []
         if record.get("history"):
@@ -2925,7 +3158,11 @@ class Scheduler:
                 why = _write_habit(str(record["habit"]), line, now)
                 (problems if why else wrote).append(why if why else "a habit tick")
         said = _wrote_words(wrote, problems)
-        if does == "done":
+        if does == "done" and not state:
+            # A row with no parts: the button ends the reminder, as it always
+            # did. A ROUTINE's Done is handled by `_part_answered`, because on a
+            # part before the last one it means "this part is dealt with", not
+            # "end the whole routine".
             said = self._answer_done(jid, row, now)
         elif does == "snooze":
             code, out = self.snooze(jid, float(button["minutes"]) * 60.0)
@@ -2935,36 +3172,114 @@ class Scheduler:
             # A snoozed QUESTION asks again when it comes back: its own copy
             # carries the same block. Without this the copy would come back as
             # a plain reminder with the words and no buttons - the owner would
-            # have snoozed a question into a statement.
+            # have snoozed a question into a statement. A snoozed ROUTINE gets
+            # a fresh copy of its parts from `snooze` itself.
             copy_id = (out.get("job") or {}).get("id")
             if copy_id:
                 self._copy_question(jid, str(copy_id))
+        if state and does != "snooze":
+            # The part is dealt with. Mark it and surface the one after it - on
+            # an untimed part, IMMEDIATELY (the ruling's "marking part 1 done
+            # brings up part 2"); a timed part is left to its own clock. On the
+            # LAST part the occurrence is over, and a repeating routine starts
+            # its next one with a fresh state.
+            said = self._part_answered(jid, row, steps, state, part_index, now,
+                                      do_ended=(does == "done")) or said
         entry = {"at": float(now), "clock": clock(now), "button": button["label"],
                  "does": does, "wrote": wrote}
+        if part_index is not None:
+            # WHICH part this line is about. One log, one bound: the parts'
+            # answers live in the same `answers` column as a single question's,
+            # never a second history.
+            entry["step"] = int(part_index)
         if problems:
             entry["problems"] = problems
         self._append_answer(jid, entry)
         _audit("schedule.answered", {"id": jid, "button": index, "does": does,
                                      "wrote": list(wrote), "problems": len(problems),
-                                     "source": str(source)[:20]})
+                                     "source": str(source)[:20],
+                                     **({"step": int(part_index)}
+                                        if part_index is not None else {})})
         if does != "done":
             # Every app hears that this job changed, so the other one takes its
             # notification away and the row redraws with the new answer on it.
             # `done` already did this inside `end`/the UPDATE.
             self._changed(jid, row["kind"])
-        return 200, {"ok": True, "id": jid, "button": button["label"], "does": does,
-                     "wrote": wrote, "problems": problems, "said": said,
-                     "answers": self.answers(jid)}
+        out_body = {"ok": True, "id": jid, "button": button["label"], "does": does,
+                    "wrote": wrote, "problems": problems, "said": said,
+                    "answers": self.answers(jid)}
+        if part_index is not None:
+            out_body["step"] = int(part_index)
+        return 200, out_body
+
+    def _part_answered(self, jid: str, row, steps: list, state: dict,
+                       index: int, now: float, *, do_ended: bool) -> str:
+        """One part ticked off: mark it, surface the next if it needs no clock,
+        and end or re-seed the occurrence when it was the last one.
+
+        Called AFTER the button's own effect, so a `record` button has already
+        written its line. It never touches the gate: this is bookkeeping on a log
+        line, and an answer that quiets something needs no card."""
+        state["parts"][int(index)]["done"] = float(now)
+        if int(index) >= len(steps) - 1:
+            # The LAST part: this occurrence is over. A one-off goes `done` and
+            # is kept DONE_KEEP, like a to-do ticked off. A repeating routine
+            # starts its NEXT occurrence here, with a fresh state, so yesterday's
+            # parts are never "done" today - unless the button was Done itself,
+            # which means "stop repeating" exactly as it does for any reminder.
+            self._write_step_state(jid, None, state, now)
+            if row["rule"] and not do_ended:
+                try:
+                    anchor = next_run(json.loads(row["rule"]), now)
+                except Exception:
+                    anchor = None
+                if anchor is not None:
+                    fresh = _empty_step_state(len(steps), anchor)
+                    self._write_step_state(jid, _routine_due(steps, fresh), fresh, now)
+                    self._changed(jid, row["kind"])
+                    return f"The next one is set up for {clock(anchor)}."
+            return self._answer_done(jid, row, now)
+        following = int(index) + 1
+        state["cursor"] = following
+        said = "Marked that part done." if do_ended else ""
+        if _step_moment(steps[following], state["anchor"]) is None:
+            # UNTIMED: nothing will ever wake for it, so surfacing it is the
+            # whole point of answering the one before it. One event, the same
+            # shape a timed part's fire publishes, so both apps draw it the same
+            # way - with this part's own buttons, never the row's.
+            state["parts"][following]["fired"] = float(now)
+            self._publish("schedule", {"id": jid, "kind": row["kind"], "state": "fired",
+                                        "late": False, "step": following,
+                                        "parts": len(steps)})
+            said = f"Part {following + 1} of {len(steps)}: {steps[following]['label']}."
+        self._write_step_state(jid, _routine_due(steps, state), state, now)
+        return said
+
+    def _write_step_state(self, jid: str, due, state: dict, now: float) -> None:
+        """Persist one routine's cursor, marks and next wake, in ONE statement.
+
+        `due` and the parts' `fired` marks are written together on purpose: a
+        crash between them would either notify a part twice or skip one, and a
+        single UPDATE cannot be half-applied."""
+        with self._lock, self._db() as c:
+            c.execute("UPDATE jobs SET due = ?, changed = ?, step_state = ? WHERE id = ?",
+                      (due, now, json.dumps(state), str(jid)))
 
     def _copy_question(self, from_jid: str, to_jid: str) -> None:
         """Give a snoozed copy the question it came from.
 
         Only `snooze` makes a copy, so this is the one place a second row can
         hold an `ask` block. Nothing else about the copy changes, and a job that
-        is not a question is left exactly as `snooze` made it."""
+        is not a question is left exactly as `snooze` made it.
+
+        A ROUTINE's questions are inside its `steps`, and `snooze` already
+        carried those across verbatim - so a routine is left alone here rather
+        than given the row's own block on top of its parts."""
         with self._lock, self._db() as c:
             row = self._row(c, from_jid)
             if row is None:
+                return
+            if _decode_steps(_row_steps(row)):
                 return
             raw = _row_action(row)
             if not _decode_action(raw):
@@ -2977,7 +3292,12 @@ class Scheduler:
         A repeating reminder STOPS repeating (`end`), which is exactly what
         deleting it would do and only ever makes Jarvis quieter. A one-off
         leaves "Just went off" and is kept DONE_KEEP, like a to-do item ticked
-        off. Neither asks a card: an answer that quiets something needs none."""
+        off. Neither asks a card: an answer that quiets something needs none.
+
+        A routine's LAST part Done comes through here too (from
+        `_part_answered`), so it ends the routine exactly as an ordinary
+        reminder's Done does: one button, one meaning, whatever the row holds
+        (JARVIS-API section 21.15)."""
         if row["rule"]:
             self.end(jid)
             return "Marked done - it will not repeat again."
@@ -3045,7 +3365,15 @@ class Scheduler:
     #: Phase 2: the field names an edit may carry. `list` is a move made inside
     #: an edit (to-dos only); `seconds` is a timer's new length; the rest are
     #: a one-off job's own time.
-    EDIT_KEYS = ("text", "when", "date", "time", "at", "repeat", "list", "seconds")
+    #:
+    #: 2026-11-03: `action` and `steps` join them, which closes the documented
+    #: JARVIS-API section 21.14 gap - a mis-worded question or a wrong button
+    #: used to mean deleting the reminder and retyping it. Both are re-checked by
+    #: the SAME cleaners the add door uses (`_clean_action`, `_clean_steps`), and
+    #: both stay cardless: neither changes what the owner is allowed to do, and
+    #: the buttons were already cardless. A `repeat` change keeps its ONE card.
+    EDIT_KEYS = ("text", "when", "date", "time", "at", "repeat", "list", "seconds",
+                 "action", "steps")
 
     def act(self, jid: str, do: str, seconds: Optional[float] = None,
             fields: Optional[dict] = None) -> tuple:
@@ -3221,12 +3549,14 @@ class Scheduler:
         if unknown:
             return 400, {"ok": False,
                          "error": "edit changes only text, when, date/time, at, "
-                                  "repeat, list and seconds"}
+                                  "repeat, list, seconds, action and steps"}
         if not fields:
             return 400, {"ok": False, "error": "an edit needs at least one field to change"}
         has_text = "text" in fields
         has_repeat = "repeat" in fields
         has_list = "list" in fields
+        has_action = "action" in fields
+        has_steps = "steps" in fields
         timed = [key for key in ("when", "at", "date", "time", "seconds") if key in fields]
         if len(timed) > 1 and set(timed) != {"date", "time"}:
             return 400, {"ok": False,
@@ -3240,6 +3570,16 @@ class Scheduler:
                          "error": "A timer's length is changed in seconds, not a time."}
         if has_list and kind != "todo":
             return 409, {"ok": False, "error": "Only a to-do item can move between lists."}
+        if (has_action or has_steps) and kind != "reminder":
+            # The same one-line guard `add_at` keeps: an action or parts belong
+            # to a reminder, and a timer or a to-do carrying one would be a
+            # target or a routine nothing can show or answer.
+            return 409, {"ok": False, "error": "Only a reminder can carry an action or parts."}
+        if has_steps and has_repeat:
+            # Both change where the occurrence starts, and one edit cannot say
+            # which wins, so it is a refusal rather than a guess.
+            return 400, {"ok": False,
+                         "error": "give either a repeat or its parts, not both in one edit"}
         if has_repeat:
             if not _repeatable(kind):
                 return 409, {"ok": False,
@@ -3267,6 +3607,24 @@ class Scheduler:
                 raw = fields.get("repeat")
                 new_rule = k.check(raw, now) if (k is not None and k.check is not None) \
                     else check_rule(raw, now)
+            except ValueError as exc:
+                return 400, {"ok": False, "error": _sentence(exc)}
+        new_action = new_steps = None
+        if has_action:
+            # The SAME validator the add door uses, so a target refused there is
+            # refused here too. `None`/`{}` clears it, exactly as it does on a
+            # new reminder.
+            try:
+                new_action = _clean_action(fields.get("action"))
+            except ValueError as exc:
+                return 400, {"ok": False, "error": _sentence(exc)}
+        if has_steps:
+            # The occurrence's anchor is the row's own (or the new time, when
+            # one is given), so an `at` part and an `offset_min` part are
+            # comparable and "Part 3 starts before Part 2" is refused here
+            # exactly as it is on the add door.
+            try:
+                new_steps = _clean_steps(fields.get("steps"), starts_at=row["due"])
             except ValueError as exc:
                 return 400, {"ok": False, "error": _sentence(exc)}
         new_due = new_left = new_duration = None
@@ -3341,6 +3699,34 @@ class Scheduler:
         if new_duration is not None:
             sets.append("duration = ?")
             args.append(new_duration)
+        if has_action:
+            # `None` clears it, exactly as it does on a new reminder: an edit
+            # with no action is how the owner takes a wrong one away.
+            sets.append("action = ?")
+            args.append(json.dumps(new_action) if new_action else None)
+        if has_steps:
+            if new_steps:
+                anchor = new_due if new_due is not None else row["due"]
+                first = _step_moment(new_steps[0], anchor)
+                if first is not None and new_due is None:
+                    # The cursor starts at the earliest part's own moment, the
+                    # same rule `add_at` keeps.
+                    sets.append("due = ?")
+                    args.append(first)
+                # A fresh state, anchored at this occurrence: the parts the owner
+                # just typed have not fired yet, and yesterday's marks are not
+                # theirs to inherit.
+                sets.append("steps = ?")
+                args.append(json.dumps(new_steps))
+                sets.append("step_state = ?")
+                args.append(json.dumps(_empty_step_state(len(new_steps), anchor)))
+            else:
+                # Clearing the parts leaves an ordinary reminder with its own
+                # `due`, and no state to read.
+                sets.append("steps = ?")
+                args.append(None)
+                sets.append("step_state = ?")
+                args.append(None)
         # The same rule as creation: an edit made while the private latch is
         # on marks the row, so the next firing replays it.
         mark = _taint_mark()
@@ -3351,7 +3737,8 @@ class Scheduler:
         if has_list:
             self._move_in_tx(c, row, target_key, now)
         named = [name for name, present in
-                 (("repeat", False), ("text", has_text), ("when", bool(timed)))
+                 (("repeat", False), ("text", has_text), ("when", bool(timed)),
+                  ("action", has_action), ("steps", has_steps))
                  if present]
         audit = {"fields": named}
         if has_list:
@@ -3542,9 +3929,18 @@ class Scheduler:
                 except OverflowError as exc:
                     return 409, {"ok": False, "error": _sentence(exc)}
                 kind, text = row["kind"], row["text"]
+                copy_steps = _decode_steps(_row_steps(row))
             copy_id = self._insert(kind, text=text, state="active", due=now + length, rule=None,
                                    duration=length if kind == "timer" else None,
                                    source="snooze", snooze_of=jid,
+                                   # A routine's parts come with it and its
+                                   # STATE starts fresh, anchored at the copy's
+                                   # own due, so a snoozed routine runs again
+                                   # from part 1 (2026-11-03). Without the
+                                   # re-seed the copy would come back at part 3.
+                                   steps=copy_steps,
+                                   step_state=_empty_step_state(len(copy_steps), now + length)
+                                   if copy_steps else None,
                                    # A snooze copy of a tainted row inherits
                                    # the mark even after the latch expired.
                                    source_taint=_row_taint(row) or None)
@@ -3696,6 +4092,84 @@ class Scheduler:
 
     # ---- the loop -------------------------------------------------------------------
 
+    def _routine_tick(self, c, row, steps: list, state: dict, now: float) -> tuple:
+        """A routine's turn in `tick`: fire ONE part, or move the row on.
+
+        Returns the tuple `tick` pushes onto `went`, or () when this row has
+        nothing to announce (its `due` was stale - a race, a clock change, a row
+        edited by hand). One call fires at most one part, so a routine is one
+        notification per part and never a burst.
+
+        The row is NOT ended here: an occurrence is over when its parts have been
+        ANSWERED (`answer`), because a part that asks nothing is still something
+        the owner ticks off, and that tick is what surfaces the next one."""
+        index, state = _advance_parts(steps, state, now)
+        anchor = float(state["anchor"])
+        moment = None
+        if index is not None:
+            moment = _step_moment(steps[index], anchor)
+            if moment is None:
+                moment = anchor          # an untimed FIRST part: the anchor itself
+            state["parts"][index]["fired"] = float(now)
+            state["cursor"] = int(index)
+        due = _routine_due(steps, state)
+        if due is None and row["rule"]:
+            # Every part has fired and none is left on the clock, but a part is
+            # still waiting to be answered. The routine keeps its promise to
+            # repeat: the loop wakes at the next occurrence and re-seeds, and
+            # the unanswered part is said to be lost (JARVIS-API section 21.15).
+            try:
+                due = next_run(json.loads(row["rule"]), now)
+            except Exception:
+                due = None
+        late = moment is not None and (now - moment) > LATE_AFTER
+        if index is None:
+            # Nothing to fire. If this IS the next occurrence's clock (every part
+            # fired, a part still unanswered), start the new occurrence here: its
+            # own first part is announced by THIS tick, exactly once.
+            if row["rule"] and all(entry.get("fired") is not None
+                                   for entry in state["parts"]):
+                try:
+                    fresh = _empty_step_state(len(steps), next_run(json.loads(row["rule"]), now))
+                except Exception:
+                    fresh = {}
+                if fresh:
+                    state = fresh
+                    anchor = float(state["anchor"])
+                    due = _routine_due(steps, state)
+                    index, state = _advance_parts(steps, state, now)
+                    if index is not None:
+                        moment = _step_moment(steps[index], anchor) or anchor
+                        state["parts"][index]["fired"] = float(now)
+                        state["cursor"] = int(index)
+                        late = (now - moment) > LATE_AFTER
+            if index is None:
+                # Nothing fires: still write the state and the corrected `due`,
+                # so the loop does not look at this row again until it should.
+                c.execute("UPDATE jobs SET due = ?, changed = ?, step_state = ? WHERE id = ?",
+                          (due, now, json.dumps(state), row["id"]))
+                return ()
+        ended = False
+        past_end = False
+        if row["rule"]:
+            try:
+                rule = json.loads(row["rule"])
+                nxt = next_run(rule, now)
+                if rule.get("ends") is not None:
+                    ends = float(rule["ends"])
+                    if nxt > ends:
+                        nxt = None
+                    past_end = (float(row["due"]) > ends or now > ends + LATE_AFTER)
+            except Exception:
+                nxt = None
+            ended = nxt is None
+        c.execute("UPDATE jobs SET due = ?, fired_at = ?, fired_due = ?, late = ?, "
+                  "changed = ?, step_state = ?, snoozed_to = NULL WHERE id = ?",
+                  (due, now, moment, int(late), now, json.dumps(state), row["id"]))
+        return (row["id"], row["kind"], late, ended, past_end, _row_taint(row),
+                _row_action(row), float(moment), int(index), len(steps),
+                _part_action(steps[index]))
+
     def tick(self, now: Optional[float] = None) -> list:
         """One look at the list: everything due goes off, ONCE. Returns the
         ids that went off. Public, so the tests drive it with their own clock."""
@@ -3717,6 +4191,18 @@ class Scheduler:
                 late = (now - float(row["due"])) > LATE_AFTER
                 ended = False
                 past_end = False
+                # Multi-part reminders (2026-11-03): a row whose parts and state
+                # agree is a ROUTINE, and it gets one part per tick. A row whose
+                # blocks disagree (`_routine_state` is {}) is NOT one: it falls
+                # through and fires as an ordinary reminder, which is the whole
+                # of the "unreadable state" rule.
+                steps_here = _decode_steps(_row_steps(row))
+                state_here = _routine_state(steps_here, _row_step_state(row))
+                if state_here:
+                    out = self._routine_tick(c, row, steps_here, state_here, now)
+                    if out:
+                        went.append(out)
+                    continue
                 if row["rule"]:
                     try:
                         rule = json.loads(row["rule"])
@@ -3759,7 +4245,8 @@ class Scheduler:
                               "WHERE id = ?",
                               (now, row["due"], int(late), now, now, row["id"]))
                 went.append((row["id"], row["kind"], late, ended, past_end,
-                             _row_taint(row), _row_action(row), float(row["due"])))
+                             _row_taint(row), _row_action(row), float(row["due"]),
+                             None, 0, {}))
             # Housekeeping: what went off a day ago, and done to-dos a week old.
             c.execute("DELETE FROM jobs WHERE state = 'fired' AND fired_at < ?",
                       (now - FIRED_KEEP,))
@@ -3770,7 +4257,8 @@ class Scheduler:
             # BUNDLE_RETENTION_DAYS days - the bare reminder row stays, the
             # details that were only there to help do it do not.
             _expire_bundles(c, now)
-        for jid, kind, late, ended, past_end, taint, action_raw, due in went:
+        for (jid, kind, late, ended, past_end, taint, action_raw, due,
+             part, parts_n, part_action) in went:
             self.fired += 1
             k = KINDS.get(kind)
             if past_end:
@@ -3797,6 +4285,12 @@ class Scheduler:
             else:
                 _audit("schedule.fired", {"id": jid, "kind": kind, "late": late})
                 data = {"id": jid, "kind": kind, "state": "fired", "late": bool(late)}
+                if part is not None:
+                    # Additive keys an older client ignores: WHICH part this is,
+                    # so both apps can say "2 of 4" and put the part's own
+                    # buttons on the notification instead of the row's.
+                    data["step"] = int(part)
+                    data["parts"] = int(parts_n)
                 if k is not None and not k.notify:
                     # Nothing to tell the owner (the standby schedule at
                     # 01:00): both apps show no notification or toast for it.
@@ -3813,12 +4307,21 @@ class Scheduler:
             # id. One occurrence spawns one card, and `_fire_action` keeps the
             # (id, due) pair it has asked about, so a retry inside this process
             # can never ask or run twice.
-            if action_raw:
-                fired_action = _decode_action(action_raw)
-                if fired_action and fired_action["kind"] in ACTING_ACTION_KINDS:
-                    self._spawn(lambda jid=jid, due=due: _safe_action(self, jid, due))
-                elif not fired_action:
-                    _audit("schedule.action_unreadable", {"id": jid})
+            #
+            # A PART's own action (2026-11-03) is the one that counts for a
+            # routine: its `run-task`, once, for that part. A part that only
+            # asks a question raises nothing at all - an answer is a log line,
+            # cardless. The pair `_fire_action` remembers carries the part's
+            # index too, or a routine's second `run-task` part at another time
+            # would be refused as a duplicate and silently never ask.
+            fired_action = part_action if part is not None else (
+                _decode_action(action_raw) if action_raw else {})
+            if fired_action and fired_action["kind"] in ACTING_ACTION_KINDS:
+                self._spawn(lambda jid=jid, due=due, part=part,
+                                   fired_action=fired_action:
+                            _safe_action(self, jid, due, part, fired_action))
+            elif part is None and action_raw and not fired_action:
+                _audit("schedule.action_unreadable", {"id": jid})
         return [w[0] for w in went]
 
     def end(self, jid: str) -> bool:
@@ -4030,7 +4533,62 @@ class Scheduler:
         kept_answers = _decode_answers(raw_answers)
         if kept_answers:
             v["answers"] = kept_answers
-        if v.get("action", {}).get("kind") == ASK_KIND:
+        # A routine's PARTS (2026-11-03). Handed out only when the row really has
+        # them, so a job with no parts - which is every job written before this -
+        # grows NO key at all: the same additive contract `action` and `answers`
+        # keep. `steps` carries the shape AND the live marks together, because
+        # both apps draw one row per part with its own buttons and its own tick;
+        # `buttons` is the EFFECTIVE list (the part's own, or the ONE implicit
+        # Done), so neither app ever invents a label.
+        steps_here = _decode_steps(_row_steps(row))
+        if steps_here:
+            state_here = _routine_state(steps_here, _row_step_state(row))
+            if not state_here:
+                # The shape decoded and the state did not (or they disagree):
+                # one boolean so a client can say one line instead of drawing
+                # half a routine. The row still fires as an ordinary reminder.
+                v["steps_unreadable"] = True
+            else:
+                anchor = float(state_here["anchor"])
+                drawn = []
+                missed = 0
+                for index, part in enumerate(steps_here):
+                    live = state_here["parts"][index]
+                    item = {"id": part["id"], "label": part["label"],
+                            "offset_min": part["offset_min"], "at": part["at"],
+                            "buttons": _part_button_blocks(part),
+                            "fired_at": live["fired"],
+                            "done": live["done"] is not None,
+                            "missed": live.get("missed") is True,
+                            "current": index == int(state_here["cursor"])}
+                    moment = _step_moment(part, anchor)
+                    if moment is not None:
+                        item["when"] = clock(moment)
+                    own = _part_action(part)
+                    if own:
+                        if own.get("kind") == ASK_KIND:
+                            # The part's OWN question and buttons, without the
+                            # `kind` marker the row's `action` carries: a part is
+                            # an `ask` by sitting under this key, exactly as it
+                            # is stored.
+                            item["ask"] = {key: value for key, value in own.items()
+                                           if key != "kind"}
+                            item["asks"] = True
+                        else:
+                            # A part that runs a task: the desktop does not draw
+                            # its block (the card owns the words), it only needs
+                            # to know there is one.
+                            item["runs_task"] = True
+                    if live.get("missed") is True:
+                        missed += 1
+                    drawn.append(item)
+                v["steps"] = drawn
+                v["steps_parts"] = len(drawn)
+                v["steps_cursor"] = int(state_here["cursor"])
+                if missed:
+                    v["missed_parts"] = missed
+        if v.get("action", {}).get("kind") == ASK_KIND or any(
+                item.get("asks") for item in v.get("steps") or ()):
             # A question is worth being asked and answered: both apps draw its
             # buttons, and `answers` may be absent (nothing pressed yet) - so
             # the marker says the PC can take an answer, which is the one thing
@@ -4184,7 +4742,16 @@ class Scheduler:
                 # a question nothing can draw), but an older backend ALSO has no
                 # `answer` verb - so a newer UI hides the buttons unless the PC
                 # says `asks: true`, and every old client ignores the key.
-                "asks": True, "now": now, "tz": _tz_name(now),
+                "asks": True,
+                # A reminder with PARTS (2026-11-03): the same kind of marker,
+                # for the same reason. `handle_add` pulls only the keys it
+                # knows, so an older backend would SILENTLY DROP `steps` and the
+                # owner would get one plain reminder where they asked for a
+                # routine - the one dangerous direction. A newer UI therefore
+                # hides the parts editor when this is absent and says why, and
+                # every old client ignores the key. The same contract `phase2`
+                # and `actions` have.
+                "steps": True, "now": now, "tz": _tz_name(now),
                 "jobs": self.listed(), "todo": todo,
                 # The to-do list's own day (2026-11-02): which mode is in
                 # force, the two modes in the owner's words for the Settings
@@ -4202,7 +4769,11 @@ class Scheduler:
                 "running": self.running, "limits": {
                     "text": MAX_TEXT, "jobs": MAX_JOBS, "todo": MAX_TODO,
                     "timer_seconds": MAX_TIMER, "min_every_hours": MIN_EVERY_HOURS,
-                    "lists": MAX_LISTS, "snooze_seconds": SNOOZE_DEFAULT}}
+                    "lists": MAX_LISTS, "snooze_seconds": SNOOZE_DEFAULT,
+                    # How many parts one routine may have (2026-11-03): the
+                    # editor's own ceiling, read from here so the page and the
+                    # phone never hard-code a number the PC would refuse.
+                    "steps": MAX_STEPS}}
 
     # ---- "this sentence set a reminder" (for the learner) ------------------------------
 
@@ -4228,14 +4799,82 @@ def _safe(fn: Callable[[str], None], jid: str) -> None:
         pass
 
 
-def _safe_action(sched, jid: str, due: float) -> None:
+def _safe_action(sched, jid: str, due: float, part=None, action=None) -> None:
     """A reminder's fire-time action card, on its own thread. Nothing it raises
     reaches the tick loop - the same rule a kind's `on_fire` has, and for the
-    same reason: a card that waits fifteen minutes must never stop the clock."""
+    same reason: a card that waits fifteen minutes must never stop the clock.
+
+    `part`/`action` (2026-11-03): ONE part of a routine and the block that part
+    carries. Both None is an ordinary reminder's own action."""
     try:
-        sched._fire_action(jid, due)
+        sched._fire_action(jid, due, part=part, action=action)
     except Exception:
         pass
+
+
+def _part_receipt(part: dict) -> dict:
+    """ONE part as a receipt may name it: its words, its time, and whether it
+    asks a question. Never the question itself and never a destination - a
+    receipt is a line in a list, not a second copy of the reminder."""
+    return {"label": str(part.get("label") or ""),
+            "offset_min": part.get("offset_min"),
+            "at": part.get("at"),
+            "asks": bool(_part_action(part))}
+
+
+def record_routine_receipt(jid: str, steps: list, said: str) -> str:
+    """ONE receipt for one routine created cardlessly, so Undo outlives the
+    120-second "cancel that" window (`UNDO_WINDOW`).
+
+    Written AFTER the row exists, which is a deliberate, stated deviation from
+    `jarvis_receipts.record`'s "called BEFORE the change" docstring: a CREATION
+    has nothing to snapshot before it, and the id the receipt needs only exists
+    afterwards. If it returns "" nothing is lost - "cancel that" still works for
+    its own two minutes.
+
+    `before` is the snapshot the restart path restores TO: a schedule.db with no
+    row of that id. `after` is what was created, for the list to show. Pressing
+    Undo raises the ordinary `undo_action` card - creation is cardless, undoing
+    it is a mutating action, and the one permission model is not bypassed here.
+    """
+    if not jid:
+        return ""
+    try:
+        import jarvis_receipts
+    except Exception:
+        return ""
+    _register_steps_restorer()
+    try:
+        return jarvis_receipts.record(
+            STEPS_TOOL, said,
+            before={"id": str(jid), "existed": False},
+            after={"id": str(jid), "parts": [_part_receipt(part) for part in steps or ()]},
+            undo=lambda: get().act(str(jid), "delete"))
+    except Exception:
+        return ""
+
+
+def restore_routine(snapshot) -> None:
+    """Put a routine's creation back: the row is deleted, exactly as the
+    in-process `undo` callable does. The snapshot's own `id` is the whole
+    instruction - nothing else about the row is needed to remove it."""
+    jid = str((snapshot or {}).get("id") or "") if isinstance(snapshot, dict) else ""
+    if jid:
+        get().act(jid, "delete")
+
+
+def _register_steps_restorer() -> None:
+    """Say how a routine's creation is undone AFTER a restart, when the
+    in-process callable is gone by definition. Never raises: a tree without
+    `jarvis_receipts` beside this file simply has no receipts."""
+    try:
+        import jarvis_receipts
+        jarvis_receipts.register_restorer(STEPS_TOOL, restore_routine)
+    except Exception:
+        pass
+
+
+_register_steps_restorer()
 
 
 def _tz_name(now: float) -> str:
@@ -4513,7 +5152,8 @@ def handle_add(body: dict) -> tuple:
             if body.get("repeat") is not None:
                 job = s.add_repeat(kind, body.get("repeat"), body.get("text") or "",
                                    source="app",
-                                   action=body.get("action") if kind == "reminder" else None)
+                                   action=body.get("action") if kind == "reminder" else None,
+                                   steps=body.get("steps") if kind == "reminder" else None)
                 return _repeat_answer(job, s.now())
             if kind in ("alarm", "reminder") and ("date" in body or "time" in body):
                 # "Photo to reminder" (2026-09-28, JARVIS-API section 83):
@@ -4612,7 +5252,12 @@ def handle_act(body: dict) -> tuple:
         jid = body.get("id")
         if not isinstance(jid, str) or not re.fullmatch(r"s[0-9a-f]{10}", jid):
             return 400, {"ok": False, "error": "need one job id"}
-        return get().answer(jid, body.get("button"), source=str(body.get("source") or "app"))
+        return get().answer(jid, body.get("button"),
+                            source=str(body.get("source") or "app"),
+                            # 2026-11-03: which PART of a routine. An index into
+                            # `steps`, never a label - the same rule `button`
+                            # keeps - and ignored by a reminder with no parts.
+                            step=_answer_step(body.get("step")))
     jid = body.get("id")
     if not isinstance(jid, str) or not re.fullmatch(r"s[0-9a-f]{10}", jid):
         return 400, {"ok": False, "error": "need one job id"}
@@ -4622,6 +5267,23 @@ def handle_act(body: dict) -> tuple:
 def _sentence(exc: BaseException) -> str:
     t = str(exc).strip() or type(exc).__name__
     return t[0].upper() + t[1:] + ("" if t.endswith(".") else ".")
+
+
+def _answer_step(raw) -> Optional[int]:
+    """`{"do": "answer", "step": k}`: which part, as a whole number, or None.
+
+    None means "the part that is current", which is what a client that does not
+    know about parts sends (and what an older client's body has always been).
+    Anything else that is not a non-negative whole number is None too: the
+    scheduler refuses an out-of-range index with its own sentence, and guessing
+    here would answer a part the owner did not press."""
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
 
 
 # --------------------------------------------------------------------------
@@ -4955,6 +5617,346 @@ def _decode_ask(got: dict) -> dict:
         return {}
 
 
+# ---- a reminder's PARTS (2026-11-03) ----------------------------------------
+#
+# The rules live here, in ONE place, and are used twice: once when the routine
+# is SAVED (`add_at` / `add_repeat` / an edit) and once when it is READ
+# (`_decode_steps`, `_decode_step_state`). That two-check pattern is what keeps
+# the save door and the read door from drifting apart - the same shape the `ask`
+# block keeps - so a row edited on the owner's own disk reads as a reminder with
+# no parts and fires normally, instead of handing an app half a block.
+
+#: A part's clock time, "HH:MM" on the occurrence's own calendar day.
+_STEP_AT = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d")
+
+
+def _clean_steps(raw, *, starts_at: Optional[float] = None) -> list:
+    """A routine's parts, checked and normalised. `[]` when there are none.
+
+    ValueError, in ONE plain sentence, for anything else. `starts_at` is the
+    occurrence's anchor when the caller knows it (`add_at` knows its own time,
+    `add_repeat` its first run); it is what makes an `at` part and an
+    `offset_min` part comparable, so "Part 3 starts before Part 2" can be
+    refused. A read door passes None: the order was settled when the row was
+    written, and refusing a hand-edited row over an order it can still fire is
+    worse than firing it in index order."""
+    if raw is None or raw == "":
+        return []
+    if not isinstance(raw, list):
+        raise ValueError(STEP_KEYS_ONLY)
+    if len(raw) < MIN_STEPS:
+        raise ValueError(STEPS_NEED_TWO)
+    if len(raw) > MAX_STEPS:
+        raise ValueError(STEPS_TOO_MANY)
+    out: list = []
+    for index, part in enumerate(raw):
+        if not isinstance(part, dict):
+            raise ValueError(STEP_KEYS_ONLY)
+        if set(part) - STEP_KEYS:
+            raise ValueError(STEP_KEYS_ONLY)
+        label = part.get("label")
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(STEP_NEEDS_WORDS)
+        label = " ".join(label.split())
+        if len(label) > MAX_STEP_LABEL:
+            raise ValueError(STEP_LABEL_LONG)
+        at = part.get("at")
+        offset = part.get("offset_min")
+        if at is not None and offset is not None:
+            raise ValueError(STEP_ONE_TIME)
+        if at is not None:
+            if not isinstance(at, str) or not _STEP_AT.fullmatch(at.strip()):
+                raise ValueError(STEP_AT_SHAPE)
+            at = at.strip()
+        if offset is not None:
+            if isinstance(offset, bool) or not isinstance(offset, (int, float)):
+                raise ValueError(STEP_OFFSET_RANGE)
+            if float(offset) != float(int(offset)) or not 0 <= offset <= MAX_STEP_OFFSET:
+                raise ValueError(STEP_OFFSET_RANGE)
+            offset = int(offset)
+        clean: dict = {"id": "p" + str(index + 1), "label": label,
+                       "offset_min": offset, "at": at}
+        ask = part.get("ask")
+        if ask is not None and ask != {}:
+            if not isinstance(ask, dict):
+                raise ValueError(_NO_ACTION_KIND)
+            # EXACTLY the existing action validator, so the three-button
+            # ceiling, the 24-character label, the no-duplicate-labels rule, the
+            # 200-character question, the four destinations and (since #1119)
+            # the owner's own `run-task` phrase are never reimplemented here.
+            # `kind` is the one thing a part's own block does not carry: it is
+            # the `ask` key's own job, and `_part_action` puts it back.
+            clean["ask"] = _clean_step_action(ask)
+        out.append(clean)
+    _check_step_order(out, starts_at)
+    return out
+
+
+#: What a part's own block may be. A part is either a question (the `ask`
+#: block, up to three buttons) or one closed task to run - the same two shapes
+#: `_clean_action` already knows. A part that opened a file or a page would be a
+#: second opener on the phone's notification, which is a surface this wave does
+#: not own.
+STEP_ACTION_ONLY = ("A part either asks a question with buttons or runs one task. "
+                    "Opening a file or a page is the reminder's own action, not a part's.")
+
+
+def _clean_step_action(raw) -> dict:
+    """A part's own block, checked by the ONE action validator.
+
+    An `ask` block or a `run-task` (the owner's own words included, through
+    #1119's `_clean_run_task`), and nothing else. `kind` is stripped, because the
+    key a part's block sits under carries it - and it is put back by SHAPE, not
+    by guessing: a block with a `question` or `buttons` is a question, and one
+    with `task` or `job` is a task. That is what makes the save door and the read
+    door agree, which is the whole two-check pattern."""
+    if not isinstance(raw, dict):
+        raise ValueError(_NO_ACTION_KIND)
+    kind = raw.get("kind")
+    if kind is None:
+        kind = ASK_KIND if ("question" in raw or "buttons" in raw) else "run-task"
+    if kind not in (ASK_KIND, "run-task"):
+        raise ValueError(STEP_ACTION_ONLY)
+    clean = _clean_action({**raw, "kind": kind})
+    if not clean:
+        raise ValueError(_NO_ACTION_KIND)
+    clean.pop("kind", None)
+    return clean
+
+
+def _part_action(part: dict) -> dict:
+    """A part's stored block as the action it is, or {} when it cannot be read.
+
+    Never raises, and it is the SAME check the save door uses (`_clean_action`
+    for a `run-task`, `_clean_ask` for a question) - the two-check pattern every
+    other stored block here keeps."""
+    block = part.get("ask") if isinstance(part.get("ask"), dict) else {}
+    if not block:
+        return {}
+    if "question" in block or "buttons" in block:
+        return _decode_ask({"kind": ASK_KIND, **block})
+    return _decode_action({"kind": "run-task", **block})
+
+
+def _part_button_blocks(part: dict) -> list:
+    """The buttons a part really offers: its own question's, or the ONE implicit
+    "Done" a plain checklist line gets handed out.
+
+    Both apps draw this list and never invent a label: a part with no question is
+    still something the owner can tick off, and it must read the same on the PC
+    and on the phone."""
+    action = _part_action(part)
+    buttons = action.get("buttons") if action.get("kind") == ASK_KIND else None
+    if isinstance(buttons, list) and buttons:
+        return [dict(button) for button in buttons]
+    return [{"label": "Done", "does": "done"}]
+
+
+def _check_step_order(parts: list, starts_at: Optional[float]) -> None:
+    """Refuse a routine whose parts are not in time order.
+
+    Only parts whose distance from the anchor is KNOWN are compared, so a
+    hand-edited row that mixes an `at` with an `offset_min` (and no anchor to
+    measure them from) is accepted rather than refused over an order it can
+    still fire."""
+    previous = None
+    for index, part in enumerate(parts):
+        here = _step_offset_min(part, starts_at)
+        if here is None:
+            continue
+        if previous is not None and here < previous[1]:
+            raise ValueError(STEP_ORDER.format(index + 1, previous[0] + 1))
+        previous = (index, here)
+
+
+def _step_offset_min(part: dict, starts_at: Optional[float]) -> Optional[float]:
+    """How many minutes after the anchor this part is, or None when that cannot
+    be known (an untimed part, or an `at` with no anchor to measure it from)."""
+    offset = part.get("offset_min")
+    if offset is not None:
+        return float(offset)
+    at = part.get("at")
+    if not at or starts_at is None:
+        return None
+    hh, mm = str(at).split(":")
+    lt = time.localtime(float(starts_at))
+    return float((int(hh) * 60 + int(mm)) - (lt.tm_hour * 60 + lt.tm_min))
+
+
+def _step_moment(part: Optional[dict], anchor: Optional[float]) -> Optional[float]:
+    """The epoch moment this part is due on the occurrence anchored at `anchor`,
+    or None for an untimed part (which never touches `due`)."""
+    if not part or anchor is None:
+        return None
+    offset = part.get("offset_min")
+    if offset is not None:
+        return float(anchor) + float(offset) * 60.0
+    at = part.get("at")
+    if not at:
+        return None
+    hh, mm = str(at).split(":")
+    lt = time.localtime(float(anchor))
+    return wall_to_epoch(lt.tm_year, lt.tm_mon, lt.tm_mday, int(hh), int(mm))
+
+
+def _decode_steps(raw) -> list:
+    """The stored parts, or [] for anything that is not a valid block.
+
+    Never raises, and it is the SAME check the save door uses: a routine whose
+    parts block was damaged on disk reads as an ordinary reminder and fires
+    normally, rather than handing an app half a block. A single-part block is
+    [] here - one part is a reminder, not a routine."""
+    if not raw:
+        return []
+    try:
+        got = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return []
+    try:
+        return _clean_steps(got)
+    except (ValueError, TypeError, KeyError):
+        return []
+
+
+def _empty_step_state(count: int, anchor) -> dict:
+    """The state a routine starts an occurrence with: nothing fired, nothing
+    answered, the cursor on part 1, anchored at this occurrence's own moment."""
+    return {"anchor": float(anchor), "cursor": 0,
+            "parts": [{"fired": None, "done": None} for _ in range(int(count))]}
+
+
+def _decode_step_state(raw) -> dict:
+    """The stored parts STATE, or {} for anything that is not a valid block.
+
+    Never raises, and it is deliberately strict about its exact keys: a state
+    this code cannot read exactly is treated as unreadable (the row fires as a
+    plain reminder) rather than guessed at. `fired` is the durable dedupe, so a
+    value that is not a number is not something to approximate."""
+    if not raw:
+        return {}
+    try:
+        got = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception:
+        return {}
+    if not isinstance(got, dict) or set(got) - {"anchor", "cursor", "parts"}:
+        return {}
+    try:
+        anchor = float(got.get("anchor"))
+        cursor = int(got.get("cursor"))
+    except (TypeError, ValueError):
+        return {}
+    entries = got.get("parts")
+    if not isinstance(entries, list) or not entries:
+        return {}
+    parts: list = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            return {}
+        live: dict = {}
+        for key in ("fired", "done"):
+            value = entry.get(key)
+            if value is None:
+                live[key] = None
+                continue
+            try:
+                live[key] = float(value)
+            except (TypeError, ValueError):
+                return {}
+        if entry.get("missed") is True:
+            live["missed"] = True
+        parts.append(live)
+    if not 0 <= cursor < len(parts):
+        return {}
+    return {"anchor": anchor, "cursor": cursor, "parts": parts}
+
+
+def _routine_state(steps: list, raw_state) -> dict:
+    """(steps, step_state) as one readable pair, or {} when they disagree.
+
+    A routine is only a routine when the two blocks are the same length: the
+    shape says four parts and the state says three is a row this code cannot
+    draw honestly, so `_view` says `steps_unreadable` and `tick` fires it as an
+    ordinary reminder."""
+    if not steps:
+        return {}
+    state = _decode_step_state(raw_state)
+    if not state or len(state.get("parts") or ()) != len(steps):
+        return {}
+    return state
+
+
+def _steps_written(state: dict) -> int:
+    """How many parts have been fired - the "2 of 4" in a title."""
+    return sum(1 for entry in state.get("parts") or () if entry.get("fired") is not None)
+
+
+def _next_timed_moment(steps: list, state: dict) -> Optional[float]:
+    """The earliest moment of a part that has not fired yet, or None when
+    nothing is left on the clock for this occurrence."""
+    soonest: Optional[float] = None
+    for index, part in enumerate(steps):
+        if state["parts"][index].get("fired") is not None:
+            continue
+        moment = _step_moment(part, state["anchor"])
+        if moment is None:
+            continue
+        if soonest is None or moment < soonest:
+            soonest = moment
+    return soonest
+
+
+def _routine_due(steps: list, state: dict) -> Optional[float]:
+    """When the loop must next wake for this routine: the earliest unfired timed
+    part, or the anchor itself when the FIRST part is untimed (that is the moment
+    the routine starts and says "part 1").
+
+    None when there is nothing left for the clock, which is what keeps a routine
+    whose remaining parts are all waiting on an answer from spinning the loop."""
+    soonest = _next_timed_moment(steps, state)
+    if soonest is not None:
+        return soonest
+    if not steps:
+        return None
+    first = state["parts"][0]
+    if first.get("fired") is None and _step_moment(steps[0], state["anchor"]) is None:
+        return float(state["anchor"])
+    return None
+
+
+def _advance_parts(steps: list, state: dict, now: float) -> tuple:
+    """Mark the parts whose moment is long past, and pick the ONE part to fire.
+
+    Returns `(index or None, state)`. The LOWEST index wins, so a PC that was
+    asleep through three parts walks them out in order, each saying it is late -
+    a part is a distinct action (laundry, dryer, fold), not a repeat occurrence.
+
+    A part whose moment is more than PART_LATE_MAX before `now` is marked
+    `missed` and NOT notified: twelve parts times a week of downtime is how a
+    feature becomes a nuisance, and `missed_parts` says how many were skipped."""
+    parts = state["parts"]
+    for index, part in enumerate(steps):
+        live = parts[index]
+        if live.get("fired") is not None or live.get("done") is not None:
+            continue
+        moment = _step_moment(part, state["anchor"])
+        if moment is None:
+            # UNTIMED: never touches `due`, and is surfaced by the answer to the
+            # part before it. The FIRST part is the exception: the anchor is the
+            # moment the routine starts, so a checklist's own first line is what
+            # the start time announces.
+            if index == 0:
+                return 0, state
+            continue
+        if moment > now:
+            continue
+        if now - moment > PART_LATE_MAX:
+            live["missed"] = True
+            live["fired"] = moment       # so it is never looked at again
+            continue
+        return index, state
+    return None, state
+
+
 def _clean_run_task(raw: dict) -> dict:
     """ONE run-task: the closed name (`task`) OR the owner's own words (`job`).
 
@@ -5149,6 +6151,12 @@ def _decode_answers(raw) -> list:
         kept = {"at": at, "clock": str(entry.get("clock") or clock(at))[:8],
                 "button": str(entry.get("button") or "")[:MAX_ASK_LABEL],
                 "does": str(entry.get("does") or "")[:20], "wrote": wrote}
+        # WHICH part a routine's answer was about (2026-11-03). An index, never
+        # a label; absent on every answer from before this, and on a reminder
+        # that has no parts, so an old log reads byte for byte as it did.
+        step = entry.get("step")
+        if isinstance(step, int) and not isinstance(step, bool) and 0 <= step < MAX_STEPS:
+            kept["step"] = int(step)
         if problems:
             kept["problems"] = problems
         out.append(kept)
@@ -5545,6 +6553,11 @@ def _reminder_extras(body) -> dict:
     # one known kind and its one payload key.
     if body.get("action") is not None:
         out["action"] = body.get("action")
+    # 2026-11-03: a routine's parts. Checked by `_clean_steps` in `add_at` /
+    # `add_repeat` - the only two functions that know the occurrence's anchor,
+    # which is what makes an `at` part and an `offset_min` part comparable.
+    if body.get("steps") is not None:
+        out["steps"] = body.get("steps")
     return out
 
 

@@ -58,7 +58,19 @@ use crate::ChatState;
 /// writes are NOT here - `/api/calendar/add`, `/api/calendar/act` and
 /// `/api/calendar/settings` stay refused, and the first two go through
 /// `hud_calendar_add` / `hud_calendar_act`, which hold the stale-link rule.
-pub const HUD_GET_PATHS: [&str; 14] = [
+///
+/// `/api/setup` (2026-11-03, Wave B's "Personalize Jarvis" HUD banner): the
+/// owner's own questionnaire state - how many questions are answered, the
+/// question-set version, what they last finished, and when they last pressed
+/// "Not now". A read of Option ids, counts and timestamps: no answer text worth
+/// hiding, no file, no account, no path - the same read both apps already make.
+/// Recording progress and dismissing are NOT here: they go through the
+/// `hud_setup_dismiss` and `setup_questionnaire` commands, so this window never
+/// posts. `/api/setup/plan` and `/api/setup/apply` stay refused.
+///
+/// `15` after the 2026-11-03 merge: this branch's `/api/setup` plus main's
+/// multiwindow lane's `/api/self`, `/api/self/version` and `/api/conversations`.
+pub const HUD_GET_PATHS: [&str; 15] = [
     "/api/status",
     "/api/graph",
     "/api/pending",
@@ -99,6 +111,11 @@ pub const HUD_GET_PATHS: [&str; 14] = [
     // The Current Models panel's model/loaded facts (2026-10-26): a plain
     // GET, read-only, no card and no switch - see the doc comment above.
     "/api/models",
+    // The "Personalize Jarvis" banner's state (2026-11-03): the answered count,
+    // the question-set version, `completed_version` and `dismissed_at`. A read
+    // of the owner's own progress, and the same one both apps make; the writes
+    // are the two commands above, never this window's own POSTs.
+    "/api/setup",
 ];
 
 /// The retrieval trace: `/api/retrieve?q=<the question>`, and nothing else.
@@ -498,6 +515,10 @@ mod tests {
         // The Current Models panel's list read, added 2026-10-26: a plain GET
         // on the exact path, and nothing around it.
         assert_eq!(allowed_get("/api/models").as_deref(), Some("/api/models"));
+        // The "Personalize Jarvis" banner's state, added 2026-11-03: the same
+        // plain GET, so the HUD can say how far the quiz has got without
+        // holding the pairing token. The two writes beside it stay refused.
+        assert_eq!(allowed_get("/api/setup").as_deref(), Some("/api/setup"));
         // The Update button's cheap version read (2026-11-03, JARVIS-API
         // section 184.7): the block alone, on the exact path. No query, no
         // sub-path and no trailing slash - the page has one read here, and a
@@ -595,6 +616,14 @@ mod tests {
             "/api/models?recommend=1",
             "/api/models/",
             "/api/models#a",
+            // The questionnaire's state may be READ and nothing else: planning
+            // and applying change settings, and recording progress is the two
+            // commands' door. A query on the read is not one the page sends.
+            "/api/setup/plan",
+            "/api/setup/apply",
+            "/api/setup/progress",
+            "/api/setup/",
+            "/api/setup?section=learning",
             "http://127.0.0.1:4719/api/status",
             "/api/retrieve",
             "/api/retrieve?q=",

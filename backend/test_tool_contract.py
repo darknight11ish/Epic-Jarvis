@@ -156,7 +156,7 @@ CATALOGUE = [
     "self_portrait",
     "send_email", "send_file_to_phone",
     "set_reminder",
-    "set_timer", "shell_exec", "stop_web_search_approval", "tidy_inbox",
+    "set_timer", "setup_quiz", "shell_exec", "stop_web_search_approval", "tidy_inbox",
     "todo_add", "todo_done",
     "web_search",
 ]

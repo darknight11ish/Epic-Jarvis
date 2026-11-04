@@ -40,15 +40,16 @@
 //! * **A per-kind switch is absolute.** Off means no toast of that kind, at
 //!   any hour, ringing or not. There is no hour at which "off" quietly means
 //!   "on again".
-//! * **Quiet hours act on the three kinds that can wait** - a reminder, the
-//!   briefing, and a handoff - **and on nothing else.** They never silence an
+//! * **Quiet hours act on the four kinds that can wait** - a reminder, the
+//!   briefing, a handoff, and the setup offer - **and on nothing else.** They
+//!   never silence an
 //!   ALARM, and they never silence an APPROVAL. An alarm the owner set must
 //!   still ring at 03:00, which is the entire point of having set it; and an
 //!   approval card must always reach him, or Jarvis sits waiting for a yes
 //!   nobody was ever told about. This is exactly the rule a later edit
 //!   flattens - "quiet hours: return false here" reads perfectly reasonable
 //!   until it is an alarm - so it is stated twice: once in
-//!   [`Kind::waits_for_quiet_hours`], which lists the three kinds by name,
+//!   [`Kind::waits_for_quiet_hours`], which lists the four kinds by name,
 //!   and once in this module's tests, which walk every minute of the day.
 
 use std::path::PathBuf;
@@ -86,6 +87,16 @@ pub struct NotificationPrefs {
     /// A website or support chat has paused at a captcha or sign-in page and
     /// is waiting for the owner.
     pub handoff: bool,
+    /// "Personalize Jarvis" is still unfinished. The one kind that is about
+    /// this PC's own state rather than something Jarvis did, so it can wait for
+    /// the morning: quiet hours hold it.
+    ///
+    /// `default` on the struct is what makes an older `notifications.json` (or
+    /// an older PC answering `/api/notifications` without the key) read as
+    /// **on**, which is the module's own rule: nothing stored must never mean
+    /// nothing may notify. The answer reader is lenient on top of that for the
+    /// same reason - see [`notifications_answer`].
+    pub setup: bool,
     /// Quiet hours on or off.
     pub quiet_enabled: bool,
     /// The window's two ends, "HH:MM" on the owner's own wall clock.
@@ -103,6 +114,7 @@ impl Default for NotificationPrefs {
             reminders: true,
             briefing: true,
             handoff: true,
+            setup: true,
             quiet_enabled: false,
             quiet_start: DEFAULT_QUIET_START.to_string(),
             quiet_end: DEFAULT_QUIET_END.to_string(),
@@ -170,7 +182,7 @@ impl NotificationPrefs {
 
 /// One kind of thing that can arrive as a Windows toast on this PC.
 ///
-/// The four kinds Settings offers a switch for, plus two it does not. The
+/// The five kinds Settings offers a switch for, plus two it does not. The
 /// "plus two" are the point: a poster must be able to say what it is posting
 /// without being handed a switch that does not exist for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,12 +197,19 @@ pub enum Kind {
     Briefing,
     /// A website or support chat is waiting for the owner.
     Handoff,
+    /// The setup questionnaire is still unfinished ("Personalize Jarvis").
+    ///
+    /// NOT from an event: no stream event names a setup offer. Rust posts it
+    /// once per launch (`setup_offer.rs`), so [`Kind::for_event`] has no arm
+    /// for it and an unknown event string still falls to [`Kind::Other`]. It
+    /// can wait for the owner to be awake, so quiet hours hold it.
+    Setup,
     /// A toast with no switch of its own: a plain (non-urgent) "tell me
     /// when" match, a "tell me when" that cannot look, and the line a Snooze
     /// press is answered with. Nothing here turns it off, because Settings
     /// never offered to - inventing a silence for it is not this module's
     /// job - and quiet hours leave it alone for the same reason the module
-    /// doc gives: only the three kinds that can wait are listed.
+    /// doc gives: only the four kinds that can wait are listed.
     Other,
     /// An approval card's own toast (`stream.rs` `refresh_pending`).
     ///
@@ -221,13 +240,16 @@ impl Kind {
 
     /// Whether quiet hours may hold this kind back.
     ///
-    /// THREE kinds, named one by one on purpose - see the module doc. An
+    /// FOUR kinds, named one by one on purpose - see the module doc. An
     /// alarm is not one of them (the owner set it to ring), and neither is an
     /// approval (`Kind::Approval`), which must always reach him. A single
     /// change here - adding `| Kind::Alarm`, say - is the edit the module's
     /// tests exist to catch.
     pub fn waits_for_quiet_hours(self) -> bool {
-        matches!(self, Kind::Reminder | Kind::Briefing | Kind::Handoff)
+        matches!(
+            self,
+            Kind::Reminder | Kind::Briefing | Kind::Handoff | Kind::Setup
+        )
     }
 }
 
@@ -259,6 +281,7 @@ pub fn verdict(prefs: &NotificationPrefs, kind: Kind, minutes: Option<u32>) -> V
         Kind::Reminder => prefs.reminders,
         Kind::Briefing => prefs.briefing,
         Kind::Handoff => prefs.handoff,
+        Kind::Setup => prefs.setup,
         // The two with no switch. `Other`: Settings never offered to turn it
         // off. `Approval`: it must always reach the owner - there is no hour
         // and no combination of switches at which this may become false.
@@ -442,6 +465,15 @@ pub(crate) fn notifications_answer(status: u16, body: &str) -> Option<Notificati
             reminders: flag("reminders")?,
             briefing: flag("briefing")?,
             handoff: flag("handoff")?,
+            // LENIENT, unlike the four above (Wave B, 2026-11-03). The `setup`
+            // switch is new here, and a PC that has not been updated yet never
+            // sends it. A required field would make every answer from that PC
+            // `None`, which means "keep what we have" (`sync_from_remote`) -
+            // right for one cycle, and wrong for ever on a backend that never
+            // learns the key: the owner's own off choice would be discarded
+            // every thirty seconds. An absent `setup` is the store's own
+            // default, which is ON, not OFF.
+            setup: node.get("setup").and_then(|v| v.as_bool()).unwrap_or(true),
             quiet_enabled: flag("quietEnabled")?,
             quiet_start: clock("quietStart")?,
             quiet_end: clock("quietEnd")?,
@@ -521,7 +553,7 @@ pub(crate) async fn refresh_notification_prefs(app: AppHandle) {
     }
 }
 
-/// The settings window's "Notifications" choices: the four switches and the
+/// The settings window's "Notifications" choices: the five switches and the
 /// quiet-hours window, pushed here by `notifications-prefs.js` - the same file
 /// that keeps the page's copy, so there is one place a change is made and two
 /// copies that are written together.
@@ -601,6 +633,7 @@ mod tests {
     fn an_empty_store_is_everything_on_and_quiet_hours_off() {
         let prefs = all_on();
         assert!(prefs.alarms && prefs.reminders && prefs.briefing && prefs.handoff);
+        assert!(prefs.setup, "the quiz offer is on until it is switched off");
         assert!(!prefs.quiet_enabled);
         assert_eq!(prefs.quiet_start, DEFAULT_QUIET_START);
         assert_eq!(prefs.quiet_end, DEFAULT_QUIET_END);
@@ -610,6 +643,7 @@ mod tests {
             Kind::Reminder,
             Kind::Briefing,
             Kind::Handoff,
+            Kind::Setup,
             Kind::Other,
             Kind::Approval,
         ] {
@@ -630,6 +664,9 @@ mod tests {
         let half: NotificationPrefs = serde_json::from_str(r#"{"reminders": false}"#).unwrap();
         assert!(!half.reminders);
         assert!(half.alarms && half.briefing && half.handoff);
+        // The `setup` switch did not exist before 2026-11-03: a file written by
+        // the build before it must read as ON, not as "the owner turned it off".
+        assert!(half.setup, "an older notifications.json read as setup OFF");
         assert!(!half.quiet_enabled);
         assert_eq!(
             half,
@@ -686,6 +723,13 @@ mod tests {
                     ..all_on()
                 },
             ),
+            (
+                Kind::Setup,
+                NotificationPrefs {
+                    setup: false,
+                    ..all_on()
+                },
+            ),
         ] {
             for prefs in [
                 off.clone(),
@@ -719,11 +763,20 @@ mod tests {
     }
 
     #[test]
-    fn quiet_hours_hold_back_the_three_that_can_wait_and_nothing_else() {
+    fn quiet_hours_hold_back_the_four_that_can_wait_and_nothing_else() {
         let prefs = quiet();
         for minutes in every_minute() {
             let inside = !(7 * 60..22 * 60).contains(&minutes);
-            for kind in [Kind::Reminder, Kind::Briefing, Kind::Handoff] {
+            for kind in [
+                Kind::Reminder,
+                Kind::Briefing,
+                Kind::Handoff,
+                // Wave B (2026-11-03): the setup offer is the fourth kind that
+                // can wait. "Personalize Jarvis" at 03:00 is exactly the toast
+                // the ruling Q4 refuses - `Kind::Other` would have posted it,
+                // which is why it is not `Kind::Other`.
+                Kind::Setup,
+            ] {
                 let want = if inside {
                     Verdict::QuietHours
                 } else {
@@ -810,6 +863,7 @@ mod tests {
             reminders: false,
             briefing: false,
             handoff: false,
+            setup: false,
             quiet_enabled: true,
             ..all_on()
         };
@@ -844,6 +898,59 @@ mod tests {
         for unknown in ["", "nexttime", "next_time", "standby"] {
             assert_eq!(Kind::for_event(unknown, false), Kind::Other, "{unknown}");
         }
+        // Wave B: no event names the setup offer - Rust posts it once per
+        // launch (`setup_offer.rs`) - so an event that said "setup" would be
+        // the unknown kind, not a second path to the offer.
+        assert_eq!(Kind::for_event("setup", false), Kind::Other);
+    }
+
+    /// Wave B (2026-11-03): the new `setup` switch, on the wire and in the
+    /// store. The one thing to get right is that an OLDER PC - one that answers
+    /// `/api/notifications` without the key, because it has not been updated -
+    /// must read as ON rather than as "the owner switched it off": a required
+    /// field would return `None` here, and `None` means "keep what we have"
+    /// only for one cycle; a backend that never learns the key would discard
+    /// the owner's own choice every thirty seconds for ever.
+    #[test]
+    fn the_setup_switch_reads_leniently_and_off_is_off() {
+        // The owner's live body with `setup` absent - the shape an older PC
+        // answers today.
+        let older = backend(
+            r#"{"ok": true, "notifications": {"alarms": true, "reminders": true,
+                "briefing": true, "handoff": true, "quietEnabled": false,
+                "quietStart": "22:00", "quietEnd": "07:00"}}"#,
+        )
+        .expect("an older PC's answer is still an answer");
+        assert!(
+            older.setup,
+            "an absent setup switch must read as on, not as switched off"
+        );
+
+        // The new shape: the phone (or this PC) really switched it off.
+        let off = backend(
+            r#"{"ok": true, "notifications": {"alarms": true, "reminders": true,
+                "briefing": true, "handoff": true, "setup": false,
+                "quietEnabled": false, "quietStart": "22:00",
+                "quietEnd": "07:00"}}"#,
+        )
+        .expect("the new answer");
+        assert!(!off.setup);
+        for minutes in every_minute() {
+            assert_eq!(
+                verdict(&off, Kind::Setup, Some(minutes)),
+                Verdict::SwitchedOff,
+                "a setup switch that is off is off at every hour"
+            );
+        }
+        // A value that is not a bool is not a choice: the default stands.
+        let wrong = backend(
+            r#"{"ok": true, "notifications": {"alarms": true, "reminders": true,
+                "briefing": true, "handoff": true, "setup": "yes",
+                "quietEnabled": false, "quietStart": "22:00",
+                "quietEnd": "07:00"}}"#,
+        )
+        .expect("the rest of the answer is readable");
+        assert!(wrong.setup, "a non-boolean setup must not read as off");
     }
 
     #[test]
@@ -876,6 +983,15 @@ mod tests {
                 .contains("notifications::may_post(app, crate::notifications::Kind::Approval)"),
             "the approval toast no longer asks the store - a switch or quiet hours \
              could silence a card"
+        );
+        // The "Personalize Jarvis" offer (Wave B, 2026-11-03) is posted by Rust,
+        // once per launch, and it asks the store like every other toast: this is
+        // what makes quiet hours hold it and the new `setup` switch silence it.
+        let offer = include_str!("setup_offer.rs");
+        assert!(
+            function(offer, "pub(crate) fn offer_once(")
+                .contains("notifications::may_post(&app, crate::notifications::Kind::Setup)"),
+            "the setup offer posts without asking the notification store"
         );
     }
 
