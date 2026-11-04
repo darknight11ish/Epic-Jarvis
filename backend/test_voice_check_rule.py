@@ -86,6 +86,30 @@ def engine(device="phone", by="button", locked=None):
     return e, out
 
 
+class RealEngine:
+    """The module-level `jarvis_live.ENGINE`, made hermetic for the one test
+    that drives `handle_post`: no voice print is needed, nothing is warmed, no
+    loop thread runs, and no real card queue is read. CI has no enrolled
+    voice and no Ollama, so a test that leaned on this PC's own state would
+    pass here and fail there."""
+
+    ATTRS = dict(voice_ready=lambda dev: None, warm=lambda: None,
+                 power_mode=lambda: "", cards_waiting=lambda: [],
+                 windows_locked=lambda: None, end_on=lambda: "app_lock",
+                 run_loop=False, loop_ticks=False)
+
+    def __enter__(self):
+        self.saved = {k: getattr(L.ENGINE, k) for k in self.ATTRS}
+        for k, v in self.ATTRS.items():
+            setattr(L.ENGINE, k, v)
+        return L.ENGINE
+
+    def __exit__(self, *a):
+        for k, v in self.saved.items():
+            setattr(L.ENGINE, k, v)
+        L.ENGINE.stop()
+
+
 class Verdict:
     def __init__(self, allowed=True, outcome="approved", tier="ask"):
         self.allowed, self.outcome, self.tier = allowed, outcome, tier
@@ -207,22 +231,23 @@ def t_every_other_session_still_checks():
 
 def t_the_route_passes_the_phone_word_through():
     with TempConfig():
-        code, out = L.handle_post({"do": "start", "device": "phone", "locked": False})
-        check("POST start with \"locked\": false starts Live", code == 200 and out.get("ok"),
-              out)
-        check("...and the session records it, so a clip is not checked",
-              L.ENGINE.phone_locked is False
-              and L.ENGINE.trust_decision("phone", 2.5)["action"] == "trusted")
-        L.ENGINE.stop()
-        code, out = L.handle_post({"do": "start", "device": "phone"})
-        check("POST start with no \"locked\" keeps today's behaviour",
-              code == 200 and L.ENGINE.phone_locked is None
-              and L.ENGINE.trust_decision("phone", 2.5)["action"] == "check", out)
-        L.ENGINE.stop()
-        code, out = L.handle_post({"do": "start", "device": "phone", "locked": "no"})
-        check("...and so does a value that is not true/false",
-              code == 200 and L.ENGINE.phone_locked is None, out)
-        L.ENGINE.stop()
+        with RealEngine():
+            code, out = L.handle_post({"do": "start", "device": "phone", "locked": False})
+            check("POST start with \"locked\": false starts Live",
+                  code == 200 and out.get("ok"), out)
+            check("...and the session records it, so a clip is not checked",
+                  L.ENGINE.phone_locked is False
+                  and L.ENGINE.trust_decision("phone", 2.5)["action"] == "trusted")
+            L.ENGINE.stop()
+            code, out = L.handle_post({"do": "start", "device": "phone"})
+            check("POST start with no \"locked\" keeps today's behaviour",
+                  code == 200 and L.ENGINE.phone_locked is None
+                  and L.ENGINE.trust_decision("phone", 2.5)["action"] == "check", out)
+            L.ENGINE.stop()
+            code, out = L.handle_post({"do": "start", "device": "phone", "locked": "no"})
+            check("...and so does a value that is not true/false",
+                  code == 200 and L.ENGINE.phone_locked is None, out)
+            L.ENGINE.stop()
 
 
 # ------------------------------------------------------ (d) ONE setting, card --
