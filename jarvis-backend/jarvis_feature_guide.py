@@ -807,11 +807,55 @@ def surface_words(row: dict) -> str:
     return f"{line}, and the feature list does not record why the other app has none."
 
 
-def _state_clause(rows: list) -> str:
-    """One plain sentence about the switches, or "" when the feature has none."""
-    if not rows:
+#: Control-matrix `status` values that mean a REAL control exists for the row
+#: even though no boolean switch could be read for it: the control is a typed
+#: adjust phrase ("adjust"), a Settings screen ("open-only") or a switch the
+#: matrix links but this build cannot read for this row ("switch"). Everything
+#: else - "planned", "not-a-setting" - really has no on/off to report.
+_HAS_A_CONTROL = frozenset({"switch", "adjust", "open-only"})
+
+
+def _no_switch_words(row: dict) -> str:
+    """What to say when `feature_switches(row)` named no readable switch.
+
+    THE HONEST SPLIT (2026-11-04 self-awareness audit, "knows partly"). 43 of
+    the 175 features carry the Switchable/Adjustable label, and 43 - 24 = 19 of
+    them have no boolean switch the read path can resolve: their control is a
+    typed adjustment, a Settings screen, or a planned row. The old sentence
+    said "The feature list names no on/off switch for it" for ALL of them,
+    which reads as "there is nothing to set" for features that really do have
+    a control (topics, focus presets, reach, limits, captcha hand-off...).
+
+    The control matrix already knows which is which (`status`), so this reads
+    that rather than a second list: a row with a real control gets the honest
+    "I cannot read that switch from chat", with the place and, where the matrix
+    has one, the exact phrase the owner can type. A row that really has no
+    on/off keeps the old, true sentence.
+    """
+    mine = _matrix_row(row) or {}
+    status = str(mine.get("status") or "")
+    if status not in _HAS_A_CONTROL:
         return ("The feature list names no on/off switch for it, so there is no "
                 "state for me to read.")
+    where = str(mine.get("where") or row.get("where") or "").strip()
+    said = "I could not read a live on/off for it from chat."
+    phrase = ""
+    for adjust in mine.get("adjust") or ():
+        phrase = str((adjust or {}).get("phrase") or "").strip()
+        if phrase:
+            break
+    if phrase:
+        said += f' To change it, say "{phrase}".'
+    elif where:
+        said += f" To change it, use the control at {where}"
+        said += "" if said.endswith(".") else "."
+    return said
+
+
+def _state_clause(rows: list, row: Optional[dict] = None) -> str:
+    """One plain sentence about the switches, or the honest no-reader sentence."""
+    if not rows:
+        return _no_switch_words(row or {})
     known = [(r, r["state"]) for r in rows if isinstance(r["state"], bool)]
     unknown = [r for r in rows if not isinstance(r["state"], bool)]
     if not known:
@@ -1095,7 +1139,7 @@ def explain_words(row: dict) -> str:
     if surface_words(row):
         parts.append(surface_words(row))
     rows = _switch_state_rows(row)
-    clause = _state_clause(rows)
+    clause = _state_clause(rows, row)
     if clause:
         parts.append(clause)
     parts.append(change_words(row))
@@ -2256,10 +2300,13 @@ def state(words) -> dict:
         row = got["row"]
         rows = _switch_state_rows(row)
         if not rows:
+            has_control = (str((_matrix_row(row) or {}).get("status") or "")
+                           in _HAS_A_CONTROL)
+            words = (f"{row['title']}: {_no_switch_words(row)}" if has_control else
+                     f"{row['title']} has no on/off switch in the feature list, "
+                     f"so there is no state for me to read.")
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-                    "state": None, "switches": [],
-                    "words": (f"{row['title']} has no on/off switch in the feature list, "
-                              f"so there is no state for me to read.")}
+                    "state": None, "switches": [], "words": words}
         known = [r for r in rows if isinstance(r["state"], bool)]
         if not known:
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
@@ -2324,11 +2371,16 @@ def how_to(words, on: bool) -> dict:
         if not rows:
             # An ability with no switch is not a dead end: say which kind it is
             # and how to use it, in the same words the "turn on <ability>"
-            # phrase already gives (2026-10-26).
+            # phrase already gives (2026-10-26). A row that DOES have a control
+            # - just not a boolean one this build can read - gets the honest
+            # "I cannot read that switch" instead (2026-11-04 audit).
+            has_control = (str((_matrix_row(row) or {}).get("status") or "")
+                           in _HAS_A_CONTROL)
+            tail = (_no_switch_words(row) if has_control else
+                    "The feature list names no on/off switch for it, so there is "
+                    "nothing to turn on or off there. " + ability_explanation(row))
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-                    "switches": [], "words": (base + " The feature list names no on/off "
-                                              "switch for it, so there is nothing to turn "
-                                              "on or off there. " + ability_explanation(row))}
+                    "switches": [], "words": (base + " " + tail)}
         if len(rows) == 1:
             label = rows[0]["label"]
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
