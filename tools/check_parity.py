@@ -1084,6 +1084,21 @@ BACKEND_ONLY = {
     "/api/storage/scan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
     "/api/storage/cleanup/plan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
     "/api/storage/cleanup": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
+    # The self-benchmark's five phase-1 routes (2026-11-04; jarvis_bench.py,
+    # bench.patch, JARVIS-API section 185). BACKEND-ONLY TODAY, and each reason
+    # says which lane builds the caller: DESIGN.md's phase plan puts the desktop
+    # Benchmark panel at phase 2, the separate History window at phase 3 and the
+    # phone's BenchScreen at phase 5, so no window calls any of these on this
+    # tree. They are built, tested (backend/test_bench.py, 236 checks) and
+    # documented, and the run itself is refused rather than faked when the PC
+    # cannot measure. When a screen lands it goes on BOTH apps on this same
+    # store (ARCHITECTURE section 8), and this check FAILS the day one app starts
+    # calling a route still listed here - which is the point of listing it.
+    "/api/bench": "The self-benchmark's controls read (JARVIS-API section 185; jarvis_bench.py, bench.patch): the defaults, the ladders, each lane with its card and its installed models, the two cards and the driver from nvidia-smi, standby, whether a run is in flight, and the last run. Read-only - it starts and loads nothing. The desktop Benchmark panel is DESIGN.md phase 2 and the phone's BenchScreen is phase 5, so no window calls it yet; when one does it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/run": "Starting ONE benchmark run (JARVIS-API section 185; jarvis_bench.py, bench.patch). No approval card, by the recorded DESIGN section 7 decision, and `confirm: {model, lane, may_evict: true}` is mandatory - a POST without it measures nothing. Asynchronous: it spawns and returns, and a screen polls /api/bench/run/{id}. DESIGN.md phase 2 (desktop) and phase 5 (phone) build the button; no window calls it yet, and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/run/{id}": "How one benchmark run is going, and its numbers when it is done (`state`, `step`, `of`, `partial`, `result`) - JARVIS-API section 185, jarvis_bench.py. The read a screen polls while a run is going; no app polls it yet (DESIGN.md phase 2 desktop, phase 5 phone). When a screen lands it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/cancel": "Stopping the benchmark run in flight (JARVIS-API section 185; jarvis_bench.py): the repeat already running is NOT killed, because a request cut off mid-answer leaves Ollama's counters unusable, and the run row says PARTIAL. No app calls it yet - the Cancel button is DESIGN.md phase 2 on the desktop and phase 5 on the phone - and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/history": "The benchmark's OWN history, newest first, from `bench.jsonl` - never `/api/history` and never the chat history (JARVIS-API section 185; jarvis_bench.py). Filters are exact matches on the stored model/lane/preset names. The separate History window is DESIGN.md phase 3 on the desktop and phase 5 on the phone, so no window reads it yet; when one does it goes on BOTH apps, and the DELETE beside it arrives with that window because phase 1 has no delete (ARCHITECTURE section 8).",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)
