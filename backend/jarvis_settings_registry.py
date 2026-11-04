@@ -1247,11 +1247,13 @@ def set_voice_check_locked(on: bool, *, peer=None, local=None) -> Outcome:
     jarvis live on my unlocked phone i dont want it to need to confirm my
     voice. make this a setting i can change". The rule itself is
     `jarvis_live.voice_check_needed()` - ONE function, read by the phone and
-    by the PC - and this switch changes the ONE answer it is allowed to
-    change: whether a wake word said on a LOCKED phone still checks the
-    owner's voice. Nothing here re-implements the rule: the phone's own
-    Settings switch and the Live route call the SAME function, so the card
-    and the "off is at once" are the ones that switch has always had."""
+    by the PC - and this switch is the EXEMPTION the owner can withdraw: ON
+    (the default) is the owner's rule, where an explicitly unlocked phone is
+    not asked to prove itself; OFF is the OLD, FULL CHECKS, with the phone's
+    "I am unlocked" ignored. So ON is the looser direction and raises the one
+    card; OFF only tightens and is at once - the project's standing rule.
+    Nothing here re-implements the rule: the phone's own Settings switch and
+    the Live route call the SAME function."""
     try:
         import jarvis_live as LV
     except Exception:
@@ -2428,9 +2430,13 @@ BOOL_SETTINGS: tuple = (
                 "the one moment clip", "one moment while you think"),
                None, set_one_moment),
     # "Check my voice when my phone is locked" (the owner's ask of 2026-11-03;
-    # the rule is jarvis_live.voice_check_needed()). OFF is at once; ON is ONE
-    # card (the project's standing rule), which is why the setter above calls
-    # the Live route's own function rather than writing the file itself.
+    # the rule is jarvis_live.voice_check_needed()). It is the EXEMPTION the
+    # owner can withdraw: ON (the default) is the owner's rule, where an
+    # explicitly unlocked phone is not asked to prove itself; OFF is the OLD,
+    # FULL CHECKS with the phone's "I am unlocked" ignored. ON is therefore the
+    # looser direction - ONE card - and OFF only tightens, so it is at once
+    # (the project's standing rule), which is why the setter above calls the
+    # Live route's own function rather than writing the file itself.
     #
     # `section` IS None ON PURPOSE, and this is the THIRD switch where that is
     # the reason (see the one-moment entry above and the anti-slop entry): the

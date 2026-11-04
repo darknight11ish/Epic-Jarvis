@@ -226,9 +226,10 @@ internal fun WakeWordSwitchesCard(
         // rule (voice/VoiceCheckRule.kt, the PC's own copy is
         // jarvis_live.voice_check_needed): the mic press never checks, Live
         // started on an unlocked phone does not check, and "hi Jarvis" on a
-        // LOCKED phone does - the only check left. ON raises ONE approval card
-        // on the PC; OFF is at once. `null` is "the PC has not answered", never
-        // "off" - it says so and offers nothing to press.
+        // LOCKED phone does - the only check left. ON is that EXEMPTION, so it
+        // raises ONE approval card on the PC; OFF only gives the old, full
+        // checks back, so it is at once. `null` is "the PC has not answered",
+        // never "off" - it says so and offers nothing to press.
         if (onVoiceCheck != null) {
             Gap(12)
             Text(
@@ -239,12 +240,12 @@ internal fun WakeWordSwitchesCard(
             Gap(4)
             Text(
                 when (voiceCheck) {
-                    true -> "Your voice is checked only when you say \"hi Jarvis\" on a " +
-                        "locked phone. Pressing the mic never checks, and Live started on " +
-                        "an unlocked phone does not either."
-                    false -> "Your voice is not checked for \"hi Jarvis\" on a locked " +
-                        "phone. The mic button never checks it either, and Jarvis Live " +
-                        "started here does not."
+                    true -> "Your voice is checked for \"hi Jarvis\" on a locked phone. " +
+                        "Pressing the mic never checks, and Jarvis Live started on an " +
+                        "unlocked phone does not either."
+                    false -> "The full checks are back: your phone's \"I am unlocked\" is " +
+                        "ignored, so Jarvis Live asks again and \"hi Jarvis\" is always " +
+                        "checked. The mic button never checks either way."
                     null -> "Your PC has not answered yet, so this is not shown as off. " +
                         "The microphone buttons and Live work either way."
                 },
@@ -254,7 +255,11 @@ internal fun WakeWordSwitchesCard(
             if (voiceCheck != null) {
                 Gap(6)
                 Secondary(
-                    text = if (voiceCheck) "Stop checking my voice" else "Check my voice again",
+                    text = if (voiceCheck) {
+                        "Check my voice everywhere again"
+                    } else {
+                        "Check only on a locked phone"
+                    },
                     enabled = true,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { onVoiceCheck(!voiceCheck) },
