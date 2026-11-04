@@ -29966,6 +29966,27 @@ nothing.
   makes the pane say a job started now would never run - and what makes the
   create route answer 503.
 
+**The attention fields are optional, and absence is normal (2026-11-04).**
+Each job row MAY carry:
+
+- **`waits_for_person`**: a real boolean, the PC's own answer to "does this job
+  wait for a person?". When a row carries it, both apps BELIEVE IT over
+  anything they could derive - the server can see a card that a client cannot.
+  `null`/absent is not `false`: it means "the PC did not decide", and both apps
+  then derive the answer from `state` as below.
+- **`dismissed_by_owner`**: a real boolean, meaningful on a `failed` row. A
+  failure the owner has already put aside is not still asking for him.
+
+**No backend in this repository sends either field yet.** That is why the
+derivation is part of the contract, not a temporary stub: both apps compute
+
+    state in ("waiting_approval", "blocked", "needs_input")
+    or (state == "failed" and not dismissed_by_owner)
+
+from the row the read already carries, so a payload without the two fields is
+the ordinary case and must keep working. A client must keep that fallback when
+a later backend starts sending `waits_for_person`.
+
 **Both keys are also how a client tells an older PC from a busy one.** A body
 with no `ticking` at all is a backend that predates this section, so neither
 POST exists on it: both apps keep the read-only list they always had and say
@@ -29998,6 +30019,26 @@ absence is load-bearing and is not the same fact as an empty list.
   `tools/check_parity.py` classifies `/api/jobs/answer` as **`ported`**.
   `BackgroundJobsTest.kt` holds the parse, the two bodies, both answers' words
   and the wiring.
+- **Attention first, BOTH apps (2026-11-04, pattern 4).** The job list under the
+  form is two sections, decided by ONE predicate per platform (desktop
+  `src/attention.js`; phone `net/JobAttention.kt`) and readable from either
+  app's `state` field:
+  - **"Needs you"** holds every job whose approval, answer, retry or failure a
+    person has to look at, drawn expanded with the job's own action. An EMPTY
+    "Needs you" is not created at all - no heading, no empty box, no reserved
+    gap - so it costs **zero pixels**.
+  - **"Quiet / healthy"** is ONE collapsed line, e.g. `Quiet / healthy · 3
+    background jobs — 1 still running, 2 finished · last finished 5m ago`, that
+    opens on a click (desktop) or tap (phone) to the same rows. Counts and the
+    finish time are printed only when the payload supports them.
+
+  The split is STABLE (the read's own order on both sides), so a row never
+  jumps between two reads of the same answer. It adds no polling (the existing
+  refresh path redraws it), no new action and no approval: the only controls in
+  the sections are the ones each row already had (a one-shot grant answer,
+  Cancel). Tests: `jarvis-desktop/tests/attention-first.mjs` (truth table and
+  the one-line summary, plus Playwright DOM checks for the zero-pixel empty
+  state and the folded bar) and `AttentionFirstTest.kt`.
 
 ### 169.5 What is proven, and what is not
 
