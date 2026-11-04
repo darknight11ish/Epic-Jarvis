@@ -829,18 +829,40 @@ def cards_from_smi(text: str) -> dict:
     return {"cards": cards, "driver": driver}
 
 
+def _child_env() -> dict:
+    """The environment the `nvidia-smi` child gets: `jarvis_child_env`'s
+    allowlist, so no token and no key of the owner's goes with it.
+
+    THE RULE IS NOT DECORATION. A child that inherits the parent's environment
+    inherits `HUD_TOKEN` and `JARVIS_TOKEN` with it, and every spawn in this
+    repository either passes an environment or sits on
+    `backend/test_child_env_spawns.py`'s small reviewed list. `nvidia-smi` needs
+    only PATH, so this is the same shape `jarvis_docker._env()` uses: the
+    allowlist when that module is there, and almost nothing when it is not,
+    rather than everything.
+    """
+    try:
+        import jarvis_child_env as CE  # type: ignore
+        env = CE.inherited()
+    except Exception:
+        env = {}
+    env.setdefault("PATH", "")
+    return env
+
+
 def smi_text() -> str:
     """One `nvidia-smi` query. "" when the tool is missing or refuses.
 
     ONE process for one call, which is why a run samples before, after every
     repeat, and at the end - rather than on a timer that would leave a process
-    running for the whole benchmark.
+    running for the whole benchmark. No shell, and no inherited environment.
     """
     exe = shutil.which("nvidia-smi") or "nvidia-smi"
     try:
         r = subprocess.run([exe, "--query-gpu=" + ",".join(SMI_FIELDS),
                             "--format=csv,noheader,nounits"],
-                           capture_output=True, text=True, timeout=8)
+                           capture_output=True, text=True, timeout=8,
+                           env=_child_env(), shell=False)
     except (OSError, subprocess.SubprocessError):
         return ""
     return r.stdout or ""
