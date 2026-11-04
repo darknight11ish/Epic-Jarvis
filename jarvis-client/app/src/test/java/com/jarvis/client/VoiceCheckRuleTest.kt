@@ -150,7 +150,7 @@ class VoiceCheckRuleTest {
             put("ok", JsonPrimitive(true))
             put("on", JsonPrimitive(true))
             put("waiting", JsonPrimitive(false))
-            put("message", JsonPrimitive("Your voice is checked only when you say \"hi Jarvis\" on a locked phone."))
+            put("message", JsonPrimitive("Your voice is checked when you say \"hi Jarvis\" on a locked phone and when Jarvis Live starts on a locked phone. Starting Live on an unlocked phone does not check it. \"Hi Jarvis\" on an unlocked phone is still checked for now."))
         }
         assertEquals(true, VoiceCheckRule.on(on))
         assertFalse(VoiceCheckRule.waiting(on))

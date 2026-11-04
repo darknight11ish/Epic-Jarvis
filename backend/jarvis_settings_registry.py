@@ -1247,13 +1247,21 @@ def set_voice_check_locked(on: bool, *, peer=None, local=None) -> Outcome:
     jarvis live on my unlocked phone i dont want it to need to confirm my
     voice. make this a setting i can change". The rule itself is
     `jarvis_live.voice_check_needed()` - ONE function, read by the phone and
-    by the PC - and this switch is the EXEMPTION the owner can withdraw: ON
-    (the default) is the owner's rule, where an explicitly unlocked phone is
-    not asked to prove itself; OFF is the OLD, FULL CHECKS, with the phone's
-    "I am unlocked" ignored. So ON is the looser direction and raises the one
-    card; OFF only tightens and is at once - the project's standing rule.
-    Nothing here re-implements the rule: the phone's own Settings switch and
-    the Live route call the SAME function."""
+    by the PC - and this switch changes the ONE thing it is allowed to change:
+    the EXEMPTION that rule grants, never the check itself. ON (the default,
+    and the owner's own rule) means an UNLOCKED phone's "hi Jarvis" and an
+    UNLOCKED phone's Live start are not asked to prove themselves; OFF
+    withdraws that exemption and gives back the OLD, FULL checks, with the
+    phone's "I am unlocked" then IGNORED. OFF is never "no checks":
+    withdrawing an exemption must not quietly weaken a gate, so OFF is the
+    stricter direction and applies at once, while turning ON is the looser
+    direction and asks first - ONE card, nothing changes until it is
+    approved. THE WAKE WORD'S HALF IS NOT APPLIED YET (DEF-033, 2026-11-03):
+    the wake route cannot carry the phone's lock state until the patch wave,
+    so a wake clip is still checked on an unlocked phone - MORE checks than
+    the rule asks, never fewer. Nothing here re-implements the rule: the
+    phone's Settings switch shows the answer the PC's one function gives, and
+    the Live route asks that same function."""
     try:
         import jarvis_live as LV
     except Exception:
@@ -2429,14 +2437,15 @@ BOOL_SETTINGS: tuple = (
                 "the one moment sound", "say one moment if i am kept waiting",
                 "the one moment clip", "one moment while you think"),
                None, set_one_moment),
-    # "Check my voice when my phone is locked" (the owner's ask of 2026-11-03;
-    # the rule is jarvis_live.voice_check_needed()). It is the EXEMPTION the
-    # owner can withdraw: ON (the default) is the owner's rule, where an
-    # explicitly unlocked phone is not asked to prove itself; OFF is the OLD,
-    # FULL CHECKS with the phone's "I am unlocked" ignored. ON is therefore the
-    # looser direction - ONE card - and OFF only tightens, so it is at once
-    # (the project's standing rule), which is why the setter above calls the
-    # Live route's own function rather than writing the file itself.
+    # "Only check my voice on a locked phone" (the owner's ask of 2026-11-03;
+    # the rule is jarvis_live.voice_check_needed()). The phrases below name the
+    # EXEMPTION the switch grants, not a check, because both states check a
+    # LOCKED phone: ON (the default) is the relaxed rule - only a locked
+    # phone's "hi Jarvis" and a locked phone's Live start ask for the voice -
+    # and OFF gives the OLD, FULL checks back with the phone's lock state
+    # ignored. OFF is stricter and applies at once; ON is looser and asks
+    # first, which is why the setter above calls the Live route's own function
+    # rather than writing the file itself.
     #
     # `section` IS None ON PURPOSE, and this is the THIRD switch where that is
     # the reason (see the one-moment entry above and the anti-slop entry): the
@@ -2449,12 +2458,12 @@ BOOL_SETTINGS: tuple = (
     # carried "voice". The row link (`SETTINGS_ROWS`) is what "where is this
     # row" reads; `section` is not a place.
     BoolSetting("voice_check_locked",
-               ("checking my voice when my phone is locked",
-                "check my voice when the phone is locked",
-                "the locked phone voice check",
-                "the voice check on my phone",
-                "confirming my voice on my phone",
-                "asking for my voice when my phone is locked"),
+               ("only checking my voice on a locked phone",
+                "checking my voice only on a locked phone",
+                "only asking for my voice on a locked phone",
+                "confirming my voice only on my locked phone",
+                "the unlocked phone voice check exemption",
+                "skipping my voice check on my unlocked phone"),
                None, set_voice_check_locked),
     # --- the universal-control pass (2026-10-22): switches that had a real
     # route/control but no spoken name. See the setters above; every section

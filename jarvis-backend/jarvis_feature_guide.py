@@ -485,10 +485,11 @@ def _read_one_moment():
 
 
 def _read_voice_check_locked():
-    """2026-11-03: "Check my voice when my phone is locked", read from the
+    """2026-11-03: "Only check my voice on a locked phone", read from the
     module that owns the rule - jarvis_live.voice_check_setting() is the same
     answer `GET /api/voice/live` reports and the same one
-    jarvis_live.voice_check_needed() acts on, never a second copy."""
+    jarvis_live.voice_check_needed() acts on, never a second copy. ON is the
+    exemption (the default); OFF gives the full checks back."""
     import jarvis_live as M
     return M.voice_check_setting() is True
 

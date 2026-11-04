@@ -488,7 +488,7 @@ def t_the_route_carries_the_setting_itself():
 # ---------------------------------------------------------- the settings row --
 
 def t_the_registry_row_is_the_same_switch():
-    row = R.find_bool_setting("check my voice when the phone is locked")
+    row = R.find_bool_setting("only checking my voice on a locked phone")
     check("the registry knows the switch by the owner's own words",
           row is not None and row.key == "voice_check_locked",
           None if row is None else row.key)

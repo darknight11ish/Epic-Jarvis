@@ -224,28 +224,36 @@ internal fun WakeWordSwitchesCard(
 
         // THE OWNER'S 2026-11-03 ASK - ONE setting over the ONE voice-check
         // rule (voice/VoiceCheckRule.kt, the PC's own copy is
-        // jarvis_live.voice_check_needed): the mic press never checks, Live
-        // started on an unlocked phone does not check, and "hi Jarvis" on a
-        // LOCKED phone does - the only check left. ON is that EXEMPTION, so it
-        // raises ONE approval card on the PC; OFF only gives the old, full
-        // checks back, so it is at once. `null` is "the PC has not answered",
-        // never "off" - it says so and offers nothing to press.
+        // jarvis_live.voice_check_needed). ON (the default) is the EXEMPTION
+        // the owner asked for: only "hi Jarvis" on a LOCKED phone checks, and
+        // Live started on an unlocked phone does not. OFF withdraws that
+        // exemption and gives the OLD, FULL checks back, with the phone's
+        // unlock then ignored - it is never "no checks", which is why OFF is
+        // the stricter direction and applies at once while ON asks first (ONE
+        // card on the PC). THE WAKE-WORD HALF IS NOT APPLIED YET (DEF-033):
+        // "hi Jarvis" is still checked on an unlocked phone until a later PC
+        // update, which is MORE checking than the rule asks, never less, and
+        // this switch says so in its own words rather than claiming it.
+        // `null` is "the PC has not answered", never "off" - it says so and
+        // offers nothing to press.
         if (onVoiceCheck != null) {
             Gap(12)
             Text(
-                "Check my voice on my locked phone",
+                "Only check my voice on a locked phone",
                 style = MaterialTheme.typography.labelLarge,
                 color = chrome.textHi,
             )
             Gap(4)
             Text(
                 when (voiceCheck) {
-                    true -> "Your voice is checked for \"hi Jarvis\" on a locked phone. " +
-                        "Pressing the mic never checks, and Jarvis Live started on an " +
-                        "unlocked phone does not either."
-                    false -> "The full checks are back: your phone's \"I am unlocked\" is " +
-                        "ignored, so Jarvis Live asks again and \"hi Jarvis\" is always " +
-                        "checked. The mic button never checks either way."
+                    true -> "Jarvis checks your voice when you say \"hi Jarvis\" on a " +
+                        "locked phone, and when Jarvis Live starts on a locked phone. " +
+                        "Pressing the mic never checks, and Live started on an unlocked " +
+                        "phone does not either. Saying \"hi Jarvis\" on an unlocked phone " +
+                        "is still checked for now - a later PC update stops that."
+                    false -> "Jarvis checks your voice every time you say \"hi Jarvis\", " +
+                        "and every time Jarvis Live starts, locked or not. Pressing the " +
+                        "mic never checks."
                     null -> "Your PC has not answered yet, so this is not shown as off. " +
                         "The microphone buttons and Live work either way."
                 },
@@ -255,11 +263,8 @@ internal fun WakeWordSwitchesCard(
             if (voiceCheck != null) {
                 Gap(6)
                 Secondary(
-                    text = if (voiceCheck) {
-                        "Check my voice everywhere again"
-                    } else {
-                        "Check only on a locked phone"
-                    },
+                    text = if (voiceCheck) "Check it on my unlocked phone too"
+                    else "Only check it on my locked phone",
                     enabled = true,
                     modifier = Modifier.fillMaxWidth(),
                     onClick = { onVoiceCheck(!voiceCheck) },

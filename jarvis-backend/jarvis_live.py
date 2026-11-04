@@ -1078,20 +1078,24 @@ TRIGGER_MIC_PRESS = "mic_press"
 TRIGGER_WAKE = "wake_word"
 TRIGGER_LIVE_START = "live_start"
 VOICE_CHECK_TRIGGERS = (TRIGGER_MIC_PRESS, TRIGGER_WAKE, TRIGGER_LIVE_START)
-#: The card that turning it ON raises, and the line the switch shows. Fixed
-#: words: they say exactly what changes and nothing more - ON is the
-#: EXEMPTION (an explicitly unlocked phone is not asked), OFF is the old, full
-#: checks, and the mic button is never touched by either.
-VOICE_CHECK_CARD = ("Check your voice only when you say \"hi Jarvis\" on a locked phone? "
-                    "Starting Jarvis Live on an unlocked phone then does not ask, and the "
-                    "mic button never does. Turning it off brings the full checks back.")
-VOICE_CHECK_CARD_WHY = "check your voice only for \"hi Jarvis\" on a locked phone"
-VOICE_CHECK_ON_WORDS = ("Your voice is checked for \"hi Jarvis\" on a locked phone. Jarvis "
-                        "Live started on an unlocked phone does not ask, and the mic button "
-                        "never checks.")
-VOICE_CHECK_OFF_WORDS = ("The full checks are back: your phone's \"I am unlocked\" is "
-                         "ignored, so Jarvis Live asks again. The mic button still never "
-                         "checks.")
+#: The card that turning it ON raises (the looser direction asks, the stricter
+#: one is at once), and the two lines the phone's switch shows. Fixed words:
+#: they say exactly what changes and nothing more. THE WAKE WORD'S HALF IS NOT
+#: APPLIED YET (DEF-033): the wake route cannot carry the phone's lock state
+#: until the patch wave, so a wake clip is still checked on an unlocked phone -
+#: more checking than the rule asks, never less - and these words say so
+#: instead of claiming it.
+VOICE_CHECK_CARD = ("Only check your voice when you say \"hi Jarvis\" on a locked phone? "
+                    "Starting Jarvis Live on an unlocked phone does not ask, and the mic "
+                    "button never does. Saying \"hi Jarvis\" on an unlocked phone is still "
+                    "checked for now - a later PC update stops that.")
+VOICE_CHECK_CARD_WHY = ("only check your voice when you say \"hi Jarvis\" on your locked phone")
+VOICE_CHECK_ON_WORDS = ("Your voice is checked when you say \"hi Jarvis\" on a locked phone and "
+                        "when Jarvis Live starts on a locked phone. Starting Live on an unlocked "
+                        "phone does not check it. \"Hi Jarvis\" on an unlocked phone is still "
+                        "checked for now.")
+VOICE_CHECK_OFF_WORDS = ("Your voice is checked every time you say \"hi Jarvis\" and every time "
+                         "Jarvis Live starts, locked or not. The mic button never checks.")
 
 
 def _locked_flag(value) -> Optional[bool]:

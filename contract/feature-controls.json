@@ -10052,17 +10052,17 @@
     {
       "key": "voice_check_locked",
       "names": [
-        "checking my voice when my phone is locked",
-        "check my voice when the phone is locked",
-        "the locked phone voice check",
-        "the voice check on my phone",
-        "confirming my voice on my phone",
-        "asking for my voice when my phone is locked"
+        "only checking my voice on a locked phone",
+        "checking my voice only on a locked phone",
+        "only asking for my voice on a locked phone",
+        "confirming my voice only on my locked phone",
+        "the unlocked phone voice check exemption",
+        "skipping my voice check on my unlocked phone"
       ],
       "section": "voice",
       "desktop_row": null,
-      "turn_on": "turn on checking my voice when my phone is locked",
-      "turn_off": "turn off checking my voice when my phone is locked",
+      "turn_on": "turn on only checking my voice on a locked phone",
+      "turn_off": "turn off only checking my voice on a locked phone",
       "resolved": true,
       "status": "planned",
       "owner": "setup-ui",
