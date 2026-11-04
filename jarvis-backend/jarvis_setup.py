@@ -7,6 +7,18 @@ install block to `jarvis_hud.py`, the same shape as `tutorials.patch`:
     GET  /api/setup          the questions, the current values and last answers
     POST /api/setup/plan     {"answers": {...}}          -> what WOULD change
     POST /api/setup/apply    {"answers": {...}, "confirm": true} -> what changed
+    POST /api/setup/progress where the owner is in the card (desktop only)
+
+WAVE B, "Personalize Jarvis" (2026-11-03). The questionnaire is now 25
+questions in seven sections (`QUIZ_VERSION` 2), every one still mapping to a
+setter that already exists - no quiz-only setting, and no new gate action or
+tier. `state()` is versioned (`completed_version`, `runs`, `dismissed_at`) and
+`POST /api/setup/progress` records where the owner is in the card. That route
+is CARDLESS and GATELESS by design: it stores the owner's own Option ids and
+the section/question they are on, so it calls no setter, raises no card, does
+not read the taint latch, and can never apply anything. `apply()` still merges
+its answers into the saved ones, so a retake of one question no longer wipes
+the answers it did not ask about.
 
 WHAT THIS IS, AND THE ONE THING IT MUST NEVER BECOME. The owner asked for a
 first-run questionnaire (their words, 2026-10-20): "there should be a setup
@@ -88,10 +100,27 @@ except Exception:  # pragma: no cover - a suite sets the environment instead
 PATH = "/api/setup"
 PLAN_PATH = "/api/setup/plan"
 APPLY_PATH = "/api/setup/apply"
+PROGRESS_PATH = "/api/setup/progress"
 
 ANSWERS_NAME = "setup.json"
 ROUTES_GET = (PATH,)
-ROUTES_POST = (PLAN_PATH, APPLY_PATH)
+ROUTES_POST = (PLAN_PATH, APPLY_PATH, PROGRESS_PATH)
+
+#: The QUESTION-SET version (2026-11-03, Wave B). It is bumped ONLY when a
+#: question is added, removed, or reworded in a way that changes what an answer
+#: means - never for a cosmetic edit. `state()` reports it as `version`; the
+#: file records `completed_version`, and the first launch after a bump offers
+#: the quiz once more (`completed_version < version`), with the old answers
+#: still pre-filled. Version 1 was the original fourteen questions; version 2 is
+#: the 25-question "Personalize Jarvis" set.
+QUIZ_VERSION = 2
+
+#: The FILE's own schema version (`setup.json`'s `version` key), not the
+#: question set's. 1 is the old three-key file; 2 adds `completed_version`,
+#: `runs`, `dismissed_at` and `in_progress`. They are equal today because both
+#: changed in the same wave, and they are kept apart because they answer
+#: different questions: one is "which questions", the other "which shape".
+SCHEMA_VERSION = 2
 
 #: How long `apply()` waits for ONE raised card before it moves on. The gate's
 #: own card timeout is 900 s; this is the questionnaire's patience, not a
@@ -117,6 +146,12 @@ TAINTED_APPLY = ("Jarvis read something from outside that may be trying to take 
 PC_ONLY_APPLY = ("One or more of these answers can only be changed on the PC "
                  "itself, so nothing was changed. Open Jarvis on the PC and run "
                  "the questionnaire there.")
+#: Wave B (2026-11-03). Where the owner is in the card is the card's own state,
+#: so it is recorded on the PC alone - the same desktop-only rule `apply()`
+#: enforces, and the reason the phone reads this state but never writes it.
+PC_ONLY_PROGRESS = ("Where you are in the questionnaire can only be recorded on "
+                    "the PC itself, so nothing was recorded. Open Jarvis on the "
+                    "PC and carry on there.")
 
 
 def _tainted() -> bool:
@@ -156,9 +191,10 @@ def _pc_only_change(ch: dict) -> bool:
 
     Loosening "what asks first" and offering a reading tool are in
     `jarvis_owner_check.PC_ONLY_ACTIONS` (one card approved on the PC, with
-    Windows Hello); the face's sky switch is the desktop's own visual. The
-    existing setters keep enforcing all three - this only lets the plan say so
-    and lets a remote apply be refused whole before anything runs.
+    Windows Hello); the face's sky switch is the desktop's own visual, and the
+    small-approval fingerprint's loosening (2026-11-03) is this PC's own check.
+    The existing setters keep enforcing all four - this only lets the plan say
+    so and lets a remote apply be refused whole before anything runs.
     """
     kind = str(ch.get("kind") or "")
     if kind == "asks_first":
@@ -167,6 +203,14 @@ def _pc_only_change(ch: dict) -> bool:
         return bool(ch.get("to"))                # offering the tool is PC-only
     if kind == "sky_show":
         return True                              # the PC face's own sky
+    if kind == "choice":
+        # The fingerprint on small approvals may only be turned OFF on this PC
+        # (set_small_approvals refuses the loosening from another device, its
+        # own `_SMALL_APPROVALS_PC_ONLY`). Turning it back on asks for more,
+        # which any device may do. The loosening is the row's False value; the
+        # question names it with the option id "skip".
+        return (str(ch.get("setting")) == "small_approvals"
+                and (ch.get("to") is False or str(ch.get("to")) == "skip"))
     return False
 
 
@@ -183,6 +227,16 @@ def _pc_only_change(ch: dict) -> bool:
 #     {"kind": "animal", "key": <jarvis_animal switch id>, "to": bool}
 #     {"kind": "sky_show", "to": True|False}
 #     {"kind": "preset", "to": <jarvis_presets preset id>}   RECOMMENDATION only
+#     {"kind": "choice", "setting": <CHOICE_SETTINGS key>, "to": <option id>}
+#     {"kind": "number", "setting": <NUMBER_SETTINGS key>, "to": <int>}
+#
+#   The last two were added by Wave B (2026-11-03) so a question can reach the
+#   newer registry setters without a second settings system. `choice` resolves
+#   the row out of `jarvis_settings_registry.CHOICE_SETTINGS` by key and calls
+#   the row's OWN setter with the row's own value (`choice_from_words`, the same
+#   step jarvis_quick's write path makes); `number` does the same through
+#   `NUMBER_SETTINGS`. Neither invents a route: both are the functions the
+#   matching Settings control calls.
 #
 #   A multi question also accepts the two data-level answers "all" and "none";
 #   `plan()` expands them here, so both apps get the same behaviour without
@@ -192,6 +246,14 @@ def _pc_only_change(ch: dict) -> bool:
 
 def _b(setting: str, to: bool) -> dict:
     return {"kind": "bool", "setting": setting, "to": bool(to)}
+
+
+def _choice(setting: str, to) -> dict:
+    return {"kind": "choice", "setting": setting, "to": to}
+
+
+def _num(setting: str, to: int) -> dict:
+    return {"kind": "number", "setting": setting, "to": int(to)}
 
 
 def _asks(action: str, ask: bool) -> dict:
@@ -222,15 +284,46 @@ READING_TOOLS = ("calendar_read", "email_read", "notes_search", "home_read")
 ANIMAL_SWITCHES = ("still", "nods", "focus_buddy", "acks", "petting",
                    "cute_moments", "seasonal")
 
-#: The five work presets, by the ids `jarvis_presets.PRESETS` uses. The answer
-#: to "what will you mostly use it for" only RECOMMENDS one; test_setup.py
-#: fails if an id here leaves the preset table.
+#: The nine work presets, by the ids `jarvis_presets.PRESETS` uses. The answer
+#: to "what will you mostly use it for" only RECOMMENDS one; test_setup.py and
+#: test_setup_quiz.py fail if an id here leaves the preset table. Widened from
+#: five on 2026-11-03 (Wave B): the registry already lists all nine, and the
+#: missing four were a real gap in the recommendation question.
 PRESET_IDS = {"general": "General", "general_uncensored": "General Uncensored",
-              "coding": "Coding", "agentic_vision": "Agentic + Vision", "fast": "Fast"}
+              "coding": "Coding", "agentic_vision": "Agentic + Vision",
+              "fast": "Fast", "reflect": "Reflective Coach",
+              "pictures": "Pictures & Screens", "documents": "Documents & Notes",
+              "browser": "Browser & Forms"}
+
+#: The seven sections of the quiz, in the order the card shows them:
+#: (id, title). A question's own `section` is one of these ids. The id is what
+#: `GET /api/setup` hands both apps - the phone groups by it too - so it is a
+#: stable word, never a label that may be reworded.
+SECTIONS: tuple = (
+    ("talking", "How it talks"),
+    ("reading", "What it may read"),
+    ("learning", "Learning & privacy"),
+    ("notifications", "Notifications"),
+    ("voice", "Voice & Live"),
+    ("models", "Models & speed"),
+    ("screen", "Screen & sound"),
+)
+_SECTION_IDS = frozenset(sid for sid, _title in SECTIONS)
+_SECTION_TITLES = dict(SECTIONS)
+
+#: The ten built-in personality presets, by the ids `jarvis_manner` uses, with
+#: the title it gives each one. Data only: nothing is imported at module load.
+#: test_setup_quiz.py pins the ids against `jarvis_manner.all_personalities()`,
+#: so a preset renamed there fails at the desk rather than on the owner's screen.
+PERSONALITY_IDS = ("warm_peer", "classic_butler", "tactical_ops", "dry_wit",
+                   "friday_partner", "socratic_mentor", "devils_advocate",
+                   "calm_stoic", "advocate", "reflect")
 
 QUESTIONS: tuple = (
     {
         "id": "talk_style",
+        "section": "talking",
+        "version": 1,
         "title": "How should Jarvis talk?",
         "help": ("This changes only how answers are worded. It never changes what "
                  "Jarvis does or what it asks you first."),
@@ -246,6 +339,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "humour",
+        "section": "talking",
+        "version": 1,
         "title": "Should Jarvis use a little humour?",
         "help": ("Occasional light humour when it fits. Never on cards, errors, or "
                  "serious topics."),
@@ -259,6 +354,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "carefulness",
+        "section": "reading",
+        "version": 1,
         "title": "How careful should Jarvis be before it acts?",
         "help": ("Which of your things Jarvis may read, and whether it asks first. "
                  "Making it MORE careful happens at once; making it LESS careful asks "
@@ -285,6 +382,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "learning",
+        "section": "learning",
+        "version": 1,
         "title": "How should Jarvis learn?",
         "help": ("Facts about you and your projects are learned from YOUR own words "
                  "only. Turning learning on, or letting sensitive topics be learned "
@@ -311,6 +410,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "reading_tools",
+        "section": "reading",
+        "version": 1,
         "title": "Which of your things may the AI model read when you ask?",
         "help": ("These are the tools Jarvis may be offered at all. Turning one on "
                  "shows its own approval card and asks for Windows Hello, on the PC; "
@@ -329,6 +430,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "web_search",
+        "section": "reading",
+        "version": 1,
         "title": "Should Jarvis be able to search the web?",
         "help": ("A search still shows its exact words on a card first when private "
                  "things could slip in. Turning web search on raises its one card; "
@@ -343,6 +446,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "search_asking",
+        "section": "reading",
+        "version": 1,
         "title": "How often should Jarvis ask before a web search?",
         "help": ("By default a search asks only when it could include something "
                  "private. Asking before EVERY search is stricter and instant; turning "
@@ -357,6 +462,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "search_provider",
+        "section": "reading",
+        "version": 1,
         "title": "Which search service should Jarvis use?",
         "help": ("The service only sees the words of a search Jarvis decides to make. "
                  "Some need a key you add later in Settings; changing this is instant."),
@@ -378,6 +485,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "screen_pictures",
+        "section": "screen",
+        "version": 1,
         "title": "What may Jarvis look at or draw on this PC?",
         "help": ("Each of these has its own existing card or switch. Picture mode and "
                  "the headless browser each raise their own card when turned on. All / "
@@ -396,6 +505,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "notifications",
+        "section": "notifications",
+        "version": 1,
         "title": "Which notifications do you want?",
         "help": ("Each switch only changes when this PC or your phone speaks up; none "
                  "of them raises a card, and none of them is ever a way out of your "
@@ -422,6 +533,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "card_size",
+        "section": "talking",
+        "version": 1,
         "title": "How much of an approval card should be shown at first?",
         "help": ("This only changes how much of the card is open when it appears: the "
                  "same card, the same words underneath, the same buttons. Instant "
@@ -436,6 +549,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "voice",
+        "section": "voice",
+        "version": 1,
         "title": "Which voice options should be on?",
         "help": ("These only change how Jarvis sounds. This questionnaire never starts "
                  "voice training - that stays your own step, in Settings. All / None "
@@ -453,6 +568,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "animal_faces",
+        "section": "screen",
+        "version": 1,
         "title": "How should the animal faces behave?",
         "help": ("Small cosmetic switches, shared by the PC and the phone. None of "
                  "them raises a card. All / None applies to the whole list."),
@@ -478,6 +595,8 @@ QUESTIONS: tuple = (
     },
     {
         "id": "main_use",
+        "section": "models",
+        "version": 1,
         "title": "What will you mostly use Jarvis for?",
         "help": ("This recommends one of the existing work presets. It changes NO "
                  "model by itself: a preset is only applied by choosing it in the "
@@ -494,6 +613,249 @@ QUESTIONS: tuple = (
              "changes": ({"kind": "preset", "to": "general_uncensored"},)},
             {"id": "quick", "label": "Quick, short answers",
              "changes": ({"kind": "preset", "to": "fast"},)},
+            # Widened to the other four built-in presets on 2026-11-03: the
+            # table above had five of the nine, so four real answers could not
+            # be given. Still a RECOMMENDATION only - plan() reports it and
+            # never applies it.
+            {"id": "reflect", "label": "Talking things through and coaching",
+             "changes": ({"kind": "preset", "to": "reflect"},)},
+            {"id": "pictures", "label": "Making and reading pictures",
+             "changes": ({"kind": "preset", "to": "pictures"},)},
+            {"id": "documents", "label": "Documents, notes and long writing",
+             "changes": ({"kind": "preset", "to": "documents"},)},
+            {"id": "browser", "label": "Using websites and filling in forms, step by step",
+             "changes": ({"kind": "preset", "to": "browser"},)},
+        ),
+    },
+    # ------------------------------------------------------------------
+    #   The eleven added by Wave B (2026-11-03). Every one maps to a setter
+    #   that ALREADY exists in jarvis_settings_registry.py (or jarvis_manner /
+    #   jarvis_owner_check through it) - there is no quiz-only setting here.
+    #   `version` 2 is what the "show only new / unanswered" filter reads: a
+    #   question is new when `completed_version` is below its version, so an
+    #   owner who finished the fourteen is offered exactly these eleven once.
+    # ------------------------------------------------------------------
+    {
+        "id": "personality",
+        "section": "talking",
+        "version": 2,
+        "title": "Which personality should Jarvis have?",
+        "help": ("The personality changes how Jarvis words things - its tone and "
+                 "character - and nothing else: not what it does, not what it asks "
+                 "you first, and no approval card. It is the same choice the "
+                 "Personality control in Settings makes."),
+        "multi": False,
+        "options": (
+            {"id": "warm_peer", "label": "Warm Collaborator",
+             "detail": "Friendly and on your side - the default.",
+             "changes": (_choice("personality", "warm_peer"),)},
+            {"id": "classic_butler", "label": "Classic British Butler",
+             "detail": "Formal, precise and discreet.",
+             "changes": (_choice("personality", "classic_butler"),)},
+            {"id": "tactical_ops", "label": "Tactical Mission Control",
+             "detail": "Short, clipped and operational.",
+             "changes": (_choice("personality", "tactical_ops"),)},
+            {"id": "dry_wit", "label": "Dry & Deadpan",
+             "detail": "Understated humour, never at your expense.",
+             "changes": (_choice("personality", "dry_wit"),)},
+            {"id": "friday_partner", "label": "Sharp Tech Partner",
+             "detail": "Direct, technical and quick to the point.",
+             "changes": (_choice("personality", "friday_partner"),)},
+            {"id": "socratic_mentor", "label": "Socratic Coach & Tutor",
+             "detail": "Asks the next question and teaches as it goes.",
+             "changes": (_choice("personality", "socratic_mentor"),)},
+            {"id": "devils_advocate", "label": "No-Nonsense Critic",
+             "detail": "Finds the weak spot and says so plainly.",
+             "changes": (_choice("personality", "devils_advocate"),)},
+            {"id": "calm_stoic", "label": "Calm & Grounded",
+             "detail": "Steady and unhurried, even under pressure.",
+             "changes": (_choice("personality", "calm_stoic"),)},
+            {"id": "advocate", "label": "Patient Advocate",
+             "detail": "Takes your side and explains the options.",
+             "changes": (_choice("personality", "advocate"),)},
+            {"id": "reflect", "label": "Reflective Coach",
+             "detail": "Helps you think it through before deciding.",
+             "changes": (_choice("personality", "reflect"),)},
+        ),
+    },
+    {
+        "id": "antislop",
+        "section": "talking",
+        "version": 2,
+        "title": "Should Jarvis avoid AI-sounding writing?",
+        "help": ("The Anti-Slop filter takes out the phrases that make writing sound "
+                 "machine-made. It changes only the words, so neither direction asks "
+                 "on a card. \"During\" filters as Jarvis writes; \"after\" audits "
+                 "the answer and lists what it would change instead."),
+        "multi": False,
+        "options": (
+            {"id": "off", "label": "No, leave the writing as it is (default)",
+             "changes": (_b("antislop", False),)},
+            {"id": "during", "label": "Yes, filter it as Jarvis writes",
+             "detail": "The filter works while the answer is written.",
+             "changes": (_b("antislop", True),
+                         _choice("antislop_mode", "during"))},
+            {"id": "after", "label": "Yes, but only list what it would change first",
+             "detail": "Jarvis answers normally, then audits its own wording.",
+             "changes": (_b("antislop", True),
+                         _choice("antislop_mode", "after"))},
+        ),
+    },
+    {
+        "id": "lights_without_card",
+        "section": "reading",
+        "version": 2,
+        "title": "May Jarvis switch lights, plugs and fans without a card?",
+        "help": ("On means a light, plug or fan in your home can be switched "
+                 "without a card each time. Turning that on raises ONE approval "
+                 "card first; turning it back off is instant. Nothing else in "
+                 "your home changes."),
+        "multi": False,
+        "options": (
+            {"id": "on", "label": "Yes, switch them without a card each time",
+             "detail": "Turning this on raises its own card once.",
+             "changes": (_b("lights_without_card", True),)},
+            {"id": "off", "label": "No, ask me first every time (default)",
+             "changes": (_b("lights_without_card", False),)},
+        ),
+    },
+    {
+        "id": "reworded_memories",
+        "section": "learning",
+        "version": 2,
+        "title": "Should Jarvis save a fact when it had to reword it?",
+        "help": ("Facts are normally learned from your own words. With this on, "
+                 "Jarvis may also save a fact whose words are its own - which is "
+                 "how it can keep something you implied rather than said. Off by "
+                 "default; turning it on raises its own card."),
+        "multi": False,
+        "options": (
+            {"id": "on", "label": "Yes, save a reworded fact too",
+             "detail": "Turning this on raises its own card once.",
+             "changes": (_b("learn_paraphrase", True),)},
+            {"id": "off", "label": "No, only my own words (default)",
+             "changes": (_b("learn_paraphrase", False),)},
+        ),
+    },
+    {
+        "id": "chat_history",
+        "section": "learning",
+        "version": 2,
+        "title": "Should Jarvis keep your chats and voice transcripts on this PC?",
+        "help": ("On keeps the conversation on this PC so Jarvis can pick it up "
+                 "later; it is kept encrypted. Off means nothing is written. "
+                 "Turning it back on raises its own card; turning it off is "
+                 "instant."),
+        "multi": False,
+        "options": (
+            {"id": "on", "label": "Yes, keep them on this PC (default)",
+             "changes": (_b("chat_history", True),)},
+            {"id": "off", "label": "No, do not keep them",
+             "changes": (_b("chat_history", False),)},
+        ),
+    },
+    {
+        "id": "media_index",
+        "section": "learning",
+        "version": 2,
+        "title": "Should recordings and videos be searchable by their words?",
+        "help": ("On keeps readable words from recordings and videos in the "
+                 "folders you listed, so Jarvis can find them later. Off stops "
+                 "keeping them and is instant; turning it back on raises its own "
+                 "card."),
+        "multi": False,
+        "options": (
+            {"id": "on", "label": "Yes, make them searchable (default)",
+             "changes": (_b("media_index", True),)},
+            {"id": "off", "label": "No, do not keep their words",
+             "changes": (_b("media_index", False),)},
+        ),
+    },
+    {
+        "id": "small_approvals",
+        "section": "learning",
+        "version": 2,
+        "title": "Should the small approvals ask for your fingerprint too?",
+        "help": ("A small read-only card - a web search, a page, the news - can be "
+                 "approved by the card alone, or every card can ask for your "
+                 "fingerprint as well. Turning the fingerprint on is instant; "
+                 "turning it off can only be done on this PC."),
+        "multi": False,
+        "options": (
+            {"id": "ask", "label": "Yes, ask for my fingerprint on the small cards too",
+             "changes": (_choice("small_approvals", "ask"),)},
+            {"id": "skip", "label": "No, the card alone is enough (default)",
+             "detail": "This can only be chosen on the PC itself.",
+             "changes": (_choice("small_approvals", "skip"),)},
+        ),
+    },
+    {
+        "id": "voice_speed",
+        "section": "voice",
+        "version": 2,
+        "title": "How fast should Jarvis speak?",
+        "help": ("This only changes how fast spoken answers are read. It never "
+                 "changes what Jarvis says, and no card either way."),
+        "multi": False,
+        "options": (
+            {"id": "slower", "label": "Slower",
+             "changes": (_choice("voice_speed", "slower"),)},
+            {"id": "normal", "label": "Normal (default)",
+             "changes": (_choice("voice_speed", "normal"),)},
+            {"id": "faster", "label": "Faster",
+             "changes": (_choice("voice_speed", "faster"),)},
+        ),
+    },
+    {
+        "id": "one_moment",
+        "section": "voice",
+        "version": 2,
+        "title": "Should Jarvis say \"One moment\" while it thinks?",
+        "help": ("The short spoken line before a slower answer. Off hides it "
+                 "everywhere both apps speak, and no card either way."),
+        "multi": False,
+        "options": (
+            {"id": "on", "label": "Yes, say \"One moment\" (default)",
+             "changes": (_b("one_moment", True),)},
+            {"id": "off", "label": "No, stay quiet while it thinks",
+             "changes": (_b("one_moment", False),)},
+        ),
+    },
+    {
+        "id": "live_idle_seconds",
+        "section": "voice",
+        "version": 2,
+        "title": "How long should Jarvis Live wait before it turns itself off?",
+        "help": ("How long Live keeps listening after it last hears you. This "
+                 "never starts Live and never opens the microphone; no card "
+                 "either way."),
+        "multi": False,
+        "options": (
+            {"id": "60", "label": "1 minute",
+             "changes": (_num("live_idle_seconds", 60),)},
+            {"id": "120", "label": "2 minutes",
+             "changes": (_num("live_idle_seconds", 120),)},
+            {"id": "300", "label": "5 minutes",
+             "changes": (_num("live_idle_seconds", 300),)},
+            {"id": "600", "label": "10 minutes",
+             "changes": (_num("live_idle_seconds", 600),)},
+        ),
+    },
+    {
+        "id": "bigger_model_hints",
+        "section": "models",
+        "version": 2,
+        "title": "Should Jarvis offer the bigger model when it would help?",
+        "help": ("These only decide whether Jarvis OFFERS a bigger model at a "
+                 "moment it might help. Every offer still needs your yes, and no "
+                 "model is switched by this answer. All / None applies to the "
+                 "whole list."),
+        "multi": True,
+        "options": (
+            {"id": "struggle", "label": "When I seem to be struggling",
+             "changes": (_b("second_card_suggest_struggle", True),)},
+            {"id": "correction", "label": "After I correct it",
+             "changes": (_b("second_card_suggest_correction", True),)},
         ),
     },
 )
@@ -523,10 +885,54 @@ def answers_path() -> Path:
     return _config_dir() / ANSWERS_NAME
 
 
+def _clean_progress(raw) -> dict:
+    """`in_progress` as this module stores it, or {} when it holds nothing
+    usable: `{section, question, started_at, draft_answers}`. Only a real
+    question id and a real section id survive, and the draft runs through
+    `_clean_answers` like every other answer - an Option id, never a value."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    qid = str(raw.get("question") or "")
+    if qid in _QUESTIONS_BY_ID:
+        out["question"] = qid
+    sid = str(raw.get("section") or "")
+    if sid in _SECTION_IDS:
+        out["section"] = sid
+    elif out.get("question"):
+        out["section"] = _QUESTIONS_BY_ID[out["question"]]["section"]
+    at = raw.get("started_at")
+    if isinstance(at, (int, float)) and not isinstance(at, bool):
+        out["started_at"] = float(at)
+    draft = raw.get("draft_answers")
+    if isinstance(draft, dict):
+        out["draft_answers"] = _clean_answers(draft)
+    return out
+
+
 def _read_saved() -> dict:
-    """{"answers": {...}, "completed_at": float|None, "outcomes": [...]} - an
-    empty one when nothing was saved or the file is damaged (never raises)."""
-    out = {"answers": {}, "completed_at": None, "outcomes": []}
+    """The whole `setup.json`, defaulted and never raised.
+
+    Shape (schema 2, 2026-11-03)::
+
+        {"version": 1|2, "completed_version": int, "runs": int,
+         "dismissed_at": float|None, "in_progress": {...},
+         "answers": {...}, "completed_at": float|None, "outcomes": [...]}
+
+    BACKWARD COMPATIBILITY, precisely. A file with only `answers`,
+    `completed_at` and `outcomes` (every file written before Wave B) reads as
+    `version` 1. If it has a `completed_at`, it reads as
+    `completed_version` 1 and `runs` 1 - the truth: those fourteen answers were
+    completed under question-set version 1, so the first launch after this
+    lands makes ONE correct new-version offer (`1 < QUIZ_VERSION`) instead of
+    none or a permanent nag. A file with no `completed_at` reads as
+    `completed_version` 0, `runs` 0. A damaged file reads as the empty
+    defaults. THIS FUNCTION NEVER WRITES - it is called by `state()` on every
+    GET, and a read must not change the file.
+    """
+    out = {"version": 1, "completed_version": 0, "runs": 0,
+           "dismissed_at": None, "in_progress": {},
+           "answers": {}, "completed_at": None, "outcomes": []}
     try:
         doc = json.loads(answers_path().read_text(encoding="utf-8"))
     except Exception:
@@ -543,6 +949,24 @@ def _read_saved() -> dict:
     rows = doc.get("outcomes")
     if isinstance(rows, list):
         out["outcomes"] = [r for r in rows if isinstance(r, dict)][:40]
+    version = doc.get("version")
+    if isinstance(version, int) and not isinstance(version, bool) and version >= 1:
+        out["version"] = version
+    completed_version = doc.get("completed_version")
+    if (isinstance(completed_version, int)
+            and not isinstance(completed_version, bool) and completed_version >= 0):
+        out["completed_version"] = completed_version
+    elif out["completed_at"] is not None:
+        out["completed_version"] = 1
+    runs = doc.get("runs")
+    if isinstance(runs, int) and not isinstance(runs, bool) and runs >= 0:
+        out["runs"] = runs
+    elif out["completed_at"] is not None:
+        out["runs"] = 1
+    dismissed = doc.get("dismissed_at")
+    if isinstance(dismissed, (int, float)) and not isinstance(dismissed, bool):
+        out["dismissed_at"] = float(dismissed)
+    out["in_progress"] = _clean_progress(doc.get("in_progress"))
     return out
 
 
@@ -622,6 +1046,17 @@ def _bool_action(key: str) -> Optional[str]:
             return _module("jarvis_big_coder").ACTION_ON
         if key == "better_voice":
             return _module("jarvis_voices").BETTER_ACTION
+        # The four carded BoolSettings Wave B wired (2026-11-03). Each is the
+        # action constant of the module that raises the card - never a second
+        # copy of the tier.
+        if key == "learn_paraphrase":
+            return _module("jarvis_auto_learn").PARAPHRASE_ACTION
+        if key == "chat_history":
+            return _module("jarvis_chat_log").ACTION
+        if key == "media_index":
+            return _module("jarvis_media_index").SWITCH_ACTION
+        if key == "lights_without_card":
+            return _module("jarvis_asks_first").LIGHTS_ACTION
     except Unavailable:
         raise
     except Exception:
@@ -647,10 +1082,13 @@ def _tool_action() -> str:
 #: the setters' own docstrings/request functions in
 #: jarvis_settings_registry.py (e.g. set_web_search: "OFF at once; ON raises
 #: the one approval card"; set_ask_every_search: ON instant, OFF one card).
-#: Anything absent never asks.
+#: Anything absent never asks. The four rows Wave B added (2026-11-03) are the
+#: ones `jarvis_feature_guide.CARD_ON_LOOSENING` already records as carded-on,
+#: read from each setter's own words and cross-checked by test_setup_quiz.py.
 BOOL_CARDED = {
     "background_learning": "on",
     "learn_sensitive_topics": "on",
+    "learn_paraphrase": "on",          # AL.request(kind="paraphrase"): ON is one card
     "web_search": "on",
     "ask_before_every_search": "off",
     "smartwatch_notifications": "on",
@@ -661,7 +1099,25 @@ BOOL_CARDED = {
     "briefing_senders": "on",
     "big_coder": "on",
     "better_voice": "on",
+    "chat_history": "on",              # "OFF at once, ON is its own card"
+    "media_index": "on",               # "ON is ONE normal approval card"
+    "lights_without_card": "on",       # request_lights: "ON through ONE approval card"
 }
+
+#: Which DIRECTION of a named CHOICE raises its own existing card. EMPTY on
+#: purpose: every choice question this quiz asks is cardless by the setter's own
+#: words - personality ("Cardless by design"), anti-slop mode ("CARDLESS IN BOTH
+#: DIRECTIONS"), voice speed, and small approvals (whose loosening is PC-only,
+#: not carded). A future choice whose setter asks must be listed here, or plan()
+#: would promise "Instant" for a change that really waits on a card. While it is
+#: listed, effect_of() answers "blocked" rather than lying (fail closed).
+CHOICE_CARDED: dict = {}
+
+#: The same for a NUMBER_SETTINGS row. Empty: the one number question is the
+#: Jarvis Live timeout, and `jarvis_limits`' own row says `loosening = "none"`
+#: (measured 2026-11-03 - the spec's open question §11.4), so neither direction
+#: asks. A future number row that asks must be listed here.
+NUMBER_CARDED: dict = {}
 
 #: Plain labels for every change, so the summary reads like a person talking.
 BOOL_LABELS = {
@@ -686,6 +1142,31 @@ BOOL_LABELS = {
     "humor": "Light humour",
     "voice_follows_face": "Voice follows the face",
     "better_voice": "Better voice on the second card",
+    "antislop": "Avoid AI-sounding writing",
+    "one_moment": "Say \"One moment\" while it thinks",
+    "learn_paraphrase": "Save facts Jarvis had to reword",
+    "chat_history": "Keep chats and voice transcripts on this PC",
+    "media_index": "Searchable recordings and videos",
+    "lights_without_card": "Lights, plugs and fans without a card",
+    "second_card_suggest_struggle": "Offer the bigger model when you are struggling",
+    "second_card_suggest_correction": "Offer the bigger model after a correction",
+}
+#: Plain labels for the two newer change kinds, so a summary reads like a
+#: person talking and never shows a registry key.
+CHOICE_LABELS = {
+    "personality": "Personality",
+    "antislop_mode": "Anti-Slop mode",
+    "voice_speed": "How fast Jarvis speaks",
+    "small_approvals": "The fingerprint on small approvals",
+}
+NUMBER_LABELS = {"live_idle_seconds": "How long Jarvis Live waits"}
+#: How each choice's real value is said back. The personality's title is read
+#: from jarvis_manner (the module that owns the presets), never typed here.
+CHOICE_VALUE_WORDS = {
+    "antislop_mode": {"during": "filter as it writes", "after": "audit first"},
+    "voice_speed": {"slower": "slower", "normal": "normal", "faster": "faster"},
+    "small_approvals": {True: "ask for the fingerprint too",
+                        False: "the card alone"},
 }
 ASKS_LABELS = {
     "calendar_read": "Reading my calendar",
@@ -732,6 +1213,8 @@ def change_key(ch: dict) -> str:
         return f"animal:{ch.get('key')}"
     if kind == "preset":
         return f"preset:{ch.get('to')}"
+    if kind in ("choice", "number"):
+        return f"{kind}:{ch.get('setting')}"
     return kind
 
 
@@ -756,6 +1239,12 @@ def change_label(ch: dict) -> str:
         return PROVIDER_LABELS.get(str(ch.get("to")), str(ch.get("to")))
     if kind == "preset":
         return "Work preset (recommendation only)"
+    if kind == "choice":
+        key = str(ch.get("setting"))
+        return CHOICE_LABELS.get(key, key)
+    if kind == "number":
+        key = str(ch.get("setting"))
+        return NUMBER_LABELS.get(key, key)
     return kind
 
 
@@ -806,7 +1295,24 @@ def _read_bool(key: str):
                "pc_handoff_notification", "pc_quiet_hours"):
         LIM = _module("jarvis_limits")
         return bool(LIM.value_of(LIM.find(_NOTIFY_LIMIT[key])))
+    if key in _FEATURE_GUIDE_BOOLS:
+        # The four switches Wave B wired (2026-11-03) plus the two bigger-model
+        # hints have no bespoke reader in this module. `jarvis_feature_guide`
+        # owns ONE reader per BoolSetting (its own suite fails if that table and
+        # BOOL_SETTINGS drift), so the value is read there rather than copied
+        # here - the same choice jarvis_settings_registry._bool_now makes.
+        value = _module("jarvis_feature_guide").read_state(key)
+        if isinstance(value, bool):
+            return value
+        raise Unavailable(f"no reader for {key}")
     raise Unavailable(f"no reader for {key}")
+
+
+#: The BoolSettings this module reads through jarvis_feature_guide's table.
+_FEATURE_GUIDE_BOOLS = ("antislop", "one_moment", "learn_paraphrase", "chat_history",
+                        "media_index", "lights_without_card",
+                        "second_card_suggest_struggle",
+                        "second_card_suggest_correction")
 
 
 _NOTIFY_LIMIT = {
@@ -816,6 +1322,99 @@ _NOTIFY_LIMIT = {
     "pc_handoff_notification": "notif_handoff",
     "pc_quiet_hours": "notif_quiet_enabled",
 }
+
+
+def _choice_row(ch: dict):
+    """(the registry, the CHOICE_SETTINGS row this change names). Raises
+    Unavailable for a row this PC does not have."""
+    R = _registry()
+    key = str(ch.get("setting"))
+    row = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
+    if row is None:
+        raise Unavailable(f"this PC does not know the setting {key!r}")
+    return R, row
+
+
+def _number_row(ch: dict):
+    """(the registry, the NUMBER_SETTINGS row this change names)."""
+    R = _registry()
+    key = str(ch.get("setting"))
+    row = next((n for n in R.NUMBER_SETTINGS if n.key == key), None)
+    if row is None:
+        raise Unavailable(f"this PC does not know the setting {key!r}")
+    return R, row
+
+
+def _choice_value(ch: dict):
+    """The real value `ch["to"]` names in its own row, or None when it names
+    none. Resolved through `choice_from_words` - the same step jarvis_quick's
+    write path makes - so the option id the question offers is never handed to
+    a setter raw (a choice's spoken words and the value it takes can differ,
+    e.g. small approvals' "ask"/"skip" are True/False)."""
+    try:
+        R, row = _choice_row(ch)
+        return R.choice_from_words(row, str(ch.get("to")))
+    except Unavailable:
+        raise
+    except Exception:
+        return None
+
+
+def _number_value(ch: dict):
+    try:
+        return int(ch.get("to"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _read_choice(key: str):
+    """One CHOICE_SETTINGS row's value as its setter takes it, from the module
+    that OWNS it - never a copy kept here. None means "could not read it"."""
+    if key == "personality":
+        return str(_module("jarvis_manner").current_personality() or "") or None
+    if key == "antislop_mode":
+        return str((_module("jarvis_antislop").get_state() or {}).get("mode") or "") or None
+    if key == "voice_speed":
+        return str((_module("jarvis_voices").speed_view() or {}).get("choice") or "") or None
+    if key == "small_approvals":
+        OC = _module("jarvis_owner_check")
+        return OC.approvals_mode() != OC.MODE_SMALL
+    raise Unavailable(f"no reader for {key}")
+
+
+def _read_number(key: str):
+    """One NUMBER_SETTINGS row's value, from the engine's own reader."""
+    if key == "live_idle_seconds":
+        # The reader the Live session itself obeys, not a second copy of it.
+        return int(_module("jarvis_live").quiet_seconds())
+    raise Unavailable(f"no reader for {key}")
+
+
+def _choice_words(setting: str, value) -> str:
+    """One choice value in the owner's words. Never raises."""
+    words = CHOICE_VALUE_WORDS.get(setting)
+    if isinstance(words, dict) and isinstance(value, (str, int, float, bool)):
+        if value in words:
+            return str(words[value])
+    if setting == "personality":
+        try:
+            row = _module("jarvis_manner").preset(str(value))
+        except Exception:
+            row = None
+        title = str((row or {}).get("title") or "") if isinstance(row, dict) else ""
+        return title or str(value)
+    return str(value)
+
+
+def _number_words(ch: dict, value) -> str:
+    """One number value with the row's own unit ("2 minutes"), when it has one.
+    Never raises."""
+    try:
+        _R, row = _number_row(ch)
+        unit = str(row.unit() or "")
+    except Exception:
+        unit = ""
+    return f"{value} {unit}".strip() if unit else str(value)
 
 
 def _current(ch: dict):
@@ -842,6 +1441,10 @@ def _current(ch: dict):
             return bool(_module("jarvis_animal").values()[str(ch.get("key"))])
         if kind == "sky_show":
             return bool(_module("jarvis_sky").view()["show"])
+        if kind == "choice":
+            return _read_choice(str(ch.get("setting")))
+        if kind == "number":
+            return _read_number(str(ch.get("setting")))
         if kind == "preset":
             return None
     except Unavailable:
@@ -861,6 +1464,15 @@ def _same(ch: dict, current) -> bool:
         return cur == bool(ch.get("ask"))
     if kind in ("bool", "reading_tool", "animal", "sky_show"):
         return bool(current) == bool(ch.get("to"))
+    if kind == "choice":
+        try:
+            want = _choice_value(ch)
+        except Unavailable:
+            return False                      # cannot resolve it: do not claim it is set
+        return want is not None and current == want
+    if kind == "number":
+        want = _number_value(ch)
+        return want is not None and current == want
     return current == ch.get("to")
 
 
@@ -873,6 +1485,10 @@ def _from_words(ch: dict, current) -> str:
     if kind == "asks_first":
         cur = bool(current.get("asks")) if isinstance(current, dict) else bool(current)
         return "asks me first" if cur else "goes ahead without asking"
+    if kind == "choice":
+        return _choice_words(str(ch.get("setting")), current)
+    if kind == "number":
+        return _number_words(ch, current)
     return str(current)
 
 
@@ -884,6 +1500,15 @@ def _to_words(ch: dict) -> str:
         return "on" if ch.get("to") is True else "off"
     if kind == "preset":
         return PRESET_IDS.get(str(ch.get("to")), str(ch.get("to")))
+    if kind == "choice":
+        try:
+            want = _choice_value(ch)
+        except Unavailable:
+            want = None
+        return _choice_words(str(ch.get("setting")),
+                             want if want is not None else ch.get("to"))
+    if kind == "number":
+        return _number_words(ch, ch.get("to"))
     return str(ch.get("to"))
 
 
@@ -916,6 +1541,17 @@ def effect_of(ch: dict, *, tier_of: Optional[Callable[[str], str]] = None) -> st
         except Unavailable:
             return "blocked"
         return "card" if str(tier_of(action)) == "ask" else "blocked"
+    if kind == "choice":
+        # No choice this quiz asks is carded today (see CHOICE_CARDED). A row
+        # listed there fails CLOSED: plan() must never promise "Instant" for a
+        # change whose setter really waits on a card.
+        if CHOICE_CARDED.get(str(ch.get("setting"))) != str(ch.get("to")):
+            return "instant"
+        return "blocked"
+    if kind == "number":
+        if NUMBER_CARDED.get(str(ch.get("setting"))) != ch.get("to"):
+            return "instant"
+        return "blocked"
     if kind != "bool":
         return "instant"
     direction = "on" if ch.get("to") else "off"
@@ -1131,6 +1767,36 @@ def _apply_change(ch: dict, *, peer=None, local=None) -> dict:
                                       peer=peer, local=local)
         elif kind == "sky_show":
             out = R.set_sky_show(bool(ch.get("to")), peer=peer, local=local)
+        elif kind == "choice":
+            # The row's OWN setter, with the row's own value: `choice_from_words`
+            # is the step jarvis_quick's write path makes, so an option id whose
+            # spoken word differs from the value it takes (small approvals'
+            # "ask"/"skip" are True/False) reaches the setter as the value.
+            key = str(ch.get("setting"))
+            setting = next((c for c in R.CHOICE_SETTINGS if c.key == key), None)
+            if setting is None:
+                return {"ok": False, "waiting": False,
+                        "message": f"{change_label(ch)}: this PC does not know that "
+                                   "setting"}
+            value = R.choice_from_words(setting, str(ch.get("to")))
+            if value is None:
+                return {"ok": False, "waiting": False,
+                        "message": f"{change_label(ch)}: that is not one of its "
+                                   "choices, so nothing was changed."}
+            out = setting.set(value, peer=peer, local=local)
+        elif kind == "number":
+            key = str(ch.get("setting"))
+            setting = next((n for n in R.NUMBER_SETTINGS if n.key == key), None)
+            if setting is None:
+                return {"ok": False, "waiting": False,
+                        "message": f"{change_label(ch)}: this PC does not know that "
+                                   "setting"}
+            value = _number_value(ch)
+            if value is None:
+                return {"ok": False, "waiting": False,
+                        "message": f"{change_label(ch)}: that is not a whole number, "
+                                   "so nothing was changed."}
+            out = setting.set(value, peer=peer, local=local)
         else:
             return {"ok": False, "waiting": False,
                     "message": f"{change_label(ch)}: nothing to apply"}
@@ -1265,7 +1931,8 @@ def _card_wait_s() -> float:
 #: Safest first: tightening and cosmetic changes at once, then the carded ones;
 #: within the carded group a single ON-card setting goes before the bundles.
 _KIND_ORDER = {"asks_first": 1, "reading_tool": 2, "manner": 3, "card_mode": 4,
-               "provider": 5, "animal": 6, "sky_show": 7, "bool": 8, "preset": 9}
+               "provider": 5, "choice": 5, "number": 5, "animal": 6,
+               "sky_show": 7, "bool": 8, "preset": 9}
 
 
 def _order(ch: dict, effect: str) -> tuple:
@@ -1297,6 +1964,11 @@ def apply(answers, confirm: bool = False, *, peer=None, local=None,
     `wait`, `readers`, `appliers` and `tier_of` exist so the suite can drive
     every branch without a card, a module or the owner's PC; the shipped route
     passes none of them.
+
+    On the accepted answer the answers are MERGED into the ones already saved
+    (submitted wins), `completed_version` becomes `QUIZ_VERSION` - a partial
+    retake marks the set complete because the owner has seen the new
+    questions by then - `runs` gains one, and `in_progress` is cleared.
     """
     if confirm is not True:
         return {"ok": False, "confirmed": False,
@@ -1374,9 +2046,25 @@ def apply(answers, confirm: bool = False, *, peer=None, local=None,
                          "waited": bool(out.get("waiting"))})
     saved = _read_saved()
     at = time.time()
-    if not _save_saved({"answers": _clean_answers(answers),
-                        "completed_at": at,
-                        "outcomes": outcomes}):
+    # MERGE, never replace (Wave B, 2026-11-03). Before this, a one-question
+    # retake replaced `answers` with only the ids just submitted, so every
+    # answer it did not ask about disappeared from the prefill. The rule is
+    # existing ∪ submitted, and a submitted answer wins; `_clean_answers` is
+    # still the only cleaner, so an invalid answer is dropped and the OLD value
+    # survives rather than being lost. A refused or denied card still saves the
+    # answers: they are the owner's own words, not a claim that every setting
+    # changed (`test_setup.py` pins that).
+    merged = dict(saved["answers"])
+    merged.update(_clean_answers(answers))
+    doc = {"version": SCHEMA_VERSION,
+           "completed_version": QUIZ_VERSION,
+           "runs": int(saved.get("runs") or 0) + 1,
+           "dismissed_at": saved.get("dismissed_at"),
+           "in_progress": {},
+           "answers": merged,
+           "completed_at": at,
+           "outcomes": outcomes}
+    if not _save_saved(doc):
         return {"ok": False, "confirmed": True,
                 "error": "The settings were attempted, but the answers could not be "
                          "saved. Nothing else changed.",
@@ -1444,9 +2132,32 @@ def current_values(*, readers=None) -> dict:
     return out
 
 
+def answered_count(saved: Optional[dict] = None) -> int:
+    """How many questions have an answer - the last accepted `answers` plus the
+    answers drafted but not applied yet, counted by QUESTION id (an id that is
+    no longer in the quiz does not count). Both apps and the HUD say "N of
+    len(QUESTIONS) answered" from this one number."""
+    doc = _read_saved() if saved is None else saved
+    answers = doc.get("answers") if isinstance(doc, dict) else None
+    where = doc.get("in_progress") if isinstance(doc, dict) else None
+    draft = where.get("draft_answers") if isinstance(where, dict) else None
+    ids = set(answers) if isinstance(answers, dict) else set()
+    if isinstance(draft, dict):
+        ids |= set(draft)
+    return len([qid for qid in ids if qid in _QUESTIONS_BY_ID])
+
+
 def state(*, readers=None) -> dict:
     """GET /api/setup: the questions (in order), the current values, the last
-    answers and when they were accepted. Never raises."""
+    answers and when they were accepted. Never raises.
+
+    Wave B (2026-11-03) adds the versioning the first-open offer and the
+    "show only new/unanswered" filter read: the question-set `version`, the
+    `completed_version` the owner last finished or accepted, `runs`,
+    `dismissed_at`, the card's `in_progress` place and `answered_count`. Each
+    question carries its `section` and its own `version`; `sections` is the
+    seven (id, title) pairs in card order, so neither app types them again.
+    """
     saved = _read_saved()
     try:
         available = True
@@ -1455,8 +2166,16 @@ def state(*, readers=None) -> dict:
         available = False
     return {
         "available": available,
+        "version": QUIZ_VERSION,
+        "completed_version": saved["completed_version"],
+        "runs": saved["runs"],
+        "dismissed_at": saved["dismissed_at"],
+        "in_progress": saved["in_progress"],
+        "answered_count": answered_count(saved),
+        "sections": [{"id": sid, "title": title} for sid, title in SECTIONS],
         "questions": [{
             "id": q["id"], "title": q["title"], "help": q["help"],
+            "section": q["section"], "version": q["version"],
             "multi": bool(q["multi"]),
             "options": [{"id": o["id"], "label": o["label"],
                          "detail": o.get("detail", "")} for o in q["options"]],
@@ -1475,10 +2194,115 @@ def state(*, readers=None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-#   The routes: GET /api/setup, POST /api/setup/plan, POST /api/setup/apply
-#   (setup.patch wraps the HUD's Handler with install(); same origin/token
-#   checks as every other write).
+#   The routes: GET /api/setup, POST /api/setup/plan, POST /api/setup/apply and
+#   POST /api/setup/progress (setup.patch wraps the HUD's Handler with
+#   install(); same origin/token checks as every other write).
 # ---------------------------------------------------------------------------
+
+
+def _progress_not_saved() -> tuple:
+    return 503, {"ok": False, "available": False,
+                 "error": "The questionnaire's progress could not be saved, so "
+                          "nothing was recorded."}
+
+
+def progress(body, *, peer=None, local=None,
+             here: Optional[Callable[[], bool]] = None) -> tuple:
+    """POST /api/setup/progress - where the owner is in the card. (code, body).
+
+    CARDLESS AND GATELESS BY DESIGN (Wave B, 2026-11-03). It records the
+    owner's own Option ids and the section/question they are on - the same
+    class of state as tutorial progress - so it calls NO setter, raises NO
+    card, changes NO setting, and never calls `apply()`. It deliberately does
+    not read the gate's taint latch: progress is not a change, and a tainted
+    turn must not lock the owner out of recording where they are.
+
+    DESKTOP-ONLY, failing closed exactly as `apply()` does: the card's own
+    place is the PC's state, and the phone reads it but never moves it.
+
+    Writes ONLY `setup.json`, through the one `_save_saved()`; every other key
+    (answers, completed_at, outcomes, completed_version, runs, dismissed_at)
+    is preserved by construction because the whole read document is written
+    back. `draft_answers` is cleaned by `_clean_answers` - an unknown question
+    id or a value that is not a string/list is dropped, never stored - and the
+    draft is never applied.
+
+    Bodies:
+      {"section": "...", "question": "...", "draft_answers": {...}}
+          record the place and stage/merge draft answers. An explicit empty
+          `draft_answers` ({}) CLEARS the stored draft, which is what "take it
+          again" needs; a non-empty one is merged, so a staged choice from chat
+          and the card's own answer both survive.
+      {"dismiss": true}         set `dismissed_at` (the 24 h "Not now").
+      {"keep_current": true}    set `completed_version = QUIZ_VERSION` without
+                                touching a single setting or answer.
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "send a JSON object"}
+    on_pc = bool(here()) if here is not None else _here(peer, local)
+    if not on_pc:
+        return 403, {"ok": False, "pc_only": True, "error": PC_ONLY_PROGRESS}
+    saved = _read_saved()
+    at = time.time()
+    if body.get("dismiss") is True:
+        saved["version"] = SCHEMA_VERSION
+        saved["dismissed_at"] = at
+        if not _save_saved(saved):
+            return _progress_not_saved()
+        return 200, {"ok": True, "dismissed_at": at}
+    if body.get("keep_current") is True:
+        # "Keep current settings / Don't remind me again": one press, one POST,
+        # no setter and no card. The answers are not touched - this is not a
+        # quiz answer, it is the owner saying they are happy as they are.
+        saved["version"] = SCHEMA_VERSION
+        saved["dismissed_at"] = at
+        saved["completed_version"] = QUIZ_VERSION
+        if not _save_saved(saved):
+            return _progress_not_saved()
+        return 200, {"ok": True, "completed_version": QUIZ_VERSION,
+                     "dismissed_at": at}
+    qid = str(body.get("question") or "").strip()
+    if not qid:
+        return 400, {"ok": False,
+                     "error": 'send {"question": "..."} with optional "section" '
+                              'and "draft_answers", or {"dismiss": true}, or '
+                              '{"keep_current": true}'}
+    q = _QUESTIONS_BY_ID.get(qid)
+    if q is None:
+        return 400, {"ok": False,
+                     "error": f"{qid!r} is not one of the questionnaire's questions"}
+    supplied_draft = body.get("draft_answers")
+    if supplied_draft is not None and not isinstance(supplied_draft, dict):
+        return 400, {"ok": False,
+                     "error": 'send {"draft_answers": {...}} - one entry per '
+                              "question id"}
+    where = dict(saved["in_progress"])
+    if isinstance(supplied_draft, dict):
+        cleaned = _clean_answers(supplied_draft)
+        if supplied_draft:
+            merged = dict(where.get("draft_answers") or {})
+            merged.update(cleaned)
+            where["draft_answers"] = merged
+        else:
+            where["draft_answers"] = {}
+    section = str(body.get("section") or "")
+    where["section"] = section if section in _SECTION_IDS else q["section"]
+    where["question"] = qid
+    started = where.get("started_at")
+    supplied_started = body.get("started_at")
+    if isinstance(supplied_started, (int, float)) and not isinstance(supplied_started, bool):
+        started = float(supplied_started)
+    if not isinstance(started, (int, float)) or isinstance(started, bool):
+        started = at
+    where["started_at"] = float(started)
+    where = _clean_progress(where)
+    if not where:
+        return 400, {"ok": False, "error": "that progress could not be read"}
+    saved["version"] = SCHEMA_VERSION
+    saved["in_progress"] = where
+    if not _save_saved(saved):
+        return _progress_not_saved()
+    return 200, {"ok": True, "in_progress": where}
 
 
 def handle_get() -> tuple:
@@ -1522,8 +2346,14 @@ def handle_post_apply(body, *, peer=None, local=None) -> tuple:
     return (200 if out.get("ok") else 500), out
 
 
+def handle_post_progress(body, *, peer=None, local=None) -> tuple:
+    """POST /api/setup/progress - the thin route wrapper, same rules as
+    `progress()`. It never calls `apply()` and never consults the taint latch."""
+    return progress(body, peer=peer, local=local)
+
+
 def install(Handler, *, origin_ok, token_ok, read_body):
-    """Wire the three /api/setup routes onto the HUD's Handler. Every other
+    """Wire the four /api/setup routes onto the HUD's Handler. Every other
     request goes untouched. Origin and token are checked FIRST, exactly like
     every other route, and nothing is read before both pass."""
     get0 = getattr(Handler, "do_GET", None)
@@ -1573,6 +2403,16 @@ def install(Handler, *, origin_ok, token_ok, read_body):
         try:
             if split == PLAN_PATH:
                 code, out = handle_post_plan(body)
+            elif split == PROGRESS_PATH:
+                # Cardless and gateless: where the owner is in the card. The
+                # request's own addresses are passed the same way apply's are,
+                # so the desktop-only rule is the same one (fail closed).
+                peer = (getattr(self, "client_address", None) or ("",))[0]
+                try:
+                    local = self.connection.getsockname()[0]
+                except Exception:
+                    local = None
+                code, out = handle_post_progress(body, peer=peer, local=local)
             else:
                 # The request's own addresses, read exactly as the asks-first
                 # and owner-check routes read them: the existing PC-only rules
@@ -1593,5 +2433,6 @@ def install(Handler, *, origin_ok, token_ok, read_body):
     do_POST._jarvis_setup = True
     Handler.do_GET = do_GET
     Handler.do_POST = do_POST
-    return ("  setup      Setup questionnaire "
-            "(GET /api/setup, POST /api/setup/plan, POST /api/setup/apply)")
+    return ("  setup      Personalize Jarvis questionnaire "
+            "(GET /api/setup, POST /api/setup/plan, POST /api/setup/apply, "
+            "POST /api/setup/progress)")

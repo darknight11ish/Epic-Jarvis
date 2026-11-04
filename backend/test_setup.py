@@ -31,6 +31,13 @@ WHAT IS CHECKED, and why each check matters:
   cannot approve, cannot clear a latch and cannot move anything off this PC;
 * the three routes are wired (GET /api/setup, POST /api/setup/plan,
   POST /api/setup/apply) with the same origin and token checks as every write;
+* Wave B (2026-11-03): the 25-question set's two newer change kinds (`choice`,
+  `number`) resolve through the registry's own rows and values, the four new
+  carded BoolSettings match `jarvis_feature_guide.CARD_ON_LOOSENING` (no drift
+  between the two records), `state()` carries the versioning the first-open
+  offer reads, and the new cardless `POST /api/setup/progress` is desktop-only
+  and cannot write anything but its own place (its fuller suite is
+  `test_setup_quiz.py`);
 * the two audit refusals (2026-10-20 Gemini, Area 1B): apply refuses when the
   gate's taint latch says outside text may be steering (409, fail closed when
   the gate cannot be asked), and a request from another device whose answers
@@ -94,6 +101,21 @@ def opposite(ch):
         return "always_full" if ch.get("to") != "always_full" else "start_short"
     if kind == "provider":
         return "duckduckgo" if ch.get("to") != "duckduckgo" else "searxng"
+    if kind == "choice":
+        setting = str(ch.get("setting"))
+        if setting == "small_approvals":
+            # The change names the option id ("ask"/"skip"); the reader answers
+            # the real bool the registry row's setter takes.
+            return ch.get("to") != "ask"
+        if setting == "voice_speed":
+            return "normal" if ch.get("to") != "normal" else "faster"
+        if setting == "antislop_mode":
+            return "after" if ch.get("to") != "after" else "during"
+        if setting == "personality":
+            return "warm_peer" if ch.get("to") != "warm_peer" else "classic_butler"
+        return None
+    if kind == "number":
+        return 90 if int(ch.get("to")) != 90 else 60
     return None
 
 
@@ -208,6 +230,31 @@ def t_every_change_maps_to_a_real_setter():
                     P = __import__("jarvis_presets")
                     if ch.get("to") not in {p.id for p in P.PRESETS}:
                         bad.append(f"{q['id']}/{o['id']}: unknown preset id")
+                elif kind == "choice":
+                    row = next((c for c in R.CHOICE_SETTINGS
+                                if c.key == ch.get("setting")), None)
+                    if row is None:
+                        bad.append(f"{q['id']}/{o['id']}: no ChoiceSetting "
+                                   f"{ch.get('setting')!r}")
+                    elif R.choice_from_words(row, str(ch.get("to"))) is None:
+                        bad.append(f"{q['id']}/{o['id']}: {ch.get('to')!r} is not one "
+                                   f"of {ch.get('setting')!r}'s choices")
+                elif kind == "number":
+                    row = next((n for n in R.NUMBER_SETTINGS
+                                if n.key == ch.get("setting")), None)
+                    if row is None:
+                        bad.append(f"{q['id']}/{o['id']}: no NumberSetting "
+                                   f"{ch.get('setting')!r}")
+                    else:
+                        try:
+                            value = int(ch.get("to"))
+                        except (TypeError, ValueError):
+                            value = None
+                        low, high = row.low(), row.high()
+                        if (value is None or low is None or high is None
+                                or not (low <= value <= high)):
+                            bad.append(f"{q['id']}/{o['id']}: {ch.get('to')!r} is "
+                                       f"outside {ch.get('setting')!r}'s range")
                 else:
                     bad.append(f"{q['id']}/{o['id']}: unknown change kind {kind!r}")
     check("every option maps to an existing setter / registry setting", not bad,
@@ -258,6 +305,31 @@ def t_the_carded_actions_are_the_modules_own():
               for o in q["options"] for ch in o["changes"])
           and "apply_preset" not in Path(S.__file__).read_text(encoding="utf-8"),
           "preset change missing or the module calls apply_preset")
+    choice_keys = {str(ch.get("setting")) for q in S.QUESTIONS for o in q["options"]
+                   for ch in o["changes"] if ch.get("kind") == "choice"}
+    number_keys = {str(ch.get("setting")) for q in S.QUESTIONS for o in q["options"]
+                   for ch in o["changes"] if ch.get("kind") == "number"}
+    check("every named-choice and number change is cardless, and neither table "
+          "lists one",
+          choice_keys and number_keys
+          and not (choice_keys & set(S.BOOL_CARDED))
+          and not (number_keys & set(S.BOOL_CARDED))
+          and S.CHOICE_CARDED == {} and S.NUMBER_CARDED == {},
+          (sorted(choice_keys), sorted(number_keys),
+           S.CHOICE_CARDED, S.NUMBER_CARDED))
+    check("...the four new carded bools are the ones the feature guide records",
+          all(S.BOOL_CARDED.get(k) == "on"
+              for k in ("learn_paraphrase", "chat_history", "media_index",
+                        "lights_without_card")),
+          {k: S.BOOL_CARDED.get(k) for k in
+           ("learn_paraphrase", "chat_history", "media_index",
+            "lights_without_card")})
+    FG = __import__("jarvis_feature_guide")
+    carded_on = {k for k, direction in S.BOOL_CARDED.items() if direction == "on"}
+    check("every switch the feature guide records as carded-on is carded-on here "
+          "too (one record, no drift)",
+          set(FG.CARD_ON_LOOSENING) <= carded_on,
+          sorted(set(FG.CARD_ON_LOOSENING) - carded_on))
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +443,38 @@ def t_card_rules_match_the_existing_rules():
     out = one({"voice": ["better_voice"]}, readers=lambda ch: False)
     check("the better voice keeps its own card", effect(out, "bool:better_voice") == "card",
           out)
+
+    # The Wave B answers (2026-11-03): four BoolSettings that ask on their ON,
+    # read from their setters' own words, and the two new change kinds, which
+    # are cardless in both directions.
+    out = one({"lights_without_card": "on"}, readers=lambda ch: False)
+    check("lights/plugs/fans without a card ON raises its own card",
+          effect(out, "bool:lights_without_card") == "card", out)
+    out = one({"reworded_memories": "on"}, readers=lambda ch: False)
+    check("saving a reworded fact ON raises its own card",
+          effect(out, "bool:learn_paraphrase") == "card", out)
+    out = one({"chat_history": "on"}, readers=lambda ch: False)
+    check("keeping chat history ON raises its own card",
+          effect(out, "bool:chat_history") == "card", out)
+    out = one({"media_index": "on"}, readers=lambda ch: False)
+    check("searchable recordings ON raises its own card",
+          effect(out, "bool:media_index") == "card", out)
+    out = one({"bigger_model_hints": ["struggle"]}, readers=lambda ch: False)
+    check("a bigger-model hint is instant (no card either way)",
+          effect(out, "bool:second_card_suggest_struggle") == "instant", out)
+    out = one({"personality": "dry_wit"}, readers=lambda ch: "warm_peer")
+    check("a personality choice is instant (cardless by design)",
+          effect(out, "choice:personality") == "instant", out)
+    out = one({"antislop": "during"}, readers=lambda ch: None)
+    check("the Anti-Slop switch and its mode are instant, both changes planned",
+          effect(out, "bool:antislop") == "instant"
+          and effect(out, "choice:antislop_mode") == "instant", out)
+    out = one({"voice_speed": "faster"}, readers=lambda ch: "normal")
+    check("a voice-speed choice is instant",
+          effect(out, "choice:voice_speed") == "instant", out)
+    out = one({"live_idle_seconds": "60"}, readers=lambda ch: 90)
+    check("the Live timeout is instant (its own limit row says loosening none)",
+          effect(out, "number:live_idle_seconds") == "instant", out)
 
 
 def t_a_tier_that_does_not_ask_is_skipped_not_promised():
@@ -565,18 +669,49 @@ def t_state_round_trips_and_prefills_a_rerun():
     check("state carries every question in order and says how big a card wait is",
           [q["id"] for q in st["questions"]] == [q["id"] for q in S.QUESTIONS]
           and isinstance(st["card_wait_s"], float), st["questions"][:2])
+    check("state carries the question-set version and the completed one",
+          st["version"] == S.QUIZ_VERSION
+          and st["completed_version"] == S.QUIZ_VERSION
+          and st["runs"] == 1 and st["dismissed_at"] is None
+          and st["in_progress"] == {},
+          {k: st[k] for k in ("version", "completed_version", "runs",
+                              "dismissed_at", "in_progress")})
+    check("...every question carries its section and its own version",
+          all(q.get("section") in S._SECTION_IDS
+              and isinstance(q.get("version"), int) for q in st["questions"])
+          and [s["id"] for s in st["sections"]] == [s for s, _t in S.SECTIONS],
+          (st["sections"], st["questions"][:2]))
+    check("...and answered_count counts the answers it can prefill",
+          st["answered_count"] == 2, st["answered_count"])
 
 
 def t_the_saved_answers_never_hold_private_data():
     raw = (Path(_TMP) / "setup.json").read_text(encoding="utf-8")
     saved = json.loads(raw)
-    check("setup.json holds the choice ids and a timestamp, and nothing else "
-          "private enters it",
-          set(saved) == {"answers", "completed_at", "outcomes"}
+    check("setup.json holds the choice ids, the versioning and a timestamp, and "
+          "nothing else private enters it",
+          set(saved) == {"version", "completed_version", "runs", "dismissed_at",
+                         "in_progress", "answers", "completed_at", "outcomes"}
           and saved["answers"] == {"talk_style": "plain", "humour": "on"}
+          and saved["version"] == S.SCHEMA_VERSION
+          and saved["completed_version"] == S.QUIZ_VERSION
+          and saved["runs"] == 1 and saved["dismissed_at"] is None
+          and saved["in_progress"] == {}
           and not any(word in raw.lower() for word in
                       ("transcript", "my email", "calendar_read", "chat history")),
           raw[:200])
+    # A DRAFT is an Option id too (Wave B): record one and prove the file still
+    # holds nothing but ids and the place - never a setting value.
+    code, got = S.progress({"section": "talking", "question": "talk_style",
+                            "draft_answers": {"talk_style": "warm",
+                                              "not_a_question": "x"}})
+    saved = json.loads((Path(_TMP) / "setup.json").read_text(encoding="utf-8"))
+    draft = (saved.get("in_progress") or {}).get("draft_answers")
+    check("a staged draft answer is an Option id, cleaned of unknown ids",
+          code == 200 and draft == {"talk_style": "warm"}
+          and saved["in_progress"]["question"] == "talk_style"
+          and saved["answers"] == {"talk_style": "plain", "humour": "on"},
+          saved.get("in_progress"))
 
 
 def t_tainted_apply_refuses_before_any_setter():
@@ -691,6 +826,21 @@ def t_get_exposes_no_folder_or_account_data():
               for v in st["current"].values()), st["current"])
     check("...and the storage sentence is the folder's NAME, not its path",
           st["storage"] == "setup.json in the Jarvis settings folder", st["storage"])
+    where = json.dumps(st.get("in_progress"))
+    check("...the new versioning keys hold no path and no account id",
+          "in_progress" in st and "dismissed_at" in st
+          and "version" in st and "runs" in st
+          and not any(word in where for word in
+                      ("C:", "Users", "/home/", "OneDrive", "AppData", "@")),
+          where)
+    words = " ".join(f"{q['title']} {q['help']}" for q in st["questions"])
+    check("...and no question title or help line names a folder or a path",
+          not any(word in words for word in
+                  ("C:", "Users", "/home/", "OneDrive", "AppData", "@")),
+          words[:300])
+    check("...every question's section is one of the seven it reports",
+          {q["section"] for q in st["questions"]}
+          == {s["id"] for s in st["sections"]}, st["sections"])
 
 
 def t_the_route_fails_closed_and_maps_the_two_new_refusals():
@@ -742,6 +892,35 @@ def t_the_route_fails_closed_and_maps_the_two_new_refusals():
     check("a remote apply of a PC-only answer is 403 and nothing ran",
           FakeHandler.sent[0] == 403
           and FakeHandler.sent[1].get("pc_only") is True, FakeHandler.sent)
+    # 3. POST /api/setup/progress (Wave B): desktop-only, and a bad body 400.
+    old_here, S._here = S._here, lambda peer, local: False
+    try:
+        h = H("/api/setup/progress",
+              body=json.dumps({"question": "talk_style"}).encode())
+        h.client_address = ("100.64.0.9", 5555)
+        h.connection = _Conn(("100.64.0.1", 4719))
+        h.do_POST()
+    finally:
+        S._here = old_here
+    check("progress from another device is 403 and writes nothing",
+          FakeHandler.sent[0] == 403
+          and FakeHandler.sent[1].get("pc_only") is True, FakeHandler.sent)
+    old_here, S._here = S._here, lambda peer, local: True
+    try:
+        h = H("/api/setup/progress",
+              body=json.dumps({"section": "talking"}).encode())
+        h.do_POST()
+        bad = FakeHandler.sent
+        h = H("/api/setup/progress",
+              body=json.dumps({"question": "talk_style"}).encode())
+        h.do_POST()
+        good = FakeHandler.sent
+    finally:
+        S._here = old_here
+    check("progress with no question and no dismiss is 400", bad[0] == 400, bad)
+    check("progress from this PC records the place (200, in_progress)",
+          good[0] == 200
+          and good[1].get("in_progress", {}).get("question") == "talk_style", good)
 
 
 def _wired(path, body=b"{}", token=True):
