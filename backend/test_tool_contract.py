@@ -124,12 +124,11 @@ CATALOGUE = [
     "approve_web_search_for_conversation", "browser_control",
     "calculator", "calendar_read", "change_setting", "coming_up",
     "connect_account", "control_computer", "control_phone",
-    # Clearing / reading one of the owner's own kept conversations (2026-11-03:
-    # "pull up any old conversation", "clear any conversation on request").
-    # find/open are read-only under `skill_list`; clear raises
-    # jarvis_self_portrait's ONE `conversation_clear` card and never runs
-    # through the generic gate. Not in a cloud or private-turn allow-list.
-    "conversation_clear", "conversation_find", "conversation_open",
+    # Reading one of the owner's own kept conversations (2026-11-03: "pull up
+    # any old conversation"). Both are read-only under `skill_list`. Clearing is
+    # NOT a model tool (Gemini ruling 1, 2026-11-03): it stays route / app /
+    # fast-path only, behind its ONE `conversation_clear` card.
+    "conversation_find", "conversation_open",
     "create_joplin_note",
     "draft_email",
     "email_check", "feature_guide", "file_read", "github_search",

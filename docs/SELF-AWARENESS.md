@@ -48,11 +48,15 @@ What is built but not yet connected, said plainly:
   either app; no screen calls it yet. What the History screens do today is
   unchanged: the app asks you "are you sure?" and deletes the one chat, no card
   from the PC.
-- **There are no conversation/opening chat tools yet.** Asking Jarvis "what can
-  you do?" is still answered by the existing feature guide, not by reading the
-  new portrait; there is no "open ..." tool and no "clear ..." tool in the chat
-  yet. `refresh_abilities` is the one new chat tool that is built, and on the
-  shipped settings file it still has to be switched on before it is offered.
+- **The conversation/opening chat tools are built - and clearing is
+  deliberately not one of them.** `self_portrait`, `conversation_find` (titles
+  and dates only, never the words), `conversation_open` (one kept chat's turns,
+  local model only) and `refresh_abilities` are read-only model tools with no
+  card; on the shipped settings file each has to be switched on before it is
+  offered. **Clearing a kept conversation is never a model tool** (Gemini
+  ruling 1, 2026-11-03): an AI must never have an autonomous way to wipe the
+  transcript, so clearing stays the REST route, an app UI action or the fast
+  path, always behind its ONE card.
 - **There is no storage tool and no storage screen yet.** The PC can scan, plan
   and raise the cleanup card, and the card is real; nothing in either app or in
   chat asks for it yet, so for now this is plumbing with a tested card.

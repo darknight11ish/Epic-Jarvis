@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -1271,7 +1271,46 @@
+@@ -1271,7 +1271,40 @@
      # and no new card words are invented. "ask" here is deliberately the
      # CONSERVATIVE answer for the page - the true answer depends on which
      # setting is named, which jarvis_reach's own plain name for the tool says.
@@ -38,12 +38,6 @@
 +    #     is the worst case this gate already uses for a spawned program, so
 +    #     this is the conservative classification and never a looser one.
 +    "rea_investigate": "run_shell_on_host",
-+    #   conversation_clear - the tool's own name IS its action (2026-11-03,
-+    #     jarvis_self_portrait.py): the card is raised under CLEAR_ACTION, the
-+    #     same name, and "conversation_clear = ask" ships in both copies of
-+    #     jarvis-framework.toml. Without this row action_for_tool() answers
-+    #     "unclassified_tool" and the Reach page calls it unclassified.
-+    "conversation_clear": "conversation_clear",
  }
  
  # Arguments that ESCALATE a shell-class tool. Regex on model-written text is

@@ -358,6 +358,17 @@ def version_surface_is_honest():
           block["app_version"] == "unknown"
           or bool(re.fullmatch(r"\d+\.\d+\.\d+", block["app_version"])),
           block["app_version"])
+    # PROVENANCE (Gemini ruling 3, 2026-11-03): which PROCESS answered, and the
+    # manifest summary a runner can compare with the live folder. Read-only.
+    check("the version block names the answering process and its start time",
+          block.get("pid") == os.getpid()
+          and isinstance(block.get("started_at"), (int, float)))
+    check("the version block carries the _jarvis-state.json manifest summary",
+          set(block.get("manifest") or {}) == {"recorded", "written",
+                                               "files_recorded", "files_verified",
+                                               "resealed"}
+          and block["manifest"]["recorded"] is False
+          and block["manifest"]["files_recorded"] == 0)
     # THE MODULE'S OWN RULE, CHECKED IN BOTH LAYOUTS. _app_version() looks beside
     # the module that is RUNNING (here and here.parent), and honestly answers
     # "unknown" when no VERSION is there. In this checkout the repo root holds a
@@ -928,16 +939,28 @@ def refresh_abilities_tool_exists_and_reads():
 # ---------------------------------------------------------------------------
 
 
-class _FakeWatch:
-    def __init__(self):
-        self.cards = 0
-
-
 def conversation_tools_by_chat():
     import jarvis_agent as A
-    for name in ("self_portrait", "conversation_find", "conversation_open",
-                 "conversation_clear"):
+    for name in ("self_portrait", "conversation_find", "conversation_open"):
         check(f"the {name} tool is in the model's tool table", name in A.TOOLS)
+    # GEMINI RULING 1 (2026-11-03): clearing a conversation is NEVER a model
+    # tool - an LLM must not have an autonomous way to wipe the transcript. The
+    # REST route stays (that is the one way: its ONE card), and no bridge, no
+    # constant and no diet hint may survive for it.
+    check("clearing a conversation is NOT a model tool",
+          "conversation_clear" not in A.TOOLS)
+    check("... and none of its tool plumbing survives",
+          not hasattr(A, "CONVERSATION_CLEAR_TOOL")
+          and not hasattr(A, "_conversation_clear_call")
+          and not hasattr(A, "_conversation_clear_tool_text"))
+    check("... and it is in no tool group the model can open",
+          all("conversation_clear" not in members
+              for _name, _what, members in A.TOOL_GROUPS))
+    check("... and no plan step can name it",
+          "conversation_clear" not in A._PLAN_EXCLUDED_STEPS)
+    check("the REST route and its ONE action still exist",
+          SP.CLEAR_ACTION == "conversation_clear"
+          and SP.CLEAR_PATH == "/api/conversations/clear")
     check("the three read-only tools raise no card (skill_list)",
           all(A.TOOLS[n].gate_lookup_name is not None for n in
               ("self_portrait", "conversation_find", "conversation_open")))
@@ -949,18 +972,11 @@ def conversation_tools_by_chat():
     check("conversation_open's text says read-only and never invent an id",
           "read-only" in A._conversation_open_tool_text().lower()
           and "never invent" in A._conversation_open_tool_text().lower())
-    check("conversation_clear's text says ONE card is the permission",
-          "one approval card" in A._conversation_clear_tool_text().lower()
-          and "never clear anything yourself" in
-          A._conversation_clear_tool_text().lower())
     # The self portrait tool answers a compact inventory, not the full one.
     got = A._run_self_portrait({})
     check("self_portrait reads the portrait and answers counts",
           got.get("ok") is True and int(got["counts"]["places"]) > 100
           and got.get("ability_groups"))
-    # A conversation clear must be a step a plan can never name.
-    check("a plan step may not name conversation_clear",
-          "conversation_clear" in A._PLAN_EXCLUDED_STEPS)
     # --conversation_find / open, against a stubbed store (no chat db touched).
     import jarvis_chat_log as CL
     had_search, had_get = CL.search, CL.handle_get
@@ -1013,60 +1029,6 @@ def conversation_tools_by_chat():
               got.get("ok") is False)
     finally:
         CL.search, CL.handle_get = had_search, had_get
-    # --conversation_clear: ONE card, exact id, never a second card.
-    import jarvis_self_portrait as SP2
-    had_get2, had_clear = SP2.conversation_get, SP2.clear_request
-    calls = {"clear": [], "said": 0}
-
-    def fake_get(cid):
-        if len(str(cid)) < 8:
-            return 400, {"error": "need a conversation id"}
-        return 200, {"id": cid, "title": "The boiler",
-                     "turns": [{"role": "user", "text": "hi"}]}
-
-    def fake_clear(body):
-        calls["clear"].append(body)
-        return 202, {"ok": True, "waiting": True, "id": body["id"],
-                     "title": "The boiler", "messages": 1}
-
-    SP2.conversation_get, SP2.clear_request = fake_get, fake_clear
-    try:
-        convo, steps = [], []
-        watch = _FakeWatch()
-        A._conversation_clear_call({"id": "conv-aaaa"}, {"id": "tool-1"}, convo,
-                                   steps, lambda *a, **k: calls.__setitem__(
-                                       "said", calls["said"] + 1), watch=watch)
-        check("conversation_clear hands the exact id to the one card door",
-              calls["clear"] == [{"id": "conv-aaaa"}], str(calls["clear"]))
-        check("conversation_clear answers WAITING, never done",
-              json.loads(convo[-1]["content"]).get("waiting") is True
-              and json.loads(convo[-1]["content"])["said"].startswith("Waiting"))
-        check("conversation_clear counts the card against the turn",
-              watch.cards == 1)
-        check("conversation_clear emits no 'done' step",
-              steps[-1]["ran"] is False and steps[-1]["outcome"] == "unknown")
-        # A wrong id is refused in words, and no card is raised.
-        calls["clear"].clear()
-        convo, steps = [], []
-        A._conversation_clear_call({"id": "bad"}, {"id": "tool-2"}, convo, steps,
-                                   lambda *a, **k: None, watch=_FakeWatch())
-        check("an unknown conversation id raises no card",
-              calls["clear"] == [] and
-              json.loads(convo[-1]["content"]).get("ok") is False)
-        # A double call in one turn still raises only ONE card: the second is
-        # refused by the turn's card budget.
-        calls["clear"].clear()
-        convo, steps = [], []
-        watch = _FakeWatch()
-        A._conversation_clear_call({"id": "conv-aaaa"}, {"id": "a"}, convo, steps,
-                                   lambda *a, **k: None, watch=watch)
-        watch.cards = A.CARDS_PER_TURN
-        A._conversation_clear_call({"id": "conv-bbbb"}, {"id": "b"}, convo, steps,
-                                   lambda *a, **k: None, watch=watch)
-        check("a second clear in one answer is refused by the card budget",
-              len(calls["clear"]) == 1)
-    finally:
-        SP2.conversation_get, SP2.clear_request = had_get2, had_clear
 
 
 # ---------------------------------------------------------------------------

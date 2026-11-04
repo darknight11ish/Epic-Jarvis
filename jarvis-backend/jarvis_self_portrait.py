@@ -71,6 +71,7 @@ makes are the one delete a person approved.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sqlite3
 import threading
@@ -745,15 +746,32 @@ def version_block() -> dict:
     the deploy replaced, their sha256, and the commit a reseal put them back
     on. A HUD update button can compare `deploy.identity` / `deploy.resealed`
     against what it is about to install; nothing here changes anything.
+
+    PROVENANCE (Gemini ruling 3, 2026-11-03): `pid` and `started_at` prove which
+    PROCESS answered, and `deploy` is the `_jarvis-state.json` manifest summary
+    (when it was written, how many files it recorded/verified, the resealed
+    commit and the identity hashes) - read-only, no patch to jarvis_hud's own
+    /api/version, and the out-of-band Get-FileHash + Get-NetTCPConnection proof
+    stays the primary hardware evidence.
     """
     version, source = _app_version()
+    deploy = deploy_block()
     return {"schema": SCHEMA,
             "app_version": version,
             "app_version_source": source,
             "api_version": _api_version(),
             "server": "jarvis-hud",
+            "pid": os.getpid(),
             "started_at": _started_at(),
-            "deploy": deploy_block()}
+            "deploy": deploy,
+            # The manifest summary a runner can compare against the folder: the
+            # same fields deploy_block reads, copied here so the shape is stable
+            # even if deploy's own keys grow later.
+            "manifest": {"recorded": bool(deploy.get("recorded")),
+                         "written": str(deploy.get("written") or ""),
+                         "files_recorded": int(deploy.get("files_recorded") or 0),
+                         "files_verified": int(deploy.get("files_verified") or 0),
+                         "resealed": dict(deploy.get("resealed") or {})}}
 
 
 # ---------------------------------------------------------------------------

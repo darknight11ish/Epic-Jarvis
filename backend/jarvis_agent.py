@@ -1849,15 +1849,7 @@ _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "pr
                                   # defined further down this file (with the rest of the
                                   # feature), and this set is built before them.
                                   "approve_web_search_for_conversation",
-                                  "stop_web_search_approval",
-                                  # "conversation_clear" (2026-11-03): clearing
-                                  # ONE conversation raises its own card from
-                                  # jarvis_self_portrait and is handled by
-                                  # _conversation_clear_call before the generic
-                                  # path, exactly like "change_setting" above. A
-                                  # plan step would put a second mechanism around
-                                  # a destructive action, so it cannot be a step.
-                                  "conversation_clear"})
+                                  "stop_web_search_approval"})
 
 #: The gate action a plan step is put to when it must be asked about on its
 #: own card (marked risky, or filled in from an earlier step's result) but
@@ -3218,17 +3210,15 @@ def _run_refresh_abilities(args: dict) -> dict:
 #       what "pull up any old conversation" (2026-11-03) asks for, it stays on
 #       this PC's model (rule 1), and it is only reached when the owner asked
 #       to open that one chat.
-#   conversation_clear - ONE card, ONE exact conversation, no bulk form.
-#       It raises the card through jarvis_self_portrait.clear_request(), whose
-#       own gate action is `conversation_clear` (tier "ask"), so this tool can
-#       never delete anything without a person's yes. _one_call hands it to
-#       _conversation_clear_call BEFORE the generic path, the same way
-#       SETTINGS_TOOL is handled: the card must be that action's own, with that
-#       action's own words and no second card around it.
+#   Clearing a conversation is DELIBERATELY NOT a model tool (Gemini ruling 1,
+#   2026-11-03): an LLM must never have an autonomous tool to wipe the
+#   transcript (prompt-injection / hallucinated-wipe hazard). The REST route
+#   POST /api/conversations/clear still raises the ONE card under the action
+#   `conversation_clear` (tier "ask"); the apps and the fast path are the only
+#   callers. Nothing in this file offers it to the model.
 SELF_PORTRAIT_TOOL = "self_portrait"
 CONVERSATION_FIND_TOOL = "conversation_find"
 CONVERSATION_OPEN_TOOL = "conversation_open"
-CONVERSATION_CLEAR_TOOL = "conversation_clear"
 #: The three read-only tools and the one gate action they all resolve under.
 SELF_READ_TOOLS = (SELF_PORTRAIT_TOOL, CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL)
 SELF_READ_GATE = "skill_list"
@@ -3264,16 +3254,6 @@ def _conversation_open_tool_text() -> str:
             "invent an ID; if you do not have one, call conversation_find first. "
             "Read-only: no card, nothing changed. The words come from this PC's "
             "own kept chat and stay on this PC.")
-
-
-def _conversation_clear_tool_text() -> str:
-    return ("Delete ONE kept conversation from this PC. It raises ONE approval "
-            "card naming that chat's title and message count, and the chat is "
-            "deleted only if the owner approves it - that card is the permission, "
-            "so you can never clear anything yourself. Deleting a chat keeps the "
-            "facts Jarvis learned from it. Use only when the owner asks to clear "
-            "or delete a specific old conversation; call conversation_find first to "
-            "get its exact ID. Never guess an ID.")
 
 
 def _run_self_portrait(args: dict) -> dict:
@@ -3384,66 +3364,6 @@ def _run_conversation_open(args: dict) -> dict:
             "turns_total": len(turns), "turns_shown": len(shown),
             "turns": [{"role": t.get("role"), "text": t.get("text"),
                        "at": t.get("at")} for t in shown]}
-
-
-def _conversation_clear_call(args: dict, call: dict, convo: list, steps: list,
-                             say_step, *, watch: "_TurnWatch") -> None:
-    """One conversation_clear call: raise ONE card, name the exact chat.
-
-    The card itself is raised by jarvis_self_portrait.clear_request() - the one
-    place that owns the action, its title/count words, its "learned facts are
-    KEPT" sentence and its approval test - so this function never deletes
-    anything and cannot ask twice. It answers the model with "waiting", never
-    "done", because nothing has changed until a person approves that card.
-    """
-    def reply(result: dict) -> None:
-        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
-                      "content": _tool_content(result)})
-
-    def stop(why: str, outcome: str = "refused") -> None:
-        steps.append({"tool": CONVERSATION_CLEAR_TOOL, "ran": False, "ok": False,
-                      "outcome": outcome})
-        say_step("tool_refused", CONVERSATION_CLEAR_TOOL)
-        reply({"ok": False, "waiting": False, "error": why})
-
-    if watch.cards >= CARDS_PER_TURN:
-        return stop(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
-    cid = str((args or {}).get("id") or "").strip()
-    try:
-        import jarvis_self_portrait as SP
-    except Exception as exc:                # noqa: BLE001 - an older PC
-        return stop(f"the chat history is not reachable here ({type(exc).__name__}), "
-                    f"so nothing was deleted.", "unknown")
-    # Read it first so a wrong or already-deleted id is refused in words, with
-    # no card: asking a person to approve deleting a chat that is not there is a
-    # lie in card form.
-    try:
-        code, conv = SP.conversation_get(cid)
-    except Exception as exc:                # noqa: BLE001 - said, never raised
-        return stop(f"the chat history could not be read ({type(exc).__name__}), so "
-                    f"nothing was deleted.", "unknown")
-    if code != 200 or not isinstance(conv, dict):
-        return stop("I could not find that conversation - it may have been deleted. "
-                    "Call conversation_find for the exact id; nothing was deleted.")
-    try:
-        code, out = SP.clear_request({"id": cid})
-    except Exception as exc:                # noqa: BLE001 - said, never raised
-        return stop(f"the approval card could not be raised ({type(exc).__name__}), "
-                    f"so nothing was deleted.", "unknown")
-    if code == 202 and out.get("waiting"):
-        # The card is up. It counts against the turn's budget like any card
-        # (CARD_LIMIT_ERROR exists so one answer cannot bury the owner), and the
-        # model is told it is WAITING - never that it is done.
-        watch.cards += 1
-        steps.append({"tool": CONVERSATION_CLEAR_TOOL, "ran": False, "ok": False,
-                      "outcome": "unknown"})
-        reply({"ok": True, "waiting": True, "id": cid,
-               "title": out.get("title", ""), "messages": out.get("messages"),
-               "said": "Waiting for the owner's approval on the card. Nothing is "
-                       "deleted unless they approve it."})
-        return
-    return stop(str(out.get("error") or "that conversation could not be cleared"),
-                "unknown")
 
 
 # --------------------------------------------------------------------------
@@ -4464,13 +4384,10 @@ TOOLS: dict = {
         lambda args, state, **_: _run_refresh_abilities(args),
         gate_lookup_name=lambda args: "skill_list"),
     # What Jarvis is made of, and the owner's own old conversations
-    # (2026-11-03). The three read-only tools go through the generic path with
+    # (2026-11-03). The three are read-only and go through the generic path with
     # the gate's own `skill_list` action (tier "auto"), like feature_guide, so
-    # they raise no card. conversation_clear's prepare()/execute() below are
-    # deliberately unreachable in a real turn: `_one_call` hands it to
-    # `_conversation_clear_call` before the generic path, so the ONE card it
-    # raises is jarvis_self_portrait's own `conversation_clear` card and never a
-    # second, generic one around it.
+    # they raise no card. Clearing a kept conversation is NOT here: Gemini
+    # ruling 1 keeps it route/app/fast-path only, behind its one card.
     SELF_PORTRAIT_TOOL: Tool(
         SELF_PORTRAIT_TOOL, _self_portrait_tool_text(),
         {"type": "object", "properties": {}},
@@ -4498,18 +4415,6 @@ TOOLS: dict = {
         _plain_prepare("Open conversation"),
         lambda args, state, **_: _run_conversation_open(args),
         gate_lookup_name=lambda args: SELF_READ_GATE),
-    CONVERSATION_CLEAR_TOOL: Tool(
-        CONVERSATION_CLEAR_TOOL, _conversation_clear_tool_text(),
-        {"type": "object", "properties": {
-            "id": {"type": "string",
-                   "description": "the conversation id conversation_find gave"}},
-         "required": ["id"]},
-        _plain_prepare("Clear conversation"),
-        lambda args, state, **_: {"ok": False, "waiting": False,
-                                  "error": "refused: clearing a conversation is "
-                                           "raised through its own card, so "
-                                           "nothing was cleared here."},
-        gate_lookup_name=lambda args: CONVERSATION_CLEAR_TOOL),
     # Raising the connect card - see CONNECT_TOOL above for why this is not put
     # to the gate. `_one_call` hands this tool to `_connect_call` before the
     # generic path, so prepare()/execute() here are never reached by a real
@@ -8864,14 +8769,14 @@ TOOL_GROUPS = (
       # more_tools' own enum, so test_short_tool_list.py's pin does not move.
       REFRESH_ABILITIES_TOOL, SELF_PORTRAIT_TOOL,
       # The owner's own old conversations (2026-11-03: "pull up any old
-      # conversation", "clear any conversation on request"). They ride in this
-      # group rather than a new one, and that is a MEASURED choice: the short
-      # list's budget (test_short_tool_list.py) counts group NAMES and
-      # descriptions, so a seventh group pushed it from 1,600 to 1,608 tokens;
-      # a group's members cost nothing there and are paid only when the group
-      # is opened, which ships OFF. The three are read-only except the clear,
-      # and the clear raises its own ONE card whatever group offered it.
-      CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL, CONVERSATION_CLEAR_TOOL)),
+      # conversation"). They ride in this group rather than a new one, and that
+      # is a MEASURED choice: the short list's budget
+      # (test_short_tool_list.py) counts group NAMES and descriptions, so a
+      # seventh group pushed it from 1,600 to 1,608 tokens; a group's members
+      # cost nothing there and are paid only when the group is opened, which
+      # ships OFF. Both are read-only. Clearing is NOT a model tool (Gemini
+      # ruling 1) - it stays route/app/fast-path only, behind its one card.
+      CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -9132,10 +9037,6 @@ TOOL_HINTS = {
         r"\bread (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bpull up (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bwhat did (?:we|i) say (?:in|about)\b.*\bchat\b"),
-    "conversation_clear": (
-        r"\b(?:delete|clear|remove|erase) (?:that|the|one|my|this) (?:chat|conversation)\b",
-        r"\bdelete\b.*\bchat\b.*\b(?:from|on) (?:this|the) pc\b",
-        r"\bclear (?:an?|one|that|the) (?:old )?(?:chat|conversation)\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
@@ -15197,18 +15098,6 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # it would never run. With the guard it falls through to the generic
         # path, where a plug-in tool always needs a person's yes.
         _settings_call(args, call, convo, steps, say_step, watch=watch)
-        return
-    if name == CONVERSATION_CLEAR_TOOL and not outside_program:
-        # Clearing ONE conversation is not put to the gate here, for the same
-        # kind of reason SETTINGS_TOOL is not: the card IS the permission and it
-        # belongs to jarvis_self_portrait's `conversation_clear` action, whose
-        # words name the chat's title and message count and say what is kept.
-        # The generic path would raise a SECOND, vaguer card around it. The
-        # `not outside_program` belt is the same one SETTINGS_TOOL carries: a
-        # plug-in tool can never equal this bare name, and if one ever did it
-        # would fall through to the generic path, where a plug-in tool always
-        # needs a person's yes.
-        _conversation_clear_call(args, call, convo, steps, say_step, watch=watch)
         return
     if name == CONNECT_TOOL and not outside_program:
         # Raising the connect card (2026-10-28) - not put to the gate here, for

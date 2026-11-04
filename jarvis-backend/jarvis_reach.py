@@ -198,8 +198,6 @@ TOOL_NAMES = {
                          "(read-only, titles and dates only)",
     "conversation_open": "Opening one of your old conversations to read it "
                          "(read-only, on this PC)",
-    "conversation_clear": "Deleting ONE conversation from this PC after one card "
-                          "(the facts it taught are kept)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as

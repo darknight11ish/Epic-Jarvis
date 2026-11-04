@@ -1269,25 +1269,6 @@
  {
   "type": "function",
   "function": {
-   "name": "conversation_clear",
-   "description": "Delete ONE kept conversation from this PC. It raises ONE approval card naming that chat's title and message count, and the chat is deleted only if the owner approves it - that card is the permission, so you can never clear anything yourself. Deleting a chat keeps the facts Jarvis learned from it. Use only when the owner asks to clear or delete a specific old conversation; call conversation_find first to get its exact ID. Never guess an ID.",
-   "parameters": {
-    "type": "object",
-    "properties": {
-     "id": {
-      "type": "string",
-      "description": "the conversation id conversation_find gave"
-     }
-    },
-    "required": [
-     "id"
-    ]
-   }
-  }
- },
- {
-  "type": "function",
-  "function": {
    "name": "connect_account",
    "description": "Raise ONE card that connects a calendar or GitHub to Jarvis. Use when the owner asks to connect, set up or link one. The OWNER types the token, private link or username and password into that card on this PC; it is saved into Windows Credential Manager and tested for real. NEVER take a password, token or private link in the chat and never pass one here: this tool has no field for a value. For any other account say Settings-only.",
    "parameters": {

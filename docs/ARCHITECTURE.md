@@ -5378,15 +5378,15 @@ route that writes from this module is the carded conversation clear (§13.4).
 - **No model-mediated navigation.** The ids and the tables are deterministic;
   the model is not asked to invent a section id.
 - **No bulk clear, no cardless clear, no memory-clear route.** 13.4.
-- **No conversation/opening chat tools, on the tree this was written from.**
-  The first sketch named an explainer, `open_area`, `conversation_find`/
-  `conversation_open` and `conversation_clear` as model tools; they are not
-  built in this change. `refresh_abilities` is the one new chat tool that is
-  built (and, on this tree, it is defined and grouped but not yet named by the
-  shipped `[tools].enabled` list, so it is not offered by a stock settings
-  file). The portrait is served by its routes and the existing `feature_guide`
-  covers the plain-words side. JARVIS-API §184.10 says the same, and that is
-  where a later change starts.
+- **No model tool that clears a conversation, by design.** `conversation_find`
+  and `conversation_open` ARE model tools (read-only, under `skill_list`, so
+  they raise no card). `conversation_clear` is deliberately NOT one (Gemini
+  ruling 1, 2026-11-03): an LLM must never have an autonomous tool to wipe the
+  transcript. Clearing stays the REST route, an app UI action or the fast path,
+  always behind its ONE `conversation_clear` card. The explainer and
+  `open_area` from the first sketch are still not built; the portrait's routes
+  and the existing `feature_guide` cover the plain-words side. JARVIS-API
+  §184.10 says the same.
 - **No storage tool and no storage screen, on the tree this was written from.**
   The storage routes and their ONE card are built and tested, but no
   `storage_scan`/`storage_cleanup` model tool is registered and neither app

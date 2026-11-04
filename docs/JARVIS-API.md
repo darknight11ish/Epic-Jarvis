@@ -31781,7 +31781,7 @@ and a caller that fails one gets the ordinary 403/401.
 | Route | Method | Answers | Card |
 |---|---|---|---|
 | `/api/self` | GET | the portrait (184.2). Optional `?app_locked=1` / `?hide_memory_lists=1` can only WITHHOLD the private counts (184.4). `X-Jarvis-Client` is echoed back in `client`; it decides nothing, the same rule `/api/version` states | none - read only |
-| `/api/self/version` | GET | the `version` block alone (184.7): `app_version`, `app_version_source`, `api_version`, `server`, `started_at`, `deploy`. Cheap on purpose - it reads no big module and is cached for 60 s | none - read only |
+| `/api/self/version` | GET | the `version` block alone (184.7): `app_version`, `app_version_source`, `api_version`, `server`, **`pid`**, `started_at`, `deploy` and the `_jarvis-state.json` **`manifest`** summary (`recorded`, `written`, `files_recorded`, `files_verified`, `resealed`). Cheap on purpose - it reads no big module and is cached for 60 s | none - read only |
 | `/api/conversations` | GET | the SAME body `GET /api/history` answers, including `limit`/`before`/`kind`/`tag`/`archived`, and the same App-lock withholding. It is an adapter onto `jarvis_chat_log`'s own handler, not a second list | none - read only |
 | `/api/conversations/<id>` | GET | the SAME body `GET /api/history/conversation?id=` answers, with the same `400`/`404`/`423`/`503` | none - read only |
 | `/api/conversations/clear` | POST | **202** `{"ok", "waiting": true, "id", "title", "messages", "action": "conversation_clear", "message"}` and ONE approval card; phase two deletes that one id only after a person approves (184.6) | **ONE** `conversation_clear` card (tier `ask`) |
@@ -32068,6 +32068,18 @@ The version block is in the portrait (184.2) and alone at `GET
   (`resealed.commit`, hex only). A missing or damaged record answers
   `recorded: false` with `why_not`, never an exception and never a guess.
 
+**Provenance (Gemini ruling 3, 2026-11-03).** The block also names the process
+that is answering and the manifest it agrees with, so a stage check can compare
+what it reads with the live folder without patching `jarvis_hud.py`'s own
+`/api/version` (which is deliberately untouched): **`pid`** is `os.getpid()` of
+the server, **`started_at`** is the epoch seconds that same process started
+(same value the portrait's footer uses), and **`manifest`** is the
+`_jarvis-state.json` summary - `recorded`, `written`, `files_recorded`,
+`files_verified` and `resealed` (`at`/`ref`/`commit`). All are read-only,
+counts and identifiers only, no path and no secret; the out-of-band
+`Get-FileHash` + `Get-NetTCPConnection` proof remains the primary Stage V
+evidence.
+
 The desktop's handshake is `jarvis-desktop/src-tauri/src/backend_self.rs`. It
 reads `/api/self` (5 s timeout, no proxy, no redirects), compares the
 executable's own package version with the backend's `version.app_version`, and
@@ -32250,14 +32262,16 @@ other tool, and §184.10 says what the shipped list names on this tree.
 
 ### 184.10 What is not built, and what is not proved
 
-- **The conversation/opening tools the first sketch named** - a "what can you
-  do / where do I change X / what is connected" explainer, `open_area`,
-  `conversation_find`/`conversation_open`, `conversation_clear` - are NOT part
-  of this change on the tree it was written from. The portrait is served by the
-  routes above; the existing `feature_guide` tool answers the plain-words side,
-  and `refresh_abilities` (184.9) is the only new chat tool that IS built. A
-  tool that does not exist is not documented as existing, and the model reaches
-  the other routes only when a later change adds the tools.
+- **The conversation tools: `conversation_find` and `conversation_open` ARE
+  built** (read-only, under the gate's own `skill_list`, no card).
+  `conversation_clear` is DELIBERATELY NOT a model tool (Gemini ruling 1,
+  2026-11-03): an LLM must never have an autonomous tool to wipe the
+  transcript, because an injected or hallucinated "clear that up for me" would
+  delete chat history. Clearing stays the REST route (`POST
+  /api/conversations/clear`), an app UI action, or the fast path - always
+  behind its ONE `conversation_clear` card. The explainer and `open_area` from
+  the first sketch are still NOT built; the portrait's routes and the existing
+  `feature_guide` answer that side.
 - **The storage routes have no chat tools and no app screen yet**, on the tree
   this was written from: `/api/storage/scan`, `/api/storage/cleanup/plan` and
   `/api/storage/cleanup` answer and are fully tested, but no `storage_scan`/
