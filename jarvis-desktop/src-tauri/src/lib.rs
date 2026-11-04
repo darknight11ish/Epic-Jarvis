@@ -601,10 +601,13 @@ fn spawn_telemetry_loop(app: AppHandle) {
             // The one toast this launch may raise, and only once the app has
             // settled: `offer_once` itself checks the state, the owner's
             // switch, quiet hours, the 24 h dismissal window and the
-            // one-per-launch flag.
+            // one-per-launch flag. It answers whether the launch's one offer
+            // is now SPENT, and that answer is the flag: a backend that was
+            // not answering at the 60 s mark has not answered, so the look is
+            // retried on the next beat instead of costing the launch its
+            // reminder (audit 2026-11-03, bug 1).
             if !offer_considered && launched.elapsed() >= setup_offer::OFFER_AFTER {
-                offer_considered = true;
-                setup_offer::offer_once(app.clone());
+                offer_considered = setup_offer::offer_once(app.clone());
             }
 
             // A drag is persisted even while the widget is collapsed or

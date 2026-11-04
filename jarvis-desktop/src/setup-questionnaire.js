@@ -125,6 +125,12 @@ export const FILTER_LABEL = "Show only new / unanswered";
 export const FILTER_EMPTY =
   "Every question is answered and up to date. Untick the filter to read them " +
   "all again.";
+/** The same empty panel, when THIS section holds none but other sections do.
+ *  A different sentence on purpose: the label above counts the whole
+ *  questionnaire, so "every question is answered" here would be a lie. */
+export const FILTER_SECTION_EMPTY =
+  "Nothing new in this section. Other sections still have some - pick one " +
+  "above, or untick the filter to read this section in full.";
 export const SECTION_FALLBACK_TITLE = "Questions";
 export const BACK = "Back";
 export const NEXT = "Next";
@@ -138,12 +144,23 @@ export const DONE_HEADING = "You have finished this pass";
 export const DONE_WORDS =
   "Every question the PC has is answered. Change anything above and Apply, or " +
   "press \"Take it again\" to walk the whole quiz from the first question.";
+/** The same block after "Keep current settings", which records
+ *  `completed_version` and NO answer at all - so it may not claim answers that
+ *  do not exist (audit 2026-11-03, bug 5). */
+export const KEPT_WORDS =
+  "Jarvis will not offer this again. Questions you have not answered are " +
+  "still unanswered - answer them above and Apply, or press \"Take it again\" " +
+  "to walk the whole quiz from the first question.";
 export const KEEP_CURRENT_WORDS =
   "Keep current settings writes no answer and changes nothing: it just records " +
   "that you are happy as things are, so Jarvis stops offering this.";
 export const NOT_NOW_WORDS =
   "Not now hides this offer. The card stays exactly where it is, and Jarvis " +
   "will not offer it again for a day.";
+/** How long "Not now" hides the offer, in seconds - the same 24 hours the
+ *  toast honours (`setup_offer::DISMISS_QUIET_SECS`), because one press must
+ *  mean one thing. */
+export const OFFER_QUIET_SECS = 24 * 60 * 60;
 
 /** The three effect words. The PC decides which one a change has. */
 export const EFFECT_WORDS = {
@@ -407,6 +424,52 @@ export function visibleQuestions(reading, { section = "", filter = false } = {})
 }
 
 /**
+ * The filter's empty-state sentence, or "" when there is nothing to explain.
+ *
+ * ONE SCOPE, TWO LINES. The filter's own label counts every new or unanswered
+ * question in the WHOLE questionnaire (`visibleQuestions(reading, {filter:
+ * true})`), so the sentence underneath it may not claim the questionnaire is
+ * finished while that number is above zero. It used to test the section on
+ * screen only, and the two adjacent lines could contradict each other (audit
+ * 2026-11-03, bug 6): "(4)" with "Every question is answered" beneath it.
+ *
+ * A section that holds none of them is a real, different answer - the card
+ * must say THAT, not go blank and not claim completion.
+ */
+export function filterEmptyWords(reading, { section = "", filter = false } = {}) {
+  if (!filter) return "";
+  if (visibleQuestions(reading, { section, filter: true }).length) return "";
+  if (!visibleQuestions(reading, { filter: true }).length) return FILTER_EMPTY;
+  return FILTER_SECTION_EMPTY;
+}
+
+/**
+ * Is the card's own offer row still offered - "Not now" included?
+ *
+ * The card draws two buttons that both end the offer, and the row must go when
+ * either has been pressed. `dismissed_at` is the PC's own timestamp for "Not
+ * now" (the toast already honours it); this is the same 24 hours on the same
+ * clock (`setup_offer::may_offer_at`), so the row disappears the moment it is
+ * pressed and stays gone on the next open within the day, instead of promising
+ * quiet and painting itself again (audit 2026-11-03, bug 4).
+ *
+ * `now` is seconds since the epoch. A zero (or negative) timestamp is not a
+ * real press, so it hides nothing; a clock that went backwards still counts as
+ * "just pressed", which is the quiet reading - the same two choices the Rust
+ * makes.
+ */
+export function offerShown(reading, now) {
+  if (!reading || !reading.available) return false;
+  if (!(reading.version > 0 && reading.completedVersion < reading.version)) return false;
+  const at = reading.dismissedAt;
+  if (typeof at !== "number" || !Number.isFinite(at) || at <= 0) return true;
+  const clock = Number(now);
+  // No usable clock is still no reason to contradict the PC's timestamp.
+  if (!Number.isFinite(clock)) return false;
+  return clock - at >= OFFER_QUIET_SECS;
+}
+
+/**
  * The next question, in the PC's order, that the draft has no answer for after
  * `fromId`; or null when there is none.
  *
@@ -447,6 +510,26 @@ export function firstUnanswered(reading) {
 export function progressWords(reading, draft) {
   const total = ((reading && reading.questions) || []).length;
   return `${answeredCount(draft)} of ${total} answered`;
+}
+
+/**
+ * The "you have finished this pass" block, or "" when this pass is not done.
+ *
+ * It opens on `completed_version`, which the PC moves for TWO different
+ * things: an apply, and "Keep current settings". Only the first leaves answers
+ * behind. So the block says what is true of the draft on screen: every
+ * question answered gets `DONE_WORDS`; a pass closed without answering some of
+ * them gets `KEPT_WORDS`, which never claims an answer that does not exist
+ * (audit 2026-11-03, bug 5 - the block said "Every question the PC has is
+ * answered" after a press that writes no answer, and kept saying it).
+ */
+export function finishedPassWords(reading, draft) {
+  if (!reading || !(reading.version > 0)) return "";
+  if (reading.completedVersion < reading.version) return "";
+  const questions = (reading && reading.questions) || [];
+  const everyOne = questions.length > 0
+    && questions.every((q) => answerFor(draft, q.id) !== null);
+  return `${DONE_HEADING}. ${everyOne ? DONE_WORDS : KEPT_WORDS}`;
 }
 
 /** "Question 3 of 25", or "" when the id is not one this reading holds. */
@@ -621,9 +704,17 @@ export function applyBody(draft) {
  *
  * It never carries `confirm`, and the Rust command builds the same three
  * shapes again before anything is sent.
+ *
+ * `clearDraft` is "Take it again" (audit 2026-11-03, bug 2). The PC's
+ * `progress()` MERGES a supplied draft and only an EXPLICIT empty object
+ * clears it - an absent `draft_answers` means "keep what you have". Omitting
+ * the field for an empty draft therefore left the PC's stored answers in
+ * place, and `load()` merged them straight back on the next open, undoing the
+ * retake. With `clearDraft` the empty object is sent on purpose.
  */
 export function progressBody({
-  section = "", question = "", draft = null, dismiss = false, keepCurrent = false,
+  section = "", question = "", draft = null, clearDraft = false,
+  dismiss = false, keepCurrent = false,
 } = {}) {
   if (dismiss) return { dismiss: true };
   if (keepCurrent) return { keep_current: true };
@@ -632,7 +723,11 @@ export function progressBody({
   const id = plain(question).trim();
   if (where) body.section = where;
   if (id) body.question = id;
-  if (draft) {
+  if (clearDraft) {
+    // The one explicit empty object: the PC clears on THIS, and on nothing
+    // else. Anything the draft still holds is sent as usual.
+    body.draft_answers = answerBody(draft || {});
+  } else if (draft) {
     const answers = answerBody(draft);
     if (Object.keys(answers).length) body.draft_answers = answers;
   }
