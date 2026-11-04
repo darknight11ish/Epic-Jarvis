@@ -1116,7 +1116,11 @@ third_port = 11438
 # The Ollama model tag. A model whose name ends in -cloud or :cloud is
 # refused: it would send the screen off this PC.
 # model = "minicpm-v:4.6"
-# Not 11434 (the everyday Ollama), 11435 or 11436 (the second and third card).
+# Default 11437. Do NOT point it at another lane's port: 11434 is the everyday
+# Ollama, 11435 the second card's lane, 11436 the everyday lane, 11438 the
+# third card's default (jarvis_second_card.DEFAULT_THIRD_PORT) and 11450 the
+# pooled both-cards lane. Only 11434-11436 are refused by the module
+# (jarvis_screen_picture._TAKEN_PORTS); the others are the owner's to avoid.
 # port = 11437
 # Seconds one look may spend on the picture before it is given up, and how
 # long a question waits for it after the words are ready.
