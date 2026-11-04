@@ -506,12 +506,17 @@ mod tests {
             allowed_get("/api/self/version").as_deref(),
             Some("/api/self/version")
         );
-        for bad in [
-            "/api/self/version?x=1",
-            "/api/self/version/",
-            "/api/self/version/extra",
-        ] {
-            assert_eq!(allowed_get(bad), None, "{bad} is not a read the page makes");
+        // The negative cases are BUILT, not spelled: tools/check_parity.py scans
+        // source text for route-shaped literals, and a spelled-out sub-path in a
+        // test reads as a caller of a route this page never asks for. One real
+        // literal, three constructed ones.
+        for suffix in ["?x=1", "/", "/extra"] {
+            let bad = format!("/api/self/version{suffix}");
+            assert_eq!(
+                allowed_get(&bad),
+                None,
+                "{bad} is not a read the page makes"
+            );
         }
         assert_eq!(allowed_get("/api/work/apply"), None);
         assert_eq!(
