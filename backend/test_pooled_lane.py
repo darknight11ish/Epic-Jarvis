@@ -156,18 +156,19 @@ def t_the_lane_is_the_one_big_coder_owns():
     import jarvis_big_coder as BC
     check("the pooled port is the big-coder mode's own port, not a second one",
           L.POOLED_PORT == BC.BIG_PORT == 11450, (L.POOLED_PORT, BC.BIG_PORT))
-    check("the model is the mode's own, and the context is a measured rung at or "
-          "below the mode's widest - never a number invented here",
-          L.POOLED_MODEL == BC.MODEL == MODEL and 0 < L.POOLED_CTX <= BC.NUM_CTX,
+    check("the model is the mode's own, and the context is a MEASURED rung on "
+          "this PC's ladder - never a number invented here",
+          L.POOLED_MODEL == BC.MODEL == MODEL
+          and L.POOLED_CTX in (16384, 20480, 24576, 28672, 32768),
           (L.POOLED_MODEL, L.POOLED_CTX, BC.MODEL, BC.NUM_CTX))
-    check("the pooled window is 20,480 - the 2026-11-03 measurement, not the "
-          "old 16,384 and not the big-coder mode's 28,672",
-          L.POOLED_CTX == 20480 and BC.NUM_CTX == 28672,
+    check("the pooled window is 32,768 - the 2026-11-03 measurement (the rung the "
+          "owner chose), not the old 16,384 and not the big-coder mode's 28,672",
+          L.POOLED_CTX == 32768 and BC.NUM_CTX == 28672,
           (L.POOLED_CTX, BC.NUM_CTX))
     measured = int(L.POOLED_SPILL_MEASURED_MIB * 1024 * 1024)
-    check("the allowance is ONE 224 MiB number: the measured 203.5 MiB plus about "
-          "10%, and nothing larger is accepted",
-          L.POOLED_SPILL_ALLOWANCE == 224 * 1024 * 1024
+    check("the allowance is ONE 352 MiB number: the measured 323.5 MiB plus about "
+          "9%, and nothing larger is accepted",
+          L.POOLED_SPILL_ALLOWANCE == 352 * 1024 * 1024
           and measured < L.POOLED_SPILL_ALLOWANCE <= int(measured * 1.15),
           (L.POOLED_SPILL_MEASURED_MIB, L.POOLED_SPILL_ALLOWANCE))
     check("the allowance is not a general 'spill is fine': load_coder defaults to "
@@ -177,14 +178,14 @@ def t_the_lane_is_the_one_big_coder_owns():
           (inspect.signature(BC.load_coder), inspect.signature(BC.start)))
     check("the Coding preset's own context IS the lane's measured rung, so the "
           "contract and the load cannot disagree",
-          P.by_id("coding").context == L.POOLED_CTX == 20480,
+          P.by_id("coding").context == L.POOLED_CTX == 32768,
           (P.by_id("coding").context, L.POOLED_CTX))
     cod = P.by_id("coding")
     check("the preset records BOTH the new window and the old zero-spill rung as "
           "history, with the measured spill it accepts",
-          cod.measured.get("context_measured") == 20480
+          cod.measured.get("context_measured") == 32768
           and cod.measured.get("context_zero_spill") == 16384
-          and cod.measured.get("spill_gib") == 0.2, cod.measured)
+          and cod.measured.get("spill_gib") == 0.3, cod.measured)
     check("the contract row says BOTH cards, never a single card",
           L.POOLED["card"] == "both cards" and L.POOLED["port"] == L.POOLED_PORT)
     check("the preset contract's pooled lane is this lane's own port and words",
@@ -202,9 +203,9 @@ def t_the_card_describes_the_load_it_will_really_do():
     zero-spill rung, and not the old 16,384-token window."""
     import jarvis_big_coder as BC
     words = L.pooled_card_text()          # the real engine, this lane's words
-    check("the pooled card names the 20,480-token window it will ask for",
+    check("the pooled card names the 32,768-token window it will ask for",
           f"{L.POOLED_CTX:,} tokens" in words, words)
-    check("... and it says the measured 203.5 MiB out loud instead of promising "
+    check("... and it says the measured 323.5 MiB out loud instead of promising "
           "zero spill",
           f"{L.POOLED_SPILL_MEASURED_MIB:g} MiB" in words
           and "zero spill" not in words.lower()

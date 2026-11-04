@@ -25344,13 +25344,13 @@ What an apply does, in order, and what it never does:
    leaves it running).
 2. The pause is ANNOUNCED (event bus + audit log) before the first unload, both
    lane models are unloaded and proved gone from `/api/ps`, the model is loaded
-   **naming 20,480 tokens** (since 2026-11-03; 16,384 before it), and `/api/ps`
+   **naming 32,768 tokens** (since 2026-11-03; 16,384 before it), and `/api/ps`
    must show it present, at that context and with no spill beyond this one
-   window's measured allowance - **224 MiB**
-   (`jarvis_model_lanes.POOLED_SPILL_ALLOWANCE`: the 203.5 MiB measured on
-   2026-11-03 plus about 10%). A load that comes up elsewhere, spills past the
-   allowance, or does not report its spill is unloaded again, both lanes are
-   restored and the answer says why (503) - the refusal is the machine's own
+   window's measured allowance - **352 MiB**
+   (`jarvis_model_lanes.POOLED_SPILL_ALLOWANCE`: the 323.5 MiB measured at
+   32,768 on 2026-11-03 plus about 9%). A load that comes up elsewhere, spills
+   past the allowance, or does not report its spill is unloaded again, both
+   lanes are restored and the answer says why (503) - the refusal is the machine's own
    words, never a canned one. **That allowance is the ONE exception:**
    `load_coder` with no allowance still refuses any spill at all, and that is
    every other caller, the big-coder mode's own 28,672-token load included.
@@ -25399,23 +25399,34 @@ largest rung that loaded with none, which is why the preset asked for 16,384
 from 2026-11-02 until the amendment below. `jarvis_big_coder.NUM_CTX` (28,672)
 is that mode's own measured rung and was not changed.
 
-**2026-11-03 amendment: the preset now asks for 20,480, and the allowance is
-still one window's.** A second read-only measurement on the same PC, through the
-same shipped path, loaded 20,480 at **15,326.2 MiB with 203.5 MiB in system
-RAM** (16,384: 14,886.2 MiB, no spill); cold load was 34.9 s against 37.0 s, and
-decode was 79.88 -> 81.44 tokens a second median on the three prompts - inside
-the model's own run-to-run noise, with one ~333-token probe 4% slower. The owner
-accepted that measured cost, so the preset's `context` is now **20,480**
-(`jarvis_model_lanes.POOLED_CTX`, pinned to it by test), and the start passes
-`load_coder(..., allow_spill=...)` the cap of **224 MiB**. **Nothing else
-relaxes:** no allowance is the default and still means any spill is refused;
-`jarvis_big_coder.start()` never passes one; the big-coder mode's 28,672 rung
-and its zero-spill check are unchanged; and a load above the cap, or one that
-does not report its spill, is still refused (503) with both the actual spill and
-the allowance named. The extra 4,096 tokens were not filled by the measurement
-(all prompts were 40-43 tokens), so a genuinely long conversation is still
-unmeasured; a 15-minute real coding test runs after deployment. Full numbers:
-`docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment.
+**2026-11-03 amendment: the preset now asks for 32,768, and the allowance is
+still one window's.** The same day's read-only measurement on this PC, through
+the same shipped path, put the whole context ladder on one table: 16,384 at
+14,886.2 MiB with **no spill** (still the zero-spill ceiling), then 20,480 at
+203.5 MiB spilled, 24,576 at 207.5, 28,672 at 211.5 and **32,768 at 323.5 MiB**
+(16,513.7 MiB in all, 16,190.1 of it in video memory). Above 16,384 every rung
+spills; the 8 GB card is what runs out first (7,591 of 8,192 MiB at 32,768),
+which is why the top rung's spill jumps by 112 MiB rather than growing smoothly.
+The owner chose 32,768, the largest rung measured to load on this PC: cold load
+36.0 s against 37.0 s at 16,384, and a decode median of 80.36 against 79.88
+tokens a second on the three prompts, inside the model's own run-to-run noise.
+The owner accepted the 323.5 MiB of the model in system RAM, so the preset's
+`context` is now **32,768** (`jarvis_model_lanes.POOLED_CTX`, pinned to it by
+test; `POOLED_SPILL_MEASURED_MIB` is 323.5, `context_measured` is 32,768, and
+`context_zero_spill` stays 16,384 as the historical fact), and the start passes
+`load_coder(..., allow_spill=...)` the cap of **352 MiB** - the 323.5 MiB
+measurement plus about 9%. **Nothing else relaxes:** no allowance is the default
+and still means any spill is refused; `jarvis_big_coder.start()` never passes
+one; the big-coder mode's 28,672 rung and its zero-spill check are unchanged;
+and a load above the cap, or one that does not report its spill, is still
+refused (503) with both the actual spill and the allowance named. The extra
+16,384 tokens over the old window were not filled by the measurement (all
+prompts were 40-43 tokens), so a genuinely long conversation is still
+unmeasured - the decode speed of a nearly-full 32,768-token window was not
+measured either; a 15-minute real coding test runs after deployment. Full
+numbers: `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment; raw
+output: `.dsh-scratch/CODING-TAKEOVER-2026-11-03/WINDOW-20480.md` and
+`WINDOW-HIGHER-RUNGS.md`.
 
 **The HUD's left rail renders this contract too** (the owner's request of
 2026-10-21: "i would like this part of the jarvis HUD to have the presets we

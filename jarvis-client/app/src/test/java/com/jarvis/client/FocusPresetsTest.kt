@@ -266,7 +266,7 @@ class FocusPresetsTest {
         assertEquals("qwen3-coder-30b-a3b-ud-q3-k-xl", coding.model)
         assertEquals("both cards", coding.lane.card)
         assertEquals("pooled", coding.lane.key)
-        assertEquals(20480, coding.context)
+        assertEquals(32768, coding.context)
         assertTrue("Coding needs both cards while it runs", coding.heavyMode)
         assertNull("no second worker is planned in this contract", coding.helper)
         // Heavy mode IS offered (2026-11-02): the PC's pooled both-card lane

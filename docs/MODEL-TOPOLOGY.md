@@ -717,31 +717,38 @@ models paused first and put back afterwards:
 | After the stop | `qwen3.5:9b ctx=196608` on 11436 and `qwen3:8b ctx=16384` on 11435, both zero spill |
 
 **On 2026-11-02 the zero-spill context on this PC was 16,384, not 28,672.**
-Measured as a ladder with every model unloaded, each rung a real cold load:
+Measured as a ladder with every model unloaded, each rung a real cold load; the
+whole ladder was measured again on 2026-11-03:
 
 | `num_ctx` | Size | In video memory | Spilled |
 |---|---|---|---|
+| **32,768 (what the preset asks for)** | **16,513.7 MiB** | **16,190.1 MiB** | **323.5 MiB** |
 | 28,672 | 16,114 MiB | 15,902 MiB | **212 MiB** |
 | 24,576 | 15,722 MiB | 15,514 MiB | **208 MiB** |
 | 20,480 | 15,326 MiB | 15,123 MiB | **204 MiB** |
 | 16,384 | 14,886 MiB | **14,886 MiB** | **0** |
 
-**2026-11-03: the preset moved to 20,480 and accepts the measured 203.5 MiB.**
-A second measurement, read-only and through the same shipped path, found 20,480
-at **15,326.2 MiB with 203.5 MiB in system RAM**, against 16,384 at 14,886.2 MiB
-with none. Cold load was 34.9 s against 37.0 s, and decode was 79.88 -> 81.44
-tok/s median on the three prompts - inside this model's own run-to-run noise -
-with one ~333-token probe 4% slower. The owner accepted that measured cost, so:
+**2026-11-03: the preset moved to 32,768 and accepts the measured 323.5 MiB.**
+Every rung above 16,384 spills (20,480 at 203.5 MiB, 24,576 at 207.5, 28,672 at
+211.5), and 32,768 - the largest rung measured to load on this PC - loaded at
+**16,513.7 MiB with 323.5 MiB in system RAM**, against 16,384 at 14,886.2 MiB
+with none. Cold load was 36.0 s against 37.0 s, and decode was 80.36 against
+79.88 tok/s median on the three prompts - inside this model's own run-to-run
+noise. The 8 GB card is what runs out first (at 28,672 it was at 7,529 of
+8,192 MiB; at 32,768, 7,591), which is why the spill jumps by 112 MiB rather
+than growing smoothly. The owner accepted that measured cost, so:
 
-- the preset asks for **20,480** (`jarvis_model_lanes.POOLED_CTX`);
+- the preset asks for **32,768** (`jarvis_model_lanes.POOLED_CTX`; the preset
+  records `context_measured = 32768`, `spill_gib = 0.3`, and keeps
+  `context_zero_spill = 16384` as the historical fact);
 - the pooled start passes `load_coder(..., allow_spill=...)` the one number
-  **224 MiB** (`POOLED_SPILL_ALLOWANCE`) - the 203.5 MiB measurement plus about
-  10%, so the same split reported slightly differently still loads, and nothing
-  larger is accepted;
+  **352 MiB** (`POOLED_SPILL_ALLOWANCE`) - the 323.5 MiB measurement
+  (`POOLED_SPILL_MEASURED_MIB`) plus about 9%, so the same split reported
+  slightly differently still loads, and nothing larger is accepted;
 - **zero spill is still the rule by default and for every other caller.**
   `load_coder` with no allowance refuses any spill at all (unchanged), the
   big-coder mode's 28,672-token rung and its zero-spill check are unchanged,
-  and a load that spills past the 224 MiB cap is refused (503) in the machine's
+  and a load that spills past the 352 MiB cap is refused (503) in the machine's
   own words, naming both the spill and the allowance.
 
 The 2026-10-18 measurement's 28,672 rung is kept in `jarvis_big_coder.NUM_CTX`
@@ -749,10 +756,12 @@ for that mode and was not changed. `OLLAMA_SCHED_SPREAD=1` was tried at 28,672
 and did not change the split (212 MiB spilled, 68.4 tok/s). The whole
 measurement, the method and the undo are in
 `docs/MEASURED-2026-11-02-POOLED-LANE.md` - the 2026-11-02 numbers above, and
-the 2026-11-03 amendment at its end. The extra 4,096 tokens were not filled by
-that measurement (every prompt was 40-43 tokens), so a genuinely long
-conversation that uses them is still unmeasured; a 15-minute real coding test
-runs after this is deployed.
+the 2026-11-03 amendment at its end. The extra 16,384 tokens the new window adds
+over the old 16,384-token window were not filled by that measurement (every
+prompt was 40-43 tokens), so a
+genuinely long conversation that uses them is still unmeasured - the decode
+speed of a nearly-full 32,768-token window was not measured either - and a
+15-minute real coding test runs after this is deployed.
 
 A sixth Ollama, or a model left loaded on port 11434 (Ollama's own default
 server), does not need to be stopped: measured on the same day, that server's

@@ -643,7 +643,7 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     does not pass an allowance still gets that rule. The number is a
     measurement, never a guess: a caller that passes it must be able to point
     at the measurement that produced it (the Coding preset's pooled lane
-    passes 224 MiB for the 203.5 MiB measured at 20,480 tokens on 2026-11-03,
+    passes 352 MiB for the 323.5 MiB measured at 32,768 tokens on 2026-11-03,
     `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment). It is
     one number for one window, not a general "spill is fine" switch: a load
     that spills past it, or that does not say how much it spilled, is still

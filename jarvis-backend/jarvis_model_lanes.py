@@ -260,7 +260,7 @@ def start_lane(lane_key, **kwargs) -> tuple:
 #   4. the pause is ANNOUNCED (event bus + audit log) BEFORE the first unload;
 #   5. the both-cards server is started, BOTH lane models are unloaded and
 #      proved gone from `/api/ps`, and only then is the model loaded - at THIS
-#      lane's own measured rung (20,480 tokens since 2026-11-03; 16,384 before
+#      lane's own measured rung (32,768 tokens since 2026-11-03; 16,384 before
 #      it), with the spill that measurement accepted passed to `load_coder` as
 #      `allow_spill`. A load that comes up at another context, spills past this
 #      one measured cap, or does not say how much it spilled, is unloaded again
@@ -305,29 +305,35 @@ POOLED_PORT = 11450
 #: big-coder mode's 28,672: measured on this PC on 2026-11-02 with every model
 #: unloaded, the zero-spill ceiling had moved - 20,480 / 24,576 / 28,672 all
 #: spilled 204-212 MiB, and 16,384 loaded with none (14,886 MiB, all of it in
-#: video memory). The preset ran at 16,384 until 2026-11-03; on that day a
-#: second measurement put 20,480 at 15,326 MiB with 203.5 MiB in system RAM and
-#: speed inside the same noise, and the owner accepted that measured cost - so
-#: the preset now runs at 20,480 and accepts those 203.5 MiB through
-#: `POOLED_SPILL_ALLOWANCE` below, which is one number for THIS window only.
-#: The preset's own `context` is pinned to it by test.
+#: video memory). The preset ran at 16,384 until 2026-11-03. On that day the
+#: whole ladder was measured again through this same shipped path, and every
+#: rung above 16,384 spills: 20,480 at 203.5 MiB, 24,576 at 207.5, 28,672 at
+#: 211.5, and 32,768 at 323.5 MiB (the 8 GB card is the wall - its video memory
+#: is full first, then one more slab of the model goes to system RAM). The
+#: owner chose the full 32,768, the largest rung measured to load on this PC:
+#: 16,513.7 MiB with 323.5 MiB in system RAM, cold load 36.0 s against 37.0 s
+#: at 16,384, and decode inside this model's own run-to-run noise (80.36 against
+#: 79.88 tok/s median on three short prompts). So the preset now runs at 32,768
+#: and accepts those 323.5 MiB through `POOLED_SPILL_ALLOWANCE` below, which is
+#: one number for THIS window only. The preset's own `context` is pinned to it
+#: by test.
 POOLED_MODEL = "qwen3-coder-30b-a3b-ud-q3-k-xl"
-POOLED_CTX = 20480
+POOLED_CTX = 32768
 
-#: The spill this one window is allowed to have, in BYTES. Measured 203.5 MiB
-#: at 20,480 on 2026-11-03 (source: `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s
-#: 2026-11-03 amendment). 224 MiB is that measurement plus about 10%, so the
+#: The spill this one window is allowed to have, in BYTES. Measured 323.5 MiB
+#: at 32,768 on 2026-11-03 (source: `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s
+#: 2026-11-03 amendment). 352 MiB is that measurement plus about 9%, so the
 #: same split reported slightly differently still loads; nothing larger is
 #: accepted. It is a MEASUREMENT, not a guess, and it is deliberately the only
 #: allowance in this code base: every other caller of `load_coder` -
 #: `jarvis_big_coder.start()` included - passes none and keeps the exact
 #: zero-spill rule.
-POOLED_SPILL_ALLOWANCE = 224 * 1024 * 1024
+POOLED_SPILL_ALLOWANCE = 352 * 1024 * 1024
 
 #: The spill that measurement really saw, in MiB. The card and the docs quote
 #: this number; it is kept beside the cap so the two cannot drift, and the test
-#: proves the cap is this plus about 10% and nothing more.
-POOLED_SPILL_MEASURED_MIB = 203.5
+#: proves the cap is this plus about 9% and nothing more.
+POOLED_SPILL_MEASURED_MIB = 323.5
 
 #: What the contract calls it. `card` is "both cards" on purpose: there is no
 #: single card this lane lives on, and saying the 2060 would be a lie.
@@ -448,7 +454,7 @@ def pooled_card_text(*, engine=None) -> str:
     it is the same pause, and two descriptions of one action would drift. What
     this lane passes it is what is THIS lane's own measurement: the window it
     asks for and the spill that measurement accepted, so the card describes the
-    load that will really happen (20,480 tokens with 203.5 MiB in system RAM,
+    load that will really happen (32,768 tokens with 323.5 MiB in system RAM,
     2026-11-03) and never the big-coder mode's 28,672-token zero-spill rung.
     The last line is this lane's own: what changes about chat.
     """

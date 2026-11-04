@@ -450,25 +450,25 @@ def t_the_measured_allowance_is_one_window_and_not_a_general_rule():
         w = World()
         with Wired(w, cfg):
             w.spill_bytes = 1
-            out = B.load_coder(port=11450, num_ctx=20480)
+            out = B.load_coder(port=11450, num_ctx=32768)
             check("no allowance: even 1 byte of spill is refused",
                   out["ok"] is False and "spill" in out["why"], str(out))
             check("... and the model is unloaded again",
                   not w.ports.get(11450), str(w.ports))
 
             w.spill_bytes = 0
-            out = B.load_coder(port=11450, num_ctx=20480)
+            out = B.load_coder(port=11450, num_ctx=32768)
             check("no allowance: a zero-spill load at the pooled rung still loads",
                   out["ok"] is True, str(out))
 
-            allowance = 224 * 1024 * 1024
+            allowance = 352 * 1024 * 1024
             w.spill_bytes = allowance
-            out = B.load_coder(port=11450, num_ctx=20480, allow_spill=allowance)
+            out = B.load_coder(port=11450, num_ctx=32768, allow_spill=allowance)
             check("an allowance accepts spill up to the allowance itself",
                   out["ok"] is True, str(out))
 
             w.spill_bytes = allowance + 1
-            out = B.load_coder(port=11450, num_ctx=20480, allow_spill=allowance)
+            out = B.load_coder(port=11450, num_ctx=32768, allow_spill=allowance)
             why = str(out.get("why") or "")
             check("one byte over the allowance is refused, not accepted",
                   out["ok"] is False, str(out))
@@ -480,7 +480,7 @@ def t_the_measured_allowance_is_one_window_and_not_a_general_rule():
 
             w.spill_bytes = 10_000_000
             w.spill_unreadable = True
-            out = B.load_coder(port=11450, num_ctx=20480, allow_spill=allowance)
+            out = B.load_coder(port=11450, num_ctx=32768, allow_spill=allowance)
             check("an unreadable spill is refused even WITH an allowance - an "
                   "allowance can never be taken to mean 'spill is fine'",
                   out["ok"] is False and "allowance" in out["why"], str(out))
