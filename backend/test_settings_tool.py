@@ -89,11 +89,14 @@ _TMP = Path(tempfile.mkdtemp(prefix="jarvis-settings-tool-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "config")
 (_TMP / "config").mkdir(parents=True, exist_ok=True)
 os.environ["JARVIS_FRAMEWORK_TOML"] = str(_TMP / "jarvis-framework.toml")
-# THE RECEIPTS STORE NEEDS ITS OWN VARIABLE. jarvis_receipts._config_dir()
-# prefers the framework module's CONFIG_DIR over both config-dir variables
-# above, so without this line a run at the owner's own desk writes real
-# change_setting rows into his real receipts.db - measured 2026-11-03, 20 rows
-# in four minutes. JARVIS_RECEIPTS_DB is read first and wins.
+# THE RECEIPTS STORE NEEDS ITS OWN VARIABLE. Since R5 (2026-11-03)
+# jarvis_receipts._config_dir() reads the two config-dir variables above FIRST,
+# and only then the framework module's CONFIG_DIR - so this pin is no longer
+# the only thing keeping a run at the owner's own desk out of his real
+# receipts.db, but it is still the surest one: JARVIS_RECEIPTS_DB is read
+# before all of them. The old reason for this line was the reverse order, and
+# it cost 20 real change_setting rows in four minutes (measured 2026-11-03,
+# before R5).
 os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 
 sys.path.insert(0, str(HERE))

@@ -664,13 +664,26 @@ class Outcome:
     said: str
     waiting: bool = False       # a card is up; nothing changed yet
     refused_pc_only: bool = False
+    #: The action receipt the setting's OWN module wrote for this change, when
+    #: it writes one (the Anti-Slop filter does: `jarvis_antislop._change`
+    #: records a row and hands its id back). "" means "no row was written".
+    #: Callers must use THIS id rather than guessing "the newest row in the
+    #: database": two changes can land in the same clock tick, and the newest
+    #: row may be another surface's change entirely (2026-11-03 review, BUG 2).
+    receipt_id: str = ""
 
 
 def _say(code: int, out: dict, *, on_ok: Optional[str] = None) -> Outcome:
     """The common shape every one of these `handle_*`/`request_*` functions
     already returns: (http code, {"ok"?, "message"|"said"?, "error"?,
-    "waiting"?, "pc_only"?}). Never invents a sentence: falls back to a
-    plain "that did not work" only when the function gave none at all."""
+    "waiting"?, "pc_only"?, "receipt_id"?}). Never invents a sentence: falls
+    back to a plain "that did not work" only when the function gave none at
+    all.
+
+    A module that records its OWN action receipt hands the row's id back in
+    `receipt_id`; it is carried through here unchanged, so a caller can point a
+    chat's "undo" at exactly that row instead of inferring it from what is
+    newest (2026-11-03 review, BUG 2)."""
     out = out if isinstance(out, dict) else {}
     if out.get("pc_only"):
         return Outcome(False, str(out.get("error") or "That can only be changed on the PC."),
@@ -681,7 +694,8 @@ def _say(code: int, out: dict, *, on_ok: Optional[str] = None) -> Outcome:
     waiting = bool(out.get("waiting"))
     if not said:
         said = on_ok or ("Waiting for your approval." if waiting else "Done.")
-    return Outcome(True, said, waiting=waiting)
+    return Outcome(True, said, waiting=waiting,
+                   receipt_id=str(out.get("receipt_id") or ""))
 
 
 def _missing(name: str) -> Outcome:
@@ -722,7 +736,12 @@ def set_prompt_coach(on: bool, *, peer=None, local=None) -> Outcome:
 # so a spoken sentence, a tap in Settings and a phone POST cannot disagree.
 
 def set_antislop(on: bool, *, peer=None, local=None) -> Outcome:
-    """Turn the Anti-Slop filter on or off. No card either way."""
+    """Turn the Anti-Slop filter on or off. No card either way.
+
+    The module records its OWN action receipt for the write and returns its id,
+    which `_say` carries on `Outcome.receipt_id` - a caller that keeps an undo
+    pointer (the chat's "undo") points at that exact row, never at "whatever is
+    newest" (2026-11-03 review, BUG 2)."""
     try:
         import jarvis_antislop as AS
     except Exception:
@@ -736,7 +755,10 @@ def set_antislop(on: bool, *, peer=None, local=None) -> Outcome:
 
 
 def set_antislop_mode(value: str, *, peer=None, local=None) -> Outcome:
-    """`during` (filter as it writes) or `after` (audit and list findings)."""
+    """`during` (filter as it writes) or `after` (audit and list findings).
+
+    The module's own receipt id is handed back on `Outcome.receipt_id`, exactly
+    as `set_antislop` does."""
     try:
         import jarvis_antislop as AS
     except Exception:
@@ -752,7 +774,10 @@ def set_antislop_mode(value: str, *, peer=None, local=None) -> Outcome:
 
 
 def set_antislop_scope(scope: str, on: bool, *, peer=None, local=None) -> Outcome:
-    """One of copy / code / ui inside the filter."""
+    """One of copy / code / ui inside the filter.
+
+    The module's own receipt id is handed back on `Outcome.receipt_id`, exactly
+    as `set_antislop` does."""
     try:
         import jarvis_antislop as AS
     except Exception:

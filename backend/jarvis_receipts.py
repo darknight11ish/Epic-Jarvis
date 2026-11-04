@@ -272,14 +272,24 @@ CREATE INDEX IF NOT EXISTS ix_receipts_created ON action_receipts (created_at DE
 
 
 def _config_dir() -> Path:
+    """The folder the receipts file lives in: the ENVIRONMENT WINS.
+
+    `jarvis_framework` resolves `CONFIG_DIR` once, at import, so a suite that
+    points `OPENJARVIS_CONFIG_DIR`/`JARVIS_CONFIG_DIR` at a temporary folder
+    after some product module was imported would otherwise still write its
+    receipts into the owner's real `~/.openjarvis` (Gemini ruling R5,
+    2026-11-03: `test_feature_guide.py` was the measured case). The env is the
+    later and more specific instruction, so it is read first; the framework's
+    own value stays the answer when nothing is set.
+    """
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    if env:
+        return Path(os.path.expanduser(env))
     if fw is not None:
         try:
             return Path(fw.CONFIG_DIR)
         except Exception:
             pass
-    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
-    if env:
-        return Path(os.path.expanduser(env))
     return Path(os.path.expanduser("~")) / ".openjarvis"
 
 

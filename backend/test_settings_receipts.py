@@ -39,6 +39,7 @@ repository's own file and the owner's desk are never written.
 """
 from __future__ import annotations
 
+import dataclasses
 import os
 import shutil
 import sys
@@ -67,10 +68,11 @@ shutil.copyfile(REPO / "backend" / "rebuilt" / "jarvis-framework.toml", _TOML)
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_CFG)
 os.environ["JARVIS_CONFIG_DIR"] = str(_CFG)
 os.environ["JARVIS_FRAMEWORK_TOML"] = str(_TOML)
-#: The receipts store needs its OWN variable: jarvis_receipts._config_dir()
-#: prefers jarvis_framework.CONFIG_DIR, so a run at the owner's desk would
-#: otherwise write real rows into his receipts.db (test_settings_tool.py's own
-#: measured note, 2026-11-03: 20 rows in four minutes).
+#: The receipts store needs its OWN variable: a run at the owner's desk must
+#: never write real rows into his receipts.db (test_settings_tool.py's own
+#: measured note, 2026-11-03: 20 rows in four minutes). Since R5 the module
+#: also honours OPENJARVIS_CONFIG_DIR / JARVIS_CONFIG_DIR first, but the
+#: explicit file is still the pin this suite wants.
 os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 
 sys.path.insert(0, str(HERE))
@@ -163,8 +165,12 @@ def _after_value(row):
 # ---------------------------------------------------------------------------
 
 def t_wake_word_change_leaves_one_receipt_and_its_card_guards_the_way_back():
-    """A two-state switch, so the before value is exact without a reader
-    (`not on`). OFF is instant; ON raises the module's own card.
+    """One REAL change on a two-state switch: OFF is instant, ON raises the
+    module's own card.
+
+    The before value is READ through the module's own reader
+    (`_wake_word_now`), never assumed from `not on`, so a sentence that changes
+    nothing writes no receipt at all - that case is the no-op test below.
 
     Both halves are proved here: ON while the card waits writes NO receipt
     (nothing happened), and the instant OFF writes exactly one whose undo asks
@@ -222,6 +228,60 @@ def t_wake_word_change_leaves_one_receipt_and_its_card_guards_the_way_back():
         SP.set_wake_enabled(False)
 
 
+def t_wake_word_no_op_change_writes_no_receipt_and_undo_leaves_the_mic_alone():
+    """R4's no-op guard (2026-11-03 review, BUG 3).
+
+    `jarvis_speech.set_wake_enabled(True)` while the switch is ALREADY on
+    answers "The wake word is already on." and changes nothing, so NO receipt
+    may be written for it. Before the guard a receipt claiming `before: true`
+    was written, and its undo calls `set_wake_enabled(False)`, which is instant
+    and cardless - so "turn on the wake word" (already on) then "undo"
+    silently switched the microphone OFF. The same guard covers OFF while
+    already off, which is the same code path.
+    """
+    real_spawn = SP._spawn
+    SP._spawn = lambda fn: None            # no card thread in a suite
+    conv = "receipts-wake-word-noop-01"
+    try:
+        SP._reset_wake_for_tests()
+        check("seed: the wake word is ON",
+              SP._write_wake(True) is None and SP._wake_enabled() is True,
+              SP._wake_enabled())
+        count = _receipt_count()
+        intent, res = _drive("turn on the wake word", conv)
+        check("'turn on the wake word' while it is already on says so, in the "
+              "module's own words",
+              intent is not None and intent.name == "settings_wake_word"
+              and res is not None and "already on" in res.reply,
+              None if res is None else res.reply)
+        check("...and writes NO receipt, because nothing changed",
+              _receipt_count() == count, (count, _receipt_count()))
+        check("...and this chat has nothing to take back",
+              not Q._SETTINGS_UNDO.get(conv), Q._SETTINGS_UNDO.get(conv))
+        undone = _undo(conv)
+        check("...so 'undo' changes nothing and says there is nothing to take back",
+              undone is not None and undone.reply == Q.UNDO_NOTHING_SAID
+              and SP._wake_enabled() is True,
+              (None if undone is None else undone.reply, SP._wake_enabled()))
+
+        # The other direction is the same code path: OFF while already off.
+        SP._reset_wake_for_tests()
+        SP.set_wake_enabled(False)
+        count = _receipt_count()
+        intent, res = _drive("turn off the wake word", conv)
+        check("'turn off the wake word' while it is already off writes NO receipt either",
+              intent is not None and intent.name == "settings_wake_word"
+              and _receipt_count() == count,
+              (None if res is None else res.reply, count, _receipt_count()))
+        check("...and 'undo' still leaves the microphone off",
+              _undo(conv) is not None and SP._wake_enabled() is False,
+              SP._wake_enabled())
+    finally:
+        SP._spawn = real_spawn
+        SP._reset_wake_for_tests()
+        SP.set_wake_enabled(False)
+
+
 # ---------------------------------------------------------------------------
 #   2. Which browser Jarvis uses (jarvis_browser_engine.py)
 # ---------------------------------------------------------------------------
@@ -262,7 +322,8 @@ def t_browser_mode_change_leaves_one_receipt_and_undo_puts_it_back():
 def t_antislop_scope_leaves_exactly_one_receipt_and_undo_puts_it_back():
     """The module records its OWN receipt for every write, so the runner's
     receipt call must be suppressed by the `since` guard: ONE receipt, never
-    two (DEF-031 sub-cause 3's two instruments, measured)."""
+    two (DEF-031 sub-cause 3's two instruments, measured). R4 (2026-11-03):
+    that one receipt must also be reachable by the chat's own "undo"."""
     AS.set_scope("code", True)
     conv = "receipts-antislop-01"
     count = _receipt_count()
@@ -282,14 +343,11 @@ def t_antislop_scope_leaves_exactly_one_receipt_and_undo_puts_it_back():
     check("...holding the whole filter state, with code off in the after",
           (_after_value(row).get("scopes") or {}).get("code") is False,
           (row or {}).get("after"))
-    check("the in-chat pointer claims nothing of its own here (the module's "
-          "receipt is the one)",
-          _undo(conv) is not None and _undo(conv).reply == Q.UNDO_NOTHING_SAID,
-          _undo(conv).reply if _undo(conv) else None)
-    out = RC.undo(str((row or {}).get("receipt_id") or ""))
-    check("...and that receipt's undo puts the scope back",
-          out.get("ok") is True and R.antislop_scope_now("code") is True,
-          (out, R.antislop_scope_now("code")))
+    undone = _undo(conv)
+    check("'undo' in this chat takes the module's own receipt back (R4: it "
+          "used to answer there was nothing to take back)",
+          undone is not None and R.antislop_scope_now("code") is True,
+          None if undone is None else undone.reply)
     # The registry's own `antislop_scope` restore kind is there too: it is the
     # path a snapshot uses if this module's own recording ever stops. Drive it
     # directly, through the real setter.
@@ -299,6 +357,145 @@ def t_antislop_scope_leaves_exactly_one_receipt_and_undo_puts_it_back():
     check("the antislop_scope restore kind puts one scope back through its setter",
           restored.ok is True and R.antislop_scope_now("copy") is True,
           (getattr(restored, "ok", None), R.antislop_scope_now("copy")))
+
+
+def t_antislop_filter_toggle_is_undoable_by_chat():
+    """R4 (2026-11-03): "turn on the anti-slop filter" is a plain switch
+    sentence, but its module records its own receipt - the chat's "undo" has
+    to find that receipt, or the promise "say undo" is broken for it."""
+    AS.set_enabled(False)
+    conv = "receipts-antislop-filter-01"
+    count = _receipt_count()
+    intent, res = _drive("turn on the anti-slop filter", conv)
+    check("'turn on the anti-slop filter' reaches a switch runner for antislop",
+          intent is not None
+          and intent.name in ("settings_bool", "feature_switch")
+          and intent.f.get("key") == "antislop" and intent.f.get("on") is True,
+          intent)
+    check("...the filter really turned on",
+          (AS.get_state() or {}).get("enabled") is True,
+          (AS.get_state() or {}).get("enabled"))
+    row = _one_new_receipt(count)
+    check("...and it left exactly ONE receipt, the module's own",
+          row is not None and (row or {}).get("tool_name") == AS.TOOL_NAME,
+          (count, _receipt_count(), (row or {}).get("tool_name")))
+    # BUG 2 (2026-11-03 review): the chat's pointer must name the row the
+    # module RETURNED for this change, never "whatever row is newest" - another
+    # chat or either Settings screen can write one in the same clock tick, and
+    # its undo would then put back someone else's change.
+    entry = Q._SETTINGS_UNDO.get(conv) or {}
+    check("...and this chat's undo points at THAT row, not at the newest one",
+          bool(entry) and entry.get("receipt_id") == (row or {}).get("receipt_id"),
+          (entry, (row or {}).get("receipt_id")))
+    check("...and the pointer carries no empty before-snapshot to be read as "
+          "'that setting is not on this PC any more'",
+          bool(entry) and "before" not in entry, entry)
+    undone = _undo(conv)
+    check("'undo' in this chat turns the filter back off",
+          undone is not None and (AS.get_state() or {}).get("enabled") is False,
+          None if undone is None else undone.reply)
+    check("...and says what it did, instead of claiming nothing happened",
+          undone is not None and "back the way it was" in undone.reply,
+          None if undone is None else undone.reply)
+    again = _undo(conv)
+    check("a SECOND 'undo' is honest: it says the filter is already back, and "
+          "leaves it off",
+          again is not None and "already put" in again.reply
+          and "nothing left to undo" in again.reply
+          and (AS.get_state() or {}).get("enabled") is False,
+          (None if again is None else again.reply,
+           (AS.get_state() or {}).get("enabled")))
+
+
+def t_antislop_mode_change_leaves_one_receipt_and_undo_puts_it_back():
+    """R4 (2026-11-03): the Anti-Slop mode is a named CHOICE
+    (`_run_settings_choice`), and its module records its own receipt too - so
+    the same exact-id bridge has to work for the second of the three Anti-Slop
+    settings, not just the master switch."""
+    AS.set_mode("during")
+    check("seed: the filter works as it writes",
+          _choice_value("antislop_mode") == "during", _choice_value("antislop_mode"))
+    conv = "receipts-antislop-mode-01"
+    count = _receipt_count()
+    intent, res = _drive("set the anti-slop mode to after", conv)
+    check("'set the anti-slop mode to after' reaches the choice runner",
+          intent is not None and intent.name == "settings_choice"
+          and intent.f.get("key") == "antislop_mode"
+          and intent.f.get("value") == "after", intent)
+    check("...the mode really changed",
+          _choice_value("antislop_mode") == "after", _choice_value("antislop_mode"))
+    row = _one_new_receipt(count)
+    check("...and it left exactly ONE receipt, the module's own",
+          row is not None and (row or {}).get("tool_name") == AS.TOOL_NAME,
+          (count, _receipt_count(), (row or {}).get("tool_name")))
+    entry = Q._SETTINGS_UNDO.get(conv) or {}
+    check("...and this chat's undo points at that exact row",
+          bool(entry) and entry.get("receipt_id") == (row or {}).get("receipt_id"),
+          (entry, (row or {}).get("receipt_id")))
+    undone = _undo(conv)
+    check("'undo' in this chat puts the mode back",
+          undone is not None and _choice_value("antislop_mode") == "during",
+          (None if undone is None else undone.reply, _choice_value("antislop_mode")))
+
+
+def t_antislop_pointer_ignores_a_receipt_written_in_between():
+    """BUG 2 (2026-11-03 review): identity comes from the id the module
+    RETURNED, never from "the newest row in the database".
+
+    Reproduced exactly as the review describes it: a receipt is written by
+    another surface between the setter's own write and this file's decision, so
+    the newest row is no longer the Anti-Slop row. Before the fix the pointer
+    was set from that newest row (or from nothing at all), so "undo" in this
+    chat could put back someone else's change - or answer that there was
+    nothing to take back right after telling the owner to say undo.
+    """
+    setting = next((b for b in R.BOOL_SETTINGS if b.key == "antislop"), None)
+    if setting is None:                     # a tree without the filter: nothing to prove
+        return
+    real_set, real_record = setting.set, RC.record
+    real_settings = R.BOOL_SETTINGS
+    other_ids = []
+
+    def noisy_set(on, *, peer=None, local=None):
+        out = real_set(on, peer=peer, local=local)
+        # Another chat, or either Settings screen, writes its own receipt
+        # inside THIS change - the race the review measured.
+        other_ids.append(real_record("other_tool", "a change from somewhere else"))
+        return out
+
+    # `BoolSetting` is a frozen dataclass, so the row is swapped for a copy of
+    # itself with the same names and the noisy setter - everything else about
+    # the row is the real one.
+    R.BOOL_SETTINGS = tuple(dataclasses.replace(b, set=noisy_set)
+                            if b.key == "antislop" else b for b in real_settings)
+    conv = "receipts-antislop-race-01"
+    try:
+        AS.set_enabled(False)
+        intent, res = _drive("turn on the anti-slop filter", conv)
+        check("the race test really reached the switch runner",
+              intent is not None and intent.name in ("settings_bool", "feature_switch")
+              and intent.f.get("key") == "antislop", intent)
+        rows = RC.recent(4)
+        check("the newest row in the database is NOT this change's (the race is real)",
+              bool(rows) and rows[0].get("tool_name") == "other_tool",
+              [(r.get("tool_name"), r.get("receipt_id")) for r in rows])
+        mine = next((r for r in rows if r.get("tool_name") == AS.TOOL_NAME), None)
+        pointer = (Q._SETTINGS_UNDO.get(conv) or {}).get("receipt_id")
+        check("...and this chat's undo still points at the anti-slop row, not at it",
+              bool(pointer) and mine is not None
+              and pointer == mine.get("receipt_id"),
+              (pointer, None if mine is None else mine.get("receipt_id")))
+        undone = _undo(conv)
+        other = RC.get(str(other_ids[0])) if other_ids and other_ids[0] else None
+        check("...so 'undo' takes back the filter, not the other surface's change",
+              undone is not None
+              and (AS.get_state() or {}).get("enabled") is False
+              and bool(other) and other.get("undone") is False,
+              (None if undone is None else undone.reply,
+               [(r.get("tool_name"), r.get("undone")) for r in RC.recent(4)]))
+    finally:
+        R.BOOL_SETTINGS = real_settings
+        AS.set_enabled(False)
 
 
 # ---------------------------------------------------------------------------
@@ -634,8 +831,12 @@ def t_no_reader_means_no_receipt_and_the_answer_still_tells_the_truth():
 
 if __name__ == "__main__":
     for fn in (t_wake_word_change_leaves_one_receipt_and_its_card_guards_the_way_back,
+               t_wake_word_no_op_change_writes_no_receipt_and_undo_leaves_the_mic_alone,
                t_browser_mode_change_leaves_one_receipt_and_undo_puts_it_back,
                t_antislop_scope_leaves_exactly_one_receipt_and_undo_puts_it_back,
+               t_antislop_filter_toggle_is_undoable_by_chat,
+               t_antislop_mode_change_leaves_one_receipt_and_undo_puts_it_back,
+               t_antislop_pointer_ignores_a_receipt_written_in_between,
                t_voice_speed_change_leaves_one_receipt_and_undo_puts_it_back,
                t_voice_speed_natural_verb_door_leaves_one_receipt_too,
                t_handoff_mode_change_leaves_one_receipt_and_undo_respects_its_card,
