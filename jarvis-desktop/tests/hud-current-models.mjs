@@ -385,7 +385,7 @@ await check("Rust's fixed read list gains /api/models and refuses every model wr
   assert.match(rust, /allowed_get\("\/api\/models"\)\.as_deref\(\), Some\("\/api\/models"\)/,
     "the positive pin for /api/models is missing");
   // The shell's own comment must not still claim the old, shorter list.
-  assert.ok(bootstrap.includes("models, and /retrieve?q="),
+  assert.ok(bootstrap.includes("models, setup, and /retrieve?q="),
     "hud_bootstrap.js's read-list comment was not updated");
 });
 
