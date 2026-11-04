@@ -1376,6 +1376,22 @@
      "name": "Explaining and checking one of Jarvis's own features (read-only)"
     },
     {
+     "id": "refresh_abilities",
+     "name": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+    },
+    {
+     "id": "self_portrait",
+     "name": "Saying what it is made of on this PC (read-only)"
+    },
+    {
+     "id": "conversation_find",
+     "name": "Finding your old conversations by their titles (read-only, titles and dates only)"
+    },
+    {
+     "id": "conversation_open",
+     "name": "Opening one of your old conversations to read it (read-only, on this PC)"
+    },
+    {
      "id": "connect_account",
      "name": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)"
     },
