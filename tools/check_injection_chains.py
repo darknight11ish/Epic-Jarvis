@@ -43,7 +43,7 @@ WHAT EACH PROBE RUNS, AND WHAT IT ASSERTS.
     either half.
   * chain3b-project-github - project document -> project workspace -> a GitHub
     write. THE LAST HOP EXISTS SINCE 2026-11-03 (`backend/jarvis_github.py`,
-    the owner's "Read + actions" decision, JARVIS-API section 184), so this is
+    the owner's "Read + actions" decision, JARVIS-API section 185), so this is
     now a REAL end-to-end probe rather than an absence. Until that day it
     asserted that no `jarvis_github*` writer module was shipped and failed the
     moment one appeared - which is exactly what it did, and replacing it was
@@ -495,7 +495,7 @@ def probe_chain3b(sb: Sandbox) -> dict:
     old absence-probe asked for. Until that day this probe asserted that no
     `jarvis_github*` writer module was shipped, and failed the moment one
     appeared - exactly what happened when `backend/jarvis_github.py` landed
-    (the owner's "Read + actions" decision; JARVIS-API section 184). Replacing
+    (the owner's "Read + actions" decision; JARVIS-API section 185). Replacing
     it was the point of that arrangement, not a nuisance to silence.
 
     What is measured now, all of it plain code and no model:

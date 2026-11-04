@@ -1455,7 +1455,7 @@ SHIPPED = (
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
     # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
-    # the owner's decision: "Read + actions"; JARVIS-API section 189). Fixed
+    # the owner's decision: "Read + actions"; JARVIS-API section 185). Fixed
     # api.github.com addresses only - there is no arbitrary-URL path at all -
     # the token in the request header and never in a result, and every read and
     # every action asks a person first. No code write of any kind: it cannot
