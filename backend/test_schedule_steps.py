@@ -30,7 +30,10 @@ folder inside this checkout (so the owner's own state is never touched):
   G7  dedupe      two ticks at one clock fire nothing twice, and a fresh
                   Scheduler on the same file fires nothing twice (on-disk mark).
   G8  repeat      a repeating routine re-seeds at each occurrence, so
-                  yesterday's parts are never "done" today.
+                  yesterday's parts are never "done" today - and it neither
+                  goes to sleep while it still holds an untimed part nor skips
+                  the occurrence the tick woke up for (the two repeat bugs,
+                  2026-11-04).
   G9  answer      `step` routes to the right part; a bad index is 400; a part
                   that has not come up is 409; the answer log grows one entry
                   with the `step` key.
@@ -755,6 +758,70 @@ def t_g8_yesterdays_parts_are_never_done_today():
         "SELECT step_state FROM jobs WHERE id = ?", (r["id"],)).fetchone()[0])
     check("...anchored at the new occurrence, not yesterday's",
           float(state["anchor"]) > anchor, (state["anchor"], anchor))
+
+
+def t_g8_an_untimed_repeating_routine_never_goes_asleep():
+    """The owner's untimed morning checklist (meds / keys), repeating daily.
+
+    Every part is untimed, so nothing but an ANSWER ever touches the clock.
+    Answering part 1 surfaces part 2 - the last part of the occurrence - and the
+    row must still hold a wake time for the next occurrence. Before the fix that
+    write was `_routine_due(...)` alone, which is None once no timed part is
+    left, and `tick` only looks at rows whose `due` is set: the routine went to
+    sleep forever and never repeated."""
+    w = a_world(1_800_000_000.0, name="g8c")
+    r = w.s.add_repeat("reminder", {"every": "day", "at": "08:00"}, "morning checklist",
+                       steps=[{"label": "meds", "offset_min": None},
+                              {"label": "keys", "offset_min": None}])
+    anchor = float(r["due"])
+    w.clock.t = anchor
+    w.s.tick()                        # part 1: the untimed FIRST part goes off
+    w.s.answer(r["id"], 0, step=0)    # ...answered, which surfaces part 2
+    view = w.s.job(r["id"])
+    check("answering an untimed part leaves the repeating routine a wake time",
+          view["due"] is not None, view["due"])
+    check("...and it is the next occurrence its own rule names, to the second",
+          view["due"] == anchor + 86400.0, (view["due"], anchor + 86400.0))
+    w.reset()
+    w.clock.t = anchor + 86400.0
+    check("...so it really repeats: the next morning's part 1 goes off",
+          w.s.tick() == [r["id"]])
+    check("...as part 1 of 2 again, not yesterday's unanswered part",
+          [e["step"] for e in w.fired()] == [0] and w.fired()[0]["parts"] == 2,
+          w.fired())
+
+
+def t_g8_the_tick_reseeds_at_the_occurrence_that_arrived():
+    """A routine whose parts have all gone off but were never answered: its
+    `due` is the next occurrence, and the tick that arrives THERE starts the
+    new one. The new occurrence must be anchored at the occurrence that just
+    arrived - `next_run(rule, now)` is strictly AFTER now, so anchoring there
+    skipped the day the owner was being woken for (the tick fired nothing and
+    the state jumped a whole occurrence ahead)."""
+    w = a_world(1_800_000_000.0, name="g8d")
+    r = w.s.add_repeat("reminder", {"every": "day", "at": "08:00"}, "morning routine",
+                       steps=[{"label": "meds", "offset_min": 0},
+                              {"label": "leave", "offset_min": 30}])
+    anchor = float(r["due"])
+    w.clock.t = anchor
+    w.s.tick()                        # part 1
+    w.clock.t = anchor + 1800
+    w.s.tick()                        # part 2: every part fired, none answered
+    check("with every part fired and none answered the row waits for the next "
+          "occurrence", w.s.job(r["id"])["due"] == anchor + 86400.0,
+          w.s.job(r["id"])["due"])
+    w.reset()
+    w.clock.t = anchor + 86400.0      # ...and the occurrence arrives
+    check("the tick at the new occurrence announces its FIRST part at once",
+          w.s.tick() == [r["id"]])
+    check("...as part 1 of 2", [e["step"] for e in w.fired()] == [0], w.fired())
+    state = json.loads(sqlite3.connect(str(w.path)).execute(
+        "SELECT step_state FROM jobs WHERE id = ?", (r["id"],)).fetchone()[0])
+    check("...anchored at the occurrence that arrived, not the one after it",
+          float(state["anchor"]) == anchor + 86400.0,
+          (state["anchor"], anchor + 86400.0))
+    check("...with the cursor back on part 1", w.s.job(r["id"])["steps_cursor"] == 0,
+          w.s.job(r["id"])["steps_cursor"])
 
 
 # --------------------------------------------------------------------------
