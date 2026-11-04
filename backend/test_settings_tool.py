@@ -89,11 +89,14 @@ _TMP = Path(tempfile.mkdtemp(prefix="jarvis-settings-tool-"))
 os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "config")
 (_TMP / "config").mkdir(parents=True, exist_ok=True)
 os.environ["JARVIS_FRAMEWORK_TOML"] = str(_TMP / "jarvis-framework.toml")
-# THE RECEIPTS STORE NEEDS ITS OWN VARIABLE. jarvis_receipts._config_dir()
-# prefers the framework module's CONFIG_DIR over both config-dir variables
-# above, so without this line a run at the owner's own desk writes real
-# change_setting rows into his real receipts.db - measured 2026-11-03, 20 rows
-# in four minutes. JARVIS_RECEIPTS_DB is read first and wins.
+# THE RECEIPTS STORE NEEDS ITS OWN VARIABLE. Since R5 (2026-11-03)
+# jarvis_receipts._config_dir() reads the two config-dir variables above FIRST,
+# and only then the framework module's CONFIG_DIR - so this pin is no longer
+# the only thing keeping a run at the owner's own desk out of his real
+# receipts.db, but it is still the surest one: JARVIS_RECEIPTS_DB is read
+# before all of them. The old reason for this line was the reverse order, and
+# it cost 20 real change_setting rows in four minutes (measured 2026-11-03,
+# before R5).
 os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "receipts.db")
 
 sys.path.insert(0, str(HERE))
@@ -797,11 +800,17 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # as `flow.moment.enabled` - so the tool reaches exactly the switch they
     # obey. It LEFT NOT_BY_ASKING at the same time; t_the_one_moment_switch_is_
     # reachable_and_cardless below drives it for real.
-    check("the count is now 35: the 23 measured on 2026-10-19, the eight added"
+    # 35 since 2026-11-03: `voice_check_locked` ("Check my voice when my phone
+    # is locked") joined, on the owner's own ask. Its setter calls
+    # jarvis_live.request_voice_check() - the SAME function the phone's switch
+    # and the Live route call - so the tool reaches exactly the rule the PC
+    # acts on, and its card / at-once-off are that function's own.
+    check("the count is now 36: the 23 measured on 2026-10-19, the eight added"
           " by the universal-control pass on 2026-10-22, antislop on"
           " 2026-10-28, the Jarvis calendar on 2026-10-29, one moment on"
-          " 2026-11-01, and learn_paraphrase on 2026-11-02",
-          len(R.BOOL_SETTINGS) == 35, str(len(R.BOOL_SETTINGS)))
+          " 2026-11-01, learn_paraphrase on 2026-11-02, and the locked-phone"
+          " voice check on 2026-11-03",
+          len(R.BOOL_SETTINGS) == 36, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

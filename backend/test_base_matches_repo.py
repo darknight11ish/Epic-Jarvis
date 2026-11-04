@@ -546,15 +546,13 @@ def t_the_stale_twin_check_agrees_with_the_rule():
 #: request that has not merged into this tree yet: a guarded
 #: `try: import <name> / except ImportError` is the honest way to wire a drop-in
 #: that the published base cannot carry, and this table is how the walk is told
-#: the truth rather than being routed around. 2026-11-03: `jarvis_storage_health`
-#: is PR #1117's own module; `jarvis_self_portrait.py` and `jarvis_asks_first.py`
-#: import it that way and say "storage self-scan NOT installed" when it is
-#: absent. Delete the entry when the module is in the shipped set and the base
-#: is re-taken - the check below fails a stale entry.
-OPTIONAL_IMPORTS = {
-    "jarvis_storage_health": "PR #1117's drop-in; imported only inside a try that "
-                             "catches ImportError, and absent from this tree",
-}
+#: the truth rather than being routed around. Empty since 2026-11-03:
+#: `jarvis_storage_health` was the one entry (PR #1117's own module, imported
+#: that way by `jarvis_self_portrait.py` and `jarvis_asks_first.py`), and it was
+#: deleted when that PR put the module in the shipped set and the base was
+#: re-taken. The check below fails a stale entry, so an entry left behind would
+#: be red rather than quiet.
+OPTIONAL_IMPORTS = {}
 
 
 def t_the_base_is_complete_on_its_own():

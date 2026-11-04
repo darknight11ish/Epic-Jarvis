@@ -633,9 +633,19 @@ object LiveRules {
      * other device's for "Move it here" - so the PC can name it to the other
      * app, which then carries on the SAME chat. An id that is not one (8-64
      * of `[A-Za-z0-9_-]`) is left out, never sent.
+     *
+     * [phoneLocked] (2026-11-03) is this phone's own screen lock at the moment
+     * the owner started Live: `"locked":true|false`, or nothing when it cannot
+     * be read. It is the ONE fact the PC needs to apply the owner's rule - a
+     * Live session started from an unlocked phone asks for no voice check
+     * (`VoiceCheckRule.LIVE_START`) - and a phone that says nothing keeps every
+     * check, exactly as before this field existed.
      */
-    fun startBody(conversationId: String? = null): String =
-        "{\"do\":\"start\",\"device\":\"$ME\",\"by\":\"button\"" + cidField(conversationId) + "}"
+    fun startBody(conversationId: String? = null, phoneLocked: Boolean? = null): String =
+        "{\"do\":\"start\",\"device\":\"$ME\",\"by\":\"button\""
+            .plus(cidField(conversationId))
+            .plus(VoiceCheckRule.lockedField(phoneLocked))
+            .plus("}")
 
     private val CID = Regex("[A-Za-z0-9_-]{8,64}")
 

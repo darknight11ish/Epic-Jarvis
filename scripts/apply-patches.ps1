@@ -2831,6 +2831,15 @@ $SHIPPED = @(
     # position, is in backend/_where.py's SHIPPED list.
     'jarvis_self_portrait.py'
 'jarvis_phone_apps.py'
+    # The storage self-scan and the safe temporary-file cleanup
+    # (jarvis_storage_health.py, 2026-11-03; the owner's own request: "take
+    # inventory of storage and ... clear any temporary files up safely"). A
+    # read-only bounded inventory, a dry-run plan from an explicit allowlist,
+    # and ONE approval card before anything is deleted or moved; ~/.openjarvis
+    # is refused and logs/old deploy snapshots are quarantined, never deleted.
+    # Standard library only, no network. The same entry, in the same position,
+    # is in backend/_where.py's SHIPPED list.
+    'jarvis_storage_health.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

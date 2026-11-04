@@ -8347,7 +8347,7 @@ object JarvisRuntime {
             resume && !move -> chat.conversationIdNow()
             else -> com.jarvis.client.net.ChatHistory.newConversationId()
         }
-        return when (val r = api.liveWrite(rules.startBody(cid))) {
+        return when (val r = api.liveWrite(rules.startBody(cid, phoneLockedForVoiceCheck()))) {
             is ApiResult.Ok -> {
                 val (code, body) = r.value
                 if (code !in 200..299 || body?.get("ok")?.let { (it as? JsonPrimitive)?.content } != "true") {
@@ -8532,6 +8532,78 @@ object JarvisRuntime {
         ApiError.NotFound -> LIVE_MISSING
         ApiError.BadToken -> "Your PC did not accept this phone's key. Pair it again."
         else -> "Could not reach your PC. Check the link, then try again."
+    }
+
+    // --------------------- the ONE voice-check setting (the owner, 2026-11-03) ----
+    // "my voice should only need to be confirmed if i say hi jarvis when the
+    // phone is locked ... make this a setting i can change". The RULE is the
+    // PC's (backend/jarvis_live.py's voice_check_needed, one function); this
+    // phone's copy is voice/VoiceCheckRule.kt, held to the Python side row for
+    // row by its JVM test. The setting travels on the EXISTING Live route
+    // (`{"do":"voice_check"}`): no value reads it, a value asks - so no new
+    // route was added for it.
+
+    private val _voiceCheck = MutableStateFlow<Boolean?>(null)
+
+    /**
+     * "Check my voice when my phone is locked", as the PC last answered: true,
+     * false, or null when it has not answered (which the switch shows as
+     * unknown, never as off).
+     */
+    val voiceCheck: StateFlow<Boolean?> = _voiceCheck.asStateFlow()
+
+    private val _voiceCheckNotice = MutableStateFlow<String?>(null)
+
+    /** The PC's own sentence after a change (or why not), for under the switch. */
+    val voiceCheckNotice: StateFlow<String?> = _voiceCheckNotice.asStateFlow()
+
+    /** Reads the setting through the Live route's own command. A read: never held. */
+    suspend fun voiceCheckRead() {
+        val r = api.liveWrite(com.jarvis.client.voice.VoiceCheckRule.body(null))
+        if (r is ApiResult.Ok) {
+            val (_, body) = r.value
+            com.jarvis.client.voice.VoiceCheckRule.on(body)?.let { _voiceCheck.value = it }
+            _voiceCheckNotice.value = com.jarvis.client.voice.VoiceCheckRule.words(body)
+                .takeIf { it.isNotBlank() }
+        }
+    }
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises ONE approval
+     * card on the PC - nothing is on until the owner approves it. OFF is never
+     * held: it only narrows what Jarvis checks.
+     *
+     * @return the PC's own sentence to show under the switch.
+     */
+    suspend fun setVoiceCheck(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = api.liveWrite(com.jarvis.client.voice.VoiceCheckRule.body(on))) {
+            is ApiResult.Ok -> {
+                val (code, body) = r.value
+                if (code !in 200..299) {
+                    val said = com.jarvis.client.voice.VoiceCheckRule.words(body)
+                        .ifBlank { liveError(body, code) }
+                    _voiceCheckNotice.value = said
+                    return said
+                }
+                val waiting = com.jarvis.client.voice.VoiceCheckRule.waiting(body)
+                // Only a real answer moves the switch: an ON that is still
+                // waiting for its card must never show as on.
+                if (!waiting) {
+                    com.jarvis.client.voice.VoiceCheckRule.on(body)?.let { _voiceCheck.value = it }
+                } else {
+                    refreshPending()
+                }
+                val said = com.jarvis.client.voice.VoiceCheckRule.words(body)
+                _voiceCheckNotice.value = said.takeIf { it.isNotBlank() }
+                said
+            }
+            is ApiResult.Failed -> {
+                val said = liveFailed(r.error)
+                _voiceCheckNotice.value = said
+                said
+            }
+        }
     }
 
     /**
@@ -9020,6 +9092,19 @@ object JarvisRuntime {
     private fun screenLocked(): Boolean =
         (appContext?.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
             ?.isDeviceLocked == true
+
+    /**
+     * This phone's own screen lock, for the ONE voice-check rule (2026-11-03):
+     * true or false, or null when this app cannot read it. Null always keeps
+     * every check (`voice/VoiceCheckRule.kt`), so a phone that cannot say is a
+     * phone that does not silently stop checking - and an older phone sends
+     * nothing at all, which the PC reads the same way.
+     */
+    private fun phoneLockedForVoiceCheck(): Boolean? =
+        appContext?.let {
+            (it.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+                ?.isDeviceLocked
+        }
 
     /**
      * A fixed line while Live runs. "Two minutes left..." used to be skipped

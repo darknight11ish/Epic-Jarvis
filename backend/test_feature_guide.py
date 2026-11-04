@@ -77,6 +77,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import re
 import sys
 import tempfile
@@ -105,6 +106,13 @@ import gen_feature_guide_catalogue as GEN  # noqa: E402
 
 FAILED, PASSED, SKIPPED = [], [], []
 TMP = Path(tempfile.mkdtemp(prefix="jarvis-feature-guide-"))
+#: A receipts database of its own. A feature switch goes through the real
+#: setter, and a setting whose own module records a receipt (the Anti-Slop
+#: filter does) must never write into the owner's receipts.db from a test run
+#: (Gemini ruling R5, 2026-11-03; the measured note in test_settings_tool.py:
+#: 20 rows in four minutes at the owner's desk). `setdefault`, so a caller
+#: that already pinned a store keeps its own.
+os.environ.setdefault("JARVIS_RECEIPTS_DB", str(TMP / "receipts.db"))
 _SOURCE = json.loads((REPO / "features" / "features.json").read_text(encoding="utf-8"))
 SOURCE = _SOURCE
 #: The contract's own record of the approved label mix. `tools/
