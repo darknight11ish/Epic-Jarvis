@@ -69,45 +69,66 @@ export const SWITCHABLE = Object.freeze([
 ]);
 
 /**
- * The four reading tools that may be OFFERED to the AI model at all, from
- * the desktop only - jarvis_asks_first.TOOLS_SWITCHABLE. A DIFFERENT thing
- * from SWITCHABLE (above): that is whether an offered tool asks first; this
- * is whether it is offered at all ([tools].enabled). The owner's answer of
- * 2026-09-27: "Reading tools ... can be switched on from the PC app, each
- * with a card plus Windows Hello; other tools stay in the settings file."
+ * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
+ * 48 at 2026-11-04. A DIFFERENT thing from SWITCHABLE (above): that is whether
+ * an offered tool asks first; this is whether it is offered at all
+ * ([tools].enabled).
+ *
+ * Until 2026-11-04 this was "the Tier A + Tier B tools only" (the 2026-10-31
+ * tiered ruling). The owner reversed the ON half: "few restrictions on its
+ * tools beyond the core values of jarvis that have already been established,
+ * particularly reverse engineer anything among other things". Every tool the
+ * AI model can be offered is here now. The three that are NOT are the ones
+ * whose own switch decides them (the data and maths sandbox, and the two
+ * web-search conversation tools, which ride with Web search) - a switch whose
+ * state the turn ignored would be a lie. The PC lists them under
+ * `tools.not_switchable`.
  */
 export const TOOLS_SWITCHABLE = Object.freeze([
-  // Tier A + Tier B (jarvis_asks_first.TOOLS_SWITCHABLE, 2026-10-31 tiered ruling)
-  // 21 since 2026-11-02: the conversation web-search grant's two tools were
-  // taken off this list - the field test of 2026-11-02 found the switch was
-  // never on, so the model was never offered the tool and no grant card could
-  // be raised. They ride with web_search now (jarvis_agent.GRANT_ASK_TOOLS).
+  // Tier A (13)
   "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
   "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
   "coming_up", "protect_from_jarvis", "github_search", "send_file_to_phone",
+  // Tier B (8)
   "email_check", "send_email", "draft_email", "tidy_inbox", "home_read",
   "home_control", "my_spending", "retirement_whatif",
+  // Tier C, the raw and powerful ones (7; run_data_script has its own switch)
+  "shell_exec", "control_computer", "control_phone", "browser_control",
+  "read_web_page", "connect_account", "rea_investigate",
+  // The everyday helpers that used to be "not this slice" (8)
+  "calculator", "memory_search", "file_read", "web_search", "my_files",
+  "propose_plan", "change_setting", "feature_guide",
+  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (12)
+  "goals_list", "goal_add", "goal_progress", "goal_done",
+  "conversation_find", "conversation_open", "phone_apps", "plugin_list",
+  "plugin_switch", "refresh_abilities", "self_portrait", "setup_quiz",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =
   "Whether the AI model is offered each ability at all - a separate thing from whether it " +
-  "asks you first, above. Some tools have a switch here; the raw ones and the ones this " +
-  "slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE " +
-  "approval card and asks Windows Hello on this PC; turning it off is instant, from either " +
-  "app. Nothing here switches two tools at once.";
+  "asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a " +
+  "switch here, the raw and everyday ones included; a few are not switches because their " +
+  "own switch decides them, and the page names those. Turning one on shows ONE approval " +
+  "card and asks Windows Hello on this PC; turning it off is instant, from either app. " +
+  "Nothing here switches two tools at once.";
 export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
   "first). It takes one approval card and Windows Hello.";
 /**
  * D4, the owner, 2026-11-04: every tool that is ON is listed, including one the
- * settings file switched on that this page has no switch row for. Those rows
- * are OFF switches only - turning one back on is still a hand edit of
- * [tools].enabled, and the PC's own "why" under the row says so.
+ * settings file switched on that this page has no switch row for. Since the
+ * same day's ON decision the ONLY rows that land here are names this PC does
+ * not know (a drop-in program's own tool) and, when the file happens to name
+ * them, the three whose own switch decides them. Those rows are OFF switches
+ * only - turning one back on is a hand edit of [tools].enabled, and the PC's
+ * own "why" under the row says so.
  */
 export const TOOLS_ELSEWHERE_LABEL = "Also on in your settings file";
 export const TOOLS_ELSEWHERE_OFF =
   "Off now. This page has no switch to turn it back on: add it back to [tools].enabled in " +
   "jarvis-framework.toml on this PC by hand, then restart Jarvis.";
+/** The three tools that have no switch of their own (`tools.not_switchable`). */
+export const TOOLS_NOT_SWITCHABLE_LABEL = "Not a switch on this page";
 
 /** Lockdown (2026-09-28): the PC's words (jarvis_asks_first.py LOCKDOWN_*). */
 export const LOCKDOWN_ACTION = "lockdown";
@@ -204,10 +225,11 @@ function readLockdown(k) {
   };
 }
 
-/** `view.tools` - the tiered "Let the AI use this" switches, desktop only. */
+/** `view.tools` - the "Let the AI use this" switches, desktop only. */
 function readTools(t) {
   if (!t || typeof t !== "object" || !Array.isArray(t.items)) {
-    return { canEnable: false, items: [], groups: [], vault: null, extra: [], notOffered: null };
+    return { canEnable: false, items: [], groups: [], vault: null, extra: [],
+      notSwitchable: null };
   }
   const items = t.items.filter((i) => i && typeof i === "object").map(readToolItem);
   // D4, 2026-11-04: every tool that is ON, including ones with no switch row
@@ -232,15 +254,16 @@ function readTools(t) {
     last: v.last && typeof v.last === "object" ? text(v.last.message) : "",
     lastOutcome: v.last && typeof v.last === "object" ? text(v.last.outcome) : "",
   } : null;
-  const n = t.not_offered && typeof t.not_offered === "object" ? t.not_offered : null;
+  // 2026-11-04: the tools with no switch of their own (their own switch decides
+  // them). The PC's own `why` explains; `ids` are the three names.
+  const n = t.not_switchable && typeof t.not_switchable === "object" ? t.not_switchable : null;
   const labels = n && n.labels && typeof n.labels === "object" ? n.labels : {};
-  const notOffered = n ? {
-    tierC: Array.isArray(n.tier_c) ? n.tier_c.map(text) : [],
-    notThisSlice: Array.isArray(n.not_this_slice) ? n.not_this_slice.map(text) : [],
+  const notSwitchable = n ? {
+    ids: Array.isArray(n.ids) ? n.ids.map(text) : [],
     labels: Object.fromEntries(Object.entries(labels).map(([k, v]) => [k, text(v)])),
     why: text(n.why),
   } : null;
-  return { canEnable: t.can_enable === true, items, groups, vault, extra, notOffered };
+  return { canEnable: t.can_enable === true, items, groups, vault, extra, notSwitchable };
 }
 
 /**
@@ -342,11 +365,11 @@ export function switchView(row, view, live) {
 }
 
 /**
- * One "Let the AI use this" switch, on every Tier A/Tier B tool: {checked,
- * disabled, lines}. Checked while offered, and while a card to offer it waits.
- * Unchecking it (OFF) is never held. Checking it (ON) needs the PC to say this
- * app may enable (so the phone is read-only), a live link, and no other tool's
- * card waiting.
+ * One "Let the AI use this" switch: {checked, disabled, lines}. Checked while
+ * offered, and while a card to offer it waits. Unchecking it (OFF) is never
+ * held. Checking it (ON) needs the PC to say this app may enable (so the
+ * phone is read-only), a live link, and no other tool's card waiting.
+ * 2026-11-04: EVERY tool the model can be offered is drawn with this switch.
  */
 export function toolSwitchView(item, tools, live) {
   if (!item) return null;
@@ -379,9 +402,11 @@ export function toolSwitchView(item, tools, live) {
 /**
  * One "Also on in your settings file" switch (D4, 2026-11-04): {checked,
  * disabled, lines}. These rows are ON in [tools].enabled but have no switch
- * row of their own, so this page offers them OFF only. Checked while on;
- * unchecked and disabled after this page turned one off, because putting it
- * back is a hand edit of the settings file - the line under the row says so.
+ * row of their own, because this PC does not know the name (a drop-in
+ * program's own tool) or because the tool's own switch decides it. This page
+ * offers them OFF only. Checked while on; unchecked and disabled after this
+ * page turned one off, because putting it back is a hand edit of the settings
+ * file - the line under the row says so.
  */
 export function extraToolView(item) {
   if (!item) return null;
@@ -454,16 +479,17 @@ export function vaultSwitchView(vault, live) {
   return { checked, disabled, lines };
 }
 
-/** The plain note naming every tool this slice does NOT offer in-app. */
-export function notOfferedView(tools) {
-  const n = tools && tools.notOffered;
-  if (!n || (!n.tierC.length && !n.notThisSlice.length)) return null;
+/**
+ * The plain note naming the tools that have no switch on this page, and why
+ * (2026-11-04: the three whose own switch decides them - the data and maths
+ * sandbox, and the two web-search conversation tools that ride with Web
+ * search). Empty from a PC that sends no `not_switchable`.
+ */
+export function notSwitchableView(tools) {
+  const n = tools && tools.notSwitchable;
+  if (!n || !n.ids.length) return null;
   const name = (id) => n.labels[id] || id.replace(/_/g, " ");
-  const parts = [];
-  if (n.tierC.length) parts.push("Never offered in the app: " + n.tierC.map(name).join(", ") + ".");
-  if (n.notThisSlice.length) {
-    parts.push("Not offered in-app by this slice: " + n.notThisSlice.map(name).join(", ") + ".");
-  }
+  const parts = [TOOLS_NOT_SWITCHABLE_LABEL + ": " + n.ids.map(name).join(", ") + "."];
   if (n.why) parts.push(n.why);
   return parts.join(" ");
 }

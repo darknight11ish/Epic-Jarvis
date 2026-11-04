@@ -39,7 +39,7 @@ import {
   TOOLS_LABEL,
   extraToolView,
   extraToolsView,
-  notOfferedView,
+  notSwitchableView,
   toolGroupsView,
   toolSwitchView,
   vaultSwitchView,
@@ -149,10 +149,10 @@ function paint() {
 }
 
 /**
- * "Let the AI use this": the tiered one-tool switches (Tier A and Tier B),
- * grouped, plus the vault organizer's own separate row, plus the plain note
- * naming every tool this slice does NOT offer in-app. One switch per row;
- * phone read-only because can_enable is false there.
+ * "Let the AI use this": every one-tool switch the PC offers (all of them
+ * since 2026-11-04), grouped, plus the vault organizer's own separate row,
+ * plus the plain note naming the few tools whose own switch decides them. One
+ * switch per row; phone read-only because can_enable is false there.
  */
 function paintTools() {
   if (!el.tools) return;
@@ -219,7 +219,7 @@ function paintTools() {
     box.append(ul);
     parts.push(box);
   }
-  const note = notOfferedView(tools);
+  const note = notSwitchableView(tools);
   if (note) parts.push(node("p", "note", note));
   el.tools.replaceChildren(...parts);
 }

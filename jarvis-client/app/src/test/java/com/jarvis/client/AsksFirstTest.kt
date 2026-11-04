@@ -159,19 +159,23 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        // 21 Tier A + Tier B switches. It was 23 while the conversation
-        // web-search grant's two tools were rows here; they were removed on
-        // 2026-11-02, because the field test found the switch was never on, so
-        // the model was never offered the tool and no grant card could be
-        // raised. The grant ask rides with web search now, so it has no row.
-        assertEquals("21 one-tool switches", 21, rawIds.size)
-        for (id in listOf("approve_web_search_for_conversation", "stop_web_search_approval")) {
-            assertFalse("the web-search grant's $id must NOT be a switch row any more",
+        // 48 since the owner's decision of 2026-11-04: every tool the AI model
+        // can be offered is a switch, raw Tier C set and everyday helpers
+        // included (21 before that). The phone still shows them read-only.
+        assertEquals("48 one-tool switches", 48, rawIds.size)
+        for (id in listOf("shell_exec", "control_computer", "browser_control",
+                "read_web_page", "connect_account", "rea_investigate",
+                "calculator", "propose_plan", "web_search")) {
+            assertTrue("$id is switchable in the app since 2026-11-04", rawIds.contains(id))
+        }
+        for (id in listOf("approve_web_search_for_conversation", "stop_web_search_approval",
+                "run_data_script")) {
+            assertFalse("$id has no switch of its own (its own switch decides it)",
                 rawIds.contains(id))
         }
         assertEquals("every tool, in the PC's own order",
             rawIds, t.groups.flatMap { g -> g.rows.map { it.id } })
-        assertEquals("the PC's four group titles, in order",
+        assertEquals("the PC's seven group titles, in order",
             raw["groups"]!!.jsonArray.map { it.jsonObject["title"]!!.jsonPrimitive.content },
             t.groups.map { it.title })
         assertEquals("a label is the backend's human label, not the id",
@@ -187,16 +191,17 @@ class AsksFirstTest {
     }
 
     @Test
-    fun `the vault organizer is its own row and the TOML-only note says what is left out`() {
+    fun `the vault organizer is its own row and the not-a-switch note says what is left out`() {
         val t = requireNotNull(view("phone_shipped").tools)
         val vault = requireNotNull(t.vault) { "the vault organizer's own switch is missing" }
         assertEquals("Organize an Obsidian vault", vault.title)
         assertTrue("its own words explain what it does", vault.what.contains("tidy-up"))
         assertTrue("its state is in words", AsksFirst.vaultState(vault).isNotEmpty())
-        val no = requireNotNull(t.notOffered) { "the not-offered list is missing" }
-        assertEquals("16 tools stay a settings-file choice", 16, no.labels.size)
-        assertTrue("the note says where they really live", no.why.contains("jarvis-framework.toml"))
-        assertTrue("it names the raw ones it never offers", no.why.contains("shell"))
+        val no = requireNotNull(t.notSwitchable) { "the not-a-switch list is missing" }
+        assertEquals("3 tools have no switch of their own", 3, no.labels.size)
+        assertTrue("the note names the real switch for the sandbox", no.why.contains("Data sandbox"))
+        assertTrue("... and says the web-search two ride with web search",
+            no.why.contains("Web search"))
         assertEquals("the phone shows the PC's own sentence",
             word("tools_pc_only"), AsksFirst.TOOLS_PC_ONLY)
     }
@@ -209,7 +214,7 @@ class AsksFirstTest {
         assertTrue("no tool section drawn", plate.contains("v.tools?.let"))
         assertTrue("no plain PC-only sentence", plate.contains("AsksFirst.TOOLS_PC_ONLY"))
         assertTrue("no vault organizer row", plate.contains("t.vault?.let"))
-        assertTrue("no TOML-only note", plate.contains("AsksFirst.TOOLS_TOML_ONLY_TITLE"))
+        assertTrue("no not-a-switch note", plate.contains("AsksFirst.TOOLS_NOT_SWITCHABLE_TITLE"))
         val block = plate.substringAfter("v.tools?.let").substringBefore("(if (busy)")
         assertFalse("a switch was drawn inside the read-only tools block", block.contains("SwitchRow("))
         for (banned in listOf("JarvisRuntime.makeAskFirst", "JarvisRuntime.setLightsWithoutCard",
