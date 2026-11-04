@@ -494,6 +494,28 @@ def t_touches_match_the_modules():
               or "changes nothing" in text or "never marks" in text)
 
 
+def t_the_numbers_in_the_profiles_match_the_code():
+    """A number in a dossier is a claim like any other, so it is measured here.
+
+    The feature guide's own module docstring says 140 rows; the catalogue this
+    tree actually ships holds 175 in nine groups. A docstring is not the
+    catalogue, so the profile states the measured count and this check keeps it
+    honest as features are added."""
+    import jarvis_feature_catalogue as C
+    rows, groups = len(C.FEATURES), len(C.GROUPS)
+    text = T.PROFILES["feature_guide"]["what"]
+    check(f"the feature guide's row count is the catalogue's real one ({rows})",
+          str(rows) in text, f"{rows} rows in the catalogue; profile says: {text}")
+    check(f"... and its group count is the real one ({groups})",
+          str(groups) in text, text)
+    counts = T.PROFILES["setup_quiz"]["what"]
+    import jarvis_setup as SU
+    questions = len(SU.QUESTIONS) if hasattr(SU, "QUESTIONS") else None
+    check("the setup quiz's question count is the real one",
+          questions is not None and str(questions) in counts,
+          f"{questions} questions; profile says: {counts}")
+
+
 def t_no_profile_claims_an_ungated_way_out():
     """Anything that reaches off this PC or runs a program must say it is carded."""
     carded = {"shell_exec", "control_computer", "control_phone", "browser_control",
@@ -605,6 +627,7 @@ def main():
                    t_off_by_default_really_ships_off,
                    t_rea_really_refuses_live_process_capture,
                    t_touches_match_the_modules,
+                   t_the_numbers_in_the_profiles_match_the_code,
                    t_no_profile_claims_an_ungated_way_out)),
         ("behaviour", (t_answer_about_the_expected_phrasings,
                        t_answer_about_the_document_question,
