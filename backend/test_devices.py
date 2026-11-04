@@ -584,6 +584,13 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # branches to jarvis_hud.py and has no hunk in
                                 # jarvis_gate.py at all.
                                 "phone-apps.patch",
+                                # bench.patch (2026-11-04, the self-benchmark) is appended after this
+                                # patch, immediately before plugin-loader.patch: TWO hunks, both in
+                                # jarvis_hud.py (the GET /api/bench routes and the POST /api/bench
+                                # routes), anchored inside hardware.patch's own added blocks. It touches
+                                # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
+                                # rewrites nothing this patch wrote.
+                                "bench.patch",
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",

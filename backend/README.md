@@ -86,7 +86,7 @@ Settings screen and no app change, which is why `tools/check_parity.py` is
 untouched. Proved by `backend/test_plugin_switch.py`; documented in
 `docs/JARVIS-API.md` section 181 and `docs/ARCHITECTURE.md` section 8.
 
-**The GitHub tools - "Read + actions" (2026-11-03; JARVIS-API §185).** The
+**The GitHub tools - "Read + actions" (2026-11-03; JARVIS-API §186).** The
 owner's decision that Jarvis may read his GitHub and take a few small actions on
 it, each behind its own card, never merging and never pushing. Six model tools
 in `backend/jarvis_agent.py`, all on the network half in
@@ -112,7 +112,7 @@ and ending at EOF), so a block put after it broke that reversal. It anchors on
 the owner's own text - the end of `review()` and the opening of the
 `if __name__` block. All six ship
 switched off, like `github_search`. Proved by `backend/test_github_tools.py`
-(no network, no real token); documented in `docs/JARVIS-API.md` section 185 and
+(no network, no real token); documented in `docs/JARVIS-API.md` section 186 and
 `docs/ARCHITECTURE.md` section 8.
 
 **Order.** This is a *stack*, not a set. The table order is the only order that

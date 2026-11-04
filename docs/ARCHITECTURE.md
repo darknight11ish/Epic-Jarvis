@@ -2752,7 +2752,7 @@ backend routes, in both directions; the rest are listed here only.
 
 - **Your own GitHub is read and acted on by chat, and neither app has a screen
   for it - one-sided on purpose** (2026-11-03; the owner's decision: *"GitHub
-  tools = Read + actions"*; JARVIS-API §185). The ABILITY is on both apps'
+  tools = Read + actions"*; JARVIS-API §186). The ABILITY is on both apps'
   chats, because the six model tools (`github_list`, `github_read_file`,
   `github_ci_status`, `github_comment`, `github_open_issue`,
   `github_rerun_workflow`) run on this PC and either app's chat is the same
@@ -2765,7 +2765,7 @@ backend routes, in both directions; the rest are listed here only.
   reads - they ask too, because a read still sends the saved GitHub token out)
   and the three actions. They are NOT the existing `github_read`, which is the
   scheduled look a "tell me when" watch makes and must stay `auto`; the reason
-  is in JARVIS-API §185.2. Nothing can merge, push, commit, delete or close.
+  is in JARVIS-API §186.2. Nothing can merge, push, commit, delete or close.
   `backend/test_github_tools.py` holds the whole of it.
 
 - **More than one conversation window is the desktop's, and that is one-sided on

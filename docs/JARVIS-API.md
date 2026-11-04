@@ -32925,11 +32925,187 @@ existing per-answer `X-Jarvis-Route` field). **No `features/features.json` entry
 is added by this work** - that row is still waiting on the app lanes; the PR
 says exactly what each checker reported.
 
-## 185. Your own GitHub: read it, and three small actions on it - each one card, and it can never merge, push or close (backend, both apps' chat, added 2026-11-03)
+## 185. Jarvis measures its own token speed: one run, two rates, and its own history (backend phase 1, added 2026-11-04)
+
+The owner's ask of 2026-11-04: measure Jarvis's own token speed across the
+local models, the RAM/GPU layer placement and the context sizes, keep a
+**separate** history of those runs, and explain the results in plain words.
+This section is phase 1 of the design in
+`.dsh-scratch/BENCHMARK-2026-11-04/DESIGN.md` - the measurement engine and its
+store, with **no screens yet**. `backend/jarvis_bench.py` (shipped whole, and
+its `jarvis-backend/` twin) does the work; `backend/bench.patch` is the five
+route branches in `jarvis_hud.py` that reach it, and it holds no logic of its
+own.
+
+**ONE RUN = one model + one setup + N repeats + one target lane.** A repeat
+asks Ollama one question, reads Ollama's own counters out of the reply, samples
+both graphics cards, and writes ONE row; the run then writes a second row with
+the setup and the median/min/max over its repeats. Every row goes to
+`~/.openjarvis/bench.jsonl` - a NEW file with its own allowlist, its own 500-run
+cap and a 2 MB ceiling. **`speed.jsonl` is never opened**: that file's promise
+is that rows are never deleted or rewritten, and this feature has a DELETE in a
+later phase, so mixing them would widen the allowlist that currently guarantees
+no conversation text can be written and would overload `speed.jsonl`'s
+`view()`.
+
+| Route | What it is |
+|---|---|
+| `GET /api/bench` | the controls screen's whole data: the defaults, the ladders the snapping controls snap to, each lane with the card it really is and what that lane has installed, the two cards and the driver from `nvidia-smi`, whether Jarvis is on standby, whether a run is in flight, and the last run. **Read-only: it starts and loads nothing.** `?model=` adds that model's `block_count` and trained `context_length`, which is one `/api/show` round trip and is paid only when a model is picked |
+| `POST /api/bench/run` | start ONE run. Body `{model, lane, num_ctx, num_gpu, num_predict, prefill_tokens, repeats, warmup, unload, confirm: {model, lane, may_evict: true}}`. **No approval card, and `confirm` is mandatory** (below). Asynchronous: it spawns and returns 200 `{ok, run_id, notes}`, so a two-minute run cannot hang a request thread |
+| `GET /api/bench/run/<id>` | how the run is going, and its numbers when it is done: `200 {state: running\|done\|failed, step, of, partial, result?}`; `404` when no run has that id |
+| `POST /api/bench/cancel` | `{run_id}` - stop after the repeat in flight. The repeat already running is **not** killed: a request cut off mid-answer leaves Ollama's counters unusable, and half a measured repeat is not a number. `409` when that run has already finished |
+| `GET /api/bench/history` | the run rows, newest first. `?limit=&model=&lane=&preset=`; a filter is an **exact** match on the stored name, because a fuzzy one would let a screen say `qwen3.5:9b` and mean `qwen3.5:4b`. `{runs, total, note}`, and `note` is always a sentence - "No benchmark runs on file yet." and "No benchmark runs match that filter." are different facts |
+
+Status codes follow the house style `hardware.patch` already uses: `200` ok,
+`400` bad body or missing `confirm`, `401` bad token, `403` cross-origin, `409`
+refused with a sentence, `503` could not start.
+
+**WHAT A RUN REFUSES, and why each one is a sentence rather than a silent no.**
+A benchmark started while something else is using the model measures the
+QUEUE, not the model. In this order:
+
+```
+409  a benchmark is already running; it takes a minute or two
+409  Jarvis is answering. Measuring now would time the queue, not the model.
+409  Jarvis is on standby, which keeps the graphics card free; measuring would
+     load a model onto it. Wake Jarvis first
+409  a task is running; it uses the model, so the benchmark would time the
+     queue instead of the model
+409  the <lane> lane is not running; start it first
+409  <model> is not installed on the <lane> lane. It has: <what is>
+400  Nothing was measured: Ollama's address (<base>) is not this PC, and a
+     benchmark only talks to this PC.
+400  nothing was measured: the run was not confirmed
+```
+
+**The lane is never started as a side effect.** If the chosen lane's Ollama is
+not running the run is refused; the only thing in Jarvis that starts a lane
+stays a preset apply (`jarvis_presets.APPLY_ACTION`). **"Jarvis is answering"
+is already wired to the real chat path without a patch hunk inside the chat
+handler**: the check asks `jarvis_power_switch._busy_reason()`, which reads the
+HUD's own activity state - `_activity("speaking")` when the first chunk goes
+out, `_activity("working")` during a tool call, `_activity("idle")` at the end -
+the same signal both apps already show the owner. A module flag
+(`jarvis_bench.note_answer_start()`) makes the same refusal reachable exactly
+from a caller that knows it is about to stream.
+
+**NO APPROVAL CARD, AND THAT IS THE RECORDED DECISION** (DESIGN section 7):
+`POST /api/hardware/measure` already runs with no card, for the stated reason
+that it "runs one short prompt per model on this PC and changes no setting", and
+here the owner pressing Measure is the actor - a card would ask him to approve
+his own button press. What a card would have bought is bought explicitly
+instead: the POST must carry `confirm: {model, lane, may_evict: true}`, and the
+UI fills it only after naming exactly what will happen. A `confirm` that names a
+different model or lane than the body is **not** a confirmation of this run and
+is refused too, so a stale screen cannot start a run nobody agreed to. Nothing
+is auto-approved and rule 4 is untouched.
+
+**THE PREFILL TRAP, WHICH IS THE REASON THIS FEATURE NEEDS ITS OWN FORMULA.**
+`prompt_eval_duration` times only the prompt tokens Ollama actually COMPUTED,
+while `prompt_eval_count` counts the WHOLE prompt including the part it read
+from its cache. So prompt speed is **always**
+
+```
+(prompt_eval_count - prompt_eval_cached_count) / (prompt_eval_duration / 1e9)
+```
+
+and never `prompt_eval_count / prompt_eval_duration`. The measured example
+(Ollama 0.34.0, `qwen2.5:7b`, RESEARCH section 3.1): 318 prompt tokens, **317 of
+them cached**, 23.00 ms of evaluation. The naive division reports **13,826
+tokens a second**; the model really read one token in 23 ms, which is **43** - a
+318x lie built from two numbers that are each individually correct. Two more
+rules follow and both are stored: when `cached == count` there is nothing left
+to time, so the row says **"cached - prefill not measured"** and never `0` and
+never infinity; and when `prompt_eval_cached_count` is absent (Ollama before
+0.33.3) the answer is **unknown, never 0**, because defaulting it to zero turns
+"I do not know" into a confident, too-high number. `jarvis_speed.timing_from_reply()`
+is deliberately **not** reused for this: its `first_word_ms` is
+`load_duration + prompt_eval_duration`, i.e. the UNCACHED prefill time, which
+under-reports time-to-first-token whenever part of the prompt was cached.
+
+**THE REST OF WHAT IS REPORTED**, all on the row and all from something that
+measured it: generation as `eval_count / eval_duration`; **two**
+time-to-first-token numbers - the harness's own wall clock from POST to the
+first streamed chunk (the one the owner waited), and Ollama's
+`load_duration + prompt_eval_duration` - with the row saying so when they
+disagree by more than 15%; `total_ms` and Ollama's `total_duration`; VRAM peak
+and base **per card** from `nvidia-smi` (`memory.used` sampled before, after
+every repeat and at the end) and `utilization.gpu`; the context really in use
+from `/api/ps` `context_length`, recorded **beside** the one that was asked for
+because they are not always the same; the model's `block_count` read from
+`/api/show`; and the offload from **two independent sources** - `/api/ps`
+`size` vs `size_vram` (`on_card_percent`) and `offloaded N/M layers to GPU`
+through `jarvis_hardware.parse_ollama_log`, which already had that parser and is
+not re-implemented here. When the two disagree **both are kept**. Per-process
+VRAM is not claimed at all: `nvidia-smi --query-compute-apps used_memory`
+answers `[N/A]` for every process on driver 617.42, so the row says "card 0 rose
+by X MB while this ran" and never "this model used X MB".
+
+**A SPILLED RUN IS LABELLED AND IS NEVER PRESENTED AS FAST.** When any of the
+model was off the card the run's one sentence opens with `PARTIAL:` and says the
+numbers are not comparable with a fully-on-card run, and the setup is described
+as what was **asked for** rather than as what happened - "32 of 32 layers on the
+card" beside "only 93% of it was in video memory" would be a sentence that
+contradicts itself, with no way for a reader to tell which half is the
+measurement. **A run that could not measure writes `ok: false` with a `why`
+sentence and never a zero**: there is no silent gap, because the next reader
+cannot tell a gap from a run that was never started. `ollama_version` and
+`driver_version` go on every row - this PC's driver has already moved once
+(616.56 to 617.42) and a tok/s number without them is not comparable to
+anything.
+
+**THE ROWS ARE TWO FLAT KINDS, with the same allowlist discipline as
+`jarvis_speed._clean()`**: `kind: "bench"` is one repeat and `kind:
+"bench-run"` is one run with its setup, its medians, `spilled`,
+`worst_repeat_ok`, and `words` - the one sentence both apps display, built in
+the engine so the desktop and the phone cannot word the same result two
+different ways. **No prompt text is ever stored**: the prefill prompt is
+generated from a fixed, counted word list with a per-repeat tag and is thrown
+away, and what is stored is how many tokens Ollama said it really counted. The
+allowlist is why `{"prompt": ...}` handed in by a caller that made a mistake is
+dropped rather than written.
+
+**THE ADVICE SENTENCE IS BUILT AND TESTED; ITS ROUTE IS PHASE 4.**
+`jarvis_bench.advice()` returns `{note, numbers, enough}` from `bench.jsonl` and
+nothing else - it cannot run a benchmark, delete a row, or reach the network.
+**Under three usable runs of a model it refuses to compare**, with "Only 2
+runs of that model are on file; three are needed before I compare them" - the
+same floor `jarvis_speed.compare_latency()` refuses under, because two lists of
+two can differ by 40% from noise alone. At three it names the fastest and the
+fastest that did not spill, and a comparison that spans a driver or Ollama
+version change says so rather than quietly mixing two machines into one
+verdict.
+
+**WHAT IS DELIBERATELY NOT WIRED YET, and this is not an accident.** The routes
+of DESIGN section 6 that phase 1 does **not** wire are `/api/bench/history/{id}`
+and its DELETE (the separate History window, phase 3), `/api/bench/presets`
+(two routes - benchmark presets are phase 4), `/api/bench/advice` (phase 4) and
+the read-only `benchmark_results` chat tool (phase 4). The desktop Benchmark
+panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5;
+until then `tools/check_parity.py` carries these five routes in `BACKEND_ONLY`
+with the lane named in each reason, because neither app calls any of them on
+this tree - a state that check FAILS the day an app starts calling one, which is
+the point of putting it there. **Nothing here has been measured on real
+hardware**: `backend/test_bench.py` drives every formula and every refusal from
+a fake Ollama reply and fake `nvidia-smi` text, and one real run is a field
+test, not a test (DESIGN section 12) - a CI runner has no cards and no models,
+so those rows are BLOCKED, never PASS.
+
+**PROVED BY** `backend/test_bench.py`: 236 checks, 0 failed - every refusal row
+of DESIGN section 2 with its exact sentence, the 318x trap (a reply of 318/317/
+23 ms must yield 43.48 and must NOT yield 13,826), the fully-cached case, absent
+is not zero, generation rate against a literal, both time-to-first-token
+numbers, the median/spread/warmup-drop pure functions, a run that is not fully
+on the card (its sentence leads with `PARTIAL:`), a failed run that writes
+`ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
+500-run cap keeping whole runs, the byte ceiling, the allowlist, the
+three-run comparison floor, and that no run can start without `confirm`.
+
+## 186. Your own GitHub: read it, and three small actions on it - each one card, and it can never merge, push or close (backend, both apps' chat, added 2026-11-03)
 
 The owner's decision of 2026-11-03: *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card, never merge and never push**.
 
-### 185.1 What exists, and what each one does
+### 186.1 What exists, and what each one does
 
 `backend/jarvis_github.py` is the whole of the network half. It talks to `api.github.com` and to nothing else: every address is built from the module's own `GITHUB_API` constant plus a path the module wrote, so there is **no arbitrary-URL code path at all** and a model cannot point it at another host. A redirect is REFUSED rather than followed (`_RefuseRedirect`), because following one would hand the owner's token to whoever answered. Every answer is capped (`MAX_BYTES` for a list, `MAX_FILE_CHARS` for a file) and every request has a timeout.
 
@@ -32946,7 +33122,7 @@ Six tools in `backend/jarvis_agent.py`:
 
 `github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
 
-### 185.2 The tiers: `ask`, on its own action, and never `auto`
+### 186.2 The tiers: `ask`, on its own action, and never `auto`
 
 Four gate actions, every one `ask` in the shipped `[autonomy.tiers]`: `github_inspect` (the three reads), `github_comment`, `github_open_issue`, `github_rerun_workflow`. **`github_rerun_workflow`'s risk row is `reversible = "no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
 
@@ -32956,25 +33132,25 @@ Four gate actions, every one `ask` in the shipped `[autonomy.tiers]`: `github_in
 
 All six tools are also in `jarvis_agent.NEEDS_A_PERSON`, so the setting says how much Jarvis asks and that set says a read like this is never done with nobody asked: an owner who loosens a tier line still gets a card. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
 
-### 185.3 No token, no card
+### 186.3 No token, no card
 
 Without a saved token every one of the six answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
 
-### 185.4 What Jarvis will never do with GitHub
+### 186.4 What Jarvis will never do with GitHub
 
 **No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing.
 
-### 185.5 The wording, the token and the failures
+### 186.5 The wording, the token and the failures
 
 The card prints the **literal address** of every request and, for a comment or an issue, **the whole text that will be posted** - the honest version of "may I post this" is to show the thing. It says the GitHub token is sent to `api.github.com` and nowhere else, and that nothing is merged, pushed, committed, deleted or closed. **The token is never printed**: not on a card, not in a tool result, not in a log line, not in an exception, and a server that echoes it back is scrubbed (`_scrub`). Failures are sentences with **no HTTP code in them**, and each one says what to do: the token was refused (save a new one with "connect GitHub"), GitHub said no for now (too many requests in the hour), there is nothing there (or it is private and this token cannot see it).
 
-### 185.6 Switching it on
+### 186.6 Switching it on
 
 All six ship **SWITCHED OFF** - they are not in `[tools].enabled`, exactly like `github_search`. Add `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` to that list, and save a token by saying "connect GitHub". The Reach page shows each one as off with the line that turns it on until then.
 
 `backend/github-tools.patch` gives `jarvis_gate.py` the four actions and the six `_TOOL_ACTIONS` entries - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
 
-### 185.7 What proves it
+### 186.7 What proves it
 
 `backend/test_github_tools.py` - 186 checks, **no network and no real token**: a socket opened anywhere in it fails the run. It proves the host is `api.github.com` and only that (a `url` argument is ignored, a redirect raises), the scopes are the closed four, every bad repository/path/number is refused, the token appears in no card, body, address or result while it IS sent in the `Authorization` header (the control that stops that check passing for the wrong reason), no token is a plain answer with no card, each action is exactly ONE card naming the repository, the number and the full text, a refused token and a rate limit are sentences with no code in them, nothing from email/files/memory/credentials is sent, the registered tool list has no merge/push/commit/delete/close tool, the four tiers ship as `ask` while `github_read` stays `auto`, every registration table has the six (card words, the Reach page, the claim checker, the "What asks first" page, the small-card list, the short tool list's diet hints), and **the patch reverses out of the published base and applies forward again
 byte for byte, and it sits between `web-search-grant.patch` and the last
@@ -32982,4 +33158,3 @@ writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
 those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
 
 **One-sided on purpose:** there is no screen for this in either app, and `tools/check_parity.py` is unchanged because no route was added. The ability is in both apps' chats (the tools run on this PC, and either app's chat is the same turn); a GitHub screen would be deep configuration, and `docs/ARCHITECTURE.md` §8 carries the reason.
-
