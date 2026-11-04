@@ -457,7 +457,10 @@ await check("CONTROL: Settings only; Rust refuses an action off the list; no app
   }
   const rs = read("src-tauri/src/asks_first.rs");
   assert.match(rs, /if action != LOCKDOWN && !SWITCHABLE\.contains\(&action\)/);
-  assert.match(rs, /if !TOOLS_SWITCHABLE\.contains\(&tool\)/);
+  // D4 (2026-11-04): only the ON direction is refused before it is sent now.
+  // OFF goes to the PC for any real tool name, because the settings file may
+  // have a tool on that this app has no switch row for.
+  assert.match(rs, /if enabled && !TOOLS_SWITCHABLE\.contains\(&tool\)/);
   assert.match(rs, /held_on_stale\(!ask\) && stale\(&app\)/);
   assert.doesNotMatch(rs, /api\/approve/);
   const js = read("src/asks-first-settings.js");

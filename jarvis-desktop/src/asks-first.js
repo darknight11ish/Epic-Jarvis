@@ -98,6 +98,16 @@ export const TOOLS_DETAIL =
 export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
   "first). It takes one approval card and Windows Hello.";
+/**
+ * D4, the owner, 2026-11-04: every tool that is ON is listed, including one the
+ * settings file switched on that this page has no switch row for. Those rows
+ * are OFF switches only - turning one back on is still a hand edit of
+ * [tools].enabled, and the PC's own "why" under the row says so.
+ */
+export const TOOLS_ELSEWHERE_LABEL = "Also on in your settings file";
+export const TOOLS_ELSEWHERE_OFF =
+  "Off now. This page has no switch to turn it back on: add it back to [tools].enabled in " +
+  "jarvis-framework.toml on this PC by hand, then restart Jarvis.";
 
 /** Lockdown (2026-09-28): the PC's words (jarvis_asks_first.py LOCKDOWN_*). */
 export const LOCKDOWN_ACTION = "lockdown";
@@ -172,6 +182,10 @@ function readToolItem(i) {
     waiting: i.waiting === true,
     last: last ? text(last.message) : "",
     lastOutcome: last ? text(last.outcome) : "",
+    // Only the "also on" rows carry these (D4, 2026-11-04): the PC says
+    // switchable: false and gives its own plain reason under the row.
+    switchable: i.switchable === true,
+    why: text(i.why),
   };
 }
 
@@ -193,9 +207,14 @@ function readLockdown(k) {
 /** `view.tools` - the tiered "Let the AI use this" switches, desktop only. */
 function readTools(t) {
   if (!t || typeof t !== "object" || !Array.isArray(t.items)) {
-    return { canEnable: false, items: [], groups: [], vault: null, notOffered: null };
+    return { canEnable: false, items: [], groups: [], vault: null, extra: [], notOffered: null };
   }
   const items = t.items.filter((i) => i && typeof i === "object").map(readToolItem);
+  // D4, 2026-11-04: every tool that is ON, including ones with no switch row
+  // above. A PC older than this sends no `extra`, so the page simply has none.
+  const extra = Array.isArray(t.extra)
+    ? t.extra.filter((i) => i && typeof i === "object").map(readToolItem)
+    : [];
   const groups = Array.isArray(t.groups)
     ? t.groups.filter((g) => g && typeof g === "object")
       .map((g) => ({ title: text(g.title), ids: Array.isArray(g.ids) ? g.ids.map(text) : [] }))
@@ -221,7 +240,7 @@ function readTools(t) {
     labels: Object.fromEntries(Object.entries(labels).map(([k, v]) => [k, text(v)])),
     why: text(n.why),
   } : null;
-  return { canEnable: t.can_enable === true, items, groups, vault, notOffered };
+  return { canEnable: t.can_enable === true, items, groups, vault, extra, notOffered };
 }
 
 /**
@@ -355,6 +374,36 @@ export function toolSwitchView(item, tools, live) {
   }
   if (item.last && item.lastOutcome !== "enabled" && !waitingHere) lines.push(item.last);
   return { checked, disabled, lines };
+}
+
+/**
+ * One "Also on in your settings file" switch (D4, 2026-11-04): {checked,
+ * disabled, lines}. These rows are ON in [tools].enabled but have no switch
+ * row of their own, so this page offers them OFF only. Checked while on;
+ * unchecked and disabled after this page turned one off, because putting it
+ * back is a hand edit of the settings file - the line under the row says so.
+ */
+export function extraToolView(item) {
+  if (!item) return null;
+  const lines = [];
+  if (item.on) {
+    if (item.why) lines.push(item.why);
+    if (item.last && item.lastOutcome !== "enabled") lines.push(item.last);
+    return { checked: true, disabled: false, lines };
+  }
+  // OFF (this page turned it off): the row stays and says OFF truthfully; it
+  // cannot be switched back on from here.
+  lines.push(item.last || item.why || TOOLS_ELSEWHERE_OFF);
+  return { checked: false, disabled: true, lines };
+}
+
+/**
+ * Every "Also on in your settings file" row, from the PC's `tools.extra`, in
+ * the PC's own order and words. Empty from a PC older than D4.
+ */
+export function extraToolsView(tools) {
+  if (!tools || !Array.isArray(tools.extra)) return [];
+  return tools.extra.filter((i) => i && i.id);
 }
 
 /**

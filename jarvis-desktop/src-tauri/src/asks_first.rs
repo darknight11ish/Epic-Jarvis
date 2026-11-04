@@ -27,8 +27,12 @@
 //!   DIFFERENT thing from [`set_asks_first`], which is whether an offered
 //!   tool asks first. `enabled: true` is the PC only, one approval card
 //!   that needs Windows Hello, so it is held on a stale link; `enabled:
-//!   false` is at once, never held, from either app. A tool off the list is
-//!   refused HERE too, before anything is sent; the PC refuses it as well.
+//!   false` is at once, never held, from either app. ON for a tool off the
+//!   list is refused HERE too, before anything is sent, and the PC refuses
+//!   it as well. OFF is different since D4 (the owner, 2026-11-04): the
+//!   Tools page may turn OFF anything that is on, including a tool enabled
+//!   in the settings file that this app has no row for, so any real tool
+//!   name is sent and the PC decides.
 //!   Desktop only (CLAUDE.md: no deep config editing on the phone).
 
 use std::time::Duration;
@@ -176,16 +180,34 @@ pub(crate) fn tier_body(action: &str, ask: bool) -> Result<serde_json::Value, St
     Ok(serde_json::json!({ "action": action, "ask": ask }))
 }
 
-/// The body of one "offer this to the AI model" switch, or why not: only a
-/// tool on [`TOOLS_SWITCHABLE`].
+/// The body of one "offer this to the AI model" switch, or why not.
+///
+/// ON is only for a tool on [`TOOLS_SWITCHABLE`]: offering an unlisted tool is
+/// still a deliberate settings-file edit. OFF is different since D4 (the
+/// owner, 2026-11-04): the Tools page may turn OFF anything that is on,
+/// including a tool enabled in `[tools].enabled` that this app has no switch
+/// row for - so every real tool name is sent, and the PC itself decides (200
+/// and the line is removed, or its own 403 when nothing is on by that name).
 pub(crate) fn tool_body(tool: &str, enabled: bool) -> Result<serde_json::Value, String> {
-    if !TOOLS_SWITCHABLE.contains(&tool) {
-        if tool.is_empty() || tool == "nonsense" {
-            return Err(TOOLS_NOT_ON_LIST.to_string());
-        }
+    if !plausible_tool_name(tool) {
+        return Err(TOOLS_NOT_ON_LIST.to_string());
+    }
+    if enabled && !TOOLS_SWITCHABLE.contains(&tool) {
         return Err(TOOLS_TOML_ONLY_NOTE.to_string());
     }
     Ok(serde_json::json!({ "tool": tool, "enabled": enabled }))
+}
+
+/// A name the backend's own `[tools].enabled` writer accepts: a lowercase
+/// letter, then lowercase letters, digits or `_` (`rewrite_tools`'s own rule).
+/// A malformed name is refused here so no pointless request is sent.
+fn plausible_tool_name(tool: &str) -> bool {
+    let bytes = tool.as_bytes();
+    (2..=61).contains(&bytes.len())
+        && bytes[0].is_ascii_lowercase()
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'_')
 }
 
 /// Whether a change is held while the event stream is stale: loosening
@@ -363,21 +385,36 @@ mod tests {
     }
 
     #[test]
-    fn only_the_tiered_tools_can_be_offered_and_only_on_is_held() {
+    fn only_the_tiered_tools_can_be_turned_on_but_anything_on_can_be_turned_off() {
         for t in TOOLS_SWITCHABLE {
             assert!(tool_body(t, false).is_ok());
             assert!(tool_body(t, true).is_ok());
+        }
+        // D4 (2026-11-04): the Tools page may turn OFF anything that is on,
+        // including a tool this app has no switch row for. The name is sent
+        // and the PC decides whether it really is on; only ON is refused here.
+        for t in [
+            "browser_control",
+            "shell_exec",
+            "read_web_page",
+            "connect_account",
+            "plugin_scan",
+        ] {
+            assert!(tool_body(t, false).is_ok(), "OFF must be sent: {t}");
         }
         for t in [
             "browser_control",
             "shell_exec",
             "read_web_page",
             "connect_account",
+            "plugin_scan",
+            "nonsense",
         ] {
-            assert_eq!(tool_body(t, false).unwrap_err(), TOOLS_TOML_ONLY_NOTE);
+            assert_eq!(tool_body(t, true).unwrap_err(), TOOLS_TOML_ONLY_NOTE);
         }
-        for t in ["", "nonsense"] {
+        for t in ["", "Not A Tool", "_tool", "9tool"] {
             assert_eq!(tool_body(t, false).unwrap_err(), TOOLS_NOT_ON_LIST);
+            assert_eq!(tool_body(t, true).unwrap_err(), TOOLS_NOT_ON_LIST);
         }
         assert!(held_on_stale(true));
         assert!(!held_on_stale(false));

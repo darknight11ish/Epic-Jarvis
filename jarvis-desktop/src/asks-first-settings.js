@@ -35,7 +35,10 @@ import {
   SWITCH_LABEL,
   switchView,
   TOOLS_DETAIL,
+  TOOLS_ELSEWHERE_LABEL,
   TOOLS_LABEL,
+  extraToolView,
+  extraToolsView,
   notOfferedView,
   toolGroupsView,
   toolSwitchView,
@@ -192,6 +195,29 @@ function paintTools() {
     const ul = node("ul", "sc-cards");
     ul.append(li);
     parts.push(node("h4", "subhead", "Its own switch"), ul);
+  }
+  // D4 (2026-11-04): every tool that is ON, including ones the settings file
+  // switched on that this page has no switch row for. Each is an OFF switch
+  // only; the PC's own "why" says so under the row.
+  const elsewhere = extraToolsView(tools);
+  if (elsewhere.length) {
+    const box = node("div", "af-group");
+    box.append(node("h4", "subhead", TOOLS_ELSEWHERE_LABEL));
+    const ul = node("ul", "sc-cards");
+    for (const item of elsewhere) {
+      const li = node("li", "sc-gpu");
+      li.dataset.tool = item.id;
+      li.append(node("span", "sc-gpu-name", item.title));
+      const tv = extraToolView(item);
+      if (tv) {
+        li.append(toggle(`af-tool-${item.id}`, TOOLS_LABEL, "", tv.checked,
+          busy || tv.disabled, (want, box2) => changeTool(item.id, want, box2)));
+        for (const line of tv.lines) li.append(node("span", "sc-gpu-role", line));
+      }
+      ul.append(li);
+    }
+    box.append(ul);
+    parts.push(box);
   }
   const note = notOfferedView(tools);
   if (note) parts.push(node("p", "note", note));
