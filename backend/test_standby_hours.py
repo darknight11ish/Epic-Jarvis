@@ -137,6 +137,21 @@ def cover_now(**kw):
     CONFIG["power"].update(kw)
 
 
+def away_from_now(**kw):
+    """A window that CANNOT contain the REAL clock: it opens two hours from now
+    and lasts three, so the real minute sits two hours clear of its start and
+    twenty-two clear of its end. `current()` takes no time argument, so this is
+    how the outside-the-window answer is proved at every hour of the day - the
+    fixed 23:00-07:00 window happens to contain 01:51Z, which is when CI ran and
+    made the "outside the window" assertion fail for eight hours of every day."""
+    from datetime import timedelta
+    n = datetime.now()
+    CONFIG["power"].update({"schedule_enabled": True,
+                            "quiet_start": (n + timedelta(hours=2)).strftime("%H:%M"),
+                            "quiet_end": (n + timedelta(hours=5)).strftime("%H:%M")})
+    CONFIG["power"].update(kw)
+
+
 # ---------------------------------------------------------------------------
 #   1. The decision table
 # ---------------------------------------------------------------------------
@@ -195,8 +210,18 @@ def t_what_the_window_drops_to():
 
 def t_outside_the_window_nothing_changes():
     reset_power()
-    hours(schedule_enabled=True, schedule_mode="standby")
+    # `current()` reads the real clock, so both halves are asked against
+    # windows built from that clock: one that opens two hours from now cannot
+    # contain it, and one drawn around it must. Neither depends on the hour
+    # this suite runs at, and neither is skipped.
+    away_from_now(schedule_mode="standby")
     eq("outside the window the mode is active", P.current(), "active")
+    cover_now(schedule_mode="standby")
+    eq("inside a window drawn around now the mode is standby", P.current(), "standby")
+    # `rule()` and `enforce()` take a time, so the shipped 23:00-07:00 window
+    # is used for these and they never read the clock.
+    reset_power()
+    hours(schedule_enabled=True, schedule_mode="standby")
     eq("rule() finds nothing", P.rule(at("2026-11-04 12:00")), (None, ""))
     out = P.enforce(at("2026-11-04 12:00"))
     check("enforce() outside the window does nothing", out.get("changed") is False, out)
