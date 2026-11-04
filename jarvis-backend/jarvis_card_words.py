@@ -166,6 +166,15 @@ TITLES = {
     "read_web_page": "read a web page out loud",
     # --- GitHub watches in "tell me when" (2026-09-28)
     "github_read": "check GitHub for a \"tell me when\"",
+    # --- your own GitHub, on demand (2026-11-03, the owner's "Read + actions").
+    # A DIFFERENT action from `github_read` just above, which is the scheduled
+    # look a watch makes: these are looks the model asks for, each one sending
+    # the owner's token out, so each one is its own card. The three actions say
+    # what they will do; none of them can merge, push, commit, delete or close.
+    "github_inspect": "read your GitHub",
+    "github_comment": "post a comment on GitHub",
+    "github_open_issue": "open an issue on GitHub",
+    "github_rerun_workflow": "run a GitHub workflow again",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -395,6 +404,11 @@ SUMMARY = {
     "read_web_page": "read a web page out loud",
     # --- GitHub watches in "tell me when"
     "github_read": "check GitHub for a \"tell me when\"",
+    # The on-demand ones (2026-11-03) - the short line, before "explain more".
+    "github_inspect": "read your GitHub",
+    "github_comment": "post a GitHub comment",
+    "github_open_issue": "open a GitHub issue",
+    "github_rerun_workflow": "run a workflow again",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",

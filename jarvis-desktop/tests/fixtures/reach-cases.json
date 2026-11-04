@@ -1264,6 +1264,30 @@
      "name": "GitHub research"
     },
     {
+     "id": "github_list",
+     "name": "Listing your GitHub repositories, pull requests, issues or runs (one card each)"
+    },
+    {
+     "id": "github_read_file",
+     "name": "Reading one file in a GitHub repository (one card each)"
+    },
+    {
+     "id": "github_ci_status",
+     "name": "Checking how CI went on GitHub (one card each)"
+    },
+    {
+     "id": "github_comment",
+     "name": "Posting a comment on GitHub (one card each)"
+    },
+    {
+     "id": "github_open_issue",
+     "name": "Opening a GitHub issue (one card each)"
+    },
+    {
+     "id": "github_rerun_workflow",
+     "name": "Running a GitHub workflow again (one card each)"
+    },
+    {
      "id": "web_search",
      "name": "Web search"
     },

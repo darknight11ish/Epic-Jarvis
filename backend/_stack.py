@@ -614,7 +614,19 @@ RATCHET = {
     #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
     #: applies the patch to the published base and reverses it byte for byte. A
     #: ratchet: it may still only go down.
-    "jarvis_gate.py": 59,
+    #:
+    #: 60, RAISED from 59 on 2026-11-03 for `github-tools.patch`, and looked at
+    #: rather than waved through. Its ONE hunk appends at the very END of the
+    #: file, so its whole pre-image is the last three lines - and those three
+    #: are `web-search-grant.patch`'s own closing lines, which the walk builds
+    #: from that patch's added text rather than reading them, so it materialises
+    #: exactly those 3 and nothing else. The drift is not real, and that is
+    #: measured, not assumed: the patch applies forward to
+    #: `jarvis-backend/jarvis_gate.py` (the published base, the state the whole
+    #: stack leaves) and reverses out of it BYTE FOR BYTE, which
+    #: backend/test_github_tools.py checks. It is the same shape
+    #: `web-search-grant.patch` itself already has above.
+    "jarvis_gate.py": 60,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

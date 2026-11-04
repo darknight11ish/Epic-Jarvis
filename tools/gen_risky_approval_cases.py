@@ -135,6 +135,7 @@ SMALL_ACTIONS = (
     "news_read",            # the news feeds he chose
     "page_read",            # the one page he already named
     "github_read",          # public GitHub data
+    "github_inspect",       # your own GitHub, read on demand (2026-11-03)
     "browse_model_catalog", # a fixed public query
     "calendar_read",
     "email_read",

@@ -2744,6 +2744,24 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Your own GitHub is read and acted on by chat, and neither app has a screen
+  for it - one-sided on purpose** (2026-11-03; the owner's decision: *"GitHub
+  tools = Read + actions"*; JARVIS-API §184). The ABILITY is on both apps'
+  chats, because the six model tools (`github_list`, `github_read_file`,
+  `github_ci_status`, `github_comment`, `github_open_issue`,
+  `github_rerun_workflow`) run on this PC and either app's chat is the same
+  turn. What is deliberately one-sided is a screen: neither app lists repos,
+  pull requests or runs, and neither opens a comment box. A repository list, a
+  diff and a comment editor are deep configuration and a second door onto the
+  owner's own code; the chat tool is the door, and the card is the decision. No
+  route was added, so `tools/check_parity.py` is unchanged and clean. What asks
+  first is four gate actions, every one `ask`: `github_inspect` (the three
+  reads - they ask too, because a read still sends the saved GitHub token out)
+  and the three actions. They are NOT the existing `github_read`, which is the
+  scheduled look a "tell me when" watch makes and must stay `auto`; the reason
+  is in JARVIS-API §184.2. Nothing can merge, push, commit, delete or close.
+  `backend/test_github_tools.py` holds the whole of it.
+
 - **Plugins are listed and switched by chat, and neither app has a screen for
   it - one-sided on purpose** (2026-11-02; the owner's decision: *"Jarvis may
   list plugins and turn them on/off by chat, one card per change"*; JARVIS-API

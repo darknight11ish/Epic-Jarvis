@@ -179,8 +179,24 @@
       "title": "Jarvis wants to turn on a separate lane for fiction and role-play"
     },
     {
+      "action": "github_comment",
+      "title": "Jarvis wants to post a comment on GitHub"
+    },
+    {
+      "action": "github_inspect",
+      "title": "Jarvis wants to read your GitHub"
+    },
+    {
+      "action": "github_open_issue",
+      "title": "Jarvis wants to open an issue on GitHub"
+    },
+    {
       "action": "github_read",
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
+    },
+    {
+      "action": "github_rerun_workflow",
+      "title": "Jarvis wants to run a GitHub workflow again"
     },
     {
       "action": "google_calendar_write",
@@ -993,12 +1009,60 @@
       }
     },
     {
+      "action": "github_comment",
+      "notice": {
+        "title": "Jarvis wants to post a comment on GitHub",
+        "summary": "Jarvis wants to post a GitHub comment.",
+        "full": "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards. nothing has happened yet.",
+        "body": "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_inspect",
+      "notice": {
+        "title": "Jarvis wants to read your GitHub",
+        "summary": "Jarvis wants to read your GitHub.",
+        "full": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+        "body": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_open_issue",
+      "notice": {
+        "title": "Jarvis wants to open an issue on GitHub",
+        "summary": "Jarvis wants to open a GitHub issue.",
+        "full": "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards. nothing has happened yet.",
+        "body": "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_read",
       "notice": {
         "title": "Jarvis wants to check GitHub for a \"tell me when\"",
         "summary": "Jarvis wants to check GitHub for a \"tell me when\".",
         "full": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
         "body": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_rerun_workflow",
+      "notice": {
+        "title": "Jarvis wants to run a GitHub workflow again",
+        "summary": "Jarvis wants to run a workflow again.",
+        "full": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
+        "body": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

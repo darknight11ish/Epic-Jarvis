@@ -204,6 +204,37 @@ raise_attention_budget    = "ask"
 # page_read above, or a look every 10 minutes would mean a card every 10
 # minutes. Without this line GitHub watches are refused, with the reason.
 github_read               = "auto"
+# Reading the owner's own GitHub on demand, and three small actions on it (the
+# owner's decision of 2026-11-03: "Read + actions" - Jarvis may read his repos,
+# open pull requests, issues, CI status and one file, and may comment, open an
+# issue and re-run a workflow, each behind its own card; it may NEVER merge,
+# push, commit, delete or close).
+#
+# WHY A SECOND READ ACTION, and this is the part worth reading before changing
+# anything here: `github_read` above is a SCHEDULED look by a watch the owner
+# already approved, and it MUST stay "auto" - a look every 10 minutes cannot
+# raise a card every 10 minutes. The tools added on 2026-11-03 are LOOKS ON
+# DEMAND, at a moment the model chose, and each one sends the owner's GitHub
+# token out. They are therefore their own action, `github_inspect`, and it is
+# "ask": one card per read. Reusing `github_read` would either run them at
+# "auto" - egress with a credential and nobody asked - or force that line to
+# "ask" and break every GitHub watch. Do not merge the two names.
+#
+# All four are also in `jarvis_agent.NEEDS_A_PERSON`, so an owner who loosens a
+# line below still gets a card: the config says how much Jarvis asks, and that
+# set says a read like this is never done with nobody asked. The three actions
+# cannot be "auto" in any case - `github_comment` and `github_open_issue` post
+# in the owner's name, which cannot be taken back, and `github_rerun_workflow`
+# spends CI work.
+#
+# These tools ship SWITCHED OFF: they are not in [tools].enabled below, exactly
+# like `github_search`. Add the six names (github_list, github_read_file,
+# github_ci_status, github_comment, github_open_issue, github_rerun_workflow) to
+# that list when you want them offered, and save a token with "connect GitHub".
+github_inspect            = "ask"
+github_comment            = "ask"
+github_open_issue         = "ask"
+github_rerun_workflow     = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval

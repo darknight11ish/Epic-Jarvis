@@ -859,7 +859,12 @@ def t_the_patch_is_registered_and_carries_the_change():
              # appended after this patch, immediately before
              # unknown-risk-approvable.patch - it rewrites nothing this patch
              # wrote.
-             "gate-tool-actions-gap.patch"}
+             "gate-tool-actions-gap.patch",
+# github-tools.patch (2026-11-03): ONE hunk, at the very END of
+             # jarvis_gate.py - two .update calls (the six tool names and the four
+             # actions), after everything these patches wrote, so it rewrites none of
+             # their lines.
+             "github-tools.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

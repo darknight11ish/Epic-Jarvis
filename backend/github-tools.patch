@@ -1,0 +1,53 @@
+diff --git a/jarvis_gate.py b/jarvis_gate.py
+index 4cbbc5e44..8f4cd66b7 100644
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -2718,3 +2718,48 @@ _RISK.update({
+     # what the owner just asked to stop.
+     "revoke_web_search_grant": ("yes", "local", "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on"),
+ })
++
++# --------------------------------------------------------------------------
++#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions
++# --------------------------------------------------------------------------
++# The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
++# open pull requests, issues, CI status, one file) and take three small ACTIONS
++# (comment, open an issue, re-run a workflow) - each action behind its own card
++# - and it may never merge, push, commit, delete or close.
++#
++# AT THE END OF THE FILE, FOR THE REASON THE BLOCK ABOVE GIVES: the end belongs
++# to no hunk in either tree, so this patch cannot break on another patch's
++# context. Both `.update` calls run at import, before any `check()`.
++#
++# WHY NOT REUSE `github_read`: that action is the scheduled look a "tell me
++# when" GitHub watch makes, and it is `"auto"` in the shipped settings so a look
++# every ten minutes is not a card every ten minutes. These tools are looks ON
++# DEMAND, at a moment the model chose, each one sending the owner's GitHub
++# token out - so they are their own action, `github_inspect`, at `"ask"`. They
++# are also in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still asks.
++_TOOL_ACTIONS.update({
++    # `action_for_tool` needs these, or every one of the six answers
++    # "unclassified_tool": fail-safe (that asks too), but the card would not be
++    # the card the tool raises, and the Reach page would call it unclassified.
++    "github_list": "github_inspect",
++    "github_read_file": "github_inspect",
++    "github_ci_status": "github_inspect",
++    "github_comment": "github_comment",
++    "github_open_issue": "github_open_issue",
++    "github_rerun_workflow": "github_rerun_workflow",
++})
++_RISK.update({
++    # Reading only. Reversible "yes" and reach "outbound" is the same pair
++    # `github_read`, `page_read` and `news_read` already carry: nothing on
++    # GitHub changes, but the request leaves this PC, so it is never "local".
++    "github_inspect": ("yes", "outbound", "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"),
++    # Posting in the owner's name. "no" for the same reason `send_email` is:
++    # Jarvis cannot edit or withdraw a comment once GitHub has it.
++    "github_comment": ("no", "outbound", "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards"),
++    "github_open_issue": ("no", "outbound", "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards"),
++    # "no", NOT "yes": a re-run changes nothing in the repository by itself, but
++    # a workflow is free to deploy, publish or post notifications, and a run that
++    # has started cannot be taken back. Calling that reversible would be a
++    # promise this file cannot keep.
++    "github_rerun_workflow": ("no", "outbound", "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back"),
++})

@@ -1484,7 +1484,15 @@ SHIPPED = (
     # the same atomic section writer the other settings use. Shipped whole,
     # no patch of its own; phone-apps.patch is the two routes that reach it.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_phone_apps.py"
+    "jarvis_phone_apps.py",
+    # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
+    # the owner's decision: "Read + actions"; JARVIS-API section 189). Fixed
+    # api.github.com addresses only - there is no arbitrary-URL path at all -
+    # the token in the request header and never in a result, and every read and
+    # every action asks a person first. No code write of any kind: it cannot
+    # merge, push, commit, delete or close anything.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_github.py"
 )
 
 

@@ -508,6 +508,18 @@ PIN = {
     # stack changed one later patch's invented-hunk count and
     # backend/test_app_control.py caught it.
     "jobs-routes.patch":                       (4, 27),     # position 164
+    # 2026-11-03, github-tools.patch (position 169). ONE hunk and it appends at
+    # the very END of `jarvis_gate.py`, so its whole pre-image is the last three
+    # lines of the file - which are `web-search-grant.patch`'s own closing lines.
+    # HONEST, not drift: an earlier patch DID write those three lines, and the
+    # walk has them; what it cannot do is read them as literal text before the
+    # later patch's own added block exists in its tree, so it materialises
+    # exactly those 3 and nothing else. Checked the other way by
+    # backend/test_github_tools.py, with `git apply` and no fuzz: applying it to
+    # the text before it reproduces `jarvis-backend/jarvis_gate.py` byte for
+    # byte, and reversing it out of that file gives the earlier text back byte
+    # for byte.
+    "github-tools.patch":                      (1, 3),      # position 169
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

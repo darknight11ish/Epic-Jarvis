@@ -179,7 +179,12 @@ def t_the_patch_and_the_base():
              # menu's card. It is a code patch and it sits before the loader; it
              # has no hunk in jarvis_hud.py at all.
              "skill-install-note.patch",
-             "phone-apps.patch"}
+             "phone-apps.patch",
+# github-tools.patch (2026-11-03): ONE hunk, at the very END of
+             # jarvis_gate.py - two .update calls (the six tool names and the four
+             # actions), after everything these patches wrote, so it rewrites none of
+             # their lines.
+             "github-tools.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

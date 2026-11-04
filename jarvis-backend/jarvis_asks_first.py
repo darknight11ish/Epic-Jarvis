@@ -683,6 +683,15 @@ GROUPS = (
                       "post_to_external_service",
                       "open_public_tunnel",
                       "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
+                      # Your own GitHub, on demand (jarvis_github.py, the owner's
+                      # decision of 2026-11-03: "Read + actions"). All four are
+                      # actions a card can be raised under, so all four are rows
+                      # on this page (test_asks_first.py requires it). The READ
+                      # is here too, not only the three writes: it sends the
+                      # owner's GitHub token out, which is why it asks, and the
+                      # page should say so instead of implying a read is free.
+                      "github_inspect", "github_comment", "github_open_issue",
+                      "github_rerun_workflow",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
@@ -2284,6 +2293,12 @@ LOCKDOWN_ACTIONS = frozenset({
     "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
     "news_read", "page_read", "read_web_page", "github_read", "youtube_captions_read", "quiz_cloud_grade",
+    # your own GitHub, on demand (2026-11-03): all four leave this PC through
+    # api.github.com with the owner's token. They ship as "ask", so Lockdown
+    # changes nothing today - they are here so that a line loosened to
+    # "notify" one day still asks while Lockdown is on, like every other way
+    # out of this PC on this list.
+    "github_inspect", "github_comment", "github_open_issue", "github_rerun_workflow",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

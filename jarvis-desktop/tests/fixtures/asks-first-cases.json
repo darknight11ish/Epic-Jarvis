@@ -611,6 +611,42 @@
        "title": "Hold a conversation with an AI chatbot for you"
       },
       {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
+      },
+      {
        "action": "support_chat",
        "fixed": false,
        "id": "support_chat",
@@ -2226,6 +2262,42 @@
        "title": "Hold a conversation with an AI chatbot for you"
       },
       {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
+      },
+      {
        "action": "support_chat",
        "fixed": false,
        "id": "support_chat",
@@ -3837,6 +3909,42 @@
        "title": "Hold a conversation with an AI chatbot for you"
       },
       {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
+      },
+      {
        "action": "support_chat",
        "fixed": false,
        "id": "support_chat",
@@ -5442,6 +5550,42 @@
        "title": "Hold a conversation with an AI chatbot for you"
       },
       {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
+      },
+      {
        "action": "support_chat",
        "fixed": false,
        "id": "support_chat",
@@ -7045,6 +7189,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -8665,6 +8845,42 @@
        "title": "Hold a conversation with an AI chatbot for you"
       },
       {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
+      },
+      {
        "action": "support_chat",
        "fixed": false,
        "id": "support_chat",
@@ -10274,6 +10490,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",

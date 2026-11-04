@@ -337,7 +337,12 @@ def t_the_patch_is_registered_last():
              # _SAFE_KEYS and three audit writers after _audit. It adds lines and
              # rewrites none of this patch's, which the later_rewriting() half
              # proves.
-             "web-search-grant.patch"}
+             "web-search-grant.patch",
+# github-tools.patch (2026-11-03): ONE hunk, at the very END of
+             # jarvis_gate.py - two .update calls (the six tool names and the four
+             # actions), after everything these patches wrote, so it rewrites none of
+             # their lines.
+             "github-tools.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

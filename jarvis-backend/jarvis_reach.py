@@ -107,6 +107,16 @@ TOOL_NAMES = {
     "control_phone": "Phone control",
     "browser_control": "Browser control",
     "github_search": "GitHub research",
+    # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
+    # 2026-11-03: "Read + actions"). Every one asks you first, and none of them
+    # can merge, push, commit, delete or close anything.
+    "github_list": "Listing your GitHub repositories, pull requests, issues or runs "
+                   "(one card each)",
+    "github_read_file": "Reading one file in a GitHub repository (one card each)",
+    "github_ci_status": "Checking how CI went on GitHub (one card each)",
+    "github_comment": "Posting a comment on GitHub (one card each)",
+    "github_open_issue": "Opening a GitHub issue (one card each)",
+    "github_rerun_workflow": "Running a GitHub workflow again (one card each)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",
@@ -610,6 +620,14 @@ _CAN_DO = {
     "tidy_inbox": "change your mailbox (archive, star, move to Trash)",
     "home_control": "change things in your home, such as lights and locks",
     "github_search": "send search words to GitHub",
+    # The on-demand GitHub tools (2026-11-03). Each line is what the tool can
+    # do, so the "off" row on the page says why it is a deliberate step.
+    "github_list": "read your repositories, pull requests, issues and CI runs from GitHub",
+    "github_read_file": "read one file in a GitHub repository",
+    "github_ci_status": "read how CI went on GitHub",
+    "github_comment": "post a comment on GitHub in your name",
+    "github_open_issue": "open a GitHub issue in your name",
+    "github_rerun_workflow": "start a GitHub workflow run again",
     "browser_control": "open web pages and click and type in them",
     "web_search": "send search words to the internet",
     "control_computer": "click and type in other programs on this PC",
