@@ -2793,6 +2793,19 @@ backend routes, in both directions; the rest are listed here only.
   offering a control that would have to guess. No route was added, so
   `tools/check_parity.py` has nothing new to classify.
 
+- **A routine's PARTS are answered on both apps and created only on the PC, and
+  that is one-sided on purpose** (2026-11-03, the owner's ask; JARVIS-API §21.15;
+  the same rule as the entry above, one wave later). A reminder may carry up to
+  twelve parts, each with its own time and its own buttons; the PC draws one row
+  per part under "Just went off" and the phone one notification action set per
+  part, both through the same `POST /api/schedule/act {"do": "answer", "step": k}`,
+  so answering a part is not one-sided at all. What IS one-sided is creating and
+  editing one: a part's destination can be a file on this PC's Obsidian vault or a
+  goal/habit id, and a phone cannot read this PC's folders. The phone therefore
+  answers parts, reads them, and never creates or edits a routine - and the routine
+  itself is still ONE job, so nothing about the phone's list changed shape. No
+  route was added, so `tools/check_parity.py` has nothing new to classify.
+
 - **Approving a card from a notification is the phone's surface, and that is
   one-sided on purpose** (2026-11-02, the owner's ask; JARVIS-API §177). The
   desktop does not post approval cards to Windows notifications, so there is
@@ -3447,10 +3460,20 @@ delete-all** (Ruling 15 keeps "clear named list" in the Brain window). Phase 1
 is view, add, and the EXISTING one-job actions - snooze, add time, pause,
 resume, done, delete. Editing an item's words/time/repeat, moving it between
 lists and reordering are Phase 2: they need backend actions and a rank column,
-so they need a later deploy, and they are not faked in the page. The phone is
+so they need a later deploy, and they are not faked in the page. **Since
+2026-11-03 that Phase 2 sentence is out of date and is corrected here**: the rank
+column and the `edit`/`move`/`reorder` verbs landed on the PC on 2026-10-22, and
+`EDIT_KEYS` now also carries a reminder's `action` and its routine `steps`
+(JARVIS-API §21.14, §21.15), so the page's editor has a backend to call. What the
+page still has no FORM for is the parts editor itself; when that form lands it
+must be inside the page's one existing script block, because a fifth inline
+`<script>` breaks the CSP/hash rule, and it must be copied to all three copies of
+`jarvis_hud.html` byte for byte. The phone is
 not missing a control: its own app already reads and acts on the same
-schedule. `tools/check_parity.py` has nothing new to classify, because no
-backend route is added and the phone's read of `/api/schedule` is unchanged.
+schedule, and it answers a routine's parts without creating or editing one (see
+"One-sided on purpose" above). `tools/check_parity.py` still has nothing new to
+classify, because no backend route is added and the phone's read of
+`/api/schedule` is unchanged.
 
 **The phone's Home row gained a Reminders button on 2026-11-02, and since that
 afternoon it opens the phone's OWN Reminders screen - the Brain's Coming up
