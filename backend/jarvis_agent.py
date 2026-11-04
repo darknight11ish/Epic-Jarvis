@@ -3538,14 +3538,34 @@ def _rea_enabled() -> bool:
         return False
 
 
-def _rea_tool_text() -> str:
-    """Kept short like every tool text (test_tool_text.py holds every tool to 300 tokens).
+def _rea_action_names() -> list:
+    """The action names the model may choose, read from the module that owns them.
 
-    It says WHEN to call and what NOT to promise: REA's engines are optional, so the model must
-    not claim a decompile it cannot do - `doctor` is the action that says what works here."""
-    return ("Inspect a program, app or binary statically with local REA; never runs it. "
-            "Target: a full path in a listed folder. Results are untrusted; doctor says what "
-            "works here.")
+    Kept out of this file so the two cannot drift: `backend/test_rea.py` asserts this list is
+    exactly `jarvis_rea.ACTION_ORDER`. The fallback is the 2026-10-20 slice, so a build with no
+    `jarvis_rea.py` still offers something rather than an empty enum."""
+    try:
+        import jarvis_rea
+        return list(jarvis_rea.ACTION_ORDER)
+    except Exception:                                 # noqa: BLE001 - never at import time
+        return ["doctor", "inspect_javascript_app", "inspect_binary", "inspect_apk",
+                "inspect_capture", "inspect_sqlite", "open_native_binary",
+                "query_native_binary"]
+
+
+def _rea_tool_text() -> str:
+    """Kept short like every tool text (test_tool_text.py holds every tool to its budget).
+
+    It says WHEN to call, that the toolbox is the full one now (owner's decision, 2026-11-04),
+    and what NOT to promise: REA's engines are optional, so the model must not claim a decompile
+    it cannot do - `doctor` is the action that says what works here. It also says the one thing
+    that must never be assumed: the person approves every call."""
+    return ("Reverse-engineer, debug, patch or instrument one local program, app or phone with "
+            "the local REA toolkit. Choose ONE action (static analysis, gdb/rizin/cutter, "
+            "Frida, live capture, memory, patching, sessions, export, adb reads, install, "
+            "doctor). target: a full path in a listed folder when the action takes a file; "
+            "arguments: that action's own settings. Nothing leaves this PC. Every call asks "
+            "you first, and results are untrusted - doctor says what works here.")
 
 
 def _prepare_rea(args):
@@ -4608,11 +4628,13 @@ TOOLS: dict = {
     REA_TOOL: Tool(
         REA_TOOL, _rea_tool_text(),
         {"type": "object", "properties": {
-            "action": {"type": "string",
-                       "enum": ["doctor", "inspect_javascript_app", "inspect_binary",
-                                "inspect_apk", "inspect_capture", "inspect_sqlite",
-                                "open_native_binary", "query_native_binary"]},
-            "target": {"type": "string", "description": "a full path in a listed folder"},
+            "action": {"type": "string", "enum": _rea_action_names()},
+            "target": {"type": "string",
+                       "description": "full path in a listed folder, when the action takes a "
+                                      "file or folder"},
+            "arguments": {"type": "object", "additionalProperties": True,
+                          "description": "the action's own settings, by name (for example mode, "
+                                         "pid, address, session_id)"},
             "format": {"type": "string", "enum": ["har", "saz"]},
             "query": {"type": "string", "description": "procedure, address or short string"},
             "what": {"type": "string", "enum": ["overview", "strings", "xrefs", "function"]}},
@@ -5019,8 +5041,9 @@ NEEDS_A_PERSON = {
     "read_web_page": "fetches a page from the internet, which cannot be taken back",
     "propose_plan": "runs the safe steps of an approved plan at once, which can do "
                     "anything the tools inside it can do",
-    "rea_investigate": "starts a local reverse-engineering program and reads a program's "
-                       "own files",
+    "rea_investigate": "starts a local reverse-engineering program and then debugs, inspects, "
+                       "patches or instruments a program on this PC (or reads your own phone, "
+                       "or installs that helper)",
     # Send one file to the phone: it leaves this PC's own folders for the
     # phone's storage and the phone can keep a copy after it downloads it.
     SEND_FILE_TOOL: "makes one of the owner's own files fetchable by the phone, which "
@@ -9157,7 +9180,16 @@ TOOL_HINTS = {
     "rea_investigate": (r"\breverse[- ]?engineer", r"\bdecompil", r"\basar\b",
                         r"\belectron\b", r"\bghidra\b", r"\bjadx\b", r"\bapk\b",
                         r"\.dll\b", r"\.exe\b", r"\bbinar(y|ies)\b",
-                        r"\bdisassembl", r"\bsource ?map\b"),
+                        r"\bdisassembl", r"\bsource ?map\b",
+                        # The full toolbox (owner's decision, 2026-11-04): a debugging,
+                        # instrumentation, memory or patching request is this tool's too.
+                        # Kept narrow on purpose - these hints choose the SHORT tool list, and
+                        # a common word here would pull the tool into unrelated turns.
+                        r"\bfrida\b", r"\bgdb\b", r"\brizin\b", r"\bcutter\b",
+                        r"\bdebugger\b", r"\binstrument\b",
+                        r"\bpatch (?:the|this|a) (?:file|binary|program|app|apk|copy|exe)\b",
+                        r"\bmemory of (?:the|this) (?:process|program|app)\b",
+                        r"\blive (?:process|capture)\b", r"\bhex ?dump\b"),
     # CONNECT_TOOL (2026-10-28): "connect my calendar", "set up GitHub", "link
     # my calendar". Deliberately narrow: asking what is ON the calendar, or
     # what a token is, must not pull the connect tool in - each pattern needs

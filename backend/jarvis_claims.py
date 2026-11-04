@@ -75,8 +75,9 @@ that stood with no correction:
   - H4, reads counting as actions. READ_ONLY_TOOLS was four tools behind
     the tool table: read_web_page, propose_plan, feature_guide and
     rea_investigate can run and change nothing, yet any of them returning
-    ok silenced the "nothing was done" line. All four are listed now,
-    ACTING_TOOLS names the other half explicitly, and
+    ok silenced the "nothing was done" line. All four are listed now
+    (rea_investigate left again on 2026-11-04, when it gained the full
+    toolbox and could act), ACTING_TOOLS names the other half explicitly, and
     backend/test_smarter_answers.py fails when jarvis_agent.TOOLS holds a
     name in neither set - so the next tool has to be classified by the
     person adding it instead of silently backing every claim.
@@ -125,6 +126,14 @@ CLAIMS_SCHEDULE_DONE = re.compile(
 #: feature_guide reads Jarvis's own feature list, and rea_investigate only
 #: gathers and reports. None of them changes anything.
 #:
+#: REA LEFT THIS SET ON 2026-11-04, and the reason is the point of the set: the
+#: 2026-10-20 slice only read, so a result from it could never back "I've done
+#: it". The full toolbox (the owner's decision, 2026-11-04) patches a local
+#: file, writes an exported bundle or a pulled APK into a folder, installs the
+#: helper and starts debugger and Frida sessions, so an "I did it" after one of
+#: those IS a claim this checker must read. A tool that can act belongs with the
+#: action tools, which is the direction that cannot silence a real correction.
+#:
 #: browser_control is deliberately NOT here. Half of it reads (a page's text, a
 #: window's controls) and half of it acts (click, type, submit), and the record
 #: this module sees says only "browser_control ok" - so it stays an action tool,
@@ -133,7 +142,7 @@ READ_ONLY_TOOLS = frozenset({
     "calculator", "memory_search", "file_read", "github_search", "web_search",
     "calendar_read", "email_check", "notes_search", "my_files", "my_spending", "retirement_whatif", "home_read",
     "coming_up", "more_tools",
-    "read_web_page", "propose_plan", "feature_guide", "rea_investigate",
+    "read_web_page", "propose_plan", "feature_guide",
     # goals_list (2026-11-02): it reads the owner's goals and their progress
     # back out of the store and changes nothing - the three goal WRITES are
     # in ACTING_TOOLS below.
