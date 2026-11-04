@@ -1895,18 +1895,24 @@ The owner decided on 2026-09-24 that Jarvis learns automatically by default
 (`jarvis_auto_learn.py`, `auto-learn.patch`, docs/JARVIS-API.md §19). It is
 not an approve-all: the learner still proposes every fact, and a proposal is
 saved without a card only when a fixed list of checks passes - source
-`conversation` or a colon "Remember:", every turn the learner read seen LIVE
-by this PC as typed or very-strictly-verified voice in an untainted
-conversation (the live-turn registry `jarvis_chat_log.record_turn()` writes
-on every request, history on or off), no sign of pasted or hidden text, every
-word of the fact in those turns - and no "not", "used to", "if", relation
-word or he/she/they of theirs left out of the fact - never a correction,
-nothing sensitive unless the owner allowed it (`jarvis_sensitive.py`: word
+`conversation` or a colon "Remember:", every turn a fact is learned from seen
+LIVE by this PC as typed or very-strictly-verified voice, the live-turn
+registry `jarvis_chat_log.record_turn()` writing on every request, history on
+or off; since 2026-11-03 a bad turn cards only the facts that need its words
+(per-fact attribution), and the fact's words must fit one clean turn or two
+consecutive clean turns - never across a turn that read outside text - so a
+tool output in one turn cannot supply half of a fact; no sign of pasted or
+hidden text, every word of the fact in those turns - and no "not", "used to",
+"if", relation word or he/she/they of theirs left out of the fact - never a
+correction, nothing sensitive unless the owner allowed it
+(`jarvis_sensitive.py`: word
 lists in eight languages, number and token shapes, anything private about
 another person - since 2026-09-26 an everyday fact about someone ("my sister
 likes jazz") is not a card on its own: the local model decides it, and only
 its clear "not sensitive" saves it - then the learner's own local model; its
-"unsure" or no answer is a card too; and passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are a card even when
+"unsure" or no answer is a card too, and a check that could not RUN is asked
+once more after a short pause with a 30-second deadline before the card
+(2026-11-03); and passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses are a card even when
 the owner allowed sensitive topics, by the patterns alone,
 `jarvis_sensitive.always_asks`), and a local model by address AND name. Anything else is the same
 card as before, with the reason on it. Saved facts are `source = "auto"` and
