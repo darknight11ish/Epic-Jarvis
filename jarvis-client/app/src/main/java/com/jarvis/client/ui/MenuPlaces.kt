@@ -293,7 +293,7 @@ object MenuPlaces {
         // backend/jarvis_menus.py), so no screen reads `menus.shows(...)` for it;
         // it is here because FindAnything lists every phone menu that has a
         // place, and the phone draws this one inside that row.
-        "settings.notifications" to "SettingsScreen: the PC's own seven notification kinds, inside the Notifications from Jarvis row",
+        "settings.notifications" to "SettingsScreen: the PC's own eight notification settings, inside the Notifications from Jarvis row",
     )
 
     /**

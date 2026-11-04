@@ -11,7 +11,7 @@ hours around them) out of the desktop app's own `localStorage` and into
 `[notifications]` in the owner's `jarvis-framework.toml`, so that the phone can
 change them too. Four things have to hold for that to be worth anything:
 
-1. **The defaults are the ones the desktop already used** - the four toggles
+1. **The defaults are the ones the desktop already used** - the five toggles
    ON, quiet hours OFF, 22:00 to 07:00 - and a settings file with no
    `[notifications]` table at all reads exactly as those defaults. An owner who
    never touches a switch must see no change at all.
@@ -26,7 +26,7 @@ change them too. Four things have to hold for that to be worth anything:
    apps will draw. A key the file lacks is added inside the section; a section
    the file lacks is created.
 4. **Nothing is logged.** Not a value, not a path, not a refusal. Two of the
-   seven are a window around the owner's own day, and one of them beside a
+   eight are a window around the owner's own day, and one of them beside a
    toast time says when the owner is asleep, so the module writes no log line
    of any kind - proved by capturing stdout AND stderr AND the module's own
    logger for a whole successful write and a whole refusal.
@@ -88,18 +88,19 @@ def fresh(text: str = None) -> Path:
 def t_defaults_are_what_the_desktop_already_did():
     """The desktop's own `notifications-prefs.js` defaults, matched one by one.
     Nothing here may change behaviour for an owner who never opens the card."""
-    check("the four switches default ON",
-          [N.DEFAULTS[k] for k in ("alarms", "reminders", "briefing", "handoff")]
-          == [True, True, True, True], N.DEFAULTS)
+    check("the five switches default ON",
+          [N.DEFAULTS[k] for k in ("alarms", "reminders", "briefing", "handoff",
+                                   "setup")] == [True, True, True, True, True],
+          N.DEFAULTS)
     check("quiet hours default OFF", N.DEFAULTS["quiet_enabled"] is False)
     check("the window defaults to 22:00 to 07:00",
           N.DEFAULTS["quiet_start"] == "22:00" and N.DEFAULTS["quiet_end"] == "07:00",
           N.DEFAULTS)
-    check("the shipped settings file carries every one of the seven, with the "
+    check("the shipped settings file carries every one of the eight, with the "
           "defaults",
           _shipped_section() == N.DEFAULTS, _shipped_section())
-    check("the seven keys are the five switches and the two times, in that order",
-          N.KEYS == ("alarms", "reminders", "briefing", "handoff",
+    check("the eight keys are the six switches and the two times, in that order",
+          N.KEYS == ("alarms", "reminders", "briefing", "handoff", "setup",
                      "quiet_enabled", "quiet_start", "quiet_end"), N.KEYS)
 
 
@@ -202,7 +203,7 @@ def t_a_round_trip_through_the_owners_file():
           out)
     check("what the module reads back is what both apps will be shown",
           N.read() == {"alarms": False, "reminders": True, "briefing": True,
-                       "handoff": True, "quiet_enabled": True,
+                       "handoff": True, "setup": True, "quiet_enabled": True,
                        "quiet_start": "23:15", "quiet_end": "07:00"}, N.read())
     check("the switches are written as true/false, never as 1/0",
           "alarms = false" in after and "quiet_enabled = true" in after, after[-300:])

@@ -1377,7 +1377,7 @@
     },
     {
      "id": "setup_quiz",
-     "name": "Going through the Personalize Jarvis questions: what they ask and what each answer would change (read-only; an answer is only drafted for the Settings card, which applies it)"
+     "name": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)"
     },
     {
      "id": "refresh_abilities",

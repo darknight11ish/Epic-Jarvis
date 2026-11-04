@@ -148,12 +148,13 @@ READ_ONLY_TOOLS = frozenset({
     # the acting half below.
     "self_portrait", "refresh_abilities",
     "conversation_find", "conversation_open",
-    # The Personalize Jarvis quiz tool (Wave B, 2026-11-03): it lists the
-    # questions, explains one from the real plan, and may stage ONE answer as a
-    # draft in the open desktop card. It never applies a setting - the owner
-    # presses Apply on the Settings card - so an answer that claims a setting
-    # was changed after only a draft was staged is exactly the false claim this
-    # set must not silence.
+    # "setup_quiz" (Wave B, 2026-11-03; test_smarter_answers.py caught it
+    # unclassified on 2026-11-04). It reads the quiz, explains a question from
+    # the real plan and stages a DRAFT answer in setup.json's in_progress -
+    # `jarvis_setup.apply()` is never called, every setter stays untouched and
+    # the owner presses Apply on the PC. So a sentence saying a setting was
+    # changed after it must still be corrected, which is this set: read-only
+    # for the claim check, exactly as the tool's own docstring says.
     "setup_quiz",
 })
 

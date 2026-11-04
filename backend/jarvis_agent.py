@@ -2187,7 +2187,7 @@ def _propose_plan_refusal(watch: "_TurnWatch") -> str:
 # tier of its own, raises no card of its own, and applies no change behind the
 # rule:
 #   * a cosmetic setting (the prompt coach, humour, voice-follows-the-face,
-#     making pictures, and the five PC-notification switches) is applied at
+#     making pictures, and the six PC-notification switches) is applied at
 #     once, exactly as "turn on the prompt coach" is;
 #   * a change that loosens a rule, turns on something that reads more, or
 #     touches privacy or how Jarvis works (background learning, the sensitive-
@@ -15154,7 +15154,7 @@ def _settings_call(args: dict, call: dict, convo: list, steps: list, say_step,
     # `setting.set(f["on"], peer=peer, local=local)`), so this is a real
     # difference - and exactly one place in these 21 chains reads them:
     # jarvis_limits.change refuses a `pc_only` row when the caller is not the
-    # PC. The five PC-notification switches this tool can reach are built with
+    # PC. The six PC-notification switches this tool can reach are built with
     # pc_only=False on purpose (jarvis_limits._notify_rows), so there is nothing
     # in this table for them to refuse, and the answer cannot differ today.
     #

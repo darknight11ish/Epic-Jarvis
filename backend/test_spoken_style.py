@@ -21,13 +21,33 @@ What is proven, on what really goes to the model:
     python3 test_spoken_style.py
 """
 import json
+import os
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
+# THE QUIZ IS FINISHED HERE (2026-11-04). Wave B's `dress_messages` adds one
+# "Personalize Jarvis: the setup quiz is unfinished" system line while the quiz
+# is unfinished, and an ABSENT setup.json reads as unfinished (0 of 25 answered)
+# - so in a fresh config folder, as in CI, one more system line lands in every
+# prompt this file pins word for word. This suite is about the SPOKEN note and
+# nothing else, so it gives itself a finished quiz in its own throwaway config
+# folder (never the owner's real one): every check below stays the exact byte
+# comparison it was, and the line's own behaviour is proved in
+# test_setup_quiz.py. The folder is created BEFORE jarvis_framework is imported,
+# because CONFIG_DIR is read once, at import.
+_QUIZ_CFG = tempfile.mkdtemp(prefix="jarvis-spoken-style-")
+os.environ["OPENJARVIS_CONFIG_DIR"] = _QUIZ_CFG
+os.environ["JARVIS_CONFIG_DIR"] = _QUIZ_CFG
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py")
+import jarvis_setup as _setup  # noqa: E402
+Path(_QUIZ_CFG, "setup.json").write_text(json.dumps({
+    "version": 2, "completed_version": _setup.QUIZ_VERSION, "runs": 1,
+    "dismissed_at": None, "in_progress": {}, "answers": {},
+    "completed_at": 1.0, "outcomes": []}), encoding="utf-8")
 import jarvis_agent as AG  # noqa: E402
 # The owner's manner line (jarvis_manner.py) has its own suite, test_manner.py;
 # this one checks the rest of the request word for word, so it is left out here.

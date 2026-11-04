@@ -1501,21 +1501,23 @@
           </span>
         </label>
 
-        <!-- Wave B (2026-11-03): the "Personalize Jarvis" offer has its own
-             switch - `notif_setup` -> `setup`, Ruling Q4's "give it a switch in
-             Notification Preferences" - and its row is DELIBERATELY NOT HAND-
-             WRITTEN HERE. Every toggle row between the `settings-toggles`
-             markers is generated from `backend/jarvis_settings_registry.py` by
-             `tools/gen_settings_cases.py`, and `tests/settings-catalogue.mjs`
-             holds this page to exactly that table. The registry row is the
-             backend's Wave B change, so it arrives by regenerating:
-                 py -3 tools/gen_settings_cases.py
-             and then the `setup` entry joins `notifications-prefs.js`'s
-             NOTIF_ROWS and `notifications-settings.js`'s SWITCHES (both say so
-             at their own NOTIF_ROWS / SWITCHES). The Rust side already has the
-             switch: `notifications.rs` `NotificationPrefs.setup`,
-             `Kind::Setup`, quiet-hours-gated, ON when nothing is stored.
-        -->
+        <!-- Wave B (2026-11-03): "Personalize Jarvis" has its own switch -
+             `notif_setup` -> `setup`, Ruling Q4's "give it a switch in
+             Notification Preferences". The row below is GENERATED from
+             `backend/jarvis_settings_registry.py` by `tools/gen_settings_cases.py`
+             like every other row between the `settings-toggles` markers; it is
+             written here once so the generator has something to validate, and
+             the generator owns it from then on. The Rust side already has the
+             switch: `notifications.rs` `NotificationPrefs.setup`, `Kind::Setup`,
+             quiet-hours-gated, ON when nothing is stored. -->
+        <label class="toggle" id="notif-setup-row">
+          <input id="notif-setup" type="checkbox" checked />
+          <span>
+            Personalize Jarvis
+            <span class="toggle-detail">Reminds you, once at launch, that the Personalize Jarvis quiz is still unfinished.</span>
+          </span>
+        </label>
+
         <h3 class="subhead">Quiet hours</h3>
         <p class="note">
           Silences non-urgent notifications during these hours. Quiet hours never silence urgent alerts or decisions waiting for you.

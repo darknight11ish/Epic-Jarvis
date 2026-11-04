@@ -2,7 +2,7 @@
  * Desktop notification preferences (the owner's decisions of 2026-09-30, and of
  * 2026-10-08).
  *
- * THE BACKEND IS THE ONE SOURCE OF TRUTH. Since 2026-10-08 the seven values
+ * THE BACKEND IS THE ONE SOURCE OF TRUTH. Since 2026-10-08 the eight values
  * live in the owner's `[notifications]` table in `jarvis-framework.toml`, owned
  * by `backend/jarvis_notify_prefs.py`, and both apps reach them through the one
  * limits route (`GET /api/limits`, `POST /api/limits/settings`) - because a
@@ -28,6 +28,7 @@ export const NOTIF_ALARMS_KEY = "jarvis.notifications.alarms";
 export const NOTIF_REMINDERS_KEY = "jarvis.notifications.reminders";
 export const NOTIF_BRIEFING_KEY = "jarvis.notifications.briefing";
 export const NOTIF_HANDOFF_KEY = "jarvis.notifications.handoff";
+export const NOTIF_SETUP_KEY = "jarvis.notifications.setup";
 export const NOTIF_QUIET_ENABLED_KEY = "jarvis.notifications.quiet_enabled";
 export const NOTIF_QUIET_START_KEY = "jarvis.notifications.quiet_start";
 export const NOTIF_QUIET_END_KEY = "jarvis.notifications.quiet_end";
@@ -45,39 +46,32 @@ export const GET_LIMITS_COMMAND = "get_limits";
 export const SET_LIMIT_COMMAND = "set_limit";
 
 /**
- * The seven limits rows, in the order the card draws them: the four toggles,
- * the quiet-hours switch, then the window's two ends.
+ * The eight limits rows, in the order the card draws them: the five toggles
+ * (alarms, reminders, the briefing, the website hand-off, "Personalize
+ * Jarvis"), the quiet-hours switch, then the window's two ends.
  *
  * `key` is the limits-table row (`backend/jarvis_limits.py`), `pref` is the name
  * this module and Rust use, and `mode` says where a change goes: `"limit"` means
  * the backend owns it and this page only asks (see `saveNotificationPrefs`).
  *
  * WAVE B (2026-11-03) AND THE EIGHTH ROW. "Personalize Jarvis" has its own
- * switch - `notif_setup` -> `setup`, `notifications.rs` `Kind::Setup` - and it
- * is NOT drawn here yet, on purpose. This page's notification toggles are not
- * words it owns: `settings.html`'s rows between the `settings-toggles` markers
- * are GENERATED from `backend/jarvis_settings_registry.py` by
- * `tools/gen_settings_cases.py`, and `tests/settings-catalogue.mjs` holds the
- * page to exactly that table. That registry row is the backend's Wave B change
- * (`jarvis_settings_registry.py`, `jarvis_notify_prefs.py`), so this branch
- * cannot generate it; a hand-written row here would fail the catalogue suite
- * today and be duplicated by the generator tomorrow. When the backend lands:
- *
- *   py -3 tools/gen_settings_cases.py
- *   # then add the notif_setup row (pref "setup", kind "bool") here, and the
- *   # `setup` entry in notifications-settings.js's SWITCHES.
- *
- * Until then this page never SENDS `setup`, which matters: `refresh()` pushes
- * every switch it shows back to Rust, so a missing row plus a lenient payload
- * would overwrite an owner's choice made on the phone every time Settings
- * opened. The Rust switch itself defaults ON and already obeys the value the
- * PC's settings file carries, which the phone can change.
+ * switch - `notif_setup` -> `setup`, `notifications.rs` `Kind::Setup`. It is
+ * here because the row now EXISTS: `settings.html` draws it from
+ * `backend/jarvis_settings_registry.py`'s SETTINGS_ROWS through
+ * `tools/gen_settings_cases.py`, and `backend/jarvis_limits.py` carries the
+ * `notif_setup` limits row the PC writes. Before those landed this module had
+ * to leave it out on purpose: `refresh()` pushes every switch it shows back to
+ * Rust, so a row this page could not read would have been overwritten with a
+ * guess every time Settings opened. The Rust switch defaults ON, is
+ * quiet-hours gated, and already obeys the value the PC's settings file
+ * carries, which the phone can change too.
  */
 export const NOTIF_ROWS = [
   { key: "notif_alarms", pref: "alarms", kind: "bool" },
   { key: "notif_reminders", pref: "reminders", kind: "bool" },
   { key: "notif_briefing", pref: "briefing", kind: "bool" },
   { key: "notif_handoff", pref: "handoff", kind: "bool" },
+  { key: "notif_setup", pref: "setup", kind: "bool" },
   { key: "notif_quiet_enabled", pref: "quietEnabled", kind: "bool" },
   { key: "notif_quiet_start", pref: "quietStart", kind: "time" },
   { key: "notif_quiet_end", pref: "quietEnd", kind: "time" },
@@ -142,6 +136,7 @@ export function loadNotificationPrefs(storage = globalThis.localStorage) {
     reminders: loadBool(NOTIF_REMINDERS_KEY, true, storage),
     briefing: loadBool(NOTIF_BRIEFING_KEY, true, storage),
     handoff: loadBool(NOTIF_HANDOFF_KEY, true, storage),
+    setup: loadBool(NOTIF_SETUP_KEY, true, storage),
     quietEnabled: loadBool(NOTIF_QUIET_ENABLED_KEY, false, storage),
     quietStart: loadString(NOTIF_QUIET_START_KEY, DEFAULT_QUIET_START, storage),
     quietEnd: loadString(NOTIF_QUIET_END_KEY, DEFAULT_QUIET_END, storage),
@@ -155,6 +150,7 @@ export function saveNotificationPrefs(prefs, storage = globalThis.localStorage, 
   if (typeof prefs.reminders === "boolean") ok = saveBool(NOTIF_REMINDERS_KEY, prefs.reminders, storage) && ok;
   if (typeof prefs.briefing === "boolean") ok = saveBool(NOTIF_BRIEFING_KEY, prefs.briefing, storage) && ok;
   if (typeof prefs.handoff === "boolean") ok = saveBool(NOTIF_HANDOFF_KEY, prefs.handoff, storage) && ok;
+  if (typeof prefs.setup === "boolean") ok = saveBool(NOTIF_SETUP_KEY, prefs.setup, storage) && ok;
   if (typeof prefs.quietEnabled === "boolean") ok = saveBool(NOTIF_QUIET_ENABLED_KEY, prefs.quietEnabled, storage) && ok;
   if (typeof prefs.quietStart === "string") ok = saveString(NOTIF_QUIET_START_KEY, prefs.quietStart, storage) && ok;
   if (typeof prefs.quietEnd === "string") ok = saveString(NOTIF_QUIET_END_KEY, prefs.quietEnd, storage) && ok;
@@ -172,7 +168,7 @@ export function saveNotificationPrefs(prefs, storage = globalThis.localStorage, 
 }
 
 /**
- * The choices as Rust wants them: the four switches and the quiet-hours
+ * The choices as Rust wants them: the five switches and the quiet-hours
  * window, camelCase, times filled in when an input is blank. Pure, so it is
  * testable without a window.
  */
@@ -183,6 +179,7 @@ export function notificationPrefsPayload(prefs = {}) {
     reminders: on(prefs.reminders),
     briefing: on(prefs.briefing),
     handoff: on(prefs.handoff),
+    setup: on(prefs.setup),
     quietEnabled: prefs.quietEnabled === true,
     quietStart: typeof prefs.quietStart === "string" && prefs.quietStart
       ? prefs.quietStart
@@ -242,11 +239,11 @@ export function validTime(text) {
 }
 
 /**
- * The seven values out of a `GET /api/limits` answer, or null when the answer
+ * The eight values out of a `GET /api/limits` answer, or null when the answer
  * is not the shape this card can read.
  *
  * A row whose kind is not `bool` or `time` is ignored - the table carries other
- * kinds for other screens, and this card draws only these seven. A row that is
+ * kinds for other screens, and this card draws only these eight. A row that is
  * absent leaves its value alone rather than inventing one: an older PC without
  * these rows must not have its switches silently changed by a page that guessed.
  */
@@ -288,7 +285,7 @@ export async function readFromBackend(invoke = tauriInvoke()) {
 /**
  * Writes ONE value to the PC, through the one limits route.
  *
- * The BACKEND decides whether a change asks first: these seven rows carry no
+ * The BACKEND decides whether a change asks first: these eight rows carry no
  * loosening in either direction (`loosening="none"`), so a change is applied at
  * once and there is no card - which is the point, because a card over "show me
  * the briefing" could otherwise leave an alarm waiting on an answer.

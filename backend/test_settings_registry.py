@@ -242,7 +242,7 @@ def t_every_real_settings_card_is_listed():
     # row that opens Android's OWN per-app notification screen and is
     # deliberately not a Jarvis setting at all (the owner's decision of
     # 2026-10-09, docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1). The
-    # registry's "notifications" Section stays desktop-only, because the four
+    # registry's "notifications" Section stays desktop-only, because the five
     # per-kind switches and quiet hours really are the PC's, and
     # _check_phone_declines_the_pc_only_cards below still holds the phone to
     # that.

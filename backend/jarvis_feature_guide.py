@@ -603,6 +603,9 @@ STATE_READERS = {
     "pc_reminder_sounds": lambda: _read_notify("notif_reminders"),
     "pc_briefing_notification": lambda: _read_notify("notif_briefing"),
     "pc_handoff_notification": lambda: _read_notify("notif_handoff"),
+    # Wave B, "Personalize Jarvis" (2026-11-03): the reminder that the quiz is
+    # still unfinished. Read through the same limits row the card writes.
+    "pc_setup_notification": lambda: _read_notify("notif_setup"),
     "pc_quiet_hours": lambda: _read_notify("notif_quiet_enabled"),
     "humor": _read_humor,
     "voice_follows_face": _read_voice_follows_face,

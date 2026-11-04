@@ -17,10 +17,10 @@ import java.io.File
  * all three to each other:
  *
  *  * `jarvis-desktop/src/settings.html` - the desktop card the audit named, its
- *    eight control ids, its note, its three subheadings and its Test button;
- *  * `jarvis-desktop/src/notifications-prefs.js` - the seven rows the desktop's
+ *    nine control ids, its note, its three subheadings and its Test button;
+ *  * `jarvis-desktop/src/notifications-prefs.js` - the eight rows the desktop's
  *    card really reads and writes (`NOTIF_ROWS`);
- *  * `backend/jarvis_limits.py` - the PC's own table those seven rows live in
+ *  * `backend/jarvis_limits.py` - the PC's own table those eight rows live in
  *    (`_NOTIFY_ROWS`), which is what both apps' controls are wired to.
  *
  * A change to any one of them that the phone did not follow fails here, which
@@ -55,7 +55,7 @@ class NotifyRowsTest {
 
     private fun obj(json: String): JsonObject = JarvisJson.parseToJsonElement(json).jsonObject
 
-    /** The seven keys the desktop's own card drives, in its own order. */
+    /** The eight keys the desktop's own card drives, in its own order. */
     private val desktopKeys: List<String> =
         Regex("\\{\\s*key:\\s*\"(notif_[a-z_]+)\"").findAll(notifPrefsJs)
             .map { it.groupValues[1] }.toList()
@@ -70,7 +70,7 @@ class NotifyRowsTest {
     // ------------------------------------------------------- the wiring ----
 
     @Test
-    fun `the phone's seven rows are the desktop card's own seven, in its order`() {
+    fun `the phone's eight rows are the desktop card's own eight, in its order`() {
         assertEquals(
             "notifications-prefs.js's NOTIF_ROWS was not found, or moved",
             NotifyRows.KEYS.size,
@@ -80,8 +80,8 @@ class NotifyRowsTest {
     }
 
     @Test
-    fun `the same seven are rows in the PC's own limits table`() {
-        assertEquals(7, tableRows.size)
+    fun `the same eight are rows in the PC's own limits table`() {
+        assertEquals(8, tableRows.size)
         assertEquals(
             "the phone's keys are the PC's table keys with its own notif_ prefix",
             tableRows.map { "notif_${it.first}" },
@@ -104,7 +104,8 @@ class NotifyRowsTest {
     fun `the desktop card the audit named is really there, control for control`() {
         for (id in listOf(
             "notif-alarms", "notif-reminders", "notif-briefing", "notif-handoff",
-            "notif-quiet-enabled", "notif-quiet-start", "notif-quiet-end", "notif-send-test",
+            "notif-setup", "notif-quiet-enabled", "notif-quiet-start", "notif-quiet-end",
+            "notif-send-test",
         )) {
             assertTrue("settings.html has no id=\"$id\"", settingsHtml.contains("id=\"$id\""))
         }
@@ -140,6 +141,8 @@ class NotifyRowsTest {
            "value":true,"words":"on","note":"","pc_only":false,"app":"both","quiet_on":true},
           {"key":"notif_handoff","title":"Say when a website needs you (on your PC)","kind":"bool",
            "value":true,"words":"on","note":"","pc_only":false,"app":"both","quiet_on":true},
+          {"key":"notif_setup","title":"Say when Personalize Jarvis is unfinished (on your PC)","kind":"bool",
+           "value":true,"words":"on","note":"","pc_only":false,"app":"both","quiet_on":true},
           {"key":"notif_quiet_enabled","title":"Be quiet during quiet hours (on your PC)","kind":"bool",
            "value":false,"words":"off","note":"","pc_only":false,"app":"both","quiet_on":false},
           {"key":"notif_quiet_start","title":"Quiet hours start (on your PC)","kind":"time",
@@ -153,7 +156,7 @@ class NotifyRowsTest {
     )
 
     @Test
-    fun `the card draws exactly the seven rows, in the desktop's order`() {
+    fun `the card draws exactly the eight rows, in the desktop's order`() {
         val rows = NotifyRows.rows(answer)
         assertEquals(NotifyRows.KEYS, rows.map { it.key })
         // The PC's own words are shown as they arrived: the phone invents no
@@ -166,9 +169,10 @@ class NotifyRowsTest {
     }
 
     @Test
-    fun `the four kinds and the quiet group are the same seven, split once`() {
+    fun `the five kinds and the quiet group are the same eight, split once`() {
         val rows = NotifyRows.rows(answer)
-        assertEquals(listOf("notif_alarms", "notif_reminders", "notif_briefing", "notif_handoff"),
+        assertEquals(listOf("notif_alarms", "notif_reminders", "notif_briefing", "notif_handoff",
+                "notif_setup"),
             NotifyRows.kindRows(rows).map { it.key })
         assertEquals(listOf("notif_quiet_enabled", "notif_quiet_start", "notif_quiet_end"),
             NotifyRows.quietRows(rows).map { it.key })
@@ -179,7 +183,7 @@ class NotifyRowsTest {
     fun `a row the PC keeps to itself is never drawn, and a missing one is not invented`() {
         // The PC-only row is in the answer and must not appear...
         assertFalse(NotifyRows.rows(answer).any { it.key == "jobs_per_tick" })
-        // ...and an older PC that sends only some of the seven shows only what
+        // ...and an older PC that sends only some of the eight shows only what
         // it sent: no switch is drawn for a value the PC never gave.
         val partial = obj("""{"limits":[{"key":"notif_alarms","title":"Alarms (on your PC)","kind":"bool",
             "value":true,"words":"on","note":"","pc_only":false,"app":"both","quiet_on":true}]}""")

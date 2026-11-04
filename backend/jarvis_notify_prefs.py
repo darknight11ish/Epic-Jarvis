@@ -4,7 +4,7 @@ hours around them, in the OWNER'S SETTINGS FILE instead of one webview's
 
     check()      - refuse a value this module would not take, in plain words
     check_time() - refuse a time of day that is not "HH:MM"
-    read()       - the seven values as they stand, each defaulted
+    read()       - the eight values as they stand, each defaulted
     write()      - move the keys this module is handed; nothing else changes
 
 WHY THIS EXISTS (the owner's decision, 2026-10-08). The desktop's Settings ->
@@ -13,7 +13,7 @@ briefing, "Solve it here") and a quiet-hours window. `notifications-prefs.js`
 kept them in the desktop app's own `localStorage` and pushed a copy to Rust
 (`set_notification_prefs`, `jarvis-desktop/src-tauri/src/notifications.rs`),
 which is what actually raises a toast. There was **no backend route and no
-key in `jarvis-framework.toml` for any of the seven** - checked, and this
+key in `jarvis-framework.toml` for any of them** - checked, and this
 module is the answer to it. A phone can never reach another app's
 `localStorage`, so a control on the phone needs the value to live somewhere
 the phone can reach, and the one place both apps already read is the owner's
@@ -25,23 +25,24 @@ and no database: `read()` asks the file every time (through
 `jarvis_framework.load_framework`, the same reader every other module uses),
 so what the owner reads on the phone IS what is in force. Where a key is
 missing, the default below is what the module reports - the same defaults the
-desktop's card has always used (the four toggles on, quiet hours off, 22:00
+desktop's card has always used (the five toggles on, quiet hours off, 22:00
 to 07:00), so a settings file written before this module existed behaves
 exactly as it did.
 
-THE SEVEN VALUES:
+THE EIGHT VALUES:
 
     [notifications]
     alarms = true          # alarms and urgent "tell me when" alerts
     reminders = true       # reminders, timers and to-do items
     briefing = true        # the morning briefing is ready
     handoff = true         # a website needs the owner ("Solve it here")
+    setup = true           # the "Personalize Jarvis" quiz is still unfinished
     quiet_enabled = false  # quiet hours on or off
     quiet_start = "22:00"  # the window's two ends, local time
     quiet_end = "07:00"
 
 THE ROWS THE OWNER SEEES. The limits table (`jarvis_limits.py`) rides this
-section: one row per value, `kind="bool"` for the five switches and
+section: one row per value, `kind="bool"` for the six switches and
 `kind="time"` for the two ends, each marked `app="both"` so BOTH apps draw
 them. That is deliberate - a new patch would cost this repository its place in
 `scripts/apply-patches.ps1`, three ordering invariants and the stand-in
@@ -49,7 +50,7 @@ ratchet, while a row in the one limits table costs a line. This module is the
 thing those rows write; the rows are not a second table of their own.
 
 WHAT IT NEVER DOES. It never logs: not a value, not a path, not a refusal.
-Two of the seven are a window around the owner's own day, and one of them
+Two of the eight are a window around the owner's own day, and one of them
 combined with a toast time says when the owner is asleep. Nothing here is
 worth a log line. It also never raises an approval card and never decides
 anything: the limits table decides whether a change is put to the owner
@@ -73,10 +74,12 @@ except Exception:                                    # pragma: no cover
 #: The one table in the owner's settings file this module owns.
 SECTION = "notifications"
 
-#: The five switches, in the order the desktop's card draws them, and the one
-#: field name each has in `jarvis-framework.toml`.
+#: The six switches, in the order the desktop's card draws them, and the one
+#: field name each has in `jarvis-framework.toml`. "setup" is the "Personalize
+#: Jarvis" reminder (Wave B, 2026-11-03): it sits after "handoff" because that
+#: is where the card draws it, between the toasts and the quiet-hours switch.
 SWITCHES: Tuple[str, ...] = ("alarms", "reminders", "briefing", "handoff",
-                             "quiet_enabled")
+                             "setup", "quiet_enabled")
 
 #: The two ends of the quiet-hours window, "HH:MM" on the owner's own clock.
 TIMES: Tuple[str, ...] = ("quiet_start", "quiet_end")
@@ -84,7 +87,7 @@ TIMES: Tuple[str, ...] = ("quiet_start", "quiet_end")
 #: Every key this module owns, switches first.
 KEYS: Tuple[str, ...] = SWITCHES + TIMES
 
-#: What each key is when the owner's file does not say. The four toggles ON,
+#: What each key is when the owner's file does not say. The five toggles ON,
 #: quiet hours OFF, 22:00 to 07:00 - byte for byte the defaults the desktop's
 #: `notifications-prefs.js` and Rust's `NotificationPrefs::default()` already
 #: use, so nothing changes behaviour for anyone who never touches a switch.
@@ -93,6 +96,7 @@ DEFAULTS: dict = {
     "reminders": True,
     "briefing": True,
     "handoff": True,
+    "setup": True,
     "quiet_enabled": False,
     "quiet_start": "22:00",
     "quiet_end": "07:00",
@@ -153,7 +157,7 @@ def check_bool(value) -> bool:
 
 def check(key: str, value):
     """One value for one key, checked, or a `PrefsError`. The key must be one
-    of the seven; nothing else in the settings file is this module's to move."""
+    of the eight; nothing else in the settings file is this module's to move."""
     if key not in KEYS:
         raise PrefsError("That is not a notification setting Jarvis knows.")
     return check_bool(value) if key in SWITCHES else check_time(value)
@@ -180,7 +184,7 @@ def _section(cfg: Optional[dict] = None) -> dict:
 
 
 def read() -> dict:
-    """All seven values as they stand, each defaulted.
+    """All eight values as they stand, each defaulted.
 
     A key the owner's file does not carry reads as its default; a key that is
     there but nonsense (a hand-edited "quiet_start = maybe", an "alarms = 3")
@@ -284,7 +288,7 @@ _LOCK = threading.RLock()
 def write(changes: dict, *, path: Optional[Path] = None) -> dict:
     """Move the keys in `changes`, atomically, and nothing else.
 
-    `{"ok", "changed", "from", "to"}` - `from` and `to` are whole seven-value
+    `{"ok", "changed", "from", "to"}` - `from` and `to` are whole eight-value
     readings, so the caller can show the owner what actually moved. An unknown
     key, or a value that is not on/off or a time, raises `PrefsError` BEFORE
     anything is written: a bad value in the middle of a set of changes must
