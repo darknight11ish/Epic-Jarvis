@@ -1747,6 +1747,16 @@ def tools_enabled_set() -> set:
         return set()
 
 
+#: For a tool whose own one-line label is a NAME rather than an action
+#: ("Computer control", "Browser control"), the card says what using it means -
+#: the owner is never asked to switch on a phrase they cannot picture.
+CARD_USES = {
+    "control_computer": "click and type in other programs on this PC, one approved plan at a time",
+    "control_phone": "tap and type on your phone over the cable, one approved plan at a time",
+    "browser_control": "open a web page and click or type in one browser tab",
+}
+
+
 def tool_enable_card(tool: str) -> str:
     """The ONE card's words for offering one tool to the AI model.
 
@@ -1767,6 +1777,10 @@ def tool_enable_card(tool: str) -> str:
         f"words: {label}. This changes one line in your settings file on this PC; "
         "nothing else changes.",
         "",
+    ]
+    if real in CARD_USES:
+        lines += [f"What that means in use: it can {CARD_USES[real]}.", ""]
+    lines += [
         "This is separate from whether it asks you first: that is set above, in "
         '"Ask me first", and is unchanged by this card.',
         "",

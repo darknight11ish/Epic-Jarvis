@@ -1013,6 +1013,20 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
     rea = AF.tool_enable_card("rea_investigate")
     check("REA's card says it needs its own [rea] opt-in too",
           "[rea] enabled = true" in rea, rea)
+    # 2026-11-04: the card must let the person picture what they switch on. A
+    # tool whose own label is a name ("Phone control") gets one line saying
+    # what using it means; one whose label already says it does not.
+    for tool, means in (("control_computer", "click and type in other programs"),
+                        ("control_phone", "tap and type on your phone"),
+                        ("browser_control", "open a web page and click or type")):
+        card = AF.tool_enable_card(tool)
+        check(f"{tool}: the card says what using it means", means in card, card)
+    check("a tool whose label already says what it does gets no extra line",
+          "What that means in use" not in AF.tool_enable_card("shell_exec"))
+    check("web search's card names its own Settings switch",
+          "Settings, Web search" in AF.tool_enable_card("web_search"))
+    check("browser control's card names its browser lane",
+          "browser lane" in AF.tool_enable_card("browser_control"))
     check("approved by a person: the tool is added",
           tools.writes == [("calendar_read", True)] and "calendar_read" in tools.on)
     check("... and the page says so", AF._T_STATE["last"].get("outcome") == "enabled")

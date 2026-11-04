@@ -11206,12 +11206,17 @@ ability.
 
 The first line and "in plain words" are the tool's own one-line description
 (`jarvis_reach.TOOL_NAMES`), so the person is told what they are switching on,
-never just a name. Where another switch must also be on, the card adds a
-paragraph naming it - `rea_investigate` its `[rea] enabled = true`,
-`web_search` its Settings, Web search switch, `browser_control` its second-card
-browser lane or the headless browser - because otherwise "offered" would be a
-promise the card cannot keep. `send_file_to_phone` keeps its own paragraph: off
-by default on purpose, asking in chat is the normal door.
+never just a name. Where that description is a NAME rather than an action -
+`control_computer`, `control_phone`, `browser_control` - the card adds one line
+saying what using it means ("it can tap and type on your phone over the cable,
+one approved plan at a time"), so nobody is asked to switch on a phrase they
+cannot picture (`jarvis_asks_first.CARD_USES`). Where another switch must also
+be on, the card adds a paragraph naming it - `rea_investigate` its
+`[rea] enabled = true`, `web_search` its Settings, Web search switch,
+`browser_control` its second-card browser lane or the headless browser - because
+otherwise "offered" would be a promise the card cannot keep.
+`send_file_to_phone` keeps its own paragraph: off by default on purpose, asking
+in chat is the normal door.
 
 Its title: "Jarvis wants to offer a tool to the AI model"
 (`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the shipped
