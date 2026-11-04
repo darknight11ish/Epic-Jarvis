@@ -121,18 +121,24 @@ pub(crate) const NOT_ON_LIST: &str = "Only reading your calendar, email, notes, 
 pub(crate) const TOOLS_NOT_ON_LIST: &str =
     "This PC does not know a tool by that name, so nothing was changed.";
 
-/// A tool that is deliberately NOT offered in-app by this slice - Tier C (raw
-/// shell/computer/browser, web-page reading, account connections, REA) and the
-/// nine unlisted tools - `jarvis_asks_first.TOOLS_TOML_ONLY_NOTE`, word for
-/// word. A DIFFERENT answer from [`TOOLS_NOT_ON_LIST`], which is for a name the
-/// PC does not know at all.
+/// A tool that is deliberately NOT switchable in-app by this slice - Tier C
+/// (raw shell/computer/browser, web-page reading, account connections, REA)
+/// and the unlisted tools. A DIFFERENT answer from [`TOOLS_NOT_ON_LIST`],
+/// which is for a name the PC does not know at all.
+///
+/// THIS IS THE PC'S FIXED HEAD ONLY (`jarvis_asks_first.TOOLS_TOML_ONLY_NOTE`),
+/// deliberately. The PC appends a tail BUILT FROM THE LIVE `[tools].enabled`
+/// saying which of the unlisted tools are offered right now
+/// (`tools_toml_only_note()`), because a typed list went stale and told the
+/// owner six of his switched-on tools were off (2026-11-04). This app cannot
+/// read that file, so it must not claim either half: it says what is always
+/// true - the switch is not in an app - and leaves "offered right now" to the
+/// PC's answer (the Settings page renders the PC's own `not_offered.why`).
 pub(crate) const TOOLS_TOML_ONLY_NOTE: &str =
-    "That tool is not offered from inside the app by this slice. Raw shell, computer and \
+    "That tool cannot be switched from inside the app by this slice. Raw shell, computer and \
      browser control, reading one web page, connecting an account and REA (which also needs \
      its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC \
-     (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, \
-     my_files, propose_plan, change_setting and feature_guide are not offered in-app by this \
-     slice either. Nothing was changed.";
+     (jarvis-framework.toml, [tools].enabled).";
 
 const STALE: &str =
     "The connection to Jarvis is catching up, so nothing can be sent until it does.";

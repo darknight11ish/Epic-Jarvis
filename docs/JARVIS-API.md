@@ -8279,8 +8279,13 @@ the list, the spoken answer or the route.
 "what do you have access to?", "what are you connected to?" and close
 phrasings (whole sentences only, the owner's own typed or said words) from
 `jarvis_reach.sentence()` - the same list, in one answer, host names only
-(no account name). A near miss ("what can you reach on the top shelf") goes
-to the model, as does pasted text.
+(no account name). **The answer also carries the `tools` block** (2026-11-04):
+`view()`'s "Tools the AI model is offered" is said in the same sentence, from
+the same rows, so "which tools do you have" is answered by the one place that
+reads `[tools].enabled` and the API and the spoken form cannot disagree
+(`backend/test_reach.py`'s `t_the_spoken_answer_names_the_tools_the_api_holds`).
+A near miss ("what can you reach on the top shelf") goes to the model, as does
+pasted text.
 
 ### 24.5 Known gaps, said plainly
 
@@ -32287,7 +32292,9 @@ card either way.
 tool (§115) and it stays exactly where it was: off by default (not in
 `[tools].enabled`), in `jarvis_asks_first.TIER_C` and out of `TOOLS_SWITCHABLE`,
 still in `HARD_LIMITS` and `MUST_ASK`, so `request_tool_enable` keeps answering
-`403` with `TOOLS_TOML_ONLY_NOTE` for it and no app may turn it on. Hand-editing
+`403` with the note `tools_toml_only_note()` returns - the fixed head plus a
+tail built from the live `[tools].enabled` - for it and no app may turn it on.
+Hand-editing
 `[tools].enabled` on this PC remains the only way to offer it to the model, and
 that is the decision of 2026-11-03
 (`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`), not an omission.

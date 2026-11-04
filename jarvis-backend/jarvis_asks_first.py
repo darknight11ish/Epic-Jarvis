@@ -1581,14 +1581,85 @@ TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separat
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
                  "What asks first). It takes one approval card and Windows Hello.")
 TOOLS_NOT_ON_LIST = ("This PC does not know a tool by that name, so nothing was changed.")
-TOOLS_TOML_ONLY_NOTE = ("That tool is not offered from inside the app by this slice. Raw shell, "
-                        "computer and browser control, reading one web page, connecting an "
-                        "account and REA (which also needs its own [rea] enabled = true) stay a "
-                        "deliberate choice in your settings file on this PC "
-                        "(jarvis-framework.toml, [tools].enabled); calculator, memory_search, "
-                        "file_read, web_search, my_files, propose_plan, change_setting and "
-                        "feature_guide are not offered in-app by this slice either. Nothing was "
-                        "changed.")
+#: The FIXED half of the "this tool has no in-app switch" answer. The list of
+#: which tools are offered RIGHT NOW is NOT typed here any more: it is built by
+#: `tools_toml_only_note()` from the live `[tools].enabled`. The hand-typed tail
+#: this replaces named `calculator, memory_search, file_read, web_search,
+#: my_files, propose_plan, change_setting and feature_guide` as "not offered",
+#: and SIX of those were enabled in the shipped file - so the answer told the
+#: owner his own switched-on tools were off (2026-11-04 self-awareness audit,
+#: gap 8). A typed list cannot follow a settings file that changes.
+TOOLS_TOML_ONLY_NOTE = (
+    "That tool cannot be switched from inside the app by this slice. Raw shell, "
+    "computer and browser control, reading one web page, connecting an account "
+    "and REA (which also needs its own [rea] enabled = true) stay a deliberate "
+    "choice in your settings file on this PC (jarvis-framework.toml, "
+    "[tools].enabled).")
+
+
+def _names_sentence(names) -> str:
+    """`a`, `a and b`, `a, b and c` - the owner's list, never a bare join."""
+    got = [str(n) for n in names if n]
+    if not got:
+        return ""
+    if len(got) == 1:
+        return got[0]
+    return ", ".join(got[:-1]) + " and " + got[-1]
+
+
+def tools_toml_only_note() -> str:
+    """The whole answer, with its tail READ from the live `[tools].enabled`.
+
+    THE TAIL IS MEASURED, NOT TYPED (2026-11-04). `TIER_UNLISTED` is the fixed
+    set of tools this slice has no in-app switch for; whether each one is
+    offered to the AI model is `[tools].enabled`'s business, and the shipped
+    file enables seven of the eight. So the sentence is split by the live set:
+
+      * an unlisted tool that IS enabled is said to be offered right now;
+      * one that is NOT enabled is said to be not offered right now.
+
+    An unreadable settings file is said plainly instead of reading as "none of
+    them are on": `tools_enabled_set()` answers an empty set for both, so the
+    readable case is asked of `fw` first. A `check()` in `test_asks_first.py`
+    fails if any clause ever names an enabled tool as not offered.
+    """
+    readable, enabled = _tools_enabled_now()
+    on = [t for t in TIER_UNLISTED if t in enabled]
+    off = [t for t in TIER_UNLISTED if t not in enabled]
+    parts = [TOOLS_TOML_ONLY_NOTE]
+    if not readable:
+        parts.append("Your settings file could not be read just now, so which of "
+                     "them are offered to the AI model is unknown.")
+    else:
+        if off:
+            parts.append(f"{_names_sentence(off)} "
+                         f"{'is' if len(off) == 1 else 'are'} not offered to the AI "
+                         f"model right now either.")
+        if on:
+            parts.append(f"{_names_sentence(on)} "
+                         f"{'is' if len(on) == 1 else 'are'} offered to the AI model "
+                         f"right now - your settings file names "
+                         f"{'it' if len(on) == 1 else 'them'} - but this page has no "
+                         f"switch for {'it' if len(on) == 1 else 'them'}.")
+    parts.append("Nothing was changed.")
+    return " ".join(parts)
+
+
+def _tools_enabled_now() -> tuple:
+    """(could the settings file be read, the enabled tool names).
+
+    `tools_enabled_set()` deliberately collapses "empty" and "unreadable" to
+    one empty set, which is the right fail-closed answer for a turn. A SENTENCE
+    about the file may not do that: it would say every unlisted tool is off
+    when the real answer is "I could not read it". The two are separated here,
+    and only for wording - the read itself is still the one reader."""
+    try:
+        if fw is None:
+            return False, set()
+        cfg = fw.load_framework() or {}
+        return True, normalise_enabled((cfg.get("tools") or {}).get("enabled") or [])
+    except Exception:
+        return False, set()
 _TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
 _ENABLED_LINE = re.compile(
     r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
@@ -1941,7 +2012,7 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
     if not (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
             or real in SWITCHABLE_TOOL_NAMES):
         if real in TOOLS_TOML_ONLY or tool in TOOLS_TOML_ONLY:
-            return 403, {"ok": False, "error": TOOLS_TOML_ONLY_NOTE}
+            return 403, {"ok": False, "error": tools_toml_only_note()}
         return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
     now_on = real_tool(tool) in tools_enabled_set()
     if not enabled:
@@ -2048,7 +2119,7 @@ def tools_status(*, here: bool = False) -> dict:
             "not_offered": {
                 "tier_c": list(TIER_C), "not_this_slice": list(TIER_UNLISTED),
                 "labels": {tool: tool_label(tool) for tool in TOOLS_TOML_ONLY},
-                "why": TOOLS_TOML_ONLY_NOTE,
+                "why": tools_toml_only_note(),
             }}
 
 

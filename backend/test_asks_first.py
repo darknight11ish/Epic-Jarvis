@@ -916,7 +916,7 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
         code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
         check(f"{tool}: not offered in-app (403), nothing written",
               code == 403 and tools.writes == []
-              and out["error"] == AF.TOOLS_TOML_ONLY_NOTE, (code, out))
+              and out["error"] == AF.tools_toml_only_note(), (code, out))
     tools = ToolsFile()
     code, out = _treq({"tool": "nonsense", "enabled": True}, tools, here=True)
     check("an unknown tool: 403, the 'does not know that name' answer",
@@ -1010,7 +1010,7 @@ def t_the_tools_status_and_the_page():
               and st["vault"]["can_enable"] is True
               and set(st["not_offered"]["tier_c"]) == set(AF.TIER_C)
               and set(st["not_offered"]["not_this_slice"]) == set(AF.TIER_UNLISTED)
-              and st["not_offered"]["why"] == AF.TOOLS_TOML_ONLY_NOTE, st)
+              and st["not_offered"]["why"] == AF.tools_toml_only_note(), st)
         check("the vault row is a separate switch, not a tool item",
               all(i["id"] != "vault_organizer" for i in st["items"]))
         v = AF.view(here=False)
@@ -1270,6 +1270,82 @@ def t_both_routes_raise_a_card_the_gate_can_actually_show():
     check("... nor does the detail handed beside it",
           _protected_hits(json.dumps(seen.get("detail", {})), names) == [],
           _protected_hits(json.dumps(seen.get("detail", {})), names))
+
+
+def _note_halves(note: str) -> tuple:
+    """(the names in the 'offered' clause, the names in the 'not offered' one).
+
+    The note's two halves are the only place a tool name may appear, and they
+    are found by their own sentence shapes rather than by splitting a sentence
+    that starts with a fixed head.
+    """
+    off = re.search(r"(?P<names>[A-Za-z0-9_, ]+?) (?:is|are) not offered to the "
+                    r"AI model right now either\.", note)
+    on = re.search(r"(?P<names>[A-Za-z0-9_, ]+?) (?:is|are) offered to the "
+                   r"AI model right now -", note)
+    return ((on.group("names") if on else ""),
+            (off.group("names") if off else ""))
+
+
+def t_the_tool_note_follows_the_live_file():
+    """THE TAIL OF THE "no in-app switch" NOTE IS MEASURED (2026-11-04).
+
+    It used to be a typed list naming eight unlisted tools as "not offered",
+    and the shipped settings file enables six of them - so the answer told the
+    owner his own switched-on tools were off (self-awareness audit gap 8).
+    This writes two DIFFERENT framework files through `JARVIS_FRAMEWORK_TOML`,
+    the real override the loader honours, and checks the sentence follows:
+    a tool the file enables is never in the "not offered" half, and a tool it
+    leaves out is.
+    """
+    real = os.environ.get("JARVIS_FRAMEWORK_TOML")
+    tmp = Path(tempfile.mkdtemp(prefix="jarvis-tool-note-"))
+    only_web = tmp / "only-web.toml"
+    every_unlisted = tmp / "every-unlisted.toml"
+    only_web.write_text('[tools]\nenabled = ["web_search"]\n', encoding="utf-8")
+    every_unlisted.write_text(
+        "[tools]\nenabled = [" + ", ".join(f'"{t}"' for t in AF.TIER_UNLISTED)
+        + "]\n", encoding="utf-8")
+    try:
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(only_web)
+        note = AF.tools_toml_only_note()
+        offered, not_offered = _note_halves(note)
+        check("the fixed head still opens the answer",
+              note.startswith(AF.TOOLS_TOML_ONLY_NOTE))
+        check("a tool the file enables is said to be offered, never 'not offered'",
+              "web_search" in offered and "web_search" not in not_offered, note)
+        check("a tool the file leaves out is said not to be offered",
+              "calculator" in not_offered and "calculator" not in offered, note)
+        check("no enabled tool is ever named in the 'not offered' half",
+              not [t for t in AF.TIER_UNLISTED if t in AF.tools_enabled_set()
+                   and t in not_offered], note)
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(every_unlisted)
+        note = AF.tools_toml_only_note()
+        offered, not_offered = _note_halves(note)
+        check("with every unlisted tool enabled, none is called not offered",
+              not_offered == "" and all(t in offered for t in AF.TIER_UNLISTED),
+              note)
+        # An UNREADABLE file is not "all off": it is said as unknown.
+        keep = AF.fw
+        AF.fw = None
+        try:
+            unknown = AF.tools_toml_only_note()
+            check("an unreadable settings file is said as unknown, never as all-off",
+                  "could not be read" in unknown
+                  and "not offered to the AI model right now either" not in unknown,
+                  unknown)
+        finally:
+            AF.fw = keep
+        # And the page's own `why` is the same sentence, not the old constant.
+        st = AF.tools_status(here=True)
+        check("the page's not-offered reason is the measured sentence",
+              st["not_offered"]["why"] == AF.tools_toml_only_note())
+    finally:
+        if real is None:
+            os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+        else:
+            os.environ["JARVIS_FRAMEWORK_TOML"] = real
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

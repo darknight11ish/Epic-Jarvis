@@ -7289,7 +7289,14 @@ def _tool_off_words(subject: str, action: str) -> str:
         if pc_only:
             return f"{subject} is switched off on this PC. {pc_only}"
     if real in tuple(getattr(AF, "TOOLS_TOML_ONLY", ()) or ()):
-        why = str(getattr(AF, "TOOLS_TOML_ONLY_NOTE", "") or "").strip()
+        # The PC builds this sentence's tail from the LIVE [tools].enabled
+        # (tools_toml_only_note). The plain constant is only the head, so a
+        # caller that can build the whole note must be asked for it - the old
+        # constant's typed tail is what told the owner six of his switched-on
+        # tools were off (2026-11-04).
+        builder = getattr(AF, "tools_toml_only_note", None)
+        why = str((builder() if callable(builder)
+                   else getattr(AF, "TOOLS_TOML_ONLY_NOTE", "")) or "").strip()
         if why:
             return f"{subject} is switched off on this PC. {why}"
     not_listed = str(getattr(AF, "TOOLS_NOT_ON_LIST", "") or "").strip()
