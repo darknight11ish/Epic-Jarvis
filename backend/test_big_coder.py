@@ -15,7 +15,9 @@ it:
   3. BOTH lanes must be proved gone from /api/ps before the model is loaded -
      a lane that will not go means NOTHING is loaded;
   4. the model must load with ZERO spill at the measured context, or it is
-     unloaded again and the lanes are put back;
+     unloaded again and the lanes are put back. This MODE passes no allowance,
+     so for it zero spill is the whole rule; the Coding preset's pooled lane is
+     the one measured exception and `load_coder`'s own test proves its bound;
   5. at NO point are the model and a lane model resident together (the trace
      below is checked step by step, not just at the end);
   6. stopping puts both lanes back EXACTLY: 11436 qwen3.5:9b at 196608 on the
@@ -82,6 +84,7 @@ class World:
         self.unload_refuses = set()   # ports whose unload silently does nothing
         self.load_ctx_override = {}   # port -> ctx the server really uses
         self.spill_bytes = 0          # bytes the coder loads with NOT in VRAM
+        self.spill_unreadable = False  # the /api/ps row does not say size/size_vram
         self.lane_spill = {}          # port -> bytes a LANE loads back with, NOT in VRAM
 
     @staticmethod
@@ -115,7 +118,10 @@ class World:
         self.trace.append(("load", port, model, int(num_ctx)))
         ctx = int(self.load_ctx_override.get(port, num_ctx))
         spill = self.spill_bytes if model == B.MODEL else int(self.lane_spill.get(port, 0))
-        self.ports.setdefault(port, {})[model] = self.row(model, ctx, spill)
+        row = self.row(model, ctx, spill)
+        if model == B.MODEL and self.spill_unreadable:
+            row["size"], row["size_vram"] = "unknown", "unknown"
+        self.ports.setdefault(port, {})[model] = row
         self.snapshot(f"load {model} on {port}")
         return True
 
@@ -428,6 +434,66 @@ def t_a_load_at_the_wrong_context_is_undone():
                   and str(B.NUM_CTX) in out.get("error", ""), str(out))
             check("nothing is left loaded", not w.ports[11450])
             check("both lanes are back", bool(w.ports[11436]) and bool(w.ports[11435]))
+    finally:
+        shutil.rmtree(cfg, ignore_errors=True)
+
+
+def t_the_measured_allowance_is_one_window_and_not_a_general_rule():
+    """`load_coder` refuses ANY spill when no allowance is given - the rule
+    every other caller gets - and accepts at most the ONE measured number the
+    pooled lane passes for its own window. Above that, or when the server does
+    not say how much spilled, it still refuses and unloads, and the reason
+    names both the actual spill and the allowance."""
+    cfg = tempfile.mkdtemp(prefix="big-coder-cfg-")
+    try:
+        _fresh_switch(cfg)
+        w = World()
+        with Wired(w, cfg):
+            w.spill_bytes = 1
+            out = B.load_coder(port=11450, num_ctx=32768)
+            check("no allowance: even 1 byte of spill is refused",
+                  out["ok"] is False and "spill" in out["why"], str(out))
+            check("... and the model is unloaded again",
+                  not w.ports.get(11450), str(w.ports))
+
+            w.spill_bytes = 0
+            out = B.load_coder(port=11450, num_ctx=32768)
+            check("no allowance: a zero-spill load at the pooled rung still loads",
+                  out["ok"] is True, str(out))
+
+            allowance = 352 * 1024 * 1024
+            w.spill_bytes = allowance
+            out = B.load_coder(port=11450, num_ctx=32768, allow_spill=allowance)
+            check("an allowance accepts spill up to the allowance itself",
+                  out["ok"] is True, str(out))
+
+            w.spill_bytes = allowance + 1
+            out = B.load_coder(port=11450, num_ctx=32768, allow_spill=allowance)
+            why = str(out.get("why") or "")
+            check("one byte over the allowance is refused, not accepted",
+                  out["ok"] is False, str(out))
+            check("... and the reason names the actual spill AND the allowance, "
+                  "so it cannot read as the old message",
+                  str(allowance + 1) in why and str(allowance) in why, why)
+            check("... and the model is unloaded again",
+                  not w.ports.get(11450), str(w.ports))
+
+            w.spill_bytes = 10_000_000
+            w.spill_unreadable = True
+            out = B.load_coder(port=11450, num_ctx=32768, allow_spill=allowance)
+            check("an unreadable spill is refused even WITH an allowance - an "
+                  "allowance can never be taken to mean 'spill is fine'",
+                  out["ok"] is False and "allowance" in out["why"], str(out))
+
+            # The allowance is ONE number for ONE window, not a new default.
+            import inspect
+            check("the default is NO allowance, so every other caller keeps the "
+                  "zero-spill rule",
+                  inspect.signature(B.load_coder).parameters["allow_spill"].default
+                  is None, inspect.signature(B.load_coder))
+            check("the big-coder mode's own start() cannot pass an allowance at all",
+                  "allow_spill" not in inspect.signature(B.start).parameters,
+                  inspect.signature(B.start))
     finally:
         shutil.rmtree(cfg, ignore_errors=True)
 
@@ -745,6 +811,7 @@ def main() -> int:
                t_a_lane_that_will_not_pause_stops_the_whole_start,
                t_a_load_that_spills_is_undone_and_the_lanes_come_back,
                t_a_load_at_the_wrong_context_is_undone,
+               t_the_measured_allowance_is_one_window_and_not_a_general_rule,
                t_stop_puts_both_lanes_back_exactly,
                t_a_lane_that_does_not_come_back_is_reported,
                t_status_changes_nothing,

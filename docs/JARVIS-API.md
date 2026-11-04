@@ -5273,8 +5273,17 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    - a tool ran in that turn or earlier in the conversation: "the
      conversation read outside text (a tool ran)"
 
-   **One turn that fails makes every proposal of that pass a card.** The
-   model read every turn, and nothing says which turn a fact came from.
+   **Per-fact attribution, since 2026-11-03.** A turn that fails no longer
+   cards every proposal of the pass: each fact is attributed to the clean
+   turns that hold its words, and only a fact that needs a failing turn's
+   words keeps that reason. The words must fit **one** clean turn, or **two
+   consecutive** clean turns with no other turn between them - never stitched
+   across a turn that read outside text, so a tool output in the middle
+   cannot supply half of a fact (Gemini's Q1 hardening on the memory review).
+   The conversation-wide taint still counts as the card's reason for a fact
+   that cannot be attributed. A turn's own `read_outside` is what makes it
+   unclean; a typed turn after an earlier tool turn is still the owner's
+   words.
 5. **Voice** (GUARDS L8) counts only when the voice check that let it in was
    `very_strict`, decided by the stronger voice model, in mode `owner`. Else:
    "said aloud, but the voice check was not at its strictest ...".
@@ -5309,7 +5318,9 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    not grounded by only a past or -ing form ("hated" does not ground "hat");
    a date counts when it is the real date of a relative date the owner used
    ("yesterday"). Negations ("not", "no longer") must be there word for
-   word. Else: "not in your own words".
+   word. Else: "not in your own words". **Since 2026-11-03** the fact's words
+   must all be in **one** clean turn, or in **two consecutive** clean turns -
+   never stitched across a turn that read outside text (point 4).
    **And the fact leaves out nothing that changed what was said** (red team
    R2, 2026-09-24). Each sentence the fact shares a word with is read for:
    a negation or change of state (not, n't, no, never, no longer, any more,
@@ -5430,7 +5441,14 @@ ALL of these, or it stays a card. The words in quotes are what the card's
      nothing (or only another person, above), for a one-line JSON verdict. Its "unsure", an answer that is
      not that JSON, no answer within 8 seconds, Ollama not reachable, no
      model known, or a model that is not on this PC or is a cloud model: a
-     card (fail closed).
+     card (fail closed). **Since 2026-11-03** a check that could not RUN (a
+     timeout, an unreachable model, an unreadable answer - never a topic it
+     flagged) is asked once more after a 1.5 s pause with a 30 s deadline
+     (`SENSITIVE_RETRY_TIMEOUT` / `SENSITIVE_RETRY_BACKOFF`): a clean second
+     answer saves the fact, and a second failure is still a card, still
+     counted as the fault it is. (The learner's model is often busy right
+     after an answer - measured on the owner's PC, two of six carded facts
+     were exactly this 8-second timeout.)
 
    The reason is one per topic: "about health, a sensitive topic", "about
    money, ...", "about passwords or account details, ...", "about ID
@@ -5592,6 +5610,22 @@ saved this way in one learning pass (`REWORDED_MAX_PER_PASS`); the rest stay
 cards whose reason says it is a ceiling. A wrong paraphrase can then be stored
 and recalled - the card says so in those words before it is turned on.
 
+**It cannot relax a pass that read outside text** (2026-11-03, Gemini Q1):
+when any turn of the pass is not learnable from - a tool ran, or its words
+were re-sent - the extractor was fed those turns too, so a reworded fact in
+that pass still cards.
+
+**Turning it on also rechecks the pending cards** (2026-11-03, Gemini Q3): a
+pending card whose ONLY reason was "not in your own words" is saved with
+`meta.reworded` when the switch is turned on, and again on every later
+learning pass (`recheck_pending_proposals`). At most five such cards per call,
+and the same checks the pass runs still apply (source, correction, instruction,
+forgotten-before, contradiction, sensitive - a check that cannot run leaves the
+card alone). The other two old card reasons - a sensitive check that could not
+run, and the old pass-wide "the conversation read outside text" - need the
+turns of the pass that was carded, which were never stored, so they stay cards
+rather than be guessed at.
+
 `GET /api/memory/auto?limit=30&before=<saved_at>`
 
 ```json
@@ -5698,14 +5732,22 @@ wait for your yes, even with this on."
 ### 19.6 Known gaps, said plainly
 
 - **Strict on purpose, so many real facts stay cards.** A fact the model
-  rewords ("prefers" for "likes better") is not grounded; a conversation
-  with one pasted message, one shared text, one tool run or one voice turn at
-  the balanced voice setting makes every later pass of that conversation
-  cards; and the sensitive-topic check flags anything private about another
-  person (an everyday fact about someone saves since 2026-09-26, but only
-  on the local model's clear "no"), and asks the local model about
-  everything else (a card when it is unsure
-  or does not answer in 8 seconds).
+  rewords ("prefers" for "likes better") is not grounded unless the third
+  switch is on; a turn that fails - a pasted or shared message, an
+  unverifiable voice turn - still cards the facts whose words it holds
+  (2026-11-03: no longer the whole pass, only the facts that need it); and the
+  sensitive-topic check flags anything private about another person (an
+  everyday fact about someone saves since 2026-09-26, but only on the local
+  model's clear "no"), and asks the local model about everything else (a card
+  when it is unsure or does not answer in 8 seconds - after one more patient
+  30-second ask when the check itself could not run).
+- **Old cards were not all recheckable.** The pending cards made before
+  2026-11-03 by the reworded and sensitive-timeout bugs can only be rechecked
+  for the "not in your own words" reason (turning the switch on saves those by
+  itself). The other two reasons need the turns of the pass that was carded,
+  which were never stored, so they stay cards for the owner's yes; the two
+  repairs stop new ones being made. Said here so nobody expects every old live
+  card to vanish.
 - **The registry is in memory.** After a backend restart, the rest of an
   ongoing conversation is cards (the earlier turns are "not seen arrive"). An
   app that sends no `conversation_id` gets cards only.
@@ -25353,10 +25395,16 @@ What an apply does, in order, and what it never does:
    leaves it running).
 2. The pause is ANNOUNCED (event bus + audit log) before the first unload, both
    lane models are unloaded and proved gone from `/api/ps`, the model is loaded
-   **naming 16,384 tokens**, and `/api/ps` must show it present, at that
-   context and with **zero spill**. A load that spills or comes up elsewhere is
-   unloaded again, both lanes are restored and the answer says why (503) - the
-   refusal is the machine's own words, never a canned one.
+   **naming 32,768 tokens** (since 2026-11-03; 16,384 before it), and `/api/ps`
+   must show it present, at that context and with no spill beyond this one
+   window's measured allowance - **352 MiB**
+   (`jarvis_model_lanes.POOLED_SPILL_ALLOWANCE`: the 323.5 MiB measured at
+   32,768 on 2026-11-03 plus about 9%). A load that comes up elsewhere, spills
+   past the allowance, or does not report its spill is unloaded again, both
+   lanes are restored and the answer says why (503) - the refusal is the machine's own
+   words, never a canned one. **That allowance is the ONE exception:**
+   `load_coder` with no allowance still refuses any spill at all, and that is
+   every other caller, the big-coder mode's own 28,672-token load included.
 3. The model is then recorded as the one chat uses. It is NOT a second card and
    NOT `switch_to`: `jarvis_models.switch_to` runs its tripwire smoke test at
    `jarvis_models.OLLAMA`, which is a single-card lane, so asking it for a
@@ -25398,9 +25446,38 @@ RTX 2080 SUPER while it ran, and both lane models proved back afterwards at
 start took 69.9 s and the stop 59.1 s, the pause and the restores included.
 **The 28,672-token rung the 2026-10-18 measurement used no longer fits this
 PC**: 28,672, 24,576 and 20,480 all spilled 204-212 MiB, and 16,384 was the
-largest rung that loaded with none, which is why the preset asks for 16,384.
-`jarvis_big_coder.NUM_CTX` (28,672) is that mode's own measured rung and was
-not changed.
+largest rung that loaded with none, which is why the preset asked for 16,384
+from 2026-11-02 until the amendment below. `jarvis_big_coder.NUM_CTX` (28,672)
+is that mode's own measured rung and was not changed.
+
+**2026-11-03 amendment: the preset now asks for 32,768, and the allowance is
+still one window's.** The same day's read-only measurement on this PC, through
+the same shipped path, put the whole context ladder on one table: 16,384 at
+14,886.2 MiB with **no spill** (still the zero-spill ceiling), then 20,480 at
+203.5 MiB spilled, 24,576 at 207.5, 28,672 at 211.5 and **32,768 at 323.5 MiB**
+(16,513.7 MiB in all, 16,190.1 of it in video memory). Above 16,384 every rung
+spills; the 8 GB card is what runs out first (7,591 of 8,192 MiB at 32,768),
+which is why the top rung's spill jumps by 112 MiB rather than growing smoothly.
+The owner chose 32,768, the largest rung measured to load on this PC: cold load
+36.0 s against 37.0 s at 16,384, and a decode median of 80.36 against 79.88
+tokens a second on the three prompts, inside the model's own run-to-run noise.
+The owner accepted the 323.5 MiB of the model in system RAM, so the preset's
+`context` is now **32,768** (`jarvis_model_lanes.POOLED_CTX`, pinned to it by
+test; `POOLED_SPILL_MEASURED_MIB` is 323.5, `context_measured` is 32,768, and
+`context_zero_spill` stays 16,384 as the historical fact), and the start passes
+`load_coder(..., allow_spill=...)` the cap of **352 MiB** - the 323.5 MiB
+measurement plus about 9%. **Nothing else relaxes:** no allowance is the default
+and still means any spill is refused; `jarvis_big_coder.start()` never passes
+one; the big-coder mode's 28,672 rung and its zero-spill check are unchanged;
+and a load above the cap, or one that does not report its spill, is still
+refused (503) with both the actual spill and the allowance named. The extra
+16,384 tokens over the old window were not filled by the measurement (all
+prompts were 40-43 tokens), so a genuinely long conversation is still
+unmeasured - the decode speed of a nearly-full 32,768-token window was not
+measured either; a 15-minute real coding test runs after deployment. Full
+numbers: `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment; raw
+output: `.dsh-scratch/CODING-TAKEOVER-2026-11-03/WINDOW-20480.md` and
+`WINDOW-HIGHER-RUNGS.md`.
 
 **The HUD's left rail renders this contract too** (the owner's request of
 2026-10-21: "i would like this part of the jarvis HUD to have the presets we
