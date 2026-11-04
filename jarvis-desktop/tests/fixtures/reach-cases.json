@@ -1376,6 +1376,10 @@
      "name": "Explaining and checking one of Jarvis's own features (read-only)"
     },
     {
+     "id": "setup_quiz",
+     "name": "Going through the Personalize Jarvis questions: what they ask and what each answer would change (read-only; an answer is only drafted for the Settings card, which applies it)"
+    },
+    {
      "id": "refresh_abilities",
      "name": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
     },

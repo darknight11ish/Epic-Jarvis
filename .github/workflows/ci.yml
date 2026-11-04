@@ -278,7 +278,15 @@ jobs:
     # thing wrong with that run was that the suite and a loaded shared runner
     # came within five minutes of the cap. 60 gives the real work room without
     # hiding a genuine hang.
-    timeout-minutes: 60
+    # 2026-11-04: the backend suites are now 55-60 minutes of real work.
+    # Measured on this night: #1132's suite step took 55m20s (whole job 58m44s)
+    # and #1115's whole job passed at 59m44s, while four required backend jobs
+    # were CANCELLED at this 60-minute cap rather than failing a test - #1126 at
+    # 60m03s and #1128 at 60m25s (every step they reached was success). A
+    # cancelled required check can never satisfy the ruleset, so the cap is 90
+    # minutes and the honest limit is the suite's own runtime, not a clock that
+    # turns a passing run into a red one.
+    timeout-minutes: 90
     # KEEP THE CODE-ONLY CHECKS IN CI (review of #861, 2026-10-26). The four
     # suites that drive jarvis_chatbot_web's visible browser -
     # test_chatbot_sites.py, test_chatbot_gemini.py, test_handoff.py and

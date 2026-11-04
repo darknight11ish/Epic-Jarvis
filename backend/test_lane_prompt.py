@@ -37,6 +37,11 @@ sys.path.insert(0, str(HERE / "rebuilt"))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_agent.py")
 import jarvis_agent as AG  # noqa: E402
+# The Personalize Jarvis line (jarvis_agent.with_setup_state_note, Wave B
+# 2026-11-03) is ONE system line added to every local turn while the quiz is
+# unfinished - correct to send, but not inside a test that pins the request
+# word for word. test_setup_quiz.py proves that line and its placing.
+AG.setup_state_note = lambda: None
 import _ollama_wire as W  # noqa: E402
 
 FAILED, PASSED = [], []

@@ -66,6 +66,12 @@ def _restore_config_dir():
 atexit.register(_restore_config_dir)
 
 import jarvis_agent as AG  # noqa: E402
+# The Personalize Jarvis line (jarvis_agent.with_setup_state_note, Wave B
+# 2026-11-03) is ONE system line added to every local turn while the quiz is
+# unfinished, and dress_messages() adds it too - correct to send, but not
+# inside a suite that checks an ordinary prompt keeps its bytes. The line and
+# its placing are proved by test_setup_quiz.py.
+AG.setup_state_note = lambda: None
 
 FAILED, PASSED = [], []
 

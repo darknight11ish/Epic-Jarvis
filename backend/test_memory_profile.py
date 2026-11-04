@@ -417,6 +417,12 @@ def t_a_first_question_keeps_the_rules_first():
         return
     require_shipped("jarvis_agent.py")
     import jarvis_agent as AG
+    # The Personalize Jarvis line (jarvis_agent.with_setup_state_note, Wave B
+    # 2026-11-03) is ONE system line added to every local turn while the quiz is
+    # unfinished, and it lands just before the question - the place this check
+    # pins the recalled block into. Correct to send, so it is stubbed here; its
+    # own suite (test_setup_quiz.py) proves the line and its placing.
+    AG.setup_state_note = lambda: None
     import _ollama_wire as W
     st = fresh("first")
     st.pin(st.add(VEG))
