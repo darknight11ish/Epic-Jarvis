@@ -947,9 +947,12 @@ mod tests {
     #[test]
     fn the_fix_button_opens_only_the_places_it_names() {
         let src = include_str!("plain_errors.rs");
+        // A bare-token needle on purpose: the zero-jargon scanner reads a
+        // literal with a space in it as prose for the owner, and this one is
+        // code - the function's own name, first seen in its definition.
         let at = src
-            .find("pub async fn open_fix_place(")
-            .expect("open_fix_place is gone");
+            .find("open_fix_place(")
+            .expect("the fix button's function is gone");
         let rest = &src[at..];
         let end = rest.find("\n}\n").map(|i| i + 3).unwrap_or(rest.len());
         let body = &rest[..end];
