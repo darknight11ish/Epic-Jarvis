@@ -473,8 +473,12 @@ def real_switch_files_move_the_pair_answers():
         path.write_text(json.dumps({"auto": True, "auto_sensitive": False}),
                         encoding="utf-8")
         off = said("does background learning save sensitive topics")
+        # "waits" only: "until you say yes" is the ending the card-words rule
+        # removed (docs/ARCHITECTURE.md, Never approve-by-voice) and
+        # test_card_words.py forbids it in jarvis_quick.py, so this must not
+        # accept it as an alternative way to pass.
         check("... and flipping it OFF says the fact waits for its own card",
-              "waits" in off or "until you say yes" in off, off)
+              "waits" in off, off)
         check("... which is a different answer", off != on, off)
     finally:
         if had is None:
