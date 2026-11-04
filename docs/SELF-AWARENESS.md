@@ -75,9 +75,10 @@ a portrait of the running Jarvis, taken the moment you ask:
 |---|---|
 | version and start time | which version of the backend is running, when it started, and what the installer recorded |
 | places | every Settings section and every menu an app can open, by the same ids the screens use |
-| settings | every setting, its section, its live value where one can be read, and how to change it |
+| settings | every setting, its section, its live value - a switch's and a named choice's (the personality, the voice, the focus preset, the hand-off mode and the rest all read their real stored value now) - and how to change it |
 | asks first | every action and whether it reads or asks, straight from the "What asks first" page |
 | abilities | the plain-words feature list, one row per ability |
+| tools | how many tools the backend has built in and which of them are switched on in your own settings file, read live from `[tools].enabled` - the same read the "What asks first" page makes |
 | plugins | the optional add-on folders, whether each is on, and why it is off |
 | stores | how much it is keeping - memories, conversations, receipts - and how to clear each |
 | private | whether App lock or "Hide memory lists and chat history" is on |
@@ -97,18 +98,29 @@ no second list to update - and there is nothing that can disagree with the app.
 
 ## Asking about itself
 
-The plain-words questions already exist and still work through the feature
-guide, which is the project's one place that explains a feature:
+These questions are answered by the PC, in one step, with no AI model in the
+loop - each from the list or module that already owns the fact, so none of them
+can invent an ability:
 
-- "What can you do?"
-- "Where do I change how Jarvis talks?"
-- "What is connected?" (accounts, plugins, the model, the two graphics cards)
-- "What tools do you have?" / "Which of your tools ask before they act?"
+- "What can you do?" - the feature list, counted and grouped.
+- "Where do I change how Jarvis talks?" - the feature guide, with the real
+  Settings place.
+- "What is connected?" - the "What Jarvis can reach" list's ON rows (accounts
+  and services) plus the plug-in folders on this PC. **Not** the model or the
+  graphics cards; ask "are you using both cards" for the cards.
+- "What tools do you have?" - the registered tool count and the tools switched
+  on in your own settings file (`[tools].enabled`), with their plain names.
+- "Which of your tools ask before they act?" - the "What asks first" page's own
+  rows whose words say they ask you first, with the count.
+- "refresh your abilities" - re-reads the inventory above and says in one
+  sentence what changed; nothing restarted, nothing changed, no approval
+  needed. The same read is `POST /api/self/refresh`.
 
 When the portrait is given to a model (a later piece of work), the same kind of
 question will be answerable from the portrait itself, so the answer agrees with
 what Settings shows. Until then, the portrait is the source the apps and the
-desktop's own version check read.
+desktop's own version check read - and the questions above are answered by the
+PC directly, not by the model.
 
 ## "Open <a place>"
 

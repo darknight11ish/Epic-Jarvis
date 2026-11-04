@@ -509,10 +509,16 @@ def tool_inventory() -> dict:
     here, each from the registry that owns it:
 
       * `registered` - `jarvis_agent.TOOLS`, the tools this backend has built;
-      * `enabled`    - the names in `[tools].enabled` of the owner's own
-        settings file, through `jarvis_asks_first.tools_enabled_set()` - the
-        SAME read the "What asks first" page makes, never a second copy and
-        never a default.
+      * `enabled`    - the names switched on in `[tools].enabled` of the
+        owner's own settings file, read through
+        `jarvis_asks_first.tools_enabled_set()` - the SAME read the "What asks
+        first" page makes, never a second copy and never a default.
+
+    A tool's OWN switch can still hold it back at turn time (`web_search`'s
+    separate on/off, browser control's second-card rule, the data sandbox) -
+    that is `jarvis_agent.offered_tools()`'s business and is not counted here,
+    because this number answers "how many are switched on in your settings
+    file", the question the old 136 was pretending to answer.
 
     `enabled` is None (never 0) when the settings file cannot be read: a PC
     without the framework module, or with a damaged file, is said as unknown
@@ -527,7 +533,13 @@ def tool_inventory() -> dict:
     enabled = None
     try:
         import jarvis_asks_first as AF
-        enabled = sorted(str(n) for n in (AF.tools_enabled_set() or ()))
+        wanted = set(AF.tools_enabled_set() or ())
+        # Names this backend has never had are not tools; the legacy
+        # `email_read` spelling is read as the tool it means by real_tool().
+        real = {str(getattr(AF, "real_tool", lambda n: n)(n)) for n in wanted}
+        registered_set = set(registered or ())
+        enabled = sorted(n for n in real
+                         if not registered_set or n in registered_set)
     except Exception:                       # noqa: BLE001 - said as unknown
         enabled = None
     why = "" if enabled is not None else (
@@ -995,7 +1007,7 @@ def refresh_sentence(changed: dict, now: dict) -> str:
 
     base = (f"{_n(now.get('places'))} places, {_n(now.get('settings'))} settings, "
             f"{_n(now.get('tools_registered'))} tools "
-            f"({_n(now.get('tools_enabled'))} offered to the AI model), "
+            f"({_n(now.get('tools_enabled'))} switched on in your settings), "
             f"{_n(now.get('asks_first_rows'))} ask-first actions, "
             f"{_n(now.get('plugins'))} plugins and "
             f"{_n(now.get('abilities'))} abilities")

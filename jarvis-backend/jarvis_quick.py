@@ -1622,6 +1622,15 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if _REACH.fullmatch(s):
         return Intent("reach_list")
 
+    # --- the three data-backed self-questions and the refresh (2026-11-04) -----
+    # docs/SELF-AWARENESS.md said these already worked and three of the four
+    # answered nothing, so the sentence went to the model and was invented.
+    # Before the reach list is not needed (that one has its own words); after it
+    # so "what are you connected to" keeps the reach answer it has always had.
+    got = _self_answers(s)
+    if got is not None:
+        return got
+
     # --- "who are you?" (jarvis_identity.py, feasibility I131) ---------------------
     if _WHO_ARE_YOU.fullmatch(s):
         return Intent("identity_help")
@@ -9767,6 +9776,63 @@ _REACH = re.compile(
 REACH_MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 "
                  "on the PC.")
 
+#: THE THREE DATA-BACKED SELF-QUESTIONS docs/SELF-AWARENESS.md promised and the
+#: code did not answer (2026-11-04 self-awareness audit, gap 4). Each is a
+#: WHOLE sentence, and each is answered from the module that already owns the
+#: fact - jarvis_agent.TOOLS + the live [tools].enabled, jarvis_asks_first's
+#: own view, jarvis_reach's own view - so none of them can invent an ability.
+#: "refresh your abilities" is the fourth: it re-reads the self portrait, which
+#: changes nothing and restarts nothing.
+_SELF_TOOLS = re.compile(
+    r"(?:what|which)\s+tools\s+(?:do\s+you|does\s+jarvis|have\s+you|are\s+you)\s+"
+    r"(?:have|got|use|using|offered)\b.*"
+    r"|what\s+tools\s+(?:can\s+you\s+use|are\s+you\s+using|do\s+you\s+use|"
+    r"do\s+you\s+have)\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?tools\s*\??$")
+
+_SELF_TOOLS_ASK = re.compile(
+    r"(?:which|what)\s+(?:of\s+)?(?:your|the|jarvis'?s?)\s+tools\s+"
+    r"(?:ask|asks|need|needs)\b.*"
+    # A bare "which tools ask ..." only when it names APPROVAL. Without this
+    # tail "which tools ask for a password" would be answered with the
+    # asks-first list - a different question.
+    r"|(?:which|what)\s+tools\s+(?:ask|need\s+my\s+approval)\s+"
+    r"(?:before|first|for\s+my|me\b)\b.*"
+    r"|(?:do|does)\s+(?:any\s+of\s+)?(?:your|the)\s+tools\s+ask\b.*")
+
+_SELF_CONNECTED = re.compile(
+    r"what\s+(?:is|are)\s+(?:currently\s+)?connected(?:\s+(?:right\s+)?now)?\s*\??$"
+    r"|what\s+have\s+you\s+got\s+connected\s*\??$"
+    r"|what\s+is\s+hooked\s+up\s*\??$")
+
+_SELF_REFRESH = re.compile(
+    r"(?:refresh|re-?read|reload)\s+(?:your|jarvis'?s?)\s+"
+    r"(?:abilities|capabilities|features|inventory|functions?|self)\b.*"
+    r"|refresh\s+abilities\s*\??$")
+
+SELF_TOOLS_MISSING = ("Your PC's Jarvis cannot list its tools yet - run apply-patches.ps1 "
+                      "on the PC.")
+
+
+def _self_answers(s: str) -> Optional[Intent]:
+    """The promises docs/SELF-AWARENESS.md made, answered with no model.
+
+    Each shape is a whole sentence and each answer reads the module that owns
+    the fact (see the three `_run_*` functions below). A near miss - "what
+    tools do I need for this job" - names no "you"/"jarvis" and falls through
+    exactly as before.
+    """
+    if _SELF_TOOLS_ASK.fullmatch(s):
+        return Intent("tools_asking")
+    if _SELF_TOOLS.fullmatch(s):
+        return Intent("tools_inventory")
+    if _SELF_CONNECTED.fullmatch(s):
+        return Intent("connected_list")
+    if _SELF_REFRESH.fullmatch(s):
+        return Intent("self_refresh")
+    return None
+
+
 SAYABLE_MISSING = ("Your PC's Jarvis cannot list things you can say yet - run "
                    "apply-patches.ps1 on the PC.")
 
@@ -13563,6 +13629,165 @@ def _run_reach(intent: Intent) -> Result:
         return Result(REACH_MISSING, intent.name)
 
 
+# --------------------------------------------------------------------------
+#   The self-questions the doc promised (2026-11-04)
+# --------------------------------------------------------------------------
+#
+# docs/SELF-AWARENESS.md told the owner that "What tools do you have?",
+# "Which of your tools ask before they act?" and "What is connected?" already
+# worked through the feature guide. Driven, all three answered nothing and
+# went to the model, which has no state to answer them from. Each answer below
+# is built from the module that already owns the fact, at answer time, so a
+# typed list cannot drift: jarvis_agent.TOOLS + the live [tools].enabled,
+# jarvis_asks_first.view(), jarvis_reach.view(), jarvis_plugins.available().
+# None of them changes anything; all four are in READ_ONLY_INTENTS.
+
+
+def _self_list(items, cap: int = 14) -> str:
+    """`a, b and c`; `a, ... and N more` past `cap` - one answer, not a dump."""
+    got = [str(i) for i in items if str(i or "").strip()]
+    if not got:
+        return ""
+    if len(got) > cap:
+        return ", ".join(got[:cap]) + f" and {len(got) - cap} more"
+    if len(got) == 1:
+        return got[0]
+    return ", ".join(got[:-1]) + " and " + got[-1]
+
+
+def _tool_label(name: str) -> str:
+    """A tool's plain-words name, from jarvis_reach's own table."""
+    try:
+        import jarvis_reach as RE
+        return str(RE.TOOL_NAMES.get(str(name), str(name)))
+    except Exception:
+        return str(name)
+
+
+def _run_tools_inventory(intent: Intent) -> Result:
+    """"What tools do you have?" - the registry's own list and live offer.
+
+    THE COUNTS COME FROM ONE PLACE: `jarvis_self_portrait.tool_inventory()`,
+    the same read `/api/self` and the model's self_portrait tool now use, so
+    the chat answer, the portrait and the refresh sentence cannot say three
+    different numbers. It is built at answer time from `jarvis_agent.TOOLS`
+    and the same `[tools].enabled` read the turn makes; an unreadable settings
+    file says so instead of reading as "no tools".
+    """
+    try:
+        import jarvis_self_portrait as SP
+        inv = SP.tool_inventory()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    head = f"I have {registered} tools built in."
+    if inv.get("enabled") is None:
+        return Result(
+            head + " I cannot read which of them the AI model is offered right "
+            "now - the settings file did not answer, so I will not guess.",
+            intent.name)
+    offered = [str(n) for n in (inv.get("enabled_names") or ())]
+    if not offered:
+        return Result(
+            head + " None of them are switched on right now: your settings file "
+            "(jarvis-framework.toml, [tools].enabled) names no tool.",
+            intent.name)
+    body = (f" {len(offered)} of them are switched on in your settings file: "
+            f"{_self_list([_tool_label(n) for n in offered])}.")
+    if len(offered) < registered:
+        body += (f" The other {registered - len(offered)} are built in but not "
+                 f"switched on - jarvis-framework.toml, [tools].enabled, is the "
+                 f"list, and Settings, \"What asks first\", has the switches for "
+                 f"the ones an app can change.")
+    body += (" A tool's own switch can still hold it back for one turn - web "
+             "search, browser control and the data sandbox have their own - so "
+             "the live page is Settings, \"What asks first\".")
+    return Result(head + body, intent.name)
+
+
+def _run_tools_asking(intent: Intent) -> Result:
+    """"Which of your tools ask before they act?" - the asks-first page's rows.
+
+    The page is the project's one list of what asks first, and its rows are the
+    actions the gate decides; the answer counts and names the ones whose own
+    words say they ask. Re-using the page is what keeps this from inventing a
+    permission the gate does not keep.
+    """
+    try:
+        import jarvis_asks_first as AF
+        view = AF.view(here=False)
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    asking = []
+    for group in view.get("groups") or ():
+        for row in group.get("rows") or ():
+            says = str((row or {}).get("says") or "")
+            # THE PAGE'S OWN "ask" WORD, not a prefix: "Asks when Jarvis made
+            # the mark" is a narrower rule and must not be counted as "asks you
+            # first every time".
+            if says == AF.SAYS.get("ask"):
+                asking.append(str(row.get("title") or row.get("id") or ""))
+    if not asking:
+        return Result("Nothing asks you first right now - the \"What asks first\" "
+                      "page is where that would be listed.", intent.name)
+    return Result(
+        f"{len(asking)} actions ask you first before they act - for example: "
+        f"{_self_list(asking, cap=6)}. The \"What asks first\" page has every one, "
+        f"written by the PC, in Settings in both apps.", intent.name)
+
+
+def _run_connected(intent: Intent) -> Result:
+    """"What is connected?" - the reach page's ON rows plus the plug-ins."""
+    try:
+        import jarvis_reach as RE
+        view = RE.view()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result(REACH_MISSING, intent.name)
+    on = []
+    for row in view.get("rows") or ():
+        if (row or {}).get("on"):
+            where = str(row.get("where") or "").split(" (as ")[0]
+            on.append(str(row.get("name") or "") + (f": {where}" if where else ""))
+    head = ("Right now these are connected or reachable from this PC: "
+            + "; ".join(on) + "." if on else
+            "Nothing is connected from this PC right now.")
+    try:
+        import jarvis_plugins as P
+        plugins = len(P.available() or ())
+    except Exception:                       # noqa: BLE001 - no folder is not a fault
+        plugins = None
+    if plugins is None:
+        plugins_bit = " I cannot read the plug-in folder on this PC just now."
+    elif plugins:
+        plugins_bit = f" Plug-ins installed on this PC: {plugins}."
+    else:
+        plugins_bit = " No plug-ins are installed on this PC."
+    return Result(head + plugins_bit + " Anything not on this list stays on this "
+                  "PC. This list is written by the PC from its settings, not by "
+                  "the AI model.", intent.name)
+
+
+def _run_self_refresh(intent: Intent) -> Result:
+    """"Refresh your abilities" - the self portrait's own refresh, said.
+
+    The same read-only refresh `POST /api/self/refresh` and the
+    `refresh_abilities` model tool use: it clears two caches, re-reads the
+    inventory and says what moved. No card, no restart, no change.
+    """
+    try:
+        import jarvis_self_portrait as SP
+        out = SP.refresh()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("Your PC's Jarvis cannot re-read its abilities yet - run "
+                      "apply-patches.ps1 on the PC.", intent.name)
+    said = str((out or {}).get("said") or "").strip()
+    return Result(said or "I re-read what I can do. Nothing was restarted.",
+                  intent.name)
+
+
+
 def _run_identity(intent: Intent) -> Result:
     """"Who are you?" and close phrasings (jarvis_identity.py): fixed text,
     no model, no romance. Reads no state, changes nothing."""
@@ -17055,6 +17280,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n == "tools_inventory":
+        return _run_tools_inventory(intent)
+    if n == "tools_asking":
+        return _run_tools_asking(intent)
+    if n == "connected_list":
+        return _run_connected(intent)
+    if n == "self_refresh":
+        return _run_self_refresh(intent)
     if n == "calendar_setup":
         # "connect my calendar", "set up a calendar bridge for me" (2026-10-28):
         # a read-only answer from the reader's own state - it names the real
@@ -17692,6 +17925,11 @@ READ_ONLY_INTENTS = frozenset({
     "personality_refine_failed", "personality_show", "personality_show_missing",
     "personality_status", "project_log",
     "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
+    # The self-questions docs/SELF-AWARENESS.md promises (2026-11-04): each only
+    # reads a registry or a view, and the refresh re-reads the portrait without
+    # changing or restarting anything - so none may take back what "cancel
+    # that" would undo.
+    "tools_inventory", "tools_asking", "connected_list", "self_refresh",
     "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
     "settings_browser_mode_bad",
     # Reading the Anti-Slop filter (2026-10-28): "is anti-slop on?" changes

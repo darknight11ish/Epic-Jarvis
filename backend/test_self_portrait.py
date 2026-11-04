@@ -288,7 +288,7 @@ def tool_counts_are_the_real_tools():
           and counted["counts"]["asks_first_rows"] > 100, str(counted["counts"]))
     said = SP.refresh_sentence({}, c)
     check("the refresh sentence names tools as tools, not as ask-first actions",
-          "51 tools (13 offered to the AI model)" in said
+          "51 tools (13 switched on in your settings)" in said
           and "136 ask-first actions" in said, said)
     # THE SETTINGS FILE IS THE SOURCE. Write a one-tool [tools].enabled into
     # the throwaway config folder (the first place jarvis_framework looks),
