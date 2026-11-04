@@ -1143,10 +1143,17 @@ def _restore(original, piece: str) -> str:
     return out.strip(" ,.;:!?")
 
 
-def match(text, now: Optional[float] = None) -> Optional[Intent]:
-    """The intent of a sentence, or None when it is not one of ours."""
+def match(text, now: Optional[float] = None,
+          conversation: Optional[str] = None) -> Optional[Intent]:
+    """The intent of a sentence, or None when it is not one of ours.
+
+    `conversation`: the request's conversation_id, read by the read-a-link
+    follow-up alone (Q2, 2026-11-03) - one page per chat is kept for 15 minutes
+    after a read, and a question about it is answered from the kept words with
+    no card and no fetch. Optional, so every older caller is unchanged.
+    """
     now = time.time() if now is None else now
-    got = _match(text, now)
+    got = _match(text, now, conversation)
     if got is not None and got.f.get("text"):
         got.f["text"] = _restore(text, got.f["text"])
     if got is not None and got.f.get("about"):
@@ -1171,7 +1178,7 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
     return got
 
 
-def _match(text, now: float) -> Optional[Intent]:
+def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Intent]:
     s = normalize_spoken_command(text)
     if not s or len(s) > 400 or "\n" in s:
         return None
@@ -1205,6 +1212,14 @@ def _match(text, now: float) -> Optional[Intent]:
         return Intent("note_location", {"context": "last"})
     if _NOTE_LOCATION_VAULT.fullmatch(s):
         return Intent("note_location", {"context": "vault"})
+    # The phone's app allow-list, from the RAW sentence (Q7, 2026-11-03).
+    # BEFORE the generic capability lane on purpose: "what can you open on my
+    # phone" used to be answered by `_feature_capability_question` with the
+    # feature catalogue's capability sentence, which names no app, while the
+    # catalogue's own phone-apps row says that question lists them.
+    got = _phone_apps_question(text)
+    if got is not None:
+        return got
     # The capability questions (2026-10-31, the pass-9 field test) are read
     # BEFORE the tidied sentence, because "can you add something to my
     # calendar?" loses its "can you" on the way in and would otherwise be
@@ -1600,7 +1615,13 @@ def _match(text, now: float) -> Optional[Intent]:
     # "approve", "deny", "yes", "no" as the WHOLE message. He typed one, and
     # the app answered him as ordinary chat - which reads as a broken app
     # rather than a deliberate rule. This says where the control is instead.
-    if _TYPED_DECISION.fullmatch(s):
+    #
+    # ONLY WHILE A CARD IS WAITING (D1, 2026-11-03). Without `_card_is_pending`
+    # a bare "yes" or "no" was answered with the canned approval sentence even
+    # when nothing was pending, which hijacked ordinary conversation; with it,
+    # the sentence appears exactly when it can point at a real card, and the
+    # rest of the time "yes" is the model's like any other sentence.
+    if _TYPED_DECISION.fullmatch(s) and _card_is_pending():
         return Intent("approval_where")
 
     # --- "open <a settings section>", and "turn on/off <a setting>" ------------
@@ -1736,7 +1757,7 @@ def _match(text, now: float) -> Optional[Intent]:
     # when this page changes" is a WATCH on a page, so the watcher must have
     # first refusal. `_read_link_intent` refuses a watch-shaped sentence itself
     # too, so the two orders agree rather than merely happening to work.
-    got = _read_link_intent(text, s)
+    got = _read_link_intent(text, s, conversation)
     if got is not None:
         return got
 
@@ -3510,10 +3531,125 @@ _READ_LINK_WANT = re.compile(
     r"\b(?:read|reading|summari[sz]e|summari[sz]ing|sum\s+up)\b"
     r"[^.!?]{0,40}?\b(?:link|url|address|web\s*page|webpage|page|article|video)\b")
 
+#: A pasted link with NO read verb is still a request (Q2, Gemini's ruling of
+#: 2026-11-03). Measured before this: "https://example.com/kettle" and
+#: "https://example.com/kettle what is this about?" both matched NOTHING and
+#: went to the local model, which cannot open a page on this PC (the page tool
+#: is not offered), so the owner got a guess about an address nothing read.
+#:
+#: THE RULE IS NARROW, because a link pasted to talk ABOUT is a real thing:
+#:   * the message is ONLY the link; or
+#:   * the link plus a QUESTION about it - the message ends with "?" or opens
+#:     with a question word / "tell me" / "explain".
+#: A statement ("here is a link <url>"), a browser command ("open <url> in my
+#: browser", which is `_open`'s own) and a watch ("tell me when <url> changes",
+#: refused above) are NOT reads. The one card is still the guard: nothing is
+#: fetched until a person answers it, and a decline fetches nothing.
+_READ_LINK_QUESTION_LEAD = re.compile(
+    r"^(?:what|what's|whats|whatever|which|who|whom|whose|when|where|why|how|"
+    r"is|are|was|were|does|do|did|can|could|would|should|will|tell\s+me|"
+    r"explain|summari[sz]e|anything|something)\b")
 
-def _read_link_intent(text, s: str) -> Optional[Intent]:
+#: How long ONE read page is kept for follow-up questions (Q2, 2026-11-03):
+#: 900 seconds, per conversation. Long enough for the questions that follow a
+#: read ("what does it say about pricing?"), short enough that the words do not
+#: linger; a restart clears it, a new page in the same chat replaces it, and a
+#: PRIVATE turn never keeps one (`answer()` refuses the whole fast path there
+#: before this is ever reached).
+READ_LINK_KEEP_SECONDS = 900
+#: At most this many conversations keep a page at once: the cap is a bound, not
+#: a feature - the oldest goes.
+READ_LINK_KEEP_MAX = 8
+#: conversation_id -> {"url", "title", "text", "at"}. MEMORY ONLY: nothing is
+#: written to disk, and the text kept is the window the reader already handed
+#: back (its own MAX_TEXT_CHARS), never the page.
+_READ_LINK_KEPT: dict = {}
+_READ_LINK_KEPT_LOCK = threading.Lock()
+#: Said when a follow-up names a page but this chat kept none (a restart, more
+#: than 15 minutes, another conversation, or a private chat).
+READ_LINK_NOTHING_KEPT = "Say the address to read, starting with http:// or https://."
+
+#: The follow-up shapes answered from the page this chat already read: a word
+#: about the page's CONTENT ("say", "mention", "about") next to a reference to
+#: it, or "summarise it". Narrow on purpose - "where is it" and "what about
+#: tomorrow" are not questions about the page, and a shape this does not match
+#: keeps the model, exactly as it did before there was a cache.
+_READ_LINK_KEPT_Q = re.compile(
+    r"\b(?:say|says|said|mention|mentions|mentioned|talk\s+about|talks\s+about|"
+    r"cover|covers|name|names|mean|means|about)\b[^.!?]{0,60}?\b"
+    r"(?:it|that|this|the\s+page|the\s+article|the\s+link|the\s+site)\b"
+    r"|\b(?:it|that|this|the\s+page|the\s+article|the\s+link|the\s+site)\b"
+    r"[^.!?]{0,60}?\b(?:say|says|said|mention|mentions|mean|means)\b"
+    r"|\bwhat\s+(?:is|was|'s)\s+(?:it|that|this)\s+about\b"
+    r"|\b(?:summari[sz]e|quote)\s+(?:it|that|the\s+page|the\s+article)\b")
+
+
+def _read_link_pasted(raw: str, url: str) -> bool:
+    """Is this sentence JUST the link, or the link plus a question about it?
+
+    The one gate `_read_link_intent` uses for a paste with no read verb. `raw`
+    is the message as it arrived (the "?" and the capital letters are only
+    there), `url` the address as matched.
+    """
+    rest = str(raw or "")
+    at = rest.find(url)
+    if at >= 0:
+        rest = rest[:at] + " " + rest[at + len(url):]
+    rest = " ".join(rest.lower().split()).strip(" \t,;:-.")
+    if not rest:
+        return True                 # the message is the address and nothing else
+    if str(raw or "").rstrip().endswith("?"):
+        return True                 # "https://x ... what is this about?"
+    return bool(_READ_LINK_QUESTION_LEAD.match(rest))
+
+
+def _read_link_remember(conversation, url: str, title: str, text: str,
+                        now: Optional[float] = None) -> None:
+    """Keep ONE page for this conversation, for READ_LINK_KEEP_SECONDS.
+
+    Memory only, capped, and never raising: the read already happened and its
+    answer must not depend on this. A private turn never reaches here.
+    """
+    if not conversation:
+        return
+    when = time.time() if now is None else now
+    with _READ_LINK_KEPT_LOCK:
+        _READ_LINK_KEPT[str(conversation)] = {
+            "url": str(url or ""), "title": str(title or ""),
+            "text": str(text or ""), "at": when}
+        while len(_READ_LINK_KEPT) > READ_LINK_KEEP_MAX:
+            _READ_LINK_KEPT.pop(next(iter(_READ_LINK_KEPT)), None)
+
+
+def _read_link_kept(conversation, now: Optional[float] = None) -> Optional[dict]:
+    """The page this conversation read, or None when there is none or it is old.
+
+    Expiry is read here rather than on a timer: nothing runs in the background,
+    and a page past READ_LINK_KEEP_SECONDS is gone the moment anyone asks.
+    """
+    if not conversation:
+        return None
+    when = time.time() if now is None else now
+    with _READ_LINK_KEPT_LOCK:
+        kept = _READ_LINK_KEPT.get(str(conversation))
+        if not kept:
+            return None
+        if when - float(kept.get("at") or 0) > READ_LINK_KEEP_SECONDS:
+            _READ_LINK_KEPT.pop(str(conversation), None)
+            return None
+        return dict(kept)
+
+
+def _read_link_intent(text, s: str,
+                      conversation: Optional[str] = None) -> Optional[Intent]:
     """`Intent("read_link", {"url", "words"})`, or None - the sentence is not
-    a request to read a link."""
+    a request to read a link.
+
+    `conversation` is only read for the FOLLOW-UP: when this chat kept a page
+    recently (Q2, 2026-11-03), "what does it say about pricing?" is answered
+    from that page with no card and no fetch. With no address and no kept page
+    the sentence is left alone exactly as before.
+    """
     raw = str(text or "")
     low = str(s or "").lower()
     if _READ_LINK_WATCH.search(low):
@@ -3526,6 +3662,10 @@ def _read_link_intent(text, s: str) -> Optional[Intent]:
         # runner, so its own "say the address" sentence is reachable (BUG 5).
         if _READ_LINK_WANT.search(low):
             return Intent("read_link", {"url": "", "words": low})
+        # A follow-up about the page this chat already read (Q2): no card, no
+        # fetch, nothing new leaves the PC - the words are already here.
+        if _read_link_kept(conversation) is not None and _READ_LINK_KEPT_Q.search(low):
+            return Intent("read_link_q", {"words": low})
         return None
     url = m.group(0).rstrip(".,;:!?]}'\u2019\u201d\"")
     # A closing bracket that OPENS inside the link is part of it
@@ -3534,8 +3674,8 @@ def _read_link_intent(text, s: str) -> Optional[Intent]:
         url = url[:-1].rstrip(".,;:!?]}")
     if not url or len(url) > 500:
         return None
-    if not _READ_LINK_VERB.search(low):
-        return None              # a link with no "read it" in the sentence
+    if not _READ_LINK_VERB.search(low) and not _read_link_pasted(raw, url):
+        return None              # pasted to talk about, not to read
     return Intent("read_link", {"url": url, "words": low})
 
 
@@ -5084,6 +5224,21 @@ _FEATURE_WHERE = re.compile(
     # model rather than being hijacked.
     r"|how\s+do\s+i\s+change\s+(?:the\s+|my\s+|a\s+|an\s+)?(.+)"
     r"|where\s+in\s+jarvis\s+is\s+(?:the\s+|my\s+)?(.+)")
+#: "where do I change <setting>, and what is it set to?" (Q7, 2026-11-03).
+#: ONE question that asks for BOTH halves - the place and the value - and the
+#: settings registry already answers both together: `explain_setting_words`
+#: prints the real Settings card AND its current value ("Right now: normal").
+#: Measured before this: the compound sentence matched nothing at all and went
+#: to the local model, which invented a `configuration.yaml` place, while the
+#: plain "where do I change <setting>" answered correctly.
+#:
+#: So the clause is taken OFF here and the rest of the sentence is read by
+#: `_FEATURE_WHERE` below: no new intent, no new words, and the SAME exact-name
+#: gate - a name nothing knows still falls through to the model exactly as the
+#: plain question does.
+_WHERE_AND_VALUE = re.compile(
+    r"where\s+do\s+i\s+(?:change|set|edit|adjust)\s+(?:the\s+|my\s+|a\s+|an\s+)?"
+    r"(?P<setting>.+?)\s*,?\s*and\s+what(?:'s|\s+is)\s+it\s+set\s+to\s*\??")
 #: "can I change <feature>", "how do I change <feature>", "is it adjustable" -
 #: answered from the five owner-facing labels and the real switch table, never
 #: by changing anything (2026-10-26).
@@ -5978,6 +6133,15 @@ def _plugins_question(raw) -> Optional[Intent]:
         return None
     if re.search(r"\b(?:turn|switch)\s+(?:on|off)\b|\b(?:enable|disable)\b", text):
         return None
+    # "list my plugins" / "show all plugins" (Q7, 2026-11-03, Gemini's ruling).
+    # The owner's own words for the list, and they matched NOTHING before this:
+    # the shapes below all want "what"/"which"/"do you have" first, so the
+    # natural imperative fell through to the local model, which has no plug-in
+    # tool. Additive only - the older "what plugins do you have" still answers
+    # through them, and the switch guard above already refused "turn on ...".
+    if re.fullmatch(r"(?:list|show)\s+(?:me\s+)?(?:my\s+|all\s+|the\s+|your\s+|all\s+my\s+)?"
+                    r"(?:installed\s+|available\s+)?plug-?ins?", text):
+        return Intent("plugin_list")
     if re.search(r"\b(?:what|which)\b.*\b(?:plug-?ins?)\b.*\b(?:integrated|installed|ready)\b", text) \
             or re.search(r"\b(?:integrated|built)\b.*\bplug-?ins?\b", text) \
             or re.search(r"\b(?:what|which)\s+plug-?ins?\b", text) \
@@ -6151,6 +6315,82 @@ def _android_question(raw) -> Optional[Intent]:
         return Intent("android_capability")
     return None
 
+
+# --------------------------------------------------------------------------
+#   "which apps on my phone may you open?" (Q7, 2026-11-03)
+#
+# THE GAP, MEASURED. `jarvis_phone_apps.py` keeps the owner's own allow-list
+# ([phone_apps] in jarvis-framework.toml) and the feature catalogue's own row
+# says the question lists them: "Ask in chat on the PC or the phone - "which
+# apps can you open on my phone?" lists them" (features.json, phone-apps). It
+# did not: "which apps on my phone may you open" matched nothing and reached the
+# local model, which has no phone-apps tool at all, and "what can you open on my
+# phone" was answered by the generic feature CAPABILITY sentence, which names no
+# app.
+#
+# ONE READ, NO CARD. `jarvis_phone_apps.view()` is the same read-only view the
+# route serves (GET /api/phone/apps); it lists names and never a package id,
+# writes nothing, and changes no setting. Adding or removing an app is the
+# ordinary `change_own_config` card and is NOT reachable from here.
+#
+# The forms are the owner's own words plus the catalogue's example, and nothing
+# else: every alternative below names BOTH "apps" and "phone", so "open the app
+# store on my phone" and "can you open the front door" keep their own paths.
+# --------------------------------------------------------------------------
+
+_PHONE_APPS_ASK = re.compile(
+    r"(?:which|what)\s+apps?\s+(?:on\s+)?(?:my\s+|the\s+)?phone\s+"
+    r"(?:may|can|could|might|will|would|do|does)\s+(?:you\s+|jarvis\s+)?"
+    r"(?:open|launch|use|start|run)\b.*"
+    r"|(?:which|what)\s+apps?\s+(?:may|can|could|might|will|would)\s+"
+    r"(?:you|jarvis)\s+(?:open|launch|use|start|run)\s+(?:on|from)\s+"
+    r"(?:my|the)\s+phone\b.*"
+    r"|what\s+(?:can|could|may)\s+you\s+(?:open|launch|use|start|run)\s+on\s+"
+    r"(?:my|the)\s+phone\b.*"
+    r"|what\s+apps?\s+(?:do|does)\s+(?:you|jarvis)\s+(?:have|allow|support)"
+    r"[^.!?]{0,20}\bphone\b.*")
+
+
+def _phone_apps_question(raw) -> Optional[Intent]:
+    """The phone-app allow-list question, from the RAW sentence."""
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if not _PHONE_APPS_ASK.fullmatch(text):
+        return None
+    return Intent("phone_apps_list")
+
+
+PHONE_APPS_MISSING = ("Your PC's Jarvis cannot read the phone's app list yet - run "
+                      "apply-patches.ps1 on the PC.")
+
+
+def _run_phone_apps() -> Result:
+    """The allow-list, in the module's own rows. Reads only; no card, no write.
+
+    An empty list is a real answer and is said as one: the table ships empty, so
+    nothing can be opened until the owner adds an app, and that add is the one
+    card. No package id is printed - the name is what he says out loud, and the
+    list is his own settings file, not a screen either app draws yet.
+    """
+    try:
+        import jarvis_phone_apps as PA
+        view = PA.view()
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result(PHONE_APPS_MISSING, "phone_apps_list")
+    rows = [r for r in (view.get("apps") or []) if isinstance(r, dict)]
+    where = ("Each one is a line under [phone_apps] in jarvis-framework.toml on this PC, "
+             "and adding or removing one raises one approval card. There is no Settings "
+             "screen for the list yet.")
+    if not rows:
+        return Result("No apps are allowed yet, so I cannot open any app on your phone. "
+                      + where, "phone_apps_list")
+    names = ", ".join(str(r.get("name") or "").strip() for r in rows if r.get("name"))
+    count = len(rows)
+    said = (f"Your phone allows me to open {count} app{'s' if count != 1 else ''}: "
+            f"{names}. " + where)
+    return Result(said, "phone_apps_list")
 
 
 # --------------------------------------------------------------------------
@@ -8928,6 +9168,15 @@ def _feature_guide_body(s: str, raw: str, said_guide: bool) -> Optional[Intent]:
         if not target:
             return None
         return _feature_explain_intent(s, raw, target, said_guide)
+    m = _WHERE_AND_VALUE.fullmatch(s)
+    if m:
+        # "where do I change <setting>, and what is it set to?" - ONE question,
+        # two halves, and `setting_explain` already prints both (the real
+        # Settings place and "Right now: ..."). The clause is taken off and the
+        # rest is read by `_FEATURE_WHERE` directly below, so the exact-name
+        # gate, the registry fallback and the honest refusals are all the ones
+        # the plain question already uses.
+        s = "where do i change " + m.group("setting")
     m = _FEATURE_WHERE.fullmatch(s)
     if m:
         target = _feature_target(next(g for g in m.groups() if g is not None))
@@ -9335,6 +9584,16 @@ _OPEN_CHAT = re.compile(
 #: card's own button, and a risky one adds Windows Hello on this PC. The
 #: `approval_where` reply below only says WHERE the control is, and carries
 #: no id, no "approved", nothing a client could action.
+#:
+#: AND IT ONLY ANSWERS WHILE A CARD IS REALLY WAITING (D1, 2026-11-03). Until
+#: this guard existed the intent was returned for a bare "yes"/"no" with
+#: nothing pending at all, so ordinary conversation got the canned "approvals
+#: are decided on the card itself" sentence instead of an answer - measured:
+#: "yes", "Yes", "yes please" and "no" all did. `yes` and `no` are the two most
+#: ordinary words in a chat; the sentence is only ever useful when it has a card
+#: to point at. `_card_is_pending` asks this PC's own approvals table, and a
+#: bare decision word with nothing waiting is now left to the model like every
+#: other sentence this file does not own.
 _TYPED_DECISION = re.compile(
     r"approve(?:\s+it)?"
     r"|approve\s+it\s+please"
@@ -9344,6 +9603,28 @@ _TYPED_DECISION = re.compile(
     r"|yes"
     r"|no"
     r"|yes,?\s+please")
+
+
+def _card_is_pending() -> bool:
+    """Is an approval card really waiting on this PC right now?
+
+    THE ONE PLACE THIS FILE ASKS. `jarvis_gate.pending()` is the same reader the
+    approval window and the phone poll (`GET /api/approvals`), read through the
+    module's ONE lazy gate import (`_gate_module`, defined below) so no second
+    gate door appears in this file. Called ONLY after a whole message has
+    matched `_TYPED_DECISION`, so it costs one small SELECT on the few turns
+    whose entire text is "yes", "no" or "approve" - never on ordinary chat.
+
+    False when the gate is not here (this repository's own suites, a backend
+    without the approvals table) or when the read fails: nothing waiting is the
+    safe direction, because the sentence changes nothing either way, and a
+    healthy gate must never be replaced by a canned non-answer to "yes". It
+    cannot approve anything: `pending()` only reads.
+    """
+    try:
+        return bool(_gate_module().pending())
+    except Exception:                   # noqa: BLE001 - no gate here = none waiting
+        return False
 
 
 # --------------------------------------------------------------------------
@@ -12250,7 +12531,14 @@ MODEL_CARD_WORDS = ("Nothing switches until you answer the ONE approval card on 
 
 _K_MODEL_CURRENT = re.compile(
     r"(?:what|which)\s+(?:ai\s+)?model\s+(?:are\s+you\s+(?:running|using|on)|"
-    r"do\s+you\s+have|are\s+you|is\s+this)\b.*")
+    r"do\s+you\s+have|are\s+you|is\s+this)\b.*"
+    # "which model is answering me?" (Q7, 2026-11-03) - the owner's own words
+    # for the same fact, answered by the same sentence as "which model are you
+    # using" (a second intent would be a second wording for one fact). The
+    # optional "and why" tail is tolerated and NOT invented on: the preset the
+    # answer already names is the honest reason this PC has.
+    r"|(?:what|which)\s+(?:ai\s+)?model\s+is\s+answering(?:\s+(?:me|this|that|you))?"
+    r"(?:\s*,?\s*and\s+why\b.*)?")
 _K_MODEL_ANSWERED = re.compile(
     r"(?:which|what)\s+model\s+(?:answered|wrote|gave|produced|said)\s+"
     r"(?:that|this|it|the\s+answer)\b.*")
@@ -13739,8 +14027,16 @@ def _read_youtube_link(parsed: dict, *, gate, tier_of, YT) -> Result:
     return Result(said, "read_link", read=["youtube_captions_read"])
 
 
-def _read_web_link(url: str, *, gate, tier_of) -> Result:
-    """One card built from `jarvis_readpage.describe` and one GET of it."""
+def _read_web_link(url: str, *, gate, tier_of,
+                   conversation: Optional[str] = None) -> Result:
+    """One card built from `jarvis_readpage.describe` and one GET of it.
+
+    The FIRST LINE of the answer carries the canonical address the card showed
+    (`page.url`, never one taken from the page), because that is the one fact
+    the owner needs to check what was read - and both apps already make a bare
+    `http(s)` address tappable with no rendering change (Q2, 2026-11-03).
+    `conversation` only decides whether the words are kept for a follow-up.
+    """
     try:
         import jarvis_readpage as RP
     except Exception:
@@ -13768,21 +14064,96 @@ def _read_web_link(url: str, *, gate, tier_of) -> Result:
         return Result(why or "That page has no readable words on it, so there was nothing "
                              "to read.", "read_link")
     title = " ".join(str(got.get("title") or "").split())
-    head = f'Read "{title}".' if title else "Read that page."
-    said = f'{head} It says: "{_read_link_excerpt(text)}"'
+    head = f"Read from {page.url}"
+    if title:
+        head += f' - "{title}"'
+    said = f'{head}. It says: "{_read_link_excerpt(text)}"'
     if got.get("more") is not None:
         said += " That is the first part of it."
     said += f" {RP.ONE_PAGE_LINE} {RP.OUTSIDE_LINE}"
+    # Kept for this chat only, for 15 minutes, so a follow-up needs no second
+    # card and no second fetch. Memory only; the reader wrote nothing.
+    _read_link_remember(conversation, page.url, title, text)
     return Result(said, "read_link", read=["read_web_page"])
 
 
-def _run_read_link(f: dict, *, gate=None, tier_of=None) -> Result:
+def _read_link_needle(words: str) -> str:
+    """The words a follow-up asks the kept page about, or "" for all of it."""
+    m = re.search(r"\b(?:about|mention|mentions|say\s+on|says\s+about|say\s+about|"
+                  r"on|regarding|part)\s+(.+)$", " ".join(str(words or "").split()))
+    if not m:
+        return ""
+    needle = m.group(1).strip(" ?.!,")
+    return needle if len(needle) >= 3 else ""
+
+
+def _read_link_find(text: str, needle: str, span: int = 400) -> str:
+    """A quote around `needle` in `text`, or "" when it is not there.
+
+    A word-find, not understanding - and the answer says so when it finds
+    nothing. The whole phrase is tried first, then its longest word, so "what
+    does it say about the pricing of the kettle" still finds "pricing".
+    """
+    flat = " ".join(str(text or "").split())
+    tries = [needle] + [w for w in sorted(needle.split(), key=len, reverse=True)
+                        if len(w) >= 5][:3]
+    low = flat.lower()
+    for needle_try in tries:
+        at = low.find(needle_try.lower())
+        if at < 0:
+            continue
+        start = max(0, at - span // 3)
+        end = min(len(flat), at + len(needle_try) + span)
+        piece = flat[start:end]
+        if start:
+            piece = piece.split(" ", 1)[-1]
+        if end < len(flat):
+            piece = piece.rsplit(" ", 1)[0]
+        return _read_link_excerpt(piece, span)
+    return ""
+
+
+def _run_read_link_q(f: dict, conversation: Optional[str] = None,
+                     now: Optional[float] = None) -> Result:
+    """A follow-up answered from the page this chat already read.
+
+    NO CARD AND NO FETCH: the words are already on this PC, so nothing new
+    leaves it - the asymmetry with a fresh read is the point of Q2's ruling.
+    It answers with the address and how long ago the page was read, quotes
+    around the asked words when they are there, and says plainly when they are
+    not, naming the limit of what was kept.
+    """
+    kept = _read_link_kept(conversation, now)
+    if kept is None:
+        return Result(READ_LINK_NOTHING_KEPT, "read_link_q")
+    when = time.time() if now is None else now
+    minutes = max(1, int((when - float(kept.get("at") or when)) // 60))
+    head = (f'From {kept.get("url")}'
+            + (f' ("{kept.get("title")}")' if kept.get("title") else "")
+            + f", read {minutes} minute{'s' if minutes != 1 else ''} ago")
+    text = str(kept.get("text") or "")
+    needle = _read_link_needle(str(f.get("words") or ""))
+    if not needle:
+        return Result(f'{head}. It says: "{_read_link_excerpt(text)}"', "read_link_q")
+    hit = _read_link_find(text, needle)
+    if hit:
+        return Result(f'{head}. It says: "{hit}"', "read_link_q")
+    return Result(f'{head}. Its first {len(" ".join(text.split()))} characters do not '
+                  f'mention "{needle}", and that is all I kept of it - ask me to read '
+                  f'the address again for more.', "read_link_q")
+
+
+def _run_read_link(f: dict, *, gate=None, tier_of=None,
+                   conversation: Optional[str] = None) -> Result:
     """"read this link": YouTube's captions or a page's words, one card first.
 
     Yields to `tellme_page` in the matcher (a watch is not a read). A link that
     IS on YouTube but does not parse as one video answers with the caption
     reader's own refusal rather than being fetched as a page: "read this
     playlist address" must not quietly become a page read.
+
+    `conversation` goes to the PAGE reader only, which keeps the words for a
+    follow-up (Q2, 2026-11-03); the caption path is unchanged.
     """
     n = "read_link"
     url = str((f or {}).get("url") or "").strip()
@@ -13794,15 +14165,18 @@ def _run_read_link(f: dict, *, gate=None, tier_of=None) -> Result:
         import jarvis_youtube as YT
     except Exception:
         YT = None
-        return _read_web_link(url, gate=gate, tier_of=tier_of)
+        return _read_web_link(url, gate=gate, tier_of=tier_of,
+                              conversation=conversation)
     try:
         parsed = YT.parse_link(url)
     except YT.YouTubeError as exc:
         if _read_link_host(url) in YT.HOSTS:
             return Result(str(exc.message), n)
-        return _read_web_link(url, gate=gate, tier_of=tier_of)
+        return _read_web_link(url, gate=gate, tier_of=tier_of,
+                              conversation=conversation)
     except Exception:
-        return _read_web_link(url, gate=gate, tier_of=tier_of)
+        return _read_web_link(url, gate=gate, tier_of=tier_of,
+                              conversation=conversation)
     return _read_youtube_link(parsed, gate=gate, tier_of=tier_of, YT=YT)
 
 
@@ -15849,6 +16223,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_reminders(n, _client_surface(peer, local, client_surface))
     if n in _PLUGIN_INTENTS:
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
+    if n == "phone_apps_list":
+        # Q7 (2026-11-03): the owner's own allow-list, read-only. Both apps get
+        # the same sentence - the list lives on the PC and the phone shows it
+        # there, so this is not a one-sided answer.
+        return _run_phone_apps()
     if n in _ANDROID_INTENTS:
         return _run_android(n, _android_state())
     if n in _GOAL_INTENTS:
@@ -15891,7 +16270,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # ONE card per link, raised through the reader's own action. It adds no
     # route and no model tool, and it never follows a link it read.
     if n == "read_link":
-        return _run_read_link(f)
+        return _run_read_link(f, conversation=conversation)
+    if n == "read_link_q":
+        # A follow-up about the page this chat already read (Q2, 2026-11-03):
+        # no card, no fetch - the words are on this PC already.
+        return _run_read_link_q(f, conversation, now)
 
     # The HUD field test's three answers (2026-10-29): Google/Gmail paths,
     # which voice speaks, and how a phone is paired. Every one is read-only:
@@ -16183,6 +16566,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # WHICH card is waiting (its own approval window knows), or that none
         # is. That is why this half needs nothing from the live backend's
         # gate, which this repository does not carry.
+        #
+        # Since D1 (2026-11-03) the matcher asks the PC's own approvals table
+        # first and returns this intent ONLY while a card is waiting, so the
+        # "or that none is" half is unreachable from this file: an owner who
+        # types "yes" with nothing pending now gets an ordinary answer instead.
         return Result(
             "Approvals are decided on the card itself - the Jarvis approval "
             "window on this PC, with your fingerprint for a risky one. "
@@ -16676,6 +17064,15 @@ READ_ONLY_INTENTS = frozenset({
     "goal_capability", "goal_list", "goal_state", "goal_about", "goal_update",
     "android_capability", "android_howto", "android_needs", "android_build_install",
     "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    # "which apps on my phone may you open?" (Q7, 2026-11-03) reads the
+    # owner's own [phone_apps] table through jarvis_phone_apps.view() - the
+    # same read-only view the route serves. It changes nothing, so it must not
+    # take away what "cancel that" would undo.
+    "phone_apps_list",
+    # A follow-up about the page this chat already read (Q2, 2026-11-03): it
+    # quotes words already on this PC and raises no card, so it must not clear
+    # what "cancel that" would take back.
+    "read_link_q",
     "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
@@ -17223,7 +17620,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
     if _made is not None:
         return Result(str(_made.get("reply") or ""),
                       str(_made.get("intent") or "personality_draft"))
-    intent = match(text, now)
+    intent = match(text, now, conversation)
     if intent is None:
         # GOOGLE CALENDAR: READS AND EVENT CHANGES, AND ONLY THOSE (2026-10-28).
         # Asked HERE - after the fast path has declined - so one sentence has

@@ -20972,6 +20972,15 @@ the address in full; `read_web_page` is `ask` in `jarvis-framework.toml`, in
 **What raises no card:** nothing else. This module has no settings, no
 switch, no route and no file of its own.
 
+**The same reader from a bare pasted address (2026-11-03).** The chat fast path
+in `jarvis_quick` hands a message that is only an `http(s)` address, or an
+address plus a question about it, to this same `prepare` -> `describe` -> `run`
+flow, so the card is this card and the outside-text rule above is unchanged; the
+words are kept in memory for that conversation for 900 seconds so a follow-up
+needs no second card. It keeps **no source row** for now: "Where this came from"
+lists model-tool reads only, and adding this one needs the turn-id seam in
+`jarvis_hud.py` (a later change).
+
 ### 115.5 Tests
 
 `backend/test_readpage.py` - the address's shape (and that no socket is
@@ -30619,6 +30628,11 @@ never runs an adb command.
 package is left out of `apps` (the reader's rule, the same one the phone tool
 uses) and counted in `note` - it is not silently hidden.
 
+**By chat (2026-11-03).** The sentences `which apps on my phone may you open`
+and `what can you open on my phone` (and their close phrasings) list this same
+allow-list, read-only, through `jarvis_phone_apps.view()` - no card, no write,
+and no package id printed.
+
 ### 176.3 `POST /api/phone/apps` - ONE change, and its card
 
 `{"action": "add", "name": "YouTube Music", "package": "com.google.android.apps.youtube.music"}`
@@ -31590,8 +31604,26 @@ address plus a read verb ("read", "reading", "summarise"/"summarize", "sum up",
 run by `_run_read_link`. It is placed after the "tell me when ..." watcher, and a
 watch-shaped sentence ("tell me when/if ...") is refused by the matcher as well,
 so "tell me when this page changes" stays a watch on a page (§30.3.1) and is
-never a read. A sentence with a link and no read verb is left alone, so a pasted
-address on its own is not fetched.
+never a read. A sentence with a link and no read verb is left alone **unless the
+message is that address and nothing else, or the address plus a question about
+it** (2026-11-03, below).
+
+**A PASTED ADDRESS IS A REQUEST, AND THE ANSWER'S FIRST LINE CARRIES IT.** A
+message that is only an `http(s)` address, or an address plus a question about it
+("https://... what is this about?"), reaches this same path: ONE card per
+address, nothing fetched before the yes. The answer's first line carries the
+canonical address the card showed - `Read from <url> - "<title>". It says:
+"..."` - so both apps make it tappable with no rendering change. The page's words
+are then kept **in memory, for that conversation only, for 900 seconds** (one page
+per conversation, at most eight conversations, replaced by a new page in the same
+chat, cleared by a restart, never kept on a private turn), so a follow-up that
+refers to the page ("what does it say about ...?") is answered from the words
+already on this PC with **no second card and no second fetch**. It is a word-find,
+not reasoning: it quotes around what it finds and says plainly when the kept
+characters do not mention it. A statement ("here is a link ..."), a browser
+command ("open <url> in my browser") and a watch ("tell me when <url> changes")
+are not reads. There is still no source row for a fast-path page read ("Where
+this came from" lists model-tool reads only).
 
 **A STATEMENT IS NOT A REQUEST.** The matcher also refuses a sentence whose read
 verb is preceded by a negation or a completed-action word - "don't read
