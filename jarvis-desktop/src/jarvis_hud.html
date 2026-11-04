@@ -1875,6 +1875,45 @@ html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:c
 .rem-ask-button select{flex:0 1 105px;}
 .rem-ask-button input[type="number"]{flex:0 1 62px;}
 .rem-ask-button input[hidden]{display:none !important;}
+/* A routine's PARTS (2026-11-03, the owner's ask): ONE reminder with up to
+   twelve parts, each with its own words, its own time and - when it asks one -
+   its own question. The list under a row is read-only; the list in a form is
+   the ONE editor, built by this page's own script and used by both doors (the
+   Add form and the row editor), so there is no second creation path. Styling
+   only: every word comes from the PC's own answer or the owner's own typing. */
+.rem-parts{margin:5px 0 0; padding:0; list-style:none; display:flex;
+  flex-direction:column; gap:0;}
+.rem-part{display:flex; flex-direction:column; gap:4px; padding:5px 0 0;
+  border-top:1px dashed var(--line);}
+.rem-part:first-child{border-top:none; padding-top:2px;}
+.rem-part-line{display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;}
+.rem-part-name{margin:0; font-size:11.5px; line-height:1.35; color:var(--text);}
+.rem-part-when{font-family:var(--f-mono); font-size:10px; color:var(--dim);}
+.rem-part-mark{font-family:var(--f-mono); font-size:10px; color:var(--text-faint);}
+.rem-part.done .rem-part-name{color:var(--dim); text-decoration:line-through;}
+.rem-part.current .rem-part-name{color:var(--text); font-weight:600;}
+.rem-part.current .rem-part-mark{color:var(--accent-text);}
+.rem-part-answers{display:flex; flex-wrap:wrap; gap:5px;}
+.rem-parts-editor{display:flex; flex-direction:column; gap:6px; flex:1 1 100%;
+  min-width:0;}
+.rem-part-row{display:flex; flex-direction:column; gap:5px; padding:7px;
+  border:1px solid var(--line); border-radius:4px; background:var(--plate-2);}
+.rem-part-fields{display:flex; align-items:center; gap:5px; flex-wrap:wrap;}
+.rem-part-num{font-family:var(--f-mono); font-size:10px; color:var(--dim);
+  min-width:12px;}
+.rem-part-fields input[type="text"]{flex:1 1 120px;}
+.rem-part-when-fields{display:flex; align-items:center; gap:5px; flex-wrap:wrap;}
+.rem-part-when-fields select{flex:0 1 190px;}
+.rem-part-when-fields input[type="time"]{flex:0 1 110px;}
+.rem-part-when-fields input[type="number"]{flex:0 1 80px;}
+.rem-part-when-fields [hidden]{display:none !important;}
+.rem-part-ask{display:flex; flex-direction:column; gap:5px;}
+.rem-part-ask-fields{display:flex; flex-direction:column; gap:5px;}
+.rem-part-ask-fields[hidden]{display:none !important;}
+.rem-part-ask-fields input[type="text"]{flex:1 1 140px;}
+.rem-parts-count{font-family:var(--f-mono); font-size:10px; color:var(--text-faint);}
+.rem-form-row.rem-parts-row{align-items:flex-start;}
+.rem-form-row.rem-parts-row > .rem-days-label{padding-top:6px;}
 /* Phase 2 (2026-10-22): the inline row editor, the one Edit control and the
    keyboard Up/Down reorder. The same words/field model come from
    src/hud-actions.js; this is styling only. */
@@ -1884,6 +1923,11 @@ html[data-hud-shell="split-stage"] .bento-waiting{display:flex; flex-direction:c
   border-radius:4px; background:var(--plate-2);}
 .rem-edit-grid{display:grid; grid-template-columns:minmax(0,1fr); gap:6px;}
 .rem-edit-field{display:flex; align-items:center; gap:6px; min-width:0;}
+/* The parts editor inside a row's own editor is a column, not one line: it is a
+   list of rows with a button under them (2026-11-03). */
+.rem-edit-field[data-rem-field="parts"]{flex-direction:column; align-items:stretch;
+  gap:4px;}
+.rem-edit-field[data-rem-field="parts"] > label{min-width:0;}
 .rem-edit-field > label{min-width:52px; font-family:var(--f-mono); font-size:10.5px;
   letter-spacing:.06em; text-transform:uppercase; color:var(--dim);}
 .rem-editor input, .rem-editor select{flex:1 1 110px; min-width:0; padding:6px 8px;
@@ -3916,6 +3960,24 @@ html[data-cal-view="day"] .cal-side{display:none;}
                  placeholder="habit id (optional)">
         </div>
         <p class="rem-help" id="rem-then-help" hidden></p>
+        <!-- A routine's PARTS (2026-11-03, the owner's ask: a reminder with up
+             to twelve parts, each with its own time and its own buttons). The
+             rows are built by this page's own script - ONE builder, used here
+             for a new routine and by the row editor for an existing one - so a
+             routine has the same ONE creation path and the same ONE edit path
+             every other reminder has. Drawn ONLY when the PC's own GET
+             /api/schedule says steps:true: an older backend drops `steps`
+             silently, and one plain reminder where the owner asked for a
+             routine is the one dangerous direction. -->
+        <div class="rem-form-row rem-parts-row" id="rem-parts-row" hidden>
+          <span class="rem-days-label">Parts</span>
+          <div class="rem-parts-editor" id="rem-parts"></div>
+        </div>
+        <div class="rem-form-row" id="rem-parts-add-row" hidden>
+          <button type="button" class="rem-btn" id="rem-part-add">Add a part</button>
+          <span class="rem-parts-count" id="rem-parts-count"></span>
+        </div>
+        <p class="rem-help" id="rem-parts-help" hidden></p>
         <div class="rem-form-actions">
           <button type="submit" class="act primary" id="rem-add">Add</button>
           <span class="rem-form-note">No card: adding an item only adds.</span>
@@ -10232,11 +10294,19 @@ subscribe();
   //  rail all show this one panel. Its words are blanked in Rust while App
   //  lock or the private lists are hidden - and, because a page is only as
   //  private as its last read, `forgetPrivateGraph` re-reads it the moment the
-  //  PC says the lists hid again. Phase 1: view, add, and the
-  //  existing one-job actions - edit/move/reorder need backend changes and a
-  //  later deploy, and are not faked here. It lives INSIDE the page's own
-  //  layout script on purpose: another inline script block would be a fifth
-  //  one for the CSP/hash rule tests/csp-inline.mjs holds the page to.
+  //  PC says the lists hid again.
+  //
+  //  What is here now, and it is no longer Phase 1: view, add, the existing
+  //  one-job actions, Phase 2's ONE edit / move / reorder (2026-10-22), a
+  //  reminder's own question and its answer buttons (2026-11-02), and - since
+  //  2026-11-03 - a routine: ONE reminder with up to twelve parts, each with
+  //  its own time and its own question, edited by the ONE builder the Add form
+  //  and the row editor share. The THREE fields the phase-2 backend needs
+  //  (`action`, `steps`) are carried by `hud_schedule_act`'s `change`; a
+  //  `repeat` edit keeps its ONE card, and nothing else here raises a card.
+  //  It lives INSIDE the page's own layout script on purpose: another inline
+  //  script block would be a fifth one for the CSP/hash rule
+  //  tests/csp-inline.mjs holds the page to.
 (function () {
   "use strict";
   if (window.__hudReminders) return;
@@ -10337,11 +10407,521 @@ subscribe();
                wrote: (Array.isArray(e.wrote) ? e.wrote : []).map(txt) };
     }).filter(function (e) { return e !== null; });
   }
+  /* ---- a routine's parts (2026-11-03, the owner's ask) ------------------ */
+  /*  ONE reminder with up to twelve parts, timed or one after another, each with
+   *  its own words and - when it asks one - its own question. The PC owns every
+   *  rule (jarvis_schedule._clean_steps: 2 to 12 parts, ONE time per part, the
+   *  order, the three buttons, where an answer is written) and refuses what it
+   *  will not take in one plain sentence, which the form shows as it is. What
+   *  follows is the ONE builder both doors use - the Add form for a new routine
+   *  and the row editor for an existing one - so there is no second creation
+   *  path and no second edit path, and the PC's validation stays the authority. */
+  var MAX_PARTS_FALLBACK = 12;
+  var MAX_PART_LABEL = 80;
+  var MAX_PART_OFFSET = 1440;
+  var PART_WHEN_CHOICES = [
+    { value: "at", label: "At a time" },
+    { value: "minutes", label: "Minutes after the start" },
+    { value: "after", label: "After the part before" }
+  ];
+  var PART_COUNT_WORDS = "A routine has 2 to 12 parts.";
+  var PART_BACK_WORDS = "A routine keeps at least two parts. To go back to a " +
+    "plain reminder, delete this one and add it again.";
+  var PART_TASK_WORDS = "One of this routine's parts runs a task, so its parts " +
+    "can only be changed by asking Jarvis in chat for now.";
+  var PART_HELP_WORDS = "Each part comes up on its own. \"At a time\" is a clock " +
+    "time, \"Minutes after the start\" counts from the reminder's own time, and " +
+    "\"After the part before\" waits until you have pressed the one above it. A " +
+    "part with a question is one notification with its own buttons; a part " +
+    "without one gets Done. Pressing a part's button is a log line, never an " +
+    "approval, so no card is raised.";
+
+  /* The PC's own ceiling: `limits.steps` from its read, or the number both
+     sides ship when an older PC says nothing (that PC does not offer the editor
+     at all, because it has no `steps` marker). */
+  function maxParts() {
+    var n = view && view.limits ? view.limits.steps : null;
+    return Number.isInteger(n) && n > 0 ? n : MAX_PARTS_FALLBACK;
+  }
+
+  /* The PC's own parts off ONE row of its read, in the shape §4.3 of the wave's
+     spec names - or [] so a row with none (every row written before today)
+     draws exactly what it drew. A part with no words - which is what the PC
+     hands out while App lock or the private lists hide the words - draws
+     nothing: the row still shows its count and its times, the same rule its own
+     `text` keeps. Anything else that is not the shape the PC hands out is
+     dropped rather than half-drawn. */
+  function partsOf(j) {
+    var buttonsOf = function (raw) {
+      return (Array.isArray(raw) ? raw : []).map(function (b) {
+        if (!b || typeof b !== "object") return null;
+        var words = txt(b.label);
+        var does = txt(b.does);
+        if (!words || ASK_DOES.indexOf(does) < 0) return null;
+        var one = { label: words, does: does };
+        if (does === "snooze") {
+          one.minutes = typeof b.minutes === "number" && b.minutes > 0 ? b.minutes : 0;
+        }
+        return one;
+      }).filter(function (b) { return b !== null; }).slice(0, 3);
+    };
+    var steps = Array.isArray(j && j.steps) ? j.steps : [];
+    return steps.map(function (p) {
+      if (!p || typeof p !== "object") return null;
+      var label = txt(p.label);
+      if (!label) return null;
+      // The EFFECTIVE buttons, which is what the PC hands out and what both apps
+      // draw: the part's own question's, or the ONE implicit Done. Its own
+      // question's are read from the question, so the editor saves back exactly
+      // the block the part was written with (and falls back to the effective
+      // list if a hand-edited row ever disagreed).
+      var buttons = buttonsOf(p.buttons);
+      var ask = p.ask && typeof p.ask === "object" ? p.ask : null;
+      var askButtons = ask ? buttonsOf(ask.buttons) : [];
+      if (!askButtons.length) askButtons = buttons;
+      return {
+        label: label,
+        when: txt(p.when),
+        at: txt(p.at),
+        offsetMin: Number.isInteger(p.offset_min) ? p.offset_min : null,
+        // The question, its buttons, and WHERE AN ANSWER IS WRITTEN. The last
+        // one is carried verbatim: without it, editing a routine's part would
+        // silently drop every destination the owner chose, which is the one
+        // thing an editor must never do.
+        ask: ask && txt(ask.question) ? {
+          question: txt(ask.question),
+          buttons: askButtons,
+          record: ask.record && typeof ask.record === "object" ? ask.record : null
+        } : null,
+        // The EFFECTIVE buttons: the part's own, or the ONE implicit Done the PC
+        // hands out - the page never invents a label.
+        buttons: buttons.length ? buttons : [{ label: "Done", does: "done" }],
+        firedAt: typeof p.fired_at === "number" ? p.fired_at : null,
+        done: p.done === true,
+        missed: p.missed === true,
+        current: p.current === true,
+        // NOT in §4.3 of the spec: the PC's own marker for a part that runs a
+        // task (the shape cannot tell one from a plain checklist line). It is
+        // read only as a SAFETY guard - a part the editor cannot rebuild must
+        // not be silently rewritten into a checklist line - and its absence
+        // changes nothing.
+        runsTask: p.runs_task === true
+      };
+    }).filter(function (p) { return p !== null; });
+  }
+
+  /* A part's own time in words. The PC's `when` is its clock wording for the
+     part's moment; an untimed part has none and says when it comes up instead. */
+  function partWhenWords(part) {
+    if (part.when) return part.when;
+    if (typeof part.offsetMin === "number") {
+      return part.offsetMin === 0 ? "at the start"
+        : part.offsetMin + " min after the start";
+    }
+    return "after the part before it";
+  }
+
+  /* The row's title with the part on it - "Morning routine · 2 of 4" - and only
+     on a row that has actually gone off: a routine waiting for its first part
+     is a reminder with a list under it, not "1 of 4". */
+  function titleWithPart(title, job, wentOff) {
+    if (!wentOff || !job.partsCount) return title;
+    var at = Math.min(job.partsCount, Math.max(1, job.partsCursor + 1));
+    return title + " \u00b7 " + at + " of " + job.partsCount;
+  }
+
+  /* The body one save makes from plain rows - or an Error whose sentence the
+     form shows as it is. PURE on purpose: it touches no DOM and no page state,
+     so tests/routine-parts.mjs cuts this function out of the page and CALLS it -
+     the real function the page runs, not a copy of it. The PC checks every one
+     of these again (jarvis_schedule._clean_steps) and is the authority; this is
+     only so the owner is told before anything is sent. */
+  function partsBody(rows) {
+    var out = [];
+    var list = Array.isArray(rows) ? rows : [];
+    if (!list.length) return out;                 // no parts: a plain reminder
+    if (list.length < 2) {
+      return new Error("A routine needs at least two parts - a single part is " +
+        "just a reminder.");
+    }
+    if (list.length > 12) return new Error("A routine has up to 12 parts.");
+    for (var i = 0; i < list.length; i++) {
+      var row = list[i] || {};
+      if (row.ask instanceof Error) return row.ask;
+      var label = typeof row.label === "string" ? row.label.trim() : "";
+      label = label.split(/\s+/).join(" ");
+      if (!label) return new Error("Every part needs its own words.");
+      if (label.length > 80) return new Error("A part's words are up to 80 characters.");
+      var part = { label: label };
+      if (row.when === "at") {
+        var at = typeof row.at === "string" ? row.at.trim() : "";
+        if (!/^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(at)) {
+          return new Error("A part's time looks like 09:30.");
+        }
+        part.at = at;
+      } else if (row.when === "minutes") {
+        var mins = row.minutes;
+        if (typeof mins !== "number" || Math.floor(mins) !== mins
+            || mins < 0 || mins > 1440) {
+          return new Error("A part is 0 to 1440 minutes after the start.");
+        }
+        part.offset_min = mins;
+      }
+      if (row.ask) {
+        // The part's question is the SAME block a reminder's own question is,
+        // minus the `kind` marker (§2.3 of the spec): the question, the
+        // buttons, and the destinations only when there are any.
+        part.ask = { question: row.ask.question, buttons: row.ask.buttons };
+        if (row.ask.record) part.ask.record = row.ask.record;
+      }
+      out.push(part);
+    }
+    return out;
+  }
+
+  /* The rows a row's own parts become in the editor, so an existing routine
+     opens with what the PC holds. A part with no question opens as "Nothing to
+     press", which is exactly how the PC drew it. */
+  function partsFromJob(job) {
+    return (job && Array.isArray(job.parts) ? job.parts : []).map(function (p) {
+      var when = p.at ? "at" : (typeof p.offsetMin === "number" ? "minutes" : "after");
+      return {
+        label: p.label,
+        when: when,
+        at: p.at,
+        minutes: typeof p.offsetMin === "number" ? p.offsetMin : 0,
+        ask: p.ask && p.ask.question ? p.ask : null
+      };
+    });
+  }
+
+  /* ONE question's block, from a READER - the reminder's own question fields, or
+     one part's. `read(name)` returns the element holding that name, so a part's
+     question obeys the same rules as the reminder's (the 200-character question,
+     at most three buttons, 24 characters each, one snooze span, and a
+     destination when a button records) without a second copy of them. */
+  function askFrom(read) {
+    var node = function (name) { return read(name); };
+    var value = function (name) {
+      var field = node(name);
+      return field && typeof field.value === "string" ? field.value.trim() : "";
+    };
+    var ticked = function (name) {
+      var field = node(name);
+      return !!(field && field.checked === true);
+    };
+    var question = value("question");
+    if (!question) {
+      return new Error("Write the question first - it is what you will read when it " +
+        "goes off.");
+    }
+    if (question.length > 200) return new Error("A question is up to 200 characters.");
+    var buttons = [];
+    for (var i = 1; i <= 3; i++) {
+      var label = value("label-" + i);
+      if (!label) continue;
+      if (label.length > 24) {
+        return new Error("A button's words are up to 24 characters.");
+      }
+      var doesField = node("does-" + i);
+      var does = doesField && doesField.value ? doesField.value : "record";
+      if (ASK_DOES.indexOf(does) < 0) {
+        return new Error("A button can record the answer, mark it done, or " +
+          "snooze it.");
+      }
+      var one = { label: label, does: does };
+      if (does === "snooze") {
+        var mins = parseInt(value("minutes-" + i), 10);
+        if (!(mins >= 1 && mins <= 1440)) {
+          return new Error("A snooze button is 1 to 1440 minutes.");
+        }
+        one.minutes = mins;
+      }
+      buttons.push(one);
+    }
+    if (!buttons.length) {
+      return new Error("A question needs at least one button - that is what you press " +
+        "when it goes off.");
+    }
+    var record = {};
+    if (ticked("history")) record.history = true;
+    if (ticked("obsidian")) record.obsidian_daily = true;
+    var goal = value("goal");
+    if (goal) record.goal = goal;
+    var habit = value("habit");
+    if (habit) record.habit = habit;
+    var records = false;
+    for (var j = 0; j < buttons.length; j++) {
+      if (buttons[j].does === "record") records = true;
+    }
+    if (records && !Object.keys(record).length) {
+      return new Error("A button records the answer, so pick where: its own history, " +
+        "today's Obsidian note, a goal or a habit.");
+    }
+    var block = { question: question, buttons: buttons };
+    if (Object.keys(record).length) block.record = record;
+    return block;
+  }
+
+  /* ONE part's input, named so a row can be read back without ids (a row of the
+     editor is created as many times as there are parts, and an id must be
+     unique in the document). */
+  function partInput(field, type, value, placeholder, maxLength) {
+    var i = el("input");
+    i.type = type;
+    i.setAttribute("data-part", field);
+    i.value = value === null || value === undefined ? "" : String(value);
+    if (placeholder) i.placeholder = placeholder;
+    if (maxLength) i.setAttribute("maxlength", String(maxLength));
+    return i;
+  }
+
+  function partAskFields(ask, index, row) {
+    ask = ask || {};
+    var box = el("div", "rem-part-ask-fields");
+    box.setAttribute("data-part", "ask-fields");
+    var question = partInput("question", "text", ask.question || "",
+      "Did you move it to the dryer?", 200);
+    question.setAttribute("aria-label", "part " + (index + 1) + "'s question");
+    box.append(question);
+    var buttons = el("div", "rem-ask-buttons");
+    var own = Array.isArray(ask.buttons) ? ask.buttons : [];
+    for (var n = 1; n <= 3; n++) {
+      var one = own[n - 1] || {};
+      var line = el("span", "rem-ask-button");
+      var label = partInput("label-" + n, "text", one.label || "",
+        n === 1 ? "Done" : "(another button, optional)", 24);
+      label.setAttribute("aria-label",
+        "part " + (index + 1) + ", button " + n + "'s words");
+      var does = el("select");
+      does.setAttribute("data-part", "does-" + n);
+      does.setAttribute("aria-label",
+        "what button " + n + " of part " + (index + 1) + " does");
+      [{ value: "record", label: "Records it" },
+       { value: "done", label: "Marks it done" },
+       { value: "snooze", label: "Snoozes it" }].forEach(function (o) {
+        var opt = el("option", "", o.label);
+        opt.value = o.value;
+        if (o.value === (one.does || "record")) opt.selected = true;
+        does.append(opt);
+      });
+      does.addEventListener("change", function () { syncPartRow(row); });
+      var mins = partInput("minutes-" + n, "number",
+        one.minutes === undefined ? 30 : one.minutes);
+      mins.setAttribute("min", "1");
+      mins.setAttribute("max", "1440");
+      mins.setAttribute("step", "1");
+      mins.setAttribute("aria-label",
+        "minutes button " + n + " of part " + (index + 1) + " snoozes for");
+      line.append(label, does, mins);
+      buttons.append(line);
+    }
+    box.append(buttons);
+    var record = el("div", "rem-days");
+    // A part the PC already holds keeps exactly the destinations it was saved
+    // with; a NEW part starts like the reminder's own question row does.
+    var held = ask && ask.record ? ask.record : null;
+    [["history", "its own history", held ? held.history === true : !ask],
+     ["obsidian", "today's Obsidian note",
+      held ? held.obsidian_daily === true : false]].forEach(function (r) {
+      var lab = el("label", "", "");
+      var cb = el("input");
+      cb.type = "checkbox";
+      cb.setAttribute("data-part", r[0]);
+      cb.checked = r[2];
+      lab.append(cb, document.createTextNode(" " + r[1]));
+      record.append(lab);
+    });
+    box.append(record);
+    var ids = el("div", "rem-part-fields");
+    ids.append(partInput("goal", "text", held && held.goal ? held.goal : "",
+      "goal id (optional)", 64));
+    ids.append(partInput("habit", "text", held && held.habit ? held.habit : "",
+      "habit id (optional)", 64));
+    box.append(ids);
+    return box;
+  }
+
+  /* ONE part's row in a form: its words, its ONE time, and its own question when
+     it asks one. */
+  function partRowOf(part, index) {
+    part = part || {};
+    var row = el("div", "rem-part-row");
+    row.setAttribute("data-part-row", "");
+    var head = el("div", "rem-part-fields");
+    head.append(el("span", "rem-part-num", String(index + 1)));
+    var words = partInput("label", "text", part.label || "",
+      "Move it to the dryer", MAX_PART_LABEL);
+    words.setAttribute("aria-label", "part " + (index + 1) + "'s words");
+    head.append(words);
+    var remove = el("button", "rem-btn", "Remove");
+    remove.type = "button";
+    remove.setAttribute("data-part", "remove");
+    remove.setAttribute("aria-label", "Remove part " + (index + 1));
+    remove.addEventListener("click", function () {
+      var host = row.parentNode;
+      row.remove();
+      if (host) {
+        renumberParts(host);
+      }
+    });
+    head.append(remove);
+    row.append(head);
+
+    var whenRow = el("div", "rem-part-when-fields");
+    var when = el("select");
+    when.setAttribute("data-part", "when");
+    when.setAttribute("aria-label", "when part " + (index + 1) + " comes up");
+    PART_WHEN_CHOICES.forEach(function (o) {
+      var opt = el("option", "", o.label);
+      opt.value = o.value;
+      if (o.value === (part.when || "after")) opt.selected = true;
+      when.append(opt);
+    });
+    when.addEventListener("change", function () { syncPartRow(row); });
+    whenRow.append(when);
+    var clock = partInput("at", "time", part.at || "");
+    clock.setAttribute("aria-label", "part " + (index + 1) + "'s time");
+    var mins = partInput("minutes", "number",
+      part.minutes === undefined ? 0 : part.minutes);
+    mins.setAttribute("min", "0");
+    mins.setAttribute("max", String(MAX_PART_OFFSET));
+    mins.setAttribute("step", "1");
+    mins.setAttribute("aria-label",
+      "minutes after the start for part " + (index + 1));
+    whenRow.append(clock, mins);
+    row.append(whenRow);
+
+    var askRow = el("div", "rem-part-ask");
+    var then = el("select");
+    then.setAttribute("data-part", "then");
+    then.setAttribute("aria-label", "what part " + (index + 1) + " asks");
+    [{ value: "", label: "Nothing to press" },
+     { value: "ask", label: "Ask me a question" }].forEach(function (o) {
+      var opt = el("option", "", o.label);
+      opt.value = o.value;
+      if (o.value === (part.ask ? "ask" : "")) opt.selected = true;
+      then.append(opt);
+    });
+    then.addEventListener("change", function () { syncPartRow(row); });
+    askRow.append(then);
+    askRow.append(partAskFields(part.ask, index, row));
+    row.append(askRow);
+    syncPartRow(row);
+    return row;
+  }
+
+  /* What one part row shows: the one time it has, and its question when it asks
+     one. Nothing is sent and nothing is validated here. */
+  function syncPartRow(row) {
+    if (!row || !row.querySelector) return;
+    var pick = function (name) { return row.querySelector('[data-part="' + name + '"]'); };
+    var mode = pick("when") ? pick("when").value : "after";
+    if (pick("at")) pick("at").hidden = mode !== "at";
+    if (pick("minutes")) pick("minutes").hidden = mode !== "minutes";
+    var asks = pick("then") && pick("then").value === "ask";
+    if (pick("ask-fields")) pick("ask-fields").hidden = !asks;
+    for (var n = 1; n <= 3; n++) {
+      var does = pick("does-" + n);
+      if (pick("minutes-" + n)) {
+        pick("minutes-" + n).hidden = !(does && does.value === "snooze");
+      }
+    }
+  }
+
+  /* The parts as the editor holds them: each row's words, its one time, and its
+     question read by the SAME rules the reminder's own question uses. `host` is
+     a `.rem-parts-editor` in either form. */
+  function partsRead(host) {
+    var out = [];
+    if (!host || !host.querySelectorAll) return out;
+    Array.prototype.forEach.call(host.querySelectorAll("[data-part-row]"),
+      function (row) {
+        var pick = function (name) {
+          return row.querySelector('[data-part="' + name + '"]');
+        };
+        var then = pick("then");
+        var ask = null;
+        if (then && then.value === "ask") {
+          ask = askFrom(function (name) { return pick(name); });
+        }
+        out.push({
+          label: pick("label") ? pick("label").value : "",
+          when: pick("when") ? pick("when").value : "after",
+          at: pick("at") ? pick("at").value : "",
+          minutes: pick("minutes") ? parseInt(pick("minutes").value, 10) : NaN,
+          ask: ask
+        });
+      });
+    return out;
+  }
+
+  /* Renumber the parts after one is removed, so "2" always means the second
+     one - the PC numbers them itself on save, and the screen must agree. */
+  function renumberParts(host) {
+    if (!host || !host.querySelectorAll) return;
+    Array.prototype.forEach.call(host.querySelectorAll("[data-part-row]"),
+      function (row, i) {
+        var num = row.querySelector(".rem-part-num");
+        if (num) num.textContent = String(i + 1);
+        var remove = row.querySelector('[data-part="remove"]');
+        if (remove) remove.setAttribute("aria-label", "Remove part " + (i + 1));
+      });
+    syncPartFooter(host);
+  }
+
+  /* The one "Add a part" control and the count beside it, at the PC's ceiling -
+     disabled rather than hidden, so the owner is never left wondering why the
+     twelfth part did nothing. */
+  function syncPartFooter(host) {
+    if (!host || !host.querySelector) return;
+    var foot = host.querySelector(".rem-parts-foot");
+    if (!foot) return;
+    var rows = host.querySelectorAll("[data-part-row]").length;
+    var add = foot.querySelector('[data-part="add"]');
+    if (add) add.disabled = rows >= maxParts();
+    var note = foot.querySelector(".rem-parts-count");
+    if (note) {
+      note.textContent = rows
+        ? rows + " of up to " + maxParts() + " parts"
+        : PART_COUNT_WORDS;
+    }
+  }
+
+  /* Draw the parts editor into a host: the rows it is given, then the ONE Add a
+     part control. Called by the Add form (a new routine) and by the row editor
+     (an existing one), so both doors are the same builder. */
+  function partsInto(host, parts) {
+    if (!host) return;
+    host.replaceChildren();
+    (parts || []).forEach(function (part, index) {
+      host.append(partRowOf(part, index));
+    });
+    var foot = el("div", "rem-parts-foot rem-part-fields");
+    var add = el("button", "rem-btn", "Add a part");
+    add.type = "button";
+    add.setAttribute("data-part", "add");
+    add.addEventListener("click", function () {
+      var rows = host.querySelectorAll("[data-part-row]").length;
+      if (rows >= maxParts()) return;
+      host.insertBefore(partRowOf({}, rows), foot);
+      syncPartFooter(host);
+      var made = host.querySelectorAll("[data-part-row]")[rows];
+      var words = made ? made.querySelector('[data-part="label"]') : null;
+      if (words) words.focus();
+    });
+    foot.append(add);
+    foot.append(el("span", "rem-parts-count", ""));
+    host.append(foot);
+    syncPartFooter(host);
+  }
+
   function readSchedule(a) {
     var src = a && typeof a === "object" ? a : {};
     var available = src.available !== false && Array.isArray(src.jobs) && Array.isArray(src.todo);
     var ok = function (j) { return j && typeof j === "object" && /^s[0-9a-f]{10}$/.test(txt(j.id)); };
     var row = function (j) {
+      var parts = partsOf(j);
       return { id: txt(j.id), kind: txt(j.kind), text: txt(j.text), state: txt(j.state),
                due: typeof j.due === "number" ? j.due : null,
                left: typeof j.left === "number" ? j.left : null,
@@ -10369,6 +10949,16 @@ subscribe();
                // Both are empty unless the PC said them, so every other row -
                // and every row written before today - draws what it always did.
                answers: answersOf(j),
+               // A routine's parts (2026-11-03): the parts themselves, and the
+               // PC's own count, cursor and missed count. Each is absent unless
+               // the PC said it, so a reminder with no parts grows no key and
+               // draws exactly what it drew.
+               parts: parts,
+               partsCount: Number.isInteger(j.steps_parts) ? j.steps_parts : 0,
+               partsCursor: Number.isInteger(j.steps_cursor) ? j.steps_cursor : 0,
+               missedParts: Number.isInteger(j.missed_parts) ? j.missed_parts : 0,
+               stepsUnreadable: j.steps_unreadable === true,
+               partsTask: parts.some(function (p) { return p.runsTask; }),
                asks: j.asks === true };
     };
     var lists = Array.isArray(src.lists) ? src.lists.filter(function (l) {
@@ -10394,6 +10984,14 @@ subscribe();
       // question" choice and the row's buttons are only offered when the PC
       // says it can take an answer.
       asks: available && src.asks === true,
+      // ...and the same for a routine (2026-11-03). An older backend drops
+      // `steps` silently (`handle_add` keeps only the keys it knows), so the
+      // parts editor is drawn ONLY when the PC says it can keep them: one plain
+      // reminder where the owner asked for a routine is the one dangerous
+      // direction this form must never take by accident.
+      steps: available && src.steps === true,
+      limits: available && src.limits && typeof src.limits === "object"
+        ? src.limits : null,
       hiddenCount: typeof src.hidden_count === "number" ? src.hidden_count : 0,
       jobs: available ? src.jobs.filter(ok).map(row) : [],
       todo: available ? src.todo.filter(ok).map(row) : [],
@@ -10428,9 +11026,9 @@ subscribe();
   window.__hudRemindersRefresh = refresh;
 
   /* ---- drawing -------------------------------------------------------- */
-  function rowTitle(job) {
+  function rowTitle(job, wentOff) {
     if (job.hidden) return "(hidden while App lock is on)";
-    if (txt(job.text)) return job.text;
+    if (txt(job.text)) return titleWithPart(job.text, job, wentOff);
     if (job.kind === "timer") return "Timer";
     if (job.kind === "alarm") return "Alarm";
     if (job.kind === "todo") return "To-do";
@@ -10481,6 +11079,23 @@ subscribe();
     if (!job.hidden && job.actionProblem) out.push(job.actionProblem);
     if (job.actionUnreadable) {
       out.push("That reminder's action could not be read, so nothing will open.");
+    }
+    // A routine's parts (2026-11-03): how many there are, how many were missed
+    // while the PC was off, and the one line a block it could not read gets.
+    // Each is absent unless the PC said it, so a reminder with no parts draws
+    // exactly what it always drew - and while the words are hidden the COUNT
+    // still shows, the same rule the rest of this line keeps.
+    if (job.partsCount) {
+      out.push(job.partsCount === 1 ? "1 part, on its own"
+        : job.partsCount + " parts, each on its own");
+    }
+    if (job.missedParts) {
+      out.push(job.missedParts === 1
+        ? "1 part was missed - the PC was off or asleep."
+        : job.missedParts + " parts were missed - the PC was off or asleep.");
+    }
+    if (job.stepsUnreadable) {
+      out.push("Its parts could not be read, so it will go off as one reminder.");
     }
     return out.join(" · ");
   }
@@ -10763,6 +11378,25 @@ subscribe();
       });
       fields.push(fieldRow("List", selectOf(opts, job.list || "todo", "list")));
     }
+    // A routine's PARTS (2026-11-03), edited by the SAME builder the Add form
+    // uses - the one edit path this page has, not a second one. Offered only
+    // when the PC's own read says it can keep them (`steps`).
+    if (job.kind === "reminder" && view && view.steps === true) {
+      var partsBox = el("div", "rem-edit-field");
+      partsBox.setAttribute("data-rem-field", "parts");
+      partsBox.append(el("label", "", "Parts"));
+      if (job.partsTask) {
+        // A part whose block this page cannot rebuild must never be silently
+        // rewritten into a checklist line, so the editor says so instead.
+        partsBox.append(el("p", "rem-form-note", PART_TASK_WORDS));
+      } else {
+        var partsHost = el("div", "rem-parts-editor");
+        partsBox.append(partsHost);
+        partsInto(partsHost, partsFromJob(job));
+        partsBox.append(el("p", "rem-form-note", PART_HELP_WORDS));
+      }
+      fields.push(partsBox);
+    }
     fields.forEach(function (f) { grid.append(f); });
     form.append(grid);
     var words2 = phase2Words();
@@ -10846,6 +11480,26 @@ subscribe();
       if (!sameRule(rule, oldRule)) out.repeat = rule;
     }
     var api = phase2Words();
+    // A routine's parts (2026-11-03): sent ONLY when the owner actually changed
+    // them, and through the same ONE `change` command as every other field -
+    // never a bare "edit" of the words. A part the page cannot rebuild (one
+    // that runs a task) is refused above, before anything is read here.
+    var partsHost = form.querySelector('[data-rem-field="parts"] .rem-parts-editor');
+    if (partsHost) {
+      var was = partsBody(partsFromJob(job));
+      var now = partsBody(partsRead(partsHost));
+      if (now instanceof Error) {
+        showError(now);
+        return;
+      }
+      if (JSON.stringify(now) !== JSON.stringify(was instanceof Error ? [] : was)) {
+        if (!now.length) {
+          showError(new Error(PART_BACK_WORDS));
+          return;
+        }
+        out.steps = now;
+      }
+    }
     if (!Object.keys(out).length) {
       showError(new Error(api.NOTHING_CHANGED_WORDS));
       return;
@@ -10871,7 +11525,7 @@ subscribe();
     row.setAttribute("data-rem-id", job.id);
     row.setAttribute("data-rem-kind", job.kind);
     if (Number.isInteger(job.rank)) row.setAttribute("data-rem-rank", String(job.rank));
-    row.append(el("p", "rem-title", rowTitle(job)));
+    row.append(el("p", "rem-title", rowTitle(job, wentOff)));
     // A question is the row's REAL words when it goes off (2026-11-02): the
     // reminder's own text is what it is about, the question is what is asked.
     // Set with textContent, never HTML - the owner's own words.
@@ -10880,6 +11534,11 @@ subscribe();
     }
     var meta = rowMeta(job);
     if (meta) row.append(el("p", "rem-meta", meta));
+    // A routine's parts (2026-11-03), under the row's own words: each part's
+    // words, its time and its mark, and - on a row that has gone off - that
+    // part's OWN buttons, with the PC's labels and never one this page invented.
+    var partsList = partsListOf(job, wentOff);
+    if (partsList) row.append(partsList);
     var askBar = askBarOf(job, wentOff);
     if (askBar) row.append(askBar);
     var openBtn = openButtonOf(job, wentOff);
@@ -10899,6 +11558,48 @@ subscribe();
       row.append(bar);
     }
     return row;
+  }
+  /* A routine's parts, drawn under its row. The words, times and marks are the
+     PC's own; a row that has gone off gets that PART's own buttons, with the
+     labels the PC handed out (never one this page invented), and pressing one
+     answers THAT part. Nothing is drawn while App lock hides the words - the PC
+     blanks each part's label then, so there is nothing here to draw. */
+  function partsListOf(job, wentOff) {
+    if (!job || job.hidden || !job.parts || !job.parts.length) return null;
+    var list = el("ul", "rem-parts");
+    job.parts.forEach(function (part, index) {
+      var item = el("li", "rem-part" + (part.done ? " done" : "") +
+        (!part.done && part.current ? " current" : ""));
+      var line = el("div", "rem-part-line");
+      line.append(el("p", "rem-part-name", part.label));
+      var when = partWhenWords(part);
+      if (when) line.append(el("span", "rem-part-when", when));
+      var mark = part.done ? "done" : (part.missed ? "missed" : (part.current ? "now" : ""));
+      if (mark) line.append(el("span", "rem-part-mark", mark));
+      item.append(line);
+      // A part that has not come up yet draws no buttons: the PC refuses an
+      // answer to one with "That part has not come up yet." and a control that
+      // can only be refused is not a control. `fired_at` is exactly the mark the
+      // PC's own `answer` checks before it takes one.
+      if (wentOff && part.firedAt !== null) {
+        var bar = el("div", "rem-part-answers");
+        part.buttons.forEach(function (b, buttonIndex) {
+          var btn = el("button", "rem-btn rem-answer", b.label);
+          btn.type = "button";
+          btn.setAttribute("data-rem-answer", String(buttonIndex));
+          btn.setAttribute("data-rem-part", String(index));
+          btn.title = b.does === "snooze"
+            ? "Snoozes this part for " + b.minutes + " minutes"
+            : (b.does === "done" ? "Marks this part done"
+              : "Records the answer to this part");
+          btn.addEventListener("click", function () { answer(job, buttonIndex, btn, index); });
+          bar.append(btn);
+        });
+        item.append(bar);
+      }
+      list.append(item);
+    });
+    return list;
   }
   function group(title, jobs, wentOff) {
     if (!jobs.length) return null;
@@ -11012,6 +11713,10 @@ subscribe();
   function askBarOf(job, wentOff) {
     if (!job.action || job.action.kind !== "ask" || job.hidden) return null;
     if (!wentOff || !job.asks) return null;
+    // A ROUTINE answers a PART, never the row (2026-11-03): the PC fires a
+    // routine's action only for a part, so its own question has nothing to
+    // answer. Each part above draws its own buttons instead.
+    if (job.parts && job.parts.length) return null;
     var bar = el("div", "rem-actions rem-ask");
     job.action.buttons.forEach(function (b, i) {
       var btn = el("button", "rem-btn rem-answer", b.label);
@@ -11025,13 +11730,17 @@ subscribe();
     });
     return bar;
   }
-  function answer(job, index, button) {
+  function answer(job, index, button, step) {
     if (busy) return;
     busy = true;
     if (button) button.disabled = true;
-    // ONE call, one job, the button's INDEX - never its label, so a re-worded
-    // button cannot be answered by accident. The PC checks everything again.
-    invoke("hud_schedule_act", { id: job.id, action: "answer", button: index })
+    // ONE call, one job, the button's INDEX and - for a routine - WHICH part,
+    // also an index: never a label of either, so a re-worded button or a
+    // re-ordered part cannot be answered by accident. The PC checks everything
+    // again, and the part's own block is read from its stored row.
+    var args = { id: job.id, action: "answer", button: index };
+    if (typeof step === "number") args.step = step;
+    invoke("hud_schedule_act", args)
       .then(function (v) {
         var said = v && typeof v === "object" ? txt(v.said) : "";
         note.textContent = said || "Answered.";
@@ -11092,12 +11801,33 @@ subscribe();
     $("rem-repeat-row").hidden = !when;
     $("rem-minutes").hidden = kind !== "timer";
     $("rem-list-row").hidden = kind !== "todo";
+    // A routine's parts (2026-11-03) are drawn only for a reminder AND only when
+    // the PC's own read says `steps:true`: an older backend drops `steps`
+    // silently, and one plain reminder where the owner asked for a routine is
+    // the one dangerous direction. Rows typed for another kind are cleared, so
+    // they can never ride along unseen.
+    var host = $("rem-parts");
+    var canRoutine = kind === "reminder" && !!(view && view.steps);
+    if ($("rem-parts-row")) $("rem-parts-row").hidden = !canRoutine;
+    if ($("rem-parts-help")) {
+      $("rem-parts-help").hidden = !canRoutine;
+      if (canRoutine) $("rem-parts-help").textContent = PART_HELP_WORDS;
+    }
+    if (!canRoutine && host && host.querySelector("[data-part-row]")) {
+      partsInto(host, []);
+    }
+    var routineNow = !!(host && host.querySelector("[data-part-row]"));
     // "Then" (2026-10-27) is drawn ONLY for a reminder AND only when the PC's
     // own read says it can keep an action: an older backend drops one silently,
     // and a reminder that looks like it opens something and does not is the one
     // failure worth hiding the control over. A choice already made for another
     // kind is cleared, so it can never ride along unseen.
-    var canAct = kind === "reminder" && !!(view && view.actions);
+    //
+    // A ROUTINE's own "Then" is not offered at all (2026-11-03): the PC fires a
+    // routine's action only for a PART (jarvis_schedule.tick), so the row's own
+    // action would never run - and a control that promises something that never
+    // happens is the same failure this comment is about.
+    var canAct = kind === "reminder" && !!(view && view.actions) && !routineNow;
     $("rem-then-row").hidden = !canAct;
     if (!canAct) $("rem-then").value = "";
     // "Ask me a question" is offered only when the PC says it can take an
@@ -11172,54 +11902,23 @@ subscribe();
   }
   /* The action the form's own choices make, or null for "Nothing", or an Error
      whose sentence is shown as it is. The PC checks all of this again - this is
-     only so the owner is told before anything is sent. */
+     only so the owner is told before anything is sent.
+     A question's rules live in `askFrom`, which is ALSO what a routine's part
+     uses: one set of rules, two places they are asked for. */
   function askedAction() {
-    var question = $("rem-then-question").value.trim();
-    if (!question) {
-      return new Error("Write the question first - it is what you will read when it " +
-        "goes off.");
-    }
-    if (question.length > 200) return new Error("A question is up to 200 characters.");
-    var buttons = [];
-    for (var i = 1; i <= 3; i++) {
-      var label = $("rem-ask-label-" + i).value.trim();
-      if (!label) continue;
-      if (label.length > 24) {
-        return new Error("A button's words are up to 24 characters.");
-      }
-      var does = $("rem-ask-does-" + i).value;
-      var one = { label: label, does: does };
-      if (does === "snooze") {
-        var mins = parseInt($("rem-ask-minutes-" + i).value, 10);
-        if (!(mins >= 1 && mins <= 1440)) {
-          return new Error("A snooze button is 1 to 1440 minutes.");
-        }
-        one.minutes = mins;
-      }
-      buttons.push(one);
-    }
-    if (!buttons.length) {
-      return new Error("A question needs at least one button - that is what you press " +
-        "when it goes off.");
-    }
-    var record = {};
-    if ($("rem-record-history").checked) record.history = true;
-    if ($("rem-record-obsidian").checked) record.obsidian_daily = true;
-    var goal = $("rem-record-goal").value.trim();
-    if (goal) record.goal = goal;
-    var habit = $("rem-record-habit").value.trim();
-    if (habit) record.habit = habit;
-    var records = false;
-    for (var j = 0; j < buttons.length; j++) {
-      if (buttons[j].does === "record") records = true;
-    }
-    if (records && !Object.keys(record).length) {
-      return new Error("A button records the answer, so pick where: its own history, " +
-        "today's Obsidian note, a goal or a habit.");
-    }
-    var block = { kind: "ask", question: question, buttons: buttons };
-    if (Object.keys(record).length) block.record = record;
-    return block;
+    var block = askFrom(function (name) {
+      if (name === "question") return $("rem-then-question");
+      if (name === "history") return $("rem-record-history");
+      if (name === "obsidian") return $("rem-record-obsidian");
+      if (name === "goal") return $("rem-record-goal");
+      if (name === "habit") return $("rem-record-habit");
+      var one = /^(label|does|minutes)-([123])$/.exec(name);
+      return one ? $("rem-ask-" + one[1] + "-" + one[2]) : null;
+    });
+    if (block instanceof Error) return block;
+    var action = { kind: "ask", question: block.question, buttons: block.buttons };
+    if (block.record) action.record = block.record;
+    return action;
   }
   function chosenAction() {
     var kind = $("rem-then") ? $("rem-then").value : "";
@@ -11321,6 +12020,20 @@ subscribe();
       return;
     }
     if (action) args.action = action;
+    // A routine's parts (2026-11-03), built by the same builder the row editor
+    // uses. None typed means a plain reminder and no `steps` key at all, so
+    // every reminder written before today is created exactly as it was.
+    var partsHost = $("rem-parts");
+    var routineParts = [];
+    if (kind === "reminder" && partsHost && view && view.steps
+        && partsHost.querySelector("[data-part-row]")) {
+      routineParts = partsBody(partsRead(partsHost));
+      if (routineParts instanceof Error) {
+        showError(routineParts);
+        return;
+      }
+      args.steps = routineParts;
+    }
     busy = true;
     $("rem-add").disabled = true;
     invoke("hud_schedule_add", args).then(function (v) {
@@ -11345,7 +12058,10 @@ subscribe();
         if ($("rem-record-habit")) $("rem-record-habit").value = "";
         if ($("rem-record-obsidian")) $("rem-record-obsidian").checked = false;
       }
+      // ...and the parts, so the next routine is never the last one's list.
+      if (routineParts.length) partsInto(partsHost, []);
       syncThen();
+      syncForm();
     }).catch(showError).then(function () {
       busy = false;
       $("rem-add").disabled = false;
@@ -11373,6 +12089,10 @@ subscribe();
       if ($("rem-ask-label-" + n)) $("rem-ask-label-" + n).addEventListener("input", syncThen);
     }
     $("rem-form").addEventListener("submit", submitAdd);
+    // The parts editor (2026-11-03) is drawn empty here and filled by the owner:
+    // the rows are the page's own, and the PC's own `steps` marker decides
+    // whether the block is shown at all (syncForm does that after every read).
+    partsInto($("rem-parts"), []);
     syncForm();
     refresh();
     var last = Date.now();

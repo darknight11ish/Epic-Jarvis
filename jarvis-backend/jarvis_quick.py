@@ -1786,6 +1786,12 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
         return got
 
     # --- reminders -----------------------------------------------------------------
+    # A reminder with PARTS is tried FIRST (2026-11-03): a timed chain begins
+    # exactly like an ordinary reminder ("remind me at 8 to ...") and `_reminder`
+    # would stop at the first clause and swallow the rest as its words.
+    got = _routine(s, now)
+    if got is not None:
+        return got
     got = _reminder(s, now)
     if got is not None:
         return got
@@ -2337,6 +2343,205 @@ _REMIND_ASK = (_REMIND_LEAD
                  r"|(?:a|an)\s+(?:new\s+)?reminder"
                  r"|new\s+reminder|reminder)")
 _REMIND = re.compile(_REMIND_ASK)
+
+
+# ---- multi-part reminders / routines (2026-11-03) ---------------------------
+#
+# The owner's ask, in his own words: "at 8 to X, then at 8:30 Y", and a
+# checklist. TWO sentence forms, ONE intent - `reminder_set` with `steps` - so
+# there is no second kind of reminder, no new verb and no new route.
+#
+# `_routine` is tried BEFORE `_reminder` in the matcher chain, because a timed
+# chain begins exactly like an ordinary reminder ("remind me at 8 to ...") and
+# `_reminder` would stop at the first clause and swallow the rest as its words.
+
+#: How a chain's later clauses begin. Both the words the owner typed in the
+#: brief ("then at 8:30") and the shorthand ("and then 9").
+_ROUTINE_THEN = re.compile(r"\s*,\s*then\s+|\s+then\s+|\s*,\s*and\s+then\s+")
+
+#: A checklist's marker: one of the words that means "these are the parts", and
+#: then a colon (or a comma) and the list. The period word and the noun are kept
+#: because they are the routine's own title ("Morning routine"), and a title
+#: this code invented would be a word the owner never said.
+_ROUTINE_LEAD = re.compile(
+    r"(?:set\s+(?:me\s+)?up\s+(?:a|my)\s+|set\s+(?:a|my)\s+|start\s+(?:a|my)\s+|create\s+(?:a|my)\s+)?"
+    r"(?P<period>morning\s+|evening\s+|night\s+|daily\s+|work\s+)?"
+    r"(?P<noun>routine|checklist)\b\s*[:,-]?\s*")
+
+#: "1. meds 2. keys", "1) meds, 2) keys", "1 - meds". The number is the ORDER,
+#: never a time - a part's time is separate and comes from the sentence's own.
+_ROUTINE_NUMBERED = re.compile(r"(?:^|\s+|,)\s*(\d{1,2})\s*[.)\-:]\s+")
+
+#: A minute offset said as "+45m", "45 minutes later", "in 45 minutes".
+_ROUTINE_PLUS = re.compile(r"^\+\s*(\d{1,4})\s*(?:m|min|mins|minute|minutes)?\b")
+_ROUTINE_LATER = re.compile(r"^(?:in\s+)?(\d{1,4})\s*(?:m|min|mins|minute|minutes)\s+later\b")
+
+#: The most parts a routine may have. The PC owns the real bound
+#: (`jarvis_schedule.MAX_STEPS`) and refuses a longer one in its own sentence;
+#: this is only how many the sentence parser will collect before it says so.
+_ROUTINE_MAX_WORDS = 12
+
+
+def _routine_split(title: str) -> list:
+    """The parts of a checklist, in order, from one run of words.
+
+    Numbered lists are split on their own numbers ("1. meds 2. keys 3. badge");
+    anything else is split on commas and "and". Each part keeps the owner's own
+    words, tidied, and never the number."""
+    marks = list(_ROUTINE_NUMBERED.finditer(title))
+    if len(marks) >= 2:
+        out = []
+        for index, mark in enumerate(marks):
+            start = mark.end()
+            end = marks[index + 1].start() if index + 1 < len(marks) else len(title)
+            words = " ".join(title[start:end].split()).strip(" ,;.")
+            if words:
+                out.append(words)
+        if len(out) >= 2:
+            return out
+    return [" ".join(bit.split()).strip(" ,;.")
+            for bit in re.split(r",|\band\b|;", title) if bit.strip(" ,;.")]
+
+
+def _routine_time(text: str, now: float):
+    """A When for a phrase that is ONLY a time ("at 7", "7:30am"), or None."""
+    text = " ".join(str(text or "").split())
+    if not text:
+        return None
+    for candidate in (re.sub(r"^(?:and|at|for|on)\s+(?=\d|noon|midday|midnight)", "", text),
+                      text):
+        when = parse_when(candidate.strip(), now, "reminder")
+        if when is not None and when.at is not None:
+            return when
+    return None
+
+
+def _routine_clause(s: str, now: float):
+    """(When, words) for one clause of a timed chain, or None.
+
+    The time is the LONGEST leading run of words `parse_when` accepts wholly, so
+    "at 8:30 move it to the dryer" reads its time from "at 8:30" and its words
+    from the rest - never a guess at where the time stopped."""
+    words = s.split()
+    if len(words) < 2:
+        return None
+    for take in range(len(words) - 1, 0, -1):
+        head, tail = " ".join(words[:take]), " ".join(words[take:]).strip()
+        for candidate in (re.sub(r"^(?:and|at|for|on)\s+(?=\d|noon|midday|midnight)", "", head),
+                          head):
+            when = parse_when(candidate.strip(), now, "reminder")
+            if when is not None and when.at is not None and tail:
+                return when, tail
+    return None
+
+
+def _routine_offset(s: str):
+    """(minutes, words) for a "+45m" / "45 minutes later" clause, or None."""
+    for pattern in (_ROUTINE_PLUS, _ROUTINE_LATER):
+        m = pattern.match(s.strip())
+        if m:
+            words = s.strip()[m.end():].strip()
+            if words:
+                return int(m.group(1)), words
+    return None
+
+
+def _routine(s: str, now: float) -> Optional[Intent]:
+    """A reminder with PARTS: a timed chain, or a checklist.
+
+    "remind me at 8 to start the laundry, then at 8:30 move it to the dryer,
+     then at 9 fold it"  -> three timed parts, each its own notification.
+    "morning routine at 7: 1. meds 2. keys 3. badge" -> a checklist whose first
+    part is the start time and whose rest come up as each one is ticked off.
+
+    Cardless, like every one-off reminder since 2026-09-25: nothing here raises a
+    card, and the reply is the numbered echo both apps can repeat. When a
+    checklist names no time at all the answer is ONE question rather than a
+    guess - a routine that fired at 00:00 because the sentence had no time would
+    be the worst failure this feature can have."""
+    chain = _ROUTINE_THEN.split(s)
+    if len(chain) > 1:
+        head = chain[0].strip()
+        lead = _REMIND.match(head)
+        if lead is not None:
+            head = head[lead.end():].strip()
+        first = _routine_clause(head, now)
+        if first is None:
+            return None
+        anchor = float(first[0].at)
+        steps = [{"label": _routine_words(first[1]), "offset_min": 0}]
+        for clause in chain[1:]:
+            if not steps[-1].get("label"):
+                return None
+            offset = _routine_offset(clause)
+            if offset is not None:
+                minutes, words = int(offset[0]), _routine_words(str(offset[1]))
+            else:
+                got = _routine_clause(clause, now)
+                if got is None:
+                    return None
+                minutes = int(round((float(got[0].at) - anchor) / 60.0))
+                words = _routine_words(got[1])
+            if not words or minutes < 0 or minutes > 1440:
+                return None
+            if minutes == steps[-1]["offset_min"]:
+                minutes = steps[-1]["offset_min"]      # two parts at one moment
+            steps.append({"label": words, "offset_min": minutes})
+            if len(steps) > _ROUTINE_MAX_WORDS:
+                return None
+        labels = [part["label"] for part in steps]
+        if len(set(label.lower() for label in labels)) != len(labels):
+            return None
+        title = _routine_title(labels)
+        return Intent("reminder_set", {"text": title, "when": first[0],
+                                       "steps": steps})
+    m = _ROUTINE_LEAD.match(s)
+    if not m:
+        return None
+    rest = s[m.end():].strip()
+    if not rest:
+        return None
+    # A routine's own title: the words that said it was one ("Morning routine",
+    # "checklist"). Never invented - a title is what both apps print above the
+    # parts.
+    named = (" ".join(((m.group("period") or "") + (m.group("noun") or "")).split())).strip()
+    title = named[:60].capitalize() if named else ""
+    # An optional time before the colon: "morning routine at 7: 1. meds ...".
+    start = None
+    head, sep, tail = rest.partition(":")
+    if sep and tail.strip() and len(_routine_split(tail)) >= 2:
+        got = _routine_time(head.strip(), now)
+        if got is not None:
+            start, rest = got, tail.strip()
+    parts = _routine_split(rest)
+    if len(parts) < 2:
+        return None
+    if len(parts) > _ROUTINE_MAX_WORDS:
+        return None
+    title = title or _routine_title(parts)
+    if start is None:
+        # No time anywhere: ONE question, never a guess (Q4). Nothing is created
+        # and nothing is carded, so "cancel that" keeps what it had.
+        return Intent("routine_no_time", {"text": title, "parts": parts})
+    steps = [{"label": _routine_words(parts[0]), "offset_min": 0}]
+    steps.extend({"label": _routine_words(label), "offset_min": None}
+                 for label in parts[1:])
+    return Intent("reminder_set", {"text": title, "when": start, "steps": steps})
+
+
+def _routine_words(words: str) -> str:
+    """One part's label: the owner's own words, one line, no leading "to"."""
+    text = " ".join(str(words or "").split()).strip(" ,;.")
+    text = re.sub(r"^(?:to|then|that|about)\s+", "", text, flags=re.I)
+    return text.strip()
+
+
+def _routine_title(labels: list) -> str:
+    """"Morning routine" when the sentence names one, else the first part's own
+    words: a title is what both apps print above the parts, and an invented one
+    would be a word the owner never said."""
+    first = labels[0] if labels else "Routine"
+    return first[:60] if first else "Routine"
 
 
 def _bare_when(s: str, now: float) -> Optional[Intent]:
@@ -17120,7 +17325,15 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result(("One alarm: " if len(alarms) == 1 else f"{len(alarms)} alarms: ")
                       + words + ".", n, [a["id"] for a in alarms[:5]])
     if n == "reminder_set":
-        return _set_at("reminder", f["when"], f["text"], sched, now, n)
+        return _set_at("reminder", f["when"], f["text"], sched, now, n,
+                       steps=f.get("steps"))
+    if n == "routine_no_time":
+        # A checklist with no time anywhere (2026-11-03): ONE question instead
+        # of a guess. A routine that fired at midnight because the sentence had
+        # no time is the worst failure this feature can have, and it is worse
+        # than being asked.
+        return Result("When should the first part come up? Say it with the time, like "
+                      "\"morning routine at 7: meds, keys, badge\".", n)
     if n == "todo_add":
         key = f.get("list")
         if key:
@@ -17484,7 +17697,11 @@ READ_ONLY_INTENTS = frozenset({
     # Updates in chat (2026-10-26): these two only read the public release
     # manifest and answer. "update_start" is deliberately NOT here: it raises a
     # card, so "cancel that" must not reach back past it.
-    "update_ask", "update_notes"})
+    # The routine that could not find a time (2026-11-03): it ASKS one question
+    # and sets nothing up, so it must not take back what "cancel that" would
+    # undo. `reminder_set` with parts - the routine that WAS made - is a write
+    # and is deliberately not here.
+    "routine_no_time", "update_ask", "update_notes"})
 
 
 def _settings_undone_recently(conversation, now: float) -> Optional[Result]:
@@ -17673,8 +17890,9 @@ def _twelve_note(hour: Optional[int], minute: int) -> str:
     return f" That is 12:{minute:02d} {word}. If you meant the other, say \"{other}\"."
 
 
-def _set_at(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
-    r = _set_at_plain(kind, w, text, sched, now, n)
+def _set_at(kind: str, w: When, text: str, sched, now: float, n: str,
+            steps: Optional[list] = None) -> Result:
+    r = _set_at_plain(kind, w, text, sched, now, n, steps=steps)
     if w.said12 and r.ids:
         if w.rule is not None:
             hh, _, mm = str(w.rule.get("at") or "").partition(":")
@@ -17686,12 +17904,27 @@ def _set_at(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
     return r
 
 
-def _set_at_plain(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
+def _set_at_plain(kind: str, w: When, text: str, sched, now: float, n: str,
+                  steps: Optional[list] = None) -> Result:
+    """ONE reminder (or alarm), from chat, with no card.
+
+    `steps` (2026-11-03) makes it a ROUTINE: the same door, the same cards (none),
+    and the same "cancel that" window - plus ONE `jarvis_receipts` entry, so
+    Undo outlives the 120-second window. Creating is cardless because it always
+    was; pressing Undo afterwards raises the ordinary undo card, because undo is
+    a mutating action (JARVIS-API section 21.15)."""
     import jarvis_schedule as S
     noun = "Alarm" if kind == "alarm" else "Reminder"
+    # `steps` rides along ONLY when this really is a routine (2026-11-04). A
+    # plain reminder keeps the exact call it always made, so a Scheduler that
+    # predates routines - and a test double written against that signature -
+    # still answers a reminder instead of raising TypeError on a keyword it has
+    # never heard of. `steps=None` would be the same call for today's
+    # jarvis_schedule; not sending it is what keeps the older one working.
+    routine = {"steps": steps} if steps else {}
     if w.rule is not None:
         try:
-            j = sched.add_repeat(kind, w.rule, text, source="quick")
+            j = sched.add_repeat(kind, w.rule, text, source="quick", **routine)
         except (ValueError, OverflowError) as exc:
             return Result(S._sentence(exc), n)
         words = S.rule_words(j.get("rule") or w.rule)
@@ -17702,20 +17935,53 @@ def _set_at_plain(kind: str, w: When, text: str, sched, now: float, n: str) -> R
                           [j["id"]], made=[j["id"]], what=what, nouns=(kind,))
         # A plain repeat needs no card (2026-09-26): set up now, and the
         # answer says when it next goes off, as the card used to.
+        if steps:
+            return _routine_result(j, sched, now, n, what, kind)
         return Result(S.repeat_set_words(j, now), n, [j["id"]], made=[j["id"]], what=what,
                       nouns=(kind,))
     if w.passed:
         return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
     try:
-        j = sched.add_at(kind, w.at, text, source="quick")
+        j = sched.add_at(kind, w.at, text, source="quick", **routine)
     except (ValueError, OverflowError) as exc:
         return Result(S._sentence(exc), n)
     what = f"the {kind} for {S.when_words(w.at, now)}"
+    if steps:
+        return _routine_result(j, sched, now, n, what, kind)
     if w.at - now < 3600 and kind == "reminder" and not w.default_time:
         return Result(f"{noun} set for {S.clock(w.at)}, in {S.length_words(w.at - now)}.",
                       n, [j["id"]], made=[j["id"]], what=what, nouns=(kind,))
     return Result(f"{noun} set for {S.when_words(w.at, now)}.", n, [j["id"]],
                   made=[j["id"]], what=what, nouns=(kind,))
+
+
+def _routine_result(j: dict, sched, now: float, n: str, what: str,
+                    kind: str) -> Result:
+    """The numbered echo of a routine just set up, and its ONE Undo receipt.
+
+    ONE function, so chat and both apps say the same words from the same source
+    (`jarvis_schedule._step_words`), and the receipt is written only once the
+    row exists - the id is what it needs."""
+    import jarvis_schedule as S
+    parts = j.get("steps") or []
+    anchor = j.get("due")
+    if anchor is None:
+        anchor = float(now)
+    head = f"{j.get('text') or 'Routine'} set for {S.when_words(float(anchor), now)}"
+    lines = [f"{head}, in {len(parts)} parts:"]
+    lines.extend(S._step_words(parts, float(anchor)))
+    lines.append('Say "cancel that" to undo, or edit it under Coming up.')
+    said = "\n".join(lines)
+    try:
+        # ONE receipt per routine created cardlessly, so Undo outlives the
+        # 120-second "cancel that" window. A creation has nothing to snapshot
+        # BEFORE it, so this is written after the row exists - a stated
+        # deviation from `record()`'s "before the change" docstring. If it
+        # returns "" nothing is lost: "cancel that" still works for 120 s.
+        S.record_routine_receipt(str(j.get("id") or ""), parts, said)
+    except Exception:
+        pass
+    return Result(said, n, [j["id"]], made=[j["id"]], what=what, nouns=(kind,))
 
 
 BRIEFING_MISSING = ("Your PC's Jarvis does not have the morning briefing yet - run "

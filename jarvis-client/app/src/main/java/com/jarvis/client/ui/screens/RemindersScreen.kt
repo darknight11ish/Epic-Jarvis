@@ -163,6 +163,26 @@ internal fun RemindersScreen(
         }
     }
 
+    /**
+     * ONE button of ONE part of a routine (2026-11-03): the same `answer` verb a
+     * reminder's own question uses, with the part's index added - one part, one
+     * button, one log line on the PC, and no card. The phone only ever ANSWERS a
+     * part: making or changing a routine is the PC's job, because a part's
+     * destination can be this PC's Obsidian vault or a goal/habit id.
+     */
+    fun answer(job: Schedule.Job, part: Int, button: Int) {
+        busyId = job.id
+        said = null
+        scope.launch {
+            try {
+                val (_, sentence) = JarvisRuntime.scheduleAnswer(job.id, button, part)
+                said = sentence
+            } finally {
+                busyId = null
+            }
+        }
+    }
+
     /** ONE new to-do item, in the owner's words. */
     fun add() {
         if (todoText.isBlank() || !canAct || adding) return
@@ -416,7 +436,11 @@ internal fun RemindersScreen(
                                     color = chrome.textLo,
                                 )
                                 list.wentOff.forEach { job ->
-                                    WentOffRow(job, canAct && busyId == null) { a -> act(job, a) }
+                                    WentOffRow(
+                                        job,
+                                        canAct && busyId == null,
+                                        onAnswer = { p, b -> answer(job, p, b) },
+                                    ) { a -> act(job, a) }
                                 }
                                 Gap(14)
                             }
@@ -435,6 +459,7 @@ internal fun RemindersScreen(
                                     now - readAt,
                                     canAct && busyId == null,
                                     onSaid = { s -> said = s },
+                                    onAnswer = { p, b -> answer(job, p, b) },
                                 ) { a -> act(job, a) }
                             }
                             // "Also on my phone": the one line saying what it

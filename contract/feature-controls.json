@@ -3922,7 +3922,7 @@
         "search": [
           "progress"
         ],
-        "found": false
+        "found": true
       },
       "status": "not-a-setting",
       "owner": "none-needed",
@@ -6174,7 +6174,7 @@
           "first time setup",
           "First-time setup questionnaire"
         ],
-        "found": false
+        "found": true
       },
       "phone": {
         "section": "setup-questionnaire",
@@ -10511,11 +10511,15 @@
         "first time setup",
         "the setup questionnaire",
         "the setup questions",
-        "how jarvis behaves"
+        "how jarvis behaves",
+        "personalize jarvis",
+        "customization quiz",
+        "setup quiz",
+        "retake setup quiz"
       ],
       "app": "both",
       "where": "settings",
-      "in_desktop_settings": false,
+      "in_desktop_settings": true,
       "in_phone_settings": true
     },
     {

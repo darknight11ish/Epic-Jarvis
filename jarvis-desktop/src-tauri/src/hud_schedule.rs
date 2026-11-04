@@ -27,16 +27,19 @@ use crate::brain::schedule::{
     ScheduleChange,
 };
 
-/// The Reminders tab's Add form: ONE reminder, timer, alarm or to-do item.
+/// The Reminders tab's Add form: ONE reminder, timer, alarm or to-do item -
+/// and, since 2026-11-03, ONE routine: a reminder with 2 to 12 `steps`, each
+/// with its own words, its own time and optionally its own question.
 ///
-/// Every field is the form's own; `hud_add_body` refuses anything the
-/// backend does not already take for the four kinds (and PHASE 1 has no
-/// body for editing an existing item - that needs backend actions).
+/// Every field is the form's own; `hud_add_body` refuses anything the backend
+/// does not already take for the four kinds. Editing an existing item does not
+/// come through here - it is `hud_schedule_act`'s `edit`, the same one command
+/// everything else on a row goes through, so there is no second edit path.
 //
 // One argument per form field, on purpose: they are the page's own inputs,
 // kept flat like the Brain's `brain_schedule_add_today`, and mirrored one to
 // one by the tests. Grouping them into a struct would only move the same
-// eight values behind another name.
+// values behind another name.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn hud_schedule_add(
@@ -50,6 +53,7 @@ pub async fn hud_schedule_add(
     repeat: Option<serde_json::Value>,
     list: Option<String>,
     action: Option<serde_json::Value>,
+    steps: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     brain::require_link_live(&app)?;
     let body = hud_add_body(
@@ -62,6 +66,7 @@ pub async fn hud_schedule_add(
         repeat.as_ref(),
         list.as_deref(),
         action.as_ref(),
+        steps.as_ref(),
     )?;
     post(&app, "/api/schedule/add", body).await
 }
@@ -77,7 +82,9 @@ pub async fn hud_schedule_add(
 /// nothing: ONE button of ONE question, pressed, carrying the button's INDEX in
 /// `button` and never its label. It is cardless - an answer is a log line, like
 /// ticking a to-do item - and [`answer_body`] is the only way that body is
-/// built, so a page can never name what is written.
+/// built, so a page can never name what is written. `step` (2026-11-03) is
+/// WHICH part of a routine, also an index and also never a label; it is absent
+/// for a reminder with no parts.
 #[tauri::command]
 pub async fn hud_schedule_act(
     app: AppHandle,
@@ -86,10 +93,11 @@ pub async fn hud_schedule_act(
     seconds: Option<f64>,
     change: Option<ScheduleChange>,
     button: Option<u32>,
+    step: Option<u32>,
 ) -> Result<serde_json::Value, String> {
     brain::require_link_live(&app)?;
     if action == "answer" {
-        let body = answer_body(&id, button)?;
+        let body = answer_body(&id, button, step)?;
         return post(&app, "/api/schedule/act", body).await;
     }
     if let Some(change) = change {
@@ -104,7 +112,7 @@ pub async fn hud_schedule_act(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::brain::schedule::{ACTIONS, MAX_ASK_BUTTONS, SNOOZE_SECONDS};
+    use crate::brain::schedule::{ACTIONS, MAX_ASK_BUTTONS, MAX_STEPS, SNOOZE_SECONDS};
 
     #[test]
     fn one_job_actions_keep_the_brains_own_rules() {
@@ -181,26 +189,50 @@ mod tests {
     /// 2026-11-02: answering one button of one question, and the rails around
     /// it - an id the PC makes, an INDEX (never a label, never a target), and
     /// the three-button ceiling the PC enforces.
+    ///
+    /// 2026-11-03: and WHICH part of a routine, also an index, also never a
+    /// label - absent for a reminder with no parts, so every body this app sent
+    /// before today is the body it still sends.
     #[test]
     fn one_button_of_one_question_is_answered_by_index_only() {
         assert_eq!(
-            answer_body("s0123456789", Some(0)).unwrap(),
+            answer_body("s0123456789", Some(0), None).unwrap(),
             serde_json::json!({"id": "s0123456789", "do": "answer", "button": 0})
         );
         assert_eq!(
-            answer_body("s0123456789", Some(2)).unwrap()["button"],
+            answer_body("s0123456789", Some(2), None).unwrap()["button"],
             serde_json::json!(2)
         );
+        // A routine's part: the step rides with the same body, and a reminder
+        // with no parts grows no `step` key at all.
+        assert_eq!(
+            answer_body("s0123456789", Some(1), Some(2)).unwrap(),
+            serde_json::json!({"id": "s0123456789", "do": "answer", "button": 1,
+                               "step": 2})
+        );
+        assert!(answer_body("s0123456789", Some(0), None)
+            .unwrap()
+            .get("step")
+            .is_none());
         // No id the PC would make, no button, and a fourth button - refused
         // here, in the words both apps use, before anything leaves this app.
-        assert!(answer_body("", Some(0)).is_err());
-        assert!(answer_body("not-an-id", Some(0)).is_err());
-        assert!(answer_body("s0123456789", None).is_err());
-        assert!(answer_body("s0123456789", Some(3)).is_err());
-        assert!(answer_body("s0123456789", Some(99)).is_err());
+        assert!(answer_body("", Some(0), None).is_err());
+        assert!(answer_body("not-an-id", Some(0), None).is_err());
+        assert!(answer_body("s0123456789", None, None).is_err());
+        assert!(answer_body("s0123456789", Some(3), None).is_err());
+        assert!(answer_body("s0123456789", Some(99), None).is_err());
+        // A thirteenth part, in the PC's own sentence.
+        assert_eq!(
+            answer_body("s0123456789", Some(0), Some(MAX_STEPS))
+                .unwrap_err()
+                .as_str(),
+            "A routine has up to 12 parts."
+        );
+        assert!(answer_body("s0123456789", Some(0), Some(MAX_STEPS - 1)).is_ok());
         // And `answer` is reachable by NAME through the closed action list, so
         // the page's own invoke is the only door it has.
         assert!(ACTIONS.contains(&"answer"));
         assert_eq!(MAX_ASK_BUTTONS, 3);
+        assert_eq!(MAX_STEPS, 12);
     }
 }

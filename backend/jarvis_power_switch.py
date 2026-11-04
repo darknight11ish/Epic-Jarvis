@@ -115,6 +115,24 @@ would break it): stop the task first. With the tier set to "ask", that is
 checked again AFTER the card is approved, before anything is unloaded - a
 task may have started while the card waited.
 
+Since 2026-11-03 the same refusal covers the THREE other things that would die
+if the model went away mid-flight, and for the same mechanical reason: a turn
+being answered, a Live conversation, and an approval card on screen
+(`jarvis_power.in_flight()`, asked without its task branch so every message
+above is unchanged). Unloading a model under a turn is a blank answer; under a
+Live conversation it is a voice that stops mid-sentence; under a card it is a
+question that can never be answered because the thing that asked it has gone.
+All four are refused BEFORE the card and again after it, and none of them is a
+reason to change the mode: the answer is "nothing changed, and why".
+
+`force` exists for exactly one caller, `jarvis_power.enforce()`: inside the
+owner's standby hours `jarvis_power.current()` already READS "standby" (the
+window is what makes it standby), while the stored mode is still "active".
+Without it, set_mode would answer "Already standby." and free nothing at all -
+the bug the hours feature would otherwise have shipped with. It skips that one
+equality test and nothing else: every guard below still runs, and the mode is
+still recorded through jarvis_power.set_mode().
+
 A second change while a power card is still waiting (409): approve or deny
 that one first. Otherwise two cards could be up at once, and the one
 answered last - not the one asked for last - would decide the mode.
@@ -169,6 +187,27 @@ def _running_tasks() -> list:
         return jarvis_task_control.running()
     except Exception:
         return []
+
+
+def _busy_reason():
+    """Something OTHER than a task is using the model, or None.
+
+    Asks `jarvis_power.in_flight(include_tasks=False)` so this module keeps its
+    own task check, and every word of it, above. A power module too old to have
+    the function answers None - the same behaviour as before this change, which
+    is the safe direction: an older jarvis_power cannot have the hours feature
+    that made the stronger guard necessary.
+    """
+    try:
+        import jarvis_power
+        return jarvis_power.in_flight(include_tasks=False)
+    except Exception:
+        return None
+
+
+def _busy_sentence(current: str, held: str) -> str:
+    return (f"Nothing was unloaded - {held}, and standby would take the model out "
+            f"from under it. Jarvis stays {current}; ask again once it has finished.")
 
 
 def _unload_models(models) -> dict:
@@ -591,13 +630,16 @@ def card_text(mode: str, current: str) -> str:
 def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
              power=None, models=None, wait_s: float = 1.5, others=None,
              ollama=None, warm: Optional[Callable[[Callable[[], None]], None]] = None,
-             why: str = "") -> tuple:
+             why: str = "", force: bool = False) -> tuple:
     """Change the power mode through the gate. Returns (http_status, body).
 
     `ollama`: the everyday Ollama (everyday_ollama() when None). `warm`:
     how the warm-up is started (its own thread when None; the tests run it
     in place). `why`: what jarvis_power records as the reason - "the owner,
-    from <by>" when empty; the standby schedule gives its own."""
+    from <by>" when empty; the standby schedule gives its own. `force`: skip
+    the "already in that mode" answer - jarvis_power.enforce() needs it inside
+    the owner's standby hours, where current() already READS standby while the
+    stored mode is still active. Every guard still runs. See the docstring."""
     mode = str(mode or "").strip().lower()
     if mode not in MODES:
         return 400, {"ok": False, "error": f"mode must be one of {', '.join(MODES)}"}
@@ -608,12 +650,17 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
     except Exception as exc:
         return 503, {"ok": False, "available": False,
                      "error": f"the power module is not available here ({type(exc).__name__})"}
-    if mode == current:
+    if mode == current and not force:
         return 200, {"ok": True, "mode": mode, "changed": False,
                      "message": f"Already {mode}."}
     if mode == "standby" and _running_tasks():
         return 409, {"ok": False, "error": "a task is running - stop it first, or it would "
                                            "lose the model it is using"}
+    if mode == "standby":
+        held = _busy_reason()
+        if held:
+            return 409, {"ok": False, "held": held,
+                         "error": _busy_sentence(current, held)}
     with _PENDING_LOCK:
         if _PENDING:
             return 409, {"ok": False, "waiting": True,
@@ -650,6 +697,19 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
                                             f"is using. Jarvis stays {current}; stop the task "
                                             f"first.")})
             return
+        if mode == "standby":
+            # The same check for the three that are not tasks: a turn being
+            # answered, a Live conversation, a card on screen. Also after the
+            # card, for the same reason as the task check above.
+            held = _busy_reason()
+            if held:
+                box["out"] = (409, {"ok": False, "mode": current, "changed": False,
+                                    "outcome": "refused", "held": held,
+                                    "message": (f"Not changed - {held} started while the "
+                                                f"card waited, and standby would take the "
+                                                f"model out from under it. Jarvis stays "
+                                                f"{current}.")})
+                return
         power.set_mode(mode, why=why or f"the owner, from {by or 'an app'}")
         out = {"ok": True, "mode": mode, "changed": True, "message": _WORDS[mode]}
         if current == "standby" and mode == "active":
