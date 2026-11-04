@@ -1363,7 +1363,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -1406,6 +1406,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -1576,49 +1618,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": false,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -2997,7 +3227,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -3040,6 +3270,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -3210,49 +3482,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": false,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -4626,7 +5086,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -4669,6 +5129,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -4839,49 +5341,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": false,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -6250,7 +6940,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -6293,6 +6983,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -6463,49 +7195,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": false,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -7879,7 +8799,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [
      {
       "group": "Also on in your settings file",
@@ -7894,15 +8814,6 @@
       "title": "plugin scan",
       "waiting": false,
       "why": "Off now. This page has no switch to turn it back on: add it back to [tools].enabled in jarvis-framework.toml on this PC by hand, then restart Jarvis."
-     },
-     {
-      "group": "Also on in your settings file",
-      "id": "web_search",
-      "on": true,
-      "switchable": false,
-      "title": "Web search",
-      "waiting": false,
-      "why": "This page does not offer this one in-app, so it has no switch to turn it on. It is on in your settings file, so you can turn it off here; to offer it again, add it back to [tools].enabled in jarvis-framework.toml by hand."
      }
     ],
     "groups": [
@@ -7946,6 +8857,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -8116,49 +9069,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": true,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -9532,7 +10673,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": true,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [
      {
       "group": "Also on in your settings file",
@@ -9541,16 +10682,7 @@
       "switchable": false,
       "title": "plugin scan",
       "waiting": false,
-      "why": "Your settings file lists this one, but this page has no row of its own for it - it may come from a part added to Jarvis. It is on, so you can turn it off here; to offer it again, add it back to [tools].enabled in jarvis-framework.toml by hand."
-     },
-     {
-      "group": "Also on in your settings file",
-      "id": "web_search",
-      "on": true,
-      "switchable": false,
-      "title": "Web search",
-      "waiting": false,
-      "why": "This page does not offer this one in-app, so it has no switch to turn it on. It is on in your settings file, so you can turn it off here; to offer it again, add it back to [tools].enabled in jarvis-framework.toml by hand."
+      "why": "Your settings file lists this one, but this PC has no row of its own for it - it may come from a part added to Jarvis. It is on, so you can turn it off here; to offer it again, add it back to [tools].enabled in jarvis-framework.toml by hand."
      }
     ],
     "groups": [
@@ -9594,6 +10726,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -9764,49 +10938,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": true,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -11175,7 +12537,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -11218,6 +12580,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -11388,49 +12792,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": false,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -12813,7 +14405,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -12856,6 +14448,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -13026,49 +14660,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": false,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -14442,7 +16264,7 @@
    "title": "What asks first",
    "tools": {
     "can_enable": false,
-    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+    "detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
     "extra": [],
     "groups": [
      {
@@ -14485,6 +16307,48 @@
        "send_file_to_phone"
       ],
       "title": "Safety and sharing"
+     },
+     {
+      "ids": [
+       "shell_exec",
+       "control_computer",
+       "control_phone",
+       "browser_control",
+       "read_web_page",
+       "connect_account",
+       "rea_investigate"
+      ],
+      "title": "Raw and powerful"
+     },
+     {
+      "ids": [
+       "calculator",
+       "memory_search",
+       "file_read",
+       "web_search",
+       "my_files",
+       "propose_plan",
+       "change_setting",
+       "feature_guide"
+      ],
+      "title": "Everyday helpers"
+     },
+     {
+      "ids": [
+       "goals_list",
+       "goal_add",
+       "goal_progress",
+       "goal_done",
+       "conversation_find",
+       "conversation_open",
+       "phone_apps",
+       "plugin_list",
+       "plugin_switch",
+       "refresh_abilities",
+       "self_portrait",
+       "setup_quiz"
+      ],
+      "title": "Jarvis's own tools"
      }
     ],
     "items": [
@@ -14655,49 +16519,237 @@
       "on": false,
       "title": "Sending one file from your PC to your phone (one card each)",
       "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "shell_exec",
+      "last": null,
+      "on": false,
+      "title": "Running commands on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_computer",
+      "last": null,
+      "on": false,
+      "title": "Computer control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "control_phone",
+      "last": null,
+      "on": false,
+      "title": "Phone control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "browser_control",
+      "last": null,
+      "on": false,
+      "title": "Browser control",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "read_web_page",
+      "last": null,
+      "on": false,
+      "title": "Reading one web page out loud (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "connect_account",
+      "last": null,
+      "on": false,
+      "title": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
+      "waiting": false
+     },
+     {
+      "group": "Raw and powerful",
+      "id": "rea_investigate",
+      "last": null,
+      "on": false,
+      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "calculator",
+      "last": null,
+      "on": false,
+      "title": "Calculator",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "memory_search",
+      "last": null,
+      "on": false,
+      "title": "Searching what it has learned about you",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "file_read",
+      "last": null,
+      "on": false,
+      "title": "Reading files on this PC",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "web_search",
+      "last": null,
+      "on": false,
+      "title": "Web search",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "my_files",
+      "last": null,
+      "on": false,
+      "title": "Finding and reading files in the folders you listed",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "propose_plan",
+      "last": null,
+      "on": false,
+      "title": "Running a short plan of its own tools (one card, several steps)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "change_setting",
+      "last": null,
+      "on": false,
+      "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
+      "waiting": false
+     },
+     {
+      "group": "Everyday helpers",
+      "id": "feature_guide",
+      "last": null,
+      "on": false,
+      "title": "Explaining and checking one of Jarvis's own features (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goals_list",
+      "last": null,
+      "on": false,
+      "title": "Reading your goals and what you have recorded on them",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_add",
+      "last": null,
+      "on": false,
+      "title": "Adding a goal, in your words",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_progress",
+      "last": null,
+      "on": false,
+      "title": "Recording one progress line on one of your goals",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "goal_done",
+      "last": null,
+      "on": false,
+      "title": "Marking one of your goals done (kept, with its progress)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_find",
+      "last": null,
+      "on": false,
+      "title": "Finding your old conversations by their titles (read-only, titles and dates only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "conversation_open",
+      "last": null,
+      "on": false,
+      "title": "Opening one of your old conversations to read it (read-only, on this PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "phone_apps",
+      "last": null,
+      "on": false,
+      "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_list",
+      "last": null,
+      "on": false,
+      "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "plugin_switch",
+      "last": null,
+      "on": false,
+      "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "refresh_abilities",
+      "last": null,
+      "on": false,
+      "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "self_portrait",
+      "last": null,
+      "on": false,
+      "title": "Saying what it is made of on this PC (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "setup_quiz",
+      "last": null,
+      "on": false,
+      "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
-    "not_offered": {
-     "labels": {
-      "browser_control": "Browser control",
-      "calculator": "Calculator",
-      "change_setting": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)",
-      "connect_account": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)",
-      "control_computer": "Computer control",
-      "control_phone": "Phone control",
-      "feature_guide": "Explaining and checking one of Jarvis's own features (read-only)",
-      "file_read": "Reading files on this PC",
-      "memory_search": "Searching what it has learned about you",
-      "my_files": "Finding and reading files in the folders you listed",
-      "propose_plan": "Running a short plan of its own tools (one card, several steps)",
-      "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
-      "read_web_page": "Reading one web page out loud (one card each)",
-      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
-      "shell_exec": "Running commands on this PC",
-      "web_search": "Web search"
-     },
-     "not_this_slice": [
-      "calculator",
-      "memory_search",
-      "file_read",
-      "web_search",
-      "my_files",
-      "propose_plan",
-      "change_setting",
-      "feature_guide"
-     ],
-     "tier_c": [
-      "shell_exec",
+    "not_switchable": {
+     "ids": [
       "run_data_script",
-      "control_computer",
-      "control_phone",
-      "browser_control",
-      "read_web_page",
-      "connect_account",
-      "rea_investigate"
+      "approve_web_search_for_conversation",
+      "stop_web_search_approval"
      ],
-     "why": "That tool is not offered from inside the app by this slice. Raw shell, computer and browser control, reading one web page, connecting an account and REA (which also needs its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, my_files, propose_plan, change_setting and feature_guide are not offered in-app by this slice either. Nothing was changed."
+     "labels": {
+      "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
+      "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
+     },
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -14763,7 +16815,34 @@
   "home_read",
   "home_control",
   "my_spending",
-  "retirement_whatif"
+  "retirement_whatif",
+  "shell_exec",
+  "control_computer",
+  "control_phone",
+  "browser_control",
+  "read_web_page",
+  "connect_account",
+  "rea_investigate",
+  "calculator",
+  "memory_search",
+  "file_read",
+  "web_search",
+  "my_files",
+  "propose_plan",
+  "change_setting",
+  "feature_guide",
+  "goals_list",
+  "goal_add",
+  "goal_progress",
+  "goal_done",
+  "conversation_find",
+  "conversation_open",
+  "phone_apps",
+  "plugin_list",
+  "plugin_switch",
+  "refresh_abilities",
+  "self_portrait",
+  "setup_quiz"
  ],
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
@@ -14781,6 +16860,11 @@
   "lockdown_row_note": "Lockdown is on, so this asks you first - or stops, if it runs by itself.",
   "lockdown_waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC.",
   "missing": "Your PC's Jarvis cannot show what asks first yet - run apply-patches.ps1 on the PC.",
+  "no_switch_note": {
+   "approve_web_search_for_conversation": "This one rides with Web search: with Web search offered, the AI is offered this too, and without it this tool could not search anyway. It has no switch of its own, so nothing was changed here.",
+   "run_data_script": "The data and maths sandbox has its own switch: Settings, Data sandbox (or the sandbox row on the What asks first page). That switch is what offers this tool, so a line in [tools].enabled would change nothing. Nothing was changed here.",
+   "stop_web_search_approval": "This one rides with Web search: with Web search offered, the AI is offered this too. It has no switch of its own, so nothing was changed here."
+  },
   "not_on_list": "Only reading your calendar, email, notes, home status and files, adding to your notes, and the power mode, can be changed from an app. Everything else changes only in your settings file (jarvis-framework.toml), and some things always ask.",
   "pc_only": "Letting Jarvis do this without asking can only be done on the PC (Settings, What asks first), with an approval card and Windows Hello.",
   "phone_loosen": "To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
@@ -14793,9 +16877,10 @@
   "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
-  "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Some tools have a switch here; the raw ones and the ones this slice leaves alone stay a settings-file choice, listed below. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
+  "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
   "tools_label": "Let the AI use this",
   "tools_not_on_list": "This PC does not know a tool by that name, so nothing was changed.",
+  "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it.",
   "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }

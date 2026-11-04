@@ -28,11 +28,14 @@ Runs anywhere; no Home Assistant, no model and no network. What it proves:
    after outside text still gets its card.
 8. The patch: applies after focus.patch, reverses, and touches only
    jarvis_hud.py and jarvis_gate.py; the module is shipped.
-9. Offering a reading tool to the AI model at all (a DIFFERENT setting from
+9. Offering a tool to the AI model at all (a DIFFERENT setting from
    1-5: [tools].enabled, never [autonomy.tiers]) is the same shape as
    loosening - the PC only, one card (enable_reading_tool) plus Windows
    Hello to turn ON; OFF is instant, from either app - and writes ONE line
-   of the settings file the same careful way.
+   of the settings file the same careful way. Since the owner's decision of
+   2026-11-04 EVERY tool the model can be offered is switchable this way -
+   the raw Tier C set and the everyday helpers included - and only the three
+   whose own switch decides them are named instead of switched.
 10. Neither card may NAME a file jarvis_gate.py protects (2026-10-10, after
    two cards that could never be approved by anyone). Both cards ARE the
    `prompt` `jarvis_gate.check()` is handed, and the gate's first rule -
@@ -859,19 +862,26 @@ def _treq(body, tools, *, here, tiers=None, gate=None, armed=True, spawn=None):
 
 
 def t_offering_a_tool_is_a_different_thing_from_loosening():
-    # 21 since 2026-11-02: the conversation-scoped web-search approval and its
-    # instant stop were taken OFF this list. They were added on 2026-11-01 as
-    # "Safety and sharing" switches, and on the owner's own PC that switch was
-    # never on - so the model was never offered the tool, no grant card could be
-    # raised, and the field test's natural request answered "Search is approved"
-    # with nothing behind it. The ask rides with web search now
-    # (jarvis_agent.GRANT_ASK_TOOLS); a switch the turn ignores would be a lie.
-    check("the tiered in-app list is Tier A + Tier B, 21 tools, calendar_read kept",
-          AF.TOOLS_SWITCHABLE == tuple(AF.TIER_A) + tuple(AF.TIER_B)
-          and "calendar_read" in AF.TIER_A and len(AF.TOOLS_SWITCHABLE) == 21)
-    check("Tier C and the nine unlisted tools are NOT switchable in-app",
-          not (set(AF.TIER_C) | set(AF.TIER_UNLISTED)) & set(AF.TOOLS_SWITCHABLE),
-          (AF.TIER_C, AF.TIER_UNLISTED))
+    # 2026-11-04, the owner's decision: "few restrictions on its tools beyond
+    # the core values of jarvis that have already been established,
+    # particularly reverse engineer anything among other things". The ON half of
+    # the 2026-10-31 tiered ruling is gone - EVERY tool the AI model can be
+    # offered is switchable from the Tools page now, 48 of them, and the only
+    # three that are not are the ones whose own switch decides them.
+    check("every tool the model can be offered is switchable in-app, 48 at 2026-11-04",
+          AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
+                                  + tuple(t for t in AF.TIER_C
+                                          if t not in AF.NOT_A_SWITCH)
+                                  + AF.TIER_UNLISTED + AF.TIER_EXTRA)
+          and len(AF.TOOLS_SWITCHABLE) == 48 and "calendar_read" in AF.TIER_A)
+    check("the tier lists plus the three exceptions ARE the model's own tool list",
+          set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH) == set(AG.TOOLS),
+          sorted(set(AG.TOOLS) ^ (set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH))))
+    check("the three exceptions are the sandbox and the two web-search grant tools",
+          set(AF.NOT_A_SWITCH) == {"run_data_script"} | set(AG.GRANT_ASK_TOOLS),
+          AF.NOT_A_SWITCH)
+    check("no row is both switchable and an exception",
+          not set(AF.TOOLS_SWITCHABLE) & set(AF.NOT_A_SWITCH))
     check("its own action, always 'ask', never loosened by the tier mechanism above",
           AF.ENABLE_TOOL_ACTION in AF.HARD_LIMITS and AF.ENABLE_TOOL_ACTION in AF.MUST_ASK
           and AF.ENABLE_TOOL_ACTION not in AF.SWITCHABLE)
@@ -908,15 +918,68 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
         check(f"{tool}: offered in-app from the PC with one card",
               code == 202 and tools.writes == [(AF.real_tool(tool), True)],
               (code, out, tools.writes))
-    # Tier C and the unlisted tools stay settings-file choices: 403 + why.
-    for tool in ("shell_exec", "run_data_script", "control_computer",
+    # THE POINT OF 2026-11-04: the seven raw tools that used to be refused with
+    # a 403 now go through the SAME one-card path. `run_data_script` is the
+    # eighth Tier C tool and is NOT here: its line in [tools].enabled is
+    # ignored by the turn (the data sandbox's own switch decides it), so its
+    # answer names that switch instead - see the next loop.
+    for tool in ("shell_exec", "control_computer", "control_phone",
                  "browser_control", "read_web_page", "connect_account",
-                 "rea_investigate", "calculator", "propose_plan"):
+                 "rea_investigate"):
+        asked = []
+        tools = ToolsFile()
+        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True,
+                          gate=lambda a, d, p: (asked.append((a, d, p)),
+                                                Verdict(True, "ask", "approved"))[1])
+        check(f"{tool}: formerly Tier C, now switchable with ONE ask-tier card",
+              code == 202 and [a for a, _, _ in asked] == [AF.ENABLE_TOOL_ACTION]
+              and tools.writes == [(tool, True)], (code, out, tools.writes, asked))
+        check(f"{tool}: ... and its card names what is being switched on",
+              AF.tool_label(tool) in (asked[0][2] if asked else ""), asked[0][2] if asked else "")
+    # Nothing is written before a person answers: the card is held, the file is
+    # untouched, and a refused card changes nothing either.
+    for tool in ("shell_exec", "browser_control", "rea_investigate", "calculator",
+                 "propose_plan", "web_search"):
+        held = []
+        tools = ToolsFile()
+        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True,
+                          gate=lambda a, d, p: Verdict(True, "ask", "approved"),
+                          spawn=held.append)
+        check(f"{tool}: 202 with the card waiting, and NOTHING written yet",
+              code == 202 and out.get("waiting") is True and tools.writes == []
+              and len(held) == 1, (code, out, tools.writes))
+        check(f"{tool}: ... the page reports it as waiting, not as on",
+              next(i for i in out["tools"]["items"] if i["id"] == tool)["waiting"] is True
+              and next(i for i in out["tools"]["items"] if i["id"] == tool)["on"] is False,
+              out["tools"]["items"][:2])
+        held[0]()
+        check(f"{tool}: approving that card writes exactly one line",
+              tools.writes == [(AF.real_tool(tool), True)], tools.writes)
+        tools = ToolsFile()
+        _treq({"tool": tool, "enabled": True}, tools, here=True,
+              gate=lambda a, d, p: Verdict(False, "ask", "denied"))
+        check(f"{tool}: a denied card changes nothing", tools.writes == [], tools.writes)
+    # The unlisted everyday helpers, all eight, the same way.
+    for tool in AF.TIER_UNLISTED:
         tools = ToolsFile()
         code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
-        check(f"{tool}: not offered in-app (403), nothing written",
+        check(f"{tool}: formerly 'not this slice', now switchable with one card",
+              code == 202 and tools.writes == [(AF.real_tool(tool), True)], (code, out))
+    # And Jarvis's own tools, which had no switch row at all.
+    for tool in AF.TIER_EXTRA:
+        tools = ToolsFile()
+        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
+        check(f"{tool}: had no switch row before 2026-11-04, now switchable",
+              code == 202 and tools.writes == [(AF.real_tool(tool), True)], (code, out))
+    # The three whose own switch decides them are refused with a sentence that
+    # names that switch - never the false "does not know that name".
+    for tool in AF.NOT_A_SWITCH:
+        tools = ToolsFile()
+        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
+        check(f"{tool}: refused with its own real switch, not 'does not know that name'",
               code == 403 and tools.writes == []
-              and out["error"] == AF.TOOLS_TOML_ONLY_NOTE, (code, out))
+              and out["error"] == AF.NO_SWITCH_NOTE[tool]
+              and out.get("not_a_switch") is True, (code, out))
     tools = ToolsFile()
     code, out = _treq({"tool": "nonsense", "enabled": True}, tools, here=True)
     check("an unknown tool: 403, the 'does not know that name' answer",
@@ -997,10 +1060,10 @@ def t_the_tools_status_and_the_page():
         # AF.SWITCHABLE_GROUPS, not AF.TOOL_GROUPS: jarvis_storage_health.py
         # (PR #1117) appends a row of tools that raise cards but are never
         # switchable from an app, so the SWITCH list is the switchable subset.
-        # 21 items stays right - the storage row adds none of them.
-        check("the label, the 21 grouped items, the vault row and the not-offered list",
+        # The storage row adds none of them, so the items are the 48.
+        check("the label, the 48 grouped items, the vault row and the three exceptions",
               st["label"] == AF.TOOLS_LABEL and st["can_enable"] is True
-              and len(st["items"]) == 21
+              and len(st["items"]) == 48
               and [g["title"] for g in st["groups"]]
               == [title for title, _tools in AF.SWITCHABLE_GROUPS]
               and st["items"][0]["group"] == AF.SWITCHABLE_GROUPS[0][0]
@@ -1008,9 +1071,21 @@ def t_the_tools_status_and_the_page():
               and next(i for i in st["items"] if i["id"] == "email_check")["on"] is False
               and st["vault"]["id"] == "vault_organizer"
               and st["vault"]["can_enable"] is True
-              and set(st["not_offered"]["tier_c"]) == set(AF.TIER_C)
-              and set(st["not_offered"]["not_this_slice"]) == set(AF.TIER_UNLISTED)
-              and st["not_offered"]["why"] == AF.TOOLS_TOML_ONLY_NOTE, st)
+              and set(st["not_switchable"]["ids"]) == set(AF.NOT_A_SWITCH)
+              and st["not_switchable"]["labels"]["run_data_script"]
+              == AF.tool_label("run_data_script")
+              and st["not_switchable"]["why"] == AF.TOOLS_NOT_SWITCHED_WHY, st)
+        check("the page offers an ON switch for every formerly locked tool",
+              all(next(i for i in st["items"] if i["id"] == tool)["group"]
+                  == "Raw and powerful"
+                  for tool in ("shell_exec", "control_computer", "control_phone",
+                               "browser_control", "read_web_page", "connect_account",
+                               "rea_investigate")))
+        check("... and for every everyday helper too",
+              all(next(i for i in st["items"] if i["id"] == tool)["group"]
+                  == "Everyday helpers" for tool in AF.TIER_UNLISTED))
+        check("the old 'not offered in-app' block is gone, never a stale promise",
+              "not_offered" not in st)
         check("the vault row is a separate switch, not a tool item",
               all(i["id"] != "vault_organizer" for i in st["items"]))
         v = AF.view(here=False)
@@ -1023,31 +1098,19 @@ def t_the_tools_status_and_the_page():
 def t_off_a_tool_the_page_was_never_told_about():
     """D4, 2026-11-04: the Tools page may turn OFF anything that is ON.
 
-    The old rule (2026-10-31 tiered ruling, reaffirmed 2026-11-03 for
-    read_web_page) refused every request for a tool outside the 21 in-app
-    switches - 403, "not offered in-app by this slice" / "does not know a tool
-    by that name". The owner reversed the OFF half on 2026-11-04: a tool that
-    is enabled in [tools].enabled is ON whether or not this page knows it, so
-    turning it off must work, write the one settings line, and then be shown
-    as OFF. Turning such a tool ON is NOT part of the decision and stays 403.
+    The old rule (2026-10-31 tiered ruling) refused every request for a tool
+    outside the 21 in-app switches. The owner reversed the OFF half on
+    2026-11-04, and the ON half on the same day: every tool the PC knows now
+    has a switch row, so what is left for this test is the OFF half's real
+    remaining case - a name this PC does not know at all (a drop-in program's
+    own tool), and the three tools whose own switch decides them.
     """
-    # A known-but-unlisted tool that the settings file has ON.
-    for tool in ("web_search", "read_web_page"):
-        tools = ToolsFile(tool)
-        code, out = _treq({"tool": tool, "enabled": False}, tools, here=False,
-                          gate=lambda a, d, p: (_ for _ in ()).throw(
-                              AssertionError("OFF must not raise a card")))
-        check(f"{tool}: ON in the file but not an in-app switch: OFF works, no card",
-              code == 200 and tools.writes == [(tool, False)] and tool not in tools.on,
-              (code, out, tools.writes))
-        check(f"{tool}: ... and the answer says it went off",
-              code == 200 and "off now" in str(out.get("message")),
-              out)
-
-    # A name the PC does not know at all: the settings file lists it, so it is
-    # ON, and OFF must remove exactly that one entry.
+    # A name this PC does not know at all: the settings file lists it, so it is
+    # ON, and OFF must remove exactly that one entry with no card.
     tools = ToolsFile("web_search", "plugin_scan", "calendar_read")
-    code, out = _treq({"tool": "plugin_scan", "enabled": False}, tools, here=False)
+    code, out = _treq({"tool": "plugin_scan", "enabled": False}, tools, here=False,
+                      gate=lambda a, d, p: (_ for _ in ()).throw(
+                          AssertionError("OFF must not raise a card")))
     check("an enabled name the PC does not know: OFF works and only it goes",
           code == 200 and tools.writes == [("plugin_scan", False)]
           and tools.on == {"web_search", "calendar_read"}, (code, tools.on))
@@ -1056,24 +1119,52 @@ def t_off_a_tool_the_page_was_never_told_about():
           and "jarvis-framework.toml" in str(out.get("message"))
           and "add" in str(out.get("message")).lower(), out.get("message"))
 
-    # The page lists every tool that is ON, including the ones it has no
-    # switch row for - with the real state and a plain reason.
+    # A tool that IS on, and that this page now has an ON switch for: OFF is
+    # the ordinary instant path (the 2026-11-04 ON half must not have broken
+    # the D4 OFF half).
+    for tool in ("web_search", "read_web_page", "shell_exec", "calculator"):
+        tools = ToolsFile(tool)
+        code, out = _treq({"tool": tool, "enabled": False}, tools, here=False,
+                          gate=lambda a, d, p: (_ for _ in ()).throw(
+                              AssertionError("OFF must not raise a card")))
+        check(f"{tool}: ON and now a switch row: OFF is instant, no card",
+              code == 200 and tools.writes == [(tool, False)]
+              and "not offered this tool any more" in str(out.get("message")),
+              (code, out, tools.writes))
+
+    # The three whose own switch decides them: OFF removes the line, and the
+    # answer says plainly that the REAL switch still offers it - never "not
+    # offered any more", which the turn would contradict.
+    for tool, said in (
+            ("run_data_script", AF.TOOLS_OFF_A_TOOL_WITH_ITS_OWN_SWITCH),
+            ("approve_web_search_for_conversation", AF.TOOLS_OFF_A_TOOL_THAT_RIDES_ALONG),
+            ("stop_web_search_approval", AF.TOOLS_OFF_A_TOOL_THAT_RIDES_ALONG)):
+        tools = ToolsFile(tool)
+        code, out = _treq({"tool": tool, "enabled": False}, tools, here=False)
+        check(f"{tool}: OFF removes its line and names the real switch",
+              code == 200 and tools.writes == [(tool, False)]
+              and out.get("message") == said, (code, out))
+
+    # The page lists every name that is ON but has no switch row - with the
+    # real state and a plain reason.
+    AF._reset_for_tests()
     keep = AF.tools_enabled_set
-    AF.tools_enabled_set = lambda: {"web_search", "plugin_scan", "calendar_read"}
+    AF.tools_enabled_set = lambda: {"plugin_scan", "calendar_read", "run_data_script"}
     try:
         st = AF.tools_status(here=True)
     finally:
         AF.tools_enabled_set = keep
     extra = {row["id"]: row for row in st.get("extra") or []}
-    check("the page lists the two ON-but-unlisted tools, and only those",
-          set(extra) == {"web_search", "plugin_scan"}, sorted(extra))
+    check("the page lists the unknown and the sandbox name, and only those",
+          set(extra) == {"plugin_scan", "run_data_script"}, sorted(extra))
     check("  ... with their real state: On",
           all(row.get("on") is True for row in extra.values()), extra)
     check("  ... their human label, not the raw id",
           all(row.get("title") for row in extra.values())
-          and extra["web_search"]["title"] != "web_search", extra)
+          and extra["plugin_scan"]["title"] != "plugin_scan", extra)
     check("  ... and a plain reason each",
-          all(row.get("why") for row in extra.values()), extra)
+          all(row.get("why") for row in extra.values())
+          and "Data sandbox" in extra["run_data_script"]["why"], extra)
     check("  ... and none of them pretends an in-app ON switch exists",
           all(row.get("switchable") is False for row in extra.values()), extra)
     # The old file that saved "email_read" adds BOTH names to the enabled set
@@ -1091,7 +1182,7 @@ def t_off_a_tool_the_page_was_never_told_about():
 
     # After OFF through the route, the row STAYS and says OFF truthfully,
     # rather than vanishing from the page on the next read.
-    tools = ToolsFile("web_search", "plugin_scan", "calendar_read")
+    tools = ToolsFile("plugin_scan", "calendar_read")
     AF._reset_for_tests()
     keep = AF.tools_enabled_set
     AF.tools_enabled_set = tools.enabled
@@ -1113,20 +1204,21 @@ def t_off_a_tool_the_page_was_never_told_about():
     check("  ... and still no in-app ON switch",
           row is not None and row.get("switchable") is False, row)
     check("  ... while a tool that is still on remains On",
-          extra.get("web_search", {}).get("on") is True, extra)
+          next(i for i in st["items"] if i["id"] == "calendar_read")["on"] is True, extra)
 
-    # Turning ON is NOT widened by this decision: both old answers stay.
-    for tool, words in (("web_search", AF.TOOLS_TOML_ONLY_NOTE),
-                        ("plugin_scan", AF.TOOLS_NOT_ON_LIST)):
-        tools = ToolsFile()
-        code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
-        check(f"{tool}: turning it ON is still refused, with the old words",
-              code == 403 and out["error"] == words and tools.writes == [], (code, out))
-    # A no-op OFF for an unlisted tool that is NOT on keeps the old refusal.
+    # A no-op OFF for a name this PC does not know, that is NOT on, keeps the
+    # old "does not know that name" refusal.
     tools = ToolsFile()
-    code, out = _treq({"tool": "web_search", "enabled": False}, tools, here=True)
-    check("OFF for an unlisted tool that is already off: the old 403, nothing written",
-          code == 403 and tools.writes == [], (code, out))
+    code, out = _treq({"tool": "plugin_scan", "enabled": False}, tools, here=True)
+    check("OFF for an unknown name that is already off: 403, nothing written",
+          code == 403 and out["error"] == AF.TOOLS_NOT_ON_LIST and tools.writes == [],
+          (code, out))
+    # ... and for one of the three it names the real switch instead.
+    tools = ToolsFile()
+    code, out = _treq({"tool": "run_data_script", "enabled": False}, tools, here=True)
+    check("OFF for the sandbox tool that is already off: 403 naming its real switch",
+          code == 403 and out["error"] == AF.NO_SWITCH_NOTE["run_data_script"]
+          and tools.writes == [], (code, out))
 
 
 def t_writing_the_tools_table():
