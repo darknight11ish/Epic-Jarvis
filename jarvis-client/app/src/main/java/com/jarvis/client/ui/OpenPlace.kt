@@ -18,6 +18,27 @@ package com.jarvis.client.ui
  *  - [Where.OnPc]: there is no phone equivalent. The phone says so in one
  *    plain sentence instead of opening a screen that does not have it.
  *
+ * **Since F6 (2026-11-03) the same closed decision table also names whole
+ * SCREENS and MENUS, not only settings sections.** The PC's deterministic
+ * "open <a place>" quick path (jarvis_quick.py, section 58.1) used to answer
+ * only with settings-section ids; an id naming a place of its own - "chat",
+ * "live", "memory", "history", "approvals", "appointments" - used to land at
+ * the top of Settings, which has none of them. The ids are resolved in this
+ * order, and each step is tested:
+ *  1. [PLACES] - the settings-registry ids this file has always decided;
+ *  2. [AREAS] - a screen id or a place name ("chat", "live", "memory", ...);
+ *  3. the shared MENU ids from [MenuPlaces] ("settings.voice",
+ *     "brain.memory.waiting") - the same ids `backend/jarvis_menus.py`
+ *     exports, so "open the web-search menu" can name the row directly;
+ *  4. [PHONE_MISSING] - a real place this build of the app has no screen for
+ *     yet: the honest refusal, never a wrong screen (habits, mood, plugins);
+ *  5. [PC_ONLY] - a place only the desktop app has at all;
+ *  6. anything newer: the old, harmless behaviour - open Settings, which
+ *     scrolls nowhere for an id it has no row for.
+ * Nothing new is added to the [Screen] enum for this, and no second
+ * navigation mechanism: MainActivity's existing `openSettings` one-time
+ * request carries the id here and `initialSection` scrolls the screen.
+ *
  * Pure - no Android - so `OpenPlaceTest` can hold it to the registry's real
  * list: a section added there without a decision here fails that test
  * rather than quietly landing at the top of Settings again. Pure navigation
@@ -294,15 +315,150 @@ object OpenPlace {
         "skills-menu",
     )
 
-    /** Every id this file has made a decision about - for the test. */
-    val KNOWN: Set<String> get() = PLACES.keys + PC_ONLY
+    /**
+     * Whole places, by the id the PC names them with (the second decision
+     * step - see this file's own doc): a SCREEN of this app, or a screen plus
+     * the item on it that the owner means by that name.
+     *
+     * These are the names the PC's deterministic "open <a place>" path can
+     * answer with, plus the names the owner uses for the Brain's plates. They
+     * are decided here once, and `OpenPlaceTest` holds every section to a real
+     * `item(key = ...)` on the screen it names - so a plate renamed on the
+     * Brain fails the test rather than landing at the top of it.
+     *
+     * `habits` and `mood` are deliberately NOT here: see [PHONE_MISSING].
+     */
+    private val AREAS: Map<String, Where.Go> = mapOf(
+        // ---------------------------------------------------------- screens ---
+        "home" to Where.Go(Screen.HOME, null),
+        "chat" to Where.Go(Screen.HOME, null),
+        "brain" to Where.Go(Screen.BRAIN, null),
+        "mind" to Where.Go(Screen.BRAIN, null),
+        "inbox" to Where.Go(Screen.INBOX, null),
+        "settings" to Where.Go(Screen.SETTINGS, null),
+        "reminders" to Where.Go(Screen.REMINDERS, null),
+        "approvals" to Where.Go(Screen.APPROVALS, null),
+        "past-approvals" to Where.Go(Screen.APPROVALS, null),
+        "history" to Where.Go(Screen.HISTORY, null),
+        "conversations" to Where.Go(Screen.HISTORY, null),
+        "chats" to Where.Go(Screen.HISTORY, null),
+        "live" to Where.Go(Screen.LIVE, null),
+        "pins" to Where.Go(Screen.PINS, null),
+        "pinned" to Where.Go(Screen.PINS, null),
+        "features" to Where.Go(Screen.FEATURES, null),
+        "all-features" to Where.Go(Screen.FEATURES, null),
+        "find" to Where.Go(Screen.FIND, null),
+        "search" to Where.Go(Screen.FIND, null),
+        "help" to Where.Go(Screen.FAQ, null),
+        "checks" to Where.Go(Screen.CHECKS, null),
+        "readiness" to Where.Go(Screen.CHECKS, null),
+        "platform-checks" to Where.Go(Screen.CHECKS, null),
+        "appearance" to Where.Go(Screen.APPEARANCE, null),
+        "voice-check" to Where.Go(Screen.VOICE_CHECK, null),
+        "train-voice" to Where.Go(Screen.VOICE, null),
+        "lock" to Where.Go(Screen.SECURITY, null),
+        "handoff" to Where.Go(Screen.HANDOFF, null),
+        "solve-it-here" to Where.Go(Screen.HANDOFF, null),
+        "edit-hud" to Where.Go(Screen.EDIT_HUD, null),
+        "home-screen" to Where.Go(Screen.EDIT_HUD, null),
+        // ------------------- the Brain's plates, named as places of their own ---
+        // The value is the `item(key = ...)` BrainScreen.kt draws the plate
+        // under (BrainSections.kt's plate recorder); the same keys the
+        // Brain-language links already send.
+        "memory" to Where.Go(Screen.BRAIN, "memory"),
+        "memories" to Where.Go(Screen.BRAIN, "memory"),
+        "models" to Where.Go(Screen.BRAIN, "models"),
+        "model" to Where.Go(Screen.BRAIN, "models"),
+        "jobs" to Where.Go(Screen.BRAIN, "jobs"),
+        "tasks" to Where.Go(Screen.BRAIN, "tasks"),
+        "goals" to Where.Go(Screen.BRAIN, "goals"),
+        "progress" to Where.Go(Screen.BRAIN, "progress"),
+        "today" to Where.Go(Screen.BRAIN, "today"),
+        "briefing" to Where.Go(Screen.BRAIN, "briefing"),
+        "projects" to Where.Go(Screen.BRAIN, "projects"),
+        "focus" to Where.Go(Screen.BRAIN, "focus"),
+        "pictures" to Where.Go(Screen.BRAIN, "pictures"),
+        "wiki" to Where.Go(Screen.BRAIN, "wiki"),
+        "quiz" to Where.Go(Screen.BRAIN, "quiz"),
+        "decks" to Where.Go(Screen.BRAIN, "decks"),
+        "retirement" to Where.Go(Screen.BRAIN, "retirement"),
+        "skills" to Where.Go(Screen.BRAIN, "skills"),
+        "people-and-things" to Where.Go(Screen.BRAIN, "people-and-things"),
+        // ----------------------------------- Settings rows named as areas ---
+        // A Settings ROW the PC can name as a place. "notifications" is the
+        // row that changes the PC's own seven notification kinds; the rest
+        // are rows this app already has under the same name.
+        "notifications" to Where.Go(Screen.SETTINGS, "jarvis-notify"),
+        "model-lane" to Where.Go(Screen.SETTINGS, "model-lane"),
+    )
 
-    fun whereFor(id: String): Where = PLACES[id]
-        ?: if (id in PC_ONLY) {
+    /**
+     * Real places the PC has, which THIS BUILD of the app has no screen for
+     * yet - the honest refusal rather than opening a screen that does not
+     * draw them.
+     *
+     * The words come from `jarvis-client/app/src/main/assets/features.json`:
+     * the Habits and Mood records say "Neither app has a screen for it yet -
+     * the Habits/Mood section on the Reminders screen is the next lane", and
+     * plugins are chat-only on the phone (the drop-in modules are listed and
+     * switched on by asking Jarvis). When a later slice builds those screens,
+     * the id moves to [AREAS] and this entry goes.
+     */
+    private val PHONE_MISSING: Map<String, String> = mapOf(
+        "habits" to NOT_HERE_YET.format("habits"),
+        "mood" to NOT_HERE_YET.format("mood"),
+        "plugins" to
+            "Plugins are turned on and off by asking Jarvis in chat. There is no Plugins screen in this app yet.",
+    )
+
+    /**
+     * The one sentence for a place the owner can reach only by another door on
+     * the phone. `%s` is the place's name, said the way the owner says it.
+     */
+    private const val NOT_HERE_YET =
+        "There is no %s screen in this app yet, so there is nothing to open. " +
+            "Jarvis on your PC keeps it until there is."
+
+    /**
+     * The MENU a place id names, from [MenuPlaces]' own tables - the ids
+     * `backend/jarvis_menus.py` exports for both apps ("settings.voice",
+     * "brain.memory.waiting"). Null when the id is not a menu.
+     *
+     * This is what makes a menu nameable as a place: the PC's registry can
+     * hand over either the phone's own item key or the shared menu id, and
+     * both land on the same row.
+     */
+    private fun forMenu(id: String): Where.Go? {
+        MenuPlaces.SETTINGS.entries.firstOrNull { it.value == id }
+            ?.let { return Where.Go(Screen.SETTINGS, it.key) }
+        MenuPlaces.BRAIN.entries.firstOrNull { it.value == id }
+            ?.let { return Where.Go(Screen.BRAIN, it.key) }
+        return null
+    }
+
+    /** Every id this file has made a decision about - for the test. */
+    val KNOWN: Set<String> get() = PLACES.keys + PC_ONLY + AREAS.keys + PHONE_MISSING.keys
+
+    /**
+     * The decision, in the order this file's doc states: a known settings
+     * section, then a whole place, then a shared menu id, then the honest
+     * refusals, then the old harmless fallback.
+     */
+    fun whereFor(id: String): Where {
+        val key = id.trim()
+        PLACES[key]?.let { return it }
+        AREAS[key]?.let { return it }
+        forMenu(key)?.let { return it }
+        PHONE_MISSING[key]?.let { return Where.OnPc(it) }
+        return if (key in PC_ONLY) {
             Where.OnPc(ON_PC)
         } else {
             // An id newer than this app: the old, harmless behaviour - open
             // Settings, which scrolls nowhere for an id it has no row for.
-            Where.Go(Screen.SETTINGS, id)
+            // (A newer desktop/phone place with no screen here is said in
+            // words only when it is listed in PHONE_MISSING above, because
+            // this fallback is also what keeps a new *settings row* working.)
+            Where.Go(Screen.SETTINGS, key)
         }
+    }
 }

@@ -401,6 +401,15 @@
         <section class="view view-panes" id="view-memory" role="tabpanel"
                  aria-labelledby="tab-memory" hidden>
           <div class="panes">
+            <!-- "Waiting for you" comes FIRST (the owner, 2026-11-03). The HUD's
+                 "N memory cards waiting for you" notice is the way into this
+                 tab, and the cards he came to decide were below nine other
+                 cards. One card, one decision, unchanged - only its place in
+                 the page moved. -->
+            <div class="card card-wide" id="memory-waiting-card" data-menu-id="brain.memory.waiting">
+              <h2>Waiting for you</h2>
+              <div id="memory-proposals"></div>
+            </div>
             <div class="card card-wide" id="learning-card" data-menu-id="brain.memory.learning">
               <h2>Learning</h2>
               <p class="note">
@@ -409,8 +418,9 @@
                 anything a tool returned — and picks out facts worth keeping.
                 With “Learn automatically” on, facts in your own words are
                 saved straight away and listed under “Saved automatically”,
-                where you can forget any of them. Everything else waits below
-                for your yes, one at a time.
+                where you can forget any of them. Everything else waits in
+                “Waiting for you”, at the top of this page, for your yes, one
+                at a time.
               </p>
               <div id="memory-learning"></div>
               <!-- Automatic learning (auto-learn.js): its two switches. -->
@@ -480,10 +490,6 @@
               <h2 id="person-dossier-title">Person dossier</h2>
               <p class="note" id="person-dossier-note">What Jarvis already keeps about one person, from this PC's own records. Nothing here is written by the model, and nothing is changed by reading it.</p>
               <div id="person-dossier"></div>
-            </div>
-            <div class="card card-wide" id="memory-waiting-card" data-menu-id="brain.memory.waiting">
-              <h2>Waiting for you</h2>
-              <div id="memory-proposals"></div>
             </div>
             <div class="card card-wide" id="memory-known-card" data-menu-id="brain.memory.known">
               <h2>What Jarvis knows about you</h2>

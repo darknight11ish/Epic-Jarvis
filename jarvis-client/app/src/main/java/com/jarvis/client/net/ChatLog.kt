@@ -32,8 +32,11 @@ import java.util.Locale
  * - `GET /api/history?limit=30&before=<updated>` - the switch, why nothing is
  *   being kept (if so), how long it is kept, and conversations newest first.
  * - `GET /api/history/conversation?id=` - one conversation, read-only.
- * - `POST /api/history/delete {"id"}` - one conversation. There is no
- *   "delete all" route, on purpose.
+ * - `POST /api/history/delete {"id"}` - ONE conversation, and since F6
+ *   (2026-11-03) the PC may ask first: 202/`waiting` means ONE approval card
+ *   naming that conversation is up and NOTHING has been deleted yet
+ *   ([deleteReply], [DELETE_WAITING]). There is no "delete all" route and no
+ *   list form, on purpose - clearing is one exact item, one card, one answer.
  * - `POST /api/history/archive {"id", "archived"}` - one conversation out of
  *   the live list and back (reversible, no confirm, no card).
  * - `POST /api/history/settings` - `{"enabled"}` or `{"keep_days"}`.
@@ -738,20 +741,114 @@ object ChatLog {
 
     // --------------------------------------------------------- delete ---
 
+    /**
+     * What every delete dialog says stays (the second chat audit, 2026-09-28) -
+     * the desktop's words. Declared here because [DELETE_WAITING] (the carded
+     * delete, F6) says the same sentence, and a const cannot refer forward in
+     * Kotlin: one string, so the phone's confirm, the PC's card and the
+     * desktop's dialog cannot drift apart.
+     */
+    const val DELETE_STAYS = "Facts Jarvis learned stay. Copies in older backups stay until they age out."
+
     /** Said when the PC answers 404: it is gone either way. */
     const val ALREADY_GONE = "It was not on your PC any more."
 
     /**
+     * Said while the PC is asking first about ONE conversation (F6, 2026-11-03:
+     * "Conversation clear is two-phase and per item").
+     *
+     * Delete became two-phase: the phone asks the PC to clear ONE named
+     * conversation (its exact id, never a list and never "all"), and the PC
+     * raises ONE approval card naming that conversation, saying it cannot be
+     * undone and that the facts Jarvis learned from it are KEPT. Nothing is
+     * deleted until the owner answers the card. The phone must therefore never
+     * read a "waiting" answer as "deleted" - the row stays, and this is what it
+     * says - and it is held on a stale link like every other destructive write.
+     *
+     * [DELETE_STAYS] is the sentence every delete dialog already says stays
+     * (it is the second half of [DELETE_CONFIRM]), so the phone and the PC's
+     * card cannot disagree about what is kept.
+     */
+    const val DELETE_WAITING =
+        "Waiting for your approval to delete this conversation. ${Approvals.WHERE} " +
+            "Nothing is deleted until you do, and $DELETE_STAYS"
+
+    /**
+     * [DELETE_WAITING] when the owner also ticked "delete the facts this chat
+     * taught". Those facts are NOT forgotten while the delete waits: a waiting
+     * answer must not be read as "deleted" (that was the whole defect the
+     * two-phase change closes), so they are left alone and the owner is told
+     * where to forget them instead of a Forget that would have acted on a chat
+     * still on the PC.
+     */
+    const val DELETE_WAITING_TICKED =
+        "Waiting for your approval to delete this conversation. ${Approvals.WHERE} " +
+            "Nothing is deleted until you do, so the facts you ticked have NOT been forgotten. " +
+            "Open Memory to forget them once the card is approved."
+
+    /**
+     * What `POST /api/history/delete` answered: whether the conversation is
+     * gone from the PC now, whether the PC is asking first about it, and the
+     * sentence to show. [waiting] and [gone] are never both true.
+     */
+    data class Delete(val gone: Boolean, val waiting: Boolean, val said: String)
+
+    /**
+     * Reads one delete answer ([Delete]).
+     *
+     * The shapes it accepts, in order:
+     * - 404: gone either way (the row was already deleted). Checked before the
+     *   body because a newer PC may explain a 404 in `ok: false`.
+     * - `ok: false`: the PC said no, in its own words.
+     * - a waiting answer - 202, `waiting: true` or `asking: true`, the three
+     *   spellings this backend's other two-phase routes use: the card is up and
+     *   nothing has been deleted yet ([DELETE_WAITING]).
+     * - any other 2xx: deleted, with the PC's `message` when it sent one.
+     * - anything else: not deleted, and why in words from the PC when it says.
+     *
+     * Pure, so `ConversationClearTest` drives every shape on a plain JVM.
+     */
+    fun deleteReply(code: Int, body: JsonObject?): Delete {
+        if (code == 404) return Delete(gone = true, waiting = false, said = ALREADY_GONE)
+        val error = body?.str("error") ?: body?.str("reason")
+        if (body?.flag("ok") == false) {
+            return Delete(
+                gone = false,
+                waiting = false,
+                said = "Not deleted. " +
+                    (error?.let { DesktopWrite.asSentence(it) } ?: "Your PC said no, without a reason."),
+            )
+        }
+        if (code == 202 || body?.flag("waiting") == true || body?.flag("asking") == true) {
+            return Delete(gone = false, waiting = true, said = DELETE_WAITING)
+        }
+        return when {
+            code in 200..299 -> Delete(
+                gone = true,
+                waiting = false,
+                said = body?.str("message")?.let { DesktopWrite.asSentence(it) } ?: "Deleted from your PC.",
+            )
+            code == 401 || code == 403 ->
+                Delete(false, false, "Not deleted. Your PC refused the pairing token.")
+            else -> Delete(
+                gone = false,
+                waiting = false,
+                said = "Not deleted. Your PC answered $code." +
+                    (error?.let { " " + DesktopWrite.asSentence(it) } ?: ""),
+            )
+        }
+    }
+
+    /**
      * After a 2xx from `/api/history/delete`: whether it is gone, and what to
      * say. `ok: false` is the PC saying no, in its own words.
+     *
+     * Kept for the calls that only have the body (the old cardless shape);
+     * [deleteReply] is what the runtime uses, because it also reads the status
+     * code and so can see a 202 waiting answer that must NOT count as deleted.
      */
     fun deleteSaid(body: JsonObject): Pair<Boolean, String> =
-        if (body.flag("ok") == false) {
-            val why = body.str("error") ?: body.str("reason") ?: body.str("message")
-            false to ("Not deleted. " + (why?.let { DesktopWrite.asSentence(it) } ?: "Your PC said no, without a reason."))
-        } else {
-            true to (body.str("message")?.let { DesktopWrite.asSentence(it) } ?: "Deleted from your PC.")
-        }
+        deleteReply(200, body).let { it.gone to it.said }
 
     // ------------------------------------------------------ keep days ---
 
@@ -919,9 +1016,6 @@ object ChatLog {
 
     const val CONTINUE = "Continue this chat"
     const val CONTINUE_TITLE = "Carry on this conversation on Home."
-
-    /** What every delete dialog says stays (the second chat audit, 2026-09-28) - the desktop's words. */
-    const val DELETE_STAYS = "Facts Jarvis learned stay. Copies in older backups stay until they age out."
 
     /** The same, when the owner is also ticking facts to forget. */
     const val DELETE_STAYS_TICKED =

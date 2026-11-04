@@ -264,6 +264,14 @@ fun HistoryScreen(
     // The row Delete was picked on, waiting for its confirm; and the request.
     var deleteFor by remember { mutableStateOf<ChatLog.Summary?>(null) }
     var deleteBusy by remember { mutableStateOf(false) }
+    // F6 (2026-11-03): a conversation delete is two-phase - the PC raises ONE
+    // approval card naming that conversation and nothing is deleted until it is
+    // answered. While that is waiting, THOSE card ids are watched: when none of
+    // them is in the queue any more (approved, denied or expired) the list is
+    // read again - the row goes only if the owner approved it, and neither
+    // answer is assumed here. Watching ids rather than "the queue changed" is
+    // what keeps an unrelated card from delaying this read.
+    var clearWatch by remember { mutableStateOf(setOf<String>()) }
     var filing by remember(fileUnder) { mutableStateOf(fileUnder) }
     // The "file it under" request does not outlive this visit: it goes when
     // the screen is left (a rotation is not leaving) and after ten quiet
@@ -444,6 +452,20 @@ fun HistoryScreen(
             reads += 1
         }
     }
+    // A conversation delete the PC is asking about (F6). Its card leaving the
+    // queue is the answer: read the list again, so the row is still there when
+    // the owner denied it and gone when they approved it - and this never
+    // moves a row on its own. [queue] is the same pending list the whole app
+    // draws cards from, so a card answered on the PC updates it too.
+    val pendingIds = queue.map { it.id }.toSet()
+    LaunchedEffect(pendingIds, clearWatch) {
+        if (clearWatch.isEmpty()) return@LaunchedEffect
+        if (clearWatch.none { it in pendingIds }) {
+            clearWatch = emptySet()
+            reads += 1
+            tagReads += 1
+        }
+    }
     LaunchedEffect(reads, kind, tagFilter, archivedView) {
         when (val r = JarvisRuntime.history(
             kind = kind.ifEmpty { null },
@@ -572,8 +594,10 @@ fun HistoryScreen(
     }
 
     // Delete ONE chat from a row's overflow menu, after the confirm shown at
-    // the top of the list. The same request (and the same confirm words) as
-    // Delete inside a conversation; the row goes only after the PC says yes.
+    // the top of the list - and, since F6 (2026-11-03), after the PC's own
+    // approval card: the request names only this chat's id, the PC asks first,
+    // and the row goes only when the PC says it is really gone. A waiting
+    // answer keeps the row and says so.
     fun deleteChat(row: ChatLog.Summary) {
         if (deleteBusy) return
         deleteBusy = true
@@ -581,11 +605,14 @@ fun HistoryScreen(
         listSaid = null
         scope.launch {
             try {
-                val (gone, sentence) = JarvisRuntime.deleteHistory(row.id)
-                if (gone) {
+                // The cards already waiting before this request; the PC's own
+                // new card (read back by the runtime) is the one to watch.
+                val beforeCards = JarvisRuntime.pending.value.map { it.id }.toSet()
+                val reply = JarvisRuntime.deleteHistory(row.id)
+                if (reply.gone) {
                     rows = rows?.filterNot { it.id == row.id }
                     found = found?.let { f -> f.copy(found = f.found.filterNot { it.row.id == row.id }) }
-                    listSaid = sentence
+                    listSaid = reply.said
                     moveFor = null
                     menuFor = null
                     // The PC's list and the tag counts changed; the chat Home
@@ -593,7 +620,13 @@ fun HistoryScreen(
                     reads += 1
                     tagReads += 1
                 } else {
-                    listSaid = sentence
+                    listSaid = reply.said
+                    if (reply.waiting) {
+                        // The card is up; when it leaves the queue the list is
+                        // read again by the effect above. The row stays until
+                        // then - a waiting answer is not a delete.
+                        clearWatch = JarvisRuntime.pending.value.map { it.id }.toSet() - beforeCards
+                    }
                 }
             } finally {
                 deleteBusy = false
@@ -664,6 +697,9 @@ fun HistoryScreen(
                         listSaid = sentence
                         openId = null
                     },
+                    // The PC asked first about this ONE conversation: the list
+                    // reads itself again when that card is answered.
+                    onClearAsked = { newCards -> clearWatch = newCards },
                 )
             }
             return@Column
@@ -1805,6 +1841,14 @@ private fun Conversation(
     onTagged: (id: String, tagId: Int?) -> Unit,
     modifier: Modifier,
     onDeleted: (id: String, sentence: String) -> Unit,
+    /**
+     * F6 (2026-11-03): the PC answered "waiting for your approval" to the
+     * delete of this conversation - ONE card, naming it. Nothing is deleted
+     * yet, so the list watches for that card (its id, handed here) leaving the
+     * queue and reads itself again; the row is never removed from here on a
+     * waiting answer.
+     */
+    onClearAsked: (newCards: Set<String>) -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -2087,8 +2131,9 @@ private fun Conversation(
                                 busy = true
                                 scope.launch {
                                     try {
-                                        val (gone, sentence) = JarvisRuntime.deleteHistory(id)
-                                        if (gone) {
+                                        val beforeCards = JarvisRuntime.pending.value.map { it.id }.toSet()
+                                        val reply = JarvisRuntime.deleteHistory(id)
+                                        if (reply.gone) {
                                             // One Forget per ticked fact - never a list form.
                                             var forgot = 0
                                             var failed = 0
@@ -2096,9 +2141,19 @@ private fun Conversation(
                                                 val (ok, _) = JarvisRuntime.forgetAutoFact(factId)
                                                 if (ok) forgot += 1 else failed += 1
                                             }
-                                            onDeleted(id, ChatLog.deleteDoneWords(sentence, forgot, failed))
+                                            onDeleted(id, ChatLog.deleteDoneWords(reply.said, forgot, failed))
+                                        } else if (reply.waiting) {
+                                            // The PC asked first. The chat still
+                                            // exists, so the ticked facts are NOT
+                                            // forgotten now - saying so is the
+                                            // honest half; Memory is where they
+                                            // are forgotten once the card is in.
+                                            said = if (forget.isEmpty()) reply.said else ChatLog.DELETE_WAITING_TICKED
+                                            onClearAsked(
+                                                JarvisRuntime.pending.value.map { it.id }.toSet() - beforeCards,
+                                            )
                                         } else {
-                                            said = sentence
+                                            said = reply.said
                                         }
                                     } finally {
                                         busy = false

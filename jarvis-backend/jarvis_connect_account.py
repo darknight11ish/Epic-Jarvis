@@ -66,6 +66,16 @@ HONEST LIMITS, SAID PLAINLY
     report only its status - never a body. GitHub's is `GET /user`, CalDAV's is
     one `PROPFIND` on the saved address, iCal's is one `GET` of the private
     link.
+
+REMOVING ONE, ADDED 2026-11-03
+
+`disconnect()` deletes exactly ONE service's own Credential Manager entries,
+through `jarvis_token_store`, and answers with the entry NAMES that went, the
+environment variable NAMES that still win over the store, and one sentence.
+`removability()` says the same thing BEFORE anything is deleted, including where
+a removal really is today. Neither reads a value, and neither is wired to a route
+or a card in this PR: this is the function a later slice's Remove button (tier
+`ask`) will call, so nothing the app draws can reach it yet.
 """
 from __future__ import annotations
 
@@ -837,10 +847,226 @@ def reset_for_tests() -> None:
         _PENDING.clear()
 
 
+# --------------------------------------------------------------------------
+#   Removing one account: its own entries, by NAME, and nothing else
+# --------------------------------------------------------------------------
+
+#: What the owner has to know AFTER a removal, when the store cannot say it:
+#: deleting a credential is not revoking it at the provider, and the private iCal
+#: link keeps working for anyone who already has it. Both are the honest limits
+#: the plan names - an answer that said only "removed" would be a lie about the
+#: owner's exposure (plan section 6.3 and 6.5).
+_AFTER_REMOVAL = {
+    "calendar_ics": (
+        "The link itself keeps working for anyone who already has it until it is "
+        "reset in the calendar provider's own settings."),
+    "github": (
+        "Deleting the saved token does not revoke it: the token on github.com stays "
+        "valid until it is deleted there (Settings, Developer settings, Personal "
+        "access tokens)."),
+}
+
+
+def _and_list(names) -> str:
+    """'a', 'a and b', 'a, b and c' - a sentence, never a Python list."""
+    text = [str(n) for n in names]
+    if len(text) <= 1:
+        return "".join(text)
+    return ", ".join(text[:-1]) + " and " + text[-1]
+
+
+def _service_or_refusal(service_id: str) -> Service:
+    """The service, or a refusal that NAMES it.
+
+    The id is the caller's own word - a name, never a value - so a short,
+    cleaned copy of it is safe to repeat, and naming it is what makes "remove my
+    email" answer in words instead of raising a bare KeyError.
+    """
+    sid = str(service_id or "").strip()
+    got = SERVICES.get(sid)
+    if got is None:
+        shown = sid[:60] if sid else "an empty name"
+        raise ConnectAccountError(
+            'there is no service called "' + shown + '" to remove; this PC can '
+            "connect " + ", ".join(s.name for s in SERVICES.values()) + ".")
+    return got
+
+
+def _env_winners(service_id: str) -> list:
+    """The environment variables that are SET and win over the store, by NAME.
+
+    The same fact `_winning_source` reports, in the form a receipt needs: names
+    only, never a value, and only the ones actually set - an empty variable does
+    not win anything.
+    """
+    source = _winning_source(service_id)
+    names = env_names(service_id)
+    return sorted(names[field] for field, where in source.items()
+                  if where == "environment")
+
+
+def _still_wins_words(still_wins) -> str:
+    """The sentence that stops a removal reading as a disconnect when an
+    environment variable still wins. NAMES only - never a value.
+
+    It is deliberately the same sentence before and after the delete: before, it
+    says what WOULD keep the account reachable; after, it says what DOES. Both
+    are true, and one wording cannot drift from the other.
+    """
+    if not still_wins:
+        return ""
+    names = _and_list(still_wins)
+    one = len(still_wins) == 1
+    return (" " + names + (" is" if one else " are") + " set in this PC's environment "
+            "and still " + ("wins" if one else "win") + " over the store, so " +
+            ("that variable is" if one else "those variables are") +
+            " what Jarvis keeps reading until " + ("it is" if one else "they are") +
+            " cleared (and Jarvis is started again).")
+
+
+def _store_for(entry: str, store):
+    """The store to ask about ONE entry: `jarvis_token_store`'s own factory
+    unless a test injected one.
+
+    `store` is a FACTORY - one stand-in per entry name, the shape
+    `jarvis_token_store._STORE_FACTORY` already has - so a test can record
+    exactly which entries were asked about and answer each on its own. There is
+    no single-store shortcut on purpose: one Credential Manager entry per
+    secret, and a service may own two.
+    """
+    import jarvis_token_store
+    if store is None:
+        return jarvis_token_store.default_store(entry)
+    return store(entry)
+
+
+def disconnect(service_id: str, *, store=None) -> dict:
+    """Remove exactly ONE service's own Credential Manager entries.
+
+    WHAT IT DELETES, AND WHAT IT CANNOT
+
+      * Only the entry NAMES `targets(service_id)` returns for that one service -
+        never another service's entry, never a file, never an environment
+        variable. The deletion goes through `jarvis_token_store` (or an injected
+        stand-in), the same store the reader uses.
+      * An environment variable that is SET still wins over the store, so the
+        account really is still reachable after its entry is gone. The answer
+        names each such variable (`still_wins`) and says so in `said`: a removal
+        must never read as "disconnected" when it is not.
+      * Deleting a credential is not revoking it at the provider. GitHub's answer
+        says so, and so does the private iCal link's.
+
+    Returns exactly `{"ok", "service", "removed", "still_wins", "said"}`: entry
+    NAMES, variable NAMES and one sentence. No value is read, kept or returned
+    anywhere, and an entry that was not there is never claimed as removed.
+
+    A store that refuses answers `ok False` with `removed` empty and a sentence
+    saying nothing was removed. (A refusal on the FIRST entry leaves nothing
+    removed, which is the tested case; a later one reports exactly what had
+    already gone rather than claiming a clean sweep it did not get.)
+
+    No route and no card calls this in this PR: it is the function a later
+    slice's Remove button (tier `ask`) will call.
+    """
+    svc = _service_or_refusal(service_id)
+    try:
+        entries = list(targets(svc.id).values())
+        still_wins = _env_winners(svc.id)
+    except Exception as exc:                # noqa: BLE001 - module absent
+        # The owning module is what knows this service's entry names. With it
+        # missing nothing is deleted and the answer says why, in its type name
+        # only - never a third party's sentence.
+        return {"ok": False, "service": svc.id, "removed": [], "still_wins": [],
+                "said": (svc.name + " cannot be removed on this PC: the module that "
+                         "owns its Credential Manager entry is not here (" +
+                         type(exc).__name__ + "). Nothing was removed.")}
+    if not entries:
+        return {"ok": False, "service": svc.id, "removed": [],
+                "still_wins": still_wins,
+                "said": (svc.name + " has no saved entry on this PC, so there is "
+                         "nothing to remove.")}
+
+    import jarvis_token_store
+    removed, refused = [], None
+    for entry in entries:
+        try:
+            got = _store_for(entry, store)
+            if isinstance(got, jarvis_token_store.StoreError):
+                raise got                    # no Credential Manager here at all
+            if got.delete():
+                removed.append(entry)
+        except Exception as exc:            # noqa: BLE001 - a store refusal
+            refused = exc
+            break
+    if refused is not None:
+        detail = (str(refused) if isinstance(refused, jarvis_token_store.StoreError)
+                  else f"({type(refused).__name__})")
+        if removed:
+            said = ("Windows Credential Manager refused to remove the rest (" + detail +
+                    "). " + _and_list(removed) + " had already been removed and cannot "
+                    "be put back.")
+        else:
+            said = ("Windows Credential Manager refused to remove " + _and_list(entries) +
+                    " (" + detail + "). Nothing was removed, so " + svc.name +
+                    " is still saved exactly as it was.")
+        return {"ok": False, "service": svc.id, "removed": removed,
+                "still_wins": still_wins, "said": said}
+
+    if removed:
+        said = "Removed " + _and_list(removed) + " from Windows Credential Manager."
+    else:
+        said = ("There was nothing saved for " + svc.name + " in Windows Credential "
+                "Manager, so there was nothing to remove.")
+    said += _still_wins_words(still_wins)
+    said += (" " + _AFTER_REMOVAL[svc.id]) if svc.id in _AFTER_REMOVAL else ""
+    return {"ok": True, "service": svc.id, "removed": removed,
+            "still_wins": still_wins, "said": said}
+
+
+def removability(service_id: str) -> dict:
+    """How one service could be removed right now - WITHOUT removing anything.
+
+    `removable` is about the STORE: True when this module knows entry names for
+    the service and `disconnect()` could delete them through Credential Manager.
+    It is NOT a claim that a screen offers a button - this PR ships none, and
+    `how` says where the removal really is today.
+
+    `removed` is the entry NAMES `disconnect()` would delete, `still_wins` the
+    environment variable NAMES that are SET and would keep the account reachable
+    afterwards, and `how` the one sentence to show the owner. No value is read,
+    kept or returned, and `how` promises no button this PR does not ship.
+
+    An unknown service refuses by name, exactly like `disconnect()`.
+    """
+    svc = _service_or_refusal(service_id)
+    try:
+        entries = list(targets(svc.id).values())
+        still_wins = _env_winners(svc.id)
+    except Exception as exc:                # noqa: BLE001 - module absent
+        return {"removable": False, "removed": [], "still_wins": [],
+                "how": (svc.name + " cannot be removed on this PC: the module that "
+                        "owns its Credential Manager entry is not here (" +
+                        type(exc).__name__ + ").")}
+    if svc.id == "calendar_ics":
+        # The one service with a real box: Settings > Accounts already has a
+        # Remove beside the four secrets it collects, this link among them.
+        how = ("Remove it in Settings > Accounts - the same box the private iCal "
+               "link was typed into.")
+    else:
+        how = ("Nothing on any screen removes this one yet: delete " +
+               _and_list(entries) + " by hand in Windows Credential Manager "
+               "(Control Panel > Credential Manager > Windows Credentials).")
+    how += _still_wins_words(still_wins)
+    how += (" " + _AFTER_REMOVAL[svc.id]) if svc.id in _AFTER_REMOVAL else ""
+    return {"removable": bool(entries), "removed": entries,
+            "still_wins": still_wins, "how": how}
+
+
 __all__ = [
     "CARD_TTL_S", "MAX_PENDING_CARDS", "MAX_VALUE_CHARS", "VERIFY_TIMEOUT_S",
     "ConnectAccountError", "ConnectAccountVoided", "Field", "Service", "SERVICES",
     "targets", "env_names", "service", "service_from_words", "clean_label",
     "raise_card", "pending_cards", "cancel_card", "card_view", "save_card",
     "verify", "status", "status_of", "status_words", "reset_for_tests",
+    "disconnect", "removability",
 ]

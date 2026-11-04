@@ -81,6 +81,22 @@ def test_list_and_state_answers_from_a_fake_registry():
         r = ask("what plugins are installed?")
         check("installed state reads the fake registry",
               r is not None and "docker" in r.reply and "goals" in r.reply, r.reply if r else "model")
+        # Q7 (Gemini's ruling, 2026-11-03): the owner's own imperative words.
+        # Measured before this: "list my plugins" matched NOTHING and reached
+        # the local model, which has no plug-in tool; the catalogue's own row
+        # says asking lists them.
+        for words in ("list my plugins", "list all plugins", "show my plugins",
+                      "show me the plugins", "list my plug-ins"):
+            r = ask(words)
+            check(f"'{words}' lists them, not the model (Q7)",
+                  r is not None and r.intent == "plugin_list",
+                  r.intent if r else "model")
+            check(f"...and it lists the installed folders: {words!r}",
+                  r is not None and "docker" in r.reply and "goals" in r.reply,
+                  r.reply[:250] if r else "model")
+        r = ask("list my plugins")
+        check("...and it does not switch anything: no card, no installer sentence",
+              r is not None and "add-plugin.ps1" in r.reply, r.reply[:250] if r else "model")
         r = ask("what plugins are available?")
         check("available state lists catalogue names",
               r is not None and "android-builder" in r.reply and "49" in r.reply,
