@@ -954,10 +954,8 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # proves it.
                                 "model-recommendations.patch",
                                 "cloud-honesty.patch",
-# github-tools.patch (2026-11-03): ONE hunk, at the very END of
-                                # jarvis_gate.py - two .update calls (the six tool names and the four
-                                # actions), after everything these patches wrote, so it rewrites none of
-                                # their lines.
+# github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+# everything these patches wrote, so it rewrites none of their lines.
                                 "github-tools.patch"}
           and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
           and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])

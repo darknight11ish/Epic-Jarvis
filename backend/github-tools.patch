@@ -1,12 +1,11 @@
 diff --git a/jarvis_gate.py b/jarvis_gate.py
-index 4cbbc5e44..8f4cd66b7 100644
+index 4cbbc5e44..46c29de7d 100644
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -2718,3 +2718,48 @@ _RISK.update({
-     # what the owner just asked to stop.
-     "revoke_web_search_grant": ("yes", "local", "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on"),
- })
-+
+@@ -2671,6 +2671,71 @@ def review(days: int = 7) -> int:
+     print()
+     return 0
+ 
 +# --------------------------------------------------------------------------
 +#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions
 +# --------------------------------------------------------------------------
@@ -15,9 +14,29 @@ index 4cbbc5e44..8f4cd66b7 100644
 +# (comment, open an issue, re-run a workflow) - each action behind its own card
 +# - and it may never merge, push, commit, delete or close.
 +#
-+# AT THE END OF THE FILE, FOR THE REASON THE BLOCK ABOVE GIVES: the end belongs
-+# to no hunk in either tree, so this patch cannot break on another patch's
-+# context. Both `.update` calls run at import, before any `check()`.
++# WHY IT SITS HERE, IN THE MIDDLE OF THE FILE, AND NOT AT THE END OF IT: two
++# measured reasons, and the second is a break this patch caused before it moved.
++#
++#   * The end of this file is `web-search-grant.patch`'s own block, and its last
++#     hunk ends at EOF. `git apply -R` needs that hunk's whole post-image (three
++#     context lines plus the block) to be contiguous AND to end at the last byte
++#     of the file, so anything inserted after those three context lines makes
++#     the reversal fail - which is what happened when this patch first appended
++#     its block after it (backend/test_web_search_grant.py caught it), and the
++#     published base could no longer be reversed and re-applied byte for byte.
++#   * `unknown-risk-approvable.patch` has to stay the LAST writer of
++#     jarvis_gate.py so its own reversal cannot be disturbed
++#     (backend/test_gate_unknown_risk.py enforces it, with no whitelist), so a
++#     new gate patch must sit before it. This one sits immediately after
++#     `web-search-grant.patch`.
++#
++# It anchors on the owner's own text - the end of `review()` and the opening of
++# the `if __name__` block, which no patch writes - so backend/_stack.py's walk
++# materialises those five lines instead of reading them. That is the honest case
++# its RATCHET records, and `no-expiry-cards.patch`, `no-deadline-cards.patch` and
++# `unknown-risk-approvable.patch` pay exactly the same one.
++#
++# Both `.update` calls run at import, before any `check()`.
 +#
 +# WHY NOT REUSE `github_read`: that action is the scheduled look a "tell me
 +# when" GitHub watch makes, and it is `"auto"` in the shipped settings so a look
@@ -51,3 +70,7 @@ index 4cbbc5e44..8f4cd66b7 100644
 +    # promise this file cannot keep.
 +    "github_rerun_workflow": ("no", "outbound", "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back"),
 +})
++
+ 
+ if __name__ == "__main__":
+     import argparse

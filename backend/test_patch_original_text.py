@@ -161,8 +161,15 @@ def t_the_late_patches_are_pinned_and_not_new():
     # jarvis_skills.py (install()'s signature, docstring and the `_gate(...)`
     # call), which is one of the five the patcher edits and is not in this
     # repository - so nothing earlier in the walk could have written them.
-    check("the twenty-four exceptions the tool's docstring names are the "
-          "twenty-four the walk finds", len(late) == 24,
+    # 2026-11-03: github-tools.patch is the TWENTY-FIFTH. Its ONE hunk reads six
+    # lines of the owner's own jarvis_gate.py - the end of `review()` and the
+    # opening of the `if __name__` block - because no patch in this walk writes
+    # them. It cannot go at the very END of the file: that is
+    # web-search-grant.patch's own block, whose last hunk must stay the last
+    # bytes (`git apply -R` needs it), and it must stay before
+    # unknown-risk-approvable.patch, the last writer of that file.
+    check("the twenty-five exceptions the tool's docstring names are the "
+          "twenty-five the walk finds", len(late) == 25,
           f"the walk found {len(late)}: {late}")
 
 

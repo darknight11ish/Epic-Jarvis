@@ -2671,6 +2671,71 @@ def review(days: int = 7) -> int:
     print()
     return 0
 
+# --------------------------------------------------------------------------
+#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions
+# --------------------------------------------------------------------------
+# The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
+# open pull requests, issues, CI status, one file) and take three small ACTIONS
+# (comment, open an issue, re-run a workflow) - each action behind its own card
+# - and it may never merge, push, commit, delete or close.
+#
+# WHY IT SITS HERE, IN THE MIDDLE OF THE FILE, AND NOT AT THE END OF IT: two
+# measured reasons, and the second is a break this patch caused before it moved.
+#
+#   * The end of this file is `web-search-grant.patch`'s own block, and its last
+#     hunk ends at EOF. `git apply -R` needs that hunk's whole post-image (three
+#     context lines plus the block) to be contiguous AND to end at the last byte
+#     of the file, so anything inserted after those three context lines makes
+#     the reversal fail - which is what happened when this patch first appended
+#     its block after it (backend/test_web_search_grant.py caught it), and the
+#     published base could no longer be reversed and re-applied byte for byte.
+#   * `unknown-risk-approvable.patch` has to stay the LAST writer of
+#     jarvis_gate.py so its own reversal cannot be disturbed
+#     (backend/test_gate_unknown_risk.py enforces it, with no whitelist), so a
+#     new gate patch must sit before it. This one sits immediately after
+#     `web-search-grant.patch`.
+#
+# It anchors on the owner's own text - the end of `review()` and the opening of
+# the `if __name__` block, which no patch writes - so backend/_stack.py's walk
+# materialises those five lines instead of reading them. That is the honest case
+# its RATCHET records, and `no-expiry-cards.patch`, `no-deadline-cards.patch` and
+# `unknown-risk-approvable.patch` pay exactly the same one.
+#
+# Both `.update` calls run at import, before any `check()`.
+#
+# WHY NOT REUSE `github_read`: that action is the scheduled look a "tell me
+# when" GitHub watch makes, and it is `"auto"` in the shipped settings so a look
+# every ten minutes is not a card every ten minutes. These tools are looks ON
+# DEMAND, at a moment the model chose, each one sending the owner's GitHub
+# token out - so they are their own action, `github_inspect`, at `"ask"`. They
+# are also in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still asks.
+_TOOL_ACTIONS.update({
+    # `action_for_tool` needs these, or every one of the six answers
+    # "unclassified_tool": fail-safe (that asks too), but the card would not be
+    # the card the tool raises, and the Reach page would call it unclassified.
+    "github_list": "github_inspect",
+    "github_read_file": "github_inspect",
+    "github_ci_status": "github_inspect",
+    "github_comment": "github_comment",
+    "github_open_issue": "github_open_issue",
+    "github_rerun_workflow": "github_rerun_workflow",
+})
+_RISK.update({
+    # Reading only. Reversible "yes" and reach "outbound" is the same pair
+    # `github_read`, `page_read` and `news_read` already carry: nothing on
+    # GitHub changes, but the request leaves this PC, so it is never "local".
+    "github_inspect": ("yes", "outbound", "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"),
+    # Posting in the owner's name. "no" for the same reason `send_email` is:
+    # Jarvis cannot edit or withdraw a comment once GitHub has it.
+    "github_comment": ("no", "outbound", "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards"),
+    "github_open_issue": ("no", "outbound", "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards"),
+    # "no", NOT "yes": a re-run changes nothing in the repository by itself, but
+    # a workflow is free to deploy, publish or post notifications, and a run that
+    # has started cannot be taken back. Calling that reversible would be a
+    # promise this file cannot keep.
+    "github_rerun_workflow": ("no", "outbound", "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back"),
+})
+
 
 if __name__ == "__main__":
     import argparse
@@ -2717,49 +2782,4 @@ _RISK.update({
     # forced to "ask", which for a revocation would mean raising a card to STOP
     # what the owner just asked to stop.
     "revoke_web_search_grant": ("yes", "local", "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on"),
-})
-
-# --------------------------------------------------------------------------
-#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions
-# --------------------------------------------------------------------------
-# The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
-# open pull requests, issues, CI status, one file) and take three small ACTIONS
-# (comment, open an issue, re-run a workflow) - each action behind its own card
-# - and it may never merge, push, commit, delete or close.
-#
-# AT THE END OF THE FILE, FOR THE REASON THE BLOCK ABOVE GIVES: the end belongs
-# to no hunk in either tree, so this patch cannot break on another patch's
-# context. Both `.update` calls run at import, before any `check()`.
-#
-# WHY NOT REUSE `github_read`: that action is the scheduled look a "tell me
-# when" GitHub watch makes, and it is `"auto"` in the shipped settings so a look
-# every ten minutes is not a card every ten minutes. These tools are looks ON
-# DEMAND, at a moment the model chose, each one sending the owner's GitHub
-# token out - so they are their own action, `github_inspect`, at `"ask"`. They
-# are also in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still asks.
-_TOOL_ACTIONS.update({
-    # `action_for_tool` needs these, or every one of the six answers
-    # "unclassified_tool": fail-safe (that asks too), but the card would not be
-    # the card the tool raises, and the Reach page would call it unclassified.
-    "github_list": "github_inspect",
-    "github_read_file": "github_inspect",
-    "github_ci_status": "github_inspect",
-    "github_comment": "github_comment",
-    "github_open_issue": "github_open_issue",
-    "github_rerun_workflow": "github_rerun_workflow",
-})
-_RISK.update({
-    # Reading only. Reversible "yes" and reach "outbound" is the same pair
-    # `github_read`, `page_read` and `news_read` already carry: nothing on
-    # GitHub changes, but the request leaves this PC, so it is never "local".
-    "github_inspect": ("yes", "outbound", "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"),
-    # Posting in the owner's name. "no" for the same reason `send_email` is:
-    # Jarvis cannot edit or withdraw a comment once GitHub has it.
-    "github_comment": ("no", "outbound", "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards"),
-    "github_open_issue": ("no", "outbound", "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards"),
-    # "no", NOT "yes": a re-run changes nothing in the repository by itself, but
-    # a workflow is free to deploy, publish or post notifications, and a run that
-    # has started cannot be taken back. Calling that reversible would be a
-    # promise this file cannot keep.
-    "github_rerun_workflow": ("no", "outbound", "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back"),
 })

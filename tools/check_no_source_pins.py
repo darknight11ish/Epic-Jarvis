@@ -82,6 +82,15 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # The surface-aware lane (2026-10-31): one card-words pin in its own new
     # suite; recorded as debt, not approval, and may only go down.
     "backend/test_surface.py": 1,
+    # The GitHub tools (2026-11-03): three pins, measured with `--measure` on
+    # this tree, recorded as debt rather than approval. Two read
+    # `backend/jarvis_github.py` as text - its import set (no private module may
+    # be imported) and the `token_target()` call - and one greps
+    # `backend/jarvis_agent.py` for the branch that answers "connect GitHub" when
+    # no token is saved. They are static proofs about code that is awkward to
+    # drive any other way; the ratchet only turns DOWN, so a later pass should
+    # turn them into behaviour checks and lower this to 0.
+    "backend/test_github_tools.py": 3,
     # The nine wave-2 honesty lanes (2026-11-01): their new suites were written
     # with a few source-text pins (a card-words string, a route name) rather
     # than behaviour checks; measured with `--measure` on the merged bundle and

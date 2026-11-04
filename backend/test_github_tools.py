@@ -33,9 +33,11 @@ token anywhere:
      repository are said in words, with no HTTP code in them.
   7. Nothing from email, files, credentials or saved memory is ever sent.
   8. There is no tool that can merge, push, commit, delete or close.
-  9. The patch: it applies to the text before it and reverses out byte for
-     byte, the four tier lines ship as "ask", and every table a new tool has
-     to join has it.
+  9. The patch: it reverses out of the published base and applies forward
+     again byte for byte, it sits between `web-search-grant.patch` and the
+     last writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so
+     neither of those patches' reversals is disturbed, the four tier lines
+     ship as "ask", and every table a new tool has to join has it.
 
 THE FAKE HTTP LAYER
 
@@ -588,38 +590,55 @@ def t_the_patch_applies_and_reverses_byte_for_byte():
                       if line.startswith("+++ b/")})
     check("the patch touches jarvis_gate.py and nothing else",
           targets == ["jarvis_gate.py"], targets)
-    check("its whole pre-image is the end of the file (one hunk)",
-          len([l for l in text.splitlines() if l.startswith("@@")]) == 1,
+    check("it is ONE hunk", len([l for l in text.splitlines()
+                                 if l.startswith("@@")]) == 1,
           [l for l in text.splitlines() if l.startswith("@@")])
 
+    # The published base IS the state the whole stack leaves, so the patch is
+    # rehearsed the other way round: reverse it out of the base (that gives the
+    # text before it), then apply it forwards again. The first version of this
+    # test read `HEAD:jarvis-backend/jarvis_gate.py` as "the text before it" -
+    # which is the SAME file once the base change is committed, so it could only
+    # ever have passed before the commit and failed in CI.
     box = _TMP / "gatecheck"
     if box.exists():
         shutil.rmtree(box)
     box.mkdir(parents=True)
-    before = subprocess.run(["git", "-C", str(REPO), "show",
-                             "HEAD:jarvis-backend/jarvis_gate.py"],
-                            capture_output=True, check=False)
-    if before.returncode != 0:
-        skip("git could not read the previous jarvis_gate.py for the rehearsal")
-        return
-    pre = before.stdout
     after = GATE_BASE.read_bytes()
-    (box / "jarvis_gate.py").write_bytes(pre)
+    (box / "jarvis_gate.py").write_bytes(after)
     run = lambda *a: subprocess.run(["git", "-C", str(box)] + list(a),  # noqa: E731
                                     capture_output=True, text=True)
     run("init", "-q")
     run("config", "core.autocrlf", "false")
-    fwd = run("apply", "--verbose", str(PATCH))
-    check("the patch applies FORWARD to the text before it", fwd.returncode == 0,
-          fwd.stderr[-400:])
-    check("... and what comes out is jarvis-backend/jarvis_gate.py, byte for byte",
-          (box / "jarvis_gate.py").read_bytes() == after,
-          "the applied file differs from the published base")
     rev = run("apply", "-R", "--verbose", str(PATCH))
-    check("it reverses out of that file", rev.returncode == 0, rev.stderr[-400:])
-    check("... back to the earlier text, byte for byte",
-          (box / "jarvis_gate.py").read_bytes() == pre,
-          "the reversed file differs from the text before it")
+    check("the patch REVERSES out of the published base cleanly", rev.returncode == 0,
+          rev.stderr[-400:])
+    pre = (box / "jarvis_gate.py").read_bytes()
+    check("... and the result is not the base any more (it really removed "
+          "something)", pre != after, "the reversed file is byte-identical")
+    fwd = run("apply", "--verbose", str(PATCH))
+    check("... and applies forwards again, byte for byte",
+          fwd.returncode == 0 and (box / "jarvis_gate.py").read_bytes() == after,
+          (fwd.returncode, fwd.stderr[-400:]))
+
+    # It must NOT sit after web-search-grant.patch's own block: that patch's last
+    # hunk ends at EOF, and anything appended after it makes the reversal fail.
+    # Rehearsed here so this suite fails at the desk, not only in that one.
+    wsg = REPO / "backend" / "web-search-grant.patch"
+    if wsg.is_file():
+        wbox = _TMP / "wsgreverse"
+        if wbox.exists():
+            shutil.rmtree(wbox)
+        wbox.mkdir(parents=True)
+        (wbox / "jarvis_gate.py").write_bytes(after)
+        wrun = lambda *a: subprocess.run(["git", "-C", str(wbox)] + list(a),  # noqa: E731
+                                         capture_output=True, text=True)
+        wrun("init", "-q")
+        wrun("config", "core.autocrlf", "false")
+        wrev = wrun("apply", "-R", "--verbose", str(wsg))
+        check("web-search-grant.patch still reverses out of the base - this patch "
+              "did not land after its end-of-file block",
+              wrev.returncode == 0, wrev.stderr[-400:])
 
     # It is in the list the installer applies, or it never reaches the owner.
     sys.path.insert(0, str(HERE))
@@ -627,9 +646,17 @@ def t_the_patch_applies_and_reverses_byte_for_byte():
     order = list(_stack.order())
     check("the installer applies it", "github-tools.patch" in order,
           order[-3:])
-    check("... immediately before plugin-loader.patch, which must stay last",
-          order[order.index("github-tools.patch") + 1:] == ["plugin-loader.patch"],
-          order[-3:])
+    at = order.index("github-tools.patch") if "github-tools.patch" in order else -1
+    check("... immediately after web-search-grant.patch, and ABOVE that patch's "
+          "own end-of-file block - which has to stay the last bytes",
+          at > 0 and order[at - 1] == "web-search-grant.patch",
+          order[max(0, at - 1):at + 1])
+    check("... and before unknown-risk-approvable.patch, which must stay the LAST "
+          "writer of jarvis_gate.py",
+          "unknown-risk-approvable.patch" in order[at + 1:] if at >= 0 else False,
+          order[-4:])
+    check("... and plugin-loader.patch stays last of all",
+          order[-1] == "plugin-loader.patch", order[-2:])
 
 
 def t_the_gate_knows_the_six_tools_and_four_actions():

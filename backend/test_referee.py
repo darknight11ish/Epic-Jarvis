@@ -927,10 +927,8 @@ def t_the_patch_and_the_lists():
              # unknown-risk-approvable.patch - it adds no tier row and no `_RISK`
              # row, so it rewrites nothing referee.patch wrote.
              "gate-tool-actions-gap.patch",
-# github-tools.patch (2026-11-03): ONE hunk, at the very END of
-             # jarvis_gate.py - two .update calls (the six tool names and the four
-             # actions), after everything these patches wrote, so it rewrites none of
-             # their lines.
+# github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+# everything these patches wrote, so it rewrites none of their lines.
              "github-tools.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])

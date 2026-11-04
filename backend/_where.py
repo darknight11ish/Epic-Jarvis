@@ -1478,21 +1478,26 @@ SHIPPED = (
     # The same entry, in the same position, is in $SHIPPED in
     # scripts/apply-patches.ps1.
     "jarvis_mood.py",
-    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
-    # JARVIS-API section 176): reads and writes ONE table of the owner's
-    # settings file, [phone_apps], one line at a time - card first, through
-    # the same atomic section writer the other settings use. Shipped whole,
-    # no patch of its own; phone-apps.patch is the two routes that reach it.
-    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_phone_apps.py",
     # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
     # the owner's decision: "Read + actions"; JARVIS-API section 189). Fixed
     # api.github.com addresses only - there is no arbitrary-URL path at all -
     # the token in the request header and never in a result, and every read and
     # every action asks a person first. No code write of any kind: it cannot
     # merge, push, commit, delete or close anything.
+    # It sits BEFORE jarvis_phone_apps.py on purpose: the ORDER MATTERS note
+    # above keeps jarvis_phone_apps.py last (and so never scanned), and this one
+    # must carry a trailing comma or tools/check_zero_jargon.py would not read
+    # it - a new user-facing module that the jargon ratchet never measured
+    # would be the worse deal. The same entry, in the same position, is in
+    # $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_github.py",
+    # The phone's app allow-list, managed (jarvis_phone_apps.py, 2026-11-02;
+    # JARVIS-API section 176): reads and writes ONE table of the owner's
+    # settings file, [phone_apps], one line at a time - card first, through
+    # the same atomic section writer the other settings use. Shipped whole,
+    # no patch of its own; phone-apps.patch is the two routes that reach it.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_github.py"
+    "jarvis_phone_apps.py"
 )
 
 
