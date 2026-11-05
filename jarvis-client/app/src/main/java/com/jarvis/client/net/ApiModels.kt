@@ -455,6 +455,11 @@ object PcOnlyActions {
         // can approve it, with Windows Hello. Approving it here would promise
         // an install nothing on the phone can perform.
         "desktop_update",
+        // 2026-11-05, the PC's tenth: the ONE card that makes Jarvis ask LESS
+        // about one thing - what needs a card, a second yes, or Windows Hello.
+        // It removes a check, so it is approved on the PC only, with Windows
+        // Hello, and this phone is refused if it tries (403 pc_only).
+        "change_approval_policy",
     )
 }
 
