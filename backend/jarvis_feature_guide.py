@@ -818,11 +818,55 @@ def surface_words(row: dict) -> str:
     return f"{line}, and the feature list does not record why the other app has none."
 
 
-def _state_clause(rows: list) -> str:
-    """One plain sentence about the switches, or "" when the feature has none."""
-    if not rows:
+#: Control-matrix `status` values that mean a REAL control exists for the row
+#: even though no boolean switch could be read for it: the control is a typed
+#: adjust phrase ("adjust"), a Settings screen ("open-only") or a switch the
+#: matrix links but this build cannot read for this row ("switch"). Everything
+#: else - "planned", "not-a-setting" - really has no on/off to report.
+_HAS_A_CONTROL = frozenset({"switch", "adjust", "open-only"})
+
+
+def _no_switch_words(row: dict) -> str:
+    """What to say when `feature_switches(row)` named no readable switch.
+
+    THE HONEST SPLIT (2026-11-04 self-awareness audit, "knows partly"). 43 of
+    the 175 features carry the Switchable/Adjustable label, and 43 - 24 = 19 of
+    them have no boolean switch the read path can resolve: their control is a
+    typed adjustment, a Settings screen, or a planned row. The old sentence
+    said "The feature list names no on/off switch for it" for ALL of them,
+    which reads as "there is nothing to set" for features that really do have
+    a control (topics, focus presets, reach, limits, captcha hand-off...).
+
+    The control matrix already knows which is which (`status`), so this reads
+    that rather than a second list: a row with a real control gets the honest
+    "I cannot read that switch from chat", with the place and, where the matrix
+    has one, the exact phrase the owner can type. A row that really has no
+    on/off keeps the old, true sentence.
+    """
+    mine = _matrix_row(row) or {}
+    status = str(mine.get("status") or "")
+    if status not in _HAS_A_CONTROL:
         return ("The feature list names no on/off switch for it, so there is no "
                 "state for me to read.")
+    where = str(mine.get("where") or row.get("where") or "").strip()
+    said = "I could not read a live on/off for it from chat."
+    phrase = ""
+    for adjust in mine.get("adjust") or ():
+        phrase = str((adjust or {}).get("phrase") or "").strip()
+        if phrase:
+            break
+    if phrase:
+        said += f' To change it, say "{phrase}".'
+    elif where:
+        said += f" To change it, use the control at {where}"
+        said += "" if said.endswith(".") else "."
+    return said
+
+
+def _state_clause(rows: list, row: Optional[dict] = None) -> str:
+    """One plain sentence about the switches, or the honest no-reader sentence."""
+    if not rows:
+        return _no_switch_words(row or {})
     known = [(r, r["state"]) for r in rows if isinstance(r["state"], bool)]
     unknown = [r for r in rows if not isinstance(r["state"], bool)]
     if not known:
@@ -1106,7 +1150,7 @@ def explain_words(row: dict) -> str:
     if surface_words(row):
         parts.append(surface_words(row))
     rows = _switch_state_rows(row)
-    clause = _state_clause(rows)
+    clause = _state_clause(rows, row)
     if clause:
         parts.append(clause)
     parts.append(change_words(row))
@@ -1754,14 +1798,116 @@ def why_use(words) -> dict:
                       f"The honest limit: {_row_limit_words(row)}")}
 
 
+def _compare_state(row: dict) -> str:
+    """One short token for a feature's live state, from the same switch read.
+
+    Tokens, not prose, so a caller gets a structured side-by-side it can render
+    itself; `state_words` beside it carries the existing honest sentence. Every
+    branch below is a state the row really has - a switch that could not be read
+    is never turned into "off".
+    """
+    rows = _switch_state_rows(row)
+    known = [r["state"] for r in rows if isinstance(r["state"], bool)]
+    if known:
+        if all(known):
+            return "on"
+        if not any(known):
+            return "off"
+        return "partly on"
+    if rows:
+        return "cannot be read on this PC"
+    mine = _matrix_row(row) or {}
+    status = str(mine.get("status") or "")
+    if status in _HAS_A_CONTROL:
+        return "a control this build cannot read as on/off"
+    if status in ("planned", "not-a-setting"):
+        return "no on/off switch"
+    label = label_for(row)
+    if label == LABEL_ALWAYS_ON:
+        return "always on (core safety rule)"
+    if label == LABEL_COMMAND_ONLY:
+        return "always available by command"
+    if label == LABEL_SETTINGS_ONLY:
+        return "Settings only, no chat control"
+    if label == LABEL_PC_ONLY:
+        return "a setting read and changed on this PC"
+    return "no on/off switch"
+
+
+def state_token(row: dict) -> str:
+    """The row's short live-state token, for a caller that compares two rows.
+
+    The public form of `_compare_state` so the generic two-feature answer in
+    `jarvis_quick` reads the SAME token the difference answer carries - one
+    reader, one vocabulary, and no second state list.
+    """
+    return _compare_state(row)
+
+
+def _compare_facts(row: dict) -> dict:
+    """One feature's structured side of a comparison, from its own row + readers.
+
+    THE STRUCTURE, NOT JUST PROSE (2026-11-04, the self-awareness audit's fix
+    #4). A "what is the difference between X and Y" answer used to be two prose
+    paragraphs; a caller could not compare a field without parsing words. This
+    names each field the catalogue really holds - where it lives, the switch it
+    has (or none), its live on/off, what asks first, and its own honest limit -
+    and every value is read, never typed. `state_words` is the existing
+    `_state_clause` sentence, so the structured and the prose answers cannot
+    disagree.
+    """
+    switches = feature_switches(row)
+    return {
+        "id": str(row.get("id") or ""),
+        "title": str(row.get("title") or ""),
+        "where": str(row.get("where") or "").strip(),
+        "has_switch": bool(switches),
+        "switch": [str(s.get("label") or s.get("key") or "") for s in switches],
+        "state": _compare_state(row),
+        "state_words": _state_clause(_switch_state_rows(row), row),
+        "asks": str(row.get("asks") or "").strip(),
+        "limit": _row_limit_words(row),
+        "what": str(row.get("what") or "").strip(),
+        "kind_label": status_label(row),
+    }
+
+
 def _comparison_block(row: dict) -> str:
-    return (f"{row['title']}. Where: {str(row.get('where') or '').strip()} "
-            f"Does it ask first? {str(row.get('asks') or '').strip()} "
-            f"The honest limit: {_row_limit_words(row)}")
+    facts = _compare_facts(row)
+    switch = ("Its switch: " + ", ".join(facts["switch"]) + "." if facts["has_switch"]
+              else "It has no on/off switch.")
+    return (f"{facts['title']}. Where it lives: {facts['where']} {switch} "
+            f"{facts['state_words']} Does it ask first? {facts['asks']} "
+            f"The honest limit: {facts['limit']}")
+
+
+def _difference_sentence(a: dict, b: dict) -> str:
+    """ONE plain sentence saying what is different, from the rows' own words."""
+    a_what = str(a.get("what") or "").strip().rstrip(".")
+    b_what = str(b.get("what") or "").strip().rstrip(".")
+    a_title = str(a.get("title") or a.get("id") or "The first")
+    b_title = str(b.get("title") or b.get("id") or "the second")
+    if a_what and b_what:
+        return (f"The difference: {a_title} is for {a_what}; "
+                f"{b_title} is for {b_what}.")
+    if a_what or b_what:
+        known = a_title if a_what else b_title
+        what = a_what or b_what
+        return (f"The difference is not recorded for both: {known} is for {what}, "
+                f"and the feature list records no description for the other.")
+    return ("The feature list records no description for either row, so I cannot "
+            "say more than what is above.")
 
 
 def difference(first, second) -> dict:
-    """"What's the difference between X and Y?" - both rows, side by side."""
+    """"What's the difference between X and Y?" - both rows, side by side.
+
+    THE STRUCTURED SIDE-BY-SIDE (2026-11-04): the answer carries `compare`, one
+    `_compare_facts` dict per feature, beside the words. Every field comes from
+    the catalogue row or the live switch reader, so "where it lives", "its
+    switch", "is it on" and "what asks first" cannot be two different answers
+    from the prose and the structure. One plain sentence says the difference.
+    """
     if CATALOGUE is None:
         return {"ok": False, "kind": "missing",
                 "words": "The feature list is not installed on this PC, so I cannot read it."}
@@ -1775,18 +1921,23 @@ def difference(first, second) -> dict:
         # difference between them.
         return {"ok": True, "kind": "feature", "feature": _feature_facts(row_a),
                 "features": [{"id": row_a["id"], "title": row_a["title"]}],
+                "compare": [_compare_facts(row_a)],
                 "words": (f"Both names are in the same feature row - "
                           f"{_comparison_block(row_a)}")}
     if row_a is not None and row_b is not None:
         return {"ok": True, "kind": "feature",
                 "features": [{"id": row_a["id"], "title": row_a["title"]},
                              {"id": row_b["id"], "title": row_b["title"]}],
-                "words": _comparison_block(row_a) + "\n\n" + _comparison_block(row_b)}
+                "compare": [_compare_facts(row_a), _compare_facts(row_b)],
+                "words": (_comparison_block(row_a) + "\n\n"
+                          + _comparison_block(row_b) + "\n\n"
+                          + _difference_sentence(row_a, row_b))}
     if row_a is not None or row_b is not None:
         known = row_a or row_b
         missing = str(second if row_a is not None else first).strip()
         return {"ok": True, "kind": "feature", "feature": _feature_facts(known),
                 "features": [{"id": known["id"], "title": known["title"]}],
+                "compare": [_compare_facts(known)],
                 "words": (f"{_comparison_block(known)} The feature list has no "
                           f"\"{missing}\" row, so there is nothing to compare it with.")}
     if got_a["kind"] == "ambiguous":
@@ -2267,10 +2418,13 @@ def state(words) -> dict:
         row = got["row"]
         rows = _switch_state_rows(row)
         if not rows:
+            has_control = (str((_matrix_row(row) or {}).get("status") or "")
+                           in _HAS_A_CONTROL)
+            words = (f"{row['title']}: {_no_switch_words(row)}" if has_control else
+                     f"{row['title']} has no on/off switch in the feature list, "
+                     f"so there is no state for me to read.")
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-                    "state": None, "switches": [],
-                    "words": (f"{row['title']} has no on/off switch in the feature list, "
-                              f"so there is no state for me to read.")}
+                    "state": None, "switches": [], "words": words}
         known = [r for r in rows if isinstance(r["state"], bool)]
         if not known:
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
@@ -2335,11 +2489,16 @@ def how_to(words, on: bool) -> dict:
         if not rows:
             # An ability with no switch is not a dead end: say which kind it is
             # and how to use it, in the same words the "turn on <ability>"
-            # phrase already gives (2026-10-26).
+            # phrase already gives (2026-10-26). A row that DOES have a control
+            # - just not a boolean one this build can read - gets the honest
+            # "I cannot read that switch" instead (2026-11-04 audit).
+            has_control = (str((_matrix_row(row) or {}).get("status") or "")
+                           in _HAS_A_CONTROL)
+            tail = (_no_switch_words(row) if has_control else
+                    "The feature list names no on/off switch for it, so there is "
+                    "nothing to turn on or off there. " + ability_explanation(row))
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
-                    "switches": [], "words": (base + " The feature list names no on/off "
-                                              "switch for it, so there is nothing to turn "
-                                              "on or off there. " + ability_explanation(row))}
+                    "switches": [], "words": (base + " " + tail)}
         if len(rows) == 1:
             label = rows[0]["label"]
             return {"ok": True, "kind": "feature", "feature": _feature_facts(row),

@@ -152,5 +152,14 @@ object SettingsJump {
         // edits its own HUD from the HUD window's header rather than from
         // Settings (docs/ARCHITECTURE.md section 8).
         Entry("Home screen", "edit-hud"),
+        // "Hands-free" (the owner's request, 2026-11-04): the mode that reads
+        // each approval card out on this phone, opens a ten-second answer
+        // window for "confirm" or "deny", and writes a text message to a contact
+        // he names. It is the LAST row on the screen, so it is the last entry
+        // here too - a row added at the end moves nothing above it. The label is
+        // this section's own title: the PC's Settings card arrives with that
+        // lane's half of the feature, so there is no desktop jump entry to copy
+        // words from yet.
+        Entry("Hands-free", "handsfree"),
     )
 }

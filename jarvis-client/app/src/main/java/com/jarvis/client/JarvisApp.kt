@@ -148,5 +148,23 @@ class JarvisApp : Application() {
                 enableVibration(true)
             },
         )
+
+        // Hands-free (the owner's request, 2026-11-04): the card read out and
+        // the answer window. HIGH, like approvals and for the same reason - the
+        // one thing this channel carries is a decision waiting for an answer -
+        // but a SEPARATE channel, so silencing it never silences approvals, and
+        // silencing approvals never leaves a card read out in a room with no
+        // notification to look at.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                com.jarvis.client.service.HandsfreeService.CHANNEL_ID,
+                getString(R.string.channel_handsfree_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = getString(R.string.channel_handsfree_desc)
+                setShowBadge(true)
+                enableVibration(true)
+            },
+        )
     }
 }

@@ -942,6 +942,42 @@ def t_read_web_page_row():
           R._off_line("plugin_scan"))
 
 
+def t_the_spoken_answer_names_the_tools_the_api_holds():
+    """THE REACH ANSWER SAYS THE TOOL BLOCK ITS API HOLDS (2026-11-04).
+
+    `view()` has always carried "Tools the AI model is offered"; `sentence()`
+    dropped it, so the one place that knows which tools are on could not be
+    asked about them (self-awareness audit gap 10). This holds the two forms
+    together: every tool name the API holds is in the spoken answer, the count
+    agrees, the empty case says so, and the chat door says the same sentence.
+    """
+    v = R.view(ctx(ALL))
+    s = R.sentence(v)
+    names = [t["name"] for t in v["tools"]]
+    check("the API holds the tool block", len(names) > 0, str(len(names)))
+    check("the spoken answer names every tool the API holds",
+          all(n in s for n in names), str([n for n in names if n not in s]))
+    check("the spoken answer names the same COUNT the API holds",
+          f"({len(names)})" in s, s)
+    check("the block's own title is used", R.TOOLS_TITLE in s)
+    empty = dict(v, tools=[])
+    check("with no tools, the spoken answer says so in the API's own words",
+          R.TOOLS_NONE in R.sentence(empty)
+          and R.TOOLS_TITLE not in R.sentence(empty))
+    # THE CHAT DOOR AND THE API AGREE: "what can you reach" answers this very
+    # sentence, tool names included. The default read is the live settings, so
+    # its own tool block is what the chat answer must carry.
+    with Env(ENV):
+        r = Q.answer("what can you reach?", sched=_Sched())
+        live_names = [t["name"] for t in R.view()["tools"]]
+    check("the chat answer is the same sentence as the API's spoken form",
+          r is not None and r.reply == R.sentence(), r and r.reply)
+    check("... and it carries the live tool names too",
+          bool(live_names) and r is not None
+          and all(n in r.reply for n in live_names),
+          str([n for n in live_names if r is None or n not in r.reply]))
+
+
 if __name__ == "__main__":
     for fn in (t_rows_and_order, t_read_web_page_row, t_youtube_row, t_chatbot_row,
                t_chatbot_api_row, t_no_secret_anywhere,
@@ -953,7 +989,8 @@ if __name__ == "__main__":
                t_never_raises, t_cloud_lanes_are_the_modules_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,
                t_both_apps_say_the_same_words, t_both_apps_read_the_current_contract,
-               t_the_enforcement_pair_is_honest):
+               t_the_enforcement_pair_is_honest,
+               t_the_spoken_answer_names_the_tools_the_api_holds):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

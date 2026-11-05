@@ -384,6 +384,15 @@ class FindAnythingTest {
                 // and find their places the normal way; it is the EDITOR row
                 // that has none.
                 "settings-row.edit-hud",
+                // "Hands-free" (2026-11-04): the mode that reads each approval
+                // card out, takes a spoken answer and writes a text message.
+                // Phone-only in this slice - the PC's half is the other lane's -
+                // so there is no catalogue menu id for it and the row is always
+                // drawn, the same shape as the five above. Its place is the row
+                // itself in Settings; when the PC lane adds a catalogue menu id,
+                // this entry becomes a `SETTINGS` place in MenuPlaces and both
+                // this test and MenuVisibilityTest say so.
+                "settings-row.handsfree",
             ),
             FindAnything.ROWS.filter { it.id.startsWith("settings-row.") }.map { it.id },
         )

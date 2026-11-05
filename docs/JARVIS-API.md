@@ -8286,8 +8286,13 @@ the list, the spoken answer or the route.
 "what do you have access to?", "what are you connected to?" and close
 phrasings (whole sentences only, the owner's own typed or said words) from
 `jarvis_reach.sentence()` - the same list, in one answer, host names only
-(no account name). A near miss ("what can you reach on the top shelf") goes
-to the model, as does pasted text.
+(no account name). **The answer also carries the `tools` block** (2026-11-04):
+`view()`'s "Tools the AI model is offered" is said in the same sentence, from
+the same rows, so "which tools do you have" is answered by the one place that
+reads `[tools].enabled` and the API and the spoken form cannot disagree
+(`backend/test_reach.py`'s `t_the_spoken_answer_names_the_tools_the_api_holds`).
+A near miss ("what can you reach on the top shelf") goes to the model, as does
+pasted text.
 
 ### 24.5 Known gaps, said plainly
 
@@ -32578,9 +32583,15 @@ not re-import every module once a second:
                "names": ["..."], "section": "learning", "value": true,
                "value_known": true, "changeable": true,
                "how_to_change": "..."},
+              {"id": "personality", "kind": "choice", "label": "...", "names": ["..."],
+               "section": "manner", "value": "Warm Collaborator",
+               "value_known": true, "value_why": "", "options": ["..."],
+               "changeable": true, "how_to_change": "..."},
               {"id": "face", "kind": "choice", "label": "...", "names": ["..."],
                "section": "appearance-card", "value": null,
-               "value_known": false, "options": ["..."],
+               "value_known": false,
+               "value_why": "The value could not be read on this PC just now ...",
+               "options": ["..."],
                "changeable": true, "how_to_change": "..."}],
  "asks_first": {"available": true, "why": "",
    "groups": [{"group": "Reading your own things",
@@ -32589,6 +32600,10 @@ not re-import every module once a second:
  "abilities": [{"id": "typing", "group": "Talking",
                 "title": "Type a message and read the answer",
                 "surface": "both"}],
+ "tools": {"registered": 51, "registered_names": ["..."],
+           "enabled": 13, "enabled_names": ["..."],
+           "source": "jarvis_agent.TOOLS and jarvis_asks_first.tools_enabled_set()",
+           "why": ""},
  "plugins": [{"id": "mood", "module": "jarvis_mood", "on": true,
               "loaded": true, "why_not": ""}],
  "stores": [{"id": "memory", "label": "What Jarvis learned", "available": true,
@@ -32606,7 +32621,8 @@ not re-import every module once a second:
 |---|---|---|
 | `version` | the `VERSION` file beside the backend when there is one, `jarvis_events`' own `_STARTED`/`API_VERSION`, and the installer's `_jarvis-state.json` (184.7) | a path into the owner's folders; `identity` is sha256 only and `resealed` accepts a 7-40 character hex ref |
 | `places` | `jarvis_settings_registry.SECTIONS` (one row each, kind `settings_section`) and `jarvis_menus.MENUS` (kind `menu`) - imported, never typed here (the module's `places()`) | an id the two registries do not have |
-| `settings` | `BOOL_SETTINGS` (kind `switch`), `CHOICE_SETTINGS` (kind `choice`) and `NUMBER_SETTINGS` (kind `number`, the one shipped row `live_idle_seconds` with its `low`/`high`/`unit`); a switch's `value` is `jarvis_feature_guide.read_state()`, "the one public reader"; a number's is `jarvis_limits.value_of()` where it can be read; a choice's `value` says `null` with `value_known: false` because no public reader exists for it yet. Measured on the tree this was written from: **46 rows** = 35 switches + 10 choices + 1 number | a value that could not be read: it is `null`, never "off" |
+| `settings` | `BOOL_SETTINGS` (kind `switch`), `CHOICE_SETTINGS` (kind `choice`) and `NUMBER_SETTINGS` (kind `number`, the one shipped row `live_idle_seconds` with its `low`/`high`/`unit`); a switch's `value` is `jarvis_feature_guide.read_state()`, "the one public reader"; a number's is `jarvis_limits.value_of()` where it can be read; a choice's value is `jarvis_settings_registry.current_value()` -> the owning module's own reader (`ChoiceSetting.now()`), so the personality, voice, focus preset, hand-off mode and the rest report their real current value. Measured on the tree this was written from: **47 rows** = 36 switches + 10 choices + 1 number, and **9 of the 10 choices** really read a value here (the face needs the desktop's appearance view; without it the row says `value_known: false` and `value_why`) | a value that could not be read: it is `null`, never "off"; an unknown choice says `value_why` and never invents one |
+| `tools` | `jarvis_agent.TOOLS` (registered) and `jarvis_asks_first.tools_enabled_set()` - the owner's own `[tools].enabled` through the same read the "What asks first" page makes (enabled). Measured on this tree: **51 registered, 13 enabled**. `enabled` is `null` when the settings file cannot be read, never 0 | a guessed or defaulted tool list: unreadable says so in `why` |
 | `asks_first` | `jarvis_asks_first.view(here=False)` - the same page both apps draw, not reworded | a permission the gate does not keep |
 | `abilities` | `jarvis_feature_guide.features()` - the feature rows both apps' Features pages show; only id/group/title/surface, because the PROSE stays in `jarvis_feature_guide`, the one module allowed to explain a feature | a sentence a model or a plugin wrote |
 | `plugins` | `jarvis_plugins.available()`/`status()`: the drop-in folders, whether each is on, loaded, and why not | a plugin's own body or summary |
@@ -32628,6 +32644,28 @@ row whose value cannot be read says `null` (or `count: null` with `why_not` /
 `count_why`) rather than guessing, and an unread switch is never reported as
 off. This is the injection-surface rule the research called F10: a self-model
 is text that reaches the model, so it is fixed data or nothing.
+
+**Added 2026-11-04 (self-awareness phase 3).** Two additions, both read-only
+and both inside this existing section:
+
+- `version.app_version_said` is ONE plain sentence. When the `VERSION` file is
+  beside the backend it names the version; when it is not (a checkout, or a
+  deployed backend folder, which carries modules and not repository files) it
+  says plainly that the app version could not be read, names the backend schema
+  and points at the deploy reseal - it is never blank, never `null`, and never
+  a guessed number. `app_version` stays exactly as it was (`"unknown"`), so an
+  older caller is unaffected.
+- The model's own `self_portrait` tool (`jarvis_agent._run_self_portrait`) now
+  hands back a `live_settings` digest beside the counts: `{available,
+  switches: {setting_id: true|false}, choices: {setting_id: chosen option},
+  unreadable: [setting_id], on, off, preset, preset_title, preset_model,
+  model, more}`. It is built by `jarvis_self_portrait.live_settings_digest()`
+  from the SAME `settings()` read this route serves - one source, no default -
+  and it is bounded (`DIGEST_MAX`). `preset`/`preset_model` are the chosen
+  preset and the model it plans to run; `model` is the PC's running-model
+  record and is `""` when none is recorded. It carries ids and values only: no
+  phrase, path or secret, and an unreadable switch is listed in `unreadable`
+  rather than shown as `false`.
 
 ### 184.3 The ids come from the two registries, not from a fourth list
 
@@ -32809,6 +32847,8 @@ The version block is in the portrait (184.2) and alone at `GET
 - `app_version` is the short `VERSION` file beside the backend when the folder
   has one; a checkout answers `"unknown"` with `app_version_source` naming why,
   because a deployed backend folder carries modules, not repository files.
+  `app_version_said` (added 2026-11-04, 184.2) says the same thing in one plain
+  sentence - or says plainly that it could not be read - and is never blank.
 - `deploy` is the installer's OWN record (`_jarvis-state.json` beside
   `jarvis_hud.py`, read at most once per 60 s): `recorded`, the run's schema and
   time, how many deployed files were recorded and verified, the sha256 of the
@@ -32981,14 +33021,29 @@ before and after, and answers one small document
 
 ```json
 {"ok": true, "schema": "jarvis-self-portrait/1", "client": "hud",
- "counts": {"places": 190, "settings": 46, "tools": 21, "abilities": 140,
-            "plugins": 48, "settings_places": 59, "menu_places": 131,
+ "counts": {"places": 190, "settings": 48,
+            "tools": 13, "tools_enabled": 13, "tools_registered": 51,
+            "asks_first_rows": 136,
+            "abilities": 175, "plugins": 0, "settings_places": 59,
+            "menu_places": 131,
             "stored_memory": 42, "stored_conversations": 31,
             "app_version": "...", "started_at": 1790000000.0},
  "changed": {"<key>": {"before": ..., "after": ...}},
  "said": "I re-read what I can do and have now: ... Everything matches what I
           had. Nothing was restarted."}
 ```
+
+**`counts["tools"]` is the tool count, and it used to be a lie.** On the tree the
+2026-11-04 self-awareness audit measured, `tools` held **136** - the number of
+asks-first permission rows - and the model's own `self_portrait` tool handed that
+dict straight back, so "how many tools do you have" could be answered "136" while
+the backend had **51** tools and **13** switched on. Since 2026-11-04 the key holds
+`tools_enabled` (the owner's `[tools].enabled`, read through
+`jarvis_asks_first.tools_enabled_set()` - the same read the What-asks-first page
+makes), with **`tools_registered`** beside it, and the old number kept under its
+true name, **`asks_first_rows`**. The old key name still exists, so a caller that
+only knows `tools` keeps working - it now gets the true number. An unreadable
+settings file is `null` in both tool keys, never 0.
 
 The sentence names every number it read, says "Nothing was restarted" in both
 cases, and when something moved names each key that changed - a setting count, a

@@ -1,0 +1,1 @@
+        if route in ("/api/search/settings", "/api/search/test"):
