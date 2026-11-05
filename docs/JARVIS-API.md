@@ -33934,3 +33934,107 @@ recorded in `test_tool_profiles_chat.py`, which fails if a third one appears, an
 the wording belongs to the module's own lane.
 
 The decision is `decisions.d/2026-11-04-capability-talk.md`.
+
+## 188. A read-only repository map: the files and symbols of a project folder, ranked for the question (added 2026-11-05)
+
+The first piece of "Jarvis as a project worker", built in the order the
+2026-11-05 project-management audit recommended and Gemini's ruling fixed:
+**a read-only repository map FIRST**, before project-scoped chat and before any
+staged diff. It is the one capability that raises what Jarvis can do for a
+coding project without giving it a pen: a project's folder stops being a list of
+file names and becomes a short, ranked table of what is in it.
+
+**What a map is.** The files, classes, functions and imports of ONE folder the
+owner already allowed, ranked for a question and packed into a bounded block of
+text. It lists NAMES AND SIGNATURES ONLY - never a function's body - and it
+writes nothing at all: no index, no cache, no temp file.
+
+**The route.** `GET /api/projects/<id>/map` - `id` is a registered project
+(`projects.db`; the same list `GET /api/projects` returns) and the folder mapped
+is that project's own folder. Query: `q` (the question to rank for, optional) and
+`tokens` (the budget, default 1,500, clamped to 200 minimum and 2,000 maximum).
+It is answered by the project store's own table (`jarvis_projects.parse_route`
+returns `("map", <id>)`), after the server's origin and token checks like every
+other project route.
+
+```text
+GET /api/projects/{id}/map?q=where+are+routes+registered&tokens=1500
+```
+
+The answer:
+
+```json
+{"ok": true, "available": true,
+ "project": {"id": "…", "name": "Epic Jarvis"},
+ "folder": {"path": "C:\\…\\Epic-Jarvis-main", "name": "Epic-Jarvis-main"},
+ "question": "where are routes registered",
+ "map": "Repository map of Epic-Jarvis-main - 214 files with names to show, 3102 symbols declared.\n…",
+ "tokens": 1487, "budget": 1500,
+ "files": 42, "files_seen": 1234, "symbols": 310,
+ "truncated": true,
+ "ranked": [{"path": "backend/jarvis_documents.py", "score": 38.5, "symbols": 41}],
+ "outside_text": true}
+```
+
+`ranked` carries the top ten only, so the order can be checked without shipping
+the whole ranking twice; `map` is the text itself. A project with no folder, an
+unknown project id and a folder that is no longer on the owner's list each answer
+`ok: false` with their own one-sentence reason and status 400.
+
+**The tool.** The module is reached from chat through the EXISTING `my_files`
+tool: `{"action": "map", "project": "<id>"}` or `{"action": "map", "path": "<a
+folder on the list>"}`, with `words` as the question and an optional `tokens`.
+It returns the same map, plus `outside_text: true` and the store's own
+outside-text label on the text (the same treatment a file read gets). `map` is
+one more action on `my_files`; it adds **no tool**, no switch and no gate
+action.
+
+**Which boundary protects the walk.** The owner's "Folders Jarvis may look in"
+list, checked by the same function the files tool uses: `jarvis_documents.
+allowed_path()`. The project's folder is checked when the project is created
+(`jarvis_projects.check_folder`), and then **every file the walk would show is
+passed through `allowed_path()` again** with that folder as its root
+(`backend/jarvis_repomap.py`, `_walk()`). A folder that is not on the list is
+refused in ONE plain sentence and the walk never starts - it is not walked and
+then filtered, and nothing about it is guessed. Hidden folders are not entered,
+links are not followed, "Protected from Jarvis" items and the private places are
+refused by the existing checks, and a small set of dependency folders
+(`node_modules`, `target`, `dist`, `build`, `__pycache__`, …) is skipped even
+when a `.gitignore` forgets them. `.gitignore` itself is honoured per directory,
+including `!` negation. An unlisted folder answers: *"That folder is not on
+"Folders Jarvis may look in", so Jarvis does not map it - the folder is added on
+the PC first, in Settings, Folders Jarvis may look in."*
+
+**The ranking, written out** (the module docstring has the full formula and the
+module has no other rule): +12 per distinct question word in a declared symbol
+name, +6 in the file or folder's own name, +2 in an import target, +4 when a
+MATCHED file imports this one (its dependency), +1 when this file imports a
+matched file (a caller), and +0.5 × log2(1 + symbols) as a small tie-break.
+Ties break by relative path, so the order never depends on the walk. Imports are
+matched on names, not by resolving paths: a wrong edge costs a line of the map,
+a resolved guess could invent one. The answer is deterministic - the same tree
+and the same question give the same bytes - and needs **no model call**.
+
+**The budget.** At most 2,000 tokens, default 1,500, counted exactly the way
+`jarvis_agent.estimate_tokens` counts a string (3 characters a token, JSON
+framing included, so a map of 2,000 really arrives as 2,000 and not more). A
+file that does not fit has its symbol lines trimmed; a file too big to read
+(at most 512 KiB is read) is named and not read; nothing is ever refused for
+being large.
+
+**What it does not do, so nobody has to ask.** It does not write, move or delete
+anything; it runs no program, opens no socket and calls no model; it adds no
+route to the phone (PC-only read, classified backend-only in
+`tools/check_parity.py`, with the reason in `docs/ARCHITECTURE.md` §8); and it is
+not a diff, an editor or a test runner - `project_edit` remains unbuilt, exactly
+as `backend/jarvis_projects.py` says. Python is parsed with `ast`; JS/TS, Kotlin
+and Rust are read by a conservative signature/import scan that misses clever
+constructs by design and never prints a line that was not in the file.
+
+**Tests and records.** `backend/test_repomap.py` drives the real modules over a
+real temp tree: 78 checks covering the ranking, `.gitignore` (including
+negation), the one-sentence refusal, the bounded budget, determinism, that no
+file is written, the route's documented shape through the real project store, a
+huge file, and the `my_files` action through `jarvis_documents` and
+`jarvis_agent`'s own runner. The decision is
+`decisions.d/2026-11-05-project-repomap-first.md`.

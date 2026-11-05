@@ -602,6 +602,12 @@ SHIPPED = (
     # Projects, build steps 1 and 2: projects, life benchmarks and their
     # numbers in projects.db; GET/POST /api/projects (projects.patch)
     "jarvis_projects.py",
+    # A READ-ONLY repository map of a project's folder (2026-11-05): the files,
+    # classes, functions and imports inside "Folders Jarvis may look in",
+    # ranked for a question and packed to a token budget. Writes nothing, runs
+    # no model, opens no socket; GET /api/projects/<id>/map and the `my_files`
+    # action `map`.
+    "jarvis_repomap.py",
     # "about N to M weeks": the pure finish-time range jarvis_projects.py
     # and jarvis_goals.py read (2026-09-30, JARVIS-API section 101)
     "jarvis_forecast.py",

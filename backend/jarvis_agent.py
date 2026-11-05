@@ -4343,13 +4343,16 @@ TOOLS: dict = {
         "Find and read the owner's own files, only in folders they listed. "
         "find: file names. search: words inside notes/text. "
         "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). "
+        "map: a folder's files and symbols, ranked for the question. "
         "read_media: one recording's words. search_media: stored spoken and "
         "on-screen recording words.",
         {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["find", "search", "read", "read_media",
+            "action": {"type": "string", "enum": ["find", "search", "read", "map", "read_media",
                                                   "search_media"]},
-            "words": {"type": "string", "description": "a few words; for read, picks the part"},
-            "path": {"type": "string", "description": "read / read_media: the full path"},
+            "words": {"type": "string", "description": "a few words; for read, the part; for map, "
+                                                       "the question"},
+            "path": {"type": "string", "description": "read / read_media: the full path; map: a "
+                                                      "folder or a project id"},
             "part": {"type": "integer", "description": "read: which part, from its list"}},
          "required": ["action"]},
         _prepare_my_files, _run_my_files,

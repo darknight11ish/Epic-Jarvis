@@ -769,7 +769,14 @@ def t_the_tool_is_offered_only_with_a_folder():
           "my_files" not in AG.offered_tools({"calculator"}))
     tool = AG.TOOLS["my_files"]
     check("decided under file_read's action", tool.gate_lookup_name({}) == "file_read")
-    check("its words fit the tool budget", AG.estimate_tokens(tool.schema()) <= 300,
+    # 300 until 2026-11-05, then measured at 329 when the `map` action was added
+    # (a folder's files and symbols, ranked for the question; a project id rides
+    # in `path` so no second field was needed). 291 before that change, so the
+    # whole addition costs 38 tokens on any turn my_files is offered - measured
+    # with AG.estimate_tokens, which counts the JSON it would be sent as. The
+    # budget is raised, never dropped: the guard stays and still fails a schema
+    # that creeps.
+    check("its words fit the tool budget", AG.estimate_tokens(tool.schema()) <= 330,
           AG.estimate_tokens(tool.schema()))
     check("it is a reading tool (outside text)", "my_files" not in AG._NOT_READING)
     fresh()

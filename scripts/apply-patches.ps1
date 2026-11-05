@@ -2278,6 +2278,7 @@ $SHIPPED = @(
     'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation
     # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
+    'jarvis_repomap.py'          # a READ-ONLY repository map of a project's folder (2026-11-05): names and signatures ranked for a question, packed to a token budget; no patch, no route of its own (the project store's table answers GET /api/projects/<id>/map), no model, no write
     'jarvis_forecast.py'         # the pure finish-time range ("about 6 to 9 weeks") jarvis_projects.py and jarvis_goals.py read; no patch (JARVIS-API section 101)
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
     'jarvis_chatbot_routes.py'   # chatbot-routes.patch: GET /api/chatbot/status, POST /api/chatbot/start (ONE card), /stop and /limits (a new card)
