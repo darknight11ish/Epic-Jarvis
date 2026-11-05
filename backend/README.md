@@ -20910,7 +20910,7 @@ a unit test.
 
 ## jarvis_call_notes.py - record a phone call, transcribe it here, file a note
 
-The owner's request of 2026-11-04 (JARVIS-API §187, `docs/CALL-RECORDING.md`,
+The owner's request of 2026-11-04 (JARVIS-API §188, `docs/CALL-RECORDING.md`,
 `docs/ARCHITECTURE.md` §15): say "record call" and the Android app records the
 call; this PC turns it into a transcript with speakers and a NEW Obsidian note
 named for the date and time.
@@ -20934,7 +20934,7 @@ no patch:** `POST /api/call/recording/start`, `/chunk`, `/finish`, and
 `receipt` STRING plus the structured `recording`, and starts the transcription
 on a daemon thread, so it never blocks on the model. The read route is PC-only;
 the three POSTs are the phone's by necessity. The exact shapes, the refusals
-and the `call_record` chat directive are in JARVIS-API §187.1-§186.3.
+and the `call_record` chat directive are in JARVIS-API §188.1-§188.3.
 
 **What it reuses, and adds nothing to:** `jarvis_media_read.read_media()` for
 the words (the existing sherpa-onnx model, English only, no network), cut into

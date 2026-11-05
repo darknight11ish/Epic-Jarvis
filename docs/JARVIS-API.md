@@ -33772,9 +33772,171 @@ once and not repeating a delivered notice, and the route's own wrapper.
   can make are its own three files and the notification it hands to the arbiter.
 - **The second stage never calls a model today** (§186.4).
 - **Not measured on the owner's PC**: the route and the job body are tested
-  against the real modules and a fake `gh`, not against a live pull request.
+  against the real modules and a fake `gh`, not against a live pull request.---
 
-## 187. Call recording: the phone records on the speaker path, the PC transcribes, labels who spoke and files a new note (backend, both apps, added 2026-11-04)
+## 187. Talking to Jarvis about any of its own tools, in depth: a dossier answer and a bounded prompt block (added 2026-11-04)
+
+The owner's ask of 2026-11-04, in his own words: Jarvis should be able to hold
+*"FULL DETAILED discussions about any of its tools/plug-ins and how they change
+its real-world capabilities"*. Before this, "tell me about the github tool" fell
+through to the model, which invented an answer, and "what does browser_control
+do" was answered by `jarvis_feature_guide`'s prose for a *different* thing - the
+catalogue does not use the tool names.
+
+What was built is ONE hand-written, code-checked page per tool and per
+capability family (`backend/jarvis_tool_profiles.py`), plus a deterministic
+answer and a bounded system note that put it in front of the model. **No new
+route and no new model tool** - both are explained in 186.3.
+
+**Where the dossiers live.** `backend/jarvis_tool_profiles.py`, shipped whole
+(in `backend/` and `jarvis-backend/`, listed in `_where.py`'s `SHIPPED`):
+`PROFILES` (`jarvis_tool_profiles.py:82`, one entry per name in the REAL
+`jarvis_agent.TOOLS` dict - 51 on this tree) and `FAMILIES`
+(`jarvis_tool_profiles.py:1820`, 11 capability families). Its own suite,
+`backend/test_tool_profiles.py`, re-checks the load-bearing claims against the
+modules that would have to implement them, so a sentence that cannot be backed
+is written as a limit rather than as a promise. The wiring is
+`backend/test_tool_profiles_chat.py`.
+
+### 187.1 What it answers, and what it still leaves to the model
+
+The fast path answers a sentence that names a tool **as a tool** - the word
+"tool", or the tool's own code name typed with its underscore:
+
+| The owner says | Intent | The fact comes from |
+|---|---|---|
+| "what does `browser_control` do" | `tool_profile` | `PROFILES["browser_control"]` |
+| "tell me about the github tool" | `tool_profile` | `PROFILES["github_search"]` |
+| "what does the web search tool do" | `tool_profile` | `PROFILES["web_search"]` |
+| "tell me about the memory tool" | `tool_profile` | `FAMILIES` / `PROFILES` |
+
+The answer is `answer_about`'s own words (`jarvis_tool_profiles.py:2257`): what
+the thing is in beginner words, what it lets the owner do, what it refuses,
+what it pairs with, and how to switch it on. It is `quick: tool_profile`,
+`where: local`, `lane: "no AI model"` in `X-Jarvis-Route`, so **both apps show
+it with no client change** and it costs no model turn.
+
+Everything else naming a tool - an opinion, a comparison, "would it help me
+with X" - is the **model's**, now with the dossier block in 186.3. A question
+that names no tool returns `None` from the fast path, which is exactly the old
+behaviour.
+
+**Why the "as a tool" gate is not optional.** 42 of the catalogue's 175 feature
+titles open with words that also name a tool ("Web search", "Goals", "Read your
+own calendar", "Spending summaries", "Jarvis reads your email"), and one feature
+row's alias is the exact phrase "plugin list", which is also the tool id
+`plugin_list`. `backend/test_feature_answers.py` and
+`backend/test_feature_guide.py` require every one of those to keep the feature
+guide's answer, so the marker is `_TOOL_SAID`
+(`jarvis_quick.py:6538`) and NOT a bare shape match. The feature layer keeps its
+answers; the tool layer is addressed by its own vocabulary.
+
+**Why it sits where it sits.** In `_match`, the call is
+`jarvis_quick.py:1272`: after the plug-in block (`_plugins_question`,
+`jarvis_quick.py:6391`, called at `:1262`) so a plug-in question keeps its own
+answer, and before the Android block and every capability family
+(`:1273` onward) and well before `_feature_guide` (`jarvis_quick.py:1762`),
+because a tool's own dossier is deeper than a feature row's prose. The runner is
+`_run_tool_profile` (`jarvis_quick.py:6602`), dispatched at
+`jarvis_quick.py:19097`, and the intent is in `READ_ONLY_INTENTS`
+(`jarvis_quick.py:19977`): it reads a fixed module, calls nothing, raises no
+card - so a **private chat hands it to the model** like every other read-only
+intent, and it cannot take away what "cancel that" would undo.
+
+### 187.2 What the model is given, and what it costs
+
+`jarvis_agent.tool_profile_note` (`jarvis_agent.py:12614`) builds ONE bounded
+block from `context_for` (`jarvis_tool_profiles.py:2311`), which never returns
+more than `CONTEXT_LIMIT = 1200` characters
+(`jarvis_tool_profiles.py:77`). `TOOL_PROFILE_CHARS` (`jarvis_agent.py:12517`)
+re-states that cap on this side, so a changed module cannot silently spend more
+of the window, and the note is the block plus ONE fixed 142-character line
+(`TOOL_NOTE_PREFIX`, `jarvis_agent.py:12524`) saying where the facts came from
+and to answer only from them.
+
+- **The budget, in this repository's own arithmetic.** `estimate_tokens`
+  (`jarvis_agent.py:6793`) counts 3 characters a token plus 6 of framing, so the
+  worst case is `6 + (1200 + 142) // 3` = **453 tokens**, and the ordinary
+  `browser_control` turn is 1,285 characters = **434 tokens**. Both `context_for`
+  and the cap it is given are checked in `test_tool_profiles_chat.py`.
+- **No tool named -> no note -> the same bytes.** That is the rule that keeps
+  every ordinary prompt exactly as it was, and it is why the note is keyed on a
+  tool's own name and never on a nickname: "what is on my calendar tomorrow" is
+  a turn to READ the calendar, and `backend/test_warm_prefix.py` pins the warm-up
+  and a real first question to the same bytes before the question.
+- **A follow-up keeps it.** If the newest message carries on from the last one
+  ("would that let you fill in a form?"), the note looks back at most two earlier
+  user messages. That is what makes a *discussion* possible rather than one
+  answer - and it is still nothing when no earlier message named a tool.
+- **It is held out of the room** like every other note:
+  `room -= estimate_tokens({"role": "system", "content": tool_note})`
+  (`jarvis_agent.py:13769`), before `clear_old_tool_results` and
+  `compact_messages`, so a block can never push the window over.
+- **Placement** is `with_tool_profile_note` (`jarvis_agent.py:12652`), copied
+  from `with_pc_facts_note`: inserted just before the newest user message, after
+  the PC-facts line and before the grant note (`jarvis_agent.py:12874`), with the
+  `at == 0` case prepending `LANE_SYSTEM` so the rules stay first. It is fixed
+  dossier data - no path, no count, no chat word, nothing read live - so it is
+  safe in a private chat.
+
+### 187.3 No route and no new tool, deliberately
+
+- **No route.** A route adds a consumer that does not exist: `/api/reach`
+  (`backend/jarvis_reach.py`) already lists every tool in one sentence for both
+  apps, and `/api/self` already carries abilities and plug-ins. A third copy
+  would need a `tools/check_parity.py` classification, a phone decision and a
+  `HUD_GET_PATHS` entry in `hud_proxy.rs` for a screen that does not exist. The
+  one worth adding later, **named and not built**: `GET /api/self/tools` (the
+  list plus one profile each), the day a Tools page exists, served from
+  `jarvis_self_portrait` the way `/api/self/version` is and classified in
+  `check_parity.py` in the same PR.
+- **No new model tool.** A tool costs five mandatory registrations, each with
+  its own test: `TOOLS` plus offer/gate wiring; a description under 300 tokens
+  (`test_tool_text.py`); a `jarvis_claims` classification (`test_smarter_answers.py`
+  fails a tool in neither set); a `jarvis_reach.TOOL_NAMES` row (`test_reach.py`
+  demands one); and the tool contract/schema suites. It also ships **off**: it
+  would need its own switch row on Settings, What asks first ("Let the AI use
+  this") - one of the lists `jarvis_asks_first.TOOLS_SWITCHABLE` is built from -
+  and that switch's PC-only card before the owner could turn it on. And it buys
+  nothing: these are facts that fit in 400 prompt tokens, and every tool call
+  is a round trip on an 8B.
+
+### 187.4 What it does not cover
+
+- **Features** stay `feature_guide`'s, by chat and as a model tool. A feature is
+  a row with a title, a where, an asks-first and a limit; a tool's dossier is
+  deeper and answers different questions. The two vocabularies are kept apart by
+  `_TOOL_SAID` (186.1).
+- **Drop-in plug-ins** (`plugins/ready/`, 49 folders) stay
+  `plugin_list`/`plugin_about`'s, which already answers them; the plug-in block
+  runs first, so it is never hijacked.
+- **Development "plug-ins"** - the patch stack in `plugins/registry.json` - are
+  developer vocabulary and not a chat topic.
+- **Listing questions** ("which tools ask first") already have their own
+  answers (`tools_asking`); `answer_about` returns `None` for them and nothing
+  here changes that.
+- **It adds no permission, card or tier**, so the standing "every new feature
+  gets its own audit" pass finds: bugs (the probes in
+  `test_tool_profiles_chat.py`), both apps (free - chat is server-side, nothing
+  one-sided, so no `docs/ARCHITECTURE.md` section 8 row), and fit (this section,
+  the architecture paragraph and the two records).
+
+Two things this section states plainly rather than hides. First, the design
+report's probe expected `match("what does browser_control do")` to be `None`
+before this work; measured on the merged tree it was `feature_explain` - the
+feature guide answering a name it does not own - which is why the tool path must
+run before it. Second, two dossier sentences read as an action already taken to
+`jarvis_claims.unbacked_claim` (`set_reminder`'s title line and one `set_timer`
+"gives" line are imperative). That checker runs on the MODEL's text
+(`jarvis_agent._nothing_done_line`, `jarvis_agent.py:14629`), never on a
+deterministic `tool_profile` result, so no chat answer is affected; it is
+recorded in `test_tool_profiles_chat.py`, which fails if a third one appears, and
+the wording belongs to the module's own lane.
+
+The decision is `decisions.d/2026-11-04-capability-talk.md`.
+
+
+## 188. Call recording: the phone records on the speaker path, the PC transcribes, labels who spoke and files a new note (backend, both apps, added 2026-11-04)
 
 The owner's request, in their own words: *"add the ability of jarvis to record a
 call if I tell it a keyword 'record call' where it will record all the audio,
@@ -33799,7 +33961,7 @@ are **NOT-TESTABLE** until the owner's own field test. Importing a file from the
 phone's own call recorder, if it has one, is a later addition and is **not
 built**.
 
-### 187.1 The four routes
+### 188.1 The four routes
 
 Origin and token exactly as every other route (`X-Jarvis-Token`;
 `X-Jarvis-Client: hud` from either app). One audio shape only: **16 kHz, mono,
@@ -33934,7 +34096,7 @@ the owner knows what is left. `docs/CALL-RECORDING.md` §7 is the retention
 policy: nothing expires on a timer, and the 400-recording cap refuses a new
 start rather than deleting anything.
 
-### 187.2 The session record
+### 188.2 The session record
 
 `receipt.json` beside the audio, and the `recording` object on `finish` and on
 the `GET`: `session`, `status` (`waiting` | `recording` | `transcribing` |
@@ -33947,7 +34109,7 @@ was recorded and where it went - **not** an action receipt with an Undo; the
 note's create leaves its own undo receipt through the notes editor. `finish`'s
 `receipt` string is the one-line summary of the same facts.
 
-### 187.3 The chat command, and the `call_record` directive
+### 188.3 The chat command, and the `call_record` directive
 
 The eight whole messages, matched **whole-message only** (after the repo's own
 tidier, which drops a polite lead-in like "can you ..." for every command in
@@ -33972,7 +34134,7 @@ directive is absent** - an app must treat absence as "record nothing". Stopping
 is always answered, because stopping only narrows what is happening. The
 intent is `call_record`; a refusal is `call_record_refused`.
 
-### 187.4 The switch, and the card
+### 188.4 The switch, and the card
 
 - **Off by default:** `[call_recording] enabled = false` in the shipped
   `jarvis-framework.toml`; a settings file with no such table is off too.
@@ -33991,7 +34153,7 @@ intent is `call_record`; a refusal is `call_record_refused`.
   not loosen the tier: it stays `ask`. Deleting a recording is a second card of
   its own, `delete_call_recording`, also `ask`.
 
-### 187.5 Transcription and speaker labels
+### 188.5 Transcription and speaker labels
 
 `jarvis_media_read.read_media()` - the existing sherpa-onnx model, English only,
 no network - reads the assembled WAV in **9-minute parts** (its own ceiling is
@@ -34007,7 +34169,7 @@ A line too short to embed carries the previous line's label. **With no speaker
 model or no trained voice print, EVERY line says "Speaker"** and the note
 records which was missing - never a guessed name.
 
-### 187.6 The note
+### 188.6 The note
 
 `Calls/YYYY-MM-DD HHMM - Call.md`, a NEW file (a same-minute call gets
 " (2)"), created through `jarvis_notes_edit.handle_create()` - the notes
@@ -34026,7 +34188,7 @@ body holds one heading, the consent reminder as a visible line, and
 sentence saying why. The transcript is always written there first, so a vault
 problem or a refused card cannot lose a recording.
 
-### 187.7 What the phone does (the frozen Android half's checklist)
+### 188.7 What the phone does (the frozen Android half's checklist)
 
 1. Read `call_record` from `X-Jarvis-Route`; on `{"action": "arm"}` call
    `start` with the date the call began, on `{"action": "stop"}` stop the
@@ -34057,7 +34219,7 @@ problem or a refused card cannot lose a recording.
    the phone never sends a delete to the PC, and the PC never deletes a
    recording by itself.
 
-### 187.8 What is not done
+### 188.8 What is not done
 
 The Android half is its own pull request against this contract; neither lane
 drove a real call on the owner's Pixel 9, so the speaker path and the quality of
@@ -34065,7 +34227,7 @@ the words it yields are **NOT-TESTABLE** until his field test. **A call can
 raise TWO cards**: `record_call` before any audio is kept, and the notes
 editor's own `edit_vault_note` card before the note is written - a transcript is
 other people's words, so it is never a card-free write; deleting the recording
-is a third, `delete_call_recording` (§187.1). The audio is **not encrypted at
+is a third, `delete_call_recording` (§188.1). The audio is **not encrypted at
 rest** - an owner decision, not implemented here, and `docs/CALL-RECORDING.md`
 §9 says so. English only, ten-second segments, and no import of the phone's own
 recorder. No real phone recording, transcription, speaker model, vault write or

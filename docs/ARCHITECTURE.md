@@ -5612,6 +5612,31 @@ route that writes from this module is the carded conversation clear (§13.4).
   both apps can make; the phone has no screen for it yet and one chat at a time.
   Both are recorded in §8 rather than left to be read as oversights.
 
+### 13.9 The tool layer of the same self-knowledge: one dossier per tool
+
+The portrait above is an inventory; the third thing the owner asked for on
+2026-11-04 is a *conversation* - "full detailed discussions about any of its
+tools/plug-ins and how they change its real-world capabilities" - and an
+inventory cannot hold one. `backend/jarvis_tool_profiles.py` (shipped whole,
+with its `jarvis-backend/` twin) is the tool layer of the same self-knowledge:
+one hand-written, code-checked page per name in the real `jarvis_agent.TOOLS`
+dict plus one per capability family, carrying what the thing is in beginner
+words, what it lets the owner do, what it refuses, what it pairs with, how to
+switch it on, and the repository files each claim was checked against. It obeys
+the same two rules as the portrait - **checked-in data only, and it decides
+nothing**: it calls no tool, reads no live state, raises no card, and its own
+suite re-derives the load-bearing claims from the modules rather than trusting
+the prose. It reaches chat two ways, and neither adds a route or a model tool:
+a deterministic fast path (`jarvis_quick._tool_profile`, in `READ_ONLY_INTENTS`,
+`lane: "no AI model"`) for a sentence that names a tool *as a tool*, and a
+bounded system note (`jarvis_agent.tool_profile_note`, at most 1,200 characters,
+held out of the room) so the model can discuss an opinion or a comparison with
+the facts in front of it. **Features stay `feature_guide`'s and drop-in plug-ins
+stay `plugin_list`'s** - the two vocabularies are kept apart by an explicit
+marker, because 42 of the catalogue's 175 feature titles open with a tool's own
+words. JARVIS-API §185 is the wire shape; the decision is
+`decisions.d/2026-11-04-capability-talk.md`.
+
 ## 14. Watchers, the attention budget, and what a restart owes (added 2026-11-04)
 
 The owner's decision of 2026-11-04 adopted four patterns from
@@ -5698,7 +5723,7 @@ The owner asked for one keyword: *"record a call if I tell it a keyword 'record
 call' where it will record all the audio, transcribe it, put a date and identify
 the speakers in the transcription, and store all of it in a new obsidian note
 labeled with the date and time"*. The whole story is
-`docs/CALL-RECORDING.md`; the wire contract is JARVIS-API §187. This section is
+`docs/CALL-RECORDING.md`; the wire contract is JARVIS-API §188. This section is
 the part that belongs in the architecture: **which half runs where, and what
 this PC refuses to guess.**
 
