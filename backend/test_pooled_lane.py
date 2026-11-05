@@ -380,6 +380,75 @@ def t_a_lane_that_does_not_come_back_is_reported():
           and "not put back" in body["error"], (code, body))
 
 
+def t_standby_stops_the_pooled_lane_and_leaves_the_lanes_stopped():
+    """2026-11-04: standby freed the second card's lane, the third's, the
+    combined lane and the voices' engine - and left THIS lane holding the 30B
+    coding model on port 11450 all night, the largest thing the PC loads.
+    `L.sleep()` is the shape `jarvis_power_switch._free_other_engines` calls on
+    every engine; the real module is driven here against the fake engine, so no
+    card, no Ollama and no model is touched."""
+
+    def listening(port, timeout=0.0):
+        """The cheap "is anything answering on the port" probe: a suite must
+        not open a socket, and the lane's own fake engine answers /api/ps."""
+        return True
+
+    eng = Engine()
+    L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
+    eng.calls.clear()
+    said = L.sleep("Jarvis is on standby", engine=eng, probe_fn=listening)
+    check("sleeping unloads the coding model and stops the server this app started",
+          said["stopped"] is True and eng.names()[-2:] == ["unload", "server_stop"],
+          (said, eng.calls))
+    check("... and it does NOT put the two lane models back - standby is emptying "
+          "the cards, so reloading qwen3.5:9b and Fast would undo it",
+          "restore" not in eng.names(), eng.calls)
+    check("... and the owner is told, naming the port the model was on",
+          "11450" in said["sentence"] and "stopped" in said["sentence"], said)
+
+    idle = Engine()
+    quiet = L.sleep("Jarvis is on standby", engine=idle, probe_fn=listening)
+    check("a lane that is not holding its model is not touched at all "
+          "(one read of /api/ps decides, never a remembered flag)",
+          quiet == {"stopped": False, "sentence": ""} and idle.names() == ["ps"],
+          (quiet, idle.calls))
+
+    silent = Engine()
+    quiet = L.sleep("Jarvis is on standby", engine=silent,
+                    probe_fn=lambda port, timeout=0.0: False)
+    check("nothing listening on the port at all: not even /api/ps is read, which "
+          "is what keeps standby's answer quick",
+          quiet == {"stopped": False, "sentence": ""} and silent.names() == [],
+          (quiet, silent.calls))
+
+    stuck = Engine(unload_ok=False)
+    L.start_pooled_lane(engine=stuck, gate=lambda *a, **k: Verdict(True))
+    said = L.sleep("Jarvis is on standby", engine=stuck, probe_fn=listening)
+    check("a lane that will not unload is reported, never claimed as freed",
+          said["stopped"] is False
+          and "Could not stop the pooled coding lane on port 11450" in said["sentence"]
+          and MODEL in said["sentence"], said)
+
+
+def t_standby_stop_keeps_the_ordinary_stop_putting_the_lanes_back():
+    """One function, two callers: the preset path still wants the lanes back
+    (that is what it restored before), and only the standby call skips it."""
+    eng = Engine()
+    L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
+    eng.calls.clear()
+    code, body = L.stop_pooled_lane(engine=eng)
+    check("the ordinary stop is unchanged: unload, server_stop, then the lanes back",
+          code == 200 and eng.names()[-2:] == ["server_stop", "restore"]
+          and "both lane models are back" in body["message"], (code, body, eng.calls))
+    eng2 = Engine()
+    L.start_pooled_lane(engine=eng2, gate=lambda *a, **k: Verdict(True))
+    eng2.calls.clear()
+    code, body = L.stop_pooled_lane(engine=eng2, restore=False)
+    check("stop_pooled_lane(restore=False) leaves them stopped and says why",
+          code == 200 and "restore" not in eng2.names()
+          and "left stopped" in body["message"], (code, body, eng2.calls))
+
+
 # ---------------------------------------------------------------------------
 #   The preset apply: the Coding row uses it, and only it
 # ---------------------------------------------------------------------------
@@ -760,6 +829,8 @@ def main() -> int:
                t_stop_puts_both_lanes_back_and_says_what_it_saw,
                t_stop_is_safe_when_nothing_is_running,
                t_a_lane_that_does_not_come_back_is_reported,
+               t_standby_stops_the_pooled_lane_and_leaves_the_lanes_stopped,
+               t_standby_stop_keeps_the_ordinary_stop_putting_the_lanes_back,
                t_coding_applies_through_the_pooled_lane,
                t_a_non_heavy_apply_leaves_a_pooled_lane_that_is_not_running_alone,
                t_leaving_the_pooled_lane_stops_it_before_the_new_model,

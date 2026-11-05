@@ -9,6 +9,8 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.jarvis.client.voice.MicNow
+import com.jarvis.client.voice.MicOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -34,6 +36,14 @@ class Recorder(private val context: Context) {
         data object NoPermission : Failure
         data object Unavailable : Failure
         data object TooShort : Failure
+
+        /**
+         * The microphone is not this path's to take right now: call recording
+         * is armed or recording (voice/MicOwner.kt). Carries the one sentence
+         * to show, so every screen says the same thing about the same cause.
+         */
+        data class MicBusy(val why: String) : Failure
+
         data class Failed(val detail: String) : Failure
     }
 
@@ -61,6 +71,11 @@ class Recorder(private val context: Context) {
         onBuffer: ((buffer: ShortArray, n: Int, captured: ShortArray, count: Int, rate: Int) -> Boolean)? = null,
     ): Result = withContext(Dispatchers.IO) {
         if (!hasPermission()) return@withContext Result.Refused(Failure.NoPermission)
+        // ONE microphone, four things that want it (voice/MicOwner.kt): call
+        // recording outranks the talk button, and it says why rather than
+        // opening a second recorder that would get silence.
+        val may = MicNow.mayOpen(MicOwner.Use.TALK)
+        if (!may.allowed) return@withContext Result.Refused(Failure.MicBusy(may.why))
 
         val rate = usableRate() ?: return@withContext Result.Refused(Failure.Unavailable)
         val minBuf = AudioRecord.getMinBufferSize(
@@ -105,6 +120,7 @@ class Recorder(private val context: Context) {
 
         try {
             recorder.startRecording()
+            MicNow.opened(MicOwner.Use.TALK)
             while (!stopWhen() && count < maxSamples) {
                 val n = recorder.read(buffer, 0, buffer.size)
                 // read() returns a NEGATIVE error code rather than throwing.
@@ -130,6 +146,7 @@ class Recorder(private val context: Context) {
         } finally {
             runCatching { recorder.stop() }
             recorder.release()
+            MicNow.closed(MicOwner.Use.TALK)
             onLevel(0f)
         }
 

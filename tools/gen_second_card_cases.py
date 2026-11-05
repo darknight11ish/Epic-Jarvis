@@ -183,11 +183,15 @@ class World:
         self.http.append((url, payload))
         if not SC._is_loopback_url(url):
             raise AssertionError("a non-loopback address was asked: " + url)
-        # 11435: the feature/combined lane's shared port. 11436: the third
-        # card's own lane (2026-09-28) - it can run at the same time as the
-        # feature lane, so it is checked against its OWN process, never
-        # "any lane process is alive" (self.running(port), above).
-        port = next((p for p in (11435, 11436) if url.startswith(f"http://127.0.0.1:{p}")), None)
+        # 11435: the feature/combined lane's shared port. SC.DEFAULT_THIRD_PORT:
+        # the third card's own lane (2026-09-28) - it can run at the same time
+        # as the feature lane, so it is checked against its OWN process, never
+        # "any lane process is alive" (self.running(port), above). Read from
+        # the module, not spelled 11436: that literal WAS this lane's default
+        # but it is the everyday lane's port, so the third card's default moved
+        # to 11438 on 2026-11-04 (DEFECT A) and this world follows it.
+        port = next((p for p in (SC.DEFAULT_PORT, SC.DEFAULT_THIRD_PORT)
+                     if url.startswith(f"http://127.0.0.1:{p}")), None)
         lane = port is not None
         if url.endswith("/api/version"):
             if lane and (self.foreign_on_port or (self.lane_answers and self.running(port))):
