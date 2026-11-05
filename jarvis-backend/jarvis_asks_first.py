@@ -463,7 +463,7 @@ TIER_EXTRA = (
     # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
     # 2026-11-03: "Read + actions"). They joined this list when the GitHub
     # tools branch met the owner's 2026-11-04 decision - EVERY tool the model
-    # can be offered is switchable from an app except the three NOT_A_SWITCH
+    # can be offered is switchable from an app except the four NOT_A_SWITCH
     # names - so leaving them nowhere would have been the one hole in that
     # rule. Each one still raises its own card, and the ACTION they share
     # (github_inspect for the three reads) stays the "ask" tier.
@@ -486,8 +486,10 @@ TIER_EXTRA = (
 NOT_A_SWITCH = ("run_data_script", "product_check") + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: three above. 54 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
-#: GitHub tools the tool list had grown without a row of their own).
+#: four above. 55 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
+#: GitHub tools the tool list had grown without a row of their own, plus
+#: hands-free's send_text_message; the product check is the fourth exception
+#: rather than a row).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
@@ -2332,11 +2334,11 @@ def tools_status(*, here: bool = False) -> dict:
     EVERY tool the AI model can be offered has a switch here since 2026-11-04
     (the owner's decision), in eight groups - the raw and everyday ones
     included. The vault organizer's own switch rides beside them as a different
-    kind of row; the three tools whose own switch decides them are named in
+    kind of row; the four tools whose own switch decides them are named in
     `not_switchable` with the plain reason, so the page points at the real
     switch instead of drawing one that would do nothing; and `extra` lists
     every OTHER name in the settings file - a drop-in program's own tool, or
-    one of the three - with its real state and a plain reason (D4). `extra`
+    one of the four - with its real state and a plain reason (D4). `extra`
     rows can be turned OFF from the page; an ON switch exists for every tool
     this PC knows (`items`).
     """

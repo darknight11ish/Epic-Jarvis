@@ -3,5 +3,5 @@
   "summary": "hands-free mode: every waiting approval card is read out to the phone, and one word from a closed list answers it - only after the PC has checked that the voice is the owner's; plus one approved text message to a contact, sent by the phone. OFF by default, and turning it on is one approval card.",
   "module": "jarvis_handsfree",
   "install": "handler",
-  "stack_order": 173
+  "stack_order": 175
 }

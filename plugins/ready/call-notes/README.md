@@ -73,8 +73,8 @@ mechanism `plugins/ready/media-index` uses.
 
 - Module the loader calls: `jarvis_call_notes.install()` (takes the core's Handler)
 - The patch this replaces: none - it is born as a folder
-- Position in the loader's order: 173, the first free slot after the highest
-  generated folder (`skill-menu` is 172)
+- Position in the loader's order: 174, the first free slot after the highest
+  generated folder (`history-purge` is 173, fixed by its own patch index)
 
 **Off by default.** `[call_recording] enabled = false` in
 `jarvis-framework.toml`; with no such table the feature is off too. Turning it

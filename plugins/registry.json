@@ -174,7 +174,7 @@
       "name": "call-notes",
       "module": "jarvis_call_notes",
       "install": "handler",
-      "stack_order": 173,
+      "stack_order": 174,
       "summary": "record a phone call from the Android app: POST /api/call/recording/start|chunk|finish and GET /api/call/recording, so the phone uploads 16 kHz mono PCM, the PC transcribes and labels who spoke, and ONE new Obsidian note is created named for the date and time.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -182,7 +182,7 @@
       "name": "handsfree",
       "module": "jarvis_handsfree",
       "install": "handler",
-      "stack_order": 173,
+      "stack_order": 175,
       "summary": "hands-free mode: every waiting approval card is read out to the phone, and one word from a closed list answers it - only after the PC has checked that the voice is the owner's; plus one approved text message to a contact, sent by the phone. OFF by default, and turning it on is one approval card.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -190,7 +190,7 @@
       "name": "product-check",
       "module": "jarvis_product_check",
       "install": "handler",
-      "stack_order": 173,
+      "stack_order": 176,
       "summary": "check ONE Amazon product page for sponsored-review and incentive patterns: one PC-only card, a read-only read in the owner's own signed-in browser, and the offline engine's reasons report - sample caveat first, counts and examples, every set-aside review with its reasons, never a trust score and never a per-review fake/real verdict.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -198,7 +198,7 @@
       "name": "skill-menu",
       "module": "jarvis_skill_menu",
       "install": "handler",
-      "stack_order": 173,
+      "stack_order": 177,
       "summary": "the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\\.hermes\\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -206,7 +206,7 @@
       "name": "watch-decisions",
       "module": "jarvis_watch_ci",
       "install": "handler",
-      "stack_order": 174,
+      "stack_order": 178,
       "summary": "what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.",
       "why": "born as a folder: it replaces no patch"
     }

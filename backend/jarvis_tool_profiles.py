@@ -103,6 +103,7 @@ PHONE_APPS        = "backend/jarvis_phone_apps.py"
 PLUGINS           = "backend/jarvis_plugins.py"
 BROWSER_CONTROL   = "backend/jarvis_browser_control.py"
 BROWSER_ENGINE    = "backend/jarvis_browser_engine.py"
+PRODUCT_CHECK     = "backend/jarvis_product_check.py"
 SECOND_CARD       = "backend/jarvis_second_card.py"
 RESEARCH          = "backend/jarvis_research.py"
 SEARCH            = "backend/jarvis_search.py"
@@ -828,6 +829,45 @@ PROFILES: dict = {
                        "and powerful\" (it is an in-app switch). Every fetch still "
                        "raises its own card (tier \"ask\").",
         "sources": [AGENT, READPAGE, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "product_check": {
+        "id": "product_check",
+        "title": "Check one Amazon product page for sponsored reviews",
+        "what": "Reads ONE Amazon product page in the owner's own visible, "
+                "signed-in browser window, after ONE PC-only card, and returns "
+                "the engine's reasons report in plain words: the sample caveat, "
+                "the listing facts, the eight signals with their counts and "
+                "examples, every set-aside review with its reason, and what could "
+                "not be checked.",
+        "gives": [
+            "See the patterns behind a listing's reviews, in plain words",
+            "See every review set aside, and why it still counts in the numbers",
+            "Know what could not be checked instead of a confident verdict",
+        ],
+        "touches": "network service, screen",
+        "limits": [
+            "One Amazon product page per card, read-only: nothing is bought, "
+            "added to a cart, ordered, signed in to or typed",
+            "No trust score and no per-review fake/real verdict - a number there "
+            "would be false precision the measured evidence does not support",
+            "A CAPTCHA is never solved and never retried: the owner is asked to "
+            "open the page themselves",
+            "Nothing is stored - the report lives in the answer and nowhere else",
+        ],
+        "combines": {
+            "browser_control": "The check uses the browser module's own read "
+                               "seam for one visible, signed-in page.",
+            "web_search": "Search finds a listing when the owner has no link; the "
+                          "product check reads the one page they name.",
+        },
+        "tier": "off-by-default",
+        "enable_hint": "Off by default: it is switched on by one line in the "
+                       "settings file on this PC (there is no Settings row for it "
+                       "yet). Every check still raises its own card, and only this "
+                       "PC may approve it.",
+        "sources": [AGENT, PRODUCT_CHECK, BROWSER_CONTROL, ASKS_FIRST,
+                    REBUILT_FRAMEWORK],
     },
 
     "calendar_read": {
@@ -1705,7 +1745,7 @@ PROFILES: dict = {
         "id": "feature_guide",
         "title": "Explain one of Jarvis's features",
         "what": "Answers \"what is this feature?\", \"where is it?\" and \"is it "
-                "on?\" from the owner's own feature list - 176 rows in 9 groups, "
+                "on?\" from the owner's own feature list - 178 rows in 9 groups, "
                 "turned into a shipped module - rather than from a guess. The "
                 "counts in this sentence are checked against that module by the "
                 "suite, so they cannot go stale here.",
@@ -2085,9 +2125,10 @@ FAMILIES: dict = {
     "web": {
         "title": "The web - searching it and reading it",
         "what": "Searching the public web through the provider the owner chose, "
-                "reading the words of one page they named, and the two tools that "
-                "grant and withdraw a conversation's search approval.",
-        "tools": ["web_search", "read_web_page",
+                "reading the words of one page they named, checking one Amazon "
+                "product listing for sponsored-review patterns, and the two tools "
+                "that grant and withdraw a conversation's search approval.",
+        "tools": ["web_search", "read_web_page", "product_check",
                   "approve_web_search_for_conversation",
                   "stop_web_search_approval"],
         "impact": "It lets Jarvis answer something it cannot know from the PC - a "

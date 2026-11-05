@@ -6,13 +6,13 @@
  *
  * What must hold:
  * - every tool the model can be offered is drawn with an ON switch, the raw
- *   Tier C set and the everyday helpers included (54 at 2026-11-05, 48 before);
- * - a name this PC does not know, or one of the three whose own switch decides
+ *   Tier C set and the everyday helpers included (55 at 2026-11-05, 48 before);
+ * - a name this PC does not know, or one of the four whose own switch decides
  *   it, is still listed when it is ON, with its real state and the PC's own
  *   plain reason, and that row is an OFF switch only;
  * - after OFF such a row STAYS and says OFF - it is not silently gone;
  * - Rust sends OFF for any real tool name and refuses ON only for a name it
- *   does not know (or one of the three, with the PC's own sentence);
+ *   does not know (or one of the four, with the PC's own sentence);
  * - a PC with nothing else ON sends no `extra`, and the page is unchanged.
  *
  * Runs on plain Node, no browser and no Playwright: the page's pure functions
@@ -56,8 +56,8 @@ check("every formerly locked tool is a switch row with an ON switch", () => {
       `${id} can be switched on from the PC: ${JSON.stringify(tv)}`);
     assert.ok(TOOLS_SWITCHABLE.includes(id), `${id} is in the switchable list`);
   }
-  assert.equal(view.tools.items.length, 54,
-    "54 switches, every tool the model can be offered (six GitHub tools since 2026-11-05)");
+  assert.equal(view.tools.items.length, 55,
+    "55 switches, every tool the model can be offered (six GitHub tools and send_text_message since 2026-11-05)");
 });
 
 check("the fixture really carries the name this PC does not know", () => {
@@ -70,7 +70,7 @@ check("the fixture really carries the name this PC does not know", () => {
   assert.ok(rows.every((r) => r.why.length > 20), "it carries the PC's plain reason");
   assert.ok(rows.every((r) => r.title && r.title !== r.id),
     "it is drawn with its human label, never the raw id");
-  assert.equal(view.tools.items.length, 54, "the switch rows are unchanged");
+  assert.equal(view.tools.items.length, 55, "the switch rows are unchanged");
   assert.ok(TOOLS_SWITCHABLE.includes("web_search"));
   assert.ok(!TOOLS_SWITCHABLE.includes("plugin_scan"));
 });
@@ -102,7 +102,7 @@ check("a PC with nothing else ON sends no extra and draws no extra rows", () => 
   const view = readAsksFirst(C.pc_shipped);
   assert.deepEqual(view.tools.extra, [], "no extra rows");
   assert.deepEqual(extraToolsView(view.tools), [], "nothing is drawn for them");
-  assert.equal(view.tools.items.length, 54);
+  assert.equal(view.tools.items.length, 55);
 });
 
 check("the page draws the extra rows and sends OFF through the same verb", () => {

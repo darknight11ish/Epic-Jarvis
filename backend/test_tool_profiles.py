@@ -67,10 +67,11 @@ import jarvis_tool_profiles as T        # noqa: E402 - after sys.path
 PASSED, FAILED = [], []
 TOML = HERE / "rebuilt" / "jarvis-framework.toml"
 
-#: The two tools whose own module switch - not a line in `[tools].enabled` -
-#: decides whether they are offered at all. Everything else off by default is
-#: simply absent from the shipped list.
-OWN_SWITCH_TOOLS = {"run_data_script", "rea_investigate"}
+#: The three tools whose own module switch - not a line in `[tools].enabled` -
+#: decides whether they are offered at all: the data sandbox, REA, and the
+#: product check (`[product_check] enabled`, 2026-11-04). Everything else off by
+#: default is simply absent from the shipped list.
+OWN_SWITCH_TOOLS = {"run_data_script", "rea_investigate", "product_check"}
 
 
 def check(name, cond, detail=""):
@@ -424,13 +425,17 @@ def t_off_by_default_really_ships_off():
     shipped = shipped_tools()
     config = shipped_config()
     rea = [n for n, p in T.PROFILES.items() if p["tier"] == "off-by-default"]
-    check("exactly the two own-switch tools claim off-by-default",
+    check("exactly the own-switch tools claim off-by-default",
           set(rea) == OWN_SWITCH_TOOLS, str(sorted(rea)))
-    check("neither off-by-default tool is in the shipped [tools].enabled list",
+    check("no off-by-default tool is in the shipped [tools].enabled list",
           not (set(rea) & shipped), str(sorted(set(rea) & shipped)))
     check("the REA module's own switch really ships false ([rea] enabled)",
           config.get("rea", {}).get("enabled") is False,
           str(config.get("rea")))
+    check("the product check's own switch really ships false "
+          "([product_check] enabled)",
+          config.get("product_check", {}).get("enabled") is False,
+          str(config.get("product_check")))
     ok, settings = sandbox_ships_off()
     check("the data sandbox's own switch is OFF with no settings file",
           ok, str(settings))

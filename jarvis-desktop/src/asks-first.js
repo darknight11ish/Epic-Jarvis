@@ -70,8 +70,9 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 54 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
- * that landed with the GitHub tools branch). A DIFFERENT thing from SWITCHABLE
+ * 55 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
+ * that landed with the GitHub tools branch, plus hands-free's
+ * send_text_message). A DIFFERENT thing from SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *

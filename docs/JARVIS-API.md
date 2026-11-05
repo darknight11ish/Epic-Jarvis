@@ -11096,8 +11096,7 @@ the app"**. So every tool the AI model can be offered is switchable ON from the
 Tools page, one approval card each. The only limits left are the five
 non-negotiable rules (`CLAUDE.md`) and the shape below.
 
-**The 54 switches**, in the page's own groups:
-**The 49 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
+**The 55 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
 
 - **Notes and reading:** `calendar_read`, `notes_search`,
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
@@ -11117,22 +11116,18 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 - **Everyday helpers:** `calculator`, `memory_search`, `file_read`,
   `web_search`, `my_files`, `propose_plan`, `change_setting`, `feature_guide` -
   the tools the earlier slice left out.
-- **Jarvis's own tools:** `goals_list`, `goal_add`, `goal_progress`,
+- **Jarvis's own tools (19):** `goals_list`, `goal_add`, `goal_progress`,
   `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
-
-  `plugin_list`, `plugin_switch`, `refresh_abilities`, `self_portrait`,
-  `setup_quiz`, and - since the GitHub tools landed (2026-11-05) - the six
-  on-demand GitHub tools `github_list`, `github_read_file`, `github_ci_status`,
+  `plugin_list`, `plugin_switch`, `send_text_message`, `refresh_abilities`,
+  `self_portrait`, `setup_quiz`, and - since 2026-11-05 - the six on-demand
+  GitHub tools `github_list`, `github_read_file`, `github_ci_status`,
   `github_comment`, `github_open_issue`, `github_rerun_workflow` (the three
   reads share the `github_inspect` action, the other three their own; every
-  use still raises its own card) - these shipped ON and had no switch row at
-  all before 2026-11-04.
-  `plugin_list`, `plugin_switch`, `send_text_message`, `refresh_abilities`,
-  `self_portrait`, `setup_quiz` - these shipped ON and had no switch row at all
-  before
-  2026-11-04.
+  use still raises its own card). The twelve before the GitHub six shipped ON
+  and had no switch row at all before 2026-11-04; `send_text_message` came
+  with hands-free the same day as the GitHub six.
 
-**Three known tools are NOT switches of their own**, because the turn ignores
+**Four known tools are NOT switches of their own**, because the turn ignores
 their line in `[tools].enabled` - a switch whose state the turn ignored would
 be a lie (the rule that removed the web-search grant's two switches on
 2026-11-02). They are named in `tools.not_switchable`, with the PC's own
@@ -11143,6 +11138,10 @@ sentence, and the route refuses ON for them with that sentence rather than
   Data sandbox; `POST /api/sandbox/enabled`). With it on the model is offered
   the tool whether or not the file names it; with it off the file cannot offer
   it.
+- `product_check` - the product check has its OWN switch too (`[product_check]
+  enabled` in the settings file, off by default; §192). With it on the model is
+  offered the tool whether or not `[tools].enabled` names it; with it off a
+  `[tools].enabled` line alone offers nothing.
 - `approve_web_search_for_conversation` and `stop_web_search_approval` - they
   ride with `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`).
 
@@ -11162,9 +11161,7 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the three `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (54), not just Tier A/B. |
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the three `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (49), not just Tier A/B. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (55), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11186,14 +11183,14 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
                              "why": <the plain note>}}
 ```
 
-`items` lists all 54 switches (48 at 2026-11-04; six GitHub tools since 2026-11-05 - every tool the AI model can be
-`items` lists all 49 switches at 2026-11-05 (48 at 2026-11-04; every tool the AI model can be
-offered except the three below), grouped; `vault` is the vault organizer's
-separate switch; `not_switchable` names the three tools whose own switch decides
+`items` lists all 55 switches at 2026-11-05 (48 at 2026-11-04, plus the six
+GitHub tools and hands-free's `send_text_message` - every tool the AI model can be
+offered except the four below), grouped; `vault` is the vault organizer's
+separate switch; `not_switchable` names the four tools whose own switch decides
 them, with the PC's own sentence, so the page points at the real switch instead
 of drawing one that would do nothing. `extra` is D4 (the owner, 2026-11-04):
 every name in `[tools].enabled` that has no row in `items` - a name this PC does
-not know, or one of the three when the file happens to name it - with its state
+not know, or one of the four when the file happens to name it - with its state
 read from the file (`on`) and the PC's own plain `why`; `switchable: false` says
 plainly that the page offers it no ON switch. A tool turned OFF through this
 route stays in `extra` with `on: false` and the line the owner just saw (until

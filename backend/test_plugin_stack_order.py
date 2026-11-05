@@ -76,6 +76,21 @@ a position renumbered with it. The loader's real sequence before this was the
 tie at 170 broken by folder name - `history-purge` then `protected-items` - and
 it is the same sequence now with the tie gone, so, as in 2026-10-16, no shipped
 feature's load order changed: only the labels did.
+
+THE 2026-11-05 WAVE (six PRs landed as one integration branch) produced the same
+shape a third time, and it is recorded here because the same decision was made.
+Four folders had each chosen `stack_order` 173 - "the first free slot at the
+end" - and `skill-menu` still held 173 too; separately, `history-purge`'s number
+is fixed by its patch index, which is NOW 173 (three patches landed before it in
+`$PATCHES` after the paragraph above was written, so that PR's own "index 170"
+is history, not the current number). The patch side again could not move: the
+four hand-numbered newcomers took the next four free slots in the order their
+names had already decided - `call-notes` 174, `handsfree` 175, `product-check`
+176, `skill-menu` 177 - and `watch-decisions` moved 174 -> 178 to stay after
+them. Every folder keeps its position except `history-purge`, which now loads
+first of that group instead of third; the five features share no route, switch
+or handler, so nothing about what loads changed - only the labels did, as on
+2026-10-16 and in the paragraph above.
 """
 from __future__ import annotations
 
