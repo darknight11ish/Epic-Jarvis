@@ -2,15 +2,15 @@
   "tool": "check_zero_jargon.py",
   "review": "Review #8 - zero-jargon beginner readability",
   "version": 1,
-  "generated": "2026-10-23",
+  "generated": "2026-11-04",
   "root": ".",
   "files_scanned": {
-    "android": 374,
-    "backend": 194,
-    "hud": 9,
-    "rust": 111
+    "android": 438,
+    "backend": 230,
+    "hud": 11,
+    "rust": 124
   },
-  "files_scanned_total": 688,
+  "files_scanned_total": 803,
   "allowlist": {
     "words": [
       "android",
@@ -44,18 +44,19 @@
       "api key",
       "https certificate",
       "pairing token",
+      "unencrypted http",
       "windows hello"
     ]
   },
   "counts": {
-    "total": 255,
+    "total": 258,
     "bare_refusals": 25,
     "by_category": {
-      "config_key": 100,
-      "dev_word": 68,
+      "config_key": 99,
+      "dev_word": 70,
       "exception": 1,
-      "internal_state": 27,
-      "module_name": 52,
+      "internal_state": 28,
+      "module_name": 53,
       "search_and_ml": 5,
       "traceback": 2
     },
@@ -65,24 +66,24 @@
       "None": 7,
       "ONNX": 4,
       "WAL": 1,
-      "config key": 100,
+      "config key": 99,
       "exception class": 1,
       "from_this_pc": 1,
-      "jarvis module": 52,
+      "jarvis module": 53,
       "latch": 10,
       "localhost": 1,
       "null": 16,
-      "payload": 9,
+      "payload": 11,
       "socket": 2,
       "sqlite": 1,
       "stderr": 1,
       "stdout": 1,
-      "taint": 16,
+      "taint": 17,
       "traceback": 2
     },
     "by_surface": {
       "android": 9,
-      "backend": 192,
+      "backend": 195,
       "hud": 1,
       "rust": 53
     }
@@ -109,7 +110,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_asks_first.py",
-      "line": 1919,
+      "line": 2447,
       "column": 0,
       "category": "dev_word",
       "term": "socket",
@@ -118,7 +119,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_asks_first.py",
-      "line": 1919,
+      "line": 2447,
       "column": 0,
       "category": "dev_word",
       "term": "socket",
@@ -172,7 +173,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_brain_reads.py",
-      "line": 772,
+      "line": 773,
       "column": 33,
       "category": "config_key",
       "term": "config key",
@@ -181,7 +182,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 1876,
+      "line": 1880,
       "column": 17,
       "category": "config_key",
       "term": "config key",
@@ -190,7 +191,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 2800,
+      "line": 2804,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -199,7 +200,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3040,
+      "line": 3044,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -208,7 +209,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3137,
+      "line": 3141,
       "column": 5,
       "category": "config_key",
       "term": "config key",
@@ -217,7 +218,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3141,
+      "line": 3145,
       "column": 5,
       "category": "config_key",
       "term": "config key",
@@ -226,29 +227,11 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3146,
+      "line": 3150,
       "column": 12,
       "category": "config_key",
       "term": "config key",
       "string": " after that element_token was made - take a "
-    },
-    {
-      "surface": "backend",
-      "path": "backend/jarvis_browser_control.py",
-      "line": 3147,
-      "column": 6,
-      "category": "config_key",
-      "term": "config key",
-      "string": "fresh snapshot_dom()"
-    },
-    {
-      "surface": "backend",
-      "path": "backend/jarvis_browser_control.py",
-      "line": 3150,
-      "column": 32,
-      "category": "config_key",
-      "term": "config key",
-      "string": "the page has changed since that element_token was made - take a "
     },
     {
       "surface": "backend",
@@ -262,7 +245,25 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3157,
+      "line": 3154,
+      "column": 32,
+      "category": "config_key",
+      "term": "config key",
+      "string": "the page has changed since that element_token was made - take a "
+    },
+    {
+      "surface": "backend",
+      "path": "backend/jarvis_browser_control.py",
+      "line": 3155,
+      "column": 6,
+      "category": "config_key",
+      "term": "config key",
+      "string": "fresh snapshot_dom()"
+    },
+    {
+      "surface": "backend",
+      "path": "backend/jarvis_browser_control.py",
+      "line": 3161,
       "column": 5,
       "category": "config_key",
       "term": "config key",
@@ -271,7 +272,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3261,
+      "line": 3265,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -280,7 +281,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3282,
+      "line": 3286,
       "column": 11,
       "category": "config_key",
       "term": "config key",
@@ -289,7 +290,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3297,
+      "line": 3301,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -298,7 +299,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3321,
+      "line": 3325,
       "column": 2,
       "category": "config_key",
       "term": "config key",
@@ -307,7 +308,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3333,
+      "line": 3337,
       "column": 13,
       "category": "config_key",
       "term": "config key",
@@ -316,7 +317,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3335,
+      "line": 3339,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -325,7 +326,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3354,
+      "line": 3358,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -334,7 +335,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3372,
+      "line": 3376,
       "column": 41,
       "category": "config_key",
       "term": "config key",
@@ -343,7 +344,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_browser_control.py",
-      "line": 3598,
+      "line": 3602,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -352,7 +353,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_chat_log.py",
-      "line": 1967,
+      "line": 2386,
       "column": 0,
       "category": "internal_state",
       "term": "taint",
@@ -361,7 +362,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_chat_log.py",
-      "line": 3290,
+      "line": 3901,
       "column": 2,
       "category": "config_key",
       "term": "config key",
@@ -370,7 +371,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_chat_log.py",
-      "line": 3294,
+      "line": 3905,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -379,7 +380,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_chat_log.py",
-      "line": 3309,
+      "line": 3931,
       "column": 1,
       "category": "dev_word",
       "term": "None",
@@ -388,7 +389,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_chat_log.py",
-      "line": 3313,
+      "line": 3935,
       "column": 34,
       "category": "config_key",
       "term": "config key",
@@ -397,7 +398,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_chatbot_api.py",
-      "line": 2140,
+      "line": 2390,
       "column": 0,
       "category": "dev_word",
       "term": "API",
@@ -496,7 +497,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_devices.py",
-      "line": 2692,
+      "line": 3101,
       "column": 0,
       "category": "internal_state",
       "term": "from_this_pc",
@@ -505,7 +506,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_documents.py",
-      "line": 1724,
+      "line": 1893,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -568,7 +569,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_jobs.py",
-      "line": 490,
+      "line": 530,
       "column": 0,
       "category": "internal_state",
       "term": "taint",
@@ -577,7 +578,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_jobs.py",
-      "line": 629,
+      "line": 597,
       "column": 0,
       "category": "internal_state",
       "term": "taint",
@@ -586,7 +587,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_jobs.py",
-      "line": 647,
+      "line": 881,
       "column": 0,
       "category": "internal_state",
       "term": "taint",
@@ -595,7 +596,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_jobs.py",
-      "line": 951,
+      "line": 899,
       "column": 0,
       "category": "internal_state",
       "term": "taint",
@@ -604,7 +605,16 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_jobs.py",
-      "line": 1409,
+      "line": 1217,
+      "column": 0,
+      "category": "internal_state",
+      "term": "taint",
+      "string": "tainted"
+    },
+    {
+      "surface": "backend",
+      "path": "backend/jarvis_jobs.py",
+      "line": 1855,
       "column": 0,
       "category": "internal_state",
       "term": "taint",
@@ -703,7 +713,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_notes.py",
-      "line": 265,
+      "line": 469,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -738,6 +748,24 @@
     },
     {
       "surface": "backend",
+      "path": "backend/jarvis_outbox.py",
+      "line": 208,
+      "column": 0,
+      "category": "dev_word",
+      "term": "payload",
+      "string": "payload"
+    },
+    {
+      "surface": "backend",
+      "path": "backend/jarvis_outbox.py",
+      "line": 334,
+      "column": 0,
+      "category": "dev_word",
+      "term": "payload",
+      "string": "payload"
+    },
+    {
+      "surface": "backend",
       "path": "backend/jarvis_pc_help.py",
       "line": 1148,
       "column": 19,
@@ -766,7 +794,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_presets.py",
-      "line": 178,
+      "line": 233,
       "column": 40,
       "category": "config_key",
       "term": "config key",
@@ -775,7 +803,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_presets.py",
-      "line": 194,
+      "line": 249,
       "column": 15,
       "category": "config_key",
       "term": "config key",
@@ -784,7 +812,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_price_radar.py",
-      "line": 797,
+      "line": 860,
       "column": 8,
       "category": "dev_word",
       "term": "payload",
@@ -838,7 +866,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_schedule.py",
-      "line": 1567,
+      "line": 3429,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -847,7 +875,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_schedule.py",
-      "line": 1567,
+      "line": 3429,
       "column": 19,
       "category": "dev_word",
       "term": "null",
@@ -856,7 +884,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_schedule.py",
-      "line": 1632,
+      "line": 3494,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -865,7 +893,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_schedule.py",
-      "line": 1889,
+      "line": 3816,
       "column": 19,
       "category": "dev_word",
       "term": "null",
@@ -874,7 +902,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_schedule.py",
-      "line": 3424,
+      "line": 6859,
       "column": 12,
       "category": "internal_state",
       "term": "latch",
@@ -928,7 +956,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_search.py",
-      "line": 651,
+      "line": 871,
       "column": 9,
       "category": "module_name",
       "term": "jarvis module",
@@ -937,7 +965,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_search.py",
-      "line": 1566,
+      "line": 1886,
       "column": 2,
       "category": "config_key",
       "term": "config key",
@@ -946,7 +974,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_search.py",
-      "line": 1586,
+      "line": 1926,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -955,7 +983,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_search.py",
-      "line": 1595,
+      "line": 1935,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -964,7 +992,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_second_card.py",
-      "line": 1831,
+      "line": 2074,
       "column": 18,
       "category": "config_key",
       "term": "config key",
@@ -973,7 +1001,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_second_card.py",
-      "line": 1832,
+      "line": 2075,
       "column": 13,
       "category": "config_key",
       "term": "config key",
@@ -982,7 +1010,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_second_card.py",
-      "line": 4236,
+      "line": 4571,
       "column": 40,
       "category": "module_name",
       "term": "jarvis module",
@@ -991,7 +1019,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_second_card.py",
-      "line": 5242,
+      "line": 5587,
       "column": 33,
       "category": "dev_word",
       "term": "null",
@@ -1152,6 +1180,15 @@
     },
     {
       "surface": "backend",
+      "path": "backend/jarvis_self_portrait.py",
+      "line": 460,
+      "column": 0,
+      "category": "module_name",
+      "term": "jarvis module",
+      "string": "jarvis_asks_first.py is not on this PC"
+    },
+    {
+      "surface": "backend",
       "path": "backend/jarvis_sensitive.py",
       "line": 2925,
       "column": 573,
@@ -1162,7 +1199,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_setup.py",
-      "line": 439,
+      "line": 556,
       "column": 62,
       "category": "dev_word",
       "term": "None",
@@ -1171,7 +1208,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_setup.py",
-      "line": 455,
+      "line": 574,
       "column": 57,
       "category": "dev_word",
       "term": "None",
@@ -1180,7 +1217,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_setup.py",
-      "line": 456,
+      "line": 575,
       "column": 26,
       "category": "dev_word",
       "term": "None",
@@ -1189,7 +1226,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_setup.py",
-      "line": 1172,
+      "line": 1841,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1198,7 +1235,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_setup.py",
-      "line": 1201,
+      "line": 1870,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1288,7 +1325,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_sky.py",
-      "line": 1062,
+      "line": 1070,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -1306,7 +1343,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 644,
+      "line": 672,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -1315,7 +1352,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1073,
+      "line": 1101,
       "column": 8,
       "category": "config_key",
       "term": "config key",
@@ -1324,7 +1361,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1401,
+      "line": 1429,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1333,7 +1370,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1414,
+      "line": 1442,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1342,7 +1379,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1491,
+      "line": 1519,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1351,7 +1388,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1504,
+      "line": 1532,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1360,7 +1397,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1547,
+      "line": 1575,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1369,7 +1406,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1575,
+      "line": 1603,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1378,7 +1415,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1665,
+      "line": 1693,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1387,7 +1424,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1671,
+      "line": 1699,
       "column": 7,
       "category": "search_and_ml",
       "term": "ONNX",
@@ -1396,7 +1433,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1681,
+      "line": 1709,
       "column": 7,
       "category": "search_and_ml",
       "term": "ONNX",
@@ -1405,7 +1442,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 1886,
+      "line": 1914,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1414,7 +1451,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 2405,
+      "line": 2449,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1423,7 +1460,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 3071,
+      "line": 3207,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1432,7 +1469,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 3148,
+      "line": 3291,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1441,7 +1478,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 3337,
+      "line": 3507,
       "column": 25,
       "category": "module_name",
       "term": "jarvis module",
@@ -1450,7 +1487,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 4189,
+      "line": 4416,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1459,7 +1496,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_speech.py",
-      "line": 4200,
+      "line": 4427,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1531,7 +1568,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_tellme.py",
-      "line": 531,
+      "line": 550,
       "column": 27,
       "category": "config_key",
       "term": "config key",
@@ -1567,7 +1604,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_tool_updates.py",
-      "line": 550,
+      "line": 732,
       "column": 32,
       "category": "module_name",
       "term": "jarvis module",
@@ -1576,7 +1613,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_tool_updates.py",
-      "line": 580,
+      "line": 796,
       "column": 31,
       "category": "module_name",
       "term": "jarvis module",
@@ -1585,7 +1622,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 1072,
+      "line": 1261,
       "column": 21,
       "category": "module_name",
       "term": "jarvis module",
@@ -1594,7 +1631,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 1080,
+      "line": 1269,
       "column": 33,
       "category": "config_key",
       "term": "config key",
@@ -1603,7 +1640,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 1219,
+      "line": 1424,
       "column": 9,
       "category": "config_key",
       "term": "config key",
@@ -1612,7 +1649,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 1233,
+      "line": 1438,
       "column": 9,
       "category": "config_key",
       "term": "config key",
@@ -1621,7 +1658,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 1285,
+      "line": 1522,
       "column": 0,
       "category": "config_key",
       "term": "config key",
@@ -1630,7 +1667,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 1741,
+      "line": 2142,
       "column": 28,
       "category": "config_key",
       "term": "config key",
@@ -1639,7 +1676,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 1747,
+      "line": 2148,
       "column": 4,
       "category": "config_key",
       "term": "config key",
@@ -1648,7 +1685,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_vault_organizer.py",
-      "line": 2140,
+      "line": 2558,
       "column": 7,
       "category": "config_key",
       "term": "config key",
@@ -1675,7 +1712,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_voice_flow.py",
-      "line": 242,
+      "line": 459,
       "column": 32,
       "category": "config_key",
       "term": "config key",
@@ -1684,7 +1721,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_voice_flow.py",
-      "line": 246,
+      "line": 463,
       "column": 17,
       "category": "module_name",
       "term": "jarvis module",
@@ -1693,16 +1730,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_voice_flow.py",
-      "line": 735,
-      "column": 32,
-      "category": "config_key",
-      "term": "config key",
-      "string": "switched off on the PC ([voice] one_moment_enabled = false in "
-    },
-    {
-      "surface": "backend",
-      "path": "backend/jarvis_voice_flow.py",
-      "line": 863,
+      "line": 1078,
       "column": 0,
       "category": "module_name",
       "term": "jarvis module",
@@ -1729,7 +1757,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_voices.py",
-      "line": 2028,
+      "line": 2117,
       "column": 17,
       "category": "module_name",
       "term": "jarvis module",
@@ -1738,7 +1766,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_voices.py",
-      "line": 2752,
+      "line": 2841,
       "column": 0,
       "category": "dev_word",
       "term": "stderr",
@@ -1756,7 +1784,7 @@
     {
       "surface": "backend",
       "path": "backend/jarvis_wiki.py",
-      "line": 707,
+      "line": 733,
       "column": 10,
       "category": "dev_word",
       "term": "HTTP",
@@ -1855,7 +1883,7 @@
     {
       "surface": "android",
       "path": "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt",
-      "line": 1467,
+      "line": 1529,
       "column": 0,
       "category": "dev_word",
       "term": "None",
@@ -1864,7 +1892,7 @@
     {
       "surface": "android",
       "path": "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt",
-      "line": 1597,
+      "line": 1659,
       "column": 33,
       "category": "internal_state",
       "term": "latch",
@@ -1873,7 +1901,7 @@
     {
       "surface": "android",
       "path": "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt",
-      "line": 1621,
+      "line": 1683,
       "column": 27,
       "category": "internal_state",
       "term": "latch",
@@ -1882,7 +1910,7 @@
     {
       "surface": "android",
       "path": "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt",
-      "line": 1628,
+      "line": 1690,
       "column": 4,
       "category": "internal_state",
       "term": "latch",
@@ -1900,7 +1928,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/appearance.rs",
-      "line": 254,
+      "line": 288,
       "column": 17,
       "category": "dev_word",
       "term": "HTTP",
@@ -1909,7 +1937,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/appearance.rs",
-      "line": 416,
+      "line": 450,
       "column": 19,
       "category": "dev_word",
       "term": "HTTP",
@@ -1945,7 +1973,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/brain.rs",
-      "line": 937,
+      "line": 1145,
       "column": 19,
       "category": "dev_word",
       "term": "HTTP",
@@ -1954,7 +1982,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/brain.rs",
-      "line": 1007,
+      "line": 1230,
       "column": 19,
       "category": "dev_word",
       "term": "HTTP",
@@ -1963,7 +1991,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/brain.rs",
-      "line": 1024,
+      "line": 1249,
       "column": 0,
       "category": "dev_word",
       "term": "HTTP",
@@ -1999,7 +2027,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/brain/pictures.rs",
-      "line": 468,
+      "line": 638,
       "column": 2,
       "category": "dev_word",
       "term": "null",
@@ -2053,7 +2081,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/commands.rs",
-      "line": 1716,
+      "line": 1737,
       "column": 20,
       "category": "dev_word",
       "term": "HTTP",
@@ -2062,7 +2090,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/commands.rs",
-      "line": 2026,
+      "line": 2047,
       "column": 20,
       "category": "dev_word",
       "term": "HTTP",
@@ -2071,7 +2099,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/commands.rs",
-      "line": 2575,
+      "line": 2661,
       "column": 20,
       "category": "dev_word",
       "term": "HTTP",
@@ -2080,7 +2108,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/commands.rs",
-      "line": 3030,
+      "line": 3124,
       "column": 20,
       "category": "dev_word",
       "term": "HTTP",
@@ -2089,7 +2117,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/commands.rs",
-      "line": 3257,
+      "line": 3363,
       "column": 13,
       "category": "config_key",
       "term": "config key",
@@ -2098,7 +2126,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/commands.rs",
-      "line": 5836,
+      "line": 6447,
       "column": 0,
       "category": "dev_word",
       "term": "HTTP",
@@ -2143,7 +2171,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/live.rs",
-      "line": 1169,
+      "line": 1170,
       "column": 9,
       "category": "config_key",
       "term": "config key",
@@ -2215,7 +2243,7 @@
     {
       "surface": "rust",
       "path": "jarvis-desktop/src-tauri/src/sidecar.rs",
-      "line": 754,
+      "line": 940,
       "column": 20,
       "category": "dev_word",
       "term": "HTTP",
@@ -2377,7 +2405,7 @@
     {
       "surface": "hud",
       "path": "jarvis-desktop/src/jarvis_hud.html",
-      "line": 1818,
+      "line": 3418,
       "column": 43,
       "category": "module_name",
       "term": "jarvis module",
@@ -2402,21 +2430,21 @@
     {
       "surface": "backend",
       "file": "backend/jarvis_backup.py",
-      "line": 3044,
+      "line": 4005,
       "string": "not found",
       "normalised": "not found"
     },
     {
       "surface": "backend",
       "file": "backend/jarvis_backup.py",
-      "line": 3065,
+      "line": 4033,
       "string": "not found",
       "normalised": "not found"
     },
     {
       "surface": "backend",
       "file": "backend/jarvis_browser_control.py",
-      "line": 1912,
+      "line": 1916,
       "string": "not found",
       "normalised": "not found"
     },
@@ -2444,14 +2472,14 @@
     {
       "surface": "backend",
       "file": "backend/jarvis_intake.py",
-      "line": 509,
+      "line": 529,
       "string": "unavailable",
       "normalised": "unavailable"
     },
     {
       "surface": "backend",
       "file": "backend/jarvis_limits.py",
-      "line": 918,
+      "line": 1133,
       "string": "denied",
       "normalised": "denied"
     },
@@ -2479,14 +2507,14 @@
     {
       "surface": "backend",
       "file": "backend/jarvis_presets.py",
-      "line": 493,
+      "line": 1433,
       "string": "not found",
       "normalised": "not found"
     },
     {
       "surface": "backend",
       "file": "backend/jarvis_presets.py",
-      "line": 514,
+      "line": 1454,
       "string": "not found",
       "normalised": "not found"
     },
@@ -2514,14 +2542,14 @@
     {
       "surface": "backend",
       "file": "backend/jarvis_setup.py",
-      "line": 1548,
+      "line": 2380,
       "string": "not found",
       "normalised": "not found"
     },
     {
       "surface": "backend",
       "file": "backend/jarvis_setup.py",
-      "line": 1562,
+      "line": 2394,
       "string": "not found",
       "normalised": "not found"
     },

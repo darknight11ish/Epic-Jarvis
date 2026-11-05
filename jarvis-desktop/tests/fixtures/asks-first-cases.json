@@ -1690,7 +1690,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -3572,7 +3572,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -5449,7 +5449,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -7321,7 +7321,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -9213,7 +9213,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -11100,7 +11100,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -12972,7 +12972,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -14858,7 +14858,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {
@@ -16735,7 +16735,7 @@
       "id": "rea_investigate",
       "last": null,
       "on": false,
-      "title": "Inspecting a program, app or binary with REA (read-only, one card each; off unless you switch it on)",
+      "title": "Reverse-engineering, debugging, patching and instrumenting a program or app on this PC with REA (one card every time; off unless you switch it on)",
       "waiting": false
      },
      {

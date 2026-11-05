@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **50 drop-in modules**, in [`ready/`](ready/) -
+- **51 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **28** replace a patch, and are generated from it;
-  - **22** replace no patch: they were born as folders, and
+  - **23** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **143 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -56,7 +56,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 22 were never patches. There is nothing in the core
+These 23 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -87,6 +87,7 @@ it is one `apply-patches.ps1` copies in.
 | 171 | `send-file` | send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path. |
 | 172 | `skill-menu` | the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\.hermes\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all. |
 | 173 | `call-notes` | record a phone call from the Android app: POST /api/call/recording/start\|chunk\|finish and GET /api/call/recording, so the phone uploads 16 kHz mono PCM, the PC transcribes and labels who spoke, and ONE new Obsidian note is created named for the date and time. |
+| 173 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 
 ## What stays in the core
 

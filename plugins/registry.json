@@ -7,8 +7,8 @@
     "core": 143,
     "missing": 0
   },
-  "folder_count": 22,
-  "ready_count": 50,
+  "folder_count": 23,
+  "ready_count": 51,
   "folders": [
     {
       "name": "skill-hub",
@@ -184,6 +184,14 @@
       "install": "handler",
       "stack_order": 173,
       "summary": "record a phone call from the Android app: POST /api/call/recording/start|chunk|finish and GET /api/call/recording, so the phone uploads 16 kHz mono PCM, the PC transcribes and labels who spoke, and ONE new Obsidian note is created named for the date and time.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "watch-decisions",
+      "module": "jarvis_watch_ci",
+      "install": "handler",
+      "stack_order": 173,
+      "summary": "what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

@@ -67,6 +67,10 @@ import {
 } from "./galaxy-presets.js";
 const menuManager = createMenuManager();
 import { fallbackTitle } from "./card-words.js";
+// "Needs you" first, then one collapsed "Quiet / healthy" bar (2026-11-04,
+// pattern 4). The predicate and the one-line summary live in that module so
+// the phone's Kotlin half and this one cannot drift; this file only draws.
+import { HIDE, NEEDS_YOU, SHOW, partitionJobs, quietSummary } from "./attention.js";
 import { stepText } from "./step-words.js";
 import { validToFromText } from "./valid-to.js";
 // Whether a model can chat, and the words when it cannot (shared with the
@@ -13031,6 +13035,74 @@ function jobGrantActions(job, grants) {
   ];
 }
 
+/**
+ * The "Needs you" half: a person has to decide, answer, retry or read a
+ * failure before these jobs can move. Only called when the list is non-empty;
+ * an empty one is not drawn at all, so it takes zero pixels (no heading, no
+ * empty box, no gap) - the whole point of the slice.
+ */
+function renderNeedsYou(jobs, paint) {
+  const wrap = el("div", "attention-needs");
+  wrap.append(el("h3", "attention-head", NEEDS_YOU));
+  const list = el("div", "rows");
+  for (const job of jobs) list.append(paint(job));
+  wrap.append(list);
+  return wrap;
+}
+
+/**
+ * The "Quiet / healthy" half: ONE line, collapsed, and the full list only
+ * after a click. The bar is a real button carrying `aria-expanded`, so a
+ * keyboard and a screen reader get the same fact as the two words Show/Hide.
+ *
+ * The rows inside are the SAME rows the top section draws, so a quiet job
+ * keeps its Cancel and its tag; opening this cannot approve anything.
+ */
+function renderQuietBar(jobs, paint) {
+  const wrap = el("div", "attention-quiet");
+  const bar = el("button", "quiet-bar");
+  bar.type = "button";
+  bar.setAttribute("aria-expanded", "false");
+  const caret = el("span", "quiet-caret", "▸");
+  caret.setAttribute("aria-hidden", "true");
+  const words = el("span", "quiet-words", quietSummary(jobs));
+  const hint = el("span", "quiet-hint", SHOW);
+  bar.append(caret, words, hint);
+  const list = el("div", "rows quiet-list");
+  list.id = "quiet-jobs";
+  list.hidden = true;
+  bar.setAttribute("aria-controls", list.id);
+  for (const job of jobs) list.append(paint(job));
+  bar.addEventListener("click", () => {
+    const open = bar.getAttribute("aria-expanded") === "true";
+    bar.setAttribute("aria-expanded", open ? "false" : "true");
+    list.hidden = open;
+    caret.textContent = open ? "▸" : "▾";
+    hint.textContent = open ? SHOW : HIDE;
+  });
+  wrap.append(bar, list);
+  return wrap;
+}
+
+/**
+ * The Work tab's "Background jobs" card.
+ *
+ * ATTENTION FIRST (2026-11-04, pattern 4 of the owner-forwarded spec): the
+ * jobs that wait for a person are drawn first under "Needs you", expanded,
+ * with the one action each is waiting on. Everything else is a single
+ * collapsed "Quiet / healthy" line that opens on a click. When nothing needs
+ * the owner the top section is not created at all, so it takes ZERO pixels.
+ *
+ * The split is `attention.js`'s `waitsForPerson`: it prefers the PC's own
+ * `waits_for_person` boolean when a payload carries it and derives the same
+ * answer from the state otherwise, which is why this card looks right against
+ * an older backend that has no such field.
+ *
+ * NOTHING HERE APPROVES ANYTHING. The only actions are the ones the rows
+ * always had (a one-shot grant answer, Cancel); the bar only folds and unfolds
+ * a list. It also starts no polling: it is rebuilt by the same
+ * `load(["jobs"])` the view already makes.
+ */
 function renderJobs() {
   const body = state.data.jobs || {};
   const why = unavailable("jobs");
@@ -13045,82 +13117,85 @@ function renderJobs() {
   // a second read to know what it is asking the owner to allow.
   const grants = Array.isArray(body.grants) ? body.grants : [];
 
-  rows(
-    dom.jobs,
-    list,
-    (j) => {
-      const jobState = String(j.state || "queued");
-      const live = jobState === "running" || jobState === "queued";
-      const grant = jobState === "waiting_approval"
-        ? grants.find((g) => String(g.job_id) === String(j.id))
-        : undefined;
-      // Waiting, with no grant left: the owner has answered and the job is
-      // waiting for the next background check to use (or act on) that answer.
-      const answered = jobState === "waiting_approval" && !grant;
-      // Either set of names: this window's (caps, tainted, created) or the
-      // phone's (capabilities, private, progress). jarvis_jobs.py is only on
-      // the owner's PC, so both apps read both.
-      const caps = Array.isArray(j.caps) && j.caps.length ? j.caps
-        : Array.isArray(j.capabilities) ? j.capabilities : [];
-      const progress = typeof j.progress === "number" ? `${Math.round(j.progress * 100)}% done` : "";
-      const actions = jobGrantActions(j, grants);
-      if (live) {
-        actions.push(
-          button(
-            "Cancel",
-            async () => {
-              if (
-                !confirm(
-                  `Cancel "${j.label || j.id}"?\n\n` +
-                    "Cancelling works mid-step and a cancelled job is not " +
-                    "resumable — it starts again from the beginning or not at all."
-                )
-              ) {
-                return;
-              }
-              try {
-                await invoke("brain_cancel_job", { id: String(j.id) });
-                toast("Cancelled.", "ok");
-                await load(["jobs"], { quiet: true });
-                render("work");
-              } catch (error) {
-                toast(String((error && error.message) || error), "bad");
-              }
-            },
-            { danger: true }
-          )
-        );
-      }
-      return row({
-        // A parked job that is waiting on the owner says so in its tag; the
-        // raw state is what colours it.
-        tag: grant ? "waiting for you" : jobState,
-        state: jobState,
-        title: String(j.label || j.handler || j.id || "(job)"),
-        meta: [
-          grant ? `wants: ${fallbackTitle(grant.action || "that")} — one answer, for this job only` : "",
-          answered ? "answered; it carries on at the next background check" : "",
-          // The frozen capability set, shown because it is the promise: it was
-          // fixed when the job was created and it cannot grow.
-          caps.length ? `frozen capabilities: ${caps.join(", ")}` : "no capabilities",
-          j.tainted ? "tainted — this job read private data and stays local" : "",
-          j.private ? "private — the phone is not shown what this is working on" : "",
-          [ago(j.created), j.result_summary || j.error || "", progress].filter(Boolean).join(" · "),
-        ],
-        actions,
-      });
-    },
-    "No background jobs."
-  );
+  /** One job row, whichever section it lands in. */
+  const paintJob = (j) => {
+    const jobState = String(j.state || "queued");
+    const live = jobState === "running" || jobState === "queued";
+    const grant = jobState === "waiting_approval"
+      ? grants.find((g) => String(g.job_id) === String(j.id))
+      : undefined;
+    // Waiting, with no grant left: the owner has answered and the job is
+    // waiting for the next background check to use (or act on) that answer.
+    const answered = jobState === "waiting_approval" && !grant;
+    // Either set of names: this window's (caps, tainted, created) or the
+    // phone's (capabilities, private, progress). jarvis_jobs.py is only on
+    // the owner's PC, so both apps read both.
+    const caps = Array.isArray(j.caps) && j.caps.length ? j.caps
+      : Array.isArray(j.capabilities) ? j.capabilities : [];
+    const progress = typeof j.progress === "number" ? `${Math.round(j.progress * 100)}% done` : "";
+    const actions = jobGrantActions(j, grants);
+    if (live) {
+      actions.push(
+        button(
+          "Cancel",
+          async () => {
+            if (
+              !confirm(
+                `Cancel "${j.label || j.id}"?\n\n` +
+                  "Cancelling works mid-step and a cancelled job is not " +
+                  "resumable — it starts again from the beginning or not at all."
+              )
+            ) {
+              return;
+            }
+            try {
+              await invoke("brain_cancel_job", { id: String(j.id) });
+              toast("Cancelled.", "ok");
+              await load(["jobs"], { quiet: true });
+              render("work");
+            } catch (error) {
+              toast(String((error && error.message) || error), "bad");
+            }
+          },
+          { danger: true }
+        )
+      );
+    }
+    return row({
+      // A parked job that is waiting on the owner says so in its tag; the
+      // raw state is what colours it.
+      tag: grant ? "waiting for you" : jobState,
+      state: jobState,
+      title: String(j.label || j.handler || j.id || "(job)"),
+      meta: [
+        grant ? `wants: ${fallbackTitle(grant.action || "that")} — one answer, for this job only` : "",
+        answered ? "answered; it carries on at the next background check" : "",
+        // The frozen capability set, shown because it is the promise: it was
+        // fixed when the job was created and it cannot grow.
+        caps.length ? `frozen capabilities: ${caps.join(", ")}` : "no capabilities",
+        j.tainted ? "tainted — this job read private data and stays local" : "",
+        j.private ? "private — the phone is not shown what this is working on" : "",
+        [ago(j.created), j.result_summary || j.error || "", progress].filter(Boolean).join(" · "),
+      ],
+      actions,
+    });
+  };
+
+  const { needs, quiet } = partitionJobs(list);
+  // What `rows()` used to do for this container, now done explicitly: the card
+  // is a form, then up to two sections, then the task list. There is no
+  // "Needs you" node at all when `needs` is empty - zero pixels, not an empty
+  // box - and no bar when there is nothing quiet to fold away.
+  dom.jobs.replaceChildren();
   // The way in sits above the list, so starting a job is not something the
-  // owner has to know to look for at the bottom. `rows()` clears the
-  // container, so this has to be re-added on every render - the same reason
-  // renderTaskList() is appended below.
-  dom.jobs.prepend(renderJobStart(body));
+  // owner has to know to look for at the bottom.
+  dom.jobs.append(renderJobStart(body));
+  if (needs.length) dom.jobs.append(renderNeedsYou(needs, paintJob));
+  if (quiet.length) dom.jobs.append(renderQuietBar(quiet, paintJob));
+  if (!list.length) dom.jobs.append(el("p", "empty", "No background jobs."));
   // Appended AFTER the Long Fuse list is painted, so this adds a section to
-  // the same card without touching a line of the code above. `rows()` clears
-  // the container, so the block has to be rebuilt on every render - which is
-  // why this is here and not in a render of its own.
+  // the same card without touching a line of the code above. Rebuilding it on
+  // every render is why this is here and not in a render of its own.
   dom.jobs.append(renderTaskList());
 }
 

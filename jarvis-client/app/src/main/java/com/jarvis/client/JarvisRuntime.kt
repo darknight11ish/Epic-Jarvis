@@ -10497,28 +10497,36 @@ object JarvisRuntime {
 
     /**
      * "Forget these" (`action` "forget": the PC raises ONE approval card
-     * listing every item) or Undo (`action` "undo": no card). "Forget these"
-     * is held on a stale link (rule 4), like the desktop's
-     * `forget_range_write` - it acts on a list read over a link that cannot
-     * be confirmed live. Undo is never held: it only puts back what the
-     * owner had a few minutes ago, and holding it could let the ten minutes
-     * run out. When a card was raised, the queue is read at once so it
-     * shows here.
+     * listing every item, and changes nothing), the SECOND yes (`action`
+     * "confirm": the held id and a literal `yes: true` - the PC forgets the
+     * facts and deletes the chats, keeping the 10-minute Undo) or Undo
+     * (`action` "undo": no card).
+     *
+     * Both steps that change something are held on a stale link (rule 4),
+     * like the desktop's `forget_range_write` - they act on a list read over a
+     * link that cannot be confirmed live. Undo is never held: it only puts
+     * back what the owner had a few minutes ago, and holding it could let the
+     * ten minutes run out. When a card was raised, the queue is read at once
+     * so it shows here.
      */
     suspend fun forgetRangeWrite(action: String, json: String): com.jarvis.client.net.ForgetRange.Outcome {
         val fr = com.jarvis.client.net.ForgetRange
         if (fr.heldOnStale(action)) {
             actionBlocker()?.let { return com.jarvis.client.net.ForgetRange.Outcome(false, false, it) }
         }
-        val path = if (action == "undo") fr.UNDO_PATH else fr.PATH
+        val path = when (action) {
+            "undo" -> fr.UNDO_PATH
+            "confirm" -> fr.CONFIRM_PATH
+            else -> fr.PATH
+        }
         // Read before the card is raised, so an older ending cannot be mistaken for its answer.
-        val before = if (action == "undo") 0.0 else (api.forgetRangeCall(fr.PATH, null) as? ApiResult.Ok)?.let { fr.lastEndedAt(it.value) } ?: 0.0
+        val before = if (action == "forget") (api.forgetRangeCall(fr.PATH, null) as? ApiResult.Ok)?.let { fr.lastEndedAt(it.value) } ?: 0.0 else 0.0
         return when (val r = api.forgetRangeCall(path, json)) {
             is ApiResult.Ok -> fr.said(r.value, if (action == "undo") "Put back." else fr.w("waiting")).also {
                 if (it.waiting) refreshPending()
                 // The chats on the card, for Home once it is approved (the
                 // chat audit, 2026-09-28): see [forgetRangeSaw].
-                if (action != "undo" && it.waiting) {
+                if (action == "forget" && it.waiting) {
                     forgetRangeChats = fr.chatsIn(json)
                     forgetRangeBase = before
                 }
