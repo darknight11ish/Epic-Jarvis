@@ -204,6 +204,13 @@ TOOL_NAMES = {
     "plugin_list": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
     "plugin_switch": "Switching ONE of Jarvis's own drop-in plugins on (one card) "
                      "or off (instant); it takes effect the next time Jarvis starts",
+    # The product check (2026-11-04, the owner's choice "wire the existing
+    # product check"): ONE Amazon product page read in the owner's own
+    # signed-in browser, behind one PC-only card. Listed here because
+    # test_reach.py requires every tool to have plain words for the page.
+    "product_check": "Checking one Amazon product page's reviews for sponsored-review "
+                     "patterns (one page, one PC-only card, read-only; off unless you "
+                     "switch it on)",
     # What Jarvis is made of, and the owner's own old conversations (2026-11-03;
     # jarvis_self_portrait.py). test_reach.py requires plain words for every
     # tool; the two conversation reads change nothing and the clear is ONE card

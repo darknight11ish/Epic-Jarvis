@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 176 rows from features/features.json.
+The owner's feature list, as data: 177 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 6c927c6f778e2b195dc2abce6eebd84fefeba0ea87b8bac95a36ee0d4eead964); the apps' Features pages read their own
+`features/features.json` (sha256 f9b3b64498706cd804fa4948cb5d2f2531a8347a7ae5ddd98c2c1e0423f7d74f); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "6c927c6f778e2b195dc2abce6eebd84fefeba0ea87b8bac95a36ee0d4eead964"
+SOURCE_SHA256 = "f9b3b64498706cd804fa4948cb5d2f2531a8347a7ae5ddd98c2c1e0423f7d74f"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -992,6 +992,19 @@ FEATURES = (
         "covers": [],
     },
     {
+        "id": "product-check",
+        "group": "Money and health",
+        "title": "Check a product's reviews",
+        "what": "A read-only product check: give Jarvis one Amazon product link and it reads that page in your own signed-in browser, then reports what the reviews themselves show - Verified Purchase and Vine badges, incentive wording, near-duplicate text, review-date bursts, the rating shape, generic prose and reviews that do not match the product - with counts, examples and every review set aside and why.",
+        "where": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+        "asks": "ONE card naming the product page, on the PC only: \"Read this product page in your own browser session? Read-only; nothing is bought or added to a cart.\" A cart, checkout, order, account, payment or sign-in address is refused before any card, and a non-Amazon address is refused too.",
+        "limit": "Off by default. Amazon only, and it reads the sample Amazon chose to show - never all of the reviews, so the report's caveat comes first. It never buys, orders, adds to a cart, signs in, types or clicks, solves a CAPTCHA, follows a link or stores the page; it says plainly what it could not check. There is no trust score and no fake/real verdict for any review - the report is evidence, counts and reasons.",
+        "surface": "desktop",
+        "surface_reason": "The visible browser window it reads in, and the sign-in that window keeps, are on the PC, so the card can only be approved there; the phone has no tool, no switch and no report screen for the product check yet (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["product check", "check a product", "sponsored reviews", "fake reviews", "unbiased product research", "product research"],
+        "covers": [],
+    },
+    {
         "id": "home-status",
         "group": "Home",
         "title": "Ask how the house is",
@@ -1609,7 +1622,7 @@ FEATURES = (
         "what": "Every way Jarvis can reach something outside itself, and whether it is on right now.",
         "where": "Settings, What Jarvis can reach.",
         "asks": "No card - it only reads the PC's own settings and the live state of each way out.",
-        "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The three whose own switch decides them say which switch: the data and maths sandbox, and Web search for the two conversation tools.",
+        "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The four whose own switch decides them say which switch: the data and maths sandbox, Web search for the two conversation tools, and the product check, by the line [product_check] enabled = true.",
         "surface": "both",
         "aliases": ["what jarvis can reach"],
         "covers": ["settings.reach", "documents-and-search"],
@@ -1886,7 +1899,7 @@ FEATURES = (
         "what": "Every action Jarvis can take and whether it asks you first, in plain words.",
         "where": "Settings, What asks first - in both apps.",
         "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch for EVERY tool the AI can be offered since 2026-11-04 - the raw ones and the everyday helpers included - PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
-        "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the three whose own switch decides them (the data and maths sandbox, and the two web-search conversation tools) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
+        "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the four whose own switch decides them (the data and maths sandbox, the two web-search conversation tools, and the product check) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
         "surface": "both",
         "covers": ["settings.asks-first", "asks-first", "home-devices", "money-and-health"],
     },

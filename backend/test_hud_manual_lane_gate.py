@@ -202,6 +202,12 @@ def t_the_patch_and_the_base():
              # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
              # rows this patch wrote, and it rewrites none of its lines.
              "handsfree.patch"}
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It touches jarvis_gate.py only (one _TOOL_ACTIONS line, its own
+             # action's _RISK row at the end of the file, and a
+             # _NO_RULE_FROM_DENIAL union) - no line this patch wrote.
+             "product-check.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

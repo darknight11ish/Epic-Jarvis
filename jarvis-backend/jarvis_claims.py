@@ -171,6 +171,11 @@ READ_ONLY_TOOLS = frozenset({
     # changed after it must still be corrected, which is this set: read-only
     # for the claim check, exactly as the tool's own docstring says.
     "setup_quiz",
+    # "product_check" (2026-11-04): it opens ONE product page in the owner's
+    # own browser and reads it, and changes nothing - no cart, order, sign-in,
+    # click or typing. Read-only for the claim check: a sentence saying
+    # something was changed after it must still be corrected.
+    "product_check",
 })
 
 #: The other half of the same classification (audit H4): every tool that can

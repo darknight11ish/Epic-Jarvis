@@ -1201,6 +1201,13 @@ BACKEND_ONLY = {
     # own unsent copy). ARCHITECTURE section 8 and docs/CALL-RECORDING.md
     # section 7 (the retention policy) say why.
     "/api/call/recording/delete": "Deleting ONE recorded call from this PC (2026-11-05, the 2026-11-05 privacy audit's D4; JARVIS-API section 188.1; jarvis_call_notes.py). It removes that session's whole folder - audio.pcm, audio.wav, transcript.md, receipt.json and any part-*.wav - which is also its row in the list route, behind ONE delete_call_recording approval card at tier ask; deleting audio cannot be undone. PC-ONLY: it refuses any device but this PC through jarvis_owner_check.from_this_pc before the body is read, and the Obsidian note is a separate document that stays. It answers 202 while its card waits, 409 while the recording is still being captured or transcribed, and 404 for an id that is not one of ours. No app calls it yet - there is no recordings screen on either app, and the desktop screen it belongs behind is the named follow-up (ARCHITECTURE section 8); docs/CALL-RECORDING.md section 7 is the retention policy that names it as the only route that deletes.",
+    # The product check's ONE route (2026-11-04, the owner's choice "wire the
+    # existing product check"). PC-ONLY by design: the browser window and the
+    # signed-in profile it reads with are on this PC, so a phone caller gets 403
+    # before the body is read - this is the one route that must NOT go on both
+    # apps, and the report screen it feeds is the named follow-up lane. The
+    # chat tool is the door that works today, on the PC.
+    "/api/product/check": "The product check's report endpoint (JARVIS-API section 192; jarvis_product_check.py, installed by plugins/ready/product-check). POST one Amazon product address -> ONE PC-only approval card -> the engine's reasons report. It reads the page in the owner's own signed-in browser window on THIS PC, so it is refused from any other device (403 pc_only) by design, not ported: ARCHITECTURE section 8's one-sided table records why. No app screen calls it yet - the report is delivered in the chat answer today, and the desktop/phone report screen is the named follow-up - so when one lands it is DESKTOP-ONLY and must NOT be treated as a parity miss.",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

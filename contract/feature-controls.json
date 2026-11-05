@@ -9561,6 +9561,57 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "product-check",
+      "name": "Check a product's reviews",
+      "group": "Money and health",
+      "surface": "desktop",
+      "where": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Check a product's reviews",
+        "turn_off": "turn off Check a product's reviews",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+        "search": [
+          "Check a product's reviews"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+        "search": [
+          "check a product's reviews"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Do arithmetic",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -13961,7 +14012,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 102
+      "not-a-setting": 103
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 29,

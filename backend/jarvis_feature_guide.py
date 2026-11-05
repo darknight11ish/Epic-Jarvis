@@ -2819,6 +2819,14 @@ NO_COMMAND_REASON = {
     # nowhere: this file is another lane's, and this is the smallest touch that
     # lets a new feature row exist (the checker below fails a silent omission).
     "reminder-asks": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The product check WIRED (2026-11-04, the owner's choice "wire the
+    # existing product check"): the feature is ONE chat request and ONE report,
+    # and its on/off door is the settings file's own `[product_check] enabled`
+    # line, not a registered BoolSetting (there is no in-app switch and no card
+    # for the switch yet). So the ROW is the read/behaviour, and the switch it
+    # does have is named in its own `where`/`limit`. Appended at the end of the
+    # dict for the same crossing-safety reason reminder-asks gives.
+    "product-check": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,

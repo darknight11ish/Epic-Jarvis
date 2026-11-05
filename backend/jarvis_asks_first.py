@@ -478,8 +478,12 @@ TIER_EXTRA = (
 #: 2026-11-02. `run_data_script` is offered from its OWN switch (Settings, Data
 #: sandbox): with that on the model is offered it whether or not the file names
 #: it, and with it off the file cannot offer it. The two grant tools ride with
-#: `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`).
-NOT_A_SWITCH = ("run_data_script",) + GRANT_ASK_TOOLS
+#: `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`). `product_check` is offered
+#: from ITS OWN switch too - the settings file's `[product_check] enabled`, off
+#: by default: `offered_tools` drops it unless that line is on, so a
+#: `[tools].enabled` line alone would change nothing, exactly as for the
+#: sandbox.
+NOT_A_SWITCH = ("run_data_script", "product_check") + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
 #: three above. 54 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
@@ -560,7 +564,7 @@ def _app_can_switch(tool: str) -> bool:
     test request_tool_enable applies. A group row can be appended for a tool
     that raises a card but must never be switched from an app:
     jarvis_storage_health.py's scan and cleanup are one (a cleanup is a
-    deletion, so storage_cleanup is in MUST_ASK) - and NOT_A_SWITCH's three are
+    deletion, so storage_cleanup is in MUST_ASK) - and NOT_A_SWITCH's four are
     the others (their own switch decides them)."""
     return (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
             or real_tool(tool) in SWITCHABLE_TOOL_NAMES)
@@ -779,7 +783,14 @@ GROUPS = (
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",
                       "open_public_tunnel",
-                      "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
+                      "news_read", "page_read", "read_web_page",
+                      # The product check (jarvis_product_check.py, 2026-11-04):
+                      # ONE PC-only card per Amazon product page, read once in
+                      # the owner's own signed-in browser. A card can name it, so
+                      # the page names it (test_asks_first.py); there is no app
+                      # switch - the tool's own door is [product_check] enabled.
+                      "product_check",
+                      "github_read", "chatbot_session",
                       # Your own GitHub, on demand (jarvis_github.py, the owner's
                       # decision of 2026-11-03: "Read + actions"). All four are
                       # actions a card can be raised under, so all four are rows
@@ -1700,21 +1711,32 @@ TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separat
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
                  "What asks first). It takes one approval card and Windows Hello.")
 TOOLS_NOT_ON_LIST = ("This PC does not know a tool by that name, so nothing was changed.")
-#: The three known tools that have no switch of their own (NOT_A_SWITCH). The
-#: page lists them so nobody hunts for a switch that is not there, and the
-#: route answers ON for one of them with the same sentence - never "does not
-#: know that name", which would be false.
+#: The known tools that have no switch of their own (NOT_A_SWITCH). The page
+#: lists them so nobody hunts for a switch that is not there, and the route
+#: answers ON for one of them with the same sentence - never "does not know
+#: that name", which would be false.
 TOOLS_NOT_SWITCHED_WHY = (
     "A few tools are not switches here because the AI's own settings line does "
     "not decide them: the data and maths sandbox has its own switch under "
-    "Settings, Data sandbox, and the two conversation web-search tools ride "
-    "with Web search. Each is named above; turning on its real switch offers it.")
+    "Settings, Data sandbox, the two conversation web-search tools ride with "
+    "Web search, and the product check is offered by its own settings-file line "
+    "([product_check] enabled = true). Each is named above; turning on its real "
+    "switch offers it.")
 NO_SWITCH_NOTE = {
     "run_data_script": (
         "The data and maths sandbox has its own switch: Settings, Data sandbox "
         "(or the sandbox row on the What asks first page). That switch is what "
         "offers this tool, so a line in [tools].enabled would change nothing. "
         "Nothing was changed here."),
+    # The product check (jarvis_product_check.py, 2026-11-04): its own door is
+    # the settings file's `[product_check] enabled` line, read fresh on every
+    # turn; an ON switch here would write a line the turn ignores, which is the
+    # lie this whole NOT_A_SWITCH mechanism exists to avoid.
+    "product_check": (
+        "The product check has its own switch: the line [product_check] enabled "
+        "= true in jarvis-framework.toml. That line is what offers this tool, "
+        "so a line in [tools].enabled would change nothing. Nothing was changed "
+        "here."),
     "approve_web_search_for_conversation": (
         "This one rides with Web search: with Web search offered, the AI is "
         "offered this too, and without it this tool could not search anyway. It "
@@ -2149,7 +2171,7 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
 
     ON accepts EVERY tool the AI model can be offered (the owner's decision,
     2026-11-04): Tier A and B, the raw Tier C set, the everyday helpers and
-    Jarvis's own tools. The three names in NOT_A_SWITCH are refused with the
+    Jarvis's own tools. The four names in NOT_A_SWITCH are refused with the
     sentence naming their real switch, never "does not know that name" - this
     PC does know them. A name it really does not know gets the plain
     "does not know" answer. Nothing is written until the person approves.
@@ -2276,7 +2298,7 @@ def _extra_tool_rows(items: list, enabled: set) -> list:
 
     Since 2026-11-04 every tool this PC knows has a switch row, so what lands
     here is a name this PC does not know (a drop-in program's own tool) and the
-    three NOT_A_SWITCH tools when the settings file happens to name them. The
+    four NOT_A_SWITCH tools when the settings file happens to name them. The
     state is the settings file's own (`enabled`, from tools_enabled_set), never
     a guess. `switchable: False` says plainly that this page offers no ON
     switch for the row; the page draws it with an OFF switch only. A row turned

@@ -603,6 +603,34 @@
       "read": true
     },
     {
+      "name": "the tool product_check ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "product_check"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "product_check"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool calendar_read ran",
       "heard": {
         "private_aloud": false,

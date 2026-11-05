@@ -1096,6 +1096,101 @@ SEND_FILE_ACTION = "send_file_to_phone"
 #: tool the model can see but never use is a worse answer than not having it.
 SEND_TEXT_TOOL = "send_text_message"
 SEND_TEXT_ACTION = "send_text_message"
+#: The product check (jarvis_product_check.py; 2026-11-04, the owner's choice
+#: "wire the existing product check"): ONE Amazon product page, read in the
+#: owner's own signed-in browser window after ONE PC-only card, then the
+#: engine's reasons report in plain words. Ships OFF: `[product_check] enabled
+#: = false` in both settings copies, and `offered_tools` does not offer the
+#: tool at all until the line says `true` - so a turn on a fresh install costs
+#: nothing and can do nothing. Its own action name (`product_check`) is the
+#: gate's `ask` line in both copies, and PC-only in jarvis_owner_check.
+PRODUCT_CHECK_TOOL = "product_check"
+PRODUCT_CHECK_ACTION = "product_check"
+
+#: What the model is told the tool is for. Written here (not imported from
+#: the module) so importing jarvis_agent never imports the product check's
+#: modules, exactly like every other optional feature here.
+PRODUCT_CHECK_DESCRIPTION = (
+    "Check one Amazon product page for sponsored-review and incentive "
+    "patterns. Use when: the owner gives an Amazon product link and asks "
+    "whether its reviews look sponsored, bought, incentivised or trustworthy, "
+    "or asks you to product-check a listing. Do NOT use it for an ordinary web "
+    "page, for flights or prices, or for a shop that is not Amazon. It reads "
+    "ONE page in the owner's own signed-in browser window after one approval "
+    "card, and returns reasons, counts and examples - never a trust score and "
+    "never a fake/real verdict for one review.")
+
+
+class _ProductCheckRefused:
+    """A product address this check cannot read: `problem` is in plain words,
+    and nothing was opened and nobody was asked (the _NoBrowser shape)."""
+
+    def __init__(self, problem: str) -> None:
+        self.problem = str(problem or "")
+
+
+def _prepare_product_check(args: dict):
+    """Check the address BEFORE the card: one Amazon product page, and not a
+    cart/checkout/order/account/payment/sign-in address. A refusal opens no
+    window and raises no card, because there is nothing to approve."""
+    try:
+        import jarvis_product_check as PC
+    except Exception as exc:                                # noqa: BLE001
+        return (_ProductCheckRefused(
+            f"the product check is not installed here ({type(exc).__name__})"),
+            "Check one Amazon product page")
+    try:
+        plan_obj = PC.plan(args.get("url"))
+    except Exception as exc:                                # noqa: BLE001
+        return (_ProductCheckRefused(getattr(exc, "why", str(exc))),
+                "Check one Amazon product page")
+    return plan_obj, PC.card_text(plan_obj)
+
+
+def _run_product_check(args: dict, plan_obj, **_) -> dict:
+    """Read the page the CARD showed and build the report - `plan_obj`, the
+    same object the card was worded from, never a new one built from `args`.
+
+    The full report rides back to the loop under `_product_report` and is
+    DELIVERED as code's own answer (`deliver_product_report`), the same way
+    the retirement what-if's figures are: the report is the answer, and the
+    model's own words about it are held and dropped so an invented trust
+    score or a per-review fake/real label cannot reach the owner. The model
+    gets a small result instead - enough to say the check ran, without a page
+    of its words in the context."""
+    try:
+        import jarvis_product_check as PC
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": f"the product check is not available here "
+                                      f"({type(exc).__name__})"}
+    if plan_obj is None:
+        return {"ok": False, "error": "there is no product page to read"}
+    try:
+        report = PC.run(plan_obj)
+    except Exception as exc:                                # noqa: BLE001
+        why = getattr(exc, "why", "")
+        if why:
+            return {"ok": False, "error": why,
+                    "kind": getattr(exc, "kind", "refused")}
+        return {"ok": False,
+                "error": f"the product check failed ({type(exc).__name__}); "
+                         f"nothing was stored"}
+    answer = PC.chat_answer(report)
+    verdict = report.get("verdict") or {}
+    sample = report.get("sample") or {}
+    return {
+        "ok": True,
+        "checked": True,
+        "page": report.get("source_url"),
+        "title": (report.get("listing") or {}).get("title"),
+        "reviews_read": sample.get("readable"),
+        "verdict": verdict.get("words"),
+        "note": ("The full reasons report is shown in the answer. Present it as it "
+                 "is: the sample caveat first, counts and reasons, no trust score "
+                 "and no fake/real verdict for any review."),
+        "_product_report": {"report": report, "answer": answer},
+    }
+
 
 
 def _prepare_my_files(args: dict):
@@ -4450,6 +4545,23 @@ TOOLS: dict = {
                                "web_search.",
                  "browser_control": "To work a page - click and type on it - use "
                                     "browser_control."}),
+    # The product check (jarvis_product_check.py; 2026-11-04, the owner's
+    # choice "wire the existing product check"). ONE Amazon product page, read
+    # in the owner's own signed-in browser window after ONE PC-only card, then
+    # the engine's reasons report. OFF by default: `offered_tools` does not
+    # offer it until `[product_check] enabled = true`. Never a trust score and
+    # never a per-review fake/real verdict - the report has no field for
+    # either, and its answer is delivered by code, not the model.
+    PRODUCT_CHECK_TOOL: Tool(
+        PRODUCT_CHECK_TOOL,
+        PRODUCT_CHECK_DESCRIPTION,
+        {"type": "object", "properties": {
+            "url": {"type": "string",
+                    "description": "the Amazon product page's full address (https://)"}},
+         "required": ["url"]},
+        _prepare_product_check, _run_product_check,
+        instead={"read_web_page": "To read a page's words out loud rather than check "
+                                  "a product's reviews, use read_web_page."}),
     "calendar_read": Tool(
         "calendar_read",
         "Read the owner's calendar events for the next N days. Read-only.",
@@ -5402,6 +5514,12 @@ NEEDS_A_PERSON = {
     "tidy_inbox": "archives, stars, marks as read or moves to Trash emails in the owner's "
                   "own mailbox",
     "read_web_page": "fetches a page from the internet, which cannot be taken back",
+    # The product check (jarvis_product_check.py, 2026-11-04): the same shape
+    # as read_web_page - one page read in the owner's own signed-in browser -
+    # plus the owner's session, which is why its card is PC-only. It asks
+    # every time regardless of its tier: the belt below the card.
+    PRODUCT_CHECK_TOOL: "opens one Amazon product page in the owner's own signed-in "
+                        "browser window, which cannot be taken back",
     "propose_plan": "runs the safe steps of an approved plan at once, which can do "
                     "anything the tools inside it can do",
     "rea_investigate": "starts a local reverse-engineering program and then debugs, inspects, "
@@ -6106,6 +6224,13 @@ def fetched_urls(name: str, state) -> list:
     (`state`) - never from the model's raw arguments, so the check sees the
     same address the card does. [] for any other tool."""
     if name == "read_web_page":
+        url = getattr(state, "url", "")
+        return [url] if isinstance(url, str) and url.strip() else []
+    if name == PRODUCT_CHECK_TOOL:
+        # The same rule for the product check (2026-11-04): a product page this
+        # PC opens in the owner's own signed-in browser is a page this PC
+        # CONTACTS, so a model-chosen address in a shaped turn says so on the
+        # card, exactly as read_web_page does.
         url = getattr(state, "url", "")
         return [url] if isinstance(url, str) and url.strip() else []
     if name != "browser_control":
@@ -8503,6 +8628,12 @@ class _TurnWatch:
         # words, held the same way (RETIREMENT_TOOL).
         self.retirement_result = None
         self.retirement_done = False
+        # The product check's report (jarvis_product_check.py, 2026-11-04): the
+        # full reasons report is CODE's own answer, held and delivered the same
+        # way the retirement what-if's figures are - so a trust score or a
+        # per-review fake/real verdict the model wrote cannot reach the owner.
+        self.product_result = None
+        self.product_done = False
         self.secrets: list = []      # KINDS of password or key read, never values
         # The websites (host names) browser_control read this turn, for the
         # form-review rule "only the form's own site" (FORM_REVIEW_OTHER_SITE).
@@ -8692,6 +8823,10 @@ class _TurnWatch:
             # The what-if's figures are for the owner's screen (see
             # RETIREMENT_TOOL); _one_call takes them out first, this is the belt.
             result = {k: v for k, v in result.items() if k != "_retirement_result"}
+        if "_product_report" in result:
+            # The product check's report is delivered by code, never read out of
+            # a tool result (see _TurnWatch.product_result); this is the belt.
+            result = {k: v for k, v in result.items() if k != "_product_report"}
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
             self._note_outside_now()
@@ -9091,6 +9226,17 @@ def _handsfree_on() -> bool:
         import jarvis_handsfree as HF
         return bool(HF.enabled())
     except Exception:
+def _product_check_on() -> bool:
+    """Is the product check's own switch ON? (`[product_check] enabled`.)
+
+    Its own switch, not a line in `[tools].enabled`: ON is what OFFERS the
+    tool, and a missing section, a broken file or anything that is not a real
+    `true` is OFF - the same fail-closed rule jarvis_product_check.enabled()
+    uses. A PC without the module never offers the tool."""
+    try:
+        import jarvis_product_check as PC
+        return bool(PC.enabled())
+    except Exception:                                       # noqa: BLE001
         return False
 
 
@@ -9194,6 +9340,11 @@ def offered_tools(enabled_tools) -> list:
         # Its own switch, like Browser control's second-card rule: the tool is not
         # offered (so costs no tokens) until [rea] enabled = true.
         wanted.discard(REA_TOOL)
+    if PRODUCT_CHECK_TOOL in wanted and not _product_check_on():
+        # The product check's own switch (2026-11-04): OFF by default in both
+        # shipped settings copies, and not merely refused when called - the
+        # model is not offered a tool the owner has switched off.
+        wanted.discard(PRODUCT_CHECK_TOOL)
     if SPENDING_TOOL in wanted and not _folders_listed():
         wanted.discard(SPENDING_TOOL)
     if RETIREMENT_TOOL in wanted and _RET is None:
@@ -9315,7 +9466,8 @@ TOOL_GROUPS = (
     # deliberate act with its own approval card, never a plain read. A group
     # rather than the core: the core is offered on every turn, and this is a
     # way out with a 300-token description of its own.
-    ("read_web_page", "read one whole web page out loud", ("read_web_page",)),
+    ("read_web_page", "read one web page out loud, or check one Amazon product page",
+     ("read_web_page", PRODUCT_CHECK_TOOL)),
     # propose_plan (jarvis_plan.py, "one card, several steps") joins this
     # group rather than starting a new one: a NEW group's name would add
     # to more_tools' own description and enum every turn (more_tools_schema
@@ -9702,6 +9854,12 @@ TOOL_HINTS = {
         r"\bread (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bpull up (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bwhat did (?:we|i) say (?:in|about)\b.*\bchat\b"),
+    # product_check (2026-11-04): the Amazon product-page check. It is only
+    # offered while the feature is on, and its own question words are the
+    # page's - "is this fake", the reviews, the listing.
+    "product_check": (r"\bproduct page\b", r"\bamazon\b", r"\bproduct\b",
+                      r"\breviews?\b", r"\bis (?:this|it) (?:fake|real|genuine)\b",
+                      r"\bscam\b", r"\bbuy(?:ing)?\b", r"\bprice\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
@@ -14347,11 +14505,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # tool call are held too, so nothing with an amount in it can stream.)
         spend_hold = _spending_hold(watch, names)
         holding = (spend_hold
-                   or (watch.retirement_result is not None and not watch.retirement_done))
+                   or (watch.retirement_result is not None and not watch.retirement_done)
+                   or (watch.product_result is not None and not watch.product_done))
         # The model's words this round are thrown away and replaced by code's
-        # own text (a what-if): they are not "what it said" for the checks
-        # that read the model's words (the "I've done it" line).
-        dropping = watch.retirement_result is not None and not watch.retirement_done
+        # own text (a what-if, a product report): they are not "what it said"
+        # for the checks that read the model's words (the "I've done it" line).
+        dropping = ((watch.retirement_result is not None and not watch.retirement_done)
+                    or (watch.product_result is not None and not watch.product_done))
 
         def on_text(piece: str) -> None:
             clean = stripper.feed(piece)
@@ -14446,6 +14606,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             elif spend_hold:
                 deliver_plain("".join(held))
             deliver_retirement()
+            deliver_product_report()
         elif spend_hold and not watch.spending_asked and watch.spending_table is None:
             # Words before a tool call on a spending question: shown only when
             # they carry no amount of money (they were written before any bank
@@ -14522,6 +14683,28 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         said["gap"] = True          # a blank line after a spending sentence in the same answer
         out.set_status(None)
         emit(text)
+
+    def deliver_product_report() -> None:
+        """The product check's answer (jarvis_product_check.py, 2026-11-04):
+        code's own text, never a sentence the model wrote - whatever the model
+        said this round was held and is dropped. The engine's SAMPLE caveat is
+        its first line, and it carries the counts, the set-aside reviews and
+        their reasons, and the no-score line, so the owner cannot be handed a
+        trust score or a per-review fake/real verdict the model invented."""
+        if watch.product_done or watch.product_result is None:
+            return
+        watch.product_done = True
+        answer = ""
+        try:
+            answer = str((watch.product_result or {}).get("answer") or "")
+        except Exception:
+            answer = ""
+        if not answer.strip():
+            answer = ("The product page was read, but the report could not be "
+                      "shown. Ask for the check again.")
+        said["gap"] = True          # a blank line after another held sentence
+        out.set_status(None)
+        emit(answer)
 
     def fail(message: str) -> None:
         if out.sse:
@@ -14896,6 +15079,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         elif watch.spending_asked and not watch.spending_done:
             deliver_plain("")
         deliver_retirement()
+        deliver_product_report()
         # The Anti-Slop filter's last held words (2026-10-28): a trailing space
         # or em dash kept back so the piece after it could decide what it meant,
         # or the end of a code block. Sent before the checks below read
@@ -15050,7 +15234,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # (jarvis_chat_log reads `tools_ran` to mark a conversation as having read
     # outside text): its own table is the owner's figures, worked out by code,
     # and marking the chat would refuse the very next spending question.
-    ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] not in (SPENDING_TOOL, RETIREMENT_TOOL)]
+    ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] not in
+           (SPENDING_TOOL, RETIREMENT_TOOL, PRODUCT_CHECK_TOOL)]
     if picture_text is not None and picture_text.get("read"):
         ran = [PICTURE_TEXT_TOOL] + ran
     if file_text is not None and file_text.get("read"):
@@ -16161,6 +16346,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # action at "ask" with its outbound worst case, and the tier row in
         # both shipped settings copies says "ask" too.
         action_name = SEND_FILE_ACTION
+    if name == PRODUCT_CHECK_TOOL:
+        # Its OWN action name (2026-11-04): `product_check` is the gate's own
+        # "ask" line in both shipped settings copies, its `_RISK` row carries
+        # the words, and jarvis_owner_check.PC_ONLY_ACTIONS makes the card
+        # PC-only with Windows Hello. The gate's table maps the tool to it too
+        # (the base and product-check.patch), so the Reach page names it.
+        action_name = PRODUCT_CHECK_ACTION
     if name == PROTECT_TOOL:
         # The chat ability asks under its OWN action name (jarvis_protection.py,
         # 2026-10-31): the gate forces an unclassified action to "ask", so the
@@ -16397,6 +16589,21 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
                       "outcome": "no card needed" if ran else "refused"})
         return
+    if name == PRODUCT_CHECK_TOOL and isinstance(state, _ProductCheckRefused):
+        # A product address this check cannot read (not an Amazon product page,
+        # a cart/checkout/order/account/payment/sign-in address, an empty
+        # address, or the module missing): nothing to open and nothing to ask
+        # about, so NO card. The model is told in the address checker's own
+        # words and can retry with the address the owner actually meant.
+        problem = state.problem or "that is not an Amazon product page"
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content({
+                          "ok": False,
+                          "error": f"refused: {problem} Nothing was opened and "
+                                   f"nobody was asked."})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return
     if name == "send_email":
         # A plan that says why nothing could be sent (a bad address, too
         # long, not set up, the module missing): nothing to ask about, so no
@@ -16459,7 +16666,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # this line stays the card's very FIRST one when both apply (rule 1 is
         # the older promise, and test_browser_engine pins it; 2026-10-30).
         browser_top = browser_card_lines(state, watch)
-    if name == "read_web_page" or name == "browser_control":
+    if name in ("read_web_page", "browser_control", PRODUCT_CHECK_TOOL):
         # Gap 1 (Gemini's S-2, 2026-10-30): the same rule web_search already
         # has, for a URL this PC is about to CONTACT. When outside text shaped
         # this turn (or the conversation is tainted, or saved memories were
@@ -16755,6 +16962,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             kept = result.pop("_retirement_result")
             if isinstance(kept, dict) and watch.retirement_result is None:
                 watch.retirement_result = kept
+        if (name == PRODUCT_CHECK_TOOL and isinstance(result, dict)
+                and "_product_report" in result):
+            # The product check's report goes into the answer as code's own
+            # text (deliver_product_report), never to the model - so no answer
+            # can add a trust score or a per-review fake/real label. Kept for
+            # the answering round only.
+            result = dict(result)
+            kept = result.pop("_product_report")
+            if isinstance(kept, dict) and watch.product_result is None:
+                watch.product_result = kept
         if name == SPENDING_TOOL and isinstance(result, dict) and "_table" in result:
             # The table goes to the apps' screen, never to the model: keep it
             # for the sentence round and take it out of what the model reads.

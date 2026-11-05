@@ -6334,6 +6334,7 @@ PLUGIN_CATALOGUE = (
     ('photo-reminder', '"Photo to reminder": a picture in, a PROPOSED reminder out. Nothing is set up here.'),
     ('picture-card', '"which card draws the pictures, and what the chat does about it".'),
     ('pictures', '"ask for a picture, and keep it" (the owner\'s decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and maki...'),
+    ('product-check', 'check one Amazon product page for sponsored-review and incentive patterns: ONE card before the page is opened, read-only in your own signed-in browser, with no trust score and no per-review verdict.'),
     ('progress', "the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-..."),
     ('projects', 'Projects, steps 1 and 2.'),
     ('protected-items', 'a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card...'),

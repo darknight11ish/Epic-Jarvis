@@ -1611,6 +1611,22 @@ SHIPPED = (
     # the request body. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
     "jarvis_handsfree.py",
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the
+    # owner's choice "wire the existing product check"): the ONE model tool,
+    # the ONE PC-only route POST /api/product/check, the card's words and the
+    # plain-words answer, over the engine/read/capture modules that shipped
+    # unwired on 2026-10-25/26. OFF by default ([product_check] enabled =
+    # false in both settings copies); the tool is not even offered while it is
+    # off. Its routes come from its own install(), called by the drop-in folder
+    # plugins/ready/product-check; product-check.patch is the gate's
+    # _TOOL_ACTIONS/_RISK rows for the action, and the browser read is the
+    # public read_page_html seam in jarvis_browser_control.py. Nothing about a
+    # page is stored; the report has no trust score and no per-review verdict.
+    # It sits BEFORE jarvis_bench.py on purpose: that entry is the LAST one,
+    # where a new module is appended, so a new module goes above it. The same
+    # entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED
+    # list.
+    "jarvis_product_check.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

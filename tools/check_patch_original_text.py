@@ -92,6 +92,12 @@ one of them is `cloud-say-yes.patch`:
                                              `body` dict it posts and the record written beside them,
                                              in the owner's `jarvis_extract.py`)
 
+The newest exception, added 2026-11-04, is `product-check.patch` (position 165):
+its ONE hunk appends its gate rows at the very end of `jarvis_gate.py`, and its
+three context lines are the owner's own `if __name__` tail - the same text
+`web-search-grant.patch`'s end-of-file hunk already reads. It sits before that
+patch so `unknown-risk-approvable.patch` stays the last writer of the file.
+
 A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
 warns about. Those eight are honest rather than drift: each anchors on lines
@@ -395,6 +401,18 @@ PIN = {
     # before web-search-grant.patch, whose EOF hunk gained 3 trailing context lines
     # (the head of this block) - hence its own 4/21 -> 4/24 above.
     "handsfree.patch":                          (1, 3),
+    # 2026-11-04 (#1164): the EOF hunk gained 3 TRAILING context lines - the
+    # head of product-check.patch's block, which now follows it in the file -
+    # so the same hunk reads 24 lines of the owner's pre-image, not 21. Those
+    # three are written by the patch before it, but the stand-in still has to
+    # invent the block they sit in, exactly as it did before.
+    # 2026-11-04, product-check.patch: ONE hunk appending its gate rows at the
+    # END OF THE FILE - the only place no earlier patch's hunk reaches. Its 3
+    # context lines are the owner's own `if __name__` tail, the same text
+    # web-search-grant.patch's end-of-file hunk reads; nothing in this
+    # repository writes it. The patch is applied before web-search-grant.patch
+    # so unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
+    "product-check.patch":                      (1, 3),
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

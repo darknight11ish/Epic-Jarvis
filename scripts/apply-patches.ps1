@@ -1936,6 +1936,13 @@ $PATCHES = @(
     # the END OF THE FILE. The routes come from the drop-in folder
     # plugins/ready/handsfree and the logic lives in the shipped
     # jarvis_handsfree.py.
+    # The product check's gate rows (product-check.patch, 2026-11-04; the
+    # owner's choice "wire the existing product check"). ONE `_TOOL_ACTIONS`
+    # entry and, at the end of the file, the action's `_RISK` row and its "a
+    # denial is not a standing rule" entry, in ONE `_TOOL_ACTIONS.update` /
+    # `_NO_RULE_FROM_DENIAL` / `_RISK.update` block. It touches jarvis_gate.py
+    # only: the module itself is a drop-in (plugins/ready/product-check) and
+    # its tier line is in both shipped settings copies.
     #
     # IT IS APPLIED BEFORE web-search-grant.patch, and that is measured rather
     # than chosen: unknown-risk-approvable.patch must stay the LAST patch that
@@ -1946,6 +1953,7 @@ $PATCHES = @(
     # patch's hunk reaches; web-search-grant.patch's own end-of-file block is
     # then inserted above it, exactly as the published base has them.
     'handsfree.patch'
+    'product-check.patch'
     # "You have full approval to search the web in this conversation" (the
     # owner's ask of 2026-11-01; docs/JARVIS-API.md section 175). ONE card,
     # once, that stands in for the `search_the_web` card for the rest of ONE
@@ -3012,6 +3020,21 @@ $SHIPPED = @(
     # to jarvis_hud.py; the gate's own rows are backend/handsfree.patch. The
     # same entry, in the same position, is in backend/_where.py's SHIPPED list.
     'jarvis_handsfree.py'
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the
+    # owner's choice "wire the existing product check"): the ONE model tool,
+    # the ONE PC-only route POST /api/product/check, the card's words and the
+    # plain-words answer, over the engine/read/capture modules that shipped
+    # unwired on 2026-10-25/26. OFF by default ([product_check] enabled =
+    # false in both settings copies), and the tool is not even offered while it
+    # is off. Its route comes from its own install(), called by the drop-in
+    # folder plugins\ready\product-check; product-check.patch is the gate's
+    # _TOOL_ACTIONS/_RISK rows for the action, and the browser read is the
+    # public read_page_html seam in jarvis_browser_control.py. Nothing about a
+    # page is stored; the report has no trust score and no per-review verdict.
+    # It sits BEFORE jarvis_bench.py on purpose: that entry is the LAST one,
+    # where a new module is appended, so a new module goes above it. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_product_check.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

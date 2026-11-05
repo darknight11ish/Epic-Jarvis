@@ -79,11 +79,11 @@ export const SWITCHABLE = Object.freeze([
  * tiered ruling). The owner reversed the ON half: "few restrictions on its
  * tools beyond the core values of jarvis that have already been established,
  * particularly reverse engineer anything among other things". Every tool the
- * AI model can be offered is here now. The three that are NOT are the ones
- * whose own switch decides them (the data and maths sandbox, and the two
- * web-search conversation tools, which ride with Web search) - a switch whose
- * state the turn ignored would be a lie. The PC lists them under
- * `tools.not_switchable`.
+ * AI model can be offered is here now. The four that are NOT are the ones
+ * whose own switch decides them (the data and maths sandbox, the product
+ * check, and the two web-search conversation tools, which ride with Web
+ * search) - a switch whose state the turn ignored would be a lie. The PC lists
+ * them under `tools.not_switchable`.
  */
 export const TOOLS_SWITCHABLE = Object.freeze([
   // Tier A (13)
@@ -125,7 +125,7 @@ export const TOOLS_PC_ONLY =
  * settings file switched on that this page has no switch row for. Since the
  * same day's ON decision the ONLY rows that land here are names this PC does
  * not know (a drop-in program's own tool) and, when the file happens to name
- * them, the three whose own switch decides them. Those rows are OFF switches
+ * them, the four whose own switch decides them. Those rows are OFF switches
  * only - turning one back on is a hand edit of [tools].enabled, and the PC's
  * own "why" under the row says so.
  */
@@ -133,7 +133,7 @@ export const TOOLS_ELSEWHERE_LABEL = "Also on in your settings file";
 export const TOOLS_ELSEWHERE_OFF =
   "Off now. This page has no switch to turn it back on: add it back to [tools].enabled in " +
   "jarvis-framework.toml on this PC by hand, then restart Jarvis.";
-/** The three tools that have no switch of their own (`tools.not_switchable`). */
+/** The four tools that have no switch of their own (`tools.not_switchable`). */
 export const TOOLS_NOT_SWITCHABLE_LABEL = "Not a switch on this page";
 
 /** Lockdown (2026-09-28): the PC's words (jarvis_asks_first.py LOCKDOWN_*). */
@@ -489,9 +489,9 @@ export function vaultSwitchView(vault, live) {
 
 /**
  * The plain note naming the tools that have no switch on this page, and why
- * (2026-11-04: the three whose own switch decides them - the data and maths
- * sandbox, and the two web-search conversation tools that ride with Web
- * search). Empty from a PC that sends no `not_switchable`.
+ * (2026-11-04: the four whose own switch decides them - the data and maths
+ * sandbox, the product check, and the two web-search conversation tools that
+ * ride with Web search). Empty from a PC that sends no `not_switchable`.
  */
 export function notSwitchableView(tools) {
   const n = tools && tools.notSwitchable;
