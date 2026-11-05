@@ -18,7 +18,10 @@ WHAT IS CHECKED, and why each check matters:
 * `setup.json` schema 2: a partial retake MERGES the answers (the state-loss
   bug this wave fixes), `completed_version`/`runs`/`dismissed_at` behave, and
   an old three-key file still reads as version 1 with `completed_version` 1 -
-  the truth that makes the first launch after deploy one correct offer;
+  the truth that makes the first launch after deploy one correct offer.
+  DEF-043 (2026-11-04): `completed_version` moves only when every question has
+  an answer, so a partial apply leaves the offer, the HUD banner and the chat
+  line running;
 * `progress()` writes ONLY the quiz's own place: a non-object and an entry
   with neither `question` nor `dismiss` are refused, a bogus draft answer is
   cleaned away, an explicit empty draft clears it, and no other key moves;
@@ -31,9 +34,10 @@ WHAT IS CHECKED, and why each check matters:
   calls `apply()` or a setter from `progress()`, never touches the taint
   latch, and `_run_setup_quiz`'s body holds no "confirm" (the pin that keeps
   the chat tool from ever applying);
-* `setup_state_note()` is ONE line, appears only while the quiz is unfinished,
-  and the `setup_quiz` tool lists, explains from the real plan, and stages a
-  draft while never applying.
+* `setup_state_note()` is ONE line, appears only while the quiz is unfinished
+  AND the "Personalize Jarvis" notification switch is on (DEF-044,
+  2026-11-04), and the `setup_quiz` tool lists, explains from the real plan,
+  and stages a draft while never applying.
 
 No network, no model, no microphone, no owner's PC. Runs in repo mode; the
 suite gives it a temporary settings folder.
@@ -337,9 +341,11 @@ def t_a_partial_retake_keeps_every_earlier_answer():
           out["ok"] is True and all(saved["answers"].get(k) == v for k, v in old.items())
           and len(saved["answers"]) == 6 and saved["answers"]["voice_speed"] == "faster",
           (out, saved["answers"]))
-    check("...records the question set as completed and counts the run",
+    check("...records the run, and does NOT claim the question set is finished "
+          "(DEF-043: only 6 of 25 are answered)",
           saved["version"] == S.SCHEMA_VERSION
-          and saved["completed_version"] == S.QUIZ_VERSION
+          and saved["completed_version"] == 1
+          and saved["completed_version"] < S.QUIZ_VERSION
           and saved["runs"] == 2 and saved["completed_at"] is not None, saved)
     check("...keeps the dismissal and clears the card's place",
           saved["dismissed_at"] == dismissed and saved["in_progress"] == {},
@@ -356,6 +362,74 @@ def t_a_partial_retake_keeps_every_earlier_answer():
           and len(saved["answers"]) == 6, (out.get("error"), saved["runs"]))
     check("...and an unanswered question id is never invented",
           set(saved["answers"]) == set(old) | {"voice_speed"}, sorted(saved["answers"]))
+
+
+class _AnyApplier(dict):
+    """`appliers` that reports every planned change as made.
+
+    The real setters are the settings registry's business; these checks are
+    about WHICH answers count as a finished quiz, not about what each setter
+    does once it is called."""
+
+    def get(self, _key, _default=None):
+        return _ok
+
+
+def _all_answers() -> dict:
+    """One valid answer for every one of the 25 questions."""
+    return {q["id"]: (["all"] if q["multi"] else q["options"][0]["id"])
+            for q in S.QUESTIONS}
+
+
+def t_a_partial_apply_does_not_claim_the_quiz_is_finished():
+    """DEF-043 (2026-11-04): a partial apply used to write
+    `completed_version = QUIZ_VERSION`, so the launch offer, the HUD banner and
+    the chat line all stopped while `answered_count()` still said 1 of 25."""
+    import jarvis_agent as AG  # noqa: E402 - heavy, so only when needed
+    _fresh()
+    out = S.apply({"talk_style": "warm"}, confirm=True, taint=lambda: False,
+                  readers=a_reader, appliers={"manner": _ok},
+                  tier_of=lambda a: "ask")
+    saved = S._read_saved()
+    check("a partial apply saves the answer and counts the run, but claims no completion",
+          out["ok"] is True and saved["answers"] == {"talk_style": "warm"}
+          and saved["completed_version"] == 0 and saved["runs"] == 1, saved)
+    st = S.state(readers=lambda ch: None)
+    check("...so the first-open offer is still open (completed_version < version)",
+          st["completed_version"] < S.QUIZ_VERSION and st["answered_count"] == 1, st)
+    check("...and the chat line still says the quiz is unfinished",
+          isinstance(AG.setup_state_note(), str)
+          and "1 of 25 answered" in AG.setup_state_note(), AG.setup_state_note())
+    # A partial retake of an OLDER completed file keeps what it did complete -
+    # it is not dragged back to zero just because this run was partial.
+    _fresh(_legacy({"talk_style": "warm", "humour": "on"}))
+    out = S.apply({"card_size": "full"}, confirm=True, taint=lambda: False,
+                  readers=a_reader, appliers={"card_mode": _ok},
+                  tier_of=lambda a: "ask")
+    saved = S._read_saved()
+    check("...and a partial retake keeps the completed version the file already had",
+          out["ok"] is True and saved["completed_version"] == 1
+          and saved["completed_version"] < S.QUIZ_VERSION and saved["runs"] == 2,
+          saved)
+
+
+def t_a_complete_apply_still_marks_the_quiz_finished():
+    """The other half of DEF-043: an apply with every question answered still
+    marks the set complete, so a finished owner is never nagged."""
+    import jarvis_agent as AG  # noqa: E402
+    _fresh()
+    out = S.apply(_all_answers(), confirm=True, taint=lambda: False,
+                  readers=a_reader, appliers=_AnyApplier(),
+                  tier_of=lambda a: "ask")
+    saved = S._read_saved()
+    check("answering every question marks the whole quiz finished",
+          out["ok"] is True and S.answered_count(saved) == len(S.QUESTIONS)
+          and saved["completed_version"] == S.QUIZ_VERSION, saved)
+    st = S.state(readers=lambda ch: None)
+    check("...so the offer and the banner stop, and the chat line costs no tokens",
+          st["completed_version"] == S.QUIZ_VERSION
+          and st["answered_count"] == len(S.QUESTIONS)
+          and AG.setup_state_note() is None, st)
 
 
 # ---------------------------------------------------------------------------
@@ -682,6 +756,73 @@ def t_the_setup_note_is_one_honest_line():
           AG.with_setup_state_note([]))
 
 
+def t_the_setup_note_obeys_the_personalize_switch():
+    """DEF-044 (2026-11-04): the eighth notification switch, "Personalize
+    Jarvis", gated only the launch toast. The every-turn chat line read
+    `setup.json` alone, so an owner who switched the reminder OFF was still
+    told in chat that the quiz was unfinished. The switch is one value in
+    `jarvis_notify_prefs`; the line must read it, both ways."""
+    import jarvis_agent as AG  # noqa: E402
+    import jarvis_framework as FW  # noqa: E402 - the reader the switch lives in
+    _fresh(_legacy({"talk_style": "warm"}))
+    cfg = Path(_TMP) / "jarvis-framework.toml"
+    keep_explicit = os.environ.get("JARVIS_FRAMEWORK_TOML")
+
+    def _write_switch(on: bool) -> None:
+        cfg.write_text("[notifications]\nsetup = %s\n"
+                       % ("true" if on else "false"), encoding="utf-8")
+        # SAY WHICH CONFIG IS THE ONE. `run_suites.py` gives every suite a
+        # `JARVIS_FRAMEWORK_TOML` pointing at the runner's own copy, and
+        # `jarvis_framework.config_path()` prefers that explicit override over
+        # `CONFIG_DIR/jarvis-framework.toml`. Without this line the switch is
+        # written to a file the reader never opens, so this check passed when
+        # the suite was run directly and failed under the runner (CI's
+        # `backend` job) - the same code, two answers. The documented way for a
+        # suite to choose its config is to set the variable itself
+        # (`test_rebuilt.py` does the same).
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(cfg)
+        FW.reload_framework()
+
+    try:
+        # No settings file at all = the module's own default, which is ON.
+        check("the switch's default (nothing written): an unfinished quiz still "
+              "adds its one line",
+              isinstance(AG.setup_state_note(), str)
+              and "Personalize Jarvis" in AG.setup_state_note(),
+              AG.setup_state_note())
+        _write_switch(False)
+        S.progress({"question": "reworded_memories",
+                    "draft_answers": {"reworded_memories": "on"}})
+        check("switch OFF: the chat line is not added, even while the quiz is "
+              "unfinished and a draft is open",
+              S._read_saved()["in_progress"].get("question") == "reworded_memories"
+              and AG.setup_state_note() is None, AG.setup_state_note())
+        msgs = [{"role": "system", "content": AG.LANE_SYSTEM},
+                {"role": "user", "content": "what's left in my setup?"}]
+        dressed = AG.with_setup_state_note(msgs)
+        check("...and the turn gets the plain copy, with no such system message",
+              dressed == msgs and dressed[0] is msgs[0]
+              and not [m for m in dressed
+                       if isinstance(m, dict)
+                       and "Personalize Jarvis" in str(m.get("content") or "")],
+              dressed)
+        _write_switch(True)
+        check("switch back ON: the line returns from the same reader",
+              isinstance(AG.setup_state_note(), str)
+              and "Personalize Jarvis" in AG.setup_state_note(),
+              AG.setup_state_note())
+    finally:
+        if keep_explicit is None:
+            os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+        else:
+            os.environ["JARVIS_FRAMEWORK_TOML"] = keep_explicit
+        try:
+            cfg.unlink()
+        except OSError:
+            pass
+        FW.reload_framework()
+
+
 # ---------------------------------------------------------------------------
 #   12. the chat tool: list, explain from the real plan, stage, never apply
 # ---------------------------------------------------------------------------
@@ -780,6 +921,8 @@ if __name__ == "__main__":
                t_every_new_change_maps_to_a_real_setter,
                t_personality_and_voice_speed_options_are_the_rows_own,
                t_a_partial_retake_keeps_every_earlier_answer,
+               t_a_partial_apply_does_not_claim_the_quiz_is_finished,
+               t_a_complete_apply_still_marks_the_quiz_finished,
                t_an_old_three_key_file_reads_as_version_one,
                t_progress_writes_only_progress,
                t_progress_is_desktop_only,
@@ -787,6 +930,7 @@ if __name__ == "__main__":
                t_keep_current_settings_touches_no_setting,
                t_no_model_switch_no_network_no_gate_in_the_new_code,
                t_the_setup_note_is_one_honest_line,
+               t_the_setup_note_obeys_the_personalize_switch,
                t_dress_messages_carries_the_line_only_while_unfinished,
                t_the_setup_quiz_tool_reads_explains_and_stages):
         print(f"\n--- {fn.__name__} ---")

@@ -1111,7 +1111,9 @@ its own):
 
 - **`NEEDS_A_PERSON`** - the hard list in the agent, not in the config: shell,
   browser, computer, phone, home, send/draft email, tidy the inbox,
-  `read_web_page`, `propose_plan`, `rea_investigate`, `github_search`, and every
+  `read_web_page`, `propose_plan`, `rea_investigate` (the full reverse-engineering
+  toolbox since 2026-11-04: it can debug, patch, instrument, export and install,
+  so every one of its 200 actions is asked), `github_search`, and every
   plug-in tool. A tool on that list runs only when the verdict records a PERSON
   approving (`_a_person_said_yes`); a gate that answers `allowed` at `auto` is
   refused with plain words, so loosening `jarvis-framework.toml` cannot loosen
@@ -2753,6 +2755,47 @@ The two apps are meant to do the same things. These are the exceptions, each
 with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
+
+- **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
+  is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
+  setting he can turn OFF from chat, Jarvis Live, or Settings ... ANY approval
+  card ... automatically READ OUT, and he can answer 'confirm' or 'deny'
+  verbally ... he specifically wants Jarvis to WRITE TEXT MESSAGES to
+  contacts"*). The feature splits along the device line, and the split is the
+  point rather than an accident of time: **the PC keeps the authority and the
+  phone keeps the body.** The PC transcribes the recorded answer, checks it
+  against the owner's voice print and decides - the phone cannot, because a
+  client never does speech-to-text (CLAUDE.md), and because "is this the
+  owner?" must be answered where the print lives. The phone reads the card out
+  through its own speaker, records the PC's own ANSWER window (a minute at most,
+  or the card's shorter countdown, with the clip capped at the PC's 30 seconds),
+  and sends the text message, because a Windows PC has no phone's speaker, no
+  microphone in a pocket and no SMS service. So the four routes
+  (`GET /api/handsfree` and `POST /api/handsfree` - ONE path for the read and
+  the switch, as the frozen contract has it - `POST /api/handsfree/answer`,
+  `POST /api/phone/result`) are classified
+  `phone-only` in `tools/check_parity.py` for as long as the desktop does not
+  call them; the desktop's own half of the same frozen contract (its own
+  setting, its own read of the mode) is another lane's, and the day it calls the
+  first of those routes the checker's rule 6 fails by name and it
+  moves to `ported`, which is the right change then. **This phone half lands
+  AHEAD of its PC half, and says so plainly.** None of those routes exists
+  in `main` yet: no module serves one, no `handsfree_card` or `phone_command` is
+  ever sent, and `main`'s `docs/JARVIS-API.md` documents none of them - that
+  record
+  describes what exists, and a route written into it before its code would be
+  the one kind of fiction this project keeps out of that file. So the feature is
+  INERT until the PC half lands: every surface shows the contract's own 404
+  sentence ("Hands-free is not available on this PC yet."), no microphone is
+  opened, and nothing claims a mode that cannot be on. The phone was built
+  against the FROZEN contract, whose four shapes are written down in
+  `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
+  request owns `JARVIS-API.md` section 186 for them. Nothing else about the
+  feature is one-sided: a card raised for something the owner asked is answered
+  on the SAME card either way, `handsfree_card`, `phone_command` and
+  `phone_result` ride the
+  one existing event stream, and the spoken audio is the existing
+  `POST /api/voice/say` - no second speech path exists for this feature.
 
 - **The self-benchmark has no screen on either app yet, and the measuring is
   this PC's whichever app asks** (2026-11-04; `backend/jarvis_bench.py`,
@@ -4469,6 +4512,8 @@ half, so `tools/check_parity.py` classifies nothing new.
 **Picture-in-picture is the phone's, and the platform is why** (2026-10-30, the owner's settled design of 2026-10-11: *"can you add a picture in picture mode to jarvis that's similar to Google maps"*; `docs/PIP-DESIGN.md`). Android's own PiP - a small Jarvis window that stays on screen while other apps are in front - is the activity itself, resized by the OS: `MainActivity` declares `supportsPictureInPicture`, draws its own compact layout while `isInPictureInPictureMode` is true, and shows the face and the first line of the answer, the last few messages, or Jarvis Live (`data/PipMode.kt`, `ui/PipWindow.kt`). **The PC has no such window**: its nearest equivalent is the floating face over other windows (`docs/JARVIS-API.md` §57), which is a window of Jarvis's own and not an OS-managed miniature of the whole activity, so there is no desktop PiP layout to build and no desktop Settings row of the same name - the mode is saved on that phone only (`ClientSettings.pipMode`, key `pip_mode`), like every other display setting. It adds **no route and no permission**: the window is fed by the existing chat and Live flows, and its only system action is Expand. Two rules are the reason it is a design rather than a shrunken screen: it never approves anything (`JarvisRuntime.decide` is not reachable from that surface at all), and while "Hide memory lists and chat history" or App lock hides content it draws a dimmed face and the owner's own sentence - "Hidden while Jarvis is locked." - never the answer or the conversation (`docs/PIP-DESIGN.md` §4, §5, §9.1). `tools/check_parity.py` has nothing to classify here.
 **Protecting things from Jarvis is a list both apps read, and only the PC can add to it** (2026-10-31, the owner's ask: *"add a list of file folders, and programs that i can manually add to (or ask jarvis to exclude in chat and get a card) that blocks jarvis from having any access ... or the ability to make certain files or folders or programs read only"*; JARVIS-API §170). The store, the two modes (blocked, and read-only - the owner's *"see it, never act"* for programs) and every refusal sentence are the PC's, and both apps read them through `GET /api/protection`; Remove asks exactly ONE card on the PC from either app, so no app can loosen the list by itself. **What is the desktop's alone is `POST /api/protection/add`** - the immediate add with NO card, from Windows' own folder/file/program pickers, which only TIGHTENS what Jarvis may reach. The phone has no file browser to drive those dialogs, and adding from the phone is not missing, only one step slower: the owner asks in chat, which goes through `/api/protection/propose` and its ONE `protect_item` card, the same card and the same store (that chat door is backend-only, so `tools/check_parity.py` classifies the add route `deliberate` and the propose route under `BACKEND_ONLY`). No second list and no second mode exists on either side.
 
+**Setting a folder-level restriction by plain chat works on BOTH apps, and nothing new is one-sided** (2026-11-04, the owner's own list of phrasings: *"restrict the folder D:\Photos from Jarvis"*, *"stop Jarvis reading C:\X"*, *"don't let Jarvis touch the folder with my medical scans"*, *"unrestrict D:\Photos"*, *"let Jarvis read that folder again"*, *"what folders are restricted?"*, *"is Jarvis blocked from C:\X?"*). Both apps chat through the same `/api/chat`, which runs the same fast path and the same server-side tool loop, so all seven phrasings reach the same routes from either device with no client change: add and remove raise the list's own `protect_item` / `unprotect_item` card, and the two questions are answered from the real store with no card. What stays the desktop's alone is still only `POST /api/protection/add` (the immediate Settings add), for the reason above. This is deliberately NOT a new entry in §8: there is no new one-sided surface to explain.
+
 
 **Sending ONE file from the PC to the phone: the request and the card are shared, the
 download is the phone's, and that is one-sided on purpose** (2026-10-31, the owner's
@@ -4528,6 +4573,9 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 
 **Habit check-ins and the mood log are backend only today, on BOTH apps, and that is a lane boundary rather than a platform decision** (2026-11-02; the owner's life-coach set, JARVIS-API §180; `backend/jarvis_habits.py` and `backend/jarvis_mood.py`, installed by the drop-in folders `plugins/ready/habits` and `plugins/ready/mood`; the two decisions are `decisions.d/2026-11-02-mood-log-recorded.md` and `decisions.d/2026-11-02-habit-mood-never-learned.md`). The routes are built, documented and classified backend-only in `tools/check_parity.py`: `GET`/`POST /api/habits` with tick/untick/stop, the weekly review and its on/off, and `GET`/`POST /api/mood`. **Neither app has a screen for either feature** - no habit row, no tick control, no 1-5 mood plate and no chart - so this is one gap on both sides at once, not one app missing what the other has. The UI half is the next lane, and when it is built it goes on BOTH apps on these same routes and stores: the phone's Reminders screen beside Reminders / Daily to-do / Goals, and the PC's equivalent (the owner's placement decision D3). Already decided and not the UI lane's to re-decide: no score, streak, percentage or praise anywhere; the mood chart is a picture of the owner's own taps and never a judgement; a tick and a mood entry raise no card; and neither store's data is ever learned, by construction rather than by a card (`backend/test_learning_exclusion.py`).
+
+
+**The watchers' decision log is read on the PC today, and neither app draws it - one-sided on purpose for now** (2026-11-04; the owner-forwarded dsh-superagent spec, Part II pattern 1; JARVIS-API §186.2; `backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`). `GET /api/watch/decisions?limit=50` is the read that makes `observe` mode worth having: what the GitHub watcher would have said, with a closed reason code and the exact preview line, so the owner can promote it to `active` on evidence rather than on hope. **Neither app has a screen for it yet**, and `tools/check_parity.py` classifies the route `BACKEND_ONLY` with that reason rather than leaving it undecided. This is a deliberate desk-first order, not a platform decision: the arithmetic ("is this watcher quiet enough to speak?") is done at the PC, and a notification about noise is not something to interrupt the phone with. When a screen is built it goes on BOTH apps on this same module and the same store - a Work-pane row in the desktop's Work plate and the phone's Work/journal screen - and at that point the route moves out of `BACKEND_ONLY`. Nothing on this route writes, approves, pushes or merges; it is a read of rows another module already wrote.
 
 ## 9. Where the backend lives
 
@@ -5539,3 +5587,83 @@ route that writes from this module is the carded conversation clear (§13.4).
 - **No mobile self screen and no mobile window fleet.** The portrait is a read
   both apps can make; the phone has no screen for it yet and one chat at a time.
   Both are recorded in §8 rather than left to be read as oversights.
+
+## 14. Watchers, the attention budget, and what a restart owes (added 2026-11-04)
+
+The owner's decision of 2026-11-04 adopted four patterns from
+`deepseek-ai/dsh-superagent-prototype` (MIT), specified in the owner-forwarded
+"Part II" and built natively here. This section says where each one lives and
+what it is bounded by; `docs/JARVIS-API.md` §186 has the route and the row
+shapes.
+
+- **`observe` before `active`.** A proactive watcher has three states, not two.
+  `observe` runs the WHOLE pipeline - poll, batch, gate, and the second stage
+  for a failed required check - and writes one structured decision row instead
+  of interrupting. `active` delivers. `off` does nothing at all. A new rule
+  defaults to `observe`, and an unreadable `[watch] pr_checks_mode` reads as
+  `observe` rather than `active`: a typo in a settings file must not turn a
+  shadow watcher into one that speaks. Promotion is the owner's own edit of his
+  settings file; there is no route that promotes, and nothing auto-promotes.
+  The rows are served by `GET /api/watch/decisions?limit=50`
+  (`backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`).
+
+- **One batch per thread, and the seven checks that matter.** A pull request is
+  ONE thread, `pr:<number>:<head sha[:9]>`, because its seven required checks
+  finish minutes apart and a watcher that speaks per check sends seven messages
+  about one pull request. Fail fast on the first required failure; settle once
+  when all seven are green AND GitHub says the pull request is mergeable; stay
+  silent (`ci_still_running_debounced`) while any required check is still
+  running and none has failed. `audit` and `python-advisories` are
+  informational - red on `main` while merges land - and are dropped BY NAME
+  before any count, so they can never be the reason for a notification.
+  Idempotent receipts in `watch-receipts.json`, keyed
+  `(pr_number, head_sha, terminal_verdict)`, mean twenty polls of one commit
+  alert once; a re-run that changes the verdict is a second, genuinely new
+  sentence. The rules live in `backend/jarvis_watch_policy.py`.
+
+- **The two-stage gate is structural, not promised.**
+  `backend/jarvis_watch_policy.py` imports nothing from Jarvis and nothing that
+  can reach a disk, a network or a model; it has no clock (every entry point
+  takes `now`). So "a filtered event never reaches the stage that can cost
+  anything" is a property of the import list, and `backend/test_watch_ci.py`
+  fails if that list grows a way out. Stage two (`assess_failure()`) is reached
+  only for a terminal failure of a REQUIRED check, reads the failing run's log
+  through the same deterministic `gh` path the poll uses, and formats its line
+  with plain string work. **No model is called** - the `summarizer` seam exists
+  and nothing passes one.
+
+- **The durable outbox, and what a restart owes (the restart card loss).**
+  `backend/jarvis_outbox.py` holds what is still owed in `outbox.json` beside
+  `jobs.db`: three kinds (`job_card`, `job_done`, `pr_ci_notice`), each with a
+  deterministic `(kind, key)`, written to a temp name, flushed and renamed
+  BEFORE anything is said. `jarvis_jobs._park()` and `_finish()` write there
+  before they publish, and `_init()` re-announces whatever is still owed, once
+  per process: a parked job with a pending grant gets its card back (the row is
+  the authority, so this also covers a card from a build with no outbox) and
+  every pending entry is announced once. A card is settled by being ANSWERED
+  (`answer()`, `_stop_denied()`, `cancel()`), not by being announced, so an
+  unanswered card survives a restart instead of vanishing. Rehydration re-
+  ANNOUNCES; it approves nothing, and `decide_grant()` is still the only thing
+  that decides a grant. `status()["outbox"]` says how much is owed.
+  **The limit is stated rather than hidden: this is at-least-once.** A process
+  that dies between the send and the settle repeats one notice on the next
+  start; it cannot lose one, because the write comes first.
+
+- **Nothing here is always-on, and nothing here is a new permission.** The CI
+  watcher is a job body registered by NAME (`watch_pr_checks`, in
+  `jarvis_watch_ci.register_job()`, called from the one start-up hook that
+  already exists - `jarvis_watch.register_job()`, which `jarvis_hud.main()`
+  calls - so no patch needed a second line) and runs only when a job created
+  through `POST /api/jobs` names a pull request; its handler asks
+  `github_read` before
+  it reads GitHub, exactly like `watch_github` (a job created with
+  `needs: ["github_read"]` already carries that yes). It starts no thread and
+  no timer of its own. The modules add no card, no tier, no capability and no
+  route that writes; the only notification path is the existing arbiter
+  (`jarvis_arbiter.deliver`), which owns the interruption budget.
+
+- **Both apps, or the reason written down.** `GET /api/watch/decisions` is
+  `BACKEND_ONLY` in `tools/check_parity.py` today because neither app draws it
+  yet; §8, "One-sided on purpose", says why and where a screen would go. The
+  tests are `backend/test_watch_ci.py` and `backend/test_outbox.py` (plain
+  Python, fake clock, fake `gh`, temp files: no network, no model).

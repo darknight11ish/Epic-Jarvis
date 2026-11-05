@@ -259,7 +259,14 @@ await check("a parked grant offers ONE yes and ONE no, matched to its own job", 
 await check("the way in is drawn above the job list, and the job list after it", () => {
   const fn = BRAIN_JS.slice(BRAIN_JS.indexOf("function renderJobs("));
   const body = fn.slice(0, fn.indexOf("\nfunction renderUndo("));
-  assert.match(body, /dom\.jobs\.prepend\(renderJobStart\(body\)\);/);
+  // Since 2026-11-04 the card is assembled explicitly (the form, then "Needs
+  // you", then the one-line quiet bar, then the task list) instead of through
+  // rows(), so the form is APPENDED first rather than prepended after a paint.
+  assert.match(body, /dom\.jobs\.append\(renderJobStart\(body\)\);/);
+  assert.ok(body.indexOf("renderJobStart(body)") < body.indexOf("renderNeedsYou("),
+    "the way in must still sit above both job sections");
+  assert.ok(body.indexOf("renderNeedsYou(") < body.indexOf("renderQuietBar("),
+    "a job that needs you comes before the quiet ones");
   assert.equal((body.match(/dom\.jobs\.append\(renderTaskList\(\)\);/g) || []).length, 2);
   assert.match(body, /body\.grants/, "renderJobs must read the grants the read now carries");
 });

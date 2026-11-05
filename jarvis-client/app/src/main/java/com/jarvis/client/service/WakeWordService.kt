@@ -199,14 +199,17 @@ class WakeWordService : Service() {
             var lastCheck = SystemClock.elapsedRealtime()
             while (running) {
                 // The talk button owns the microphone while it records,
-                // Jarvis Live while it is on on this phone (LiveService), and
-                // call recording while it is armed or recording
-                // (voice/MicOwner.kt - the ONE arbitration point). Paused, not
-                // stopped: the service keeps its notification and starts
-                // listening again the moment the microphone is free.
+                // Jarvis Live while it is on on this phone (LiveService), call
+                // recording while it is armed or recording, and the hands-free
+                // answer window while it holds it (2026-11-04). Asked of the ONE
+                // arbitration point (voice/MicOwner.kt), so a fifth user of the
+                // microphone did not have to be remembered in a fifth place.
+                // Paused, not stopped: the service keeps its notification and
+                // starts listening again the moment the microphone is free.
                 if (voice.phase.value == VoiceSession.Phase.CAPTURING ||
                     JarvisRuntime.liveOnHere() ||
-                    MicNow.callRecordingHolds()
+                    MicNow.callRecordingHolds() ||
+                    !MicNow.mayOpen(MicOwner.Use.WAKE).allowed
                 ) {
                     _state.value = WakeListen.Paused
                     delay(200)
@@ -222,7 +225,12 @@ class WakeWordService : Service() {
                     goForeground(getString(R.string.wake_listening_text))
                     val buf = ShortArray(WakeSpotter.CHUNK)
                     while (running && voice.phase.value == VoiceSession.Phase.OFF &&
-                        !JarvisRuntime.liveOnHere() && !MicNow.callRecordingHolds()
+                        !JarvisRuntime.liveOnHere() &&
+                        // Call recording, the talk button or the hands-free
+                        // answer window: the recorder is dropped for them on the
+                        // next step rather than read through them.
+                        !MicNow.callRecordingHolds() &&
+                        MicNow.mayOpen(MicOwner.Use.WAKE).allowed
                     ) {
                         if (!readFully(rec, buf)) return fail("The microphone stopped.")
                         ring.push(buf)

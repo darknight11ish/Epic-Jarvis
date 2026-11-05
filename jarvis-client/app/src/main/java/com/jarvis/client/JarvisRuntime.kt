@@ -58,6 +58,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -356,6 +358,210 @@ object JarvisRuntime {
     private val _modelLane = MutableStateFlow<com.jarvis.client.net.ModelLaneInfo?>(null)
     val modelLane: StateFlow<com.jarvis.client.net.ModelLaneInfo?> =
         _modelLane.asStateFlow()
+
+    // ----------------------------------------------------------- hands-free ----
+    // The owner's request of 2026-11-04. net/Handsfree.kt holds the frozen
+    // contract, every line of plain words and the honest degradation; these are
+    // the state the surfaces read and the two events the service acts on.
+
+    /**
+     * What `GET /api/handsfree` last said, or null when it has not been read
+     * (or the PC answered 404, which is [handsfreeMissing]).
+     */
+    private val _handsfree = MutableStateFlow<com.jarvis.client.net.Handsfree.Read?>(null)
+    val handsfree: StateFlow<com.jarvis.client.net.Handsfree.Read?> = _handsfree.asStateFlow()
+
+    /**
+     * True when this PC answered 404 on a hands-free route: it does not have
+     * the feature yet.
+     *
+     * A separate flag, not a null [handsfree]: "we have not asked" and "this
+     * desktop cannot" are two different facts and only one of them is the
+     * owner's answer. Every surface that draws the switch or the status word
+     * reads [handsfreeLine], which uses [com.jarvis.client.net.Handsfree.NOT_HERE_SHORT]
+     * for this case.
+     */
+    private val _handsfreeMissing = MutableStateFlow(false)
+    val handsfreeMissing: StateFlow<Boolean> = _handsfreeMissing.asStateFlow()
+
+    /**
+     * Home's one-line state (armed / not available on this PC / nothing), or
+     * null when there is nothing worth saying. The words are
+     * [com.jarvis.client.net.Handsfree.oneLine]'s, so the line and the rule that
+     * decides it cannot drift.
+     */
+    val handsfreeLine: StateFlow<String?> =
+        combine(_handsfree, _handsfreeMissing) { read, missing ->
+            com.jarvis.client.net.Handsfree.oneLine(read, missing)
+        }.stateIn(scope, SharingStarted.Eagerly, null)
+
+    /**
+     * The last card the PC wanted read out, or null once it has been handled.
+     *
+     * A doorbell, not a queue: the flow refuses a card it is already handling
+     * by id, so a value that never changed is exactly the "this is the same
+     * card" case and needs no second delivery. The service clears it when it is
+     * done ([clearHandsfreeCard]), which is what lets the same id arrive again
+     * after a reconnect without being ignored for ever.
+     */
+    private val _handsfreeCard = MutableStateFlow<com.jarvis.client.net.Handsfree.Card?>(null)
+    val handsfreeCard: StateFlow<com.jarvis.client.net.Handsfree.Card?> =
+        _handsfreeCard.asStateFlow()
+
+    /** The last `phone_command`, on the same one-shot terms as [handsfreeCard]. */
+    private val _handsfreeCommand = MutableStateFlow<com.jarvis.client.net.Handsfree.Command?>(null)
+    val handsfreeCommand: StateFlow<com.jarvis.client.net.Handsfree.Command?> =
+        _handsfreeCommand.asStateFlow()
+
+    /**
+     * The PC's own receipt for the last text this phone sent (`phone_result`,
+     * section 186.6), on the same one-shot terms as [handsfreeCard].
+     *
+     * The phone has already posted its own result and shown the platform's
+     * verdict; this is the PC's sentence beside it, so the app can say the same
+     * thing the PC will. Null once handled.
+     */
+    private val _handsfreeResult =
+        MutableStateFlow<com.jarvis.client.net.Handsfree.PhoneResult?>(null)
+    val handsfreeResult: StateFlow<com.jarvis.client.net.Handsfree.PhoneResult?> =
+        _handsfreeResult.asStateFlow()
+
+    /** One line plus the "is the microphone open" flag, published by the service. */
+    data class HandsfreeNow(val line: String? = null, val listening: Boolean = false)
+
+    private val _handsfreeNow = MutableStateFlow(HandsfreeNow())
+    val handsfreeNow: StateFlow<HandsfreeNow> = _handsfreeNow.asStateFlow()
+
+    /** Called by [com.jarvis.client.service.HandsfreeService] only. */
+    fun publishHandsfree(line: String?, listening: Boolean) {
+        _handsfreeNow.value = HandsfreeNow(line, listening)
+    }
+
+    /** Called by the service once a card has been finished with. */
+    fun clearHandsfreeCard() {
+        _handsfreeCard.value = null
+    }
+
+    /** ...and once a command has been reported. */
+    fun clearHandsfreeCommand() {
+        _handsfreeCommand.value = null
+    }
+
+    /** Called by the service once a `phone_result` has been shown. */
+    fun clearHandsfreeResult() {
+        _handsfreeResult.value = null
+    }
+
+    /**
+     * Reads the hands-free state, and starts or stops the service to match.
+     *
+     * A 404 is the honest "this PC does not have it": [handsfreeMissing] says
+     * so and every surface prints [com.jarvis.client.net.Handsfree.NOT_HERE].
+     * Any other failure keeps what was known - a link that dropped does not
+     * turn an armed PC into one without the feature.
+     */
+    suspend fun refreshHandsfree() {
+        when (val r = api.handsfree()) {
+            is ApiResult.Ok -> {
+                _handsfreeMissing.value = false
+                val read = com.jarvis.client.net.Handsfree.readOf(r.value)
+                _handsfree.value = read
+                followHandsfree(read.available && read.enabled)
+            }
+            is ApiResult.Failed -> {
+                if (r.error is ApiError.NotFound) {
+                    _handsfreeMissing.value = true
+                    _handsfree.value = null
+                    followHandsfree(false)
+                }
+            }
+        }
+    }
+
+    /**
+     * Starts the service while the mode is armed, stops it otherwise.
+     *
+     * Started from the FOREGROUND or not at all: Android refuses a
+     * foreground-service start from the background, and a refusal there would
+     * leave the mode looking armed with nothing reading cards out. A refused
+     * start is logged by the service and it stops itself.
+     */
+    private var handsfreeServiceOn = false
+
+    private fun followHandsfree(armed: Boolean) {
+        val app = appContext ?: return
+        if (armed == handsfreeServiceOn) return
+        handsfreeServiceOn = armed
+        if (armed) {
+            com.jarvis.client.service.HandsfreeService.start(app)
+        } else {
+            com.jarvis.client.service.HandsfreeService.stop(app)
+            _handsfreeNow.value = HandsfreeNow()
+        }
+    }
+
+    /**
+     * The switch, from Settings, chat or Live - ONE entry point.
+     *
+     * The frozen contract's shape is kept in what the owner is told as well as
+     * in what is sent (section 186.3): the PC's own route answers AFTER its
+     * enable card has been decided - 200 with `enabled`/`message`, 403 with
+     * `error` when the card was declined - so there is no "waiting" state to
+     * model here and the switch is never called on before the PC says it is.
+     * The state is read back after every answer rather than assumed from the
+     * sentence, and that read is what starts or stops the service.
+     *
+     * ON is held on a stale link ([actionBlocker]) because it decides what
+     * Jarvis does from now on; OFF is never held, because it only ever narrows.
+     */
+    suspend fun setHandsfree(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = api.setHandsfree(on)) {
+            is ApiResult.Ok -> {
+                // Read the PC's own state before saying anything about it: the
+                // body's `enabled` and the sentence beside it are the PC's
+                // claim, and [refreshHandsfree] is the check.
+                refreshHandsfree()
+                val armed = _handsfree.value?.enabled == true
+                when {
+                    !on -> r.value.message ?: com.jarvis.client.net.Handsfree.OFF_DONE
+                    armed -> r.value.message ?: com.jarvis.client.net.Handsfree.ON_DONE
+                    else -> r.value.error ?: r.value.message
+                        ?: com.jarvis.client.net.Handsfree.ON_REFUSED
+                }
+            }
+            is ApiResult.Failed -> if (r.error is ApiError.NotFound) {
+                _handsfreeMissing.value = true
+                com.jarvis.client.net.Handsfree.NOT_HERE
+            } else {
+                noticeFor(r.error)
+            }
+        }
+    }
+
+    /**
+     * "Turn on/off hands-free" typed in chat or said in Jarvis Live
+     * ([com.jarvis.client.net.Handsfree.command]).
+     *
+     * Answered on the phone rather than sent to the model: it is one sentence
+     * about one switch, and a model round trip for it would make the switch
+     * feel broken when the model is busy. [Asked.STATE] reads the PC again, so
+     * "hands-free?" is always the PC's own answer.
+     */
+    suspend fun handsfreeCommand(asked: com.jarvis.client.net.Handsfree.Asked): String =
+        when (asked) {
+            com.jarvis.client.net.Handsfree.Asked.ON -> setHandsfree(true)
+            com.jarvis.client.net.Handsfree.Asked.OFF -> setHandsfree(false)
+            com.jarvis.client.net.Handsfree.Asked.STATE -> {
+                refreshHandsfree()
+                when {
+                    _handsfreeMissing.value -> com.jarvis.client.net.Handsfree.NOT_HERE
+                    _handsfree.value?.enabled == true -> com.jarvis.client.net.Handsfree.ON
+                    else -> com.jarvis.client.net.Handsfree.OFF
+                }
+            }
+        }
+
 
     /** True while "Start the local model" is being asked and watched. */
     private val _laneStarting = MutableStateFlow(false)
@@ -899,6 +1105,10 @@ object JarvisRuntime {
                     runCatching { app.startActivity(intent) }
                 }
             },
+            // "Turn on/off hands-free" said in Jarvis Live (2026-11-04): the
+            // phone answers it, the same parser the typed chat uses, so the two
+            // surfaces cannot say different things about one switch.
+            onHandsfreeCommand = { asked -> handsfreeCommand(asked) },
             // Jarvis Live (voice/LiveRules.kt): lowered, not paused, while
             // the PC checks another voice; no tap buttons while a card of
             // THIS session waits (LiveRules.cardInSession - an older card
@@ -1910,6 +2120,45 @@ object JarvisRuntime {
                     ?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
                 if (serious != null) onSerious(serious)
             }
+            // A card the PC wants read out, something it wants this phone to do,
+            // or its own receipt for a text this phone sent (net/Handsfree.kt,
+            // docs/JARVIS-API.md section 186; the owner's request of
+            // 2026-11-04). All three are accepted only while the PC itself says
+            // the mode is armed: an event that arrives with the mode off would
+            // otherwise sit in the flow until the owner turned it on, and be
+            // read out minutes later as if the card had just been raised. An
+            // unknown `kind` inside a `phone_command` is NOT dropped - the
+            // service owes the PC a result saying this phone cannot do it.
+            com.jarvis.client.net.Handsfree.EVENT_CARD,
+            com.jarvis.client.net.Handsfree.EVENT_COMMAND,
+            com.jarvis.client.net.Handsfree.EVENT_RESULT,
+            -> {
+                // The last read can be minutes old - the mode may have been
+                // turned on from the PC, or the card this phone's own ON left
+                // waiting may have just been approved - so the card is not
+                // dropped on a stale answer: ask the PC once, then decide. A
+                // PC that answered 404 for the feature is NOT asked again
+                // (nothing there would send these events), and a read that
+                // fails keeps what was known, so an unarmed mode still drops
+                // the card exactly as before.
+                if (_handsfree.value?.enabled != true && !_handsfreeMissing.value) {
+                    runCatching { refreshHandsfree() }
+                }
+                if (_handsfree.value?.enabled != true) {
+                    Log.i(TAG, "ignored ${event.kind}: hands-free is not armed on this phone")
+                } else {
+                    when (val arrived =
+                        com.jarvis.client.net.Handsfree.arrival(event.kind, event.data)) {
+                        is com.jarvis.client.net.Handsfree.Arrival.CardArrived ->
+                            _handsfreeCard.value = arrived.card
+                        is com.jarvis.client.net.Handsfree.Arrival.CommandArrived ->
+                            _handsfreeCommand.value = arrived.command
+                        is com.jarvis.client.net.Handsfree.Arrival.ResultArrived ->
+                            _handsfreeResult.value = arrived.result
+                        null -> Log.d(TAG, "a malformed ${event.kind}")
+                    }
+                }
+            }
             else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
         }
     }
@@ -1942,6 +2191,11 @@ object JarvisRuntime {
         runCatching { phoneNotificationsSettings() }
         // Whether the PC is watching its own screen, for Home's sign.
         runCatching { refreshScreenWatch() }
+        // Hands-free (the owner's request of 2026-11-04): armed or not, and
+        // whether this PC has it at all. Read on every open so a mode turned
+        // off on the PC stops this phone's service at the next reconnect rather
+        // than at the next time the Settings row is opened.
+        runCatching { refreshHandsfree() }
     }
 
     /** Reads whether the PC is watching its screen. A PC without the route changes nothing. */
@@ -10243,28 +10497,36 @@ object JarvisRuntime {
 
     /**
      * "Forget these" (`action` "forget": the PC raises ONE approval card
-     * listing every item) or Undo (`action` "undo": no card). "Forget these"
-     * is held on a stale link (rule 4), like the desktop's
-     * `forget_range_write` - it acts on a list read over a link that cannot
-     * be confirmed live. Undo is never held: it only puts back what the
-     * owner had a few minutes ago, and holding it could let the ten minutes
-     * run out. When a card was raised, the queue is read at once so it
-     * shows here.
+     * listing every item, and changes nothing), the SECOND yes (`action`
+     * "confirm": the held id and a literal `yes: true` - the PC forgets the
+     * facts and deletes the chats, keeping the 10-minute Undo) or Undo
+     * (`action` "undo": no card).
+     *
+     * Both steps that change something are held on a stale link (rule 4),
+     * like the desktop's `forget_range_write` - they act on a list read over a
+     * link that cannot be confirmed live. Undo is never held: it only puts
+     * back what the owner had a few minutes ago, and holding it could let the
+     * ten minutes run out. When a card was raised, the queue is read at once
+     * so it shows here.
      */
     suspend fun forgetRangeWrite(action: String, json: String): com.jarvis.client.net.ForgetRange.Outcome {
         val fr = com.jarvis.client.net.ForgetRange
         if (fr.heldOnStale(action)) {
             actionBlocker()?.let { return com.jarvis.client.net.ForgetRange.Outcome(false, false, it) }
         }
-        val path = if (action == "undo") fr.UNDO_PATH else fr.PATH
+        val path = when (action) {
+            "undo" -> fr.UNDO_PATH
+            "confirm" -> fr.CONFIRM_PATH
+            else -> fr.PATH
+        }
         // Read before the card is raised, so an older ending cannot be mistaken for its answer.
-        val before = if (action == "undo") 0.0 else (api.forgetRangeCall(fr.PATH, null) as? ApiResult.Ok)?.let { fr.lastEndedAt(it.value) } ?: 0.0
+        val before = if (action == "forget") (api.forgetRangeCall(fr.PATH, null) as? ApiResult.Ok)?.let { fr.lastEndedAt(it.value) } ?: 0.0 else 0.0
         return when (val r = api.forgetRangeCall(path, json)) {
             is ApiResult.Ok -> fr.said(r.value, if (action == "undo") "Put back." else fr.w("waiting")).also {
                 if (it.waiting) refreshPending()
                 // The chats on the card, for Home once it is approved (the
                 // chat audit, 2026-09-28): see [forgetRangeSaw].
-                if (action != "undo" && it.waiting) {
+                if (action == "forget" && it.waiting) {
                     forgetRangeChats = fr.chatsIn(json)
                     forgetRangeBase = before
                 }

@@ -1031,6 +1031,82 @@ body {
   min-width: 0;
 }
 
+/* Attention-first jobs (2026-11-04, pattern 4): the jobs that wait for a
+   person come first and expanded; everything else is one collapsed line.
+   The "Needs you" block is only in the DOM when it has a row in it, so an
+   empty one is zero pixels - this file gives it no reserved room. */
+.attention-needs {
+  margin: 0 0 12px;
+}
+
+.attention-head {
+  margin: 2px 0 4px;
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.attention-quiet {
+  margin: 2px 0 6px;
+}
+
+.quiet-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.quiet-bar:hover {
+  border-color: var(--border-strong);
+}
+
+.quiet-bar:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ONE line, always: the summary is clipped with an ellipsis rather than
+   wrapping the bar into a paragraph. */
+.quiet-words {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.quiet-hint {
+  flex: 0 0 auto;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.quiet-caret {
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.quiet-list {
+  margin-top: 8px;
+}
+
 .empty {
   color: var(--text-faint);
   font-size: var(--text-sm);
