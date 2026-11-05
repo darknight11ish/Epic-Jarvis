@@ -222,8 +222,12 @@ def t_off_app_only_and_unbuilt_sentences_have_their_shapes():
                            fields.get("action"), fields.get("row"))
         check(f"{said!r} is {shape}", ok, (name, fields))
     stateful = (
-        ("remove protection from my taxes folder", "honest_state", "protection_change"),
-        ("protect my taxes folder", "honest_state", "protection_change"),
+        # Changing the protection list is a REAL action, not a read (2026-11-04):
+        # it is its own mutating intent, applied through the feature's own route
+        # and card. A sentence that names no path is handed to the model, which
+        # can find the folder - it is never guessed at.
+        ("remove protection from my taxes folder", "protection_apply", None),
+        ("protect my taxes folder", "protection_apply", None),
         ("what asks first?", "honest_chat", "asks_first"),
         ("how do I turn off quiet hours?", "honest_chat", "quiet_hours"),
         ("what is switched off on this PC?", "honest_chat", "general_off"),
@@ -233,11 +237,13 @@ def t_off_app_only_and_unbuilt_sentences_have_their_shapes():
     )
     for said, intent, shape in stateful:
         name, fields = shape_of(said)
-        check(f"{said!r} is {intent}/{shape}",
-              name == intent and fields.get("shape") == shape,
-              (name, fields))
+        ok = name == intent and (shape is None or fields.get("shape") == shape)
+        label = f"{intent}/{shape}" if shape else intent
+        check(f"{said!r} is {label}", ok, (name, fields))
     check("the stateful reads are marked read-only",
           "honest_state" in Q.READ_ONLY_INTENTS)
+    check("... and changing protection is NOT one of them (it is a mutation)",
+          "protection_apply" not in Q.READ_ONLY_INTENTS)
 
 
 def t_ordinary_conversation_keeps_its_own_path():
@@ -479,16 +485,20 @@ def t_the_protection_list_is_read_from_the_real_store():
     check("... with an honest count in the singular",
           "1 thing is protected from Jarvis" in reply, reply)
     P.save([])
+    # 2026-11-04: a change that names no PATH is not answered with the one-card
+    # rule any more, and never with "the tool is not offered, do it in
+    # Settings" - that sentence came from comparing GATE ACTION names against a
+    # list of TOOL names, so it was always false. With nothing to act on, the
+    # sentence goes to the model, which can find the folder and call the tool.
     rem = ask("remove protection from my taxes folder")
     rreply = rem.reply if rem is not None else ""
-    check("removal by chat states the one-card rule in the module's words",
-          P.CHANGE_CARD in rreply, rreply)
-    check("... says the chat tool is off and points at Settings",
-          "not offered" in rreply and "Protected from Jarvis" in rreply, rreply)
+    check("a removal naming no path asks for the whole path, never a guess",
+          "whole path" in rreply and "unrestrict" in rreply, rreply)
     add = ask("protect my taxes folder")
     areply = add.reply if add is not None else ""
-    check("adding by chat names the real immediate Settings path",
-          "adding in Settings is immediate" in areply, areply)
+    check("an add naming no path asks for the whole path, never a guess",
+          "whole path" in areply and "restrict the folder" in areply, areply)
+    P.save([])
 
 
 def t_the_job_list_is_read_from_the_real_list():

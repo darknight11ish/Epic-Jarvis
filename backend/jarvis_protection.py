@@ -60,13 +60,21 @@ THE ROUTES (all token-authenticated, ``X-Jarvis-Client`` on every call)
     POST /api/protection/propose         the chat path - ONE card (``protect_item``)
     GET  /api/protection/propose?id=     how one proposal ended
 
-The chat side is the model tool ``protect_from_jarvis`` (in jarvis_agent.py):
-the model proposes, the owner decides on ONE ordinary approval card, and the
-store is written only after that verdict. The model never writes the store by
-itself and never claims it happened until the PC says so. A manual add in
-Settings is the owner's own direct act, so it is immediate (tightening), with
-an audit line. REMOVING an entry is loosening, so it always raises ONE card
-whichever app asks.
+The chat side is the model tool ``protect_from_jarvis`` (in jarvis_agent.py)
+and the fixed phrasings in ``jarvis_quick.py``. The tool has THREE actions
+(2026-11-04): ``add``, ``remove`` and ``list``. add and remove each raise ONE
+ordinary approval card (``protect_item`` / ``unprotect_item``) and the store
+is written only after that verdict; ``list`` - the whole list, or ONE target
+checked in it - changes nothing, so it answers with NO card. The model never
+writes the store by itself and never claims it happened until the PC says so.
+The fixed phrasings ("restrict the folder C:\\X from Jarvis", "unrestrict
+C:\\X", "what folders are restricted?", "is Jarvis blocked from C:\\X?") go
+through the SAME doors - ``handle_propose``, ``handle_remove`` and
+``handle_get``/``status_for`` - so they are not a second mechanism, and they
+work on the PC and the phone alike because both chat through the same
+backend. A manual add in Settings is the owner's own direct act, so it is
+immediate (tightening), with an audit line. REMOVING an entry is loosening, so
+it always raises ONE card whichever app or chat asks.
 
 WHAT THIS MODULE NEVER DOES
 
@@ -141,6 +149,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import threading
 import time
@@ -498,6 +507,60 @@ def matching_program_item(name) -> dict:
         if item.get("kind") == "program" and (wanted & program_keys(item["target"])):
             return item
     return {}
+
+
+def _looks_like_path(text: str) -> bool:
+    """True for something a caller means as a PC path, not a program name."""
+    return ("\\" in text or "/" in text or bool(re.match(r"^[A-Za-z]:", text)))
+
+
+def item_for_target(target) -> dict:
+    """The entry covering this path or program name, or {}.
+
+    ONE resolution for every "unrestrict X" and "is X protected?" door. A path
+    is matched by ``matching_path_item`` (a folder covers its whole subtree), a
+    bare executable name by ``matching_program_item``. Path/name matching only:
+    nothing on a protected file is read to answer it.
+    """
+    text = str(target or "").strip().strip('"')
+    if not text:
+        return {}
+    if _looks_like_path(text):
+        return matching_path_item(text)
+    return matching_program_item(text)
+
+
+def status_for(target) -> dict:
+    """Is this path or program on the list right now? Real state, nothing written.
+
+    "is Jarvis blocked from C:\\X?" and the model tool's ``list`` action both
+    answer from here, so neither can guess: ``protected`` is True only when the
+    store really holds an entry covering the target, and ``item`` is that
+    entry's public form. A missing store reads as False, exactly like
+    ``load()``.
+    """
+    text = str(target or "").strip().strip('"')
+    item = item_for_target(text)
+    return {"target": text, "protected": bool(item),
+            "kind": item.get("kind") or "", "mode": item.get("mode") or "",
+            "item": public_item(item) if item else {}}
+
+
+def job_state(job_id) -> dict:
+    """One protection job's public state, or {} - how a carded change ended.
+
+    The chat path reads this after ``handle_propose``/``handle_remove`` so it
+    can say what really happened instead of assuming the card is still waiting.
+    """
+    with _lock:
+        job = dict(_jobs.get(str(job_id or "").strip()) or {})
+    if not job:
+        return {}
+    out = {k: job.get(k) for k in ("id", "what", "state", "kind", "target",
+                                   "mode", "message")}
+    item = job.get("item")
+    out["item"] = public_item(item) if isinstance(item, dict) else None
+    return out
 
 
 def _sentence(item: dict, what: str) -> str:
