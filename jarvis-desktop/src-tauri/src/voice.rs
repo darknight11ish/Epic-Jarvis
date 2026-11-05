@@ -191,6 +191,33 @@ const ZERO_PROBE_WAIT: Duration = Duration::from_millis(1500);
 /// recording officially starts. Handy's pattern: bounded, in memory only, and
 /// dropped with the clip.
 pub(crate) const PREROLL: Duration = Duration::from_millis(300);
+/// Jarvis Live's lookback in front of the sentence that starts it (2026-11-05,
+/// the owner's "it misses my first words"): the SAME ring as the VAD's own
+/// lookback, but longer. A sentence begun the instant Live was pressed reaches
+/// the trigger late - the poll interval, the device's own start-up and the
+/// first syllable's attack all sit between the words and the tick that hears
+/// them - so 300 ms can clip the opening word. 500 ms covers the measured gap
+/// while staying short enough that the quiet before a sentence is not sent as
+/// part of it. Kept in memory only, for the length of one utterance.
+pub(crate) const LIVE_PREROLL: Duration = Duration::from_millis(500);
+
+/// How much audio in front of an utterance is kept: Live's longer lookback,
+/// or the wake word's own. Pure, so the difference is proved without a device.
+pub(crate) fn capture_preroll(live: bool) -> Duration {
+    if live {
+        LIVE_PREROLL
+    } else {
+        VAD_PREROLL
+    }
+}
+
+/// Where a clip starts, in samples: `read_to` is the buffer position the
+/// trigger tick had read to, and the clip steps back by `preroll` - never
+/// before the start of the buffer. A pure function because this one
+/// subtraction is what decides whether the owner's first words are kept.
+pub(crate) fn utterance_start(read_to: usize, preroll: usize) -> usize {
+    read_to.saturating_sub(preroll)
+}
 
 // ---------------------------------------------------------------------------
 // Shared: opening the microphone
@@ -2266,7 +2293,7 @@ fn run_vad_loop(
 ) -> VadEnd {
     let samples_per_ms = (spec.sample_rate as u128 * spec.channels as u128) / 1000;
     let ms_to_samples = |d: Duration| (d.as_millis() * samples_per_ms) as usize;
-    let preroll = ms_to_samples(VAD_PREROLL);
+    let preroll = ms_to_samples(capture_preroll(LIVE_MODE.load(Ordering::SeqCst)));
     let idle_keep = ms_to_samples(VAD_IDLE_KEEP);
     let turn_window = ms_to_samples(TURN_WINDOW);
 
@@ -2323,7 +2350,7 @@ fn run_vad_loop(
             VadPhase::Silence => {
                 if voiced {
                     phase = VadPhase::Speaking {
-                        started_at_index: read_to.saturating_sub(preroll),
+                        started_at_index: utterance_start(read_to, preroll),
                         started_at: now,
                         last_voiced_at: now,
                         voiced: chunk,
@@ -3386,6 +3413,58 @@ mod mic_recovery_tests {
         );
         // Healthy first time: one open.
         assert_eq!(opens_until_answer(&[false]), (1, ZeroStep::Ready));
+    }
+
+    #[test]
+    fn live_keeps_a_longer_lookback_than_the_wake_word() {
+        assert_eq!(capture_preroll(true), LIVE_PREROLL);
+        assert_eq!(capture_preroll(false), VAD_PREROLL);
+        assert_eq!(LIVE_PREROLL, Duration::from_millis(500));
+        assert!(
+            LIVE_PREROLL > VAD_PREROLL,
+            "Live's sentence may start the instant Live is pressed"
+        );
+    }
+
+    #[test]
+    fn the_first_words_said_the_moment_live_starts_are_kept() {
+        // A fake capture stream, 16 kHz mono: 400 ms of the owner's speech
+        // arrives (the first words, said the instant Live is pressed) before
+        // the poll tick that first hears a voice, plus that tick's own 30 ms.
+        // The opening 130 ms carries its own value, so a dropped opening is
+        // visible as a value and not only as a length.
+        let rate = 16_000usize;
+        let opening = vec![-1i16; rate * 130 / 1000]; // the first syllable
+        let rest = vec![-2i16; rate * 270 / 1000]; // the rest of the 400 ms
+        let mut buffer = opening.clone();
+        buffer.extend(rest.iter().copied());
+        buffer.extend(vec![0i16; rate * 30 / 1000]); // the tick's own chunk
+        let read_to = buffer.len(); // the trigger tick has read all of it
+        let clip_from = |lookback_ms: usize| {
+            let start = utterance_start(read_to, rate * lookback_ms / 1000);
+            buffer[start..].to_vec()
+        };
+        // With Live's 500 ms lookback the clip starts at the very beginning:
+        // the opening syllable is in it, whole.
+        let live = clip_from(LIVE_PREROLL.as_millis() as usize);
+        assert_eq!(live.len(), buffer.len());
+        assert_eq!(
+            &live[..opening.len()],
+            opening.as_slice(),
+            "every one of the first words is kept"
+        );
+        // The wake word's 300 ms would have started the clip 130 ms late, so
+        // the opening syllable is gone - the bug this lookback exists to stop.
+        let short = clip_from(VAD_PREROLL.as_millis() as usize);
+        assert_eq!(
+            short[0], -2,
+            "300 ms drops the opening syllable and starts mid-sentence"
+        );
+        assert_eq!(
+            read_to - short.len(),
+            rate * 130 / 1000,
+            "the shorter lookback drops the whole opening syllable (130 ms of the 400 ms spoken)"
+        );
     }
 
     #[test]

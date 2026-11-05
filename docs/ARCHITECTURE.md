@@ -4578,6 +4578,19 @@ what is missing is only the Settings screen agreeing about who turned it off.
   not a live screen on either side. Written here rather than left as a parity
   warning, because a warning is not a reason.
 
+- **Live's "Starting microphone & voice..." is read by the desktop today, and
+  the phone shows the session it already has** (2026-11-05; `starting` and
+  `starting_words` on `GET /api/voice/live`, JARVIS-API §63.1; §15 above).
+  Neither app is missing a screen: the two keys describe a wait that exists
+  because the PC warms STT, the VAD, CAM++ and TTS behind an already-open
+  microphone. The desktop's microphone is that PC's, so its bar and badge show
+  the line and its watcher says "I'm listening." when the warm clears. The
+  phone's microphone is its own, its clips are checked by the PC's engines on
+  arrival, and a phone session has nothing to wait for - so `LiveRules.kt` and
+  the Live screen read neither key, and `tools/check_parity.py` has no route
+  to decide here (both keys ride the route both apps already call). An older
+  app of either kind simply ignores them, which the status shape allows.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -5693,3 +5706,53 @@ shapes.
   yet; §8, "One-sided on purpose", says why and where a screen would go. The
   tests are `backend/test_watch_ci.py` and `backend/test_outbox.py` (plain
   Python, fake clock, fake `gh`, temp files: no network, no model).
+## 15. Live's first turn, and the state that cannot stick (added 2026-11-05)
+
+The owner reported three things about starting Jarvis Live: the first words
+spoken after pressing Live were missed, the first answer took a long time, and
+the app could sit on "Thinking..." as if it had not heard him. The first two
+are the same cold start; the third is a flag that outlived its turn.
+
+- **The turn lifecycle is the CLIENT's, not the PC's.** There is no
+  THINKING/SPEAKING/LISTENING state machine in the Python backend and no
+  `_tts_playing` anywhere in this repository (checked 2026-11-05 with
+  `git grep`). The session's own state is `off`/`on`/`paused`/`ended`
+  (`jarvis_live.Live.status`); everything the owner sees as "thinking",
+  "speaking" or "listening" is decided in the apps: the bar's `live.thinking`
+  and the card's status text (`jarvis-desktop/src/main.js`), the Rust
+  `SPEAKING` flag that `voice.rs` reads before dropping a sentence said over an
+  answer (`jarvis-desktop/src-tauri/src/live.rs`), and the phone's
+  `LiveFlash` (`JarvisRuntime.kt`). A fix belongs on that side.
+- **The first words are kept, not just heard.** The desktop's VAD has always
+  stepped its clip back in front of the tick that first hears a voice, but by
+  the wake word's 300 ms. In Live that is not enough: the sentence can begin in
+  the same instant Live is pressed, and the poll interval plus the device's
+  start-up sit inside it. Live now keeps 500 ms (`voice.rs` `LIVE_PREROLL`,
+  `capture_preroll`), still in memory only and still bounded per utterance.
+- **"Starting microphone & voice..." is a real state, and it ends.** A
+  session that just started warms STT, the VAD, CAM++ and TTS in the
+  background (`jarvis_speech.prewarm`, already there). Until that warm
+  reports, `GET /api/voice/live` carries `starting: true` with
+  `starting_words`, and the apps show those words instead of claiming to
+  listen. The ready line ("I'm listening.") is said once, when `starting`
+  clears - the desktop says it from its watcher, which is also the side that
+  knows the microphone is really open. `START_MAX_S` (8 s) ends the wait
+  whatever the warm says, so the sign cannot stick either. It is not a pause:
+  clips are accepted the whole time, and the status grows by two keys, not by a
+  new state (`docs/JARVIS-API.md` 63.1).
+- **A playing claim now expires.** `SPEAKING` held a bare boolean. If the
+  player never cleared it - a crashed audio element, a cancelled turn, an
+  error between "answer arrived" and "answer finished" - every later Live
+  sentence began "over an answer" and was dropped, which is Live gone deaf for
+  the rest of the session. It now stores WHEN it was set and is believed for
+  `SPEAKING_MAX_MS` (120 s) at most; the bar renews it every second it really
+  plays. The backend keeps its own watchdog for the other half: the warm and
+  the model-lane warm-up are fire-and-forget threads that fail silently and
+  never block the start.
+
+- **Both apps, or the reason written down.** The two new status keys are read
+  by the desktop's `live-rules.js`, held to the shared table
+  (`tools/gen_live_cases.py`, `backend/test_live.py`, `jarvis-live.mjs`). The
+  phone's own Live screen does not read them yet: its microphone is its own
+  and it has no PC-side warm to wait for, so the honest line there is the
+  session it already shows. §8 records this as one-sided on purpose.

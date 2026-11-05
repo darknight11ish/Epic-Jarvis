@@ -219,6 +219,12 @@ SHORT_LINE_EVERY_S = 60
 TICK_S = 1.0
 #: A gap this long between two checks means the PC slept: the session ends.
 SLEEP_GAP_S = 30.0
+#: How long a just-started session may say "Starting microphone & voice..."
+#: (START_WORDS) while the PC warms STT, the VAD and CAM++ and the apps open
+#: their microphone. The warm report normally lands in a few seconds; this is
+#: the honest ceiling, so a warm that never reports cannot leave the sign on
+#: "Starting" for ever (the same rule as the turn watchdog: never stuck).
+START_MAX_S = 8.0
 #: A card raised this long before Live started still counts as new (clocks).
 CARD_SLACK_S = 2.0
 #: After a crisis turn (the owner's answer of 2026-09-28): Live does not end
@@ -650,6 +656,12 @@ END_SAID = {
     "standby": "Live ended - Jarvis is on standby.",
     "other_device": "Live moved to your other device.",
 }
+#: What both apps SHOW while a session that just started is not ready to hear
+#: yet: the microphone is open and the PC is warming the engines behind it
+#: (status()["starting"]). Shown, never said - the ready line (SAY_STARTED) is
+#: the one that means "I can hear you now". An older app that does not know the
+#: key simply shows the session as it always did.
+START_WORDS = "Starting microphone & voice..."
 #: Every fixed line, for the apps' shared fixture (tools/gen_live_cases.py).
 LINES = {"started": SAY_STARTED, "waking": SAY_WAKING, "short": SAY_SHORT, "bye": SAY_BYE,
          "extended": SAY_EXTENDED, "warn": SAY_WARN, "quiet": SAY_QUIET}
@@ -924,6 +936,23 @@ def _default_power_mode() -> str:
         return str(jarvis_power.current() or "")
     except Exception:
         return ""
+
+
+def _default_warm_ready() -> bool:
+    """Has the warm `_default_warm` started reported for the SPEECH engines?
+
+    True once `jarvis_speech.prewarm` has answered - whether it loaded them or
+    failed, because a failure is also an answer and waiting longer would be the
+    same lie in slower words. The model's own warm is NOT waited for: it is the
+    first turn's job, and the apps must be told they can start listening before
+    a 10-second model load finishes. Never raises; a missing engine report is
+    "not ready yet" (the START_MAX_S ceiling in Live.tick ends the wait)."""
+    try:
+        eng = globals().get("ENGINE")
+        warm = getattr(eng, "_warm", None) if eng is not None else None
+        return isinstance(warm, dict) and isinstance(warm.get("speech"), dict)
+    except Exception:
+        return False
 
 
 def _default_warm() -> None:
@@ -1359,6 +1388,7 @@ class Live:
                  voice_ready: Optional[Callable[[str], Optional[str]]] = None,
                  power_mode: Optional[Callable[[], str]] = None,
                  warm: Optional[Callable[[], None]] = None,
+                 warm_ready: Optional[Callable[[], bool]] = None,
                  end_on: Optional[Callable[[], str]] = None,
                  run_loop: bool = True):
         self.clock = clock
@@ -1368,6 +1398,7 @@ class Live:
         self.voice_ready = voice_ready or _default_voice_ready
         self.power_mode = power_mode or _default_power_mode
         self.warm = warm or _default_warm
+        self.warm_ready = warm_ready or _default_warm_ready
         self.end_on = end_on or _default_end_on
         self.run_loop = run_loop
         # Whether the session's own loop ticks (so a gap in its ticks means
@@ -1405,6 +1436,12 @@ class Live:
         self.muted = False
         self.muted_why = ""
         self.started_by = ""
+        #: A session that just started, while the PC is still warming the
+        #: speech engines behind an open microphone: the apps show
+        #: START_WORDS and do NOT say "I'm listening." yet. Cleared by tick()
+        #: when the warm reports (or after START_MAX_S, so it cannot stick).
+        self.starting = False
+        self.starting_since = 0.0
         #: The phone's OWN word about its screen lock when this session
         #: started: True/False, or None when it did not say (an older app).
         #: `voice_check_needed()` is the only reader that decides anything
@@ -1446,6 +1483,8 @@ class Live:
         self.ended_device = self.device
         self.ended_at = self.clock()
         self.state, self.pause, self.hint, self.ended_why = ENDED, None, None, why
+        self.starting = False
+        self.starting_since = 0.0
         self.ends_at, self.warned, self.crisis = 0.0, False, False
         self.muted, self.muted_why = False, ""
         self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
@@ -1514,6 +1553,12 @@ class Live:
             self.conversation_id = cid
             self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
             self.turns = 0
+            # A fresh session that will warm its engines in the background is
+            # "starting" until they report (or START_MAX_S): the microphone is
+            # open, but nothing may claim to be listening yet. Standby warms
+            # nothing (see below), so it has nothing to wait for.
+            self.starting = not standby
+            self.starting_since = now
             self._trust_start()
             self.phone_locked = locked_flag
             self.awake_seen = not standby
@@ -1547,7 +1592,10 @@ class Live:
                              daemon=True).start()
         self._emit()
         return {"ok": True, "status": self.status(),
-                "say": SAY_WAKING if standby else SAY_STARTED}
+                # "I'm listening." only when it can hear: a starting session
+                # says nothing yet, and the ready line is said on the status
+                # that clears `starting` (live-rules.js `liveTransition`).
+                "say": SAY_WAKING if standby else ("" if self.starting else SAY_STARTED)}
 
     def _loop(self, gen: int) -> None:
         while True:
@@ -1714,6 +1762,17 @@ class Live:
                 self.last_tick = now
                 if loop:
                     self.last_loop_tick = now
+                # The starting sign ends when the speech engines' warm reports,
+                # or after START_MAX_S whatever happens - so "Starting..." is
+                # never a state the session can be stuck in.
+                if self.starting:
+                    try:
+                        ready = bool(self.warm_ready())
+                    except Exception:
+                        ready = False
+                    if ready or now - self.starting_since >= START_MAX_S:
+                        self.starting = False
+                        changed = True
                 locked = None
                 if self.device == "desktop":
                     try:
@@ -2155,6 +2214,12 @@ class Live:
                 "quiet_warn": bool(quiet_left is not None and quiet_left <= QUIET_WARN_S),
                 "paused": self.pause if self.state == PAUSED else None,
                 "pause_words": PAUSE_WORDS.get(self.pause) if self.state == PAUSED else None,
+                # Just started: the microphone is open but the speech engines
+                # may still be loading. Nothing may say "listening" yet; both
+                # apps show START_WORDS for these few seconds (an older app
+                # does not know the keys and shows the session as before).
+                "starting": bool(on and self.starting),
+                "starting_words": START_WORDS if on and self.starting else None,
                 "muted": bool(on and self.muted),
                 "muted_why": self.muted_why if on and self.muted else None,
                 "muted_words": (MUTE_WORDS.get(self.muted_why) if on and self.muted else None),

@@ -14396,12 +14396,23 @@ sent as the `live` event on every change (the same object).
  "ending_soon": bool, "ended": str|null, "ended_words": str|null,
  "ended_say": str|null, "ended_device": str|null, "ended_ago_s": int|null,
  "resumable": bool, "turns": int, "refused_in_a_row": int,
+ "starting": bool, "starting_words": str|null,
  "limits": {..., "ended_show_s": 15, "crisis_more_s": 1800},
  "lines": {...}, "seen": {...},
  "end_on": "app_lock"|"windows_lock",
  "camera": {"ready": bool, "why": str}}
 ```
 
+- `starting` / `starting_words` (added 2026-11-05) - a session that just
+  started while the PC warms the speech engines (STT, the VAD, CAM++, TTS)
+  behind an open microphone. True only while that warm has not reported yet,
+  and never longer than `jarvis_live.START_MAX_S` (8 s), so it cannot stick.
+  Both apps show `starting_words` ("Starting microphone & voice...") for those
+  seconds instead of claiming to listen; the ready line `lines.started`
+  ("I'm listening.") is said only once `starting` is false. It is NOT a pause:
+  `state`, `on`, the clock and a `live` clip all behave as on any other
+  session, because the warm is a latency short-cut and never a gate. An older
+  app that does not know the keys shows the session exactly as before.
 - `conversation_id` (the chat audit, 2026-09-28) - the chat this session's
   words go in: the id the starting app sent with `start`, or - for a session
   started by voice or from the tray - the first one an app names with

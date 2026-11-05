@@ -199,6 +199,11 @@ export function liveSign(status, me, { stale = false, thinking = false, short = 
   else if (paused) detail = s.pause_words || "";
   else if (cardShown) detail = CARD_WORDS;
   else if (s.quiet_warn) detail = SEEN.quiet_warn;
+  // Just started: the microphone is open but the PC is still warming the
+  // speech engines. "Starting microphone & voice..." is the PC's own fixed
+  // line (jarvis_live.START_WORDS); "Listening" is only claimed once it is
+  // gone, which is the same moment the ready line ("I'm listening.") is said.
+  else if (s.starting === true && typeof s.starting_words === "string" && s.starting_words) detail = s.starting_words;
   else if (thinking) detail = SEEN.heard;
   else if (short) detail = SEEN.short;
   else if (s.hint) detail = s.hint_words || "";

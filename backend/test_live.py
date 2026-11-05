@@ -111,13 +111,17 @@ class Clock:
 
 
 class World:
-    def __init__(self, voice_ready=None, mode="active"):
+    def __init__(self, voice_ready=None, mode="active", ready=True):
         self.clock = Clock()
         self.cards = []
         self.locked = None
         self.mode = mode
         self.warmed = 0
         self.events = []
+        #: What the speech warm reports, as a box the test can flip. The real
+        #: one is false until jarvis_speech.prewarm has answered, which is why
+        #: a just-started session may say "Starting microphone & voice...".
+        self.ready = {"ready": ready}
 
         def warm():
             self.warmed += 1
@@ -127,7 +131,8 @@ class World:
                              cards_waiting=lambda: self.cards,
                              windows_locked=lambda: self.locked,
                              voice_ready=voice_ready or (lambda d: None),
-                             power_mode=lambda: self.mode, warm=warm)
+                             power_mode=lambda: self.mode, warm=warm,
+                             warm_ready=lambda: self.ready["ready"])
 
     def card(self, age=0.0):
         """A card raised `age` seconds after Live started (negative: before)."""
@@ -136,6 +141,86 @@ class World:
 
 
 # ------------------------------------------------------------ 1. the session
+
+def t_the_starting_sign_is_honest_and_cannot_stick():
+    """The third owner-reported Live bug (2026-11-05): pressing Live and
+    talking at once missed the first words, and the app claimed to listen
+    before STT, the VAD and CAM++ were loaded. A session that just started is
+    "starting" - the sign says so, and "I'm listening." is NOT said - until the
+    speech warm reports; and the wait has a ceiling, so a warm that never
+    reports cannot leave the sign on "Starting" for ever."""
+    # Warm before the owner presses: nothing claims to be starting.
+    w = World(ready=True)
+    out = w.engine.start("phone")
+    check("a session whose engines are already warm is never 'starting'",
+          out["status"]["starting"] is False
+          and out["status"]["starting_words"] is None
+          and out["status"]["on"] is True
+          and out["say"] == L.SAY_STARTED, out["status"])
+
+    # Cold: the microphone is open, but the PC cannot hear yet - and says so.
+    w = World(ready=False)
+    e = w.engine
+    out = e.start("phone")
+    st = out["status"]
+    check("a cold start says 'Starting microphone & voice...', not 'listening'",
+          st["on"] is True and st["starting"] is True
+          and st["starting_words"] == L.START_WORDS
+          and out["say"] == "", out)
+    check("the starting line is the PC's fixed words (shown, never spoken)",
+          L.START_WORDS == "Starting microphone & voice..."
+          and L.START_WORDS not in L.LINES.values())
+    check("the session is still real while starting: its clock runs, it is on "
+          "this device, and nothing pauses it",
+          st["state"] == "on" and st["device"] == "phone" and st["paused"] is None
+          and st["left_s"] == 1800)
+    check("no status event claims a different state than the route would",
+          w.events and w.events[-1][1]["starting"] is True and w.events[-1][1]["state"] == "on")
+
+    # The warm lands: the very next check flips it, and one event says so.
+    w.ready["ready"] = True
+    before = len(w.events)
+    e.tick()
+    st = e.status()
+    check("the warm flipping ends 'Starting' on the next check",
+          st["starting"] is False and st["starting_words"] is None
+          and st["on"] is True, st)
+    check("the flip is published once, on the same status channel",
+          len(w.events) == before + 1
+          and w.events[-1][1]["starting"] is False
+          and w.events[-1][1]["on"] is True, w.events[before:])
+    e.tick()
+    check("and it is not published again while nothing changes",
+          len(w.events) == before + 1)
+
+    # A warm that never reports: the ceiling ends it, so it cannot stick.
+    w = World(ready=False)
+    e = w.engine
+    e.start("phone")
+    w.clock.t += L.START_MAX_S - 0.5
+    e.tick()
+    check("a slow warm keeps the honest 'Starting' line (no early lie)",
+          e.status()["starting"] is True, e.status())
+    w.clock.t += 0.6
+    e.tick()
+    check("and after START_MAX_S the wait ends whatever the warm says",
+          e.status()["starting"] is False and e.status()["starting_words"] is None
+          and L.START_MAX_S <= 15, e.status())
+
+    # Ending clears it too: an ended session never reads as "starting".
+    w = World(ready=False)
+    e = w.engine
+    e.start("phone")
+    back = e.stop("owner")["status"]
+    check("an ended session is not 'starting' any more",
+          back["on"] is False and back["starting"] is False
+          and back["starting_words"] is None)
+    # Standby warms nothing, so there is nothing to wait for.
+    w = World(ready=False, mode="standby")
+    out = w.engine.start("phone")
+    check("on Standby there is no warm, so no 'Starting' - it says 'Waking up'",
+          out["status"]["starting"] is False and out["say"] == L.SAY_WAKING, out)
+
 
 def t_start_stop_and_the_limits():
     w = World()
@@ -972,7 +1057,11 @@ def t_status_and_events_carry_no_words():
                "started_by", "started_at", "hint", "hint_words", "ending_soon", "ended", "ended_words",
                "ended_say", "ended_device", "ended_ago_s", "resumable", "turns",
                "refused_in_a_row", "trust", "model", "limits", "lines", "seen", "camera", "end_on",
-               "conversation_id"}
+               "conversation_id",
+               # Added 2026-11-05: a session that just started, while the
+               # speech engines warm behind an open microphone. Both are fixed
+               # words and a boolean - the wire shape grows, nothing else.
+               "starting", "starting_words"}
     check("every event is the status and nothing else", w.events and all(
         k == "live" and set(d) == allowed for k, d in w.events), w.events[:1])
     fixed = (set(L.PAUSE_WORDS.values()) | set(L.HINT_WORDS.values())

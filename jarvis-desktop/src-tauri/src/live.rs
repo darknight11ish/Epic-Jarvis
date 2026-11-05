@@ -37,7 +37,7 @@
 //! NOTHING HERE HEARS ANYTHING: the microphone is voice.rs's, the words are
 //! the PC's, and what this reads is fixed words and numbers.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager, PhysicalPosition};
@@ -104,11 +104,30 @@ static MIC_OVERRIDDEN: AtomicBool = AtomicBool::new(false);
 /// `syncLiveAnswer`). voice.rs drops a Live sentence that BEGAN while this
 /// was true unless the PC said, over barge-in, that it was the owner - an
 /// "mm-hm" over an answer is not a new question (the review's bug 9).
-static SPEAKING: AtomicBool = AtomicBool::new(false);
+///
+/// It holds WHEN it was turned on, not a bare flag: `speaking_active` reads
+/// it as "playing now" only inside `SPEAKING_MAX_MS`. A flag that outlived
+/// the answer it described made Live deaf for the rest of the session (every
+/// sentence began "over an answer" and was dropped), and nothing in the app
+/// could clear it after a crashed player, a cancelled turn or a stopped
+/// answer. A watchdog that cannot stick, by construction.
+static SPEAKING: AtomicU64 = AtomicU64::new(0);
+/// How long a "playing" claim is believed without being renewed. The bar
+/// renews it every second it is really playing (main.js `syncLiveAnswer`), so
+/// this is only reached when the player stopped telling us anything.
+pub(crate) const SPEAKING_MAX_MS: u64 = 120_000;
+/// The line said when the PC's session stops being "starting" - the same
+/// fixed words as `jarvis_live.SAY_STARTED`. Said by THIS app because the
+/// session that says them is the one that just became able to hear.
+pub(crate) const READY_SAY: &str = "I'm listening.";
 /// The owner chose "Only when Windows locks" for Live on this PC (the PC's
 /// status `end_on`, read by the watcher). False - App lock's rule - until
 /// the PC says otherwise.
 static END_ON_WINDOWS_LOCK: AtomicBool = AtomicBool::new(false);
+/// Was the status last shown to the app a "starting" one? The watcher reads
+/// it once a second, so the ready line ("I'm listening.") is said exactly
+/// once, on the look that first sees `starting` gone.
+static WAS_STARTING: AtomicBool = AtomicBool::new(false);
 /// A pause ended while talk-to-type held the microphone: Live stays on,
 /// its microphone closed, and listens again once talk-to-type lets go -
 /// it is not ended as if the owner had ended it (the 2026-09-28 audit, #1).
@@ -155,7 +174,36 @@ pub fn on_here() -> bool {
 
 /// Whether the bar is playing an answer or a fixed line in Live (voice.rs).
 pub(crate) fn answer_playing() -> bool {
-    on_here() && SPEAKING.load(Ordering::SeqCst)
+    on_here() && speaking_active(SPEAKING.load(Ordering::SeqCst), now_ms())
+}
+
+/// Is a "playing" claim set at `set_at` still true at `now`? Epoch
+/// milliseconds, 0 = never set. Pure, so the expiry is proved without audio.
+pub(crate) fn speaking_active(set_at: u64, now: u64) -> bool {
+    set_at != 0 && now.saturating_sub(set_at) < SPEAKING_MAX_MS
+}
+
+/// Milliseconds since the Unix epoch, for the playing claim's age.
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+/// Is the PC's session still "starting" (microphone open, engines warming)?
+pub(crate) fn starting(status: &serde_json::Value) -> bool {
+    status.get("starting").and_then(|v| v.as_bool()) == Some(true)
+}
+
+/// The fixed line to say when a status read changes `starting` from true to
+/// false: the ready line, once. Anything else is "" - never a second one.
+pub(crate) fn starting_ready_say(was_starting: bool, now_starting: bool) -> &'static str {
+    if was_starting && !now_starting {
+        READY_SAY
+    } else {
+        ""
+    }
 }
 
 /// Does App lock end Live on this PC now? Not when the owner chose "Only
@@ -403,6 +451,10 @@ pub(crate) async fn start(
     }
     let status = status_of(&out);
     let say = out.get("say").and_then(|v| v.as_str()).unwrap_or("");
+    // The PC may answer "starting" (microphone open, engines warming): then
+    // nothing claims to be listening yet, and this app says the ready line
+    // on the look that first sees `starting` gone.
+    WAS_STARTING.store(starting(&status), Ordering::SeqCst);
     tell(app, &status, say);
     spawn_watcher(app.clone());
     Ok(payload(app, &status, say))
@@ -551,7 +603,7 @@ pub async fn live_hold(app: AppHandle, what: String, on: bool) -> Result<(), Str
         "card" => CARD_SHOWN.store(on, Ordering::SeqCst),
         "answer" => ANSWERING_TAP_ONLY.store(on, Ordering::SeqCst),
         "speaking" => {
-            SPEAKING.store(on, Ordering::SeqCst);
+            SPEAKING.store(if on { now_ms() } else { 0 }, Ordering::SeqCst);
             return Ok(());
         }
         other => return Err(format!("Jarvis Live cannot hold for {other:?}")),
@@ -615,9 +667,10 @@ async fn ended_here(app: &AppHandle) {
     CARD_PAUSED.store(false, Ordering::SeqCst);
     CARD_SHOWN.store(false, Ordering::SeqCst);
     ANSWERING_TAP_ONLY.store(false, Ordering::SeqCst);
-    SPEAKING.store(false, Ordering::SeqCst);
+    SPEAKING.store(0, Ordering::SeqCst);
     LOCK_UNKNOWN.store(false, Ordering::SeqCst);
     TALK_TYPE_WAIT.store(false, Ordering::SeqCst);
+    WAS_STARTING.store(false, Ordering::SeqCst);
     voice::close_for_live(app).await;
     crate::tray::live_changed(app);
     if was_on {
@@ -737,7 +790,14 @@ fn spawn_watcher(app: AppHandle) {
                         None => status,
                     };
                     apply_hold(&app, &status);
-                    tell(&app, &status, "");
+                    // "Starting microphone & voice..." ends when the PC says
+                    // the engines are warm: say the ready line exactly once.
+                    let now_starting = starting(&status);
+                    let say = starting_ready_say(
+                        WAS_STARTING.swap(now_starting, Ordering::SeqCst),
+                        now_starting,
+                    );
+                    tell(&app, &status, say);
                 }
                 Err(why) => {
                     // Cannot tell what the PC says: nothing is heard.
@@ -1148,6 +1208,48 @@ mod tests {
             "anything else: the stricter"
         );
         assert!(!app_lock_ends(Some("windows_lock")));
+    }
+
+    #[test]
+    fn a_playing_claim_expires_so_live_cannot_stay_deaf() {
+        assert!(!speaking_active(0, 5_000), "never set");
+        let set = 1_000_000;
+        assert!(speaking_active(set, set + 1));
+        assert!(
+            speaking_active(set, set + SPEAKING_MAX_MS - 1),
+            "the player renews it every second while it really plays"
+        );
+        assert!(
+            !speaking_active(set, set + SPEAKING_MAX_MS),
+            "a claim nothing renews is dropped, so a crashed or cancelled answer cannot leave Live deaf"
+        );
+        assert!(!speaking_active(set, set + SPEAKING_MAX_MS * 10));
+    }
+
+    #[test]
+    fn the_ready_line_is_said_once_when_starting_clears() {
+        assert_eq!(starting_ready_say(false, false), "");
+        assert_eq!(
+            starting_ready_say(true, true),
+            "",
+            "still warming: nothing said"
+        );
+        assert_eq!(
+            starting_ready_say(true, false),
+            READY_SAY,
+            "once, when it can hear"
+        );
+        assert_eq!(
+            starting_ready_say(false, true),
+            "",
+            "a new session's start says its own line"
+        );
+        assert!(starting(&json!({"starting": true})));
+        assert!(!starting(&json!({"starting": false})));
+        assert!(
+            !starting(&json!({})),
+            "a PC without the key is never claimed to be starting"
+        );
     }
 
     #[test]
