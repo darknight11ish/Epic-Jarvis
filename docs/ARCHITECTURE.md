@@ -4580,8 +4580,26 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 **Habit check-ins and the mood log are backend only today, on BOTH apps, and that is a lane boundary rather than a platform decision** (2026-11-02; the owner's life-coach set, JARVIS-API §180; `backend/jarvis_habits.py` and `backend/jarvis_mood.py`, installed by the drop-in folders `plugins/ready/habits` and `plugins/ready/mood`; the two decisions are `decisions.d/2026-11-02-mood-log-recorded.md` and `decisions.d/2026-11-02-habit-mood-never-learned.md`). The routes are built, documented and classified backend-only in `tools/check_parity.py`: `GET`/`POST /api/habits` with tick/untick/stop, the weekly review and its on/off, and `GET`/`POST /api/mood`. **Neither app has a screen for either feature** - no habit row, no tick control, no 1-5 mood plate and no chart - so this is one gap on both sides at once, not one app missing what the other has. The UI half is the next lane, and when it is built it goes on BOTH apps on these same routes and stores: the phone's Reminders screen beside Reminders / Daily to-do / Goals, and the PC's equivalent (the owner's placement decision D3). Already decided and not the UI lane's to re-decide: no score, streak, percentage or praise anywhere; the mood chart is a picture of the owner's own taps and never a judgement; a tick and a mood entry raise no card; and neither store's data is ever learned, by construction rather than by a card (`backend/test_learning_exclusion.py`).
 
+**The watchers' decision log is read on the PC today, and neither app draws it - one-sided on purpose for now** (2026-11-04; the owner-forwarded dsh-superagent spec, Part II pattern 1; JARVIS-API §186.2; `backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`). `GET /api/watch/decisions?limit=50` is the read that makes `observe` mode worth having: what the GitHub watcher would have said, with a closed reason code and the exact preview line, so the owner can promote it to `active` on evidence rather than on hope. **Neither app has a screen for it yet**, and `tools/check_parity.py` classifies the route `BACKEND_ONLY` with that reason rather than leaving it undecided. This is a deliberate desk-first order, not a platform decision: the arithmetic ("is this watcher quiet enough to speak?") is done at the PC, and a notification about noise is not something to interrupt the phone with. When a screen is built it goes on BOTH apps on this same module and the same store - a Work-pane row in the desktop's Work plate and the phone's Work/journal screen - and at that point the route moves out of `BACKEND_ONLY`. Nothing on this route writes, approves, pushes or merges; it is a read of rows another module already wrote.
 
-**The watchers' decision log is read on the PC today, and neither app draws it - one-sided on purpose for now** (2026-11-04; the owner-forwarded dsh-superagent spec, Part II pattern 1; JARVIS-API §187.2; `backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`). `GET /api/watch/decisions?limit=50` is the read that makes `observe` mode worth having: what the GitHub watcher would have said, with a closed reason code and the exact preview line, so the owner can promote it to `active` on evidence rather than on hope. **Neither app has a screen for it yet**, and `tools/check_parity.py` classifies the route `BACKEND_ONLY` with that reason rather than leaving it undecided. This is a deliberate desk-first order, not a platform decision: the arithmetic ("is this watcher quiet enough to speak?") is done at the PC, and a notification about noise is not something to interrupt the phone with. When a screen is built it goes on BOTH apps on this same module and the same store - a Work-pane row in the desktop's Work plate and the phone's Work/journal screen - and at that point the route moves out of `BACKEND_ONLY`. Nothing on this route writes, approves, pushes or merges; it is a read of rows another module already wrote.
+- **The superseded work setups' one write stays on the phone, and there is no
+  desktop half to build** (2026-11-05; the parity audit's F6;
+  `tools/check_parity.py`). `POST /api/work/choose` belongs to the five work
+  SETUPS, which the owner replaced with the nine focus PRESETS on 2026-10-18
+  (JARVIS-API §128's superseded note; §145 is the replacement). It changes no
+  model and no setting: choosing records a preference in
+  `work-setup-choice.json` and returns the ONE step that would switch a model -
+  the existing `/api/models/switch` card. The desktop's work surface is the
+  focus presets: `src-tauri/src/focus_presets.rs` and `focus-presets.js` read
+  `GET /api/work` and apply through `POST /api/work/apply`, so the desktop
+  never had the old setups screen and is not getting one. That is why the
+  route is `phone-only` in `tools/check_parity.py` rather than `planned` with
+  the desktop "still to build". The phone keeps it in `net/WorkSetups.kt` (the
+  API layer serves exactly this one write), but the old `WorkSetupsSection` is
+  no longer drawn - `HardwarePlate.kt` draws `FocusPresetsSection` in its
+  place (2026-10-19) - so it is the superseded contract's compatibility path,
+  not a live screen on either side. Written here rather than left as a parity
+  warning, because a warning is not a reason.
 
 ## 9. Where the backend lives
 

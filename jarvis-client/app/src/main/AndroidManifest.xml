@@ -524,18 +524,20 @@
             android:foregroundServiceType="mediaProjection" />
 
         <!-- Hands-free (the owner's request, 2026-11-04;
-             service/HandsfreeService.kt): a card is read out, then a ten-second
+             service/HandsfreeService.kt): a card is read out, then an answer
              window records the owner saying "confirm" or "deny", and the clip
-             is uploaded for the PC to transcribe and decide. It is the
-             microphone because a card can arrive while the app is in the
-             background (the whole point of the mode), so it needs the same
-             permission "hey Jarvis" already declares - and its own service and
-             type, not a mode of Live's, because it is started and stopped by
-             the PC's own state and must keep working with Live off.
-             Started ONLY while the PC says the mode is armed, from the app's
-             own foreground; START_NOT_STICKY, never at boot. Android shows the
-             microphone indicator only while the window is actually recording,
-             which is the ten seconds after a read-out. -->
+             is uploaded for the PC to transcribe and decide. The window is the
+             PC's own (`expires_in_sec`, a minute at most; the clip is capped
+             at the PC's 30 seconds). It is the microphone because a card can
+             arrive while the app is in the background (the whole point of the
+             mode), so it needs the same permission "hey Jarvis" already
+             declares - and its own service and type, not a mode of Live's,
+             because it is started and stopped by the PC's own state and must
+             keep working with Live off. Started ONLY while the PC says the
+             mode is armed, from the app's own foreground; START_NOT_STICKY,
+             never at boot. Android shows the microphone indicator only while
+             the window is actually recording, which is the window after a
+             read-out (up to a minute). -->
         <service
             android:name=".service.HandsfreeService"
             android:exported="false"

@@ -23289,21 +23289,25 @@ Two checks now hold that, rather than a sentence in a document:
   throwaway checkout, including the harder case - a call site inside a function
   nothing calls - which is the defect this whole guard exists to catch.
 
-The desktop's own section is still to build (`docs/WORK-SETUPS.md`, "Still to
-build"); it is not part of the same task, because `jarvis-desktop/` was another
-conversation's surface.
+The desktop never builds this section: its work surface is the focus presets
+(§145), which apply through `POST /api/work/apply`
+(`src-tauri/src/focus_presets.rs`, `focus-presets.js`). `docs/WORK-SETUPS.md`'s
+"Still to build" half predates that replacement (2026-10-18) and is kept as the
+older design's history, not as work still wanted.
 
-### 128.4 Why the routes are `planned`, and not `ported`
+### 128.4 How `tools/check_parity.py` records them now
 
-`tools/check_parity.py` classifies all three as `planned`: on the backend, in
-the phone's screen, and in **no** desktop build yet. That is what makes CI name
-the missing desktop half instead of reporting parity. For `/api/work` and
-`/api/work/choose` the warning reads "the phone calls it; the desktop does not
-yet". For `/api/work/recommend` it reads **"NEITHER app calls it"** and names the
-helper nothing calls, because the route is declared unreachable; it is also kept
-out of the "On the phone and not the desktop" list, since a literal in the
-phone's source is not a call. The old line, "the phone calls it", came from a
-string match and was never true. `backend/test_parity_callgraph.py` still pins
+`/api/work` is `ported`: both apps read the focus-presets contract on it
+(§145). `/api/work/choose` is `phone-only` (the 2026-11-05 parity audit's F6):
+it is the superseded setups contract's one write; `net/WorkSetups.kt` still
+serves it, the phone's old Work setups section is no longer drawn (the Focus
+presets plate replaced it, 2026-10-19), and the desktop has no old-setups
+surface - its work surface is the presets, which apply through
+`/api/work/apply` (ARCHITECTURE §8). `/api/work/recommend` stays `planned` and
+RETIRED: F11 took the phone's builder away and the PC route remains with
+nobody calling it, which the checker prints as "RETIRED (no app calls it)" with
+that reason. The old line, "the phone calls it", came from a string match and
+was never true for `recommend`. `backend/test_parity_callgraph.py` still pins
 the direction that matters for shipping - one real call site and the checker
 fails instead.
 ---
