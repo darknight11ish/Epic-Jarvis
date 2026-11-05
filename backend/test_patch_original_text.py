@@ -168,8 +168,19 @@ def t_the_late_patches_are_pinned_and_not_new():
     # web-search-grant.patch's own block, whose last hunk must stay the last
     # bytes (`git apply -R` needs it), and it must stay before
     # unknown-risk-approvable.patch, the last writer of that file.
-    check("the twenty-five exceptions the tool's docstring names are the "
-          "twenty-five the walk finds", len(late) == 25,
+    # 2026-11-05 (the combined six-PR tree): the count is now TWENTY-SEVEN, and
+    # both new ones were already pinned in the tool before they met here -
+    # product-check.patch at position 164 and handsfree.patch at position 165,
+    # each with ONE hunk whose three context lines are the owner's own
+    # `if __name__` tail at the end of jarvis_gate.py. Two patches cannot both
+    # be the end of the file, so whichever runs second materialises those three
+    # lines; `_stack.RATCHET`'s jarvis_gate.py pin moved 60 -> 61 for exactly
+    # that, and handsfree.patch is pinned immediately before
+    # web-search-grant.patch by backend/test_phone_app_allowlist.py. Measured,
+    # not chosen: the walk (and `tools/check_patch_original_text.py`'s own run)
+    # prints 27.
+    check("the twenty-seven exceptions the tool's docstring names are the "
+          "twenty-seven the walk finds", len(late) == 27,
           f"the walk found {len(late)}: {late}")
 
 

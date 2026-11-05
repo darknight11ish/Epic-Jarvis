@@ -1929,13 +1929,6 @@ $PATCHES = @(
     # jarvis_agent.py offers still resolves to no real gate action in CI,
     # where jarvis_gate.py itself cannot be imported.
     'gate-tool-actions-gap.patch'
-    # handsfree.patch (2026-11-04) - hands-free mode's gate rows, and nothing
-    # else: TWO `_RISK` rows (`send_text_message`, `handsfree_enable`), ONE
-    # `_TOOL_ACTIONS` line, and TWO `_NO_RULE_FROM_DENIAL` lines, in ONE
-    # `_TOOL_ACTIONS.update` / `_NO_RULE_FROM_DENIAL` / `_RISK.update` block at
-    # the END OF THE FILE. The routes come from the drop-in folder
-    # plugins/ready/handsfree and the logic lives in the shipped
-    # jarvis_handsfree.py.
     # The product check's gate rows (product-check.patch, 2026-11-04; the
     # owner's choice "wire the existing product check"). ONE `_TOOL_ACTIONS`
     # entry and, at the end of the file, the action's `_RISK` row and its "a
@@ -1952,8 +1945,25 @@ $PATCHES = @(
     # earlier. Its rows sit at the END OF THE FILE, the one place no earlier
     # patch's hunk reaches; web-search-grant.patch's own end-of-file block is
     # then inserted above it, exactly as the published base has them.
-    'handsfree.patch'
+    #
+    # IT COMES BEFORE handsfree.patch, and that order is pinned, not chosen
+    # (2026-11-05): backend/test_phone_app_allowlist.py requires handsfree.patch
+    # to be the patch IMMEDIATELY before web-search-grant.patch, so the other
+    # new end-of-file writer can only sit on the near side of it. Both append
+    # at the same end-of-file anchor, so whichever is applied second has to
+    # materialise a pre-image - measured at 61 hunks for jarvis_gate.py, which
+    # is why backend/_stack.py's RATCHET moved 60 -> 61 and says so there.
     'product-check.patch'
+    # handsfree.patch (2026-11-04) - hands-free mode's gate rows, and nothing
+    # else: TWO `_RISK` rows (`send_text_message`, `handsfree_enable`), ONE
+    # `_TOOL_ACTIONS` line, and TWO `_NO_RULE_FROM_DENIAL` lines, in ONE
+    # `_TOOL_ACTIONS.update` / `_NO_RULE_FROM_DENIAL` / `_RISK.update` block at
+    # the END OF THE FILE. The routes come from the drop-in folder
+    # plugins/ready/handsfree and the logic lives in the shipped
+    # jarvis_handsfree.py. It is applied immediately before
+    # web-search-grant.patch - backend/test_phone_app_allowlist.py pins that
+    # adjacency, and it is the reason product-check.patch sits above it.
+    'handsfree.patch'
     # "You have full approval to search the web in this conversation" (the
     # owner's ask of 2026-11-01; docs/JARVIS-API.md section 175). ONE card,
     # once, that stands in for the `search_the_web` card for the rest of ONE
@@ -2088,6 +2098,38 @@ $PATCHES = @(
     # backend/test_jobs.py rehearses this patch against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'jobs-routes.patch'
+    # Clearing old chats by date (history-purge.patch, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). FIVE hunks and NO route branches in jarvis_hud.py:
+    # ONE install block, right after forget-range.patch's own, that wraps
+    # Handler for the three routes (POST /api/history/purge/preview, /confirm
+    # and /cancel - every rule is in the shipped jarvis_history_purge.py); and
+    # FOUR rows in jarvis_gate.py that give the action its tier ("ask", only
+    # ever "ask"), its words, and the two-press guard's category - the action
+    # raises no card of its own (its two yeses and the platform ticket are
+    # stricter than one), so those rows are what keep it honest for anything
+    # that reads the gate's tables.
+    #
+    # WHY IT IS HERE AND NOT NEXT TO THE LOADER (moved 2026-11-05). It was
+    # appended immediately before plugin-loader.patch, which put it between
+    # bench.patch and the loader - and backend/test_phone_app_allowlist.py pins
+    # phone-apps.patch -> bench.patch -> plugin-loader.patch as the last three,
+    # so that suite went red on the combined tree. Its jarvis_hud.py hunk sits
+    # far above the loader's own anchor (the loader anchors on
+    # secret-handoff.patch's block, which is what it still does), so its PLACE
+    # IN THE LIST never mattered to the loader - only the last three did. It
+    # goes here, before phone-apps.patch, because it is the first free index
+    # after forget-range.patch (whose install block it follows) that collides
+    # with no drop-in folder's number: its own folder's stack_order IS the
+    # patch index, and 170 is free, while 171 protected-items, 172 send-file
+    # and 174 call-notes keep their hand numbers. The stack walk still invents
+    # no line of the owner's original file. Every patch that enumerates "the
+    # patches written after me" has had its name added there (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'history-purge.patch'
     # A skill's ONE install card can now carry a line the caller wrote
     # (`jarvis_skills.install(..., note=...)`), and the card is only a card on
     # the tiers where a person really answers: `jarvis_gate.check` returns
@@ -2135,29 +2177,6 @@ $PATCHES = @(
     # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'bench.patch'
-    # Clearing old chats by date (history-purge.patch, 2026-11-04; the owner's
-    # own request: "how long does it take for you to clear old chats if i
-    # batched a lot of them together?", then "clear the ones i don't have
-    # pinned ... including facts ... a card ... double confirmation ... windows
-    # pin or fingerprint"). FIVE hunks and NO route branches in jarvis_hud.py:
-    # ONE install block, right after forget-range.patch's own, that wraps
-    # Handler for the three routes (POST /api/history/purge/preview, /confirm
-    # and /cancel - every rule is in the shipped jarvis_history_purge.py); and
-    # FOUR rows in jarvis_gate.py that give the action its tier ("ask", only
-    # ever "ask"), its words, and the two-press guard's category - the action
-    # raises no card of its own (its two yeses and the platform ticket are
-    # stricter than one), so those rows are what keep it honest for anything
-    # that reads the gate's tables.
-    #
-    # It appends immediately before plugin-loader.patch (which must stay LAST
-    # of all) and its jarvis_hud.py hunk sits far above the loader's own
-    # anchor, so the loader's context is untouched. The block is inserted
-    # after forget-range.patch's install block, so the stack walk invents no
-    # line of the owner's original file. Every patch that enumerates "the
-    # patches written after me" has had its name added there (test_devices.py,
-    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
-    # test_screen_attach.py, test_hud_manual_lane_gate.py).
-    'history-purge.patch'
     'plugin-loader.patch'
 )
 

@@ -91,6 +91,23 @@ them. Every folder keeps its position except `history-purge`, which now loads
 first of that group instead of third; the five features share no route, switch
 or handler, so nothing about what loads changed - only the labels did, as on
 2026-10-16 and in the paragraph above.
+
+AND THEN THE PATCH SIDE MOVED AFTER ALL, later the same day, which is why the
+number above is now history too. `history-purge.patch` could not stay between
+`bench.patch` and `plugin-loader.patch`: `backend/test_phone_app_allowlist.py`
+pins `phone-apps.patch` -> `bench.patch` -> `plugin-loader.patch` as the last
+three entries, so a patch written after phone-apps could not sit between them.
+There was no free slot next to the loader either - 171, 172 and 174 are
+protected-items', send-file's and call-notes' hand numbers - so the patch moved
+to index 170, the first free number after `forget-range.patch`, whose install
+block its hunk follows. `history-purge`'s folder therefore reads 170 (one
+number, no collision: nothing else holds 170, and 173 is now unused), and the
+other 53 folders keep theirs. Its loader POSITION is what changed for the first
+time in these three records: it now loads just after `notes-edit` (169) instead
+of just before `call-notes` (174). The two features share no route, switch,
+handler or module, so what loads and in what order relative to one another is
+unchanged - only where this one starts, which is the honest label for a patch
+that really did move.
 """
 from __future__ import annotations
 

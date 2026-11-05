@@ -4,5 +4,5 @@
   "module": "jarvis_history_purge",
   "install": "handler",
   "replaces_patch": "history-purge.patch",
-  "stack_order": 173
+  "stack_order": 170
 }
