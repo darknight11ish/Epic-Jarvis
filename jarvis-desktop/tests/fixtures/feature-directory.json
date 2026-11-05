@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "b4989be733b896e1868eb5db443f18ff5864d21f989608a4be78177c0d45e14e",
-  "feature_count": 175,
+  "source_sha256": "f8b67d8f4ee34148c76358d4615003608d7f27a3cc2b8d736b3e1432636dfb6d",
+  "feature_count": 176,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
     "Settings-Only (By Design — Security Boundary)",
@@ -2811,6 +2811,22 @@
       "status": "not-a-setting",
       "label_note": "",
       "example": "turn on Turn a drop-in module on or off by asking",
+      "example_ok": true,
+      "where": "desktop Settings: All features and abilities; phone: All features and abilities",
+      "where_desktop": "All features and abilities",
+      "where_phone": "All features and abilities",
+      "note": "",
+      "not_a_control": true
+    },
+    {
+      "id": "product-check",
+      "title": "Check a product's reviews",
+      "group": "Money and health",
+      "surface": "desktop",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "status": "not-a-setting",
+      "label_note": "",
+      "example": "turn on Do arithmetic",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",

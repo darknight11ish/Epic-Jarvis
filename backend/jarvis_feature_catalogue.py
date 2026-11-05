@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 175 rows from features/features.json.
+The owner's feature list, as data: 176 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 4cb8996957734448b75da281b606c6ff5626025c2a74a8f0815bc875edf923a2); the apps' Features pages read their own
+`features/features.json` (sha256 0418fbfa1e2daec71f3d52c65762a17b3136ac3a4f8690611828eae57e4974c1); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "4cb8996957734448b75da281b606c6ff5626025c2a74a8f0815bc875edf923a2"
+SOURCE_SHA256 = "0418fbfa1e2daec71f3d52c65762a17b3136ac3a4f8690611828eae57e4974c1"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -989,6 +989,19 @@ FEATURES = (
         "limit": "One row per day, and a second entry that day replaces the first. It is excluded from learning entirely - mood data never becomes a fact, by construction rather than by a card - and it is never the crisis path.",
         "surface": "both",
         "aliases": ["mood tracker", "mood log", "mood journal", "mood diary"],
+        "covers": [],
+    },
+    {
+        "id": "product-check",
+        "group": "Money and health",
+        "title": "Check a product's reviews",
+        "what": "A read-only product check: give Jarvis one Amazon product link and it reads that page in your own signed-in browser, then reports what the reviews themselves show - Verified Purchase and Vine badges, incentive wording, near-duplicate text, review-date bursts, the rating shape, generic prose and reviews that do not match the product - with counts, examples and every review set aside and why.",
+        "where": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+        "asks": "ONE card naming the product page, on the PC only: \"Read this product page in your own browser session? Read-only; nothing is bought or added to a cart.\" A cart, checkout, order, account, payment or sign-in address is refused before any card, and a non-Amazon address is refused too.",
+        "limit": "Off by default. Amazon only, and it reads the sample Amazon chose to show - never all of the reviews, so the report's caveat comes first. It never buys, orders, adds to a cart, signs in, types or clicks, solves a CAPTCHA, follows a link or stores the page; it says plainly what it could not check. There is no trust score and no fake/real verdict for any review - the report is evidence, counts and reasons.",
+        "surface": "desktop",
+        "surface_reason": "The visible browser window it reads in, and the sign-in that window keeps, are on the PC, so the card can only be approved there; the phone has no tool, no switch and no report screen for the product check yet (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["product check", "check a product", "sponsored reviews", "fake reviews", "unbiased product research", "product research"],
         "covers": [],
     },
     {

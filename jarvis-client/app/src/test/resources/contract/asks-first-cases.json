@@ -593,6 +593,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -1840,15 +1849,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -2455,6 +2466,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -3704,15 +3724,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -4315,6 +4337,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -5563,15 +5594,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -6169,6 +6202,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -7417,15 +7459,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -8028,6 +8072,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -9291,15 +9344,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -9902,6 +9957,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -11160,15 +11224,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -11766,6 +11832,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -13014,15 +13089,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -13633,6 +13710,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -14882,15 +14968,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -15493,6 +15581,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a web page out loud"
+      },
+      {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
       },
       {
        "action": "github_read",
@@ -16741,15 +16838,17 @@
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -16862,6 +16961,7 @@
   "missing": "Your PC's Jarvis cannot show what asks first yet - run apply-patches.ps1 on the PC.",
   "no_switch_note": {
    "approve_web_search_for_conversation": "This one rides with Web search: with Web search offered, the AI is offered this too, and without it this tool could not search anyway. It has no switch of its own, so nothing was changed here.",
+   "product_check": "The product check has its own switch: the line [product_check] enabled = true in jarvis-framework.toml. That line is what offers this tool, so a line in [tools].enabled would change nothing. Nothing was changed here.",
    "run_data_script": "The data and maths sandbox has its own switch: Settings, Data sandbox (or the sandbox row on the What asks first page). That switch is what offers this tool, so a line in [tools].enabled would change nothing. Nothing was changed here.",
    "stop_web_search_approval": "This one rides with Web search: with Web search offered, the AI is offered this too. It has no switch of its own, so nothing was changed here."
   },
@@ -16880,7 +16980,7 @@
   "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
   "tools_label": "Let the AI use this",
   "tools_not_on_list": "This PC does not know a tool by that name, so nothing was changed.",
-  "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it.",
+  "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it.",
   "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }
