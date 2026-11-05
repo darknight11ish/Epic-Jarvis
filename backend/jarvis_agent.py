@@ -9226,6 +9226,7 @@ def _handsfree_on() -> bool:
         import jarvis_handsfree as HF
         return bool(HF.enabled())
     except Exception:
+        return False
 def _product_check_on() -> bool:
     """Is the product check's own switch ON? (`[product_check] enabled`.)
 
