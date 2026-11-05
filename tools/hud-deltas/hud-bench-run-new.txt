@@ -5,14 +5,14 @@
             #           "prefill_tokens", "repeats", "warmup", "unload",
             #           "confirm": {"model", "lane", "may_evict": true}}
             #   cancel {"run_id"}
-            # NO APPROVAL CARD, and that is the recorded decision rather than a
-            # shortcut (DESIGN.md section 7): POST /api/hardware/measure runs
-            # with no card for the same reason - it runs short prompts on this
-            # PC and changes no setting - and here the owner pressing Measure is
-            # the actor. What a card would have bought is bought explicitly
-            # instead: `confirm` is mandatory and a POST without it measures
-            # nothing. The run is ASYNCHRONOUS, so a two-minute run cannot hang
-            # a request thread.
+            # NO APPROVAL CARD, and that is a RECORDED decision, not a shortcut:
+            # decisions.d/2026-11-04-self-benchmark-no-approval-card.md (rolled
+            # into docs/DECISIONS.md) records it and its reasoning. The precedent
+            # is POST /api/hardware/measure, cardless for the same reason - short
+            # prompts, no setting changed - and the owner pressing Measure is
+            # the actor. What a card would buy is bought explicitly: `confirm`
+            # is mandatory and a POST without it measures nothing. The run is
+            # ASYNCHRONOUS, so a two-minute run cannot hang a request thread.
             # 200 {"ok": true, "run_id", ...}; 400 bad body or no confirm; 409
             # refused with a sentence; 503 could not start.
             if not _origin_ok(self):
