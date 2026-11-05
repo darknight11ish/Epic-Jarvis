@@ -106,6 +106,46 @@ pruned by hand on 2026-10-13). Making a new one deletes the ones past that.
 Nothing but this tool's own `jarvis-snap-*` entries is ever deleted - the
 owner's `.jbak` files, and the older plain copy, are not this tool's business.
 
+DEEP PATHS, AND THE FOUR WEEKLY RUNS THAT FAILED WITHOUT SAYING SO (2026-11-04)
+
+On 2026-11-01 the weekly task ran, failed with result `1`, and left the backup
+folder saying `OK` from 2026-10-25. It did that again every week: the newest
+snapshot was 2026-10-25 and the 0-byte-looking `.partial-msiqbffm.partial` from
+03:00:01 that morning was the only trace, holding 45 of the 277 files under
+`~/.openjarvis/apps`.
+
+**The cause was MAX_PATH.** `~/.openjarvis/apps/.tasks/.../desugar_graph/.../
+graph.bin` is a 235-character path - it opens fine where it lives, which is why
+nothing else on the PC ever noticed. A snapshot is built inside the destination
+in a `.partial-XXXXXXXX.partial` folder, and that folder's name alone is 42
+characters longer, so the same file asked for a 274-character destination path.
+Windows on this PC has long paths switched off (`LongPathsEnabled = 0`, read
+from the registry, 2026-11-04), so `CopyFile2` refused with
+`FileNotFoundError [WinError 3] The system cannot find the path specified` -
+which reads like a missing folder, not like a long name. 12 of the 339 files
+were over the limit; the copy died on the 46th and took the run with it.
+
+Three separate faults turned one long path into a silently dead backup, and all
+three are fixed here:
+
+  1. **The copy raised instead of coping.** `_long_path` now puts Windows'
+     own `\\\\?\\` prefix on a destination path that is over `MAX_WINDOWS_PATH`,
+     and the copy succeeds. That is the cause fixed, not worked around.
+  2. **One file could take the whole snapshot down.** `_copy_file` now records
+     a `problems` entry and returns False, so anything that still will not copy
+     leaves the snapshot `-INCOMPLETE` and the run exiting non-zero - an honest
+     "not verified" rather than a lost week.
+  3. **The failure left no record anywhere.** `cmd_backup` caught `Refused` and
+     nothing else, so an `OSError` went straight out of `main()`, and under
+     `pythonw.exe` a traceback goes to a console that does not exist. Every way
+     out of a backup run now writes `last-run.txt` saying FAILED, into the
+     destination **and** into the installed folder. `take_snapshot` also removes
+     its own partial folder however it ends, and clears an older one at the
+     start, so a crash cannot leave half-copied personal data in the backup
+     folder for ever. Those cleanups match this tool's own
+     `.partial-XXXXXXXX.partial` shape and its own `jarvis-snap-*` names, and
+     nothing else.
+
 WHERE IT LANDS - ONE DESTINATION, AND THE OWNER PICKS IT (2026-10-14)
 
 **`folder` in `~/.openjarvis/backup.json` is the one setting.** This tool reads
@@ -320,6 +360,7 @@ import os
 import re
 import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
 import tempfile
@@ -419,6 +460,29 @@ STALE_DAYS = 7
 #: largest kept one is voice/ at 0.2 MB).
 MAX_DIR_BYTES = 256 * 1024 * 1024
 
+#: The path length past which this tool stops trusting Windows with a plain
+#: path. MAX_PATH is 260 counting the terminating NUL, and long paths are
+#: switched off on this PC (`LongPathsEnabled = 0`, read from the registry,
+#: 2026-11-04) - but the exact ceiling is not one number: measured that day, a
+#: 260-character file destination failed with `WinError 3`, a 259-character
+#: folder path failed with `WinError 206`, and a 235-character destination
+#: worked. It also moves with the length of the last name, because a single
+#: component has its own ceiling. So this is a deliberate margin below the
+#: smallest of those, not a measurement sitting on an edge: a `\\\\?\\` prefix on
+#: a path that would have been fine anyway costs nothing, while a path one
+#: character over the line costs a silent week's backup. See `_long_path`.
+MAX_WINDOWS_PATH = 240
+
+#: The build folder a snapshot is made in, exactly as `tempfile.mkdtemp` names
+#: it: `.partial-XXXXXXXX.partial`. Matched by this shape and no other, so a
+#: `.something.partial` belonging to some other program is never deleted here.
+PARTIAL_RE = re.compile(r"^\.partial-[a-z0-9_]{4,16}\.partial$")
+
+#: A `.partial` folder older than this is a crashed run's leftover. A real run
+#: takes seconds (5.8 MB of data on 2026-11-04) and the weekly task's own limit
+#: is one hour, so two hours cannot be a run that is still going.
+PARTIAL_STALE_SECONDS = 2 * 3600
+
 #: Folders deliberately not copied, with the reason that goes into the manifest.
 #: `voice-models` is 1.14 GB of downloadable engine files, `models` is a 64 MB
 #: Hugging Face cache for the embedding model, and `logs` is 13 MB of daily
@@ -474,11 +538,67 @@ class Refused(Exception):
 # ---------------------------------------------------------------------------
 
 
+def _force_long(path) -> str:
+    """`_long_path`, but the `\\\\?\\` prefix is ALWAYS added on Windows.
+
+    Needed wherever Windows is going to build its own longer strings from the
+    one it is handed. `shutil.rmtree` and `os.walk` both descend by joining, so
+    a SHORT root over a deep tree still has to be prefixed: without it the
+    descent stops at the first path past the limit, and `os.walk` reports
+    nothing while `rmtree(ignore_errors=True)` leaves the tree behind. That is
+    the difference between "the snapshot was sealed" and "the plaintext copy is
+    still there", so it is not a detail.
+    """
+    if os.name != "nt":
+        return os.fspath(path)
+    text = os.fspath(path)
+    if text.startswith("\\\\?\\"):
+        return text
+    absolute = os.path.abspath(text)
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute[2:]
+    return "\\\\?\\" + absolute
+
+
+def _long_path(path) -> str:
+    """`path` as text Windows can open even when it is longer than MAX_PATH.
+
+    With `LongPathsEnabled = 0` - the default, and this PC's setting - Windows
+    refuses a path over about 259 characters, and the refusal is not the
+    obvious one: `shutil.copy2` goes through `CopyFile2`, which reports
+    `FileNotFoundError [WinError 3] The system cannot find the path specified`
+    for a destination that is simply too long, and `os.mkdir` reports
+    `[WinError 206]`. Both read like a missing folder or a bad name. That is the
+    whole of the 2026-11-01 failure: `~/.openjarvis/apps/.../desugar_graph/
+    .../graph.bin` is 235 characters where it lives and 274 once it is under the
+    destination's `.partial-XXXXXXXX.partial` folder, so the copy died 12 files
+    into 339 and took the run with it.
+
+    `\\\\?\\` is Windows' own way of saying "do not apply the limit to this
+    one". Windows also stops normalising the rest of the string after it, which
+    is why an over-long path is made absolute first: a `.`/`..` segment or a
+    forward slash is not understood on that side of the prefix.
+
+    A path that already fits is returned exactly as it was given, so nothing
+    about the ordinary case changes - which is what keeps every other file in
+    this tool (and its whole test suite) on the code path it was on before.
+    """
+    text = os.fspath(path)
+    if os.name != "nt" or len(text) <= MAX_WINDOWS_PATH:
+        return text
+    if text.startswith("\\\\?\\"):
+        return text
+    absolute = os.path.abspath(text)
+    if absolute.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + absolute[2:]
+    return "\\\\?\\" + absolute
+
+
 def sha256_file(path: Path) -> str:
     """The file's sha256, read in 1 MiB blocks - a snapshot of these sizes is
     a fraction of a second, and nothing is ever held in memory whole."""
     h = hashlib.sha256()
-    with open(path, "rb") as fh:
+    with open(_long_path(path), "rb") as fh:
         for block in iter(lambda: fh.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
@@ -958,24 +1078,87 @@ def verify_db_file(path: Path, expect_shape=None) -> dict:
     return out
 
 
-def _copy_file(src: Path, dest: Path, manifest: dict, arcname: str) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dest)
-    manifest["files"][arcname] = {"bytes": dest.stat().st_size,
-                                  "sha256": sha256_file(dest)}
+def _mkdirs(folder: Path) -> None:
+    """`mkdir -p` for a folder that may itself be past MAX_PATH - the folders
+    under a deep path are as long as the file that goes in them, so they need
+    the same `\\\\?\\` treatment the file does."""
+    Path(_long_path(folder)).mkdir(parents=True, exist_ok=True)
+
+
+def _walk_files(root, errors: list | None = None) -> list:
+    """Every file under `root`, as `(a path Windows can open, a relative name)`.
+
+    `os.walk` started from a `\\\\?\\` root keeps the prefix on everything it
+    yields, so a folder holding paths past MAX_PATH can still be walked.
+    `Path.rglob` cannot: it builds its own strings as it descends and stops
+    part-way down. That is not hypothetical - it is how the FIRST rehearsal of
+    the 2026-11-04 fix still failed, because the copy succeeded and then sealing
+    could not read back the files it had just written.
+
+    A folder that cannot be listed is appended to `errors` when a list is given,
+    rather than skipped in silence: a backup that quietly leaves a folder out is
+    the thing this whole file is written to prevent.
+    """
+    base = _force_long(root)
+
+    def _failed(exc):
+        if errors is not None:
+            errors.append(exc)
+
+    out = []
+    for dirpath, _dirnames, filenames in os.walk(base, onerror=_failed):
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            out.append((Path(full), Path(os.path.relpath(full, base)).as_posix()))
+    out.sort(key=lambda pair: pair[1])
+    return out
+
+
+def _copy_file(src: Path, dest: Path, manifest: dict, arcname: str) -> bool:
+    """Copy one file into the partial folder, and record it in the manifest.
+
+    Returns False - with a `problems` entry, never an exception - when this one
+    file cannot be copied. **A single file that will not copy must not take the
+    whole snapshot down.** That is exactly how the weekly run died on
+    2026-11-01: one destination path 274 characters long raised
+    `FileNotFoundError`, nothing caught it, `pythonw.exe` printed the traceback
+    to a console it does not have, and four weeks went by with the folder still
+    saying `OK` from 2026-10-25.
+
+    A problem recorded here makes the snapshot `-INCOMPLETE` and the run exit
+    non-zero, which is the honest report: it was not verified, so it is not
+    called one."""
+    try:
+        _mkdirs(dest.parent)
+        shutil.copy2(_long_path(src), _long_path(dest))
+        manifest["files"][arcname] = {"bytes": os.path.getsize(_long_path(dest)),
+                                      "sha256": sha256_file(dest)}
+        return True
+    except OSError as exc:
+        manifest["problems"].append(f"{arcname}: could not be copied ({exc})")
+        return False
 
 
 def _copy_dir(src: Path, dest: Path, manifest: dict, arcname: str) -> None:
-    size = sum(f.stat().st_size for f in src.rglob("*") if f.is_file())
+    unreadable: list = []
+    try:
+        entries = _walk_files(src, unreadable)
+        size = sum(f.stat().st_size for f, _rel in entries)
+    except OSError as exc:
+        # Unreadable rather than uncopyable - a folder that cannot even be
+        # listed is one more problem to report, not a reason to lose the other
+        # twenty-one databases.
+        manifest["problems"].append(f"{arcname}: could not be read ({exc})")
+        return
+    for exc in unreadable:
+        manifest["problems"].append(f"{arcname}: part of it could not be listed ({exc})")
     if size > MAX_DIR_BYTES:
         manifest["excluded"].append(
             {"path": arcname, "bytes": size,
              "why": f"larger than {MAX_DIR_BYTES // (1024 * 1024)} MB"})
         return
-    for f in sorted(src.rglob("*")):
-        if f.is_file():
-            rel = f.relative_to(src)
-            _copy_file(f, dest / rel, manifest, f"{arcname}/{rel.as_posix()}")
+    for f, rel in entries:
+        _copy_file(f, dest / rel, manifest, f"{arcname}/{rel}")
 
 
 def take_snapshot(source=None, dest=None, *, keep: int = KEEP, passphrase=None,
@@ -1001,6 +1184,12 @@ def take_snapshot(source=None, dest=None, *, keep: int = KEEP, passphrase=None,
         dest, _note = destination(None, source)
     dest.mkdir(parents=True, exist_ok=True)
 
+    # A crashed run's own build folder is cleared FIRST, before this run makes
+    # one of its own - so debris from 2026-11-01 cannot still be sitting in the
+    # backup folder a year later. Only this tool's `.partial-XXXXXXXX.partial`
+    # shape is touched; see `clear_stale_partials`.
+    clear_stale_partials(dest)
+
     at = time.time() if now is None else now
     stamp = time.strftime(STAMP_FMT, time.localtime(at))
     # The folder the snapshot is BUILT in asks the filesystem for its name
@@ -1012,8 +1201,42 @@ def take_snapshot(source=None, dest=None, *, keep: int = KEEP, passphrase=None,
     # with `exist_ok=True`, quietly build two half-snapshots in one folder).
     # `tools/check_same_tick_paths.py` is the check, and its own docstring has
     # the three Windows CI suites this shape really broke.
-    partial = Path(tempfile.mkdtemp(prefix=".partial-", suffix=".partial", dir=dest))
+    try:
+        partial = Path(tempfile.mkdtemp(prefix=".partial-", suffix=".partial", dir=dest))
+    except OSError as exc:
+        # `mkdtemp` cannot be given a `\\?\` name (the prefix would end up in
+        # the folder it returns, and from there in the report this tool writes
+        # for a person to read), so a destination already so deep that the
+        # build folder cannot be created is named plainly instead of crashing.
+        raise Refused(
+            f"a snapshot could not be started in {dest} ({exc}). The folder is "
+            f"either not writable, full, or so deep that Windows will not create "
+            f"another folder inside it - choose a shorter path in Jarvis, "
+            f"Settings, Backups") from None
+    try:
+        return _fill_snapshot(source, dest, partial, stamp=stamp, at=at, keep=keep,
+                              passphrase=passphrase, timeout=timeout,
+                              dest_note=dest_note)
+    except BaseException:
+        # Whatever went wrong, this run's own half-built folder goes with it -
+        # named by the path `mkdtemp` just handed back and never by pattern, so
+        # it cannot touch another run's. A failure that leaves megabytes of
+        # half-copied personal data in the backup folder is exactly the failure
+        # this is being fixed for, and `BaseException` rather than `Exception`
+        # because a Ctrl-C or a killed task is a failure too.
+        _remove(partial)
+        raise
 
+
+def _fill_snapshot(source, dest, partial, *, stamp, at, keep, passphrase,
+                   timeout, dest_note) -> dict:
+    """Build the snapshot inside `partial`, then name it, seal it and keep it.
+
+    Split out of `take_snapshot` for one reason: so a single `try` there can
+    guarantee the partial folder is cleaned up however this ends - a refusal,
+    an OSError, a crash or a kill. Nothing here is different from what
+    `take_snapshot` used to do inline.
+    """
     manifest: dict = {
         "tool": TOOL, "tool_version": VERSION,
         "tool_sha256": sha256_file(Path(__file__)) if Path(__file__).is_file() else "",
@@ -1087,16 +1310,35 @@ def take_snapshot(source=None, dest=None, *, keep: int = KEEP, passphrase=None,
         sealed_path = dest / f"{final_name}{SEAL_SUFFIX}"
         try:
             _seal_folder(final, sealed_path, passphrase)
-        except Refused:
+        except BaseException as exc:
             # Sealing was asked for and could not be done. A plaintext folder
             # left behind would quietly defeat the request, so it is removed:
             # nothing unsealed is ever kept in the place of a sealed backup.
-            shutil.rmtree(final, ignore_errors=True)
+            #
+            # `BaseException`, not `Refused`. It used to be `Refused` only,
+            # which meant a full disk, a locked destination or a bug inside
+            # `_seal_folder` left the whole snapshot sitting there READABLE
+            # while the run reported a failure - the one outcome a sealed
+            # backup must never have. Any way of failing gets the same cleanup;
+            # a clean refusal still gets the plain-words sentence.
+            _remove(final)
             _remove(sealed_path)
+            if not isinstance(exc, Refused):
+                raise
             raise Refused(
                 "the snapshot could not be sealed, so it was NOT kept - a backup you "
                 "asked to be protected must not be left readable instead") from None
-        shutil.rmtree(final)
+        _remove(final)
+        if os.path.exists(_long_path(final)):
+            # The sealed file is there, but the readable copy would not go. That
+            # is the one state a sealed run must never pass over in silence, so
+            # the run reports FAILED and names the folder. `_remove` is used
+            # rather than `shutil.rmtree` because the folder being deleted can
+            # itself hold paths past MAX_PATH - which is how the plaintext copy
+            # would otherwise survive the run that meant to remove it.
+            raise Refused(
+                f"the snapshot was sealed, but the plaintext copy at {final} could "
+                f"not be removed. Delete that folder before trusting this backup.")
         # The `.jba` is what retention must protect: the folder is gone.
         final_name = f"{final_name}{SEAL_SUFFIX}"
         result.update(name=final_name, path=str(sealed_path), sealed=True)
@@ -1123,7 +1365,11 @@ def _place_snapshot(partial: Path, dest: Path, stamp: str, verified: bool) -> st
         name = (f"{SNAP_PREFIX}{stamp}" + ("" if n == 1 else f"-{n}")
                 + ("" if verified else INCOMPLETE))
         try:
-            partial.rename(dest / name)
+            # `os.rename`, not `Path.rename`, so the two names can be prefixed
+            # for a destination past MAX_PATH. It still REFUSES when the name is
+            # taken (`os.replace` would silently overwrite a snapshot), which is
+            # the whole reason this loop exists.
+            os.rename(_long_path(partial), _long_path(dest / name))
             return name
         except OSError:
             continue
@@ -1159,14 +1405,24 @@ def _readme(manifest: dict) -> str:
 
 
 def _write_text(path: Path, text: str) -> None:
-    path.write_text(text, encoding="utf-8", newline="\n")
+    with open(_long_path(path), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write(text)
 
 
 def _write_last_run(dest: Path, result: dict) -> None:
     """`last-run.txt` in the destination folder: what the timer did, and when.
     An unattended run has no console to print to, so without this file there
     would be no way to tell a working timer from a dead one. Counts and names
-    only - never a row of anybody's data."""
+    only - never a row of anybody's data.
+
+    Written into the INSTALLED folder too, always. That copy is the one that
+    survives the destination going away, and the one a person finds without
+    knowing where the backups point. It used to be written only into the
+    destination, which meant a run that finished `-INCOMPLETE` left FAILED in
+    the backup folder and an older `OK` standing in the installed one - and a
+    destination that has been unplugged completes the illusion. A failed run
+    must never be able to look like a pass from either folder.
+    """
     lines = [
         f"{time.strftime('%Y-%m-%d %H:%M:%S')}  "
         f"{'OK' if result['ok'] else 'FAILED'}",
@@ -1193,7 +1449,19 @@ def _write_last_run(dest: Path, result: dict) -> None:
                      f"live data folder: {problem}")
     for problem in result["problems"]:
         lines.append(f"  PROBLEM: {problem}")
-    _write_text(dest / "last-run.txt", "\n".join(lines) + "\n")
+    text = "\n".join(lines) + "\n"
+    # The destination's copy may raise - if the drive has gone, that is the
+    # failure the caller has to report, and `record_failed_run` then writes the
+    # record into both folders anyway.
+    _write_text(dest / "last-run.txt", text)
+    other = state_dir()
+    if str(other) != str(dest):
+        try:
+            other.mkdir(parents=True, exist_ok=True)
+            _write_text(other / "last-run.txt", text)
+        except (OSError, Refused):
+            # A read-only program folder must not fail an otherwise good backup.
+            pass
 
 
 def state_dir() -> Path:
@@ -1313,8 +1581,13 @@ def retain(dest, keep: int = KEEP, *, protect=None, now: float | None = None) ->
 
     cut = now - STALE_DAYS * 86400
     for entry in Path(dest).iterdir():
-        stale = (entry.name.startswith(".") and entry.name.endswith(".partial")) or \
-                (SNAP_RE.match(entry.name) and entry.name.endswith(INCOMPLETE))
+        # `PARTIAL_RE`, not "starts with a dot and ends with .partial": this
+        # loop deletes, so it matches this tool's own build folders and nothing
+        # else. A `.something.partial` belonging to another program is left
+        # alone - and so is every `jarvis-backup-*.jbak`, which `SNAP_RE` has
+        # never matched.
+        stale = bool(PARTIAL_RE.match(entry.name)) or \
+                bool(SNAP_RE.match(entry.name) and entry.name.endswith(INCOMPLETE))
         if not stale:
             continue
         try:
@@ -1326,19 +1599,113 @@ def retain(dest, keep: int = KEEP, *, protect=None, now: float | None = None) ->
     return removed
 
 
+def _retry_writable(func, path, _exc) -> None:
+    """`shutil.rmtree`'s callback: make a read-only file writable and try again.
+
+    Git marks its object files read-only on Windows, and `rmtree` stops dead on
+    the first one with `PermissionError [WinError 5]`. That is not a corner
+    case: `~/.openjarvis/apps/` was created on 2026-10-30 and holds a checked-out
+    project with a `.git` in it, so it is exactly the folder a snapshot of this
+    PC has to be able to delete again. Without this the plaintext copy survived
+    every sealed run, and the old retention would have left a dead snapshot
+    behind rather than reclaiming it.
+
+    `_exc` is not used: whatever went wrong, the one thing worth trying is
+    clearing the read-only bit. If that does not fix it the file stays, and the
+    caller decides what to say about that.
+    """
+    try:
+        os.chmod(path, stat.S_IWRITE)
+        func(path)
+    except OSError:
+        pass
+
+
 def _remove(path: Path) -> None:
-    if path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
+    """Remove a file or a folder tree, best effort, and never raise.
+
+    `\\\\?\\` goes in first for the same reason it does everywhere else here: a
+    half-built snapshot can hold paths past MAX_PATH, and `shutil.rmtree` walks
+    the tree itself, so without the prefix it can fail on exactly the files
+    that broke the run in the first place - leaving the crash's own debris
+    permanently in the owner's backup folder.
+    """
+    target = Path(_long_path(path))
+    if target.is_dir():
+        # `_force_long` on the ROOT even when it is short: `rmtree` joins its own
+        # strings as it descends, so an unprefixed root over a deep tree stops
+        # at the first file past the limit - and with `ignore_errors` it leaves
+        # that half of the tree behind without a word.
+        root = _force_long(target)
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(root, onexc=_retry_writable)
+        else:
+            shutil.rmtree(root, onerror=_retry_writable)
     else:
         try:
-            path.unlink()
+            os.chmod(_long_path(target), stat.S_IWRITE)
+            target.unlink()
         except OSError:
             pass
+
+
+def clear_stale_partials(dest, max_age: float = PARTIAL_STALE_SECONDS,
+                         now: float | None = None) -> list:
+    """Remove THIS tool's own abandoned build folders from `dest`; return their
+    names. Called at the start of every run, so a crashed week cannot leave
+    megabytes of half-copied personal data in the backup folder for ever.
+
+    What it will touch is deliberately narrow, because this is the one function
+    in the tool that deletes something it did not make in this run:
+
+      * the name must match `PARTIAL_RE` - `.partial-XXXXXXXX.partial`, the
+        exact shape `tempfile.mkdtemp` gives this tool. A `.something.partial`
+        written by any other program is not matched and not removed;
+      * it must be a folder, not a file;
+      * it must be older than `max_age`, so a run that is genuinely still going
+        (a hand-run beside the weekly one, say) is never pulled out from under
+        itself. The weekly task's own execution limit is one hour, so two hours
+        cannot be a live run.
+
+    NOTHING else in the folder is read, moved or deleted - not a `jarvis-snap-*`
+    snapshot, not a `jarvis-backup-*.jbak`, not anything else of the owner's."""
+    now = time.time() if now is None else now
+    removed: list = []
+    try:
+        entries = list(Path(dest).iterdir())
+    except OSError:
+        return removed
+    for entry in entries:
+        if not PARTIAL_RE.match(entry.name):
+            continue
+        try:
+            if not entry.is_dir() or entry.stat().st_mtime >= now - max_age:
+                continue
+        except OSError:
+            continue
+        _remove(entry)
+        removed.append(entry.name)
+    return removed
 
 
 # ---------------------------------------------------------------------------
 #   Verifying, and putting it back
 # ---------------------------------------------------------------------------
+
+
+def _is_file(path) -> bool:
+    """`Path.is_file()`, but past MAX_PATH too - a snapshot's `files` entries
+    can be deep, and a file that is there must not be reported as missing."""
+    try:
+        return os.path.isfile(_long_path(path))
+    except OSError:
+        return False
+
+
+def _read_text(path) -> str:
+    """`Path.read_text()`, but past MAX_PATH too."""
+    with open(_long_path(path), "r", encoding="utf-8") as fh:
+        return fh.read()
 
 
 def verify_snapshot(path, passphrase=None) -> dict:
@@ -1359,13 +1726,13 @@ def verify_snapshot(path, passphrase=None) -> dict:
             _open_seal(path, workdir, passphrase)
             folder = workdir
         manifest_file = folder / MANIFEST
-        if not manifest_file.is_file():
+        if not _is_file(manifest_file):
             raise Refused(f"{folder} is not a snapshot of mine - there is no {MANIFEST} in it")
-        manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+        manifest = json.loads(_read_text(manifest_file))
         problems, counts = [], {}
         for name, entry in sorted(manifest.get("databases", {}).items()):
             db = folder / name
-            if not db.is_file():
+            if not _is_file(db):
                 problems.append(f"{name} is missing from the snapshot")
                 continue
             if entry.get("sha256") and sha256_file(db) != entry["sha256"]:
@@ -1379,7 +1746,7 @@ def verify_snapshot(path, passphrase=None) -> dict:
                 problems.append(f"{name}: the row counts no longer match the manifest")
         for name, entry in sorted(manifest.get("files", {}).items()):
             f = folder / name
-            if not f.is_file():
+            if not _is_file(f):
                 problems.append(f"{name} is missing from the snapshot")
             elif entry.get("sha256") and sha256_file(f) != entry["sha256"]:
                 problems.append(f"{name} is not the file this manifest describes")
@@ -1491,9 +1858,11 @@ def _seal_folder(folder: Path, out_path: Path, passphrase: str) -> None:
             "the backup without --seal.")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in sorted(folder.rglob("*")):
-            if f.is_file():
-                zf.write(f, arcname=f.relative_to(folder).as_posix())
+        # `_walk_files`, not `folder.rglob`: the snapshot being sealed can hold
+        # paths past MAX_PATH, and a plain walk stops part-way down and takes
+        # the seal with it.
+        for full, rel in _walk_files(folder):
+            zf.write(full, arcname=rel)
     salt, nonce = secrets.token_bytes(SALT_LEN), secrets.token_bytes(NONCE_LEN)
     header = (SEAL_MAGIC
               + struct.pack(">BII", ARGON_LANES, ARGON_MEMORY_KIB, ARGON_ITERATIONS)
@@ -1534,13 +1903,27 @@ def _open_seal(path: Path, into: Path, passphrase: str) -> None:
                       f"damaged)") from None
     with zipfile.ZipFile(io.BytesIO(plain)) as zf:
         for info in zf.infolist():
-            # A zip entry may name a path; refuse anything that would climb out
-            # of the folder it is being unpacked into.
-            target = (into / info.filename).resolve()
-            if not str(target).startswith(str(into.resolve())):
-                raise Refused(f"{path.name} holds an entry that points outside the "
-                              f"folder it is unpacked into ({info.filename})")
-        zf.extractall(into)
+            # Checked as TEXT, not by resolving a joined path. An entry may name
+            # anything, and a resolved path is one more thing that can fail
+            # confusingly once long paths are in play. Anything absolute, on a
+            # drive, or holding `..` is refused.
+            name = info.filename.replace("\\", "/")
+            bits = [b for b in name.split("/") if b not in ("", ".")]
+            if (name.startswith("/") or ":" in name.split("/")[0]
+                    or any(b == ".." for b in bits)):
+                raise Refused(
+                    f"{path.name} holds an entry that points outside the folder it "
+                    f"is unpacked into ({info.filename})")
+        # Written out one file at a time through `_long_path` rather than with
+        # `extractall`: a snapshot taken from a deep folder has to come back out
+        # of the same deep folder, and `extractall` joins its own strings.
+        for info in zf.infolist():
+            if info.is_dir():
+                continue
+            target = into / info.filename
+            _mkdirs(target.parent)
+            with zf.open(info) as src, open(_long_path(target), "wb") as out:
+                shutil.copyfileobj(src, out)
 
 
 def passphrase_from(args, *, required: bool = False) -> str:
@@ -1855,6 +2238,39 @@ def _print_snapshot(result: dict) -> None:
 
 
 def cmd_backup(args) -> int:
+    """Every way a backup run can end, including the way that has no sentence.
+
+    A thin wrapper around `_cmd_backup`, and its whole job is the promise this
+    tool broke on 2026-11-01: **whatever happens, the run leaves a record.**
+
+    Under `pythonw.exe` there is no console, so an exception that escapes this
+    file goes nowhere at all. That is not a theory - the weekly task's own
+    result was `1`, the backup folder went on saying `OK` from 2026-10-25, and
+    nothing connected the two for four weeks. `_cmd_backup` turns everything it
+    can into plain words itself; anything left is turned into the same record
+    here, so no path through this command can end in silence.
+    """
+    try:
+        return _cmd_backup(args)
+    except Exception as exc:      # noqa: BLE001 - a run that dies must still say so
+        return _nothing_backed_up(
+            f"the run stopped unexpectedly before it finished "
+            f"({type(exc).__name__}: {exc})",
+            _destination_for_a_failure(args), getattr(args, "source", None))
+
+
+def _destination_for_a_failure(args):
+    """The folder a failure note should go into, worked out as safely as it can
+    be. Never raises, because this runs while the run is already failing."""
+    try:
+        folder, _note = destination(getattr(args, "dest", None),
+                                    getattr(args, "source", None))
+        return folder
+    except Exception:             # noqa: BLE001 - see the docstring
+        return getattr(args, "dest", None)
+
+
+def _cmd_backup(args) -> int:
     def failed(message, dest=None) -> int:
         """Every refusal in this command goes through here, not just the ones
         that got as far as the destination: `pythonw.exe` has no console, so a
@@ -1922,6 +2338,13 @@ def cmd_backup(args) -> int:
                                dest_note=note)
     except Refused as exc:
         return failed(str(exc), dest)
+    except Exception as exc:      # noqa: BLE001 - a run that dies must still say so
+        # Not a refusal but a failure. `take_snapshot` has already removed its
+        # own partial folder; this turns whatever it was into the same
+        # plain-words record the refusals get - and `dest` is known here, so the
+        # note reaches BOTH the backup folder and the installed one.
+        return failed(f"the snapshot could not be finished "
+                      f"({type(exc).__name__}: {exc})", dest)
     result["sealed_by"] = sealed_by if result["sealed"] else ""
     # Owner-only DACL check on the live data folder (audit DATA D2): a folder
     # that lets another user or Everyone read it defeats the at-rest story
