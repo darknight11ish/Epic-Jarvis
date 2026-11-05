@@ -6,7 +6,7 @@ approval card, and the report in plain words. It ships OFF by default and there
 is still no app report screen.** The owner's choice of 2026-11-04 was *"wire the
 existing product check into Jarvis"*: `backend/jarvis_product_check.py` is that
 wiring, `jarvis_browser_control.read_page_html()` is the real read seam it
-drives, and JARVIS-API §187 is the contract. Everything below that says "none of
+drives, and JARVIS-API §188 is the contract. Everything below that says "none of
 it is wired" was true from 2026-10-25/26 until that slice, and is kept in the
 record with its new state stated rather than deleted. The design contract is
 still the owner's product-research document, revision 2
