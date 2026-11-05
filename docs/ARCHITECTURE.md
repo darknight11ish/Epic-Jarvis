@@ -1111,7 +1111,9 @@ its own):
 
 - **`NEEDS_A_PERSON`** - the hard list in the agent, not in the config: shell,
   browser, computer, phone, home, send/draft email, tidy the inbox,
-  `read_web_page`, `propose_plan`, `rea_investigate`, `github_search`, and every
+  `read_web_page`, `propose_plan`, `rea_investigate` (the full reverse-engineering
+  toolbox since 2026-11-04: it can debug, patch, instrument, export and install,
+  so every one of its 200 actions is asked), `github_search`, and every
   plug-in tool. A tool on that list runs only when the verdict records a PERSON
   approving (`_a_person_said_yes`); a gate that answers `allowed` at `auto` is
   refused with plain words, so loosening `jarvis-framework.toml` cannot loosen
