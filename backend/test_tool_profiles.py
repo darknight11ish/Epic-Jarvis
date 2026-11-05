@@ -19,8 +19,11 @@ WHAT THIS SUITE PROVES, AND WHY EACH HALF EXISTS
      that invents an ability is worse than no profile at all, so:
        * every `tier` is re-derived from the SHIPPED config path - the
          `[tools].enabled` list in backend/rebuilt/jarvis-framework.toml,
-         `jarvis_asks_first.TIER_A/TIER_B` (the in-app switches) and each
-         module's own switch - and must equal what the profile claims;
+         `jarvis_asks_first.TOOLS_SWITCHABLE` (the in-app switches, 48 of the
+         51 at 2026-11-04) and `jarvis_asks_first.NOT_A_SWITCH`'s three (their
+         own switch, or the tool they ride with, decides them) - and must equal
+         what the profile claims. There is no "no in-app switch / settings-file"
+         class any more, and the suite fails if one is claimed again;
        * every `off-by-default` tool must really be absent from the shipped
          tool list AND its own switch must really ship off (`[rea] enabled =
          false`, and the sandbox switch is OFF with no settings file);
@@ -98,14 +101,16 @@ def expected_tier(name: str, shipped: set) -> str:
 
     The order is the decision order: a tool that is already in the shipped list
     needs no action, a tool with its own module switch is governed by that
-    switch before anything else, then the in-app switches, then the rest."""
+    switch before anything else, and every other tool the model can be offered
+    has an in-app switch on Settings, What asks first ("Let the AI use this").
+    There is no fourth answer: the "no in-app switch" class was deleted on
+    2026-11-04, and every one of the 48 switches is listed by
+    `AF.TOOLS_SWITCHABLE`, which the checks below read."""
     if name in shipped or name in A.GRANT_ASK_TOOLS:
         return "always-available"
     if name in OWN_SWITCH_TOOLS:
         return "off-by-default"
-    if name in AF.TOOLS_SWITCHABLE:
-        return "switchable"
-    return "settings-file"
+    return "switchable"
 
 
 def tree_for(rel: str) -> ast.Module:
@@ -342,7 +347,7 @@ def t_tiers_agree_with_the_shipped_switch():
     check("every tier agrees with the shipped config path and the asks-first tiers",
           not wrong, "\n        ".join(wrong))
     claimed = {p["tier"] for p in T.PROFILES.values()}
-    check("all four tier values are actually used somewhere",
+    check("all three tier values are actually used somewhere",
           claimed == set(T.TIER_VALUES), f"{sorted(claimed)}")
 
 
@@ -369,26 +374,21 @@ def t_always_available_really_is():
 def t_switchable_matches_the_in_app_switches():
     shipped = shipped_tools()
     switchable = {n for n, p in T.PROFILES.items() if p["tier"] == "switchable"}
-    check("every switchable profile is a real in-app switch (TIER_A or TIER_B)",
+    check("every switchable profile is a real in-app switch (TOOLS_SWITCHABLE)",
           switchable <= set(AF.TOOLS_SWITCHABLE),
           f"claimed but not switchable: {sorted(switchable - set(AF.TOOLS_SWITCHABLE))}")
-    check("every in-app switch has a switchable profile",
-          set(AF.TOOLS_SWITCHABLE) <= switchable,
-          f"switchable but not claimed: {sorted(set(AF.TOOLS_SWITCHABLE) - switchable)}")
+    want = {n for n in T.PROFILES if expected_tier(n, shipped) == "switchable"}
+    check("every tool that is only an in-app switch has a switchable profile",
+          want == switchable,
+          f"missing: {sorted(want - switchable)}; extra: {sorted(switchable - want)}")
     check("no switchable tool is already on in the shipped list",
           not (switchable & shipped), str(sorted(switchable & shipped)))
-
-
-def t_settings_file_really_is():
-    shipped = shipped_tools()
-    bad = []
-    for name, p in T.PROFILES.items():
-        if p["tier"] != "settings-file":
-            continue
-        if name in shipped or name in AF.TOOLS_SWITCHABLE or name in OWN_SWITCH_TOOLS:
-            bad.append(name)
-    check("every settings-file tool is absent from the shipped list and has no "
-          "in-app switch", not bad, str(bad))
+    check("the three tools with no switch of their own are explained and are "
+          "never claimed switchable",
+          set(AF.NOT_A_SWITCH) <= set(T.PROFILES)
+          and not (switchable & set(AF.NOT_A_SWITCH)),
+          f"unexplained: {sorted(set(AF.NOT_A_SWITCH) - set(T.PROFILES))}; "
+          f"claimed switchable: {sorted(switchable & set(AF.NOT_A_SWITCH))}")
 
 
 def t_off_by_default_really_ships_off():
@@ -623,7 +623,6 @@ def main():
         ("truth", (t_tiers_agree_with_the_shipped_switch,
                    t_always_available_really_is,
                    t_switchable_matches_the_in_app_switches,
-                   t_settings_file_really_is,
                    t_off_by_default_really_ships_off,
                    t_rea_really_refuses_live_process_capture,
                    t_touches_match_the_modules,

@@ -33356,9 +33356,9 @@ route and no new model tool** - both are explained in 186.3.
 
 **Where the dossiers live.** `backend/jarvis_tool_profiles.py`, shipped whole
 (in `backend/` and `jarvis-backend/`, listed in `_where.py`'s `SHIPPED`):
-`PROFILES` (`jarvis_tool_profiles.py:76`, one entry per name in the REAL
+`PROFILES` (`jarvis_tool_profiles.py:82`, one entry per name in the REAL
 `jarvis_agent.TOOLS` dict - 51 on this tree) and `FAMILIES`
-(`jarvis_tool_profiles.py:1831`, 11 capability families). Its own suite,
+(`jarvis_tool_profiles.py:1820`, 11 capability families). Its own suite,
 `backend/test_tool_profiles.py`, re-checks the load-bearing claims against the
 modules that would have to implement them, so a sentence that cannot be backed
 is written as a limit rather than as a promise. The wiring is
@@ -33376,7 +33376,7 @@ The fast path answers a sentence that names a tool **as a tool** - the word
 | "what does the web search tool do" | `tool_profile` | `PROFILES["web_search"]` |
 | "tell me about the memory tool" | `tool_profile` | `FAMILIES` / `PROFILES` |
 
-The answer is `answer_about`'s own words (`jarvis_tool_profiles.py:2269`): what
+The answer is `answer_about`'s own words (`jarvis_tool_profiles.py:2257`): what
 the thing is in beginner words, what it lets the owner do, what it refuses,
 what it pairs with, and how to switch it on. It is `quick: tool_profile`,
 `where: local`, `lane: "no AI model"` in `X-Jarvis-Route`, so **both apps show
@@ -33404,17 +33404,17 @@ answer, and before the Android block and every capability family
 (`:1273` onward) and well before `_feature_guide` (`jarvis_quick.py:1762`),
 because a tool's own dossier is deeper than a feature row's prose. The runner is
 `_run_tool_profile` (`jarvis_quick.py:6602`), dispatched at
-`jarvis_quick.py:19080`, and the intent is in `READ_ONLY_INTENTS`
-(`jarvis_quick.py:19965`): it reads a fixed module, calls nothing, raises no
+`jarvis_quick.py:19097`, and the intent is in `READ_ONLY_INTENTS`
+(`jarvis_quick.py:19977`): it reads a fixed module, calls nothing, raises no
 card - so a **private chat hands it to the model** like every other read-only
 intent, and it cannot take away what "cancel that" would undo.
 
 ### 186.2 What the model is given, and what it costs
 
 `jarvis_agent.tool_profile_note` (`jarvis_agent.py:12614`) builds ONE bounded
-block from `context_for` (`jarvis_tool_profiles.py:2323`), which never returns
+block from `context_for` (`jarvis_tool_profiles.py:2311`), which never returns
 more than `CONTEXT_LIMIT = 1200` characters
-(`jarvis_tool_profiles.py:71`). `TOOL_PROFILE_CHARS` (`jarvis_agent.py:12517`)
+(`jarvis_tool_profiles.py:77`). `TOOL_PROFILE_CHARS` (`jarvis_agent.py:12517`)
 re-states that cap on this side, so a changed module cannot silently spend more
 of the window, and the note is the block plus ONE fixed 142-character line
 (`TOOL_NOTE_PREFIX`, `jarvis_agent.py:12524`) saying where the facts came from
@@ -33436,7 +33436,7 @@ and to answer only from them.
   answer - and it is still nothing when no earlier message named a tool.
 - **It is held out of the room** like every other note:
   `room -= estimate_tokens({"role": "system", "content": tool_note})`
-  (`jarvis_agent.py:13767`), before `clear_old_tool_results` and
+  (`jarvis_agent.py:13769`), before `clear_old_tool_results` and
   `compact_messages`, so a block can never push the window over.
 - **Placement** is `with_tool_profile_note` (`jarvis_agent.py:12652`), copied
   from `with_pc_facts_note`: inserted just before the newest user message, after
@@ -33460,10 +33460,12 @@ and to answer only from them.
   its own test: `TOOLS` plus offer/gate wiring; a description under 300 tokens
   (`test_tool_text.py`); a `jarvis_claims` classification (`test_smarter_answers.py`
   fails a tool in neither set); a `jarvis_reach.TOOL_NAMES` row (`test_reach.py`
-  demands one); and the tool contract/schema suites. It also ships **off** in
-  `[tools].enabled`, so the owner's own settings file would keep it off until he
-  edited that file by hand. And it buys nothing: these are facts that fit in 400
-  prompt tokens, and every tool call is a round trip on an 8B.
+  demands one); and the tool contract/schema suites. It also ships **off**: it
+  would need its own switch row on Settings, What asks first ("Let the AI use
+  this") - one of the lists `jarvis_asks_first.TOOLS_SWITCHABLE` is built from -
+  and that switch's PC-only card before the owner could turn it on. And it buys
+  nothing: these are facts that fit in 400 prompt tokens, and every tool call
+  is a round trip on an 8B.
 
 ### 186.4 What it does not cover
 
