@@ -1062,13 +1062,6 @@ _TOOL_ACTIONS: dict[str, str] = {
     # own four lines, so this patch must be applied AFTER it.
     "approve_web_search_for_conversation": "grant_web_search_conversation",
     "stop_web_search_approval": "revoke_web_search_grant",
-    # product-check.patch (2026-11-04): jarvis_agent.py's product_check tool,
-    # under the action name jarvis_agent.PRODUCT_CHECK_ACTION. Its own name IS
-    # the action, and `product_check = "ask"` ships in both settings copies;
-    # without this line action_for_tool() answers "unclassified_tool" - the
-    # Reach page calls it unclassified and the card is never the one the tool
-    # raises, the same gap gate-tool-actions-gap.patch fixed above.
-    "product_check": "product_check",
 }
 
 # Arguments that ESCALATE a shell-class tool. Regex on model-written text is
@@ -1449,7 +1442,6 @@ _NO_RULE_FROM_DENIAL = frozenset({
     "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
     "raise_a_limit",  # jarvis_limits.py acts only on tier "ask": ONE card per raise that LOOSENS - a longer Undo window, or letting a model read what you save; every other raise, and every lowering, applies at once, and denying one must not become a standing rule (limits-settings.patch; the row itself added by gate-raise-rows.patch)
     "raise_attention_budget",  # jarvis_arbiter.py acts only on tier "ask": ONE card per raise of the number of times a day Jarvis may speak up unasked; a lowering, and moving the hour the brief arrives, apply at once, and a denial must not become a standing rule either (attention-settings.patch; the row itself added by gate-raise-rows.patch)
-    "product_check",  # jarvis_product_check.py acts only on tier "ask": ONE PC-only card per Amazon product page, read once in the owner's own signed-in browser; a denial is about that one page, not a standing rule (product-check.patch)
     "read_web_page",  # jarvis_readpage.py acts only on tier "ask": ONE card per address the owner hands over; one GET of that one page, its words read out as outside text (readpage.patch)
 })
 
@@ -2725,6 +2717,36 @@ _RISK.update({
     # forced to "ask", which for a revocation would mean raising a card to STOP
     # what the owner just asked to stop.
     "revoke_web_search_grant": ("yes", "local", "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on"),
+})
+
+
+# --------------------------------------------------------------------------
+#   The product check's gate rows (jarvis_product_check.py, 2026-11-04)
+# --------------------------------------------------------------------------
+# THEY ARE HERE, AT THE END OF THE FILE, for the reason the block above gives:
+# almost every line inside `_RISK`, `_TOOL_ACTIONS` and `_NO_RULE_FROM_DENIAL`
+# is some earlier patch's hunk context, and the end of this file belongs to no
+# hunk. product-check.patch is applied BEFORE web-search-grant.patch - it has
+# to be, because unknown-risk-approvable.patch must stay the LAST patch that
+# writes jarvis_gate.py (backend/test_gate_unknown_risk.py pins that with no
+# whitelist) and web-search-grant.patch must stay immediately before it. So
+# this block is the file's end when its own hunk runs, and web-search-grant's
+# block is then inserted ABOVE it. All three updates run at import, so the gate
+# sees the rows exactly as if they sat inside the literals.
+_TOOL_ACTIONS.update({
+    # jarvis_agent.py's product_check tool, under the action name
+    # jarvis_agent.PRODUCT_CHECK_ACTION. Its own name IS the action, and
+    # `product_check = "ask"` ships in both settings copies; without this line
+    # action_for_tool() answers "unclassified_tool" - the Reach page calls it
+    # unclassified and the card is never the one the tool raises, the same gap
+    # gate-tool-actions-gap.patch fixed above.
+    "product_check": "product_check",
+})
+# A denial of a product-page read is about THAT page, never a standing rule.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "product_check",  # jarvis_product_check.py acts only on tier "ask": ONE PC-only card per Amazon product page, read once in the owner's own signed-in browser; a denial is about that one page, not a standing rule (product-check.patch)
+}
+_RISK.update({
     # product-check.patch (jarvis_product_check.py, 2026-11-04; the owner's
     # choice "wire the existing product check"). ONE card per Amazon product
     # page, showing the address in full and raised BEFORE the browser is

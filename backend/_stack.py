@@ -609,12 +609,19 @@ RATCHET = {
     #: four lines, so this patch must stay applied AFTER that one - it is, at
     #: position 164 to that patch's 163.
     #:
-    #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 59 and
+    #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 60.
     #: `by_patch` names `web-search-grant.patch: 4` (21 lines in all, pinned by
     #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
     #: applies the patch to the published base and reverses it byte for byte. A
     #: ratchet: it may still only go down.
-    "jarvis_gate.py": 59,
+    #:
+    #: 2026-11-04, RAISED from 59 for `product-check.patch`: ONE hunk, 3 lines,
+    #: and honest rather than drift - its context is the `if __name__` tail at
+    #: the end of the owner's file, the same owner-only text web-search-grant.
+    #: patch's own end-of-file hunk already reads, and no earlier patch in the
+    #: stack writes a line of it. The patch has to sit BEFORE that one so
+    #: unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
+    "jarvis_gate.py": 60,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

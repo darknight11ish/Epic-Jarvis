@@ -1521,18 +1521,6 @@ SHIPPED = (
     # before. It sits before the last entry on purpose: the zero-jargon
     # checker never scans an entry with no trailing comma.
     "jarvis_source_independence.py",
-    # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
-    # the owner's own request: measure Jarvis's own token speed across the
-    # local models, the layer placement and the context sizes, keep a separate
-    # history, and explain the results in plain words). Phase 1 is the engine
-    # and its store: one run = one model + one setup + N repeats on one lane,
-    # the prefill correction (`prompt_eval_count - prompt_eval_cached_count`,
-    # never the naive division that inflates by the cache-hit ratio), per-card
-    # VRAM and utilisation from nvidia-smi, and its own `bench.jsonl` - it
-    # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
-    # it. Standard library only, loopback only, no card and no model at import.
-    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_bench.py",
     # The product check WIRED (jarvis_product_check.py, 2026-11-04; the
     # owner's choice "wire the existing product check"): the ONE model tool,
     # the ONE PC-only route POST /api/product/check, the card's words and the
@@ -1544,8 +1532,23 @@ SHIPPED = (
     # _TOOL_ACTIONS/_RISK rows for the action, and the browser read is the
     # public read_page_html seam in jarvis_browser_control.py. Nothing about a
     # page is stored; the report has no trust score and no per-review verdict.
+    # It sits BEFORE jarvis_bench.py on purpose: that entry is the LAST one,
+    # where a new module is appended, so a new module goes above it. The same
+    # entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED
+    # list.
+    "jarvis_product_check.py",
+    # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
+    # the owner's own request: measure Jarvis's own token speed across the
+    # local models, the layer placement and the context sizes, keep a separate
+    # history, and explain the results in plain words). Phase 1 is the engine
+    # and its store: one run = one model + one setup + N repeats on one lane,
+    # the prefill correction (`prompt_eval_count - prompt_eval_cached_count`,
+    # never the naive division that inflates by the cache-hit ratio), per-card
+    # VRAM and utilisation from nvidia-smi, and its own `bench.jsonl` - it
+    # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
+    # it. Standard library only, loopback only, no card and no model at import.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_product_check.py"
+    "jarvis_bench.py"
 )
 
 

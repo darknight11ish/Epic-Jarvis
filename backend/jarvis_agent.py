@@ -9394,6 +9394,12 @@ TOOL_HINTS = {
         r"\bread (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bpull up (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bwhat did (?:we|i) say (?:in|about)\b.*\bchat\b"),
+    # product_check (2026-11-04): the Amazon product-page check. It is only
+    # offered while the feature is on, and its own question words are the
+    # page's - "is this fake", the reviews, the listing.
+    "product_check": (r"\bproduct page\b", r"\bamazon\b", r"\bproduct\b",
+                      r"\breviews?\b", r"\bis (?:this|it) (?:fake|real|genuine)\b",
+                      r"\bscam\b", r"\bbuy(?:ing)?\b", r"\bprice\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
