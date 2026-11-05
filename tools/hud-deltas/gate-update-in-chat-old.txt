@@ -1,0 +1,2 @@
+    "desktop_update",  # jarvis_quick.py acts only on tier "ask": ONE card per start of an update, which only the desktop's own update.rs can run - so a "no" here answers that one card, never a standing rule (update-in-chat.patch)
+})

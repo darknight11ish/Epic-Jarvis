@@ -25,7 +25,16 @@ setting area", "pull up any old conversation", "clear any conversation"):
     number (or "unknown"); `deploy` reads _jarvis-state.json and, on a PC
     without one, says recorded:false with a reason instead of failing. The
     identity is the recorded sha256 of gate/hud/skills, and a state file that
-    is damaged or holds nonsense is "unknown", never a crash.
+    is damaged or holds nonsense is "unknown", never a crash. Since 2026-11-04
+    the block carries `app_version_said` too: ONE plain sentence, and when the
+    file cannot be read it says so instead of a bare "unknown" a screen would
+    show as a blank (the self-awareness audit's fix #10).
+  - THE MODEL'S OWN TOOL SEES LIVE VALUES. `live_settings_digest()` (2026-11-04,
+    the audit's SA-3 part C) is the switch and choice values the model's
+    self_portrait tool now hands back: real booleans and chosen options read
+    from the registry's one reader, an unreadable value NAMED in `unreadable`
+    rather than shown as off, the chosen preset and its plan model, and a hard
+    bound (`DIGEST_MAX`).
   - CONVERSATIONS ARE THE EXISTING STORE'S. Both adapter routes hand straight
     through to jarvis_chat_log.handle_get, so the codes (200/400/404/423/503)
     and the list are the same answers /api/history gives. Nothing is duplicated.
@@ -37,6 +46,11 @@ setting area", "pull up any old conversation", "clear any conversation"):
     card named. A denied card deletes nothing. The memory store is never touched.
   - install() wraps the handler once, answers only its own routes, and leaves
     every other request to the original handler.
+  - THE STORAGE SELF-SCAN'S ROUTES ARE READ IN THE SHAPE THE REAL MODULE SHIPS.
+    `jarvis_storage_health.ROUTES` is row dicts, not bare strings; the fake
+    above is that shape and the real module is flattened by the same adapter,
+    so a stringifying adapter cannot pass here while the live server 404s
+    (found by the 2026-11-04 field test).
   - The two small owner-visible fixes folded in from the inventory audit: the
     duplicate TOOL_GROUPS definition is gone from jarvis_asks_first.py, and the
     ONE number setting (live_idle_seconds) can now be changed by the model tool,
@@ -72,14 +86,23 @@ os.environ["JARVIS_RECEIPTS_DB"] = str(_TMP / "config" / "receipts.db")
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(HERE))
+# The framework module the real backend ships beside these modules lives in
+# `backend/rebuilt/` in a checkout; putting it on the path is what makes
+# jarvis_asks_first.tools_enabled_set() read the shipped
+# `jarvis-framework.toml` here exactly as it does on an install (the same
+# arrangement test_reach.py uses). Without it the framework import is absent
+# and the tool counts would honestly say "unknown" instead of 13.
+if str(HERE / "rebuilt") not in sys.path:
+    sys.path.append(str(HERE / "rebuilt"))
 from _where import require_shipped, BACKEND  # noqa: E402
 
-require_shipped("jarvis_self_portrait.py")
+require_shipped("jarvis_self_portrait.py", "jarvis_presets.py")
 
 import jarvis_self_portrait as SP  # noqa: E402
 import jarvis_asks_first as ASK  # noqa: E402
 import jarvis_feature_guide as FG  # noqa: E402
 import jarvis_menus as MENUS  # noqa: E402
+import jarvis_presets as PRESETS  # noqa: E402
 import jarvis_settings_registry as REG  # noqa: E402
 
 PASSED, FAILED = [], []
@@ -173,6 +196,150 @@ def settings_match_the_registry():
           and bool(face.get("options")) == _spec_beside_backend(),
           f"face options={bool(face and face.get('options'))}, "
           f"spec beside backend={_spec_beside_backend()}")
+
+
+def choice_values_are_read_not_assumed():
+    """THE TEN CHOICES REPORT THEIR REAL VALUE (2026-11-04 audit gap 2).
+
+    The portrait used to hard-code value:null / value_known:false for every
+    choice row. The reader existed - `jarvis_settings_registry.current_value`,
+    the same one the Settings explainer has used since 2026-11-03 - and only
+    this page did not call it. This drives that one reader first, then flips
+    three REAL stored files in the throwaway config folder and watches the
+    portrait move with each of them, so a constant cannot pass.
+    """
+    rows = {r["id"]: r for r in SP.settings() if r["kind"] == "choice"}
+    check("all ten choice rows are in the portrait",
+          len(rows) == len(REG.CHOICE_SETTINGS))
+    mismatched = [key for key in rows
+                  if rows[key]["value"] != REG.current_value(
+                      next(c for c in REG.CHOICE_SETTINGS if c.key == key))]
+    check("every choice's value is the registry reader's own answer, word for word",
+          not mismatched, str(mismatched))
+    known = [k for k, r in rows.items() if r["value_known"]]
+    check("at least nine of the ten choices report a live value on this tree",
+          len(known) >= 9, f"known={sorted(known)}")
+    check("a known value is a non-empty string",
+          all(isinstance(rows[k]["value"], str) and rows[k]["value"]
+              for k in known))
+    check("an unknown choice says why, and never invents a value",
+          all(rows[k]["value"] is None and rows[k]["value_why"]
+              for k in rows if not rows[k]["value_known"]))
+    check("the unreadable choice here is the face, with its own honest reason",
+          [k for k, r in rows.items() if not r["value_known"]] == ["face"],
+          str([k for k, r in rows.items() if not r["value_known"]]))
+    # THE FILE IS THE SOURCE: three settings, three different stores. Each is
+    # written by the module's OWN path function, so the test cannot pass by
+    # writing somewhere the reader does not look.
+    import jarvis_handoff_mode as HM
+    import jarvis_antislop as AS
+    import jarvis_manner as MN
+    flips = ((HM.settings_path(), {"mode": "keep_offering"}, "handoff_mode",
+              "keep offering"),
+             (AS.state_path(), {"mode": "after"}, "antislop_mode", "after"),
+             (MN.settings_path(), {"personality": "dry_wit"}, "personality",
+              "Dry & Deadpan"))
+    saved = {p: (p.read_bytes() if p.is_file() else None)
+             for p, _doc, _key, _want in flips}
+    try:
+        for path, doc, _key, _want in flips:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(doc), encoding="utf-8")
+        SP._clear_caches()
+        after = {r["id"]: r for r in SP.settings() if r["kind"] == "choice"}
+        for _path, _doc, key, want in flips:
+            check(f"changing {key}'s own stored file changes the portrait's answer",
+                  after[key]["value"] == want and after[key]["value_known"] is True,
+                  f"{after[key]['value']!r} != {want!r}")
+        for path, _doc, _key, _want in flips:
+            if saved[path] is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(saved[path])
+        SP._clear_caches()
+        back = {r["id"]: r for r in SP.settings() if r["kind"] == "choice"}
+        check("putting the stored files back puts the portrait back",
+              all(back[k]["value"] == rows[k]["value"] for k in rows))
+    finally:
+        for path, _doc, _key, _want in flips:
+            if saved[path] is None:
+                path.unlink(missing_ok=True)
+            else:
+                path.write_bytes(saved[path])
+        SP._clear_caches()
+
+
+def tool_counts_are_the_real_tools():
+    """`counts()["tools"]` IS THE TOOL COUNT (2026-11-04 audit gap 3).
+
+    It used to be the asks-first row count - 136 on the audit tree - which the
+    model's own self_portrait tool repeated as its tool count. The real pair is
+    jarvis_agent.TOOLS (registered) and the owner's [tools].enabled (enabled);
+    this drives both and then flips the settings file to prove neither is a
+    constant.
+    """
+    import jarvis_agent as A
+    import jarvis_asks_first as AF
+    inv = SP.tool_inventory()
+    check("the registered count is jarvis_agent.TOOLS' own length",
+          inv["registered"] == len(A.TOOLS) == 51, str(inv["registered"]))
+    check("the enabled count is the settings file's own list",
+          inv["enabled"] == len(AF.tools_enabled_set()) == 13,
+          f"{inv['enabled']} vs {len(AF.tools_enabled_set())}")
+    check("the names are the registries' own, not a label list",
+          sorted(inv["enabled_names"]) == sorted(AF.tools_enabled_set())
+          and sorted(inv["registered_names"]) == sorted(A.TOOLS))
+    c = SP.counts(SP.build(refresh=True))
+    check("counts()['tools'] is the enabled tool count, not the asks-first rows",
+          c["tools"] == 13 and c["tools"] == c["tools_enabled"]
+          and c["tools_registered"] == 51 and c["asks_first_rows"] > 100, str(c))
+    check("the old number kept its true name and its true size",
+          c["asks_first_rows"]
+          == sum(len(g["rows"]) for g in SP.asks_first()["groups"]))
+    counted = A._run_self_portrait({})
+    check("the model tool's dict carries both true counts, never 136",
+          counted["counts"]["tools"] == 13
+          and counted["counts"]["tools_registered"] == 51
+          and counted["counts"]["asks_first_rows"] > 100, str(counted["counts"]))
+    said = SP.refresh_sentence({}, c)
+    check("the refresh sentence names tools as tools, not as ask-first actions",
+          "51 tools (13 switched on in your settings)" in said
+          and "136 ask-first actions" in said, said)
+    # THE SETTINGS FILE IS THE SOURCE. Write a one-tool [tools].enabled into
+    # the file the reader really opens, clear the caches, and watch both
+    # numbers move.
+    #
+    # WHICH FILE THAT IS (2026-11-04, phase-2 gate). This used to write into
+    # OPENJARVIS_CONFIG_DIR and pass when the suite was run on its own - and
+    # FAIL under `backend/run_suites.py`, because the runner pins the reader
+    # to its own copy of the shipped file through JARVIS_FRAMEWORK_TOML
+    # (run_suites.py:680-684). `jarvis_framework.config_path()` honours that
+    # override FIRST, so the write below changed a file nobody read. A suite
+    # that is green alone and red in the runner is the expensive case, so the
+    # test follows the same order the reader does.
+    override = str(os.environ.get("JARVIS_FRAMEWORK_TOML") or "").strip()
+    own = (Path(override) if override else
+           Path(os.environ["OPENJARVIS_CONFIG_DIR"]) / "jarvis-framework.toml")
+    had = own.read_bytes() if own.is_file() else None
+    try:
+        own.parent.mkdir(parents=True, exist_ok=True)
+        own.write_text('[tools]\nenabled = ["web_search"]\n', encoding="utf-8")
+        SP._clear_caches()
+        inv2 = SP.tool_inventory()
+        c2 = SP.counts(SP.build(refresh=True))
+        check("changing [tools].enabled changes the enabled count",
+              inv2["enabled"] == 1 and inv2["enabled_names"] == ["web_search"]
+              and c2["tools"] == 1,
+              f"{inv2['enabled']} / {inv2['enabled_names']} / {c2['tools']}")
+    finally:
+        if had is None:
+            own.unlink(missing_ok=True)
+        else:
+            own.write_bytes(had)
+        SP._clear_caches()
+    check("putting the settings file back puts the shipped list back",
+          SP.tool_inventory()["enabled"] == 13,
+          str(SP.tool_inventory()["enabled"]))
 
 
 def abilities_and_ask_match_their_modules():
@@ -387,6 +554,42 @@ def version_surface_is_honest():
     else:
         check("a backend with no VERSION beside it says 'unknown', never a guess",
               block["app_version"] == "unknown", block["app_version"])
+    # THE HONEST FALLBACK (2026-11-04, the self-awareness audit's fix #10).
+    # `app_version` stays the short token it always was, so no older caller
+    # breaks; `app_version_said` is ONE sentence for a reader that needs words.
+    # It is never blank, never carries a bare "None", and never guesses a
+    # number - the two cases (a VERSION file, and none) are both driven here.
+    said = block.get("app_version_said")
+    check("the version block carries ONE plain sentence for the version",
+          isinstance(said, str) and bool(said.strip())
+          and said.rstrip().endswith(".") and "\n" not in said, repr(said))
+    check("... never a blank and never a bare 'None'",
+          "None" not in said and "null" not in said, said)
+    if block["app_version"] == "unknown":
+        check("... with no VERSION file it says plainly it could not read it",
+              "could not read the app version" in said, said)
+        check("... names the deploy reseal as what would record one",
+              "deploy reseal" in said, said)
+        check("... and never guesses a version number",
+              not re.search(r"\d+\.\d+\.\d+", said), said)
+    else:
+        check("... with a VERSION file it names that exact number",
+              block["app_version"] in said, said)
+        check("... and says where it was read from",
+              str(block["app_version_source"]) in said, said)
+    # The missing-file case driven directly at its seam - never typed from the
+    # machine this happens to run on.
+    missing = SP.app_version_said("unknown", "no VERSION file beside the backend")
+    check("the unreadable-version fallback is a sentence, not a token",
+          bool(missing.strip()) and missing.endswith(".") and "could not read" in missing,
+          missing)
+    check("... it names the backend schema it DOES know", SP.SCHEMA in missing, missing)
+    check("... and holds no 'None' and no guessed number",
+          "None" not in missing and not re.search(r"\d+\.\d+\.\d+", missing), missing)
+    for bad in ("", "unknown", "v0.2.0", "0.2", "latest"):
+        text = SP.app_version_said(bad, "probe")
+        check(f"app_version_said({bad!r}) falls back instead of quoting it",
+              "could not read the app version" in text, text)
     check("a checkout with no deploy record says so, and does not fail",
           block["deploy"]["recorded"] is False
           and bool(block["deploy"]["why_not"]))
@@ -427,6 +630,109 @@ def version_surface_is_honest():
     got = SP.deploy_block(_TMP / "state-missing")
     check("a missing deploy record is 'unknown', never a crash",
           got["recorded"] is False)
+
+
+# ---------------------------------------------------------------------------
+#   4b. The model's own live-settings digest (2026-11-04, SA-3 part C)
+# ---------------------------------------------------------------------------
+
+
+def live_settings_digest_is_read_not_assumed():
+    """`live_settings_digest()` is the model's tool seeing the REAL values.
+
+    Before it, `jarvis_agent`'s self_portrait tool handed the model COUNTS and
+    no value, so any unusual question about two or three settings was answered
+    from a guess. This proves the digest is the registry's own switches and
+    choices read through their one reader, that an unreadable value is NAMED
+    rather than shown as `false`, that it is bounded, and that it carries the
+    chosen preset and the model that preset plans to run.
+    """
+    got = SP.live_settings_digest()
+    check("the digest answers, from the real modules",
+          isinstance(got, dict) and got.get("available") is True, str(got)[:200])
+    check("it carries exactly the ids-and-values shape the tool documents",
+          set(got) == {"available", "switches", "choices", "unreadable", "on", "off",
+                       "preset", "preset_title", "preset_model", "model", "more"},
+          str(sorted(got)))
+    rows = SP.settings()
+    want_switches = {str(r["id"]) for r in rows if r.get("kind") == "switch"}
+    want_choices = {str(r["id"]) for r in rows if r.get("kind") == "choice"}
+    if not got.get("more"):
+        check("every switch the registry has is a real bool value or named unreadable",
+              set(got["switches"]) | (want_switches & set(got["unreadable"]))
+              == want_switches,
+              str(sorted(want_switches - set(got["switches"]))))
+        check("every choice that read a value keeps that value, and no other",
+              set(got["choices"]) == want_choices - set(got["unreadable"]),
+              f"{sorted(want_choices)} / {sorted(got['choices'])}")
+    else:
+        check("the registry fits the digest's bound, so nothing is left out",
+              False, f"more={got['more']}")
+    check("no switch is ever a non-bool pretending to be a value",
+          all(isinstance(v, bool) for v in got["switches"].values()),
+          str(got["switches"])[:200])
+    check("the on and off counts are the digest's own switches, not typed",
+          got["on"] == sum(1 for v in got["switches"].values() if v)
+          and got["off"] == sum(1 for v in got["switches"].values() if not v),
+          f"{got['on']}/{got['off']}")
+    check("the digest is bounded, and says how many it left out",
+          len(got["switches"]) + len(got["choices"]) + len(got["unreadable"])
+          <= SP.DIGEST_MAX and isinstance(got["more"], int), str(got["more"]))
+    check("the chosen preset is jarvis_presets' own answer",
+          got["preset"] == (PRESETS.choice() or ""), repr(got["preset"]))
+    if got["preset"]:
+        row = next((p for p in PRESETS.PRESETS if p.id == got["preset"]), None)
+        check("... and its title and plan model are that row's own",
+              row is not None and got["preset_title"] == row.title
+              and got["preset_model"] == row.model,
+              f"{got['preset_title']!r} / {got['preset_model']!r}")
+    else:
+        check("with no preset chosen, the digest names none rather than inventing one",
+              got["preset_title"] == "" and got["preset_model"] == "",
+              str(got)[:200])
+
+    # A reader that RAISES is named in `unreadable`, never turned into "off".
+    # This is the honest-failure case: a switch whose file is damaged must not
+    # look like a switch the owner turned off.
+    real = FG.STATE_READERS.get("chat_history")
+    try:
+        def _broken():
+            raise RuntimeError("probe: the switch file is unreadable")
+        FG.STATE_READERS["chat_history"] = _broken
+        hard = SP.live_settings_digest()
+        check("a switch whose reader raises is named unreadable, never off",
+              "chat_history" in hard["unreadable"]
+              and "chat_history" not in hard["switches"], str(hard["unreadable"]))
+        check("... and the counts still describe only the switches it did read",
+              hard["on"] + hard["off"] == len(hard["switches"]))
+    finally:
+        if real is None:
+            FG.STATE_READERS.pop("chat_history", None)
+        else:
+            FG.STATE_READERS["chat_history"] = real
+
+    # It is read at CALL time, not frozen at import.
+    quiet = SP.live_settings_digest()
+    try:
+        FG.STATE_READERS["chat_history"] = lambda: False
+        moved = SP.live_settings_digest()
+        check("flipping a real reader moves the digest",
+              moved["switches"].get("chat_history") is False
+              and quiet["switches"].get("chat_history") is not False,
+              f"{quiet['switches'].get('chat_history')} -> "
+              f"{moved['switches'].get('chat_history')}")
+    finally:
+        if real is None:
+            FG.STATE_READERS.pop("chat_history", None)
+        else:
+            FG.STATE_READERS["chat_history"] = real
+
+    # Nothing private: no sentence, no path, no secret-shaped value.
+    blob = json.dumps(got)
+    check("the digest carries no sentence, path or secret-shaped key",
+          " is " not in blob and "token" not in blob.lower()
+          and _TMP.as_posix() not in blob and "\\\\" not in blob,
+          blob[:200])
 
 
 # ---------------------------------------------------------------------------
@@ -786,8 +1092,19 @@ def refresh_rereads_and_restarts_nothing():
 
 
 class _FakeStorage:
-    ROUTES = ("/api/self/storage", "/api/self/storage/plan",
-              "/api/self/storage/apply")
+    #: THE REAL MODULE'S SHAPE, deliberately. `jarvis_storage_health.ROUTES`
+    #: is a tuple of row dicts (method/path/handler/what), not a tuple of bare
+    #: paths. This fake used to ship bare strings, which is exactly why the
+    #: adapter could `str()` every row and still pass this suite while the
+    #: live server answered 404 (found by the 2026-11-04 field test).
+    ROUTES = (
+        {"method": "GET", "path": "/api/self/storage", "handler": "handle_get",
+         "what": "the fake's inventory"},
+        {"method": "GET", "path": "/api/self/storage/plan",
+         "handler": "handle_get", "what": "the fake's dry-run plan"},
+        {"method": "POST", "path": "/api/self/storage/apply",
+         "handler": "handle_post", "what": "the fake's apply"},
+    )
 
     def __init__(self, fail=False):
         self.fail = fail
@@ -827,7 +1144,9 @@ def storage_wiring_is_optional_and_defensive():
               _install_banner())
         SP._STORAGE = _FakeStorage()
         check("with the storage module present, its routes are served",
-              set(SP.storage_routes()) == set(_FakeStorage.ROUTES))
+              SP.storage_routes() == tuple(r["path"]
+                                           for r in _FakeStorage.ROUTES),
+              str(SP.storage_routes()))
         check("with the storage module present, the absence sentence is empty",
               SP.storage_absence_words() == "" and SP.storage_available() is True)
         check("its start-up banner says the storage scan is beside it",
@@ -845,6 +1164,66 @@ def storage_wiring_is_optional_and_defensive():
         code, out = SP.handle_post("/api/self/storage/apply", {})
         check("a failing storage apply is answered 503, never raised",
               code == 503 and isinstance(out, dict))
+    finally:
+        SP._STORAGE = real
+
+
+class _MixedShapeStorage:
+    """BOTH shapes `ROUTES` may be, plus rows that are not a route at all."""
+
+    ROUTES = (
+        {"method": "GET", "path": "/api/fake/scan", "handler": "handle_get"},
+        "/api/fake/plan",                       # the older, bare-path shape
+        {"method": "POST", "path": "/api/fake/cleanup",
+         "handler": "handle_post"},
+        {"method": "GET", "handler": "handle_get"},     # no path: skipped
+        {"method": "GET", "path": 7},                   # not a str: skipped
+        None,                                            # junk: skipped
+    )
+
+
+class _UnreadableStorage:
+    ROUTES = 42                                 # not iterable: must not raise
+
+
+def storage_routes_accepts_the_shapes_the_real_module_ships():
+    """The adapter reads paths, whatever shape the storage module ships.
+
+    PINNED BECAUSE IT SHIPPED BROKEN (2026-11-04): `jarvis_storage_health.ROUTES`
+    is a tuple of row dicts, and `storage_routes()` used to `str()` each row -
+    so it answered `"{'method': 'GET', 'path': '/api/storage/scan', ...}"` and
+    every dispatcher's `route in storage_routes()` was False. The live server
+    answered `GET /api/storage/scan` with the HUD's own 404; this suite stayed
+    green because its fake held bare strings. The fake above is the real shape
+    now, and these checks hold the adapter to it.
+    """
+    real = SP._STORAGE
+    try:
+        SP._STORAGE = _MixedShapeStorage()
+        got = SP.storage_routes()
+        check("storage_routes() reads the path out of a dict row, not str(row)",
+              got == ("/api/fake/scan", "/api/fake/plan", "/api/fake/cleanup"),
+              str(got))
+        check("a row that is not a route is skipped, never stringified into one",
+              not any("method" in p or "{" in p for p in got), str(got))
+        SP._STORAGE = _UnreadableStorage()
+        check("an unreadable ROUTES is (), never an exception",
+              SP.storage_routes() == ())
+        # THE REAL MODULE, FLATTENED BY THIS SAME ADAPTER. Imported, not read as
+        # text: this repository ships the module (`_where.py`'s SHIPPED set) and
+        # `backend/test_storage_health.py` imports it the same way.
+        import jarvis_storage_health as HEALTH
+        SP._STORAGE = HEALTH
+        got = SP.storage_routes()
+        check("the real storage module's ROUTES flatten to exactly its three paths",
+              got == ("/api/storage/scan", "/api/storage/cleanup/plan",
+                      "/api/storage/cleanup"), str(got))
+        check("and they are its own GET_ROUTES + POST_ROUTES, none lost",
+              got == tuple(HEALTH.GET_ROUTES) + tuple(HEALTH.POST_ROUTES),
+              f"{got} != {HEALTH.GET_ROUTES} + {HEALTH.POST_ROUTES}")
+        check("so the dispatchers' membership test is True for the live paths",
+              all(p in got for p in (HEALTH.SCAN_PATH, HEALTH.PLAN_PATH,
+                                     HEALTH.APPLY_PATH)), str(got))
     finally:
         SP._STORAGE = real
 
@@ -1049,11 +1428,14 @@ def main() -> int:
     try:
         places_match_the_two_registries()
         settings_match_the_registry()
+        choice_values_are_read_not_assumed()
+        tool_counts_are_the_real_tools()
         abilities_and_ask_match_their_modules()
         resolving_words_never_guesses()
         api_self_is_safe_and_complete()
         app_lock_can_only_withhold()
         version_surface_is_honest()
+        live_settings_digest_is_read_not_assumed()
         conversations_are_the_stores_own()
         clear_is_one_exact_item_one_card()
         clear_card_is_a_replacing_card()
@@ -1061,6 +1443,7 @@ def main() -> int:
         audit_fixes_are_in()
         refresh_rereads_and_restarts_nothing()
         storage_wiring_is_optional_and_defensive()
+        storage_routes_accepts_the_shapes_the_real_module_ships()
         refresh_abilities_tool_exists_and_reads()
         conversation_tools_by_chat()
     except Exception:

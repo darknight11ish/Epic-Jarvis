@@ -3477,12 +3477,13 @@ CONVERSATION_OPEN_MAX = 60
 def _self_portrait_tool_text() -> str:
     return ("Read what Jarvis is made of on this PC right now: how many places "
             "(Settings cards and menus) it can open, how many settings, ask-first "
-            "actions, abilities and drop-in plugins it has, which stores exist and "
-            "how to clear them, and which version it runs. Use when: the owner asks "
-            "what you can do, what you have, what is connected, or where a kind of "
-            "setting lives. Do NOT use it to explain one feature in words (that is "
-            "feature_guide) or to change anything. Read-only: no card, nothing "
-            "changed.")
+            "actions, abilities and drop-in plugins it has, which of its switches "
+            "are on or off right now and which preset is chosen, which stores exist "
+            "and how to clear them, and which version it runs. Use when: the owner "
+            "asks what you can do, what you have, what is connected, what is "
+            "switched on, or where a kind of setting lives. Do NOT use it to explain "
+            "one feature in words (that is feature_guide) or to change anything. "
+            "Read-only: no card, nothing changed.")
 
 
 def _conversation_find_tool_text() -> str:
@@ -3507,9 +3508,11 @@ def _run_self_portrait(args: dict) -> dict:
     """The whole job: read the portrait and hand a COMPACT inventory back.
 
     Deliberately compact: the model does not need every id (the full portrait is
-    GET /api/self for a screen), only the counts and the shapes it must not
-    claim wrongly. No setting value, chat word or secret is in this result
-    beyond the counts.
+    GET /api/self for a screen), only the counts, the shapes it must not claim
+    wrongly, and - since 2026-11-04 - the LIVE SETTING VALUES it was previously
+    guessing at. No chat word, path or secret is in this result: `live_settings`
+    is booleans and chosen option names only (its own module says so), and the
+    version carries a plain sentence instead of a bare "unknown" token.
     """
     try:
         import jarvis_self_portrait as SP
@@ -3526,17 +3529,25 @@ def _run_self_portrait(args: dict) -> dict:
     stores = [{"id": s.get("id"), "count": s.get("count"),
                "how_to_clear": s.get("how_to_clear")}
               for s in got.get("stores") or ()]
+    try:
+        live = SP.live_settings_digest()
+    except Exception:                       # noqa: BLE001 - the rest still answers
+        live = {"available": False}
+    version = got.get("version") or {}
     return {"ok": True,
             "schema": got.get("schema"),
-            "version": {"app_version": (got.get("version") or {}).get("app_version"),
-                        "started_at": (got.get("version") or {}).get("started_at")},
+            "version": {"app_version": version.get("app_version"),
+                        "app_version_said": version.get("app_version_said"),
+                        "started_at": version.get("started_at")},
             "counts": counts,
+            "live_settings": live,
             "stores": stores,
             "ability_groups": [g.get("group") for g in
                                (got.get("asks_first") or {}).get("groups") or ()],
-            "note": ("This is the inventory only. For one feature's words and "
-                     "where it lives, use feature_guide; to change a setting, use "
-                     "change_setting; to open a place, the owner says so in words.")}
+            "note": ("This is the inventory and the live setting states only. For "
+                     "one feature's words and where it lives, use feature_guide; to "
+                     "change a setting, use change_setting; to open a place, the "
+                     "owner says so in words.")}
 
 
 def _run_conversation_find(args: dict) -> dict:
