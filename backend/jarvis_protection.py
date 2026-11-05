@@ -753,7 +753,17 @@ def validate_request(kind, target, mode, *, known_programs=None) -> tuple:
         if _is_self_path(real):
             return "", ("That file is the Protected from Jarvis list itself; it is "
                         "already kept out of Jarvis's reach and needs no entry.")
-        return normal_path(real), ""
+        # THE PATH AS IT REALLY IS, NOT THE COMPARISON KEY (2026-11-05).
+        # `normal_path()` case-folds, which is right for deciding whether two
+        # paths are the SAME and wrong for naming one: `add_item()` validates
+        # this value again just before it stores it, and a folded path does not
+        # exist on a case-sensitive filesystem (".../work/Photos" became
+        # ".../work/photos" and the store door refused it). Windows hid that -
+        # its filesystem is case-insensitive - but the store also keeps the
+        # owner's capitals, so the card, the list and the reply name the folder
+        # the way it is spelled on disk. Every MATCH still folds case
+        # (`normal_path`, `_path_forms`), so nothing about coverage changes.
+        return real, ""
     name = normal_program(text)
     if not name:
         return "", "Name the program by its own executable name, like notepad.exe."

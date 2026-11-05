@@ -270,7 +270,7 @@ def t_restrict_and_unrestrict_run_the_real_route():
           calls and PATH.lower() in str(calls[0]["prompt"]).lower()
           and "blocked" in str(calls[0]["prompt"]).lower(), calls)
     check("  ... the entry is stored after the yes, as added_by chat",
-          [i["target"] for i in P.items()] == [P.normal_path(P._real(PATH))]
+          [i["target"] for i in P.items()] == [P._real(PATH)]
           and P.items()[0]["added_by"] == "chat", P.items())
     check("  ... and the answer says it is done",
           res is not None and "Done" in str(res.reply), None if res is None else res.reply)
@@ -303,7 +303,7 @@ def t_restrict_and_unrestrict_run_the_real_route():
         else:
             sys.modules.pop("jarvis_gate", None)
     check("a DENIED removal card leaves the entry in place",
-          [i["target"] for i in P.items()] == [P.normal_path(P._real(PATH))],
+          [i["target"] for i in P.items()] == [P._real(PATH)],
           P.items())
     check("  ... and chat says nothing was changed",
           res is not None and "Nothing was changed" in str(res.reply),
@@ -407,7 +407,7 @@ def t_the_tool_has_three_actions_and_the_right_card_each():
     result, steps = one_call({"action": "list"}, checker=_never_a_card)
     check("action=list asks nobody (no gate call) and answers the real list",
           result.get("ok") is True and result.get("count") == 1
-          and result["items"][0]["target"] == P.normal_path(P._real(PATH)),
+          and result["items"][0]["target"] == P._real(PATH),
           result)
     check("  ... and the step is recorded as 'no card needed'",
           steps and steps[-1]["outcome"] == "no card needed", steps)
@@ -417,7 +417,7 @@ def t_the_tool_has_three_actions_and_the_right_card_each():
     check("action=list with ONE target answers whether it is protected",
           result.get("ok") is True and result.get("check") is True
           and result.get("protected_item", {}).get("target")
-          == P.normal_path(P._real(PATH)), result)
+          == P._real(PATH), result)
 
     # remove: ONE unprotect_item card, then the entry leaves.
     seen = []
@@ -436,7 +436,7 @@ def t_the_tool_has_three_actions_and_the_right_card_each():
           seen)
     check("  ... and the entry is gone only after that yes",
           P.items() == [] and result.get("ok") is True
-          and result.get("removed", {}).get("target") == P.normal_path(P._real(PATH)),
+          and result.get("removed", {}).get("target") == P._real(PATH),
           (P.items(), result))
 
     # remove of something not protected: a plain refusal, no card.
@@ -513,8 +513,9 @@ def t_every_enforcement_point_still_asks_the_module():
         check(f"{name} still imports/asks jarvis_protection",
               "jarvis_protection" in text, name)
     doc = (HERE / "jarvis_protection.py").read_text(encoding="utf-8")
+    missing = [n for n in range(1, 12) if f"\n  {n}." not in doc]
     check("the module still names eleven numbered enforcement points",
-          all(f"\n  {n}." in doc for n in range(1, 12)), doc[:200])
+          not missing, f"missing numbered points: {missing}")
     reset_store()
     P.add_item("folder", PATH, "blocked")
     check("a blocked folder still refuses a read (plain sentence, no card)",
