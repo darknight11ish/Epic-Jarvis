@@ -102,7 +102,7 @@ check("a PC with nothing else ON sends no extra and draws no extra rows", () => 
   const view = readAsksFirst(C.pc_shipped);
   assert.deepEqual(view.tools.extra, [], "no extra rows");
   assert.deepEqual(extraToolsView(view.tools), [], "nothing is drawn for them");
-  assert.equal(view.tools.items.length, 55);
+  assert.equal(view.tools.items.length, 56);
 });
 
 check("the page draws the extra rows and sends OFF through the same verb", () => {
