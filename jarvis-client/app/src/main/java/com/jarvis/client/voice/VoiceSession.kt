@@ -80,6 +80,15 @@ class VoiceSession(
      * with words the desktop already transcribed and checked.
      */
     private val onOpenChatPhrase: () -> Unit = {},
+
+    /**
+     * "Turn on/off hands-free", asked in Jarvis Live (2026-11-04): the phone
+     * answers this ONE sentence itself and returns the line to say, or null
+     * when there is nothing to say. Null as the whole callback means this build
+     * has no hands-free, and the sentence then goes to the model like any
+     * other - never silently swallowed.
+     */
+    private val onHandsfreeCommand: (suspend (com.jarvis.client.net.Handsfree.Asked) -> String?)? = null,
     /**
      * Jarvis Live is on on this phone (voice.LiveRules): another voice over a
      * reply LOWERS it instead of pausing it, and talking over the first
@@ -1290,6 +1299,25 @@ class VoiceSession(
         // constructor param's own doc for why this is additive, not a
         // second fast path.
         if (com.jarvis.client.net.OpenChatPhrase.matches(text)) onOpenChatPhrase()
+        // "Turn on hands-free" / "turn off hands-free" / "hands-free?"
+        // (2026-11-04): answered by the PHONE, not sent to the model. It is one
+        // sentence about one switch, and a model round trip for it would make
+        // the switch feel broken whenever the model is busy - the same reason
+        // "Open a chat" is answered here. A typed chat message goes through the
+        // same parser in MainActivity, so the two surfaces cannot drift.
+        onHandsfreeCommand?.let { ask ->
+            com.jarvis.client.net.Handsfree.command(text)?.let { wanted ->
+                setPhase(turn, Phase.THINKING)
+                speaker.arm()
+                val line = runCatching { ask(wanted) }.getOrNull()
+                // The reply is a FIXED line of the app's own, so the phone's
+                // own voice is allowed where the PC has none (sayLine's own
+                // rule) - no card's words are ever synthesised here.
+                if (!line.isNullOrBlank()) runCatching { sayLine(line) }
+                setPhase(turn, Phase.OFF)
+                return heard
+            }
+        }
         setPhase(turn, Phase.THINKING)
         // Armed once, here, for the whole turn - never inside `play`. A reply
         // is spoken sentence by sentence, so clearing the flag per sentence
@@ -1526,8 +1554,9 @@ class VoiceSession(
             "No microphone available right now."
         Recorder.Failure.TooShort ->
             "Too short to make out. Hold the button while you speak."
-        // Call recording has the microphone (voice/MicOwner.kt): its own
-        // sentence, because "no microphone" would be untrue.
+        // Call recording, the hands-free answer window or another part of
+        // this app holds it (voice/MicOwner.kt): its own sentence, because
+        // "no microphone" would be untrue.
         is Recorder.Failure.MicBusy -> why.why
         is Recorder.Failure.Failed -> "The microphone stopped (${why.detail})."
     }

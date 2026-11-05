@@ -1240,7 +1240,7 @@
   "type": "function",
   "function": {
    "name": "self_portrait",
-   "description": "Read what Jarvis is made of on this PC right now: how many places (Settings cards and menus) it can open, how many settings, ask-first actions, abilities and drop-in plugins it has, which stores exist and how to clear them, and which version it runs. Use when: the owner asks what you can do, what you have, what is connected, or where a kind of setting lives. Do NOT use it to explain one feature in words (that is feature_guide) or to change anything. Read-only: no card, nothing changed.",
+   "description": "Read what Jarvis is made of on this PC right now: how many places (Settings cards and menus) it can open, how many settings, ask-first actions, abilities and drop-in plugins it has, which of its switches are on or off right now and which preset is chosen, which stores exist and how to clear them, and which version it runs. Use when: the owner asks what you can do, what you have, what is connected, what is switched on, or where a kind of setting lives. Do NOT use it to explain one feature in words (that is feature_guide) or to change anything. Read-only: no card, nothing changed.",
    "parameters": {
     "type": "object",
     "properties": {}
