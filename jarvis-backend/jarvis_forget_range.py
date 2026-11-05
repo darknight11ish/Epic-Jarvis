@@ -34,19 +34,50 @@ WHICH FACTS, WHICH CHATS
     that and the list says how many and asks for fewer days - no list is
     sent, and nothing can be forgotten from it.
 
+PINNED CHATS ARE KEPT (owner, 2026-11-04)
+A pinned chat is never on the list and is never deleted by this action:
+pinning is the owner's own "keep this", so it outranks a later "forget that
+week". The preview, the card and the status say how many pinned chats from
+those days are kept, so a chat that stays is never a silent surprise. Pinned
+FACTS are different: a pin there means "always in mind", not "never touch",
+and that is unchanged from before this decision.
+
+TWO YESSES (owner, 2026-11-04)
+"Do not delete until I confirm - and ask me a second time." The card is the
+FIRST yes: approving it changes nothing and holds the checked items for
+HOLD_SECONDS (120). The SECOND yes is POST /confirm ({"id", "yes": true}) -
+only then are the facts forgotten and the chats deleted, and only then does
+the 10-minute Undo start. A second yes with no hold, an expired hold, a hold
+whose items changed, a card still waiting or an Undo already open is 409,
+and nothing changes. The platform gate (Windows Hello on the PC, the
+phone's screen lock) stays on the CARD, which is where a person approves -
+the confirm route takes the same request over the same token/origin checks.
+
+HOW LONG IT TAKES (owner, 2026-11-04: "and tell me how long that would
+take")
+preview() carries an `estimate` block - seconds computed from the counts it
+just measured, never a guess and never "I don't track that". The constants
+are in FACT_SECONDS / CHAT_SECONDS / MESSAGE_SECONDS, written from a
+measurement on the owner's own PC (2026-11-04, temp copies only, best of
+three: 15.7 ms per fact retired, 0.82 ms per chat taken out, 0.016 ms per
+message row). A spoken "how long would that take" is answered from this
+block - or asks which days, when there is no range yet.
+
 THE CARD
 action `memory_forget_range`, tier "ask" only (anything else and the route
 answers 503 - a line in the settings file can never become the owner's
 yes), and never an "always allow": What asks first cannot loosen it
 (jarvis_asks_first.HARD_LIMITS). Its text lists EVERY fact word for word and
-every chat's title, with their dates (ARCHITECTURE section 3). The gate's
-risk line calls it local and NOT reversible (after the 10 minutes the chats
-are gone for good), so approving it is a risky approval: Windows Hello on
-the PC, the screen lock on the phone. Nothing changes before a person
-approves. A spoken "yes" approves nothing - there is no approving by voice
-anywhere in Jarvis.
+every chat's title, with their dates (ARCHITECTURE section 3), the pinned
+chats kept and the measured estimate. The gate's risk line calls it local
+and NOT reversible (after the 10 minutes the chats are gone for good), so
+approving it is a risky approval: Windows Hello on the PC, the screen lock
+on the phone. Nothing changes before a person approves. A spoken "yes"
+approves nothing - there is no approving by voice anywhere in Jarvis - and
+the card itself changes nothing either: it holds the items for the second
+yes.
 
-APPROVED
+APPROVED (the second yes)
 Each fact: jarvis_memory.retire(), the same call Forget makes - so it gets
 the same "forgotten" mark (meta.forgotten_at), which is what keeps a
 question about the past from bringing it back and, once the audit branch's
@@ -73,6 +104,7 @@ from __future__ import annotations
 
 import calendar
 import json
+import math
 import re
 import threading
 import time
@@ -90,16 +122,31 @@ ACTION = "memory_forget_range"
 ROUTE = "/api/memory/forget_range"
 PREVIEW = ROUTE + "/preview"
 UNDO = ROUTE + "/undo"
-ROUTES = (ROUTE, PREVIEW, UNDO)
+CONFIRM = ROUTE + "/confirm"
+ROUTES = (ROUTE, PREVIEW, UNDO, CONFIRM)
 
 #: Facts and chats together, in one list and on one card.
 MAX_ITEMS = 200
-#: How long Undo lasts after the card is approved.
+#: How long Undo lasts after the second yes.
 UNDO_SECONDS = 600
 UNDO_MINUTES = UNDO_SECONDS // 60
+#: How long the SECOND yes waits after the card is approved. Nothing is
+#: deleted while it waits, and an expired hold means nothing was changed.
+HOLD_SECONDS = 120
 #: How long a spoken or typed request stays filled in for the apps.
 ASKED_SECONDS = 1800
 KINDS = ("facts", "chats")
+
+#: What forgetting costs, measured - never guessed. Owner's PC, 2026-11-04,
+#: temp stores only, best of three full runs (tools measure in
+#: .dsh-scratch/FORGET-RANGE-EXT-2026-11-04/bench_estimate.py): retiring one
+#: fact cost 15.7 ms, taking out one chat 0.82 ms, and 2000 message rows
+#: 0.016 ms each. Every constant is that measurement rounded UP with
+#: headroom: an estimate that promises less than the work takes is the wrong
+#: kind of wrong.
+FACT_SECONDS = 0.02
+CHAT_SECONDS = 0.005
+MESSAGE_SECONDS = 0.0001
 
 #: The quick choices both apps offer, in this order, and their names.
 PRESETS = (
@@ -164,6 +211,25 @@ WORDS = {
 
 MISSING = WORDS["missing"]
 
+#: The second yes (owner, 2026-11-04). Deliberately NOT in WORDS yet: the
+#: fixture's `words` block is compared word for word against both apps' own
+#: copies (tools/gen_forget_range_cases.py, jarvis-desktop/src/forget-range.js,
+#: jarvis-client .../net/ForgetRange.kt), and the apps lane adds the second tap
+#: to them. Until it does, the backend sends these sentences itself and the
+#: fixture carries them under `confirm_words`, which neither old app reads.
+CONFIRM_TEXT = "Say yes again to finish. Undo stays available for 10 minutes."
+CONFIRM_YES = "Yes, forget them"
+#: The pinned chats the list leaves out (owner, 2026-11-04).
+PINNED_ONE = "1 pinned chat is kept"
+PINNED_MANY = "{n} pinned chats are kept"
+PINNED_WHY = "Pinning a chat keeps it out of this list and away from this Forget."
+#: A sentence that names the chats and asks for the days instead of denying
+#: the capability (owner, 2026-11-04: "clear old chats" must not be answered
+#: "I don't have a built-in action").
+WHICH_DAYS = ("I can do that for a time frame - which days? Say \"3 November\", \"last week\" "
+              "or \"from 1 to 15 September\", and I will list every fact and chat from then "
+              "before anything goes. Pinned chats are always kept.")
+
 #: What the status says after a card, by the gate's outcome.
 LAST_WORDS = {
     "done": "Done. You can undo it for 10 minutes.",
@@ -174,6 +240,12 @@ LAST_WORDS = {
     "undone": "Put back. Everything is as it was before.",
     "kept": ("The 10 minutes to undo are over. The chats are gone for good; the facts stay "
              "forgotten."),
+    # The two-step yes (owner, 2026-11-04): the card is the first yes and
+    # changes nothing; the hold is what the second yes answers.
+    "confirm": ("Your card is approved. Nothing is forgotten or deleted until you say yes a "
+                "second time."),
+    "confirm_expired": "The second yes timed out. Nothing was forgotten or deleted.",
+    "confirm_refused": "Nothing was forgotten - the second yes had no hold to answer.",
 }
 
 _MONTHS = ("january february march april may june july august september october "
@@ -458,14 +530,78 @@ def _summary(nf: Optional[int], nc: Optional[int], said: str) -> str:
     return " and ".join(parts) + f" from {said}."
 
 
+def _num(n: int) -> str:
+    """1,443 - the way the estimate's sentence writes a count."""
+    return f"{int(n):,}"
+
+
+def _pinned_words(n: int) -> str:
+    return (PINNED_ONE if n == 1 else PINNED_MANY.format(n=_num(n)))
+
+
+def seconds_for(nf: int, nc: int, messages: int) -> int:
+    """The measured cost of this batch, in whole seconds, never less than 1.
+
+    One second at the floor rather than "0 seconds": the owner asked how long
+    it takes, and "0" would read as instant when 200 facts still take about
+    four."""
+    cost = nf * FACT_SECONDS + nc * CHAT_SECONDS + messages * MESSAGE_SECONDS
+    return max(1, int(math.ceil(cost)))
+
+
+def estimate(nf: int, nc: int, messages: int, kinds=KINDS, capped: bool = False) -> dict:
+    """The measured "how long would that take", from the counts just read.
+
+    `capped`: more than MAX_ITEMS together, so the range cannot be done in one
+    go. `messages` is then the messages of the chats that WERE read (the first
+    MAX_ITEMS + 1), so the sentence says "at least" rather than pretend to a
+    total it did not count."""
+    secs = seconds_for(nf, nc, messages)
+    doing = []
+    if "facts" in kinds:
+        doing.append("forget " + _count(nf, "fact"))
+    if "chats" in kinds:
+        part = "delete " + _count(nc, "chat")
+        if messages:
+            part += f" ({_num(messages)} message{'s' if messages != 1 else ''})"
+        doing.append(part)
+    body = " and ".join(doing) or "forget nothing"
+    text = f"About {_count(secs, 'second')} to {body}."
+    if capped:
+        text = (f"At least {_count(secs, 'second')} to {body} - and that is more than "
+                f"{MAX_ITEMS} at once, so nothing can be forgotten until you choose fewer "
+                f"days. Each request covers at most {MAX_ITEMS} items, and repeating it "
+                f"covers the rest.")
+    return {"facts": int(nf), "chats": int(nc), "messages": int(messages),
+            "seconds": secs, "text": text}
+
+
+def pinned_kept(chats, frame: Frame) -> tuple:
+    """(the pinned chats that OVERLAP the days, how many in all).
+
+    Each item is {"id", "title", "messages"}. They are never on the tickable
+    list and never deleted; this is only what the list, the card and the
+    status say is being kept. A chat history that cannot be opened gives
+    ([], 0): the action itself will say why when it is asked for."""
+    try:
+        got = chats.overlapping(frame.start, frame.end, MAX_ITEMS, pinned=True)
+    except Exception:
+        return [], 0
+    items = [{"id": c["id"], "title": c["title"] or "(no title)",
+              "messages": int(c["turns"])} for c in got.get("items") or []]
+    return items, int(got.get("total") or 0)
+
+
 def preview(frame: Frame, kinds=KINDS, *, mem=None, chats=None) -> dict:
     """What is in `frame`: the facts saved then and the chats that overlap
-    it, each with a label, oldest first. Over MAX_ITEMS together: the
-    counts only, `too_many`, and no list."""
+    it, each with a label, oldest first, plus the measured estimate and the
+    pinned chats that are kept. Over MAX_ITEMS together: the counts only,
+    `too_many`, and no list."""
     kinds = tuple(kinds)
     year = datetime.fromtimestamp(frame.start).year
     out = {"ok": True, "frame": frame.view(), "kinds": list(kinds), "facts": [], "chats": [],
-           "counts": {}, "too_many": False, "max_items": MAX_ITEMS, "chats_why": ""}
+           "counts": {}, "too_many": False, "max_items": MAX_ITEMS, "chats_why": "",
+           "pinned_kept": [], "pinned_kept_count": 0}
     facts_rows, nf, chat_rows, nc = [], None, [], None
     if "facts" in kinds:
         mem = mem if mem is not None else _memory()
@@ -473,15 +609,22 @@ def preview(frame: Frame, kinds=KINDS, *, mem=None, chats=None) -> dict:
         out["counts"]["facts"] = nf
     if "chats" in kinds:
         chats = chats if chats is not None else _chats()
-        got = chats.overlapping(frame.start, frame.end, MAX_ITEMS + 1)
+        # Pinned chats are kept, so they are not part of the tickable list
+        # (owner, 2026-11-04), and the MAX_ITEMS budget counts only what can
+        # actually be ticked.
+        got = chats.overlapping(frame.start, frame.end, MAX_ITEMS + 1, pinned=False)
         chat_rows, nc = got.get("items") or [], int(got.get("total") or 0)
         out["counts"]["chats"] = nc
         if got.get("why_not"):
             out["chats_why"] = ("Your chats from then could not be read: "
                                 + str(got["why_not"]).rstrip(".") + ".")
+        out["pinned_kept"], out["pinned_kept_count"] = pinned_kept(chats, frame)
     total = (nf or 0) + (nc or 0)
+    messages = sum(int(c["turns"]) for c in chat_rows)
     out["said"] = _summary(nf, nc, frame.said)
     out["empty"] = total == 0
+    out["estimate"] = estimate(nf or 0, nc or 0, messages, kinds,
+                               capped=total > MAX_ITEMS)
     if total > MAX_ITEMS:
         out["too_many"] = True
         out["said"] = (f"That is {_summary(nf, nc, frame.said)[:-1]} - more than {MAX_ITEMS} "
@@ -499,12 +642,16 @@ def preview(frame: Frame, kinds=KINDS, *, mem=None, chats=None) -> dict:
 # --------------------------------------------------------------------------
 
 
-def card_text(frame: Frame, facts: list, chats: list) -> str:
-    """Every fact word for word and every chat's title, with their dates."""
+def card_text(frame: Frame, facts: list, chats: list, pinned_kept_count: int = 0,
+              estimate_text: str = "") -> str:
+    """Every fact word for word and every chat's title, with their dates,
+    the pinned chats kept, the measured estimate, and the second yes."""
     lines = [f"Forget what Jarvis learned and delete your chats from {frame.said}?"
              if facts and chats else
              f"Forget what Jarvis learned from {frame.said}?" if facts else
              f"Delete your chats from {frame.said}?", ""]
+    if pinned_kept_count:
+        lines += [f"{_pinned_words(pinned_kept_count)}. {PINNED_WHY}", ""]
     if facts:
         lines.append(f"Jarvis will forget {'this fact' if len(facts) == 1 else f'these {len(facts)} facts'}"
                      " - it stops using them, and they stay in the history as forgotten:")
@@ -526,13 +673,18 @@ def card_text(frame: Frame, facts: list, chats: list) -> str:
         # 2026-09-28): the same sentence every delete dialog says.
         lines.append("Facts you did not tick stay. Copies in older backups stay until they age out.")
         lines.append("")
+    if estimate_text:
+        lines += [estimate_text, ""]
     lines += [
-        f"For {UNDO_MINUTES} minutes after you approve, one tap on Undo puts everything back. "
-        "After that the chats are gone for good, and the facts stay forgotten. Nothing is "
-        "erased: a fact's words stay in the history unless you use Erase the words on it.",
+        "This card is the first yes: nothing is removed when you approve it. You are asked "
+        "to say yes a second time (\"Yes, forget them\"), and only then does it happen.",
         "",
-        "Nothing is removed unless you approve this card. Saying yes out loud does not "
-        "approve it.",
+        f"For {UNDO_MINUTES} minutes after the second yes, one tap on Undo puts everything "
+        "back. After that the chats are gone for good, and the facts stay forgotten. Nothing "
+        "is erased: a fact's words stay in the history unless you use Erase the words on it.",
+        "",
+        "Nothing is removed unless you approve this card AND say yes again. Saying yes out "
+        "loud does not approve it.",
         "",
         "If you did not just ask for this, say no.",
     ]
@@ -540,14 +692,14 @@ def card_text(frame: Frame, facts: list, chats: list) -> str:
 
 
 # --------------------------------------------------------------------------
-#   State: one card at a time, one Undo window at a time
+#   State: one card, one second yes, one Undo window at a time
 # --------------------------------------------------------------------------
 
 _LOCK = threading.Lock()
 #: Held while approved changes are made and while Undo runs, so the two
 #: never interleave.
 _SWITCH = threading.Lock()
-_STATE: dict = {"pending": None, "last": None, "undo": None, "asked": None}
+_STATE: dict = {"pending": None, "hold": None, "last": None, "undo": None, "asked": None}
 
 
 def _person_said_yes(v) -> bool:
@@ -602,24 +754,85 @@ def _purge(token: str) -> None:
 def _timer(seconds: float, fn: Callable[[], None]) -> None:
     t = threading.Timer(seconds, fn)
     t.daemon = True
-    t.name = "jarvis-forget-range-undo"
+    t.name = "jarvis-forget-range-timer"
     t.start()
 
 
+def _drop_hold(token: str, outcome: str = "confirm_expired") -> None:
+    """The second yes never came (or the code says its hold is gone): drop it
+    without changing anything. NOT an error state - the status just stops
+    offering the confirm, and `last` says nothing was changed."""
+    with _LOCK:
+        h = _STATE["hold"]
+        if not h or h.get("token") != token:
+            return
+        _STATE["hold"] = None
+        _STATE["last"] = {"outcome": outcome, "why": "", "at": _now(),
+                          "message": LAST_WORDS.get(outcome, "")}
+    _audit("memory.forget_range.confirm_expired", {"outcome": outcome})
+
+
+def _hold(job: dict, now: float, timer: Optional[Callable] = None) -> None:
+    """The card was approved: hold the checked items for the SECOND yes.
+
+    Nothing is forgotten or deleted here. The hold carries the ids the owner
+    ticked and the frame, so `confirm()` can check they are still exactly
+    that before it acts."""
+    timer = timer or _timer
+    token = job["token"]
+    with _LOCK:
+        p = _STATE["pending"]
+        if p and p.get("token") == token:
+            _STATE["pending"] = None
+        _STATE["hold"] = {"token": token, "since": now, "until": now + HOLD_SECONDS,
+                          "mono_until": time.monotonic() + HOLD_SECONDS,
+                          "frame": job["frame"], "facts": list(job["facts"]),
+                          "chats": list(job["chats"]),
+                          "counts": dict(job["counts"]),
+                          "pinned_kept": int(job.get("pinned_kept") or 0)}
+        _STATE["last"] = {"outcome": "confirm", "why": "", "at": now,
+                          "message": LAST_WORDS["confirm"]}
+    try:
+        timer(HOLD_SECONDS, lambda: _drop_hold(token))
+    except Exception:
+        pass
+    _audit("memory.forget_range.confirm_waiting", {"facts": job["counts"]["facts"],
+                                                   "chats": job["counts"]["chats"]})
+
+
 def _expire(now: float) -> None:
-    """The lazy half of the ten-minute limit (the timer is the other)."""
+    """The lazy half of the time limits (the timers are the other): the
+    ten-minute Undo, the two-minute second yes, and the half-hour spoken
+    request."""
     with _LOCK:
         u = _STATE["undo"]
+        h = _STATE["hold"]
         # `until` is a wall-clock time (shown to the apps); `mono_until` is the same
-        # ten minutes on the MONOTONIC clock, so a clock set back while the Undo
-        # is open cannot stretch it past ten real minutes (time audit, 2026-09-30).
+        # limit on the MONOTONIC clock, so a clock set back while the Undo (or the
+        # second yes) is open cannot stretch it past the real time (time audit,
+        # 2026-09-30).
         token = u["token"] if u and (u["until"] <= now or (
             u.get("mono_until") is not None and time.monotonic() >= u["mono_until"])) else None
+        htoken = h["token"] if h and (h["until"] <= now or (
+            h.get("mono_until") is not None and time.monotonic() >= h["mono_until"])) else None
         a = _STATE["asked"]
         if a and a["at"] + ASKED_SECONDS <= now:
             _STATE["asked"] = None
     if token:
         _purge(token)
+    if htoken:
+        _drop_hold(htoken)
+
+
+def _confirm_view(h: Optional[dict], now: float) -> Optional[dict]:
+    """The second-yes block the status and the 202 body carry. `expires_in`
+    is what is really left, so a client that polls sees it shrink; the block
+    disappears when the hold does."""
+    if not h:
+        return None
+    return {"route": CONFIRM, "id": h["token"],
+            "expires_in": max(0, int(h["until"] - now)),
+            "text": CONFIRM_TEXT}
 
 
 def _undo_view(u: Optional[dict], now: float) -> Optional[dict]:
@@ -643,12 +856,16 @@ def status(now: Optional[float] = None) -> dict:
     now = _now() if now is None else now
     _expire(now)
     with _LOCK:
-        p, last, u, a = (_STATE["pending"], _STATE["last"], _STATE["undo"],
-                         _STATE["asked"])
+        p, h, last, u, a = (_STATE["pending"], _STATE["hold"], _STATE["last"],
+                            _STATE["undo"], _STATE["asked"])
         return {
             "available": True, "title": WORDS["title"],
             "waiting": p is not None,
             "waiting_for": dict(p["counts"], frame=p["frame"]) if p else None,
+            # The second yes (owner, 2026-11-04): null unless a card has been
+            # approved and its items are held, waiting for the owner's yes.
+            "confirm": _confirm_view(h, now),
+            "pinned_kept_count": int((p or h or {}).get("pinned_kept") or 0),
             "undo": _undo_view(u, now),
             "last": dict(last) if last else None,
             "asked": {k: a[k] for k in ("id", "from", "to", "said", "kinds")} if a else None,
@@ -680,8 +897,13 @@ def _check_facts(mem, ids: list, frame: Frame) -> tuple:
 
 
 def _check_chats(chats, ids: list, frame: Frame) -> tuple:
+    """(items still deletable in the frame, ids that are not).
+
+    `pinned=False`: a pinned chat is never deletable, so an id naming one
+    comes back in `gone` and the request answers 409 "the list changed" -
+    never a silent delete of something the owner pinned (2026-11-04)."""
     year = datetime.fromtimestamp(frame.start).year
-    got = chats.overlapping(frame.start, frame.end, len(ids) + 1, only=ids)
+    got = chats.overlapping(frame.start, frame.end, len(ids) + 1, only=ids, pinned=False)
     if got.get("why_not"):
         raise PermissionError("Your chats could not be read: "
                               + str(got["why_not"]).rstrip(".") + ".")
@@ -740,6 +962,10 @@ def request(body, *, now: Optional[float] = None, mem=None, chats=None,
         if _STATE["pending"] is not None:
             return 409, {"ok": False, "error": "A card for this is already waiting - answer it "
                                                "first."}
+        if _STATE["hold"] is not None:
+            return 409, {"ok": False, "error": (
+                "A second yes is still waiting for the card you approved. Say yes again, or "
+                "let it time out, before forgetting another time frame.")}
         u = _STATE["undo"]
         if u is not None:
             left = max(1, -(-int(u["until"] - now) // 60))
@@ -757,19 +983,25 @@ def request(body, *, now: Optional[float] = None, mem=None, chats=None,
     if gone_f or gone_c:
         return 409, {"ok": False, "changed": True, "error": (
             "The list changed since you read it - something on it was already forgotten, "
-            "deleted, or is not from those days. Read the list again.")}
-    text = card_text(frame, facts, chat_items)
+            "deleted, pinned (a pinned chat is always kept), or is not from those days. Read "
+            "the list again.")}
+    kept_items, kept_count = pinned_kept(
+        chats if chats is not None else _chats(), frame) if cids else ([], 0)
+    est = estimate(len(facts), len(chat_items),
+                   sum(int(c["turns"]) for c in chat_items))
+    text = card_text(frame, facts, chat_items, kept_count, est["text"])
     counts = {"facts": len(facts), "chats": len(chat_items)}
+    token = uuid.uuid4().hex
     with _LOCK:
         if _STATE["pending"] is not None:
             return 409, {"ok": False, "error": "A card for this is already waiting - answer it "
                                                "first."}
-        token = uuid.uuid4().hex
         _STATE["pending"] = {"token": token, "since": now, "counts": counts,
-                             "frame": frame.said}
+                             "frame": frame.said, "frame_obj": frame,
+                             "pinned_kept": kept_count}
         _STATE["asked"] = None
     job = {"token": token, "frame": frame, "facts": fids, "chats": cids, "text": text,
-           "counts": counts}
+           "counts": counts, "pinned_kept": kept_count}
     try:
         spawn(lambda: _decide(job, mem, chats, gate, tier_of))
     except Exception:
@@ -777,15 +1009,29 @@ def request(body, *, now: Optional[float] = None, mem=None, chats=None,
             _STATE["pending"] = None
         return 503, {"ok": False, "error": "could not raise the approval card"}
     return 202, {"ok": True, "waiting": True, "counts": counts,
+                 "pinned_kept_count": kept_count,
+                 # The second yes. Its id is settled now, so a client can poll
+                 # the status and use the same id when the card is approved -
+                 # until then, POST /confirm answers 409 "a card is waiting".
+                 "confirm": {"route": CONFIRM, "id": token, "expires_in": HOLD_SECONDS,
+                             "text": CONFIRM_TEXT},
                  "message": "Waiting for your approval. Nothing is forgotten or deleted "
-                            "unless you approve the card."}
+                            "unless you approve the card - and after that, unless you say "
+                            "yes a second time."}
 
 
-def _decide(job: dict, mem, chats, gate: Callable, tier_of: Callable) -> None:
+def _decide(job: dict, mem, chats, gate: Callable, tier_of: Callable,
+            timer: Optional[Callable] = None) -> None:
+    """The card is answered. A person's yes does NOT delete anything now: it
+    holds the checked items for the second yes (owner, 2026-11-04), which is
+    `_hold()`. A no, a timeout or a gate that answered by itself changes
+    nothing at all."""
     token, text = job["token"], job["text"]
     detail = {"text": text, "what": "forget facts and delete chats from a time frame",
               "frame": job["frame"].said, "facts": job["counts"]["facts"],
-              "chats": job["counts"]["chats"], "leaves_this_pc": False}
+              "chats": job["counts"]["chats"],
+              "pinned_kept": int(job.get("pinned_kept") or 0),
+              "leaves_this_pc": False}
     try:
         v = gate(ACTION, detail, text)
     except Exception as exc:
@@ -799,14 +1045,7 @@ def _decide(job: dict, mem, chats, gate: Callable, tier_of: Callable) -> None:
         if outcome in ("denied", "timed_out"):
             return _finish(token, outcome)
         return _finish(token, "refused", str(getattr(v, "reason", "refused"))[:200])
-    try:
-        apply(job, mem=mem, chats=chats)
-    except Exception as exc:
-        with _LOCK:
-            some = (_STATE["undo"] or {}).get("token") == token
-        return _finish(token, "failed", type(exc).__name__, message=(
-            "Something went wrong part of the way. What was done can be undone for 10 minutes."
-            if some else ""))
+    _hold(job, _now(), timer)
 
 
 def _forget_one(mem, fid: int, frame: Frame) -> Optional[dict]:
@@ -832,8 +1071,9 @@ def _forget_one(mem, fid: int, frame: Frame) -> Optional[dict]:
 
 def apply(job: dict, *, mem=None, chats=None, now: Optional[float] = None,
           timer: Optional[Callable] = None) -> dict:
-    """After a person's yes: forget each fact (retire, exactly as Forget),
-    take each chat out into the Undo hold, and start the ten minutes."""
+    """THE SECOND YES: forget each fact (retire, exactly as Forget), take
+    each chat out into the Undo hold, and start the ten minutes. Only
+    `confirm()` calls this with a person's second yes behind it."""
     timer = timer or _timer
     frame = job["frame"]
     token = job["token"]
@@ -848,10 +1088,11 @@ def apply(job: dict, *, mem=None, chats=None, now: Optional[float] = None,
                         held_facts.append(got)
             if job["chats"]:
                 chats = chats if chats is not None else _chats()
-                # Only the ones still in the frame (none was deleted or
-                # moved while the card waited).
+                # Only the ones still in the frame (none was deleted, moved or
+                # pinned while the card waited). A pinned chat is NEVER taken
+                # out, even if an old client ticked one.
                 got = chats.overlapping(frame.start, frame.end, len(job["chats"]) + 1,
-                                        only=job["chats"])
+                                        only=job["chats"], pinned=False)
                 still = [c["id"] for c in got.get("items") or []]
                 if still:
                     held_chats = chats.take_out(still)
@@ -867,11 +1108,102 @@ def apply(job: dict, *, mem=None, chats=None, now: Optional[float] = None,
                 p = _STATE["pending"]
                 if p and p.get("token") == token:
                     _STATE["pending"] = None
+                h = _STATE["hold"]
+                if h and h.get("token") == token:
+                    _STATE["hold"] = None
                 _STATE["last"] = {"outcome": "done", "why": "", "at": now,
                                   "message": LAST_WORDS["done"]}
-            timer(UNDO_SECONDS, lambda: _purge(token))
+            try:
+                timer(UNDO_SECONDS, lambda: _purge(token))
+            except Exception:
+                pass
     _audit("memory.forget_range.done", {"facts": len(held_facts), "chats": len(held_chats)})
     return {"facts": len(held_facts), "chats": len(held_chats)}
+
+
+# --------------------------------------------------------------------------
+#   The second yes: POST /api/memory/forget_range/confirm
+# --------------------------------------------------------------------------
+
+
+def _iso(at: float) -> str:
+    return datetime.fromtimestamp(at).isoformat(timespec="seconds")
+
+
+def confirm(body, *, now: Optional[float] = None, mem=None, chats=None,
+            timer: Optional[Callable] = None) -> tuple:
+    """{"id": "<held id>", "yes": true} - the owner's SECOND yes.
+
+    `yes` must be the literal JSON `true`: "true", 1 or "yes" is a 400 and
+    the hold STAYS, so a mistyped client can correct itself without losing
+    the list. Nothing is deleted unless every check passes; anything else is
+    409 and nothing changes (the hold included, unless it had expired)."""
+    now = _now() if now is None else now
+    _expire(now)
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "Send a JSON object."}
+    got_id = body.get("id")
+    if not isinstance(got_id, str) or not got_id:
+        return 400, {"ok": False, "error": (
+            "Send the id from the card's confirm block. Nothing was forgotten.")}
+    if body.get("yes") is not True:
+        return 400, {"ok": False, "error": (
+            "This needs a literal yes: {\"id\": \"<held id>\", \"yes\": true}. Nothing was "
+            "forgotten or deleted, and the list is still waiting.")}
+    with _LOCK:
+        p, h, u = _STATE["pending"], _STATE["hold"], _STATE["undo"]
+    if p is not None:
+        return 409, {"ok": False, "error": (
+            "The card is still waiting - approve it first. Nothing was forgotten.")}
+    if u is not None:
+        left = max(1, -(-int(u["until"] - now) // 60))
+        return 409, {"ok": False, "error": (
+            f"You can still undo the last time frame you forgot, for about "
+            f"{_count(left, 'more minute')}. Nothing was forgotten this time.")}
+    if h is None:
+        return 409, {"ok": False, "error": (
+            "There is no second yes waiting - the 2 minutes are up, or it was already "
+            "answered. Nothing was forgotten or deleted.")}
+    if h["token"] != got_id:
+        return 409, {"ok": False, "error": (
+            "That is not the second yes waiting. Nothing was forgotten or deleted.")}
+    frame = h["frame"]
+    try:
+        facts, gone_f = _check_facts(mem if mem is not None else _memory(), h["facts"],
+                                     frame) if h["facts"] else ([], [])
+        chat_items, gone_c = _check_chats(chats if chats is not None else _chats(),
+                                          h["chats"], frame) if h["chats"] else ([], [])
+    except PermissionError as exc:
+        return 503, {"ok": False, "error": str(exc)}
+    if gone_f or gone_c:
+        return 409, {"ok": False, "changed": True, "error": (
+            "The list changed since you approved the card - something on it was already "
+            "forgotten, deleted, pinned (a pinned chat is always kept), or is not from those "
+            "days. Nothing was forgotten or deleted. Read the list again.")}
+    job = {"token": h["token"], "frame": frame, "facts": h["facts"], "chats": h["chats"],
+           "counts": dict(h["counts"]), "pinned_kept": h["pinned_kept"]}
+    try:
+        made = apply(job, mem=mem, chats=chats, now=now, timer=timer)
+    except Exception as exc:
+        with _LOCK:
+            some = (_STATE["undo"] or {}).get("token") == h["token"]
+        if not some:
+            _drop_hold(h["token"], "failed")
+        return 503, {"ok": False, "error": (
+            f"Something went wrong part of the way ({type(exc).__name__}). What was done can "
+            f"be undone for 10 minutes." if some else
+            "Something went wrong. Nothing was forgotten or deleted.")}
+    with _LOCK:
+        u = _STATE["undo"] or {}
+        until = float(u.get("until") or (now + UNDO_SECONDS))
+    said = (f"Forgot {_count(made['facts'], 'fact')} and deleted "
+            f"{_count(made['chats'], 'chat')}" if made["facts"] or made["chats"]
+            else "Nothing was left to change")
+    return 200, {"ok": True, "facts_forgotten": made["facts"],
+                 "chats_deleted": made["chats"],
+                 "pinned_kept": int(h["pinned_kept"]),
+                 "undo": {"until": _iso(until), "seconds": UNDO_SECONDS},
+                 "message": said + f". Undo is available for {UNDO_MINUTES} minutes."}
 
 
 # --------------------------------------------------------------------------
@@ -942,8 +1274,11 @@ _FACTS_OBJ = (r"(?:what|everything|anything|all|the\s+things?|things?)\s+(?:that
               r"(?:you(?:'ve|\s+have)?\s+)?(?:learned|learnt|remembered|picked\s+up|"
               r"found\s+out)(?:\s+about\s+me)?"
               r"|(?:the\s+|my\s+)?(?:facts|memories)(?:\s+you\s+(?:learned|learnt|saved))?")
-_CHATS_OBJ = (r"(?:all\s+)?(?:(?:my|our|the)\s+)?(?:chats?|conversations?|chat\s+history|"
-              r"messages|history)")
+#: "old" is allowed because the owner's own words are "clear old chats"
+#: (2026-11-04) - and a date-less one of these asks which days rather than
+#: denying the capability (`WHICH_DAYS`).
+_CHATS_OBJ = (r"(?:(?:all|any)\s+)?(?:(?:my|our|the)\s+)?(?:old\s+|older\s+)?"
+              r"(?:chats?|conversations?|chat\s+history|messages|history)")
 _BOTH_OBJ = (r"(?:what|everything|anything|all)\s+(?:that\s+)?(?:i\s+(?:said|told\s+you|typed|"
              r"asked(?:\s+you)?|said\s+to\s+you)|we\s+(?:said|talked\s+about|discussed))"
              r"|everything|all\s+of\s+it")
@@ -1152,17 +1487,42 @@ def _time_of(t: str, now: float) -> Optional[tuple]:
     return None
 
 
+#: "how long would that take" - a plain question about the time frame already
+#: on screen. Answered from preview()'s measured estimate (owner, 2026-11-04:
+#: "I don't track that" must stop being possible). "how long would it take to
+#: clear old chats" carries its own request after "to ".
+_HOW_LONG = re.compile(
+    r"(?:and\s+)?how\s+long\s+(?:would|will)\s+(?:that|it|this)\s+(?:take|last)"
+    r"(?:\s+to\s+(?P<what>.+))?")
+
+
 def parse_phrase(s: str, now: Optional[float] = None) -> Optional[dict]:
     """None - not a request to forget a time frame (the sentence goes on
     to the rest of jarvis_quick, or the model). Otherwise one of:
         {"frame": Frame, "kinds": ("facts", "chats"), "erase": bool}
         {"ask": "<a question>"}   - a date it will not guess
+        {"estimate": True, "frame": Frame, "kinds": (...)}   - "how long?"
     `s` is jarvis_quick.normalise()'s text."""
     now = _now() if now is None else now
     if not isinstance(s, str) or len(s) > 200:
         return None
+    s = s.strip()
+    # "clear old chats and how long would that take": the question is about
+    # the clear, so ask it as the clear it is.
+    s = re.sub(r"\s+and\s+how\s+long\s+(?:would|will)\s+(?:that|it|this)\s+(?:take|last)"
+               r"\s*$", "", s).strip()
+    hl = _HOW_LONG.fullmatch(s)
+    if hl:
+        what = (hl.group("what") or "").strip()
+        if what:
+            got = parse_phrase(what, now)
+            if got and got.get("frame") is not None:
+                return {"estimate": True, "frame": got["frame"], "kinds": got["kinds"]}
+            if got and got.get("ask"):
+                return got
+        return {"estimate": True}
     m = re.fullmatch(r"(?:(?:please|can\s+you|could\s+you|i\s+want\s+you\s+to)\s+)?"
-                     r"(?P<verb>" + _VERB + r")\s+(?P<rest>.+)", s.strip())
+                     r"(?P<verb>" + _VERB + r")\s+(?P<rest>.+)", s)
     if not m:
         return None
     rest = m.group("rest")
@@ -1189,6 +1549,15 @@ def parse_phrase(s: str, now: Optional[float] = None) -> Optional[dict]:
         else:
             frame = frame_of(a.date().isoformat(), b.date().isoformat(), now)
         return {"frame": frame, "kinds": kinds, "erase": erase}
+    # No time words at all: "clear old chats". A CHATS request must ask which
+    # days, not deny the capability (owner, 2026-11-04) - and a "how long"
+    # question in the same sentence is already stripped above. Facts-only
+    # sentences still go on to the model: there is no date to fill in, and
+    # this lane must not swallow "forget what you learned".
+    kinds = _kinds_of_obj(rest)
+    if kinds and "chats" in kinds and re.search(
+            r"\b(?:chats?|conversations?|chat\s+history|messages|history)\b", rest):
+        return {"ask": WHICH_DAYS}
     return None
 
 
@@ -1212,6 +1581,26 @@ def _kinds_of_obj(obj: str) -> Optional[tuple]:
     return tuple(k for k in KINDS if k in kinds) if kinds else None
 
 
+def _estimate_range(got: dict, now: float) -> tuple:
+    """(Frame | None, kinds) that "how long would that take" is about: the
+    frame the sentence itself names, else the one on screen - a held second
+    yes, a card waiting, or the range a spoken request just filled in."""
+    if got.get("frame") is not None:
+        return got["frame"], tuple(got.get("kinds") or KINDS)
+    with _LOCK:
+        h, p, a = _STATE["hold"], _STATE["pending"], _STATE["asked"]
+    if h is not None:
+        return h["frame"], KINDS
+    if p is not None and p.get("frame_obj") is not None:
+        return p["frame_obj"], KINDS
+    if a:
+        try:
+            return frame_of(a["from"], a["to"], now), kinds_of(a["kinds"])
+        except ValueError:
+            return None, KINDS
+    return None, KINDS
+
+
 def quick_answer(got: dict, now: Optional[float] = None, *, mem=None, chats=None) -> tuple:
     """(what Jarvis says, whether the apps open the list). It fills in the
     list in both apps' Brain (status()["asked"]) and says where it is - and
@@ -1220,6 +1609,23 @@ def quick_answer(got: dict, now: Optional[float] = None, *, mem=None, chats=None
     now = _now() if now is None else now
     if got.get("ask"):
         return got["ask"], False
+    if got.get("estimate"):
+        frame, kinds = _estimate_range(got, now)
+        if frame is None:
+            return WHICH_DAYS, False
+        try:
+            p = preview(frame, kinds, mem=mem, chats=chats)
+        except Exception:
+            return ("I could not read what Jarvis learned or said then, so I cannot say how "
+                    f"long it would take. Choose the days in Brain, under {WORDS['title']}.",
+                    False)
+        text = f"For {frame.said}: {p['estimate']['text']}"
+        kept = int(p.get("pinned_kept_count") or 0)
+        if kept:
+            text += f" {_pinned_words(kept)}."
+        text += (" Nothing is removed until you approve the card and then say yes a second "
+                 "time.")
+        return text, True
     frame, kinds = got["frame"], got["kinds"]
     try:
         p = preview(frame, kinds, mem=mem, chats=chats)
@@ -1231,6 +1637,13 @@ def quick_answer(got: dict, now: Optional[float] = None, *, mem=None, chats=None
         lead = ("I can forget them, but not erase their words: that is \"Erase the words\", on "
                 "one fact at a time. ")
     if p["empty"] and not p["chats_why"]:
+        kept = int(p.get("pinned_kept_count") or 0)
+        if kept and "chats" in kinds:
+            # "There are no chats" would be a lie: there is one, and it is kept.
+            return lead + (f"Nothing to delete from {frame.said}: "
+                           f"{_count(kept, 'chat')} from then "
+                           f"{'is' if kept == 1 else 'are'} pinned, and a pinned chat is "
+                           f"always kept."), False
         what = {("facts",): "Jarvis learned nothing", ("chats",): "there are no chats",
                 KINDS: "Jarvis learned nothing and there are no chats"}[tuple(kinds)]
         return lead + f"There is nothing to forget: {what} from {frame.said}.", False
@@ -1242,9 +1655,12 @@ def quick_answer(got: dict, now: Optional[float] = None, *, mem=None, chats=None
     if p["too_many"]:
         return lead + (f"That is {found} - more than {MAX_ITEMS} at once. I've put the dates "
                        f"{where}: choose fewer days there."), True
-    return lead + (f"I've put the list {where}: {found}. Check it, untick anything you want "
-                   f"to keep, and tap Forget these, then Approve on the card. Nothing is "
-                   f"removed until you do - saying yes out loud does not approve it."), True
+    kept = int(p.get("pinned_kept_count") or 0)
+    keep_said = f" {_pinned_words(kept)}." if kept else ""
+    return lead + (f"I've put the list {where}: {found}.{keep_said} Check it, untick anything "
+                   f"you want to keep, and tap Forget these, then Approve on the card and say "
+                   f"yes a second time. Nothing is removed until you do - saying yes out loud "
+                   f"does not approve it."), True
 
 
 # --------------------------------------------------------------------------
@@ -1274,7 +1690,7 @@ def handle_get(route: str, query: str = "", *, now: Optional[float] = None, mem=
             return 200, preview(frame, kinds, mem=mem, chats=chats)
         except Exception as exc:
             return 503, {"ok": False, "error": f"it could not be read ({type(exc).__name__})"}
-    if route == UNDO:
+    if route in (UNDO, CONFIRM):
         return 405, {"ok": False, "error": "use POST for this"}
     return 404, {"ok": False, "error": "no such route"}
 
@@ -1287,6 +1703,9 @@ def handle_post(route: str, body, **kw) -> tuple:
             return 400, {"ok": False, "error": "Send a JSON object."}
         keep = {k: kw[k] for k in ("now", "mem", "chats") if k in kw}
         return undo(**keep)
+    if route == CONFIRM:
+        keep = {k: kw[k] for k in ("now", "mem", "chats", "timer") if k in kw}
+        return confirm(body, **keep)
     if route == PREVIEW:
         return 405, {"ok": False, "error": "use GET for this"}
     return 404, {"ok": False, "error": "no such route"}
@@ -1352,4 +1771,4 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
 def _reset_for_tests() -> None:
     with _LOCK:
-        _STATE.update(pending=None, last=None, undo=None, asked=None)
+        _STATE.update(pending=None, hold=None, last=None, undo=None, asked=None)
