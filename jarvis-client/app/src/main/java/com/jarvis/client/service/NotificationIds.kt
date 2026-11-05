@@ -32,6 +32,17 @@ object NotificationIds {
     // recorded - armed, then recording with the clock, then Stop.
     const val CALL_RECORD = 0x4A5A
 
+    // Hands-free (2026-11-04): the service's own ongoing line, the card waiting
+    // to be answered, and the one line about a text message. Three numbers,
+    // never one: cancelling the card's notification must not take the
+    // service's own with it (a foreground service whose notification is
+    // cancelled is killed by Android on some builds), and a "sent to Alex" line
+    // must survive the card that prompted it. They start after call recording's
+    // 0x4A5A, which landed first.
+    const val HANDSFREE = 0x4A5D
+    const val HANDSFREE_CARD = 0x4A5E
+    const val HANDSFREE_SMS = 0x4A5F
+
     // Reminders and alarms (also given a tag per job, but kept distinct anyway).
     const val SCHEDULE = 0x3100
 
@@ -59,6 +70,9 @@ object NotificationIds {
         "AVATAR_OVERLAY" to AVATAR_OVERLAY,
         "SCREEN_WATCH" to SCREEN_WATCH,
         "CALL_RECORD" to CALL_RECORD,
+        "HANDSFREE" to HANDSFREE,
+        "HANDSFREE_CARD" to HANDSFREE_CARD,
+        "HANDSFREE_SMS" to HANDSFREE_SMS,
         "SCHEDULE" to SCHEDULE,
         "CHATBOT" to CHATBOT,
         "SUPPORT_CHAT" to SUPPORT_CHAT,

@@ -428,8 +428,17 @@ class HudEditScreenTest {
         assertTrue("with the app's own button", settingsSrc.contains("Secondary(\"Edit Home screen\""))
         assertTrue("and a callback", settingsSrc.contains("onOpenEditHud?.let"))
         // The jump list and the positional map both know it.
-        assertEquals("edit-hud", SettingsJump.ENTRIES.last().key)
-        assertEquals("Home screen", SettingsJump.ENTRIES.last().label)
+        //
+        // Read by key rather than by position (2026-11-04): "Hands-free" was
+        // added as the LAST Settings row, so `ENTRIES.last()` is no longer this
+        // one. What this assertion is for - the jump list knows the row and
+        // carries the app's own words for it - is unchanged, and the positional
+        // map's own number is still pinned below, which is what a reordering
+        // would break.
+        assertTrue(
+            "the jump list carries the row",
+            SettingsJump.ENTRIES.any { it.key == "edit-hud" && it.label == "Home screen" },
+        )
         assertTrue("\"edit-hud\" to 38", settingsSrc.contains("\"edit-hud\" to 38"))
         // The search index can find it by the words on the row.
         val search = source("jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsSearch.kt")

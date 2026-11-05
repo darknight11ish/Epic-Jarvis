@@ -232,6 +232,19 @@ class PipWakeWordTest {
     fun `the listener keeps listening while the window is up`() {
         val service = file(
             "jarvis-client/app/src/main/java/com/jarvis/client/service/WakeWordService.kt")
+        // The pause conditions are the talk button owning the microphone, Live
+        // running on this phone, and - since 2026-11-04 - the hands-free answer
+        // window holding the microphone through the one ledger
+        // (voice/MicOwner.kt). A PiP window must never become one of them: that
+        // is the bug this test exists to prevent, and the two assertions below
+        // still say so.
+        assertTrue("the talk-button / Live pause condition changed",
+            service.contains(
+                "if (voice.phase.value == VoiceSession.Phase.CAPTURING ||"))
+        assertTrue("and Live still pauses it",
+            service.contains("JarvisRuntime.liveOnHere() ||"))
+        assertTrue("and the hands-free window, through the one ledger",
+            service.contains("MicNow.mayOpen(MicOwner.Use.WAKE).allowed"))
         // The pause conditions: the talk button owns the microphone, Live runs
         // on this phone, or call recording is armed/recording (the one
         // arbitration point, voice/MicOwner.kt, added 2026-11-04). A PiP
