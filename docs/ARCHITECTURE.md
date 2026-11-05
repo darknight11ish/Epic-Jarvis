@@ -6020,3 +6020,67 @@ one window get one label. That is the reader's granularity and it is in the docs
   run, no real speaker model run, no real vault write and no real approval card
   were driven here. `backend/test_call_notes.py` drives fake readers, fake
   embedders, fake prints and a fake note creator.
+
+## 16. Jarvis Live's session latch, and the cheap half of the owner check it may not skip (added 2026-11-05)
+
+Jarvis Live has TWO owner checks, and they answer different questions:
+
+- **the strict check** (`jarvis_voice.verify`, with its thresholds, cohort and
+  per-condition bars) answers "is this the owner, well enough to be told what
+  Jarvis remembers?" - it is what a private answer needs before it may be read
+  aloud, and it is the one that ends a session's trust when it fails;
+- **the cheap check** (one CAM++ embedding and one `jarvis_voice.cosine`
+  against the enrolled print's centroid, about 15 ms, nothing written and
+  nothing kept) answers only "is this voice even a candidate?".
+
+The 2026-11-01 ruling ("once I actively verify my voice in a single Jarvis
+Live session, Jarvis shouldn't need to re-verify my voice") was implemented as
+an exemption from BOTH, and that is what the owner's 2026-11-05 report found:
+with `trust_active` set, `jarvis_live.trust_decision` answered "trusted" for
+every clip in the 1.5-2.0 s band and `jarvis_speech.hear` built a
+`_SessionTrusted` verdict that runs no speaker model at all, so a radio, a
+television or a call in the room was transcribed and answered as the owner.
+The same hole is wider for a session whose trigger needed no check
+(`jarvis_live.voice_check_needed` false - the phone started unlocked with the
+setting ON): there, every clip of every length is "trusted".
+
+The rule now, and the one the next change must not undo:
+
+- **The latch stays.** One verified sentence still covers the session, the
+  owner is never asked to re-enrol mid-session, and `TRUST_SESSION_S` (2 h)
+  still bounds it. A failed check, a re-enrolled print and a different device
+  still void it.
+- **The latch never skips the cheap check.** In a latched session, a clip
+  with `jarvis_live.RADIO_GUARD_S` (1.2 s) of speech or more is compared with
+  the enrolled print; under `RADIO_MIN_COSINE` (0.25 when the clip carried
+  "hey Jarvis" or arrived inside the follow-up window) or
+  `RADIO_MIN_COSINE_NO_WAKE` (0.32 when nothing in it was addressed to
+  Jarvis) it is **background audio**: dropped in silence, never transcribed,
+  never sent to the model, and nothing is said about it. The rule's own shape
+  is `jarvis_live.IGNORED_BACKGROUND` (`ok`, `ignored_unmatched_speaker`,
+  `reason: "background_media_rejected"`). On the existing utterance wire the
+  same clip answers `ok` **false** - `Heard.as_dict()` defines `ok` as "a
+  transcript was produced", and none was - with `owner` false,
+  `ignored_unmatched_speaker` true and that same `reason`. `ok: true` is
+  deliberately NOT sent: both clients read `ok` as "there are words for you",
+  and a client handed `ok: true` with no text has nothing to do with it.
+- **Short confirmations are exempt on purpose.** "yes", "do it" and "stop"
+  are under 1.2 s and pass while latched. A speaker model has almost nothing
+  to go on in one second, and asking the owner to repeat himself to answer a
+  card is the behaviour the 2026-11-01 ruling removed.
+- **A guard that cannot measure does not reject.** No enrolled print, no
+  model, an unusable clip: `_owner_cosine` answers None and the ordinary
+  decision stands. Swallowing the owner's words on an unmeasured clip is the
+  worse of the two failures, and the strict check still owns the session's
+  first sentence and every clip of 2.0 s or more.
+- **Where each length lands.** Under 1.2 s: no guard, session trust. 1.2-1.5 s:
+  the guard, plus the existing short-clip check at `hear` step 3b. 1.5-2.0 s:
+  the guard, on session trust - this is the band the fix closes. 2.0 s or
+  more: the guard, plus the strict spot check that was always there.
+
+The tests are `backend/test_voice_check_rule.py`
+(`test_live_session_latch_rejects_radio_impostor_over_1200ms_but_allows_short_confirm`
+and `t_the_radio_guard_is_wired_into_the_hearing_path`); the end-to-end drop
+needs a real print and a real model, which CI has neither of, so the second
+test pins the wiring in `jarvis_speech.py` the way the rest of the suite pins a
+path it cannot drive.

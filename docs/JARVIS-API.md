@@ -35225,3 +35225,16 @@ dimension explicitly:
    the 83 `HARD_LIMITS` actions as risky-at-policy-time would refuse the feature
    for nearly every action the owner would use it on. The strength is moved from
    a rule to the card.
+
+## 194. The Live utterance reply gains ignored_unmatched_speaker (additive, added 2026-11-05)
+
+POST /api/voice/utterance?source=live can now answer a clip it DROPPED as background audio. Nothing is renamed and nothing is removed: every field an older client reads keeps its meaning.
+
+- **ignored_unmatched_speaker: 	rue** on that reply, and absent-or-alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
+- **
+eason: "background_media_rejected"** on the same reply (jarvis_live.IGNORED_BACKGROUND).
+- **ok and owner are alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
+- **Nothing is sent to the model** on such a clip, nothing is kept, and no words of it appear in the reply. An app needs no change: a client that does not know the new field ignores it, and the clip is silent either way.
+- **Short confirmations are unaffected.** A clip under 1.2 s in a latched session is never put to this guard, so "yes" and "do it" answer exactly as they did before.
+
+The rule and its reasons are in docs/ARCHITECTURE.md §15; the tests are ackend/test_voice_check_rule.py's two new functions.
