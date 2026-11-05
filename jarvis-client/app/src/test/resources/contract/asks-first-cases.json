@@ -829,6 +829,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -2693,6 +2711,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -4553,6 +4589,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -6407,6 +6461,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -8266,6 +8338,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -10140,6 +10230,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -12004,6 +12112,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -13871,6 +13997,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"
@@ -15731,6 +15875,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
       }
      ],
      "title": "This PC and your phone"

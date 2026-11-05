@@ -311,6 +311,16 @@ TITLES = {
     # a placeholder entry for this same action, which was a second key in this
     # dict; the merge keeps this one (the feature owner's words) and drops it.
     "storage_cleanup": "clear Jarvis's temporary files",
+    # --- recording a phone call (jarvis_call_notes.py, 2026-11-04)
+    # ONE card when the owner's own keyword starts a recording: the phone
+    # records through its microphone with the call on speaker, and the words
+    # say only that kind of thing - never a transcript, a name or a path.
+    "record_call": "record a call",
+    # --- deleting one recorded call (jarvis_call_notes.py, 2026-11-05; the
+    # privacy audit's D4). ONE card, ON THE PC, for removing that recording's
+    # audio, transcript and receipt; its full words say the Obsidian note stays
+    # and that it cannot be undone.
+    "delete_call_recording": "delete a recorded call",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -508,6 +518,16 @@ SUMMARY = {
     # ONE card per cleanup of Jarvis's own temporary files; the card lists every
     # path, so the words say only the kind of thing being cleared.
     "storage_cleanup": "clear Jarvis's temporary files",
+    # --- recording a phone call (jarvis_call_notes.py, 2026-11-04)
+    # ONE card when the owner's own keyword starts a recording: the phone
+    # records through its microphone with the call on speaker, and the words
+    # say only that kind of thing - never a transcript, a name or a path.
+    "record_call": "record a call",
+    # --- deleting one recorded call (jarvis_call_notes.py, 2026-11-05; the
+    # privacy audit's D4). ONE card, ON THE PC, for removing that recording's
+    # audio, transcript and receipt; its full words say the Obsidian note stays
+    # and that it cannot be undone.
+    "delete_call_recording": "delete a recorded call",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above

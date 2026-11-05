@@ -296,6 +296,20 @@ NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits fo
 #: only about "no app switch". The organizer needs the other three promises
 #: said too - the vault it touches, ONE card, and Undo.
 NOTE_EXTRA = {
+    "delete_call_recording": (
+        "It removes ONE recording's own folder on this PC - the audio, the "
+        "transcript and the row you see in the list - and it cannot be undone. "
+        "The note it wrote in your vault is a document of its own and is NOT "
+        "deleted here; the answer names it so you know what is left. It works "
+        "with the feature switched off, because removing something only ever "
+        "narrows what Jarvis keeps."),
+    "record_call": (
+        "It records the phone's microphone with the call on speaker (Android does "
+        "not let an app record the call's own audio), keeps the audio on this PC, "
+        "transcribes it here, and writes ONE new note through the notes editor's "
+        "own card. Nothing leaves this PC, every recording stays until you remove "
+        "it, and the feature itself is off until the settings file says on - there "
+        "is no app switch for turning it on."),
     "organize_obsidian_vault": (
         "It changes only notes inside the vault the owner named, under ONE card "
         "for the whole batch; nothing is deleted, and ONE Undo puts the vault "
@@ -786,7 +800,24 @@ GROUPS = (
                                 # The app builder's last two steps (2026-10-30):
                                 # ONE card each, on this PC only, and the card
                                 # carries the exact command it will run.
-                                "app_build_android", "app_install_android"]),
+                                "app_build_android", "app_install_android",
+                                # Recording a phone call (jarvis_call_notes.py,
+                                # 2026-11-04): the owner's own keyword asks the
+                                # PHONE to record, and the start route raises
+                                # this ONE card before a byte is kept. Its tier
+                                # is the shipped "ask" line, and the gate also
+                                # forces "ask" for an action with no _RISK row,
+                                # so the page says "Always asks" honestly. The
+                                # note below carries the two promises a card
+                                # cannot: nothing leaves this PC, and the feature
+                                # itself is off until the settings file says on.
+                                "record_call",
+                                # Deleting ONE recording (2026-11-05, the
+                                # privacy audit's D4): the audio, the transcript
+                                # and the row go, behind ONE card of its own at
+                                # tier "ask" and PC-only. It cannot be undone, so
+                                # the page promises it by name.
+                                "delete_call_recording"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,

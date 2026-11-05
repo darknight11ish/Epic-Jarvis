@@ -304,6 +304,28 @@ _RISK: dict[str, tuple[str, str, str]] = {
 
     # additive writes to things you own
     "create_logseq_page":     ("yes", "local", "delete it and it is gone"),
+    # call recording (jarvis_call_notes.py, the owner's request of 2026-11-04;
+    # docs/CALL-RECORDING.md and JARVIS-API section 186). ONE card per call,
+    # before any of the phone's audio is kept. It CHANGES NOTHING on this PC and
+    # nothing leaves it: the audio is written into this PC's own settings folder
+    # (under <config dir>/call-recordings), transcribed here by the local model,
+    # and the words go into ONE new note through the notes editor's own card.
+    # The recording can be deleted again on this PC - POST
+    # /api/call/recording/delete, behind its own delete_call_recording card - so
+    # "yes", and "local" because not one byte is sent anywhere. Measured before
+    # this row: the gate had no entry for the name, so `risk_for()` fell back to
+    # _UNKNOWN_RISK and the card told the owner the action was "able to leave
+    # this PC", which was false (the 2026-11-05 privacy audit, D8). The tier
+    # stays "ask" in [autonomy.tiers] - the row does not loosen it.
+    "record_call": ("yes", "local", "records one phone call's audio into this PC's own settings folder, turns it into words on this PC, and files it as one new note through the notes editor's own card; nothing is sent anywhere, and deleting the recording again is a card of its own on this PC"),
+    # Deleting one recorded call (jarvis_call_notes.py's POST
+    # /api/call/recording/delete, added 2026-11-05 by the privacy audit's D4).
+    # "no": the audio, the transcript and the receipt are gone and there is no
+    # Undo - the Obsidian note is a separate document and stays. "local": not
+    # one byte is sent anywhere. Its route is PC-only and ALWAYS asks: it
+    # refuses a verdict that was not an answered "ask" card, so a loosened
+    # [autonomy] unknown_action_tier cannot turn a deletion card-free.
+    "delete_call_recording": ("no", "local", "deletes one recorded call from this PC - its audio, its transcript and its receipt, which is also its row in the list of recordings; the Obsidian note it was filed into is a separate document and stays; nothing is sent anywhere, and it cannot be undone"),
 
     # the ones that are reversible in one step, on purpose
     "switch_model":  ("yes", "local", "rollback is one tap, which is why rollback is tier auto"),

@@ -1163,6 +1163,43 @@ def _restore(original, piece: str) -> str:
     return out.strip(" ,.;:!?")
 
 
+# --------------------------------------------------------------------------
+#   "record call" / "stop recording" - the phone's call recorder (2026-11-04)
+# --------------------------------------------------------------------------
+# The eight whole messages live in jarvis_call_notes (ARM_PHRASES /
+# STOP_PHRASES), so this file holds no second copy of them and the module's
+# own suite proves the whole-message rule. A backend without the module keeps
+# exactly the old behaviour: the sentence is the model's.
+def _call_record_prompt(s: str) -> Optional[Intent]:
+    """The intent for one of the eight whole messages, or None."""
+    try:
+        import jarvis_call_notes as _calls
+        action = _calls.phrase_action(s)
+    except Exception:                                       # noqa: BLE001
+        return None
+    return Intent("call_record", {"action": action}) if action else None
+
+
+def _run_call_record(f: dict) -> Result:
+    """The words only - the phone acts on `call_record` in X-Jarvis-Route.
+
+    Nothing is recorded on the PC here: the Android app reads the directive and
+    starts its own recorder, and `POST /api/call/recording/start` raises the
+    `record_call` card. This answer therefore changes nothing by itself, and a
+    feature that is switched off says so instead of promising a recording.
+    """
+    action = str(f.get("action") or "").strip().lower()
+    try:
+        import jarvis_call_notes as _calls
+        allowed, said = _calls.quick_answer(action)
+    except Exception:                                       # noqa: BLE001
+        return Result("Recording calls is not available on this PC yet - run "
+                      "apply-patches.ps1 on the PC.", "call_record_refused")
+    if not allowed:
+        return Result(said, "call_record_refused")
+    return Result(said, "call_record", call_record={"action": action})
+
+
 def match(text, now: Optional[float] = None,
           conversation: Optional[str] = None) -> Optional[Intent]:
     """The intent of a sentence, or None when it is not one of ours.
@@ -1238,6 +1275,17 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # feature catalogue's capability sentence, which names no app, while the
     # catalogue's own phone-apps row says that question lists them.
     got = _phone_apps_question(text)
+    if got is not None:
+        return got
+    # --- "record call" / "stop recording" (2026-11-04) ----------------------
+    # The owner's own words arm or stop the PHONE's call recording. WHOLE
+    # MESSAGES ONLY (the keywords rule): the eight sentences are kept in
+    # jarvis_call_notes.ARM_PHRASES / STOP_PHRASES, and a sentence that merely
+    # contains one of them is the model's. The answer carries the documented
+    # machine directive `call_record: {"action": "arm" | "stop"}`, which the
+    # Android app reads to start or stop its own recorder; the PC's card is
+    # raised by the route, never by this sentence.
+    got = _call_record_prompt(s)
     if got is not None:
         return got
     # The capability questions (2026-10-31, the pass-9 field test) are read
@@ -6245,6 +6293,7 @@ PLUGIN_CATALOGUE = (
     ('antislop', "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buz..."),
     ('auto-router', 'estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and a...'),
     ('brain-reads', "the Brain's read-only routes (the Brain upgrades, and a chat's facts)."),
+    ('call-notes', 'record a phone call from the Android app: the phone uploads 16 kHz mono audio, this PC transcribes it, labels who spoke and creates ONE new Obsidian note named for the date and time.'),
     ('card-prefs', 'how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.'),
     ('chatbot-limits-hud', "the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app."),
     ('chatbot-routes', 'the routes both apps use to have Jarvis talk to an AI chatbot for the owner.'),
@@ -17606,6 +17655,13 @@ class Result:
     # the moment the card is approved, and nothing else ever told the chat that.
     # None for every other answer, and for a note filed at once.
     note_job: Optional[str] = None
+    # The phone's call recorder (2026-11-04, jarvis_call_notes.py): the
+    # documented machine directive {"action": "arm"} or {"action": "stop"} that
+    # the Android app reads to start or stop its own recorder - the phone holds
+    # the microphone, and Android reserves the call's own audio stream for the
+    # system dialer, so the phone records through the microphone with the call
+    # on speaker. None for every other answer; the PC records nothing by itself.
+    call_record: Optional[dict] = None
 
 
 def _join(items: list) -> str:
@@ -19389,6 +19445,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_vault_organizer_apply(peer, local)
     if n == "vault_organizer_on":
         return _run_vault_organizer_on(peer, local)
+    # "record call" / "stop recording" (2026-11-04): the phone's own recorder.
+    # No scheduler, no card and no write on the PC - the directive in
+    # X-Jarvis-Route is what the app acts on (see _run_call_record).
+    if n == "call_record":
+        return _run_call_record(f)
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
@@ -21235,6 +21296,14 @@ def route_fields(res: Result) -> dict:
         # above: an app that does not know it shows the waiting line exactly
         # as it always did. Never the note's text - an id and nothing else.
         out["note_job"] = res.note_job
+    if res.call_record:
+        # "record call" / "stop recording" (2026-11-04, jarvis_call_notes.py):
+        # the machine directive the Android app acts on - {"action": "arm"} or
+        # {"action": "stop"}. Additive, like every key above: an app that does
+        # not know it shows the words and records nothing. The phone records,
+        # the PC transcribes, labels who spoke and writes the note; a feature
+        # that is off never reaches here (the answer says so instead).
+        out["call_record"] = dict(res.call_record)
     return out
 
 

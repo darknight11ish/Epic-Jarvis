@@ -2148,6 +2148,25 @@
     "lesson_id": "phone-extras"
   },
   {
+    "id": "call-recording",
+    "group": "Phone",
+    "title": "Record a phone call and file it as a note",
+    "what": "Say \"record call\" and your phone records the call through its microphone with the call on speaker; this PC transcribes it, labels who spoke, and writes a new Obsidian note named for the date and time.",
+    "where": "Off by default; there is no in-app switch. Add [call_recording] enabled = true with a text editor to the settings file (jarvis-framework.toml), then say \"record call\" on the phone.",
+    "asks": "Off until you turn it on in the settings file. Starting a recording raises one approval card (record_call, tier ask) unless you set that line to auto yourself, and the note itself is written through the notes editor's own card.",
+    "limit": "The phone cannot capture the call's own audio stream - Android reserves it for the system dialer - so it records through the microphone with the call on speaker, and the other person is heard through the speaker, so the words are less clear than a system recorder's would be. English only, no cloud: the transcription and the speaker labels are made on this PC. A line is the reader's own ten-second window, so two people talking inside one window get one label; with no speaker model or no trained voice, every line says Speaker.",
+    "surface": "both",
+    "aliases": [
+      "record call",
+      "call recording",
+      "record a call"
+    ],
+    "covers": [],
+    "gate": [
+      "record_call"
+    ]
+  },
+  {
     "id": "appearance",
     "group": "The PC itself",
     "title": "Appearance",

@@ -2756,6 +2756,29 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Call recording is split by hardware, and each half is one-sided on
+  purpose** (2026-11-04; the owner's ask *"record a call if I tell it a keyword
+  'record call' ... transcribe it ... identify the speakers ... store all of it
+  in a new obsidian note labeled with the date and time"*; JARVIS-API §187,
+  `docs/CALL-RECORDING.md`, §15 of this file). Android does not let an ordinary
+  app capture the call's own audio stream, and this PC cannot see the call at
+  all, so the PHONE records through its microphone with the call on speaker and
+  uploads it, and this PC (`backend/jarvis_call_notes.py`) assembles the WAV,
+  transcribes it, labels who spoke and creates ONE new note. **The phone's
+  recorder is its own pull request against the same frozen contract**, and
+  neither lane drove a real call on the owner's Pixel 9, so the speaker path and
+  the words it yields are NOT-TESTABLE until his own field test. The feature
+  ships OFF by default anyway (`[call_recording] enabled = false`), and while it
+  is off the reply and the routes say so in plain words. **The three POST routes
+  are the phone's by necessity** - it holds the microphone, so a PC-only start
+  would make the feature impossible - with the origin+token checks, the ONE
+  `record_call` card and the off-by-default switch as their controls, and the
+  note write keeping the notes editor's own `edit_vault_note` card. **The read
+  route is the PC's**: `GET /api/call/recording` lists the owner's recordings
+  and the note paths they went to, so it refuses any other device
+  (`jarvis_owner_check.from_this_pc`). `tools/check_parity.py` carries the three
+  POSTs as `phone-only` in the phone's own pull request and the GET as
+  `BACKEND_ONLY` here, so no undecided drift is hidden while both land.
 - **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
   is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
   setting he can turn OFF from chat, Jarvis Live, or Settings ... ANY approval
@@ -5693,3 +5716,131 @@ shapes.
   yet; §8, "One-sided on purpose", says why and where a screen would go. The
   tests are `backend/test_watch_ci.py` and `backend/test_outbox.py` (plain
   Python, fake clock, fake `gh`, temp files: no network, no model).
+
+## 15. Recording a phone call, and what makes it honest (added 2026-11-04)
+
+The owner asked for one keyword: *"record a call if I tell it a keyword 'record
+call' where it will record all the audio, transcribe it, put a date and identify
+the speakers in the transcription, and store all of it in a new obsidian note
+labeled with the date and time"*. The whole story is
+`docs/CALL-RECORDING.md`; the wire contract is JARVIS-API §188. This section is
+the part that belongs in the architecture: **which half runs where, and what
+this PC refuses to guess.**
+
+### 15.1 The split, and why it is not a choice
+
+**The call happens on the owner's phone, and his primary phone is a Google
+Pixel 9; this PC can neither see nor hear it.** **Android does not let an
+ordinary app capture the call's own audio stream**: `MediaRecorder.AudioSource
+.VOICE_CALL` is privileged; a normal app gets silence or a `SecurityException`.
+So:
+
+- **the phone** records through its microphone with the call on speaker (the
+  "speaker path") and uploads 16 kHz mono s16le PCM in order;
+- **this PC** (`backend/jarvis_call_notes.py`, routes from
+  `plugins/ready/call-notes`) assembles the WAV, transcribes it with the
+  **existing** local reader, labels who spoke, and creates ONE new note.
+
+The speaker path is a real quality cost - the far end is heard through the
+speaker - and it is stated in the note's own body, in the docs and on the card.
+**No real call was driven on the Pixel by either lane** (it was not attached),
+so how that path really sounds, and how good the words are afterwards, are
+NOT-TESTABLE until the owner's own field test; nothing here claims a
+system-recorder result. Importing a file from the phone's own call recorder,
+where one exists, is a later addition and is **not built**.
+
+### 15.2 The permission model: the repo's own, unchanged
+
+- **Off by default.** `[call_recording] enabled = false`; a missing table is off
+  too. Turning it on is a hand edit of that one line - no in-app switch - the
+  same pattern `github_search` and `shell_exec` use. This is the rule that a
+  feature ships off until the owner turns it on, applied literally.
+- **ONE card.** The start route asks the approval gate under **`record_call`**,
+  shipped at tier `ask` in `[autonomy.tiers]`. The owner-initiated note actions
+  (`append_obsidian_daily`, `append_logseq_journal`) ship `auto`, but this one
+  starts capturing **other people's** speech, so it asks until the owner
+  deliberately loosens it. **No audio is kept while the card waits**: the
+  session's folder, its `receipt.json` and an empty `audio.pcm` are made before
+  the card (so a crash between the phone's first chunk and the approval cannot
+  lose it), and not one audio byte is written until it is approved.
+- **The note keeps the editor's own card.** The note is created through
+  `jarvis_notes_edit.handle_create()` with `after_outside_text` provenance, so
+  the ONE `edit_vault_note` card, the File Guardian copy and the undo receipt
+  are the ones the editor already raises. The transcript is other people's
+  words; it is never treated as an owner-typed write.
+- **Consent.** The phone must send `consent_notice: "on"` to finish, and the
+  reminder is on the card, in the reply, in the note's frontmatter and as a
+  visible line in the note's body.
+- **The three POST routes are the phone's by necessity; the read route is
+  PC-only.** The device that holds the microphone is the phone, so a PC-only
+  start would make the feature impossible; their controls are the origin+token
+  checks, the `record_call` card and the off-by-default switch. `GET
+  /api/call/recording` lists the owner's recordings and where each note went, so
+  it refuses any device but this PC through `jarvis_owner_check.from_this_pc` -
+  the same rule `jarvis_media_index` applies to its own POST.
+- **Everything stays on this PC.** Under `<config dir>/call-recordings/<session>/`:
+  `audio.pcm`, `audio.wav`, `receipt.json` and `transcript.md`. The module
+  imports no HTTP client and opens no socket.
+- **Deleting is its own card, and nothing expires by itself.**
+  `POST /api/call/recording/delete` removes ONE recording's folder (the audio,
+  the transcript and the receipt that is the list's row) behind ONE
+  `delete_call_recording` card at tier `ask`, PC-only, with no bulk form; the
+  Obsidian note is the notes editor's document and stays. Recordings and
+  transcripts are kept until the owner deletes them - there is no timer that
+  throws a recording away - and the 400-recording cap REFUSES a new start
+  rather than deleting anything. `docs/CALL-RECORDING.md` §7 is the retention
+  policy.
+
+### 15.3 Reuse, never a second engine
+
+- **Speech-to-text:** `jarvis_media_read.read_media()` - the existing
+  sherpa-onnx Parakeet TDT model in `jarvis_speech._transcribe()` (English only,
+  segment-level start/end already in its result). Its 10-minute ceiling is
+  handled by cutting the assembled WAV into **9-minute parts of the same file**
+  and shifting each part's times by its offset. No new model, no download.
+- **The owner's voice:** `jarvis_voice.find_profile()` / `load_profile()` and
+  the embedder the print was made with - `EcapaEmbedder` (`model.onnx`) or, when
+  the print says `strong`, `StrongEmbedder` (`strong.onnx`), both already under
+  `<config dir>/voice-models/speaker/` - compared with `jarvis_voice.cosine()`.
+  Choosing the wrong one would score 0 against every line and label the owner's
+  own voice "Speaker"; the voice modules are **imported, never edited**.
+- **The note:** the notes editor's own create path (14.2), never a hand-rolled
+  vault write.
+- **The audio:** the standard library's `wave`, so no new dependency and no
+  ffmpeg.
+
+### 15.4 Speaker labels: match, then cluster, then refuse to guess
+
+1. The owner's enrolled print first, using the print's **own** threshold
+   (clamped up to `jarvis_voice.MIN_THRESHOLD`) - at or above it, the line is
+   **You**.
+2. Every other line joins the cluster it is at least
+   `SPEAKER_MERGE_SIMILARITY` (0.55) similar to, else starts one, up to six; a
+   merge pass repeats until nothing merges. Clusters are numbered in the order
+   they first speak.
+3. A line shorter than 0.6 s, or one whose embedding is empty, carries the
+   previous line's label; it never invents a name.
+4. **No speaker model, or no trained print: every line says "Speaker"**, and the
+   note records which was missing. A guessed name on a transcript of other
+   people is worse than no name, so the degrade is the honest one.
+
+A segment is the reader's own **~10-second window**; two people talking inside
+one window get one label. That is the reader's granularity and it is in the docs.
+
+### 15.5 What is stated but not done
+
+- The **Android half** is its own pull request, written against JARVIS-API
+  §186; neither lane drove a real call on the owner's Pixel 9, so the speaker
+  path and the words it yields are NOT-TESTABLE until his field test.
+- The gate's `_RISK` table **has** a row for `record_call` (added 2026-11-05,
+  `("yes", "local", ...)`), so its card says what the action really is: a
+  recording made on this PC that never leaves it and can be deleted again.
+  Before that row the card printed the generic "unclassified action - treated
+  as permanent and able to leave this PC", whose second half was wrong here.
+- English only, ten-second segments, no import of the phone's own recorder.
+  (The delete route and the retention policy this bullet used to call missing
+  are in §15.2 and `docs/CALL-RECORDING.md` §7.)
+- **NOT-TESTABLE, not passed:** no real phone recording, no real transcription
+  run, no real speaker model run, no real vault write and no real approval card
+  were driven here. `backend/test_call_notes.py` drives fake readers, fake
+  embedders, fake prints and a fake note creator.

@@ -2857,6 +2857,22 @@ $SHIPPED = @(
     # Standard library only, no network. The same entry, in the same position,
     # is in backend/_where.py's SHIPPED list.
     'jarvis_storage_health.py'
+
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04; the owner's own
+    # request: "record a call if I tell it a keyword 'record call' ... transcribe
+    # it, put a date and identify the speakers ... store all of it in a new
+    # obsidian note labeled with the date and time"). The phone records through
+    # its microphone with the call on speaker (Android reserves the call's own
+    # audio stream), uploads 16 kHz mono PCM in order, and this PC makes the WAV,
+    # transcribes it with the existing sherpa-onnx reader, labels who spoke from
+    # the owner's own voice print plus clustering, and creates ONE new Obsidian
+    # note named for the date and time through the notes editor's own create
+    # path. OFF BY DEFAULT ([call_recording] enabled = false); starting is ONE
+    # record_call card. Four routes from its own install(), called by
+    # plugins/ready/call-notes - no patch. The same entry, in the same position,
+    # is in backend/_where.py's SHIPPED list. It sits BEFORE jarvis_bench.py
+    # because backend/test_bench.py pins that entry as the last one.
+    'jarvis_call_notes.py'
     # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
     # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
     # conversation about any of its tools). One entry per name in
@@ -2873,8 +2889,7 @@ $SHIPPED = @(
     # in its dispatch tuple.
     'jarvis_watch_policy.py'     # Stage one of the two-stage gate, and it is PURE: the seven REQUIRED checks vs the two informational ones, one batch per (pr, head_sha), the settle rules, the closed reason codes. Imports nothing from Jarvis - no disk, no network, no model - so "filtered events never reach the costly stage" is structural. Imported by jarvis_watch_ci.py; no route of its own
     'jarvis_watch_ci.py'         # The watch_pr_checks job body: polls ONE pull request through gh, folds the seven checks into one thread, writes a decision row (observe) or notifies (active), and holds the decisions ring buffer + watch-receipts.json so twenty polls of one commit alert once. Starts no polling of its own - a job created through POST /api/jobs is the only caller. Its install() answers GET /api/watch/decisions, so the owner can read what it would have said before promoting it from observe to active
-    'jarvis_outbox.py'           # What Jarvis still owes the owner, written down BEFORE it is said: a deterministic (kind, key) outbox in outbox.json (temp file, fsync, rename) for parked approval cards, job-completion notices and CI notices. jarvis_jobs.py re-announces whatever is still owed on startup, which is what closes the restart card loss; settled entries are pruned, an owed one never is. Approves nothing, widens nothing, writes one file
-    # Per-source independence evidence (jarvis_source_independence.py,
+    'jarvis_outbox.py'           # What Jarvis still owes the owner, written down BEFORE it is said: a deterministic (kind, key) outbox in outbox.json (temp file, fsync, rename) for parked approval cards, job-completion notices and CI notices. jarvis_jobs.py re-announces whatever is still owed on startup, which is what closes the restart card loss; settled entries are pruned, an owed one never is. Approves nothing, widens nothing, writes one file    # Per-source independence evidence (jarvis_source_independence.py,
     # 2026-11-04; the owner's clickable-card answer to "filter out products
     # that have been sponsored"). ONE supplied page -> disclosure wording,
     # affiliate and tracking links, urgency wording, a closed per-source

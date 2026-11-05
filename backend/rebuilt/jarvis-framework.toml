@@ -764,6 +764,20 @@ import_notion_export     = "ask"
 # has seen - takes this action. A missing line means "ask" anyway; it is
 # here so the tier is the owner's setting, not a fall-through.
 organize_obsidian_vault   = "ask"
+# Recording a phone call (backend/jarvis_call_notes.py, 2026-11-04; docs/
+# JARVIS-API.md section "Call recording"). The owner's own keyword, the phone's
+# own recorder and this PC's own transcription - but it starts capturing OTHER
+# PEOPLE'S speech, so it ships at "ask": the start route raises ONE card and
+# nothing is recorded until it is answered. The owner-initiated note actions
+# (append_obsidian_daily, append_logseq_journal) ship "auto"; this one asks
+# until the owner deliberately loosens it, and docs/CALL-RECORDING.md records
+# that choice. The gate's _RISK table has a row for this name (added
+# 2026-11-05): ("yes", "local", ...) - a recording changes nothing here, can be
+# deleted again on this PC, and nothing leaves it. Before that row the card
+# carried the gate's generic unclassified warning, whose "able to leave this
+# PC" half was wrong for this action. Deleting a recording is its own card,
+# delete_call_recording, also "ask".
+record_call              = "ask"
 
 [self_modification]
 enabled = true
@@ -2299,3 +2313,36 @@ enabled = false
 # The local SearXNG address the F2 item sources ask (127.0.0.1:8888 is the
 # docker-compose host mapping; the container's own port is 8080).
 searxng_url = "http://127.0.0.1:8888"
+
+# CALL RECORDING - "record call" from the Android app (2026-11-04)
+# ------------------------------------------------------------------------
+# The owner's request: record a call, transcribe it, say who spoke, and keep it
+# in a NEW Obsidian note named for the date and time (backend/
+# jarvis_call_notes.py; docs/JARVIS-API.md, "Call recording"; docs/
+# CALL-RECORDING.md for the whole story).
+#
+# THE PHONE RECORDS ON THE SPEAKER PATH, and that is not a shortcut. Android 15
+# does not let an ordinary app capture the call's own audio stream (VOICE_CALL
+# is privileged), so the phone records through its microphone with the call on
+# speaker: the far end is heard through the speaker and the words are less
+# clear than a system recorder would give. Importing a file from the phone's
+# own call recorder is a later addition and is NOT built.
+#
+# THIS SHIPS OFF by the owner's own rule that a new feature is off until they
+# turn it on. Turning it on is a hand edit of the one line below - there is no
+# in-app switch, the same pattern github_search and shell_exec use - and it is
+# then their choice, recorded here.
+#
+# The safeguards are not optional: recording starts only from the owner's own
+# keyword or the phone app's own request, under the `record_call` card (tier
+# "ask" in [autonomy.tiers] above); the phone must say the consent notice was
+# shown ("consent_notice": "on") before a recording can be finished; the audio
+# stays under <config dir>/call-recordings/<session>/ and the words go into ONE
+# new note through the notes editor's own create path (its own edit_vault_note
+# card, File Guardian copy and undo receipt). Nothing leaves this PC. Deleting
+# ONE recording is POST /api/call/recording/delete, PC-only and behind its own
+# delete_call_recording card at tier "ask"; nothing expires on a timer and the
+# 400-recording cap refuses a new start rather than deleting anything
+# (docs/CALL-RECORDING.md section 7 is the retention policy).
+[call_recording]
+enabled = false

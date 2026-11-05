@@ -119,6 +119,10 @@
       "title": "Jarvis wants to delete an event from your calendar"
     },
     {
+      "action": "delete_call_recording",
+      "title": "Jarvis wants to delete a recorded call"
+    },
+    {
       "action": "delete_file",
       "title": "Jarvis wants to delete a file"
     },
@@ -341,6 +345,10 @@
     {
       "action": "read_web_page",
       "title": "Jarvis wants to read a web page out loud"
+    },
+    {
+      "action": "record_call",
+      "title": "Jarvis wants to record a call"
     },
     {
       "action": "referee_tick",
@@ -813,6 +821,18 @@
       "notice": {
         "title": "Jarvis wants to delete an event from your calendar",
         "summary": "Jarvis wants to delete a calendar event.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "delete_call_recording",
+      "notice": {
+        "title": "Jarvis wants to delete a recorded call",
+        "summary": "Jarvis wants to delete a recorded call.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
@@ -1487,6 +1507,18 @@
         "summary": "Jarvis wants to read a web page out loud.",
         "full": "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on. nothing has happened yet.",
         "body": "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "record_call",
+      "notice": {
+        "title": "Jarvis wants to record a call",
+        "summary": "Jarvis wants to record a call.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

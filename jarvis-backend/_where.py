@@ -1508,6 +1508,24 @@ SHIPPED = (
     # no network, no elevation. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
     "jarvis_storage_health.py",
+
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04; the owner's own
+    # request: "record a call if I tell it a keyword 'record call' ... transcribe
+    # it, put a date and identify the speakers ... store all of it in a new
+    # obsidian note labeled with the date and time"). The phone records through
+    # its microphone with the call on speaker (Android reserves the call's own
+    # audio stream), uploads 16 kHz mono PCM in order, and this PC makes the
+    # WAV, transcribes it with the EXISTING sherpa-onnx reader, labels who spoke
+    # from the owner's own voice print plus clustering, and creates ONE new
+    # Obsidian note named for the date and time through the notes editor's own
+    # create path. OFF BY DEFAULT ([call_recording] enabled = false); starting
+    # is ONE `record_call` card. Its routes (start, chunk, finish, the PC-only
+    # list and the PC-only delete) come from its own install(),
+    # called by plugins/ready/call-notes - no patch. Its suite is
+    # backend/test_call_notes.py. The same entry, in the same position, is in
+    # $SHIPPED in scripts/apply-patches.ps1. It sits BEFORE jarvis_bench.py
+    # because backend/test_bench.py pins that entry as the last one.
+    "jarvis_call_notes.py",
     # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
     # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
     # conversation about any of its tools). ONE entry per name in
@@ -1537,8 +1555,7 @@ SHIPPED = (
     # re-announces on startup - the fix for the restart card loss.
     "jarvis_watch_policy.py",
     "jarvis_watch_ci.py",
-    "jarvis_outbox.py",
-    # Per-source independence evidence (jarvis_source_independence.py,
+    "jarvis_outbox.py",    # Per-source independence evidence (jarvis_source_independence.py,
     # 2026-11-04; the owner's clickable-card answer to "filter out products
     # that have been sponsored"): ONE supplied page -> disclosure wording,
     # affiliate and tracking links, urgency wording, a closed per-source

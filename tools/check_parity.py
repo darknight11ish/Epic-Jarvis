@@ -1161,6 +1161,23 @@ BACKEND_ONLY = {
     "/api/bench/run/{id}": "How one benchmark run is going, and its numbers when it is done (`state`, `step`, `of`, `partial`, `result`) - JARVIS-API section 185, jarvis_bench.py. The read a screen polls while a run is going; no app polls it yet (phase 2 desktop, phase 5 phone). When a screen lands it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/cancel": "Stopping the benchmark run in flight (JARVIS-API section 185; jarvis_bench.py): the repeat already running is NOT killed, because a request cut off mid-answer leaves Ollama's counters unusable, and the run row says PARTIAL. No app calls it yet - the Cancel button is phase 2 on the desktop and phase 5 on the phone - and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/history": "The benchmark's OWN history, newest first, from `bench.jsonl` - never `/api/history` and never the chat history (JARVIS-API section 185; jarvis_bench.py). Filters are exact matches on the stored model/lane/preset names. The separate History window is phase 3 on the desktop and phase 5 on the phone, so no window reads it yet; when one does it goes on BOTH apps, and the DELETE beside it arrives with that window because phase 1 has no delete (ARCHITECTURE section 8).",
+    # Call recording's READ route (2026-11-04, JARVIS-API section 188;
+    # jarvis_call_notes.py). The three POST routes beside it are `phone-only`
+    # in the phone lane's own pull request, because the phone holds the
+    # microphone; this one is the PC's, and this module refuses any other
+    # device through jarvis_owner_check.from_this_pc before it answers.
+    "/api/call/recording": "The list of recorded calls - date, duration, note path, status and speaker list, never the transcript text (JARVIS-API section 188; jarvis_call_notes.py). Read-only AND PC-ONLY: it names the owner's recordings and the vault paths they were filed to, which is a PC surface, and the phone has no use for it (the audio comes FROM the phone). No app calls it yet - there is no recordings screen on either app - so the PC's own list is the only reader; ARCHITECTURE section 8 and docs/CALL-RECORDING.md say why.",
+    # Call recording's DELETE route (added 2026-11-05, the privacy audit's D4;
+    # JARVIS-API section 188.1; jarvis_call_notes.py). Post, not DELETE, for
+    # the reason section 112 records about the goals store. PC-ONLY, and it
+    # refuses any other device through jarvis_owner_check.from_this_pc BEFORE
+    # the body is read; ONE delete_call_recording card at tier ask, no bulk
+    # form. No app calls it yet: there is no recordings screen on either app,
+    # and this route is the PC surface a desktop screen would call - the phone
+    # deliberately gets none (the delete happens on the phone for the phone's
+    # own unsent copy). ARCHITECTURE section 8 and docs/CALL-RECORDING.md
+    # section 7 (the retention policy) say why.
+    "/api/call/recording/delete": "Deleting ONE recorded call from this PC (2026-11-05, the 2026-11-05 privacy audit's D4; JARVIS-API section 188.1; jarvis_call_notes.py). It removes that session's whole folder - audio.pcm, audio.wav, transcript.md, receipt.json and any part-*.wav - which is also its row in the list route, behind ONE delete_call_recording approval card at tier ask; deleting audio cannot be undone. PC-ONLY: it refuses any device but this PC through jarvis_owner_check.from_this_pc before the body is read, and the Obsidian note is a separate document that stays. It answers 202 while its card waits, 409 while the recording is still being captured or transcribed, and 404 for an id that is not one of ours. No app calls it yet - there is no recordings screen on either app, and the desktop screen it belongs behind is the named follow-up (ARCHITECTURE section 8); docs/CALL-RECORDING.md section 7 is the retention policy that names it as the only route that deletes.",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

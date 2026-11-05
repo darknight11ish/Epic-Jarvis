@@ -1069,6 +1069,45 @@ _shell = _control("shell_exec", "shell", "Commands on this PC",
                   "Can run a command on this PC after you say yes to that exact command.")
 
 
+def _call_recording(ctx: Ctx) -> dict:
+    """Recording a phone call (jarvis_call_notes.py, 2026-11-04): the phone's own
+    microphone, into this PC.
+
+    It is a way out in exactly one sense - it reaches the PHONE, the device that
+    holds the microphone - and no further: the audio is kept in this PC's
+    settings folder, the words are made here, and the note is written through
+    the notes editor's own card. The switch is read from the module, never
+    copied, so this row and the routes cannot disagree.
+    """
+    name = "Call recording (your phone's microphone)"
+    try:
+        import jarvis_call_notes as C
+    except Exception:                                       # noqa: BLE001
+        return _row("call_recording", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have call recording yet - run "
+                    "apply-patches.ps1.")
+    try:
+        on = C.enabled()
+    except Exception:                                       # noqa: BLE001
+        on = False
+    if not on:
+        return _row("call_recording", name, "off", "", ASK_NA,
+                    "Off. Turning it on is a hand edit of [call_recording] enabled in the "
+                    "settings file on this PC - there is no in-app switch, the same shape "
+                    "GitHub research and shell commands use.")
+    tier, words = asks("record_call", ctx)
+    if tier == "never":
+        return _row("call_recording", name, "blocked",
+                    "your phone's microphone, into this PC", words,
+                    "Switched on, but your settings say never, so nothing is recorded.")
+    return _row("call_recording", name, "on",
+                "your phone's microphone, into this PC", words,
+                "Records a call through the phone's microphone with the call on speaker "
+                "(Android does not let an app record the call's own audio). The audio is "
+                "kept in this PC's settings folder and transcribed here; the note is "
+                "written through the notes editor's own card. Nothing is sent anywhere.")
+
+
 def _browser_engine_status() -> dict:
     try:
         import jarvis_browser_engine as BE
@@ -1534,6 +1573,7 @@ KINDS = (
     ("chatbot_api", _chatbot_api),
     ("support_chat", _support_chat),
     ("phone_control", _phone),
+    ("call_recording", _call_recording),
     ("shell", _shell),
     ("plugins", _plugins),
     ("second_card", _second_card),

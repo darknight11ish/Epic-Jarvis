@@ -96,14 +96,17 @@ NO_PATCH = {
     "vault",
     "vault-organizer",
     "voiceprint",
-    # The watchers' decision log (2026-11-04, the owner-forwarded
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04): its four
+    # routes come from its own install(), called by the drop-in loader, so the
+    # folder is the whole of its wiring and no patch is added to
+    # `jarvis_hud.py`.
+    "call-notes",    # The watchers' decision log (2026-11-04, the owner-forwarded
     # dsh-superagent spec, Part II pattern 1): GET /api/watch/decisions comes
     # from jarvis_watch_ci.install(), called by the drop-in loader, so the
     # folder is the whole of its wiring and no patch is added to
     # `jarvis_hud.py` - which also keeps the route out of that file's dispatch
     # tuple, where every addition has to be ordered around two other patches.
-    "watch-decisions",
-}
+    "watch-decisions",}
 
 
 def check(name, cond, detail=""):
