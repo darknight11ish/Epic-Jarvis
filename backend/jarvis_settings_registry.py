@@ -349,7 +349,7 @@ SECTIONS: tuple = (
     Section("asks-first", ("what asks first", "asks first settings")),
     Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
     # Hands-free mode (2026-11-04, the owner's own request; jarvis_handsfree.py,
-    # JARVIS-API section 186): the PC's own Settings card. `app="desktop"` until
+    # JARVIS-API section 191): the PC's own Settings card. `app="desktop"` until
     # the phone lane's own Settings row lands, so "open hands-free" opens the
     # one card that exists today and the phone is told nothing it cannot do.
     Section("handsfree", ("hands-free mode", "hands free mode", "hands-free settings",
@@ -2237,7 +2237,7 @@ SETTINGS_ROWS: tuple = (
         indent=10,
         has_detail=True,
         fallback=True),
-    # Hands-free mode (2026-11-04; jarvis_handsfree.py, JARVIS-API section 186).
+    # Hands-free mode (2026-11-04; jarvis_handsfree.py, JARVIS-API section 191).
     # The last row on the page: appended, never inserted, so every other row's
     # own position is untouched. The row is the switch; the card above it in
     # Settings says what it does, and the words are the PC's own.
@@ -2362,7 +2362,7 @@ BOOL_SETTINGS: tuple = (
                 "coaching my prompts"),
                "prompt-coach", set_prompt_coach),
     # Hands-free mode (2026-11-04, the owner's own request; jarvis_handsfree.py,
-    # docs/JARVIS-API.md section 186). ONE card to turn it on
+    # docs/JARVIS-API.md section 191). ONE card to turn it on
     # (`handsfree_enable`), instant to turn it off - the module's own
     # request_enabled decides that, never this table. Its section is the
     # Settings card that carries the switch, and the feature list's own row

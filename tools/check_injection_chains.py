@@ -195,7 +195,10 @@ def scratch_base(root: Path, workdir: str = "") -> Path:
 
 
 class Sandbox:
-    """A throwaway owner's-PC shape, with modules imported from `root`."""
+    """A throwaway owner's-PC shape, with modules imported from `root`.
+
+    Its own home, log and CONFIG folders are fresh and empty, so a probe reads
+    the shipped module and never the machine's own settings (see `__enter__`)."""
 
     def __init__(self, root: Path, tag: str, base: Path):
         self.root = Path(root)
@@ -209,10 +212,28 @@ class Sandbox:
         self.dir = _fresh_dir(self.base, f"chain-{self.tag}")
         home = self.dir / "home"
         logs = self.dir / "logs"
+        # THE CONFIG FOLDER IS ISOLATED TOO (2026-11-05, DEF-048). Until this
+        # line existed, a probe's `_config_dir()` - jarvis_phone_notifications'
+        # own, jarvis_documents', or any of the modules that ask
+        # jarvis_framework first - resolved to the OWNER'S real
+        # `~/.openjarvis` (`OPENJARVIS_CONFIG_DIR`, then `JARVIS_CONFIG_DIR`,
+        # then `Path.home() / ".openjarvis"` in jarvis_framework.py:77-81).
+        # chain5b's `phone.settings()` then READ the live
+        # `phone-notifications.json`, found it valid, and returned from its
+        # "file present" branch. The mutation in backend/test_injection_chains.py
+        # that puts a `text` field on the FileNotFoundError branch was therefore
+        # never reached: the suite was green on CI, which has no such file, and
+        # three checks red on the owner's PC, which has one - DEF-048. A probe
+        # must measure the SHIPPED module, never the machine it runs on: both
+        # names point at an empty folder of the sandbox's own.
+        config = self.dir / "config"
         home.mkdir()
         logs.mkdir()
+        config.mkdir()
         for key, value in (("OPENJARVIS_HOME", home), ("JARVIS_HOME", home),
-                           ("JARVIS_LOG_DIR", logs)):
+                           ("JARVIS_LOG_DIR", logs),
+                           ("OPENJARVIS_CONFIG_DIR", config),
+                           ("JARVIS_CONFIG_DIR", config)):
             self._saved_env[key] = os.environ.get(key)
             os.environ[key] = str(value)
         self._saved_path = list(sys.path)

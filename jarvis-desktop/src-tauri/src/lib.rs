@@ -49,7 +49,7 @@ pub mod focus_presets;
 pub mod folders;
 pub mod frame_feed;
 pub mod handoff;
-// Hands-free mode (2026-11-04, JARVIS-API section 186): the one switch on its
+// Hands-free mode (2026-11-04, JARVIS-API section 191): the one switch on its
 // Settings card. ON is one approval card answered in the app, OFF is immediate.
 pub mod handsfree;
 pub mod hardware;
@@ -1456,7 +1456,7 @@ pub fn run() {
             // Settings window only.
             antislop::get_antislop,
             antislop::set_antislop,
-            // Hands-free mode (2026-11-04; JARVIS-API section 186).
+            // Hands-free mode (2026-11-04; JARVIS-API section 191).
             // Settings window only. The read is a read; ON raises ONE approval
             // card through the backend and the call returns when that card is
             // answered, so the page draws a waiting line rather than flipping

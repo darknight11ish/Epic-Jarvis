@@ -162,15 +162,15 @@ def all_four_are_read_only():
 
 def tools_answer_is_the_registry_and_the_live_file():
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 51,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 52,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
-          inv["enabled"] == 13, str(inv["enabled"]))
+          inv["enabled"] == 14, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "51 tools" in reply, reply[:120])
-    check("it names the switched-on count", "13 of them are switched on" in reply,
+    check("it names the registered count", "52 tools" in reply, reply[:120])
+    check("it names the switched-on count", "14 of them are switched on" in reply,
           reply[:160])
     check("it names a REAL tool in plain words",
           "Calculator" in reply and "Web search" in reply, reply[:200])
@@ -201,8 +201,8 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 50 are not switched on",
-              bool(reply) and "other 50 are built in but not switched on" in reply,
+        check("... and says the other 51 are not switched on",
+              bool(reply) and "other 51 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:
@@ -363,7 +363,7 @@ def the_two_settings_numbers_reconcile():
     data = REG.changeable_settings()
     registry_rows = (len(REG.BOOL_SETTINGS) + len(REG.CHOICE_SETTINGS)
                      + len(REG.NUMBER_SETTINGS))
-    check("the registry's own row count is 48", registry_rows == 48,
+    check("the registry's own row count is 49", registry_rows == 49,
           str(registry_rows))
     check("the spoken answer names how many of its count are those rows",
           f"{registry_rows} of them are the switches, named choices and numbers" in

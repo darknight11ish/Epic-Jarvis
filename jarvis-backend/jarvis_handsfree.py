@@ -106,7 +106,7 @@ ACTION_ENABLE = "handsfree_enable"
 ACTION_SMS = "send_text_message"
 
 #: The event kinds this module publishes. Frozen in docs/JARVIS-API.md
-#: section 186; the Android lane reads that section, never this file.
+#: section 191; the Android lane reads that section, never this file.
 READOUT_KIND = "handsfree_card"
 PHONE_COMMAND_KIND = "phone_command"
 PHONE_RESULT_KIND = "phone_result"

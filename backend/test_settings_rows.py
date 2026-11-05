@@ -90,7 +90,7 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: 33 since Wave B's "Personalize Jarvis" (2026-11-03) gave the setup reminder
 #: its switch in Notification Preferences (`notif-setup`, Ruling Q4): one more
 #: toggle row, one more spoken setting, both generated from SETTINGS_ROWS.
-#: 34 since hands-free mode (2026-11-04, JARVIS-API section 186) added its one
+#: 34 since hands-free mode (2026-11-04, JARVIS-API section 191) added its one
 #: switch (`hf-enabled`) to the sandbox's position: one more toggle row, one
 #: more spoken setting, both generated from SETTINGS_ROWS. It adds NO phone row
 #: - the phone's own hands-free row is the Android lane's separate change.
@@ -397,7 +397,7 @@ def t_bool_settings_is_the_measured_thirteen():
 
     Thirty-eight since 2026-11-04: `handsfree`, the spoken name for the
     hands-free switch behind `hf-enabled` (jarvis_handsfree.py, JARVIS-API
-    section 186).
+    section 191).
     """
     check("BOOL_SETTINGS holds its thirty-eight spoken settings",
           len(R.BOOL_SETTINGS) == 38, str(len(R.BOOL_SETTINGS)))

@@ -98,7 +98,7 @@ object MicOwner {
     /**
      * The talk button's sentence while the answer window holds it - and the
      * one Live and the wake word are paused with. Short on purpose: the window
-     * is ten seconds at most, so "try again" is true.
+     * is up to a minute at most, so "try again" is true.
      */
     const val LISTENING = "Jarvis is listening for your answer to a card, " +
         "so the microphone is busy. Try again in a moment."

@@ -223,7 +223,6 @@ CLASSIFICATION = {
     "/api/presets": ("deliberate", "The GET alias of /api/work - the same live focus-preset contract, answered by the same function (backend/jarvis_presets.py install(): both paths serve live_status()), so this is a spelling, not a second feature. It is DELIBERATELY not called by the phone: the phone reads the canonical /api/work (net/FocusPresets.kt), and the alias exists for the desktop HUD's left-rail preset list (the OWNER'S ASK of 2026-10-21), whose window holds no token and reads through the fixed shell allowlist (jarvis-desktop/src-tauri/src/hud_proxy.rs HUD_GET_PATHS -> hud_get /api/presets; src/jarvis_hud.html renderPresets()). The feature itself is in both apps; only one surface spells the route this way. Applying is /api/work/apply, already classified above."),
     "/api/presets/recommend": ("deliberate", "What the focus presets should change to, worked out from this PC's graphics cards and what it has installed (the model advisor, 2026-10-28). It changes NOTHING and raises no card: the answer is a list of proposed rows the owner can approve or argue with. Desktop: the Brain's Model card, under \"Preset recommendation\" (brain.rs brain_model_recommend; jarvis-desktop/src/model-advisor.js). Phone: none, deliberately, with the rest of the advisor - CLAUDE.md keeps the model catalogue off the phone and the advice is about models the PC would have to measure (ARCHITECTURE.md section 8). Applying an answer is the already-ported /api/work/apply, with that route's ONE existing card."),
     "/api/presets/recommend/opinion": ("deliberate", "The owner's own note about a proposed preset change, which revises the recommendation before they approve it (the model advisor, 2026-10-28; the owner's words: \"i can approve or give my opinion and jarvis can change the preset recommendations then i approve\"). It applies nothing and raises no card. Desktop: the Brain's Model card's \"Tell Jarvis what you think\" box (brain.rs brain_model_recommend; jarvis-desktop/src/model-advisor.js). Phone: none, deliberately, with the rest of the advisor (ARCHITECTURE.md section 8)."),
-    "/api/work/choose": ("planned", "Remember a work setup, or forget it. It changes NO model and no setting: choosing records a preference in work-setup-choice.json and returns the ONE step that would switch the model. Phone: JarvisRuntime.chooseWorkSetup, held on a stale link; forgetting is not held. Desktop: still to build."),
     "/api/work/recommend": ("planned", "What setup to OFFER for the owner's own words, and the sentence to say. It SWITCHES NOTHING: the answer carries switched: false, and acting on it is the owner's tap - the switch itself is the existing /api/models/switch card. Phone: the screen and the parse are built (net/WorkSetups.kt, HardwarePlate.kt WorkSetupsSection), but the request is NOT wired: `JarvisRuntime.offerWorkSetup` is the only thing that posts this route and nothing calls it, so the offer panel can never be populated (tools/check_parity.py's UNREACHABLE, 2026-10-11). Desktop: still to build. The offer is deliberately NOT wired into the chat turn yet: that seam is jarvis_hud.py's chat route, which this feature's patch does not touch."),
     # The presets (owner decision 2026-10-18; backend/presets.patch,
     # jarvis_presets.py; contract #603, lane/apply #611). The phone half is
@@ -279,7 +278,7 @@ CLASSIFICATION = {
     # settings MIRROR, not a second editor, and it grows no catalogue
     # (ARCHITECTURE section 8, and the row in its one-sided-on-purpose table).
     # The read-only POST /api/antislop/audit is in BACKEND_ONLY below.
-    # Hands-free mode (2026-11-04; JARVIS-API section 186; backend
+    # Hands-free mode (2026-11-04; JARVIS-API section 191; backend
     # jarvis_handsfree.py, plugins/ready/handsfree). GET reads the switch, the
     # answer window, the closed vocabulary and whether a phone can take a text;
     # POST is the switch itself: OFF at once and cardless, ON one ask-tier card
@@ -294,7 +293,7 @@ CLASSIFICATION = {
     # (/api/phone/result) stay PHONE-ONLY below: the phone is the ears and the
     # SMS hand, and a client never transcribes (CLAUDE.md).
     "/api/handsfree": ("ported", "Hands-free mode's one switch (2026-11-04; "
-                       "JARVIS-API section 186; jarvis_handsfree.py, "
+                       "JARVIS-API section 191; jarvis_handsfree.py, "
                        "plugins/ready/handsfree). GET is a read of the switch, the "
                        "60-second answer window, the closed yes/no vocabulary, "
                        "whether a voice print is enrolled, whether a phone can take "
@@ -978,7 +977,7 @@ PHONE_ONLY = {
     "/api/files/send": ("phone-only", "The files the owner already approved for this phone (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172): name, folder, size, MIME type and seconds left, never a path. A file appears only after the PC's own ONE send_file_to_phone card was approved, and only the phone has any use for it - the file's destination is the phone. Phone: net/SendFile.kt and ui/screens/SendFilePlate.kt (the Settings row, and a small block inside Coming up so a waiting file is noticed), JarvisRuntime.sendFiles. Desktop: nothing to draw, by design - the bytes leave the PC for the phone (docs/ARCHITECTURE.md section 8)."),
     "/api/files/download": ("phone-only", "ONE approved file's bytes, base64 in JSON, by opaque id only - never a path, and the answer carries none (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172). Ten minutes and one download; a second fetch is the PC's own 404 sentence. Phone: ui/screens/SendFilePlate.kt's View (FileProvider + ACTION_VIEW) and Save to Downloads (MediaStore.Downloads), JarvisRuntime.downloadFile. Desktop: nothing to draw - the phone is the destination (docs/ARCHITECTURE.md section 8)."),
     # Hands-free's two phone-facing routes (the owner's request of 2026-11-04;
-    # docs/JARVIS-API.md section 186; net/Handsfree.kt,
+    # docs/JARVIS-API.md section 191; net/Handsfree.kt,
     # service/HandsfreeService.kt, voice/MicOwner.kt). PHONE-ONLY because the
     # phone IS the ears and the SMS hand: it records the answer clip (the phone
     # never transcribes - a client may not, CLAUDE.md), and it sends the text
@@ -987,7 +986,7 @@ PHONE_ONLY = {
     # and decides. The THIRD route, /api/handsfree (the state AND its switch), is
     # called by BOTH apps now that the desktop's own half landed, so it is in
     # CLASSIFICATION above as `ported`.
-    "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state, say} (the owner's request of 2026-11-04; docs/JARVIS-API.md section 186). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV inside the PC's own answer window (a minute at most), clip-capped at the PC's 30 seconds, and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
+    "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state, say} (the owner's request of 2026-11-04; docs/JARVIS-API.md section 191). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV inside the PC's own answer window (a minute at most), clip-capped at the PC's 30 seconds, and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
     "/api/phone/result": ("phone-only", "What happened to a `phone_command` this phone carried out: {id, ok, receipt, why}, where `receipt` is Android's own SMS RESULT_* and `why` is the refusal in plain words (the owner's request of 2026-11-04). Phone: service/HandsfreeService.kt posts it for EVERY command, including the ones it refused and the ones of a kind it does not know, so the PC can tell \"not sent\" from \"still working\". A PC has no phone to command, so the desktop never calls it (ARCHITECTURE.md section 8)."),
 
     # Recording a phone call (the owner's request of 2026-11-04). The audio
@@ -1003,6 +1002,18 @@ PHONE_ONLY = {
     "/api/call/recording/start": ("phone-only", "Opens one call recording on the PC and answers its session id, from the date the call began and the audio's shape (16 kHz, mono, s16le, device \"phone\") - the frozen contract of 2026-11-04. Only the phone can start one: the audio is the phone's microphone. docs/ARCHITECTURE.md section 8."),
     "/api/call/recording/chunk": ("phone-only", "One base64 PCM piece at its sequence number; the PC appends in seq order, and a failed send is retried with the SAME number. Nothing on the desktop produces PCM, and a second copy of a recording is the last thing the PC needs. docs/ARCHITECTURE.md section 8."),
     "/api/call/recording/finish": ("phone-only", "The recording's whole length, an optional title and the consent flag; the PC transcribes it, dates it, works out who was speaking and writes ONE note in the owner's vault. The phone cannot do any of that (no speech-to-text on a client, and no access to the vault), and the desktop already reads and opens notes through its own surface. docs/ARCHITECTURE.md section 8."),
+
+    # The superseded work setups' ONE write (the parity audit's F6, 2026-11-05):
+    # it belongs to the contract the nine focus presets REPLACED on 2026-10-18
+    # (docs/JARVIS-API.md section 128's superseded note; section 145 is the
+    # replacement). The desktop's work surface is the focus presets, which
+    # APPLY through /api/work/apply - the desktop never had the old setups
+    # screen and is not getting one. The phone still carries the route in
+    # net/WorkSetups.kt (JarvisApi.workPost serves exactly this one write), but
+    # the old WorkSetupsSection is no longer drawn: HardwarePlate.kt draws
+    # FocusPresetsSection instead (2026-10-19). So this is a compatibility
+    # path, not a missing desktop half - docs/ARCHITECTURE.md section 8.
+    "/api/work/choose": ("phone-only", "The five work setups' one write, from the contract the nine focus presets replaced (the owner's decision of 2026-10-18; docs/JARVIS-API.md sections 128 and 145). It changes no model and no setting: choosing records a preference in work-setup-choice.json and returns the ONE step that would switch a model - the existing /api/models/switch card. Phone: net/WorkSetups.kt's CHOOSE_PATH through JarvisApi.workPost, held on a stale link; forgetting is not held. Desktop: none, and none is wanted - its work surface is the focus presets, which apply through /api/work/apply (src-tauri/src/focus_presets.rs, focus-presets.js). The phone's own Work setups section is no longer drawn (the Focus presets plate replaced it), so this is the superseded contract's compatibility path, not a missing desktop half. ARCHITECTURE.md section 8."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

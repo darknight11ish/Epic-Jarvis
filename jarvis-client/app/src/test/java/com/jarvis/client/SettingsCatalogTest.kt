@@ -85,7 +85,7 @@ class SettingsCatalogTest {
         // 21 to 22 bare, 28 to 29 desktop, and 2 to 3 phone rows.
         // Wave B's "Personalize Jarvis" reminder (2026-11-03) carries a label
         // id, so the bare count stays 25 while the desktop total is 33.
-        // Hands-free mode (2026-11-04, JARVIS-API section 186) is one more
+        // Hands-free mode (2026-11-04, JARVIS-API section 191) is one more
         // desktop toggle - a BARE one, so the bare count goes 25 to 26 while
         // the desktop total is 34. It adds NO phone row: the phone's own
         // hands-free row is the Android lane's separate change, so the phone

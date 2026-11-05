@@ -806,7 +806,7 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # and the Live route call - so the tool reaches exactly the rule the PC
     # acts on, and its card / at-once-off are that function's own.
     # 38 since 2026-11-04: `handsfree` joined with hands-free mode (JARVIS-API
-    # section 186). Its setter calls jarvis_handsfree's own switch function, so
+    # section 191). Its setter calls jarvis_handsfree's own switch function, so
     # "turn on hands-free mode" reaches the same rule the Settings card does.
     check("the count is now 38: the 23 measured on 2026-10-19, the eight added"
           " by the universal-control pass on 2026-10-22, antislop on"

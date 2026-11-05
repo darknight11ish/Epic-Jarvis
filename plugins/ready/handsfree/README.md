@@ -42,6 +42,6 @@ the original handler untouched, and the Windows Hello check on
 - It does not claim a text was sent. The tool says "asked your phone"; only
   the phone's `POST /api/phone/result` produces a receipt.
 
-The frozen contract is `docs/JARVIS-API.md` section 186, and the owner's
+The frozen contract is `docs/JARVIS-API.md` section 191, and the owner's
 decision that a voice yes counts is
 `decisions.d/2026-11-04-handsfree-voice-approval.md`.

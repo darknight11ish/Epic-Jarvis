@@ -1,6 +1,6 @@
 /**
  * Settings -> Hands-free mode (2026-11-04, the owner's own request; backend
- * `jarvis_handsfree.py`, JARVIS-API section 186).
+ * `jarvis_handsfree.py`, JARVIS-API section 191).
  *
  * Two Rust commands (`src-tauri/src/handsfree.rs`), Settings only:
  *  - get_handsfree: is the mode on, the answer window, and whether a phone can

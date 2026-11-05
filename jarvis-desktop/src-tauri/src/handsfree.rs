@@ -1,5 +1,5 @@
 //! Settings -> Hands-free mode (2026-11-04, the owner's own request;
-//! `backend/jarvis_handsfree.py`, JARVIS-API section 186).
+//! `backend/jarvis_handsfree.py`, JARVIS-API section 191).
 //!
 //! Two commands, Settings window only (`permissions/surfaces.toml`):
 //!

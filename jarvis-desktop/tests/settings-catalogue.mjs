@@ -172,7 +172,7 @@ await check("the fixture says how many rows there are, and it is 34 desktop togg
   // Wave B's "Personalize Jarvis" reminder (2026-11-03) carries a label id, so
   // the bare count stays 25 while the desktop total moves to 33: 32 to 33, and
   // the with-id rows 7 to 8.
-  // "Hands-free mode" (2026-11-04, JARVIS-API section 186) is BARE as well
+  // "Hands-free mode" (2026-11-04, JARVIS-API section 191) is BARE as well
   // (the label has no id; only the span inside it does), so the bare count
   // moves 25 to 26 and the desktop total 33 to 34.
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;

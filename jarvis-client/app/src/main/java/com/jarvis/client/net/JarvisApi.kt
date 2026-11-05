@@ -3932,7 +3932,7 @@ class JarvisApi(
 
     /**
      * A hands-free POST whose REFUSALS are ordinary answers (docs/JARVIS-API.md
-     * section 186.3 and 186.5): 403 is "the mode is off / the voice was not the
+     * section 191.3 and 191.5): 403 is "the mode is off / the voice was not the
      * owner's / the enable card was declined", 409 is "no read-out, past the
      * window, the card is gone", and 503 is "a check could not run". Every one
      * of them carries the PC's own sentence in `say` (or `error`), written for
@@ -4150,7 +4150,7 @@ class JarvisApi(
     suspend fun handsfree(): ApiResult<kotlinx.serialization.json.JsonObject> = probe(Handsfree.PATH)
 
     /**
-     * `POST /api/handsfree {"enabled": bool}` - the switch (section 186.3).
+     * `POST /api/handsfree {"enabled": bool}` - the switch (section 191.3).
      *
      * The contract's shape: 200 {ok, enabled, changed, message} once the mode
      * is on (or already on), 403 when its own enable card was refused, 409 when

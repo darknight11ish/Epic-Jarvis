@@ -1001,7 +1001,7 @@ SEND_FILE_TOOL = "send_file_to_phone"
 SEND_FILE_ACTION = "send_file_to_phone"
 
 #: "Text a contact for me" (2026-11-04, hands-free mode; jarvis_handsfree.py,
-#: docs/JARVIS-API.md section 186). ONE text, ONE card naming the contact and
+#: docs/JARVIS-API.md section 191). ONE text, ONE card naming the contact and
 #: the EXACT message; the phone resolves the contact and sends it, so this PC
 #: never holds a number. Its gate row (`handsfree.patch`) is "no"/"outbound",
 #: a risky approval, and `[autonomy.tiers]` carries `send_text_message = "ask"`
@@ -12795,6 +12795,166 @@ def with_pc_facts_note(msgs: list) -> list:
     return list(msgs[:at]) + [msg] + list(msgs[at:])
 
 
+#: How many characters of a tool dossier the model may be given for one turn.
+#: The module's own `CONTEXT_LIMIT` is the same number; it is fixed here as well
+#: so a backend without the module spends nothing, and a module that changed
+#: could not silently spend more of the window.
+TOOL_PROFILE_CHARS = 1200
+
+#: What the block is and what to do with it - kept OUTSIDE the block, so all
+#: 1,200 characters are dossier. The block's own first line names the tool
+#: (its title and id), so no name is interpolated here: `context_for` returns
+#: words only, and digging the id back out of them would tie this file to the
+#: module's formatting for nothing.
+TOOL_NOTE_PREFIX = ("Facts about one of Jarvis's own tools, from this PC's own tool dossier. "
+                    "Answer only from these; if they do not say, say so and name the tool.\n")
+
+#: A sentence that carries on from the last one. This is what makes a
+#: DISCUSSION possible: "what does browser_control do?", then "would that let
+#: you fill in a form?" keeps the same dossier in front of the model.
+_FOLLOW_UP = re.compile(
+    r"^(?:and|so|then|also|but|what about|how about|why|how|"
+    r"would (?:that|it|this)|does (?:that|it|this)|can (?:that|it|this)|"
+    r"could (?:that|it|this)|is (?:that|it|this)|will (?:that|it|this))\b", re.I)
+
+#: A pronoun pointing back at the last thing said, for a follow-up that opens
+#: with no such word at all ("it that good for forms?").
+_BACK_POINTER = re.compile(r"\b(?:it|that|this|they|them|those|these)\b", re.I)
+
+#: What makes a sentence a question about a TOOL rather than about a feature:
+#: the word "tool", or the tool's own code name typed with its underscore.
+#: `jarvis_quick._TOOL_SAID` is the same expression - it has the longer
+#: explanation (42 of the catalogue's 175 feature titles open with a tool's own
+#: words, and one feature alias is the phrase "plugin list") - and
+#: `backend/test_tool_profiles_chat.py` fails if the two drift.
+_TOOL_SAID = re.compile(r"\btools?\b|\b[a-z0-9]+(?:_[a-z0-9]+)+\b")
+
+
+def _tool_profiles():
+    """`jarvis_tool_profiles` if this backend has it, else None."""
+    try:
+        import jarvis_tool_profiles as TP
+        return TP
+    except Exception:                                       # noqa: BLE001
+        return None
+
+
+def _newest_user_texts(msgs: list, count: int) -> list:
+    """The newest `count` user texts, newest first. A part list reads as its text."""
+    found = []
+    for m in reversed(list(msgs or [])):
+        if not isinstance(m, dict) or m.get("role") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, list):
+            c = " ".join(str(p.get("text") or "") for p in c if isinstance(p, dict))
+        if isinstance(c, str) and c.strip():
+            found.append(c)
+            if len(found) >= count:
+                break
+    return found
+
+
+def _tool_name_mentioned(text: str, TP) -> bool:
+    """Does this sentence name a tool, the way the tool layer is addressed?
+
+    Two ways, and they are the same two `jarvis_quick._tool_profile` uses, so a
+    sentence cannot be the tool's on one side and not on the other: the tool's
+    OWN name as whole words ("browser_control", "web search"), or - when the
+    sentence says "tool"/"plug-in" - one telling word of a name ("the github
+    tool", "the memory tool"). The regex below must stay identical to that
+    file's `_TOOL_SAID`; `backend/test_tool_profiles_chat.py` compares them.
+
+    A loose nickname deliberately does NOT count here on its own: "what is on
+    my calendar tomorrow" is a turn to READ the calendar, not a turn about the
+    calendar tool, and it must keep the exact prompt it had - `test_warm_prefix`
+    pins the warm-up and a real first question to the same bytes before the
+    question, and a note keyed on "my calendar" would land in the middle of
+    that list. The nickname path is not lost: the follow-up look-back uses it.
+    """
+    low = str(text or "").lower()
+    words = " " + " ".join(re.findall(r"[a-z0-9]+", low)) + " "
+    said = bool(_TOOL_SAID.search(low))
+    for name in TP.names():
+        parts = re.findall(r"[a-z0-9]+", str(name).lower())
+        if not parts:
+            continue
+        if (" " + " ".join(parts) + " ") in words:
+            return True
+        if said and any(len(p) >= 4 and (" " + p + " ") in words for p in parts):
+            return True
+    return False
+
+
+def _is_follow_up(text: str) -> bool:
+    """Does this read as carrying on the last sentence, not asking something new?"""
+    t = str(text or "").strip()
+    if not t:
+        return False
+    if _FOLLOW_UP.match(t):
+        return True
+    return len(t.split()) <= 12 and bool(_BACK_POINTER.search(t))
+
+
+def tool_profile_note(msgs: list) -> Optional[str]:
+    """The dossier block for the tool this turn is about, or None.
+
+    None on every turn that names no tool - the warm-up, "hi", a question about
+    the weather, "what is on my calendar tomorrow" - which is what keeps those
+    prompts byte-identical to before this existed: no note, no tokens, the same
+    bytes. Two ways in, and only two:
+
+      * the newest message names a tool by its own name ("browser_control",
+        "the web search tool"): the turn is about that tool, so the model gets
+        its page instead of inventing one;
+      * the newest message carries on from the last one ("would that let you
+        fill in a form?"), and an earlier user message - at most two back -
+        names a tool or a nickname of one. That second half is what makes a
+        DISCUSSION possible: the first answer, then the questions about it.
+
+    The block is fixed dossier data: no path, no count, no chat word, nothing
+    read live, so it is safe in a private chat too.
+    """
+    TP = _tool_profiles()
+    if TP is None:
+        return None
+    texts = _newest_user_texts(msgs, 3)
+    if not texts:
+        return None
+    block = None
+    if _tool_name_mentioned(texts[0], TP):
+        block = TP.context_for(texts[0])
+    if not block and _is_follow_up(texts[0]):
+        for earlier in texts[1:]:
+            block = TP.context_for(earlier)
+            if block:
+                break
+    if not block:
+        return None
+    return TOOL_NOTE_PREFIX + str(block)[:TOOL_PROFILE_CHARS]
+
+
+def with_tool_profile_note(msgs: list, note: str) -> list:
+    """A copy with the dossier block just before the question, or the same bytes.
+
+    `note` comes from `tool_profile_note` and is "" on every turn that names no
+    tool, which returns the list unchanged - the same shape as `with_grant_note`,
+    and what keeps the warm-up and every ordinary turn on exactly the prompt
+    they sent before. Placement is `with_pc_facts_note`'s, `at == 0` case
+    included, so the rules stay first.
+    """
+    if not note:
+        return list(msgs)
+    users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
+    if not users:
+        return list(msgs)
+    at = users[-1]
+    msg = {"role": "system", "content": note}
+    if at == 0:
+        return [{"role": "system", "content": LANE_SYSTEM}, msg] + list(msgs)
+    return list(msgs[:at]) + [msg] + list(msgs[at:])
+
+
 #: The two dynamic system lines the model gets about its own runtime (Gemini
 #: ruling 1, 2026-10-31). They are added ONLY when the request's surface is
 #: known (`jarvis_surface`, PR #1046's X-Jarvis-Surface context); an older
@@ -12973,7 +13133,8 @@ def with_grant_note(msgs: list, note: str) -> list:
 def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
                    cut_off: str = "", crisis: bool = False,
-                   antislop: str = "", grant_note: str = "") -> list:
+                   antislop: str = "", grant_note: str = "",
+                   tool_note: str = "") -> list:
     """The notes a local turn adds to its (already trimmed) messages, in
     their order - grant, manner, focus, next-time, spoken, live, cut-off,
     crisis, each just before
@@ -12990,6 +13151,12 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # The PC-facts line is only for a question about this PC (2026-10-31): the
     # model otherwise denied it could read disk/RAM/CPU facts.
     out = with_pc_facts_note(out)
+    # The tool dossier (2026-11-04): only for a turn about one of its own tools,
+    # and "" on every other turn - so this adds nothing and the warm-up sends
+    # exactly what it sent before. Reference material, not instruction, so it
+    # sits after the fact notes about this PC and before the ones that say HOW
+    # to answer.
+    out = with_tool_profile_note(out, tool_note)
     # A web-search approval that really IS in force, from the store (2026-11-02;
     # empty on every ordinary turn, so no tokens and the same bytes as before).
     out = with_grant_note(out, grant_note)
@@ -13892,6 +14059,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         grant_line = _grant_prompt_line(conv_id)
         if grant_line:
             room -= estimate_tokens({"role": "system", "content": grant_line})
+        # Its own tool dossier (2026-11-04), only when this turn is about one of
+        # its tools - "" otherwise, so an ordinary turn pays nothing and keeps
+        # the bytes it had. Held out of the room like every other note, so a
+        # 1,200-character block can never push the window over.
+        tool_note = tool_profile_note(msgs)
+        if tool_note:
+            room -= estimate_tokens({"role": "system", "content": tool_note})
         manner_msg = manner_message(manner)
         if manner_msg is not None:
             room -= estimate_tokens(manner_msg)
@@ -13947,7 +14121,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             antislop=_antislop_prompt(question_text, watch.spoken, dash_exempt),
             spoken=watch.spoken, live=watch.live,
             cut_off=watch.cut_off, crisis=watch.crisis,
-            grant_note=grant_line)
+            grant_note=grant_line, tool_note=tool_note)
         body = chat_body(cur["model"], sent_messages, opts,
                          offer["schemas"] if offer_tools else None,
                          spoken=watch.spoken, question=question_text, role="everyday",

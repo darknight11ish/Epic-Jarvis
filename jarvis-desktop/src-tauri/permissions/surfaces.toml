@@ -827,7 +827,7 @@ permissions = [
   # nothing about whether an answer should be de-slopped.
   "allow-get-antislop",
   "allow-set-antislop",
-  # "Hands-free mode" (2026-11-04; JARVIS-API section 186): the one switch, on
+  # "Hands-free mode" (2026-11-04; JARVIS-API section 191): the one switch, on
   # GET/POST /api/handsfree. Turning it ON raises ONE approval card through the
   # backend - the ordinary `handsfree_enable` card, answered by `/api/approve`
   # like every other one - and the call returns when it is answered; turning it

@@ -789,7 +789,7 @@ GROUPS = (
                                 # carries the exact command it will run.
                                 "app_build_android", "app_install_android",
                                 # Hands-free mode's text message (2026-11-04,
-                                # JARVIS-API section 186): the phone sends it from
+                                # JARVIS-API section 191): the phone sends it from
                                 # its own contact list, so it is a phone action. Its
                                 # words are jarvis_card_words.TITLES, its tier is the
                                 # file's own "ask" line, and it is NOT in MUST_ASK
@@ -816,7 +816,7 @@ GROUPS = (
     # 2026-09-28). Decided in the code: no card, ever.
     ("Talking with Jarvis", ["fixed:live", "fixed:screen",
                             # The switch that lets a spoken yes answer a card
-                            # (2026-11-04, JARVIS-API section 186): ON is ONE
+                            # (2026-11-04, JARVIS-API section 191): ON is ONE
                             # ask-tier card, OFF is instant and cardless.
                             "handsfree_enable"]),
     ("Jarvis's own settings, memory and voice", [

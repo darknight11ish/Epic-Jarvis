@@ -494,7 +494,7 @@ MENUS: tuple = (
        names=("data sandbox", "the data sandbox", "python sandbox",
               "the python sandbox", "data and maths sandbox")),
     # "Hands-free mode" (2026-11-04, the owner's own request; jarvis_handsfree.py,
-    # JARVIS-API section 186): the PC's Settings card holding the one switch,
+    # JARVIS-API section 191): the PC's Settings card holding the one switch,
     # with its own GET/POST /api/handsfree. DESKTOP-only, and the registry says
     # the same (`app="desktop"`): the phone lane's own Settings row is a
     # separate change, so there is no phone row here to hide yet and the

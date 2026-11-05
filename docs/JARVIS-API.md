@@ -23290,21 +23290,25 @@ Two checks now hold that, rather than a sentence in a document:
   throwaway checkout, including the harder case - a call site inside a function
   nothing calls - which is the defect this whole guard exists to catch.
 
-The desktop's own section is still to build (`docs/WORK-SETUPS.md`, "Still to
-build"); it is not part of the same task, because `jarvis-desktop/` was another
-conversation's surface.
+The desktop never builds this section: its work surface is the focus presets
+(§145), which apply through `POST /api/work/apply`
+(`src-tauri/src/focus_presets.rs`, `focus-presets.js`). `docs/WORK-SETUPS.md`'s
+"Still to build" half predates that replacement (2026-10-18) and is kept as the
+older design's history, not as work still wanted.
 
-### 128.4 Why the routes are `planned`, and not `ported`
+### 128.4 How `tools/check_parity.py` records them now
 
-`tools/check_parity.py` classifies all three as `planned`: on the backend, in
-the phone's screen, and in **no** desktop build yet. That is what makes CI name
-the missing desktop half instead of reporting parity. For `/api/work` and
-`/api/work/choose` the warning reads "the phone calls it; the desktop does not
-yet". For `/api/work/recommend` it reads **"NEITHER app calls it"** and names the
-helper nothing calls, because the route is declared unreachable; it is also kept
-out of the "On the phone and not the desktop" list, since a literal in the
-phone's source is not a call. The old line, "the phone calls it", came from a
-string match and was never true. `backend/test_parity_callgraph.py` still pins
+`/api/work` is `ported`: both apps read the focus-presets contract on it
+(§145). `/api/work/choose` is `phone-only` (the 2026-11-05 parity audit's F6):
+it is the superseded setups contract's one write; `net/WorkSetups.kt` still
+serves it, the phone's old Work setups section is no longer drawn (the Focus
+presets plate replaced it, 2026-10-19), and the desktop has no old-setups
+surface - its work surface is the presets, which apply through
+`/api/work/apply` (ARCHITECTURE §8). `/api/work/recommend` stays `planned` and
+RETIRED: F11 took the phone's builder away and the PC route remains with
+nobody calling it, which the checker prints as "RETIRED (no app calls it)" with
+that reason. The old line, "the phone calls it", came from a string match and
+was never true for `recommend`. `backend/test_parity_callgraph.py` still pins
 the direction that matters for shipping - one real call site and the checker
 fails instead.
 ---
@@ -33553,7 +33557,386 @@ word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
 of the three, because it used to sit in both the text-field and the enum table
 and the text-field branch won ("everyday lane" was stored as "everyday lan").
 
-## 186. Hands-free mode: every card read out, one spoken answer, and a text message the phone sends (2026-11-04)
+## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
+
+A watcher that speaks about everything gets muted. That is the whole of this
+section. Three patterns from `deepseek-ai/dsh-superagent-prototype` (MIT) were
+adopted on the owner's decision of 2026-11-04 - *"implement Part II patterns 1,
+2, 3 and 5B ... natively in Python"* - because they are the mechanisms that stop
+a GitHub watcher becoming noise, and because the same slice can close a defect
+this project already had: **a backend restart lost a pending approval card**
+(the job row survived; the event that told the apps about it did not).
+
+Three modules and one drop-in folder carry it:
+
+| Piece | File | What it is |
+| :--- | :--- | :--- |
+| stage one, pure | `backend/jarvis_watch_policy.py` | `gate()`: which checks are required, one batch per (pr, head_sha), the settle rules. Imports nothing from Jarvis - no disk, no network, no model. |
+| the watcher | `backend/jarvis_watch_ci.py` | poll `gh`, fold the seven checks into one thread, log a decision row (`observe`) or notify (`active`), the decisions ring buffer, `watch-receipts.json`, the job body `watch_pr_checks`. |
+| the record | `backend/jarvis_outbox.py` | what is still owed to the owner, written to `outbox.json` BEFORE it is said, re-announced on startup. |
+| the route | `plugins/ready/watch-decisions/` | calls `jarvis_watch_ci.install()` for the one GET below. No patch: `jarvis_hud.py` is not shipped, and a route there would need a hunk in its dispatch tuple. |
+
+### 186.1 The three modes, and why the middle one is the default
+
+`WATCH_MODES = ("off", "observe", "active")` (`backend/jarvis_watch.py`).
+
+- **`off`** - nothing is polled, nothing is recorded. This is what "no watcher"
+  means, and it is the state of a machine that has never created a
+  `watch_pr_checks` job.
+- **`observe`** - the WHOLE pipeline runs: poll, batch, gate, and (only for a
+  failed required check) the second stage. Nothing interrupts. One decision row
+  is written instead, saying exactly what would have been said.
+- **`active`** - the same pipeline, and a terminal verdict is delivered.
+
+**A new proactive rule defaults to `observe`.** The setting is
+`[watch] pr_checks_mode` in the owner's settings file, and an absent,
+unreadable or misspelt value reads as `observe` - never as `active`, because a
+typo in a settings file must not turn a shadow watcher into one that speaks.
+Promotion is the owner's own edit once the log below has no noise in it; there
+is no route that promotes it, and nothing here auto-promotes.
+
+**Nothing becomes always-on.** `jarvis_watch_ci.py` registers a job body and
+answers a route; it starts no thread, no timer and no polling of its own. The
+watcher looks at a pull request only when a `watch_pr_checks` job names one,
+created through the existing `POST /api/jobs`.
+
+### 186.2 `GET /api/watch/decisions?limit=50`
+
+The read that makes `observe` worth having: *"what would your GitHub watcher
+have told me today?"* Newest first, `limit` clamped to 1..200 (default 50,
+anything that is not a whole number is treated as 50 rather than refused - this
+is a read). Origin and token checked exactly like every other route.
+
+```json
+{"available": true, "mode": "observe",
+ "modes": ["off", "observe", "active"],
+ "required_jobs": ["rust", "frontend", "backend", "backend-windows",
+                   "credential-manager", "powershell-5", "phone-unit-tests"],
+ "informational_jobs": ["audit", "python-advisories"],
+ "count": 2,
+ "decisions": [
+   {"id": 2, "at": 1762300000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "would_notify",
+    "reason_code": "ci_all_required_green", "verdict": "all_green",
+    "mode": "observe", "shadow_reason_code": "observe_shadow_logged",
+    "delivery": "shadow", "receipt_key": "1135:a1b2c3d4e...:all_green",
+    "preview_text": "PR #1135 is green: all 7 required checks passed and GitHub says it is mergeable (a1b2c3d4e)."},
+   {"id": 1, "at": 1762299000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "ignored",
+    "reason_code": "ci_still_running_debounced", "verdict": "running",
+    "mode": "observe", "shadow_reason_code": "", "delivery": "shadow",
+    "preview_text": "PR #1135: 3 of 7 required checks finished, none failed - staying quiet until it settles (a1b2c3d4e)."}],
+ "reasons": {"ci_all_required_green": "All 7 required checks passed and the PR is mergeable", "...": "..."}}
+```
+
+Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
+`preview_text`; the rest is for reading the log later.
+
+- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`.
+- `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
+  `notification:<id>`, `repo:<name>`.
+- `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule
+  dropped it) or `notified` (active mode, and it was delivered).
+- `reason_code` is a CLOSED set, `WATCH_REASONS` in `backend/jarvis_watch.py`:
+  `ci_all_required_green`, `ci_required_failed`, `ci_still_running_debounced`,
+  `ci_green_not_mergeable`, `ci_no_required_checks`, `duplicate_sha_state`,
+  `observe_shadow_logged`, `filtered_bot_actor`, `notification_for_you`,
+  `attention_budget_dropped`, `repo_check_clean`, `repo_check_failed`,
+  `watch_off`, `source_not_allowed`, `unreadable_trigger`. A client that does not
+  know a new code must fall back to showing `preview_text`, which is always a
+  whole sentence in the owner's words.
+- `preview_text` is the EXACT one-line message that was, or would have been,
+  shown. Never more than one line: a `\n` in it is a bug, and the suite says so.
+- In `observe` mode a `would_notify` row also carries
+  `shadow_reason_code: "observe_shadow_logged"` - the reason code that says
+  "written down instead of delivered". `reason_code` still names the verdict, so
+  the log answers both questions at once.
+- `delivery` is `shadow` (observe), `sent`, `dropped` (the interruption budget
+  said no - the arbiter's own decision, `§123.4`), `failed` (the notifier raised;
+  the outbox is still holding it) or `already`.
+
+The buffer holds the newest 500 rows in `watch-decisions.json`, written
+temp-file-then-rename, so a crash leaves the previous whole file.
+
+### 186.3 One batch per pull request, and the seven that matter
+
+A pull request runs **seven** checks that gate a merge - `rust`, `frontend`,
+`backend`, `backend-windows`, `credential-manager`, `powershell-5`,
+`phone-unit-tests` - plus `audit` and `python-advisories`, which are
+**informational**. The seven were read from the repository ruleset itself; the
+two informational ones are red on `main` regularly and merges still land, which
+is what "informational" means. They finish minutes apart (`rust` in about three,
+`frontend` in five, `backend` in fifty-five to sixty), so:
+
+- `thread_key = f"pr:{number}:{head_sha[:9]}"` - ONE thread per commit. A new
+  push is a new thread, a new batch and a new receipt.
+- **fail fast**: any required check whose conclusion is `FAILURE`,
+  `TIMED_OUT` or `ACTION_REQUIRED` speaks ONCE, immediately. So does any other
+  terminal non-`SUCCESS` (`CANCELLED`, `STALE`, `NEUTRAL`, `SKIPPED`) - a
+  required check that ended without passing would otherwise hold the batch open
+  for ever, and on a protected branch it blocks the merge.
+- **settle green**: all seven `SUCCESS` *and* `mergeable == "MERGEABLE"` speaks
+  ONCE. All seven green with `CONFLICTING`/`UNKNOWN` is its own sentence
+  (`ci_green_not_mergeable`), because green is not mergeable.
+- **quiet while it works**: any required check still running, none failed ->
+  `ci_still_running_debounced`, and NOTHING is delivered however many times it
+  is polled.
+- **`audit` and `python-advisories` never trigger a notification.** They are
+  dropped by name before any count is taken, so a red `audit` on a green pull
+  request produces `ci_all_required_green` and one quiet line.
+
+**Idempotent receipts** (`watch-receipts.json`, newest 2000) are keyed
+`(pr_number, head_sha, terminal_verdict)`. A terminal verdict is recorded once -
+in `observe` mode too, so promoting a watcher later cannot re-report a commit
+that is already finished - and every later poll of that commit answers
+`duplicate_sha_state` and delivers nothing. The verdict is part of the key on
+purpose: a commit that fails `rust`, is re-run and settles green owes the owner
+two different sentences.
+
+### 186.4 The two-stage gate, and what may never reach stage two
+
+1. **`gate(trigger, thread)`** - pure. Allowlists, required-vs-informational
+   names, receipts, settle rules, bot filtering. No disk, no network, no model,
+   no clock: `now` is an argument. `backend/test_watch_ci.py` parses its imports
+   and fails if one of them could reach anything.
+2. **`assess()`** - reached ONLY when the gate admits a terminal failure of a
+   REQUIRED check. It reads the failing run's own log through the same
+   deterministic `gh` path the poll uses (the run id is taken from the check's
+   own details URL, never guessed) and formats the one line. A filtered event, a
+   duplicate, an informational check, a bot notification and a quiet batch never
+   reach it, and the suite proves that with a counter that must stay at zero.
+
+**No model is called on this PC by this slice, said plainly.**
+`assess_failure()` has a `summarizer` seam and nothing passes one: the line is
+built by plain string work over the log. So this is 0 GPU today, and the seam is
+where a local-model summary would go if that is ever wanted.
+
+### 186.5 The durable outbox, and what a restart owes (pattern 5B)
+
+`backend/jarvis_outbox.py` holds what Jarvis still owes the owner, in
+`outbox.json` beside `jobs.db` (`JARVIS_OUTBOX_PATH` overrides it; the path is
+resolved on each call so a moved queue moves it). Three kinds, and the kind is
+part of the dedupe key:
+
+| kind | key | settled by |
+| :--- | :--- | :--- |
+| `job_card` | `job:<id>:grant:<action>` | being ANSWERED: `answer()`, `_stop_denied()`, `cancel()` |
+| `job_done` | `job:<id>:<state>` | being delivered |
+| `pr_ci_notice` | `<thread_key>:<verdict>` | being delivered (or dropped by the arbiter) |
+
+The order is the guarantee, and it is the same everywhere: **write it down, then
+record the receipt, then deliver, then settle.** A crash after the write leaves a
+pending entry that the next start re-announces; a crash after the receipt cannot
+cause a second report. The file is written to a temp name, flushed and renamed,
+so a reader never sees half of one.
+
+On startup `jarvis_jobs._init()` re-hydrates, once per process:
+parked jobs with a pending grant get their `job_card` entry back (the ROW is the
+authority, so this also covers a card from a build with no outbox), then every
+pending entry is announced once. That is what closes the restart card loss: the
+card is re-announced, and it is still the owner's to answer - rehydration
+APPROVES NOTHING, and `decide_grant()` remains the only thing that decides a
+grant. A cancelled job's card is settled by the cancel (the owner already
+answered), and a cancelled job gets no completion notice, because telling
+somebody about the interruption they asked to stop is the interruption.
+
+**The honest limit: this is at-least-once, not exactly-once.** A process that
+dies between the send and the settle repeats ONE notice on the next start. It
+cannot do the opposite - an entry that exists is an entry somebody will be told
+about - because the write comes first. Given one repeated notice or one lost
+approval card, this takes the repeat.
+
+Settled entries are pruned back to 500; a pending one is never dropped, however
+old, because dropping it is the defect this module exists to prevent.
+
+### 186.6 Tests
+
+`backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
+plain Python with a fake clock, a fake `gh` runner and temp files - no network,
+no `gh`, no model. Between them: observe-vs-active (including that observe calls
+the notifier ZERO times), the quiet period, fail fast, the all-green settle,
+informational checks ignored, duplicate-receipt silence, a new push being a new
+thread, a fixed failure then green owing two sentences, `gate` never calling
+`assess` for a filtered event, a crash between the write and the send being
+delivered exactly once afterwards, a restart re-announcing an unanswered card
+once and not repeating a delivered notice, and the route's own wrapper.
+
+### 186.7 What is NOT built, and said plainly
+
+- **No app screen for this route yet.** It is read on the PC while the mode is
+  being decided; `tools/check_parity.py` classifies it `BACKEND_ONLY` with that
+  reason, and `docs/ARCHITECTURE.md` §8 carries the one-sided row. When a screen
+  is built it goes on BOTH apps.
+- **No promotion route and no auto-promotion.** The mode is the owner's settings
+  file.
+- **No push, merge, label or comment.** This watcher reads; the only writes it
+  can make are its own three files and the notification it hands to the arbiter.
+- **The second stage never calls a model today** (§186.4).
+- **Not measured on the owner's PC**: the route and the job body are tested
+  against the real modules and a fake `gh`, not against a live pull request.---
+
+## 187. Talking to Jarvis about any of its own tools, in depth: a dossier answer and a bounded prompt block (added 2026-11-04)
+
+The owner's ask of 2026-11-04, in his own words: Jarvis should be able to hold
+*"FULL DETAILED discussions about any of its tools/plug-ins and how they change
+its real-world capabilities"*. Before this, "tell me about the github tool" fell
+through to the model, which invented an answer, and "what does browser_control
+do" was answered by `jarvis_feature_guide`'s prose for a *different* thing - the
+catalogue does not use the tool names.
+
+What was built is ONE hand-written, code-checked page per tool and per
+capability family (`backend/jarvis_tool_profiles.py`), plus a deterministic
+answer and a bounded system note that put it in front of the model. **No new
+route and no new model tool** - both are explained in 186.3.
+
+**Where the dossiers live.** `backend/jarvis_tool_profiles.py`, shipped whole
+(in `backend/` and `jarvis-backend/`, listed in `_where.py`'s `SHIPPED`):
+`PROFILES` (`jarvis_tool_profiles.py:82`, one entry per name in the REAL
+`jarvis_agent.TOOLS` dict - 51 on this tree) and `FAMILIES`
+(`jarvis_tool_profiles.py:1820`, 11 capability families). Its own suite,
+`backend/test_tool_profiles.py`, re-checks the load-bearing claims against the
+modules that would have to implement them, so a sentence that cannot be backed
+is written as a limit rather than as a promise. The wiring is
+`backend/test_tool_profiles_chat.py`.
+
+### 187.1 What it answers, and what it still leaves to the model
+
+The fast path answers a sentence that names a tool **as a tool** - the word
+"tool", or the tool's own code name typed with its underscore:
+
+| The owner says | Intent | The fact comes from |
+|---|---|---|
+| "what does `browser_control` do" | `tool_profile` | `PROFILES["browser_control"]` |
+| "tell me about the github tool" | `tool_profile` | `PROFILES["github_search"]` |
+| "what does the web search tool do" | `tool_profile` | `PROFILES["web_search"]` |
+| "tell me about the memory tool" | `tool_profile` | `FAMILIES` / `PROFILES` |
+
+The answer is `answer_about`'s own words (`jarvis_tool_profiles.py:2257`): what
+the thing is in beginner words, what it lets the owner do, what it refuses,
+what it pairs with, and how to switch it on. It is `quick: tool_profile`,
+`where: local`, `lane: "no AI model"` in `X-Jarvis-Route`, so **both apps show
+it with no client change** and it costs no model turn.
+
+Everything else naming a tool - an opinion, a comparison, "would it help me
+with X" - is the **model's**, now with the dossier block in 186.3. A question
+that names no tool returns `None` from the fast path, which is exactly the old
+behaviour.
+
+**Why the "as a tool" gate is not optional.** 42 of the catalogue's 175 feature
+titles open with words that also name a tool ("Web search", "Goals", "Read your
+own calendar", "Spending summaries", "Jarvis reads your email"), and one feature
+row's alias is the exact phrase "plugin list", which is also the tool id
+`plugin_list`. `backend/test_feature_answers.py` and
+`backend/test_feature_guide.py` require every one of those to keep the feature
+guide's answer, so the marker is `_TOOL_SAID`
+(`jarvis_quick.py:6538`) and NOT a bare shape match. The feature layer keeps its
+answers; the tool layer is addressed by its own vocabulary.
+
+**Why it sits where it sits.** In `_match`, the call is
+`jarvis_quick.py:1272`: after the plug-in block (`_plugins_question`,
+`jarvis_quick.py:6391`, called at `:1262`) so a plug-in question keeps its own
+answer, and before the Android block and every capability family
+(`:1273` onward) and well before `_feature_guide` (`jarvis_quick.py:1762`),
+because a tool's own dossier is deeper than a feature row's prose. The runner is
+`_run_tool_profile` (`jarvis_quick.py:6602`), dispatched at
+`jarvis_quick.py:19097`, and the intent is in `READ_ONLY_INTENTS`
+(`jarvis_quick.py:19977`): it reads a fixed module, calls nothing, raises no
+card - so a **private chat hands it to the model** like every other read-only
+intent, and it cannot take away what "cancel that" would undo.
+
+### 187.2 What the model is given, and what it costs
+
+`jarvis_agent.tool_profile_note` (`jarvis_agent.py:12614`) builds ONE bounded
+block from `context_for` (`jarvis_tool_profiles.py:2311`), which never returns
+more than `CONTEXT_LIMIT = 1200` characters
+(`jarvis_tool_profiles.py:77`). `TOOL_PROFILE_CHARS` (`jarvis_agent.py:12517`)
+re-states that cap on this side, so a changed module cannot silently spend more
+of the window, and the note is the block plus ONE fixed 142-character line
+(`TOOL_NOTE_PREFIX`, `jarvis_agent.py:12524`) saying where the facts came from
+and to answer only from them.
+
+- **The budget, in this repository's own arithmetic.** `estimate_tokens`
+  (`jarvis_agent.py:6793`) counts 3 characters a token plus 6 of framing, so the
+  worst case is `6 + (1200 + 142) // 3` = **453 tokens**, and the ordinary
+  `browser_control` turn is 1,285 characters = **434 tokens**. Both `context_for`
+  and the cap it is given are checked in `test_tool_profiles_chat.py`.
+- **No tool named -> no note -> the same bytes.** That is the rule that keeps
+  every ordinary prompt exactly as it was, and it is why the note is keyed on a
+  tool's own name and never on a nickname: "what is on my calendar tomorrow" is
+  a turn to READ the calendar, and `backend/test_warm_prefix.py` pins the warm-up
+  and a real first question to the same bytes before the question.
+- **A follow-up keeps it.** If the newest message carries on from the last one
+  ("would that let you fill in a form?"), the note looks back at most two earlier
+  user messages. That is what makes a *discussion* possible rather than one
+  answer - and it is still nothing when no earlier message named a tool.
+- **It is held out of the room** like every other note:
+  `room -= estimate_tokens({"role": "system", "content": tool_note})`
+  (`jarvis_agent.py:13769`), before `clear_old_tool_results` and
+  `compact_messages`, so a block can never push the window over.
+- **Placement** is `with_tool_profile_note` (`jarvis_agent.py:12652`), copied
+  from `with_pc_facts_note`: inserted just before the newest user message, after
+  the PC-facts line and before the grant note (`jarvis_agent.py:12874`), with the
+  `at == 0` case prepending `LANE_SYSTEM` so the rules stay first. It is fixed
+  dossier data - no path, no count, no chat word, nothing read live - so it is
+  safe in a private chat.
+
+### 187.3 No route and no new tool, deliberately
+
+- **No route.** A route adds a consumer that does not exist: `/api/reach`
+  (`backend/jarvis_reach.py`) already lists every tool in one sentence for both
+  apps, and `/api/self` already carries abilities and plug-ins. A third copy
+  would need a `tools/check_parity.py` classification, a phone decision and a
+  `HUD_GET_PATHS` entry in `hud_proxy.rs` for a screen that does not exist. The
+  one worth adding later, **named and not built**: `GET /api/self/tools` (the
+  list plus one profile each), the day a Tools page exists, served from
+  `jarvis_self_portrait` the way `/api/self/version` is and classified in
+  `check_parity.py` in the same PR.
+- **No new model tool.** A tool costs five mandatory registrations, each with
+  its own test: `TOOLS` plus offer/gate wiring; a description under 300 tokens
+  (`test_tool_text.py`); a `jarvis_claims` classification (`test_smarter_answers.py`
+  fails a tool in neither set); a `jarvis_reach.TOOL_NAMES` row (`test_reach.py`
+  demands one); and the tool contract/schema suites. It also ships **off**: it
+  would need its own switch row on Settings, What asks first ("Let the AI use
+  this") - one of the lists `jarvis_asks_first.TOOLS_SWITCHABLE` is built from -
+  and that switch's PC-only card before the owner could turn it on. And it buys
+  nothing: these are facts that fit in 400 prompt tokens, and every tool call
+  is a round trip on an 8B.
+
+### 187.4 What it does not cover
+
+- **Features** stay `feature_guide`'s, by chat and as a model tool. A feature is
+  a row with a title, a where, an asks-first and a limit; a tool's dossier is
+  deeper and answers different questions. The two vocabularies are kept apart by
+  `_TOOL_SAID` (186.1).
+- **Drop-in plug-ins** (`plugins/ready/`, 49 folders) stay
+  `plugin_list`/`plugin_about`'s, which already answers them; the plug-in block
+  runs first, so it is never hijacked.
+- **Development "plug-ins"** - the patch stack in `plugins/registry.json` - are
+  developer vocabulary and not a chat topic.
+- **Listing questions** ("which tools ask first") already have their own
+  answers (`tools_asking`); `answer_about` returns `None` for them and nothing
+  here changes that.
+- **It adds no permission, card or tier**, so the standing "every new feature
+  gets its own audit" pass finds: bugs (the probes in
+  `test_tool_profiles_chat.py`), both apps (free - chat is server-side, nothing
+  one-sided, so no `docs/ARCHITECTURE.md` section 8 row), and fit (this section,
+  the architecture paragraph and the two records).
+
+Two things this section states plainly rather than hides. First, the design
+report's probe expected `match("what does browser_control do")` to be `None`
+before this work; measured on the merged tree it was `feature_explain` - the
+feature guide answering a name it does not own - which is why the tool path must
+run before it. Second, two dossier sentences read as an action already taken to
+`jarvis_claims.unbacked_claim` (`set_reminder`'s title line and one `set_timer`
+"gives" line are imperative). That checker runs on the MODEL's text
+(`jarvis_agent._nothing_done_line`, `jarvis_agent.py:14629`), never on a
+deterministic `tool_profile` result, so no chat answer is affected; it is
+recorded in `test_tool_profiles_chat.py`, which fails if a third one appears, and
+the wording belongs to the module's own lane.
+
+The decision is `decisions.d/2026-11-04-capability-talk.md`.
+
+## 191. Hands-free mode: every card read out, one spoken answer, and a text message the phone sends (2026-11-04)
 
 The owner's own request of 2026-11-04:
 
@@ -33576,7 +33959,7 @@ precedence. The old sentence is still in that file, marked superseded;
 against it and must not need to read `backend/jarvis_handsfree.py` to do so.
 Everything here is a name, a field or a window; nothing here is advice.
 
-### 186.0 The four routes, at a glance
+### 191.0 The four routes, at a glance
 
 | Route | Method | Who calls it | What it does |
 |---|---|---|---|
@@ -33585,7 +33968,7 @@ Everything here is a name, a field or a window; nothing here is advice.
 | `/api/handsfree/answer` | POST | the phone half | one spoken clip, one card: the voice print, the words, the closed list, one decision |
 | `/api/phone/result` | POST | the phone half | the phone's own word on a text it was asked to send - the only thing that makes a receipt |
 
-### 186.1 The setting
+### 191.1 The setting
 
 `[handsfree] enabled` in the owner's own settings file
 (`jarvis-framework.toml`), **`false` in both shipped copies**. OFF is the state
@@ -33604,7 +33987,7 @@ that card is approved. **OFF is immediate and raises nothing.** That asymmetry
 is the rule every loosening setting in this project follows: taking a power away
 is always safe.
 
-### 186.2 `GET /api/handsfree` - a read
+### 191.2 `GET /api/handsfree` - a read
 
 ```json
 {"ok": true, "enabled": false, "window_sec": 60,
@@ -33622,14 +34005,14 @@ to show when it is false, or the honest note when the phone has not checked in
 lately. `reading` is the newest read-out (`card_id`, `action`, `say`,
 `expires_in_sec`) or `null`. **This route decides nothing.**
 
-### 186.3 `POST /api/handsfree` - the switch
+### 191.3 `POST /api/handsfree` - the switch
 
 Request `{"enabled": true|false}`. Answers `200 {"ok", "enabled", "changed",
 "message"}`; ON refused by its card answers `403 {"ok": false, "enabled": false,
 "error": "<the gate's own sentence>"}`; a settings file that cannot be written
 answers `409`. Idempotent: ON already on asks nobody, and says so.
 
-### 186.4 The read-out event: `handsfree_card`
+### 191.4 The read-out event: `handsfree_card`
 
 While the mode is on, every approval card that starts WAITING FOR A PERSON is
 announced once on `/api/events`:
@@ -33660,7 +34043,7 @@ announced once on `/api/events`:
   that reconnects and asks `GET /api/handsfree` gets `reading` for the newest
   one.
 
-### 186.5 `POST /api/handsfree/answer` - one card, one spoken answer
+### 191.5 `POST /api/handsfree/answer` - one card, one spoken answer
 
 ```json
 {"card_id": "<the id from the read-out>",
@@ -33701,7 +34084,7 @@ most 30 seconds (`MAX_SECONDS`); a longer one is refused, never truncated.
    is never sent anywhere.
 7. **A CLOSED vocabulary decides.** The whole utterance, normalised (lowercase,
    punctuation and spacing collapsed), must equal one entry of `confirm` or
-   `deny` in 186.2. A sentence that merely contains a yes - "yes but wait" - is
+   `deny` in 191.2. A sentence that merely contains a yes - "yes but wait" - is
    not a yes. Anything else is **unclear**: the first unclear answer asks once
    more (`decision: "again"`, `say` = "Sorry - was that yes or no?", the card
    still waiting); the second treats it as a DENY.
@@ -33733,7 +34116,7 @@ understood, so a wrong transcript is visible rather than guessed at.
 action, the heard words, the decision, who decided (`handsfree_voice`) and the
 **SHA-256 of the clip** - never the audio, never the clip itself.
 
-### 186.6 Text messages: `send_text_message`
+### 191.6 Text messages: `send_text_message`
 
 One model tool, offered **only while hands-free mode is on** (`jarvis_agent.
 offered_tools` withholds it otherwise, so with the mode off the model is not
@@ -33795,7 +34178,7 @@ offered a tool that could only refuse). Arguments: `{"contact": "<a name>",
 ignores every unknown kind. `tools/check_parity.py` records that these routes
 and events are called by the phone lane and not yet by the desktop.
 
-### 186.7 What is NOT changed
+### 191.7 What is NOT changed
 
 - **The non-hands-free path is untouched.** `jarvis_owner_check.approve_check`
   has no hands-free branch; `jarvis_gate`/`jarvis_owner_check` never import
@@ -33811,7 +34194,7 @@ and events are called by the phone lane and not yet by the desktop.
 - **Nothing here approves in bulk, clears a rush latch or touches a second
   card.** One read-out is one card; one answer is one decision.
 
-### 186.8 What is PROVED, and what is not
+### 191.8 What is PROVED, and what is not
 
 `backend/test_handsfree.py` - 175 checks, 0 failed, no model, no microphone, no
 network: the switch off in both templates, OFF instant and cardless, ON one card
@@ -33833,220 +34216,3 @@ uses stand-ins for all three); no phone has ever received a `phone_command` or
 sent an SMS; and the desktop Settings row and the phone's screens are the two
 app lanes' own work. A desk test with a real clip and the owner's phone is the
 next step, and it is a field test, not a unit test.
-## 187. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
-
-A watcher that speaks about everything gets muted. That is the whole of this
-section. Three patterns from `deepseek-ai/dsh-superagent-prototype` (MIT) were
-adopted on the owner's decision of 2026-11-04 - *"implement Part II patterns 1,
-2, 3 and 5B ... natively in Python"* - because they are the mechanisms that stop
-a GitHub watcher becoming noise, and because the same slice can close a defect
-this project already had: **a backend restart lost a pending approval card**
-(the job row survived; the event that told the apps about it did not).
-
-Three modules and one drop-in folder carry it:
-
-| Piece | File | What it is |
-| :--- | :--- | :--- |
-| stage one, pure | `backend/jarvis_watch_policy.py` | `gate()`: which checks are required, one batch per (pr, head_sha), the settle rules. Imports nothing from Jarvis - no disk, no network, no model. |
-| the watcher | `backend/jarvis_watch_ci.py` | poll `gh`, fold the seven checks into one thread, log a decision row (`observe`) or notify (`active`), the decisions ring buffer, `watch-receipts.json`, the job body `watch_pr_checks`. |
-| the record | `backend/jarvis_outbox.py` | what is still owed to the owner, written to `outbox.json` BEFORE it is said, re-announced on startup. |
-| the route | `plugins/ready/watch-decisions/` | calls `jarvis_watch_ci.install()` for the one GET below. No patch: `jarvis_hud.py` is not shipped, and a route there would need a hunk in its dispatch tuple. |
-
-### 187.1 The three modes, and why the middle one is the default
-
-`WATCH_MODES = ("off", "observe", "active")` (`backend/jarvis_watch.py`).
-
-- **`off`** - nothing is polled, nothing is recorded. This is what "no watcher"
-  means, and it is the state of a machine that has never created a
-  `watch_pr_checks` job.
-- **`observe`** - the WHOLE pipeline runs: poll, batch, gate, and (only for a
-  failed required check) the second stage. Nothing interrupts. One decision row
-  is written instead, saying exactly what would have been said.
-- **`active`** - the same pipeline, and a terminal verdict is delivered.
-
-**A new proactive rule defaults to `observe`.** The setting is
-`[watch] pr_checks_mode` in the owner's settings file, and an absent,
-unreadable or misspelt value reads as `observe` - never as `active`, because a
-typo in a settings file must not turn a shadow watcher into one that speaks.
-Promotion is the owner's own edit once the log below has no noise in it; there
-is no route that promotes it, and nothing here auto-promotes.
-
-**Nothing becomes always-on.** `jarvis_watch_ci.py` registers a job body and
-answers a route; it starts no thread, no timer and no polling of its own. The
-watcher looks at a pull request only when a `watch_pr_checks` job names one,
-created through the existing `POST /api/jobs`.
-
-### 187.2 `GET /api/watch/decisions?limit=50`
-
-The read that makes `observe` worth having: *"what would your GitHub watcher
-have told me today?"* Newest first, `limit` clamped to 1..200 (default 50,
-anything that is not a whole number is treated as 50 rather than refused - this
-is a read). Origin and token checked exactly like every other route.
-
-```json
-{"available": true, "mode": "observe",
- "modes": ["off", "observe", "active"],
- "required_jobs": ["rust", "frontend", "backend", "backend-windows",
-                   "credential-manager", "powershell-5", "phone-unit-tests"],
- "informational_jobs": ["audit", "python-advisories"],
- "count": 2,
- "decisions": [
-   {"id": 2, "at": 1762300000.0, "source": "github_pr_ci",
-    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "would_notify",
-    "reason_code": "ci_all_required_green", "verdict": "all_green",
-    "mode": "observe", "shadow_reason_code": "observe_shadow_logged",
-    "delivery": "shadow", "receipt_key": "1135:a1b2c3d4e...:all_green",
-    "preview_text": "PR #1135 is green: all 7 required checks passed and GitHub says it is mergeable (a1b2c3d4e)."},
-   {"id": 1, "at": 1762299000.0, "source": "github_pr_ci",
-    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "ignored",
-    "reason_code": "ci_still_running_debounced", "verdict": "running",
-    "mode": "observe", "shadow_reason_code": "", "delivery": "shadow",
-    "preview_text": "PR #1135: 3 of 7 required checks finished, none failed - staying quiet until it settles (a1b2c3d4e)."}],
- "reasons": {"ci_all_required_green": "All 7 required checks passed and the PR is mergeable", "...": "..."}}
-```
-
-Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
-`preview_text`; the rest is for reading the log later.
-
-- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`.
-- `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
-  `notification:<id>`, `repo:<name>`.
-- `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule
-  dropped it) or `notified` (active mode, and it was delivered).
-- `reason_code` is a CLOSED set, `WATCH_REASONS` in `backend/jarvis_watch.py`:
-  `ci_all_required_green`, `ci_required_failed`, `ci_still_running_debounced`,
-  `ci_green_not_mergeable`, `ci_no_required_checks`, `duplicate_sha_state`,
-  `observe_shadow_logged`, `filtered_bot_actor`, `notification_for_you`,
-  `attention_budget_dropped`, `repo_check_clean`, `repo_check_failed`,
-  `watch_off`, `source_not_allowed`, `unreadable_trigger`. A client that does not
-  know a new code must fall back to showing `preview_text`, which is always a
-  whole sentence in the owner's words.
-- `preview_text` is the EXACT one-line message that was, or would have been,
-  shown. Never more than one line: a `\n` in it is a bug, and the suite says so.
-- In `observe` mode a `would_notify` row also carries
-  `shadow_reason_code: "observe_shadow_logged"` - the reason code that says
-  "written down instead of delivered". `reason_code` still names the verdict, so
-  the log answers both questions at once.
-- `delivery` is `shadow` (observe), `sent`, `dropped` (the interruption budget
-  said no - the arbiter's own decision, `§123.4`), `failed` (the notifier raised;
-  the outbox is still holding it) or `already`.
-
-The buffer holds the newest 500 rows in `watch-decisions.json`, written
-temp-file-then-rename, so a crash leaves the previous whole file.
-
-### 187.3 One batch per pull request, and the seven that matter
-
-A pull request runs **seven** checks that gate a merge - `rust`, `frontend`,
-`backend`, `backend-windows`, `credential-manager`, `powershell-5`,
-`phone-unit-tests` - plus `audit` and `python-advisories`, which are
-**informational**. The seven were read from the repository ruleset itself; the
-two informational ones are red on `main` regularly and merges still land, which
-is what "informational" means. They finish minutes apart (`rust` in about three,
-`frontend` in five, `backend` in fifty-five to sixty), so:
-
-- `thread_key = f"pr:{number}:{head_sha[:9]}"` - ONE thread per commit. A new
-  push is a new thread, a new batch and a new receipt.
-- **fail fast**: any required check whose conclusion is `FAILURE`,
-  `TIMED_OUT` or `ACTION_REQUIRED` speaks ONCE, immediately. So does any other
-  terminal non-`SUCCESS` (`CANCELLED`, `STALE`, `NEUTRAL`, `SKIPPED`) - a
-  required check that ended without passing would otherwise hold the batch open
-  for ever, and on a protected branch it blocks the merge.
-- **settle green**: all seven `SUCCESS` *and* `mergeable == "MERGEABLE"` speaks
-  ONCE. All seven green with `CONFLICTING`/`UNKNOWN` is its own sentence
-  (`ci_green_not_mergeable`), because green is not mergeable.
-- **quiet while it works**: any required check still running, none failed ->
-  `ci_still_running_debounced`, and NOTHING is delivered however many times it
-  is polled.
-- **`audit` and `python-advisories` never trigger a notification.** They are
-  dropped by name before any count is taken, so a red `audit` on a green pull
-  request produces `ci_all_required_green` and one quiet line.
-
-**Idempotent receipts** (`watch-receipts.json`, newest 2000) are keyed
-`(pr_number, head_sha, terminal_verdict)`. A terminal verdict is recorded once -
-in `observe` mode too, so promoting a watcher later cannot re-report a commit
-that is already finished - and every later poll of that commit answers
-`duplicate_sha_state` and delivers nothing. The verdict is part of the key on
-purpose: a commit that fails `rust`, is re-run and settles green owes the owner
-two different sentences.
-
-### 187.4 The two-stage gate, and what may never reach stage two
-
-1. **`gate(trigger, thread)`** - pure. Allowlists, required-vs-informational
-   names, receipts, settle rules, bot filtering. No disk, no network, no model,
-   no clock: `now` is an argument. `backend/test_watch_ci.py` parses its imports
-   and fails if one of them could reach anything.
-2. **`assess()`** - reached ONLY when the gate admits a terminal failure of a
-   REQUIRED check. It reads the failing run's own log through the same
-   deterministic `gh` path the poll uses (the run id is taken from the check's
-   own details URL, never guessed) and formats the one line. A filtered event, a
-   duplicate, an informational check, a bot notification and a quiet batch never
-   reach it, and the suite proves that with a counter that must stay at zero.
-
-**No model is called on this PC by this slice, said plainly.**
-`assess_failure()` has a `summarizer` seam and nothing passes one: the line is
-built by plain string work over the log. So this is 0 GPU today, and the seam is
-where a local-model summary would go if that is ever wanted.
-
-### 187.5 The durable outbox, and what a restart owes (pattern 5B)
-
-`backend/jarvis_outbox.py` holds what Jarvis still owes the owner, in
-`outbox.json` beside `jobs.db` (`JARVIS_OUTBOX_PATH` overrides it; the path is
-resolved on each call so a moved queue moves it). Three kinds, and the kind is
-part of the dedupe key:
-
-| kind | key | settled by |
-| :--- | :--- | :--- |
-| `job_card` | `job:<id>:grant:<action>` | being ANSWERED: `answer()`, `_stop_denied()`, `cancel()` |
-| `job_done` | `job:<id>:<state>` | being delivered |
-| `pr_ci_notice` | `<thread_key>:<verdict>` | being delivered (or dropped by the arbiter) |
-
-The order is the guarantee, and it is the same everywhere: **write it down, then
-record the receipt, then deliver, then settle.** A crash after the write leaves a
-pending entry that the next start re-announces; a crash after the receipt cannot
-cause a second report. The file is written to a temp name, flushed and renamed,
-so a reader never sees half of one.
-
-On startup `jarvis_jobs._init()` re-hydrates, once per process:
-parked jobs with a pending grant get their `job_card` entry back (the ROW is the
-authority, so this also covers a card from a build with no outbox), then every
-pending entry is announced once. That is what closes the restart card loss: the
-card is re-announced, and it is still the owner's to answer - rehydration
-APPROVES NOTHING, and `decide_grant()` remains the only thing that decides a
-grant. A cancelled job's card is settled by the cancel (the owner already
-answered), and a cancelled job gets no completion notice, because telling
-somebody about the interruption they asked to stop is the interruption.
-
-**The honest limit: this is at-least-once, not exactly-once.** A process that
-dies between the send and the settle repeats ONE notice on the next start. It
-cannot do the opposite - an entry that exists is an entry somebody will be told
-about - because the write comes first. Given one repeated notice or one lost
-approval card, this takes the repeat.
-
-Settled entries are pruned back to 500; a pending one is never dropped, however
-old, because dropping it is the defect this module exists to prevent.
-
-### 187.6 Tests
-
-`backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
-plain Python with a fake clock, a fake `gh` runner and temp files - no network,
-no `gh`, no model. Between them: observe-vs-active (including that observe calls
-the notifier ZERO times), the quiet period, fail fast, the all-green settle,
-informational checks ignored, duplicate-receipt silence, a new push being a new
-thread, a fixed failure then green owing two sentences, `gate` never calling
-`assess` for a filtered event, a crash between the write and the send being
-delivered exactly once afterwards, a restart re-announcing an unanswered card
-once and not repeating a delivered notice, and the route's own wrapper.
-
-### 187.7 What is NOT built, and said plainly
-
-- **No app screen for this route yet.** It is read on the PC while the mode is
-  being decided; `tools/check_parity.py` classifies it `BACKEND_ONLY` with that
-  reason, and `docs/ARCHITECTURE.md` §8 carries the one-sided row. When a screen
-  is built it goes on BOTH apps.
-- **No promotion route and no auto-promotion.** The mode is the owner's settings
-  file.
-- **No push, merge, label or comment.** This watcher reads; the only writes it
-  can make are its own three files and the notification it hands to the arbiter.
-- **The second stage never calls a model today** (§187.4).
-- **Not measured on the owner's PC**: the route and the job body are tested
-  against the real modules and a fake `gh`, not against a live pull request.

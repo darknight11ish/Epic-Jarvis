@@ -382,7 +382,7 @@ def t_switchable_matches_the_in_app_switches():
           f"claimed but not switchable: {sorted(switchable - set(AF.TOOLS_SWITCHABLE))}")
     # The equivalence this line used to assert - "every in-app switch is a
     # `switchable` profile" - is the half main's 71d4d6a01 made FALSE, and it is
-    # false in the DATA, not merely awkward here: 13 of the 48 switchable tools
+    # false in the DATA, not merely awkward here: 14 of the 49 switchable tools
     # are already ON in the shipped [tools].enabled list, so the decision order
     # above (and the truth) gives them `always-available` - no action needed, and
     # the page can still switch them OFF - and `rea_investigate` is

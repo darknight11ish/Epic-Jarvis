@@ -1264,6 +1264,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- any of its own tools, in depth (2026-11-04) ------------------------
+    # After the plug-ins (a plug-in question keeps its own answer), and before
+    # the feature guide and every capability family: the catalogue does not use
+    # the tool names ("browser control", not "Drive one browser tab"), so this
+    # is the only path that can answer one - and a tool's own dossier is deeper
+    # than a feature row's prose.
+    got = _tool_profile(s)
+    if got is not None:
+        return got
+
     # --- the Android builder, before the reminder capability family too:
     # "how do I ask you to build one" is about the app, not a reminder.
     got = _android_question(text)
@@ -6468,6 +6478,139 @@ def _run_plugins(name: str, f: dict, surface: str) -> "Result":
         return Result(_plugin_install_sentence(), "plugin_install")
     return Result(_plugin_list_sentence(installed), "plugin_list")
 
+
+# --------------------------------------------------------------------------
+# Its own tools, in depth (2026-11-04)
+#
+# The owner asked to be able to hold a full conversation about any of Jarvis's
+# tools: what each one really is, what it lets him do, what it refuses, what it
+# pairs with, how to switch it on. `jarvis_tool_profiles` holds that dossier -
+# one hand-written, code-checked page per tool in `jarvis_agent.TOOLS` plus one
+# per capability family - and the helpers below are the chat half of the
+# wiring. The model half is `jarvis_agent.tool_profile_note`, which hands the
+# model the same page as a bounded system note so a multi-turn discussion has
+# facts to stand on instead of guesses.
+#
+# The split of work is deliberate, and it is what keeps every other fast path
+# exactly as it was:
+#   * `_tool_ask` decides whether the sentence is a question ABOUT a tool - the
+#     tool has to be the SUBJECT, the words straight after the opener. So "set a
+#     timer for 5 minutes" keeps its timer path, "remind me to call mum" keeps
+#     its reminder path, "how do I set a reminder" keeps `reminder_howto`, and
+#     "what do you know about me" still recalls facts instead of explaining the
+#     memory tool.
+#   * `_tool_named` pre-filters on the module's OWN names (`TP.names()`), so
+#     `answer_about`'s looser nicknames never see a sentence with no tool in it.
+#   * `answer_about` has the last word. Anything it will not answer returns None
+#     here, which is exactly the old behaviour: the turn falls through to the
+#     model.
+#
+# No new model tool and no new route (2026-11-04): these are facts that fit in
+# the prompt, and both apps' chat already reaches this server-side path.
+
+#: How a sentence has to open to be asking ABOUT one of its tools rather than
+#: asking Jarvis to use one. `subject` is the words straight after the opener.
+_TOOL_ASK = re.compile(
+    r"^(?:tell me (?:more |a bit )?about"
+    r"|what (?:does|do|can|could|would)"
+    r"|how (?:does|do|would)"
+    r"|why (?:would|should) (?:i|you) (?:ever )?use"
+    r"|what happens if"
+    r"|what breaks without"
+    r"|what(?:'s| is))"
+    r" (?:the |a |an |your |my |this |that )?"
+    r"(?P<subject>.+)$")
+
+#: What makes a sentence a question about a TOOL rather than about a feature:
+#: the word "tool", or the tool's own code name typed with its underscore.
+#:
+#: This gate is not caution for its own sake - it is what the feature tests
+#: proved was required. 42 of the catalogue's 175 feature titles OPEN with
+#: words that also name a tool ("Web search", "Goals", "Read your own calendar",
+#: "Spending summaries", "Jarvis reads your email"), and `test_feature_answers`
+#: requires every one of them to keep the feature guide's answer. A dossier is
+#: the tool layer; the catalogue is the feature layer; the word "tool" (or the
+#: code name) is what tells the two apart. So "what does Web search do" stays
+#: the feature's, and "what does the web search tool do" is the tool's.
+#:
+#: "Plug-in" is deliberately NOT in here. The plug-in block above already owns
+#: that word, and one feature row's alias is the exact phrase "plugin list",
+#: which is also the tool id `plugin_list` - `test_feature_guide` requires that
+#: alias to keep the feature guide. The tool is still reachable by its code
+#: name ("what does plugin_list do").
+_TOOL_SAID = re.compile(r"\btools?\b|\b[a-z0-9]+(?:_[a-z0-9]+)+\b")
+
+
+def _tool_profiles():
+    """`jarvis_tool_profiles` if this backend has it, else None.
+
+    Lazy and defensive on purpose, the `_guide()` pattern: the dossier is a
+    patch of its own, so a backend that has not taken it must keep answering
+    exactly as it did instead of failing to import.
+    """
+    try:
+        import jarvis_tool_profiles as TP
+        return TP
+    except Exception:                                   # noqa: BLE001
+        return None
+
+
+def _tool_ask(s: str) -> Optional[str]:
+    """The tool-naming subject of this sentence, or None if it asks nothing."""
+    m = _TOOL_ASK.match(s or "")
+    return (m.group("subject").strip() if m else "") or None
+
+
+def _tool_named(subject: str, TP) -> Optional[str]:
+    """How clearly `subject` names a tool: "name", "word", or None.
+
+    The vocabulary is the module's own `names()` and nothing else, so a tool
+    added later needs no edit here. "name" is a whole tool id, family id or
+    multi-word name ("browser control", "web search"); "word" is ONE word of a
+    name in the subject position ("github" for github_search, "memory" for the
+    memory family), which is how the owner actually says it.
+    """
+    words = re.findall(r"[a-z0-9]+", str(subject or "").lower())
+    if not words:
+        return None
+    named = [re.findall(r"[a-z0-9]+", str(n).lower()) for n in TP.names()]
+    if any(parts and words[:len(parts)] == parts for parts in named):
+        return "name"
+    if len(words[0]) >= 4 and any(words[0] in parts for parts in named):
+        return "word"
+    return None
+
+
+def _tool_profile(s: str) -> Optional[Intent]:
+    """`Intent("tool_profile")` when this sentence asks about a named tool.
+
+    None on every other sentence - which is every sentence this path did not
+    answer before it existed - so the model keeps the turn.
+    """
+    if not _TOOL_SAID.search(s or ""):
+        return None
+    subject = _tool_ask(s)
+    if subject is None:
+        return None
+    TP = _tool_profiles()
+    if TP is None:
+        return None
+    if _tool_named(subject, TP) is None:
+        return None
+    if not TP.answer_about(s):
+        return None
+    return Intent("tool_profile", {"text": s})
+
+
+def _run_tool_profile(f: dict) -> Optional["Result"]:
+    """The dossier's own plain answer, or None so the turn can reach the model."""
+    TP = _tool_profiles()
+    if TP is None:
+        return None
+    said = TP.answer_about(str(f.get("text") or ""))
+    if not said:
+        return None
+    return Result(said, "tool_profile")
 
 
 # --------------------------------------------------------------------------
@@ -19127,6 +19270,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_reminders(n, _client_surface(peer, local, client_surface))
     if n in _PLUGIN_INTENTS:
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
+    if n == "tool_profile":
+        # Any of its own tools, in depth (2026-11-04): the dossier's own words
+        # for this one question. Read-only, no card, no model - and None when
+        # the module or the answer has gone, which hands the turn to the model
+        # exactly as before this path existed.
+        return _run_tool_profile(f)
     if n == "phone_apps_list":
         # Q7 (2026-11-03): the owner's own allow-list, read-only. Both apps get
         # the same sentence - the list lives on the PC and the phone shows it
@@ -20014,6 +20163,11 @@ READ_ONLY_INTENTS = frozenset({
     "goal_capability", "goal_list", "goal_state", "goal_about", "goal_update",
     "android_capability", "android_howto", "android_needs", "android_build_install",
     "plugin_list", "plugin_state", "plugin_about", "plugin_install",
+    # Any of its own tools, in depth (2026-11-04): it reads a fixed dossier in
+    # this repository and calls nothing - the module has no setter, no card and
+    # no network. So a private chat hands it to the model (the branch above),
+    # and it must not take away what "cancel that" would undo.
+    "tool_profile",
     # "which apps on my phone may you open?" (Q7, 2026-11-03) reads the
     # owner's own [phone_apps] table through jarvis_phone_apps.view() - the
     # same read-only view the route serves. It changes nothing, so it must not
