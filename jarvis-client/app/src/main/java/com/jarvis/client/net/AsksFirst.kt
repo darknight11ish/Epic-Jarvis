@@ -136,21 +136,18 @@ object AsksFirst {
         val why: String,
     )
 
-    // --- The switchable in-app tools (2026-10-31, the tiered-tools slice) -----
+    // --- The switchable tools (2026-10-31; unlocked 2026-11-04) --------------
     //
-    // The PC now offers 21 one-tool switches in four groups, plus the vault
-    // organizer's own switch and the list of tools it deliberately does not
-    // offer in-app. (21 when this surface landed; 23 for a while after the
-    // conversation-scoped web-search grant added
-    // `approve_web_search_for_conversation` and `stop_web_search_approval` on
-    // 2026-11-01 - both were removed on 2026-11-02, because the field test
-    // found that switch was never on, so the model was never offered the tool
-    // and no grant card could be raised; the grant ask rides with web search
-    // now.) The PHONE IS READ-ONLY here
-    // (`can_enable` is false for a
-    // request that did not come from the PC): it shows every switch and its
-    // state in the PC's own labels and says, plainly, that the PC is where they
-    // are changed. No new route, no approval, no write.
+    // The PC offers a one-tool switch for EVERY tool the AI model can be
+    // offered - 48 at 2026-11-04, the owner's decision that day (raw Tier C set
+    // and everyday helpers included), up from 21 - in seven groups, plus the
+    // vault organizer's own switch and the three tools that have no switch of
+    // their own because their own switch decides them (the data and maths
+    // sandbox and the two web-search conversation tools). The PHONE IS
+    // READ-ONLY here (`can_enable` is false for a request that did not come
+    // from the PC): it shows every switch and its state in the PC's own labels
+    // and says, plainly, that the PC is where they are changed. No new route,
+    // no approval, no write.
 
     /** The PC's own sentence for a switch page opened away from the PC. */
     const val TOOLS_PC_ONLY =
@@ -160,7 +157,7 @@ object AsksFirst {
     /** The read-only state lines the phone draws for one tool. */
     const val TOOLS_ON = "On: the AI model is offered this."
     const val TOOLS_OFF = "Off: the AI model is not offered this."
-    const val TOOLS_TOML_ONLY_TITLE = "Kept in your settings file on the PC"
+    const val TOOLS_NOT_SWITCHABLE_TITLE = "Not a switch on this page"
 
     /** The vault organizer's own state lines (it is not a tool switch). */
     const val TOOLS_VAULT_ON = "On: it can plan a tidy-up; the PC writes nothing until its one card."
@@ -185,8 +182,8 @@ object AsksFirst {
         val waiting: Boolean,
     )
 
-    /** The tools this slice deliberately does not offer in-app. */
-    data class ToolsNotOffered(val labels: List<Pair<String, String>>, val why: String)
+    /** The tools that have no switch of their own (their own switch decides them). */
+    data class ToolsNotSwitchable(val labels: List<Pair<String, String>>, val why: String)
 
     data class Tools(
         val label: String,
@@ -194,7 +191,7 @@ object AsksFirst {
         val canEnable: Boolean,
         val groups: List<ToolGroup>,
         val vault: VaultSwitch?,
-        val notOffered: ToolsNotOffered?,
+        val notSwitchable: ToolsNotSwitchable?,
     )
 
     /** One tool's state in words - the phone shows it, never changes it. */
@@ -334,14 +331,14 @@ object AsksFirst {
                 waiting = it.flag("waiting") == true,
             )
         }
-        val no = o["not_offered"] as? JsonObject
-        val notOffered = no?.let {
+        val no = o["not_switchable"] as? JsonObject
+        val notSwitchable = no?.let {
             val labelsObj = it["labels"] as? JsonObject
             val labels = labelsObj?.entries?.mapNotNull { e ->
                 val title = (e.value as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull
                 if (title.isNullOrEmpty()) null else e.key to title
             } ?: emptyList()
-            ToolsNotOffered(labels = labels, why = it.text("why") ?: "")
+            ToolsNotSwitchable(labels = labels, why = it.text("why") ?: "")
         }
         return Tools(
             label = label,
@@ -349,7 +346,7 @@ object AsksFirst {
             canEnable = o.flag("can_enable") == true,
             groups = groups.ifEmpty { listOf(ToolGroup("", items)) },
             vault = vault,
-            notOffered = notOffered,
+            notSwitchable = notSwitchable,
         )
     }
 

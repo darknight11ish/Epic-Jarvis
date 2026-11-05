@@ -470,7 +470,29 @@ fn backend_half_blocked(app: &AppHandle) -> Option<String> {
 /// successful Windows install this function never returns: the installer ends
 /// the process, and the next launch starts with no row because the new version
 /// is the one running.
+///
+/// **App lock comes before any of that** (DEF-045): right-clicking the tray is
+/// enough to reach this row, and it patches the LIVE backend, so with App lock
+/// on and the owner away it asks Windows Hello exactly as the tray's window
+/// rows do ([`crate::lock::require_unlocked`]) and starts nothing without a
+/// confirmed answer. A declined check is said out loud, because a tray row that
+/// does nothing reads as broken. With App lock off, or the owner still here,
+/// the gate returns at once and every line below is unchanged.
 pub async fn install_from_tray(app: AppHandle) {
+    if let Err(why) = crate::lock::require_unlocked(&app).await {
+        // Fixed words from the lock's own table, about Windows Hello and the
+        // lock itself - never the owner's business - so it is safe to show
+        // while locked, and it is what says whether to try again or to set
+        // Windows Hello up. Said rather than swallowed: the press must not
+        // look like a row that does nothing.
+        crate::logfile::log(&format!("[jarvis] tray update held by the App lock: {why}"));
+        commands::notify(
+            &app,
+            "Jarvis Desktop update",
+            &format!("The update was not started. {why}."),
+        );
+        return;
+    }
     let Some(version) = available_version(&app) else {
         // A check cleared the availability between the right-click and the
         // click, so the row is already gone from the menu this same cache
@@ -2181,6 +2203,55 @@ mod tests {
         assert!(
             !fallback.contains(both_call),
             "the fallback runs the both-halves update too"
+        );
+    }
+
+    /// DEF-045: the tray's update row patches the live backend, and
+    /// right-clicking the tray is enough to reach it. App lock must be asked
+    /// FIRST, and a refused check must start nothing. Pinned as source,
+    /// because this crate has no headless way to build a Tauri app and press
+    /// the row; the three lock cases themselves are
+    /// `lock::rules::tests::the_tray_update_is_held_only_while_the_lock_has_the_owner_away`.
+    #[test]
+    fn the_tray_update_asks_for_unlock_before_anything_is_started() {
+        let src = include_str!("update.rs");
+        let entrance = &src[src
+            .find(concat!("pub async fn install_from_", "tray"))
+            .expect("update.rs has no install_from_tray")..];
+        let entrance = &entrance[..entrance
+            .find(concat!("async fn update_both_", "from_tray"))
+            .expect("install_from_tray no longer chooses between the two doors")];
+
+        let gate = entrance
+            .find(concat!("crate::lock::require_", "unlocked(&app).await"))
+            .expect("install_from_tray no longer asks the App lock");
+        let announced = entrance
+            .find(concat!("crate::tray::update_", "started(&app, &version)"))
+            .expect("the tray press no longer turns the row into \"Updating…\"");
+        let branch = entrance
+            .find(concat!("match backend_half_", "blocked(&app)"))
+            .expect("the tray press no longer asks whether the backend half can run");
+        assert!(
+            gate < announced && gate < branch,
+            "the App lock is asked after the update has been announced or started"
+        );
+
+        // A refused check returns before either door, and says so: silence
+        // would read as a broken row rather than as the lock refusing.
+        let refused = &entrance[gate..];
+        let stop = refused
+            .find("\n        return;")
+            .expect("a refused App-lock check does not stop the update");
+        let version = refused
+            .find("let Some(version)")
+            .expect("install_from_tray no longer names the version");
+        assert!(
+            stop < version,
+            "a refused App-lock check falls through into the update:\n{refused}"
+        );
+        assert!(
+            entrance.contains("The update was not started."),
+            "a refused App-lock check does not tell the owner nothing was started"
         );
     }
 

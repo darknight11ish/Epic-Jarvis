@@ -29,11 +29,18 @@ WHAT IT PROVES, and why each one is worth a test rather than a comment:
   6. The store: append, tail, list with filters, get, delete, the 500-run cap
      and the byte cap, and that `speed.jsonl` is never touched.
   7. The allowlist: a row carrying a prompt, an answer or the owner's words is
-     DROPPED, not written.
+     DROPPED, not written. And `lane` is a CLOSED vocabulary: a lane that is
+     not one of the three is dropped too, rather than cut to 12 characters by
+     the text-field table it used to sit in as well.
   8. The advice builder: it refuses to compare under three runs, and it says
      so when a comparison spans a version change.
   9. The lane ports are the ones `jarvis_model_lanes.py` really uses.
  10. Its own source: this module cannot reach anything but loopback.
+ 11. THE PROMPT IS FRESH AT THE FRONT. Two repeats at one depth must share no
+     word of prefix and only a few characters - Ollama caches the longest
+     common prefix, so a tag at the TAIL makes every repeat after the first a
+     measurement of the tail. Nothing tested `prefill_prompt` before
+     2026-11-04, and the shipped prompt did put the tag at the tail.
 
 No pytest. Run it directly; the exit code is the verdict.
 """
@@ -314,6 +321,77 @@ def t_both_first_token_numbers():
 
 
 # ==========================================================================
+#   1b. The prompt is fresh for every repeat - DESIGN section 6 rule 4
+# ==========================================================================
+#
+# Ollama serves the LONGEST COMMON PREFIX of a prompt from its cache, so the
+# part that differs between two repeats has to come FIRST. A per-repeat tag at
+# the TAIL leaves the whole word body cacheable: every repeat after the first
+# is served from the cache, `prefill_rate`'s honest `(count - cached)` divides
+# the few uncached tail tokens, and `summarise()`'s median is a measurement of
+# the tail rather than of the depth. That was the shipped shape until
+# 2026-11-04, and these checks are what fails if it comes back. No test
+# referenced `prefill_prompt` before them.
+
+def _shared_word_prefix(first: str, second: str) -> int:
+    """How many leading WORDS two prompts share - what a prefix cache serves."""
+    n = 0
+    for a, b in zip(first.split(), second.split()):
+        if a != b:
+            break
+        n += 1
+    return n
+
+
+def _shared_char_prefix(first: str, second: str) -> int:
+    """The longest common CHARACTER prefix: the tighter reading of the same
+    fact, because a tokeniser splits inside a word, so word-level equality can
+    hide a shared token prefix."""
+    n = 0
+    for a, b in zip(first, second):
+        if a != b:
+            break
+        n += 1
+    return n
+
+
+def t_the_prefill_prompt_is_fresh_at_the_front():
+    # The two tags `_one_repeat` really builds for consecutive repeats of one
+    # run: the run id is shared and only `/r1` vs `/r2` differs.
+    tag_one = "20261104-155512-abc123/r1/run"
+    tag_two = "20261104-155512-abc123/r2/run"
+    depth = 512                     # llama-bench's own default (`-p 512`)
+    first = B.prefill_prompt(depth, tag_one)
+    second = B.prefill_prompt(depth, tag_two)
+    words_shared = _shared_word_prefix(first, second)
+    check("two repeats of the same run at the same depth share no WORD of "
+          "prefix, so a prefix cache cannot serve the depth body",
+          words_shared == 0,
+          (words_shared, first[:60], second[:60]))
+    chars_shared = _shared_char_prefix(first, second)
+    check("... and at most a few characters, so what a cache could serve is "
+          "the tag's own opening rather than the prompt",
+          chars_shared <= 32, chars_shared)
+    check("... which is less than a fortieth of the prompt, so nearly all of "
+          "`depth` is really read rather than served",
+          chars_shared * 40 < len(first), (chars_shared, len(first)))
+    check("the depth is still on the prompt: `depth` words come from the "
+          "fixed, counted list",
+          sum(1 for w in first.split() if w in set(B._WORDS)) == depth,
+          sum(1 for w in first.split() if w in set(B._WORDS)))
+    check("one tag is deterministic - asking twice gives the same words, so "
+          "the difference above is the tag and not chance",
+          first == B.prefill_prompt(depth, tag_one))
+    check("a different depth is a different prompt, so `depth` really sets it",
+          B.prefill_prompt(64, tag_one) != first)
+    check("depth 0 still measures no prefill at all, with one fixed sentence "
+          "that carries no tag",
+          B.prefill_prompt(0, tag_one) == B.prefill_prompt(0, tag_two)
+          and "thermometer" in B.prefill_prompt(0, tag_one),
+          B.prefill_prompt(0, tag_one))
+
+
+# ==========================================================================
 #   2. The aggregates are pure functions
 # ==========================================================================
 
@@ -564,6 +642,38 @@ def t_the_allowlist_drops_what_it_does_not_know():
           B._clean({"gen_tokens_per_s": True}) == {})
     check("an over-long reason is cut, not stored whole",
           len(B._clean({"why": "x" * 900})["why"]) == B.MAX_REASON)
+
+
+def t_a_lane_outside_the_closed_list_is_dropped():
+    """`lane` is a CLOSED vocabulary, and the table says so: "A value outside
+    its list is dropped" (`_ENUM_FIELDS`).
+
+    It was not, until 2026-11-04: `lane` was in `_NAME_FIELDS` AND in
+    `_ENUM_FIELDS`, `_clean()` tested the name table first, and the enum branch
+    was therefore unreachable for this one field - so a value like "everyday
+    lane" was cut to 12 characters and stored as a lane that does not exist,
+    while every other closed field was validated.
+    """
+    check("a lane the module really uses is kept",
+          B._clean({"lane": "coding"}) == {"lane": "coding"},
+          B._clean({"lane": "coding"}))
+    check("a lane outside the three is DROPPED, as the table promises",
+          B._clean({"lane": "gaming"}) == {}, B._clean({"lane": "gaming"}))
+    check("... including one that merely starts like a real lane, which used "
+          "to be cut to 12 characters and stored",
+          B._clean({"lane": "everyday lane"}) == {},
+          B._clean({"lane": "everyday lane"}))
+    check("every lane LANE_KEYS names is the whole accepted vocabulary",
+          all(B._clean({"lane": lane}) == {"lane": lane}
+              for lane in B.LANE_KEYS),
+          [B._clean({"lane": lane}) for lane in B.LANE_KEYS])
+    check("`lane` is governed by the enum table alone",
+          "lane" in B._ENUM_FIELDS and "lane" not in B._NAME_FIELDS,
+          (B._ENUM_FIELDS.get("lane"), B._NAME_FIELDS.get("lane")))
+    check("no field is in both the name table and the enum table, which is "
+          "how `lane`'s enum branch became unreachable",
+          not (set(B._NAME_FIELDS) & set(B._ENUM_FIELDS)),
+          set(B._NAME_FIELDS) & set(B._ENUM_FIELDS))
 
 
 # ==========================================================================

@@ -243,6 +243,13 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // end of the screen moves no other number - the same reason the two above
     // it were added there.
     "edit-hud" to 38,
+    // "Hands-free" (the owner's request, 2026-11-04): the mode that reads each
+    // approval card out loud and takes a spoken "confirm" or "deny", and writes
+    // a text message to a contact. A row added at the END of the screen moves no
+    // other number, which is why it is here rather than beside Voice or Approval
+    // cards where it would read more naturally - the same reason the three rows
+    // above it were added at the end. The jump list carries it last too.
+    "handsfree" to 39,
 )
 
 /**
@@ -1079,6 +1086,16 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+            // "Hands-free" (the owner's request, 2026-11-04): ON reads every
+            // approval card out on this phone, opens a ten-second answer
+            // window, and writes a text message to a contact he names. It is
+            // drawn here, last, because that moves no other row's position (see
+            // SETTINGS_ITEM_INDEX) - and it is always drawn, like "App control"
+            // and "What asks first", because this phone's row has no menu id in
+            // the PC's own catalogue yet.
+            if (drawn("handsfree")) item(key = "handsfree") {
+                HandsfreeSection(canAct = canAct)
             }
             item(key = "tail") { Gap(24) }
         }

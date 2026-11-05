@@ -17,19 +17,28 @@ chat history in a temp folder, with the clock and the time zone fixed:
   * time frames: the choices, typed dates, times of day, what is refused;
   * the list: facts by when they were SAVED (never their "true from"
     date), only facts still in use, chats that overlap the days - and the
-    ones that spill outside them marked; more than 200 is counts only;
-  * the card: tier "ask" only, every fact word for word and every chat's
-    title on it, nothing changed before a person's yes, one at a time, a
+    ones that spill outside them marked; PINNED chats are never on the
+    tickable list and are counted as kept; an estimate measured from the
+    counts, with a human sentence; more than 200 is counts only and the
+    estimate says the batch must be narrowed;
+  * the card: tier "ask" only, every fact word for word, every chat's
+    title, the pinned-kept count and the estimate on it; one at a time; a
     list that changed since it was read refused;
-  * approved: each fact retired with Forget's own "forgotten" mark, each
-    chat gone from the file; denied or timed out: nothing changed;
+  * TWO yesses: approving the card changes NOTHING and holds the items;
+    only POST /confirm with a literal `yes: true` retires the facts (with
+    Forget's own "forgotten" mark) and deletes the chats; denied or timed
+    out: nothing changed; a non-literal yes is a 400 and the hold stays;
+    409 with no hold, an expired hold, a changed list, a card still
+    waiting or an Undo already open;
   * Undo: everything back as it was (a lease's end date too), once; a fact
     erased meanwhile stays erased; a chat continued meanwhile is joined
     back together; after ten minutes (or a restart) there is nothing to
     undo, and the held chats are dropped;
   * by voice or typing: jarvis_quick fills in the list and opens Brain,
-    NEVER removes anything, asks about a date it cannot be sure of, and a
-    spoken "yes" approves nothing;
+    NEVER removes anything, asks about a date it cannot be sure of, answers
+    "how long would that take" from the measured estimate, asks which days
+    for a date-less "clear old chats" instead of denying the capability,
+    and a spoken "yes" approves nothing;
   * the routes, token and origin like every other, and the words both apps
     share (tools/gen_forget_range_cases.py) are current.
 
@@ -227,14 +236,35 @@ class World:
                           spawn=self.spawn)
 
     def approve(self):
-        """Answer the waiting card as the gate says, then run apply with a
-        timer this test holds."""
+        """Answer the waiting card as the gate says (the FIRST yes). Since
+        the owner's decision of 2026-11-04 this changes nothing: it holds the
+        items for the second yes, with a timer this test holds."""
         real = FR._timer
         FR._timer = self.timers
         try:
             self.spawn.run()
         finally:
             FR._timer = real
+
+    def hold_id(self):
+        with FR._LOCK:
+            return (FR._STATE["hold"] or {}).get("token")
+
+    def confirm(self, yes=True, now=NOW, hold_id=None):
+        """The SECOND yes, through the real route's own function. With no hold
+        at all it still sends a well-shaped id, so the answer is the route's
+        own 409 and not a 400 about the body."""
+        hid = hold_id if hold_id is not None else self.hold_id()
+        body = {"id": hid if isinstance(hid, str) else "0" * 32, "yes": yes}
+        return FR.confirm(body, now=now, mem=self.mem, chats=self.log, timer=self.timers)
+
+    def forget(self, body, now=NOW):
+        """The whole two-step flow: card, first yes, second yes."""
+        code, out = self.ask(body, now=now)
+        if code != 202:
+            return code, out
+        self.approve()
+        return self.confirm(now=now)
 
     def row(self, fid):
         return self.mem.get(fid)
@@ -303,6 +333,8 @@ def t_the_list():
     w.chat("conv-spills-0002", "Help me write a poem", at(2026, 8, 31, 22))
     w.chat("conv-spills-0002", "make it rhyme", at(2026, 9, 1, 8))
     w.chat("conv-outside-003", "What is the weather", at(2026, 9, 20))
+    w.chat("conv-pinned-0004", "Pinned planning", at(2026, 9, 5, 9))
+    w.log.set_pin("conv-pinned-0004", True)
     p = w.preview("2026-09-01", "2026-09-15")
     ids = [f["id"] for f in p["facts"]]
     check("facts saved in those days, oldest first; not before, not after, not already forgotten",
@@ -332,15 +364,37 @@ def t_the_list():
     check("the counts, and the summary in words",
           p["counts"] == {"facts": 2, "chats": 2}
           and p["said"] == "2 facts and 2 chats from 1 to 15 September 2026.", p)
+    # The owner's decision of 2026-11-04: a pinned chat is kept.
+    check("a pinned chat is NEVER on the tickable list",
+          "conv-pinned-0004" not in cids, cids)
+    check("... and the list says which pinned chats it is keeping, and how many",
+          p["pinned_kept"] == [{"id": "conv-pinned-0004", "title": "Pinned planning",
+                                "messages": 1}]
+          and p["pinned_kept_count"] == 1, p.get("pinned_kept"))
+    check("... a pinned chat does not use up the 200-item budget either",
+          p["counts"]["chats"] == 2)
+    # The measured "how long would that take" (owner, 2026-11-04).
+    est = p["estimate"]
+    check("the estimate is made of the counts just measured",
+          est["facts"] == 2 and est["chats"] == 2 and est["messages"] == 4
+          and isinstance(est["seconds"], int) and est["seconds"] >= 1, est)
+    check("... and says it in a plain sentence",
+          est["text"] == "About 1 second to forget 2 facts and delete 2 chats (4 messages).",
+          est["text"])
     only = w.preview("2026-09-01", "2026-09-15", ("chats",))
     check("chats only: no facts read", only["facts"] == [] and "facts" not in only["counts"]
           and only["said"] == "2 chats from 1 to 15 September 2026.", only)
+    check("... and the estimate leaves the facts out", only["estimate"]["facts"] == 0
+          and "forget 0 facts" not in only["estimate"]["text"], only["estimate"])
     empty = w.preview("2026-07-01", "2026-07-02")
     check("nothing then: empty, and said so", empty["empty"] is True
           and empty["said"] == "0 facts and 0 chats from 1 to 2 July 2026.", empty["said"])
+    check("... with a one-second floor rather than a pretend zero",
+          empty["estimate"]["seconds"] == 1 and empty["pinned_kept_count"] == 0,
+          empty["estimate"])
     m = w.preview("2026-09-01", "2026-09-15")
     check("nothing was changed by reading the list",
-          w.row(a)["valid_to"] is None and len(w.log.list()["conversations"]) == 3)
+          w.row(a)["valid_to"] is None and len(w.log.list()["conversations"]) == 4)
 
 
 def t_too_many():
@@ -356,6 +410,10 @@ def t_too_many():
           and p["facts"] == [] and p["chats"] == [] and p["counts"]["facts"] == FR.MAX_ITEMS + 1)
     check("... and asks for fewer days", p["said"].endswith("more than 200 at once. Choose fewer days."),
           p["said"])
+    check("... and the estimate is honest about the cap: the batch size and repeating it",
+          p["estimate"]["facts"] == FR.MAX_ITEMS + 1 and p["estimate"]["seconds"] >= 1
+          and "more than 200 at once" in p["estimate"]["text"]
+          and "repeating it covers the rest" in p["estimate"]["text"], p["estimate"])
     out = w.ask({"from": "2026-09-01", "to": "2026-09-15",
                  "facts": list(range(1, FR.MAX_ITEMS + 2))})
     check(f"a request for more than {FR.MAX_ITEMS} is refused", out[0] == 400, out)
@@ -404,13 +462,25 @@ def t_the_card():
               code == 503 and "must be 'ask'" in out["error"] and not w.spawn.jobs, out)
     finally:
         _TIERS["memory_forget_range"] = "ask"
+    # A pinned chat in the same days, created after the list was read, so the
+    # card must say it is being kept (owner, 2026-11-04).
+    w.chat("conv-pinned-00003", "Pinned planning", at(2026, 9, 5, 9))
+    w.log.set_pin("conv-pinned-00003", True)
     body = _body(w, facts=[w.a, w.b])          # the owner unticked the pears
     code, out = w.ask(body)
     check("202: one card is raised", code == 202 and out["waiting"] is True
           and out["counts"] == {"facts": 2, "chats": 2}, out)
     check("... and nothing changed yet", w.row(w.a)["valid_to"] is None
-          and len(w.log.list()["conversations"]) == 2)
-    check("status: waiting", FR.status(NOW)["waiting"] is True)
+          and len(w.log.list()["conversations"]) == 3)
+    check("... the pinned chat is counted as kept, not as deleted",
+          out["pinned_kept_count"] == 1, out)
+    check("... and the SECOND yes is offered with its own route, id and 2 minutes",
+          out["confirm"]["route"] == FR.CONFIRM and out["confirm"]["expires_in"] == 120
+          and isinstance(out["confirm"]["id"], str) and len(out["confirm"]["id"]) == 32
+          and "Say yes again" in out["confirm"]["text"], out.get("confirm"))
+    st = FR.status(NOW)
+    check("status: waiting, with the pinned count, and no second yes yet",
+          st["waiting"] is True and st["pinned_kept_count"] == 1 and st["confirm"] is None, st)
     code2, out2 = w.ask(body)
     check("a second request while the card waits: 409", code2 == 409, out2)
     w.gate.answer = "approved"
@@ -425,13 +495,115 @@ def t_the_card():
     for words in ("The owner moved to Leeds", "The owner's lease ends in December",
                   "Plan the trip to Rome", "Help me write a poem", "1 to 15 September 2026",
                   "saved 3 September", "4 September · 2 messages", "Undo",
-                  "Saying yes out loud does not approve it"):
+                  "Saying yes out loud does not approve it",
+                  "1 pinned chat is kept", "About 1 second to forget 2 facts",
+                  "say yes a second time"):
         check(f"the card says {words!r}", words in prompt, prompt)
     check("the card says what stays (the second chat audit): unticked facts and older backups",
           "Facts you did not tick stay. Copies in older backups stay until they age out." in prompt, prompt)
     check("the unticked fact is not on the card", "pears" not in prompt)
-    check("the card's detail says it stays on this PC", detail["leaves_this_pc"] is False
-          and detail["text"] == prompt and detail["facts"] == 2 and detail["chats"] == 2)
+    check("the card's detail says it stays on this PC, and how many pins are kept",
+          detail["leaves_this_pc"] is False
+          and detail["text"] == prompt and detail["facts"] == 2 and detail["chats"] == 2
+          and detail["pinned_kept"] == 1, detail)
+
+
+def t_two_yeses():
+    """The owner, 2026-11-04: "give me a card with all the details, with a
+    double confirmation of yes if i want to". The card is the FIRST yes and
+    changes nothing; only POST /confirm with a literal `yes: true` acts, and
+    every other answer changes nothing."""
+    w = _world_with_things()
+    w.chat("conv-pinned-00003", "Pinned planning", at(2026, 9, 5, 9))
+    w.log.set_pin("conv-pinned-00003", True)
+    code, out = w.ask(_body(w, facts=[w.a, w.b]))
+    check("CONTROL: 202 and the card", code == 202, out)
+    w.approve()                                  # the FIRST yes
+    st = FR.status(NOW)
+    check("after the card: nothing forgotten, nothing deleted",
+          w.row(w.a)["valid_to"] is None and w.row(w.b)["retired_at"] is None
+          and len(w.log.list()["conversations"]) == 3)
+    check("... status offers the second yes and says the card is approved",
+          st["waiting"] is False and st["confirm"] is not None
+          and st["confirm"]["expires_in"] == 120 and st["last"]["outcome"] == "confirm", st)
+    held = st["confirm"]["id"]
+    code, out = w.confirm(yes="yes", hold_id=held)
+    check("a yes that is not the literal true: 400, and the hold STAYS",
+          code == 400 and "literal yes" in out["error"]
+          and w.hold_id() == held and w.row(w.a)["valid_to"] is None, out)
+    code, out = w.confirm(yes=1, hold_id=held)
+    check("... a 1 is not true either", code == 400 and w.hold_id() == held, out)
+    code, out = w.confirm(hold_id="f" * 32)
+    check("the wrong id: 409, nothing changed", code == 409 and w.hold_id() == held
+          and w.row(w.a)["valid_to"] is None, out)
+    code, out = w.confirm()
+    check("the second yes: 200 and only now do the facts and chats go",
+          code == 200 and out["ok"] is True and out["facts_forgotten"] == 2
+          and out["chats_deleted"] == 2 and out["pinned_kept"] == 1, out)
+    check("... the fact is retired, not erased",
+          w.row(w.a)["retired_at"] is not None and w.row(w.a)["erased_at"] is None
+          and w.row(w.a)["text"] == "The owner moved to Leeds")
+    check("... the pinned chat is still there", w.log.get("conv-pinned-00003") is not None)
+    check("... and the two ticked chats are gone", w.log.get("conv-trip-00001") is None
+          and w.log.get("conv-poem-00002") is None)
+    check("... with the Undo's own 10 minutes in the answer",
+          out["undo"]["seconds"] == 600 and out["undo"]["until"] == "2026-09-28T15:40:00", out)
+    check("... and the status has no second yes left to give",
+          FR.status(NOW)["confirm"] is None and FR.status(NOW)["undo"] is not None)
+    code, out = w.confirm()
+    check("a second confirm after it: 409, nothing changed twice", code == 409, out)
+    check("Undo after the second yes still puts everything back",
+          FR.undo(now=NOW + 60, mem=w.mem, chats=w.log)[0] == 200
+          and w.log.get("conv-trip-00001") is not None
+          and w.row(w.a)["valid_to"] is None)
+
+
+def t_the_second_yes_409s():
+    """Every refusal the frozen contract names, each with nothing changed."""
+    w = _world_with_things()
+    code, out = w.confirm()                       # no hold at all
+    check("no hold: 409", code == 409 and "no second yes waiting" in out["error"], out)
+    code, out = w.ask(_body(w, facts=[w.a]))
+    check("CONTROL: the card is waiting", code == 202, out)
+    code, out = w.confirm()                       # a card is still waiting
+    check("a card still waiting: 409, and the card is still waiting",
+          code == 409 and "still waiting" in out["error"]
+          and FR.status(NOW)["waiting"] is True, out)
+    w.approve()
+    held = w.hold_id()
+    code, out = w.confirm(now=NOW + FR.HOLD_SECONDS + 1)   # the hold expired
+    check("the hold expired: 409, nothing forgotten",
+          code == 409 and "2 minutes are up" in out["error"] and w.row(w.a)["valid_to"] is None,
+          out)
+    check("... and expiry is not an error state: the status just stops offering it",
+          FR.status(now=NOW + FR.HOLD_SECONDS + 1)["confirm"] is None
+          and FR.status(now=NOW + FR.HOLD_SECONDS + 1)["last"]["outcome"] == "confirm_expired")
+    w = _world_with_things()
+    w.ask(_body(w, facts=[w.a]))
+    w.approve()
+    w.mem.retire(w.a)                             # the list changed while held
+    code, out = w.confirm()
+    check("the items changed: 409 with changed: true, nothing forgotten",
+          code == 409 and out.get("changed") is True, out)
+    # A hold and an open Undo are never both real (a card is refused while an
+    # Undo is open, and the second yes clears the hold), so the guard is shown
+    # by putting the two states there by hand: it must still refuse.
+    w = _world_with_things()
+    w.ask(_body(w, facts=[w.a]))
+    w.approve()
+    with FR._LOCK:
+        FR._STATE["undo"] = {"token": "made-up", "until": NOW + 300,
+                             "mono_until": time.monotonic() + 300,
+                             "facts": [], "chats": {}, "frame": "1 to 15 September 2026"}
+    code, out = w.confirm()
+    check("an Undo already open: 409, nothing else forgotten",
+          code == 409 and "undo" in out["error"].lower()
+          and w.row(w.a)["valid_to"] is None, out)
+    with FR._LOCK:
+        FR._STATE["undo"] = None
+    w.confirm()
+    check("... and once it is out of the way the held second yes still works",
+          w.row(w.a)["retired_at"] is not None)
 
 
 def t_support_records_ask_first():
@@ -508,7 +680,10 @@ def t_approved_then_undo():
     before_b = w.row(w.b)["valid_to"]
     files_before = sorted(p.name for p in w.dir.iterdir())
     w.ask(_body(w, facts=[w.a, w.b]))
-    w.approve()
+    w.approve()                                  # FIRST yes: nothing changes yet
+    check("the first yes alone left every fact and chat alone",
+          w.row(w.a)["valid_to"] is None and w.log.get("conv-trip-00001") is not None)
+    check("... and the second yes is what acts", w.confirm()[0] == 200)
     a = w.row(w.a)
     meta = json.loads(a["meta"] or "{}")
     check("approved: the fact is forgotten, as Forget does - retired, not erased",
@@ -538,7 +713,8 @@ def t_approved_then_undo():
           and st["undo"]["chats"] == 2 and st["undo"]["seconds_left"] == 600
           and st["undo"]["said"] == "Forgot 2 facts and deleted 2 chats from 1 to 15 September 2026.",
           st["undo"])
-    check("a timer was set for ten minutes", w.timers.set and w.timers.set[0][0] == 600)
+    check("timers: 2 minutes for the second yes, 10 minutes for the Undo",
+          [s for s, _ in w.timers.set] == [FR.HOLD_SECONDS, 600])
     code, out = w.ask(_body(w, facts=[w.keep], chats=None), now=NOW + 60)
     check("while an Undo is open, another time frame waits", code == 409
           and "undo" in out["error"].lower(), out)
@@ -581,6 +757,7 @@ def t_the_undo_expiring_scrubs_the_receipts_too():
     rid = R2.record("note_write", "saved: " + words, before={"text": words})
     w.ask(_body(w, facts=[w.a, w.b]))
     w.approve()
+    w.confirm()
     check("the chat is gone from the history", w.log.get("conv-trip-00001") is None)
     check("... while the Undo is open its words are STILL in the receipt "
           "(a scrub could not be undone)",
@@ -599,6 +776,7 @@ def t_the_undo_window_cannot_be_stretched_by_setting_the_clock_back():
     w = _world_with_things()
     w.ask(_body(w, facts=[w.a, w.b]))
     w.approve()
+    w.confirm()
     check("CONTROL: the Undo is open", FR.status(NOW)["undo"] is not None)
     real = time.monotonic
     time.monotonic = lambda: real() + 700            # ten real minutes have passed ...
@@ -617,6 +795,7 @@ def t_undo_edge_cases():
     w = _world_with_things()
     w.ask(_body(w, facts=[w.a, w.b]))
     w.approve()
+    w.confirm()
     w.mem.erase(w.a)
     w.chat("conv-trip-00001", "and a hotel near the station", NOW + 30)
     code, out = FR.undo(now=NOW + 60, mem=w.mem, chats=w.log)
@@ -633,6 +812,7 @@ def t_undo_edge_cases():
     w = _world_with_things()
     w.ask(_body(w))
     w.approve()
+    w.confirm()
     import copy
     w.log.put_back(copy.deepcopy(FR._STATE["undo"]["chats"]))   # e.g. a backup restored meanwhile
     w.chat("conv-trip-00001", "and a table for two", NOW + 40)
@@ -644,6 +824,7 @@ def t_undo_edge_cases():
     w = _world_with_things()
     w.ask(_body(w))
     w.approve()
+    w.confirm()
     st = FR.status(NOW + 601)
     check("after ten minutes: no Undo, and the status says why", st["undo"] is None
           and st["last"]["outcome"] == "kept", st)
@@ -655,7 +836,8 @@ def t_undo_edge_cases():
     w = _world_with_things()
     w.ask(_body(w))
     w.approve()
-    seconds, fn = w.timers.set[0]
+    w.confirm()
+    seconds, fn = w.timers.set[-1]
     fn()
     check("the ten-minute timer drops what was held", FR.status(NOW)["undo"] is None
           and FR._STATE["undo"] is None)
@@ -663,6 +845,7 @@ def t_undo_edge_cases():
     w = _world_with_things()
     w.ask(_body(w))
     w.approve()
+    w.confirm()
     FR._reset_for_tests()               # what a restart leaves: nothing in memory
     code, out = FR.undo(now=NOW + 30, mem=w.mem, chats=w.log)
     check("after a restart there is nothing to undo - it was never on disk", code == 409
@@ -701,9 +884,27 @@ def t_phrases():
         "delete my chats from 28 December to 3 January": ("2025-12-28", "2026-01-03", ("chats",)),
         "forget what I said on the twenty first of September": ("2026-09-21", "2026-09-21",
                                                                 ("facts", "chats")),
+        # The owner's own words, 2026-11-04: "clear old chats", "clear the
+        # chats from <date>", "delete the conversations from last week".
+        "clear the chats from 3 September": ("2026-09-03", "2026-09-03", ("chats",)),
+        "clear conversations from 3 September": ("2026-09-03", "2026-09-03", ("chats",)),
+        "delete the conversations from last week": ("2026-09-21", "2026-09-27", ("chats",)),
+        "forget chats from yesterday": ("2026-09-27", "2026-09-27", ("chats",)),
+        "clear old chats and everything you learned": None,       # date-less: asks
+        "clear old chats": None,
+        "delete old conversations": None,
     }
-    for s, (frm, to, kinds) in cases.items():
+    for s, want in cases.items():
         got = FR.parse_phrase(Q.normalise(s), NOW)
+        if want is None:
+            # Date-less: it must ASK which days, naming the capability and the
+            # pinned chats - never deny it (owner, 2026-11-04).
+            check(f"understood, and asks which days: {s!r}",
+                  bool(got) and got.get("ask") == FR.WHICH_DAYS
+                  and "which days" in got["ask"] and "Pinned chats are always kept" in got["ask"],
+                  got)
+            continue
+        frm, to, kinds = want
         ok = bool(got) and "frame" in got and (got["frame"].frm, got["frame"].to, got["kinds"]) \
             == (frm, to, kinds)
         check(f"understood: {s!r}", ok, got and ("frame" in got and (got["frame"].frm, got["frame"].to,
@@ -718,8 +919,17 @@ def t_phrases():
         check(f"asked, not guessed: {s!r}", bool(got) and bit in got.get("ask", ""), got)
     for s in ("delete the reminder for tomorrow", "forget it", "delete everything on my todo list",
               "yes", "approve", "approve it", "yes forget them", "forget about the dentist",
-              "delete my messages from John", "clear my history"):
+              "delete my messages from John", "delete everything",
+              "how long does it take to boil an egg"):
         check(f"not ours: {s!r}", FR.parse_phrase(Q.normalise(s), NOW) is None)
+    # "how long would that take" is answered, not owned by the model: without a
+    # range yet it asks which days (owner, 2026-11-04: never "I don't track that").
+    for s in ("how long would that take", "how long will that take?",
+              "how long would it take to clear old chats",
+              "clear old chats and how long would that take"):
+        got = FR.parse_phrase(Q.normalise(s), NOW)
+        check(f"a 'how long' question is ours, not the model's: {s!r}",
+              bool(got) and (got.get("estimate") is True or "ask" in got), got)
 
 
 def t_a_leap_day_range_asks_instead_of_crashing():
@@ -760,6 +970,16 @@ def t_quick_never_removes():
               and (asked["from"], asked["to"], asked["kinds"]) == ("2026-09-01", "2026-09-15", ["facts"]),
               asked)
         check("no card was raised by the sentence", FR.status(NOW)["waiting"] is False)
+        # "how long would that take" (owner, 2026-11-04): answered from the
+        # measured estimate, never "I don't track that".
+        res = Q.answer("how long would that take", sched=_Sched(), now=NOW)
+        check("'how long would that take' answers from the estimate, with no model",
+              res is not None and res.intent == "forget_range"
+              and res.reply.startswith("For 1 to 15 September 2026: About ")
+              and "1 second" in res.reply
+              and "say yes a second time" in res.reply, res and res.reply)
+        check("... and opens that list in the app, since that is what it is about",
+              res.open_brain == "forget-range", res and res.open_brain)
         w.ask(_body(w))
         for said in ("yes", "approve", "approve it", "yes, forget them", "OK go ahead"):
             got = Q.answer(said, sched=_Sched(), now=NOW)
@@ -771,6 +991,17 @@ def t_quick_never_removes():
         check("a date it cannot be sure of: a question, and nothing opened", res is not None
               and "Today is Monday" in res.reply and res.open_brain is None
               and FR.status(NOW)["asked"] is None, res and res.reply)
+        # The owner's own words, 2026-11-04: "clear old chats" must ask for the
+        # range, and a "how long" with no range must ask too - never deny.
+        res = Q.answer("clear old chats", sched=_Sched(), now=NOW)
+        check("'clear old chats' asks which days, naming what it can do and the pinned chats",
+              res is not None and res.intent == "forget_range"
+              and res.reply == FR.WHICH_DAYS and res.open_brain is None, res and res.reply)
+        res = Q.answer("how long would that take", sched=_Sched(), now=NOW)
+        check("'how long would that take' with no range asks which days, never "
+              "'I don't track that'",
+              res is not None and res.intent == "forget_range" and res.reply == FR.WHICH_DAYS
+              and res.open_brain is None, res and res.reply)
         res = Q.answer("forget what you learned in July", sched=_Sched(), now=NOW)
         check("nothing from then: said, nothing opened",
               res.reply == "There is nothing to forget: Jarvis learned nothing from 1 to 31 July 2026."
@@ -778,6 +1009,24 @@ def t_quick_never_removes():
         res = Q.answer("erase what I said from 1 to 15 September", sched=_Sched(), now=NOW)
         check("'erase' is told plainly this forgets, and Erase the words is per fact",
               res.reply.startswith("I can forget them, but not erase their words"), res.reply)
+        # The owner's own clear-chats words (2026-11-04) bind to this intent.
+        res = Q.answer("delete the conversations from last week", sched=_Sched(), now=NOW)
+        check("'delete the conversations from last week' is this intent, without the model",
+              res is not None and res.intent == "forget_range"
+              and "There is nothing to forget: there are no chats from 21 to 27 September 2026."
+              in res.reply, res and res.reply)
+        res = Q.answer("clear the chats from 4 September", sched=_Sched(), now=NOW)
+        check("'clear the chats from 4 September' lists that day's chat",
+              res is not None and res.intent == "forget_range"
+              and "1 chat from 4 September 2026" in res.reply, res and res.reply)
+        # The only chat from that day is pinned: say it is kept, never "there
+        # are no chats" (which would be a lie).
+        w.log.set_pin("conv-trip-00001", True)
+        res = Q.answer("clear the chats from 4 September", sched=_Sched(), now=NOW)
+        check("a pinned-only day says the chat is kept, not that there are none",
+              res is not None and res.intent == "forget_range"
+              and "1 chat from then is pinned" in res.reply
+              and "there are no chats" not in res.reply, res and res.reply)
     finally:
         FR._memory = real_mem
 
@@ -839,6 +1088,16 @@ def t_routes():
         h = H("/api/memory/forget_range/undo", body=b"{}")
         H.do_POST(h)
         check("POST undo with nothing to undo: 409", h.sent[0] == 409, h.sent)
+        h = H("/api/memory/forget_range/confirm")
+        H.do_GET(h)
+        check("GET confirm: 405, use POST", h.sent[0] == 405, h.sent)
+        h = H("/api/memory/forget_range/confirm", body=b"{}")
+        H.do_POST(h)
+        check("POST confirm with no id: 400, and no hold to answer",
+              h.sent[0] == 400 and FR.status(NOW)["confirm"] is None, h.sent)
+        h = H("/api/memory/forget_range/confirm", body=b"{}", token=False)
+        H.do_POST(h)
+        check("confirm needs the token like every other POST", h.sent[0] == 401)
         h = H("/api/memory/forget", body=b"{}")
         H.do_POST(h)
         check("any other route goes to the original handler", h.sent == ("original POST",))
@@ -850,6 +1109,18 @@ def t_routes():
         H.do_POST(h)
         check("POST forget: 202 and one card waiting", h.sent[0] == 202 and len(w.spawn.jobs) == 1,
               h.sent)
+        FR._timer, real_t = w.timers, FR._timer
+        try:
+            w.spawn.run()
+        finally:
+            FR._timer = real_t
+        held = (FR.status(NOW)["confirm"] or {}).get("id") or "x"
+        h = H("/api/memory/forget_range/confirm",
+              body=json.dumps({"id": held, "yes": True}).encode())
+        H.do_POST(h)
+        check("POST confirm through the route: 200, and only now the fact is retired",
+              h.sent[0] == 200 and h.sent[1]["facts_forgotten"] == 1
+              and w.row(w.a)["retired_at"] is not None, h.sent)
     finally:
         FR._memory, FR._spawn, FR._gate = real_mem, real_spawn, real_gate
         w.spawn.jobs.clear()

@@ -260,8 +260,16 @@ def t_every_real_settings_card_is_listed():
     # display preference saved on this phone only - no route, no approval card,
     # nothing sent to the PC - so the desktop registry has no card for it and
     # the row is always drawn.
+    # "handsfree" (2026-11-04) is named here for a different reason from the
+    # rest: the row is NOT phone-only. It is the phone half of the owner's
+    # hands-free mode, and the PC half (its `<section id="handsfree">` card and
+    # the `Section("handsfree", ...)` row in jarvis_settings_registry.py) is
+    # landing as its own change - so this branch alone has no Section for the
+    # row to name, and the row is still drawn (`drawn("handsfree")`). Remove
+    # this entry once the PC half is in: the row then IS a Section and the
+    # check finds it there.
     phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify",
-                "app-control", "model-lane", "edit-hud"}
+                "app-control", "model-lane", "edit-hud", "handsfree"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",

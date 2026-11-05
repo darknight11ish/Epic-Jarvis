@@ -69,6 +69,17 @@ real PC:
      provable AFTER that deploy: no-expiry's regions are rewritten by this later
      patch, so its entry's `or_probes` is the proof that survives, and the two
      gate-digest probes were moved onto lines the later patch leaves alone.
+  13. the 2026-11-04 bench.patch false-green (DEF-035's shape for a BRAND-NEW patch):
+     A patch that did not exist when the defect was written is reported ALREADY
+     PRESENT on a HUD with none of it, because its added block carries ten lines
+     every other route has (`if not _origin_ok(self):`, both the 403 and the 401
+     sentences, the JSON-body parse lines) and one present line is enough for the
+     fallback. Measured on a COPY of the owner's live folder: `/api/bench` occurs
+     ZERO times there, `distinctive_added_lines` yields 62 candidates and ten are
+     present. The entry's four dispatch probes make that file ABSENT, and its two
+     region pairs carry the block - proved byte-for-byte against `git apply` on the
+     published base, inserted exactly once (a half-applied pair is completed, not
+     duplicated) and idempotent on the next plan.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
@@ -2878,19 +2889,28 @@ def t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks():
               refusals2 == [] and staged2 == {}
               and [d.status for d in again] == ["already"], (again, refusals2))
 
-        # update-in-chat: ONE pure insertion. Its pre-image is the gate's
-        # `_NO_RULE_FROM_DENIAL` set as `uncensored-optins.patch` left it, which is
-        # newer than the published base, so the fixture is built from the patch's own
-        # pre-image (exactly what a live gate that has that patch holds).
+        # update-in-chat: ONE pure insertion. Since 2026-11-04 it is carried as a
+        # region pair (see DELTA_TABLE) because the patch's own pre-image ends at
+        # `})`, which the DEPLOYED `desktop_update` line now sits in front of - the
+        # hunk rule refused this PC's live gate while the old probe line made every
+        # deploy call it already present. So the fixture is the LIVE shape, built
+        # from the entry's own OLD block, and the proof that the pair is exact is
+        # still git's own applier: it lands the patch on the PRE-image, and the pair
+        # must produce exactly those bytes from the live shape.
         hunk = R.patch_hunks(patch_text("update-in-chat.patch").decode("utf-8"),
                              "jarvis_gate.py")[0]
         fake_gate = "_NO_RULE_FROM_DENIAL = frozenset({\n" + "\n".join(hunk["old"]) + "\n"
-        live2 = make_base_live(root, "update-in-chat", {"jarvis_gate.py": fake_gate})
+        old_block = R._delta_lines(R.UPDATE_IN_CHAT_OLD_FILE)
+        new_block = R._delta_lines(R.UPDATE_IN_CHAT_NEW_FILE)
+        head = "\n".join(hunk["old"][:2])          # the two rows before `})`
+        live_gate = ("_NO_RULE_FROM_DENIAL = frozenset({\n" + head + "\n"
+                     + "\n".join(old_block) + "\n")
+        live2 = make_base_live(root, "update-in-chat", {"jarvis_gate.py": live_gate})
         _d2, staged2, refusals2 = R.plan_deltas(
             live2, ["update-in-chat.patch"], show=show_patches("update-in-chat.patch"),
             repo=REPO, state_patches=[])
         gate_text = staged2.get("jarvis_gate.py", "")
-        check("update-in-chat plans cleanly on its own pre-image",
+        check("update-in-chat plans cleanly on the LIVE shape this PC holds",
               refusals2 == [] and list(staged2) == ["jarvis_gate.py"],
               (refusals2, sorted(staged2)))
         check("... the staged gate is what git apply makes of the same patch",
@@ -2900,7 +2920,13 @@ def t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks():
               '"desktop_update",  # jarvis_quick.py acts only on tier "ask"' in gate_text
               and gate_text.index('"desktop_update"')
               > gate_text.index('"fiction_roleplay_enable"'))
+        check("... and so does `storage_cleanup`, the 2026-11-03 addition",
+              '"storage_cleanup",  # jarvis_storage_health.py' in gate_text
+              and gate_text.index('"storage_cleanup"')
+              > gate_text.index('"desktop_update"'))
         check("... it still compiles", R.rehearse(staged2) == [], R.rehearse(staged2))
+        check("... the live gate was never touched by the plan",
+              (live2 / "jarvis_gate.py").read_text(encoding="utf-8") == live_gate)
         (live2 / "jarvis_gate.py").write_bytes(gate_text.encode("utf-8"))
         again2, staged3, refusals3 = R.plan_deltas(
             live2, ["update-in-chat.patch"], show=show_patches("update-in-chat.patch"),
@@ -2908,8 +2934,16 @@ def t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks():
         check("a second plan sees update-in-chat ALREADY_PRESENT",
               refusals3 == [] and staged3 == {}
               and [d.status for d in again2] == ["already"], (again2, refusals3))
-        # A gate whose `_NO_RULE_FROM_DENIAL` block is not the patch's pre-image is
-        # refused rather than guessed (this PC's live gate could be older than it).
+        # The old probe was the OLD line, which is why the 2026-11-03 addition was
+        # skipped for a day: a gate holding only `desktop_update` must not count as
+        # present. That is the bite for this entry, and it is asserted on the gate
+        # this PC really had.
+        check("... a gate with `desktop_update` but NOT `storage_cleanup` is not "
+              "called present",
+              '"storage_cleanup",' not in live_gate
+              and [d.status for d in _d2] == ["insert"], _d2)
+        # A gate whose `_NO_RULE_FROM_DENIAL` block is neither shape is refused
+        # rather than guessed (an older live gate, or the published base).
         live3 = make_base_live(root, "update-in-chat-old", {"jarvis_gate.py": base_gate})
         _d4, staged4, refusals4 = R.plan_deltas(
             live3, ["update-in-chat.patch"], show=show_patches("update-in-chat.patch"),
@@ -2917,6 +2951,111 @@ def t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks():
         check("a gate that does not hold the pre-image is REFUSED, not inserted twice",
               bool(refusals4) and "update-in-chat.patch" in refusals4[0]
               and staged4 == {}, refusals4)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+#: The three patches `e7a461ba9` (2026-11-03) added lines to, and the one block
+#: file pair that carries the addition each. Measured on a copy of the owner's
+#: live folder 2026-11-04: `ollama-direct.patch` 38/52 -> 52/52,
+#: `cloud-say-yes.patch` 21/36 -> 36/36, `update-in-chat.patch` 1/2 -> 2/2, with
+#: the four accepted rows unchanged.
+THREE_2026_11_03 = (
+    ("ollama-direct.patch", "jarvis_hud.py",
+     R.OLLAMA_DIRECT_CAP_OLD_FILE, R.OLLAMA_DIRECT_CAP_NEW_FILE,
+     'body["max_tokens"] = _api.cloud_request_cap('),
+    ("cloud-say-yes.patch", "jarvis_hud.py",
+     R.CLOUD_SAY_YES_LANES_OLD_FILE, R.CLOUD_SAY_YES_LANES_NEW_FILE,
+     '# 2026-11-03 (the owner\'s decision, after the field test): an'),
+    ("update-in-chat.patch", "jarvis_gate.py",
+     R.UPDATE_IN_CHAT_OLD_FILE, R.UPDATE_IN_CHAT_NEW_FILE,
+     '"storage_cleanup",  # jarvis_storage_health.py'),
+)
+
+
+def t_the_three_2026_11_03_additions_are_carried_byte_for_byte():
+    """The three rows the deploy silently skipped are now staged, and stage once.
+
+    The defect, measured 2026-11-04: after `e7a461ba9` added lines to these three
+    patches, a dry run of the deploy reported `already present: 221, to insert:
+    none` and planned nothing. Two of them had no DELTA_TABLE entry, so the
+    fallback rule saw their OLDER lines in the live file and called them present
+    (DEF-018's silent skip); the third's probes were lines the old version carried
+    too. So the bite here is the fallback itself: with an EMPTY table each patch is
+    reported "already" and nothing is staged, and with the real entry it inserts.
+    """
+    root = tmpdir("reconcile-2026-11-03-")
+    try:
+        for name, target, old_file, new_file, new_line in THREE_2026_11_03:
+            raw = patch_text(name).decode("utf-8")
+            files = R.parse_patch_files(raw)
+            added = files[target]["added"]
+            pre_image = R.patch_pre_image(raw, target)
+            entry = (R.DELTA_TABLE.get(name) or {}).get(target) or {}
+            check(f"{name}: the entry carries ONE region pair", bool(
+                entry.get("regions")) and len(entry["regions"]) == 1
+                and not entry.get("hunks"), entry)
+            region = (entry.get("regions") or [{}])[0]
+            check(f"... and its block files are the pair under test",
+                  region.get("file") == new_file
+                  and region.get("replace_file") == old_file, region)
+            old_block = R._delta_lines(old_file)
+            new_block = R._delta_lines(new_file)
+            post = "\n".join(line for hunk in R.patch_hunks(raw, target)
+                             for line in hunk["new"])
+            check(f"... the NEW block is a slice of the patch's own post-image",
+                  "\n".join(new_block) in post)
+            check(f"... the NEW block's new line is a line the patch ADDS",
+                  any(new_line in line for line in new_block)
+                  and any(new_line in line for line in added), new_line)
+            check(f"... the OLD block does NOT already hold it",
+                  not any(new_line in line for line in old_block), old_block[:2])
+            # The live shape this PC really holds for these three: the OLD block plus
+            # the patch's other, older lines - but never a line the NEW block brings,
+            # or the fixture would already be the fixed file and the bite below would
+            # prove nothing.
+            new_text = "\n".join(new_block)
+            pool = [line for line in R.distinctive_added_lines(added, pre_image)
+                    if line not in new_text]
+            fixture = ("# a live file stand-in\n" + "\n".join(pool[:2]) + "\n"
+                       + "\n".join(old_block) + "\n")
+            live = make_base_live(root, name.split(".")[0], {target: fixture})
+            # (1) THE BITE: with no entry, the fallback calls the old text present.
+            skipped, staged0, refusals0 = R.plan_deltas(
+                live, [name], show=show_patches(name), repo=REPO,
+                state_patches=[], table={})
+            check(f"{name}: without the entry the old text is SILENTLY 'already'",
+                  refusals0 == [] and staged0 == {}
+                  and [(d.patch, d.status) for d in skipped] == [(name, "already")],
+                  (refusals0, sorted(staged0), skipped))
+            # (2) With the entry it is staged, as one insert of one region.
+            deltas, staged, refusals = R.plan_deltas(
+                live, [name], show=show_patches(name), repo=REPO, state_patches=[])
+            text = staged.get(target, "")
+            check(f"{name}: the entry stages the addition", refusals == []
+                  and [(d.patch, d.status, d.anchor) for d in deltas]
+                  == [(name, "insert", "1 region(s)")], (refusals, deltas))
+            check(f"... the old block is gone and the new one is there",
+                  "\n".join(old_block) not in text
+                  and "\n".join(new_block) in text)
+            # (3) A second plan stages nothing: the new lines are the probes.
+            live_after = make_base_live(root, name.split(".")[0] + "-after",
+                                        {target: text})
+            again, staged2, refusals2 = R.plan_deltas(
+                live_after, [name], show=show_patches(name), repo=REPO,
+                state_patches=[])
+            check(f"{name}: a second deploy stages nothing",
+                  refusals2 == [] and staged2 == {}
+                  and [d.status for d in again] == ["already"], (again, refusals2))
+            # (4) Neither shape present -> refused, never inserted twice.
+            live_odd = make_base_live(root, name.split(".")[0] + "-odd",
+                                      {target: "# a live file stand-in\n"})
+            _d, staged3, refusals3 = R.plan_deltas(
+                live_odd, [name], show=show_patches(name), repo=REPO,
+                state_patches=[])
+            check(f"{name}: a file with neither shape is REFUSED",
+                  bool(refusals3) and name in refusals3[0] and staged3 == {},
+                  refusals3)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -3069,13 +3208,17 @@ def t_no_test_touches_a_live_folder():
     try:
         tmp = Path(tempfile.gettempdir()).resolve()
         base_hud = BASE_HUD.read_text(encoding="utf-8")
-        # The gate holds the published base's own text PLUS update-in-chat's pre-image
-        # (that block is newer than the base, so it is appended here rather than read).
+        # The gate holds the published base's own text PLUS update-in-chat's LIVE
+        # shape (that block is newer than the base, and since 2026-11-04 the entry
+        # carries the region the deployed `desktop_update` line sits in front of, so
+        # it is built from the entry's own OLD block rather than from the patch's
+        # pre-image).
         hunk = R.patch_hunks(patch_text("update-in-chat.patch").decode("utf-8"),
                              "jarvis_gate.py")[0]
         gate = BASE_GATE.read_text(encoding="utf-8")
         gate += ("\n\n_NO_RULE_FROM_DENIAL_COPY = frozenset({\n"
-                 + "\n".join(hunk["old"]) + "\n)\n")
+                 + "\n".join(hunk["old"][:2]) + "\n"
+                 + "\n".join(R._delta_lines(R.UPDATE_IN_CHAT_OLD_FILE)) + "\n)\n")
         live = make_base_live(root, "no-touch",
                               {"jarvis_hud.py": base_hud, "jarvis_gate.py": gate})
         check("the live fixture is under the system temp folder",
@@ -3718,6 +3861,119 @@ def t_the_jobs_routes_delta_carries_its_four_hunks_byte_for_byte():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   The 2026-11-04 bench.patch false-green (DEF-035's shape, BRAND-NEW patch)
+# --------------------------------------------------------------------------
+
+def t_the_bench_patch_is_carried_not_false_greened():
+    """A patch that did not exist when DEF-035 was written false-greens the same way.
+
+    Measured read-only on a COPY of the owner's live folder (2026-11-04): its
+    `jarvis_hud.py` holds ZERO occurrences of `/api/bench`, and yet the fallback rule
+    called `bench.patch` present. `distinctive_added_lines` yields 62 candidates for
+    it and TEN of them are in that file - `if not _origin_ok(self):`, the 403 and the
+    401 sentences, `from urllib.parse import parse_qs`, the JSON-body parse and its
+    two errors, the dict check - because every route carries the same boilerplate, and
+    ONE present line is enough. The published base HUD is the same shape (the stack up
+    to 2026-10-14, no bench route), so it is the fixture: the bug is reproduced on it,
+    then the entry carries the block exactly once and a second plan stages nothing.
+    """
+    root = tmpdir()
+    try:
+        base = BASE_HUD.read_text(encoding="utf-8")
+        raw = patch_text("bench.patch").decode("utf-8")
+        added = R.parse_patch_files(raw)["jarvis_hud.py"]["added"]
+        pre = R.patch_pre_image(raw, "jarvis_hud.py")
+        hunks = R.patch_hunks(raw, "jarvis_hud.py")
+        check("bench.patch has TWO HUD hunks and both pre-images appear exactly once",
+              len(hunks) == 2
+              and all(base.count("\n".join(h["old"])) == 1 for h in hunks),
+              [(len(h["old"]), base.count("\n".join(h["old"]))) for h in hunks])
+        present = [line for line in R.distinctive_added_lines(added, pre)
+                   if line in base]
+        check("the fixture has NONE of the patch's routes", "/api/bench" not in base)
+        check("... but TEN of its 62 distinctive added lines are already in it",
+              len(present) == 10, present)
+        for line in ("if not _origin_ok(self):",
+                     'return self._send(403, {"error": "cross-origin request refused"})',
+                     'return self._send(401, {"error": "bad or missing X-Jarvis-Token"})'):
+            check(f"... the shared boilerplate {line!r} is one of them",
+                  line in present, present)
+        state, why = R.patch_presence("bench.patch", "jarvis_hud.py", added, base,
+                                      table={}, pre_image=pre)
+        check("the loose fallback rule calls that HUD ALREADY_PRESENT (the bug)",
+              state == R.PRESENT, (state, why))
+        entry = (R.DELTA_TABLE.get("bench.patch") or {}).get("jarvis_hud.py") or {}
+        regions = tuple(entry.get("regions") or ())
+        check("the bench entry carries two region pairs and four post-image probes",
+              len(regions) == 2 and len(entry.get("probes") or ()) == 4
+              and not entry.get("hunks"), entry)
+        check("... every probe is a line the patch ADDS, never one its pre-image shows",
+              all(str(p) in "\n".join(added) and str(p) not in pre
+                  for p in entry.get("probes") or ()), entry.get("probes"))
+        for region, hunk in zip(regions, hunks):
+            old_lines = R._delta_lines(str(region.get("replace_file") or ""))
+            new_lines = R._delta_lines(str(region.get("file") or ""))
+            anchor = hunk["new"][-3]
+            check(f"the {region.get('file')} OLD block is ONE anchor line, in the pre-image",
+                  old_lines == (anchor,) and anchor in hunk["old"]
+                  and base.count(anchor) == 1, old_lines)
+            check(f"... its NEW block is that hunk's own added lines + that anchor",
+                  new_lines == tuple(hunk["added"]) + (anchor,), len(new_lines))
+            check(f"... its probe is a line only that block adds",
+                  bool(region.get("probes"))
+                  and all(str(p) in "\n".join(new_lines)
+                          and str(p) not in "\n".join(old_lines)
+                          for p in region.get("probes") or ()),
+                  region.get("probes"))
+        state2, why2 = R.patch_presence("bench.patch", "jarvis_hud.py", added, base,
+                                        pre_image=pre)
+        check("with its entry the SAME HUD is ABSENT, so the block is carried",
+              state2 == R.ABSENT, (state2, why2))
+        live = make_base_live(root, "bench", {"jarvis_hud.py": base})
+        before = (live / "jarvis_hud.py").read_bytes()
+        show = show_patches("bench.patch")
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["bench.patch"], show=show, repo=REPO, state_patches=[])
+        check("the bench delta is planned exactly ONCE, as an insert",
+              refusals == [] and len(deltas) == 1 and deltas[0].patch == "bench.patch"
+              and deltas[0].status == "insert", (refusals, deltas))
+        text = staged.get("jarvis_hud.py", "")
+        check("... it is what git apply makes of bench.patch, byte for byte",
+              text == git_apply_oracle(base, ["bench.patch"], "jarvis_hud.py"),
+              (len(text), len(base)))
+        check("... both dispatch sites landed, not one",
+              all(line in text for line in
+                  ('        if path == "/api/bench":',
+                   '        if path.startswith("/api/bench/run/"):',
+                   '        if path == "/api/bench/history":',
+                   '        if route in ("/api/bench/run", "/api/bench/cancel"):')))
+        check("... the staged HUD still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        check("... and the live fixture file was never touched",
+              (live / "jarvis_hud.py").read_bytes() == before)
+        # A half-applied pair is FINISHED, never duplicated: hunk 1's block already
+        # written, hunk 2's not.
+        (live / "jarvis_hud.py").write_bytes(
+            base.replace("\n".join(hunks[0]["old"]),
+                         "\n".join(hunks[0]["new"]), 1).encode("utf-8"))
+        _half, staged_half, refusals_half = R.plan_deltas(
+            live, ["bench.patch"], show=show, repo=REPO, state_patches=[])
+        check("a half-applied bench block is completed, not inserted twice",
+              refusals_half == []
+              and staged_half.get("jarvis_hud.py") == text
+              and "\n".join(hunks[0]["new"]) in text, (refusals_half,))
+        # Pretend the deploy wrote the whole thing: the second plan must prove it.
+        (live / "jarvis_hud.py").write_bytes(text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, ["bench.patch"], show=show, repo=REPO, state_patches=[])
+        check("a second plan sees bench.patch ALREADY_PRESENT and stages nothing",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"], (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -3741,6 +3997,7 @@ def main():
                t_cloud_escalate_with_its_hunks_absent_is_refused_not_skipped,
                t_cloud_escalate_and_f01_are_carried_as_their_hunks,
                t_reminder_actions_and_update_in_chat_are_carried_as_their_hunks,
+               t_the_three_2026_11_03_additions_are_carried_byte_for_byte,
                t_the_no_expiry_chain_carries_965_byte_for_byte,
                t_the_no_deadline_hunk_9_is_carried_from_the_live_shape,
                t_the_no_deadline_chain_keeps_the_earlier_entries_provable,
@@ -3782,7 +4039,8 @@ def main():
                t_a_mid_apply_failure_rolls_back_and_prints_the_backup,
                t_a_plugin_failure_rolls_back_the_already_written_files,
                t_a_probe_failure_keeps_the_complete_write_and_names_the_backup,
-               t_cli_rollback_restores_from_a_backup_folder):
+               t_cli_rollback_restores_from_a_backup_folder,
+               t_the_bench_patch_is_carried_not_false_greened):
         fn()
     print()
     if FAILED:
