@@ -251,6 +251,8 @@ fun LiveScreen(
 
     val flashing = nowMs < flash.until
     val cardHolds = remember(pending, status) { JarvisRuntime.liveCardHolds() }
+    // Hands-free (2026-11-04): what the answer window is doing, if anything.
+    val handsfreeNow by com.jarvis.client.JarvisRuntime.handsfreeNow.collectAsState()
     val sign = LiveRules.sign(
         status,
         stale = stale,
@@ -305,6 +307,21 @@ fun LiveScreen(
                         detail,
                         style = MaterialTheme.typography.bodyMedium,
                         color = chrome.textMid,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
+                }
+                // Hands-free (the owner's request, 2026-11-04): this screen is
+                // where he is talking to Jarvis, so it is where the answer
+                // window must be visible - "Listening for your confirm/deny"
+                // while the microphone is Jarvis's rather than his, and the
+                // PC's own words after an answer. The line is the runtime's,
+                // so it is the same sentence Home and the notification carry.
+                handsfreeNow.line?.let { line ->
+                    Gap(4)
+                    Text(
+                        line,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (handsfreeNow.listening) chrome.warnInk else chrome.textMid,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }

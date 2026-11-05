@@ -1,14 +1,85 @@
 {
  "card_title": "Jarvis wants to forget what it learned and delete chats from the days you chose",
  "cases": {
+  "asked_estimate": {
+   "opens": true,
+   "said": "For 1 to 15 September 2026: About 1 second to forget 2 facts. Nothing is removed until you approve the card and then say yes a second time."
+  },
   "asked_said": {
    "opens": true,
-   "said": "I've put the list in Brain, under Forget a time frame: 2 facts from 1 to 15 September 2026. Check it, untick anything you want to keep, and tap Forget these, then Approve on the card. Nothing is removed until you do - saying yes out loud does not approve it."
+   "said": "I've put the list in Brain, under Forget a time frame: 2 facts from 1 to 15 September 2026. Check it, untick anything you want to keep, and tap Forget these, then Approve on the card and say yes a second time. Nothing is removed until you do - saying yes out loud does not approve it."
+  },
+  "asked_which_days": {
+   "opens": false,
+   "said": "I can do that for a time frame - which days? Say \"3 November\", \"last week\" or \"from 1 to 15 September\", and I will list every fact and chat from then before anything goes. Pinned chats are always kept."
+  },
+  "confirm": {
+   "body": {
+    "chats_deleted": 2,
+    "facts_forgotten": 2,
+    "message": "Forgot 2 facts and deleted 2 chats. Undo is available for 10 minutes.",
+    "ok": true,
+    "pinned_kept": 0,
+    "undo": {
+     "seconds": 600,
+     "until": "2026-09-28T15:40:00"
+    }
+   },
+   "status": 200
+  },
+  "confirm_before_card": {
+   "body": {
+    "error": "There is no second yes waiting - the 2 minutes are up, or it was already answered. Nothing was forgotten or deleted.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "confirm_expired": {
+   "body": {
+    "error": "There is no second yes waiting - the 2 minutes are up, or it was already answered. Nothing was forgotten or deleted.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "confirm_no_hold": {
+   "body": {
+    "error": "There is no second yes waiting - the 2 minutes are up, or it was already answered. Nothing was forgotten or deleted.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "confirm_not_literal": {
+   "body": {
+    "error": "This needs a literal yes: {\"id\": \"<held id>\", \"yes\": true}. Nothing was forgotten or deleted, and the list is still waiting.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "confirm_twice": {
+   "body": {
+    "error": "You can still undo the last time frame you forgot, for about 10 more minutes. Nothing was forgotten this time.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "confirm_while_card": {
+   "body": {
+    "error": "The card is still waiting - approve it first. Nothing was forgotten.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "confirm_wrong_id": {
+   "body": {
+    "error": "That is not the second yes waiting. Nothing was forgotten or deleted.",
+    "ok": false
+   },
+   "status": 409
   },
   "forget_list_changed": {
    "body": {
     "changed": true,
-    "error": "The list changed since you read it - something on it was already forgotten, deleted, or is not from those days. Read the list again.",
+    "error": "The list changed since you read it - something on it was already forgotten, deleted, pinned (a pinned chat is always kept), or is not from those days. Read the list again.",
     "ok": false
    },
    "status": 409
@@ -20,6 +91,14 @@
    },
    "status": 400
   },
+  "forget_pinned_ticked": {
+   "body": {
+    "changed": true,
+    "error": "The list changed since you read it - something on it was already forgotten, deleted, pinned (a pinned chat is always kept), or is not from those days. Read the list again.",
+    "ok": false
+   },
+   "status": 409
+  },
   "forget_second_card": {
    "body": {
     "error": "A card for this is already waiting - answer it first.",
@@ -29,12 +108,19 @@
   },
   "forget_waiting": {
    "body": {
+    "confirm": {
+     "expires_in": 120,
+     "id": "hold-id",
+     "route": "/api/memory/forget_range/confirm",
+     "text": "Say yes again to finish. Undo stays available for 10 minutes."
+    },
     "counts": {
      "chats": 2,
      "facts": 2
     },
-    "message": "Waiting for your approval. Nothing is forgotten or deleted unless you approve the card.",
+    "message": "Waiting for your approval. Nothing is forgotten or deleted unless you approve the card - and after that, unless you say yes a second time.",
     "ok": true,
+    "pinned_kept_count": 0,
     "waiting": true
    },
    "status": 202
@@ -80,6 +166,13 @@
      "facts": 2
     },
     "empty": false,
+    "estimate": {
+     "chats": 2,
+     "facts": 2,
+     "messages": 3,
+     "seconds": 1,
+     "text": "About 1 second to forget 2 facts and delete 2 chats (3 messages)."
+    },
     "facts": [
      {
       "between_us": false,
@@ -111,6 +204,8 @@
     ],
     "max_items": 200,
     "ok": true,
+    "pinned_kept": [],
+    "pinned_kept_count": 0,
     "said": "2 facts and 2 chats from 1 to 15 September 2026.",
     "too_many": false
    },
@@ -163,6 +258,13 @@
      "chats": 2
     },
     "empty": false,
+    "estimate": {
+     "chats": 2,
+     "facts": 0,
+     "messages": 3,
+     "seconds": 1,
+     "text": "About 1 second to delete 2 chats (3 messages)."
+    },
     "facts": [],
     "frame": {
      "end": 1789516800,
@@ -176,6 +278,8 @@
     ],
     "max_items": 200,
     "ok": true,
+    "pinned_kept": [],
+    "pinned_kept_count": 0,
     "said": "2 chats from 1 to 15 September 2026.",
     "too_many": false
    },
@@ -190,6 +294,13 @@
      "facts": 0
     },
     "empty": true,
+    "estimate": {
+     "chats": 0,
+     "facts": 0,
+     "messages": 0,
+     "seconds": 1,
+     "text": "About 1 second to forget 0 facts and delete 0 chats."
+    },
     "facts": [],
     "frame": {
      "end": 1789516800,
@@ -204,6 +315,8 @@
     ],
     "max_items": 200,
     "ok": true,
+    "pinned_kept": [],
+    "pinned_kept_count": 0,
     "said": "0 facts and 0 chats from 1 to 15 September 2026.",
     "too_many": false
    },
@@ -218,6 +331,13 @@
      "facts": 0
     },
     "empty": true,
+    "estimate": {
+     "chats": 0,
+     "facts": 0,
+     "messages": 0,
+     "seconds": 1,
+     "text": "About 1 second to forget 0 facts and delete 0 chats."
+    },
     "facts": [],
     "frame": {
      "end": 1790596800,
@@ -232,7 +352,94 @@
     ],
     "max_items": 200,
     "ok": true,
+    "pinned_kept": [],
+    "pinned_kept_count": 0,
     "said": "0 facts and 0 chats from 28 September 2026, midnight to 11:59 am.",
+    "too_many": false
+   },
+   "status": 200
+  },
+  "preview_pinned": {
+   "body": {
+    "chats": [
+     {
+      "id": "conv-poem-00002",
+      "in_frame": 1,
+      "kind": "chat",
+      "label": "31 August to 1 September · 2 messages",
+      "spills": true,
+      "started": 1788213600,
+      "ticked": false,
+      "title": "Help me write a poem",
+      "turns": 2,
+      "updated": 1788249600
+     },
+     {
+      "id": "conv-trip-00001",
+      "in_frame": 1,
+      "kind": "chat",
+      "label": "4 September · 1 message",
+      "spills": false,
+      "started": 1788512400,
+      "ticked": true,
+      "title": "Plan the trip to Rome",
+      "turns": 1,
+      "updated": 1788512400
+     }
+    ],
+    "chats_why": "",
+    "counts": {
+     "chats": 2,
+     "facts": 2
+    },
+    "empty": false,
+    "estimate": {
+     "chats": 2,
+     "facts": 2,
+     "messages": 3,
+     "seconds": 1,
+     "text": "About 1 second to forget 2 facts and delete 2 chats (3 messages)."
+    },
+    "facts": [
+     {
+      "between_us": false,
+      "id": 1,
+      "label": "Saved 3 September",
+      "pinned": false,
+      "saved": 1788436800,
+      "text": "The owner moved to Leeds in 2019"
+     },
+     {
+      "between_us": true,
+      "id": 2,
+      "label": "Saved 10 September",
+      "pinned": true,
+      "saved": 1789041600,
+      "text": "The owner's sister likes jazz"
+     }
+    ],
+    "frame": {
+     "end": 1789516800,
+     "from": "2026-09-01",
+     "said": "1 to 15 September 2026",
+     "start": 1788220800,
+     "to": "2026-09-15"
+    },
+    "kinds": [
+     "facts",
+     "chats"
+    ],
+    "max_items": 200,
+    "ok": true,
+    "pinned_kept": [
+     {
+      "id": "conv-pinned-01",
+      "messages": 1,
+      "title": "Pinned planning"
+     }
+    ],
+    "pinned_kept_count": 1,
+    "said": "2 facts and 2 chats from 1 to 15 September 2026.",
     "too_many": false
    },
    "status": 200
@@ -245,6 +452,13 @@
      "facts": 0
     },
     "empty": true,
+    "estimate": {
+     "chats": 0,
+     "facts": 0,
+     "messages": 0,
+     "seconds": 1,
+     "text": "About 1 second to forget 0 facts."
+    },
     "facts": [],
     "frame": {
      "end": 1790553600,
@@ -258,6 +472,8 @@
     ],
     "max_items": 200,
     "ok": true,
+    "pinned_kept": [],
+    "pinned_kept_count": 0,
     "said": "0 facts from 21 to 27 September 2026.",
     "too_many": false
    },
@@ -272,6 +488,13 @@
      "facts": 201
     },
     "empty": false,
+    "estimate": {
+     "chats": 0,
+     "facts": 201,
+     "messages": 0,
+     "seconds": 5,
+     "text": "At least 5 seconds to forget 201 facts and delete 0 chats - and that is more than 200 at once, so nothing can be forgotten until you choose fewer days. Each request covers at most 200 items, and repeating it covers the rest."
+    },
     "facts": [],
     "frame": {
      "end": 1789516800,
@@ -286,6 +509,8 @@
     ],
     "max_items": 200,
     "ok": true,
+    "pinned_kept": [],
+    "pinned_kept_count": 0,
     "said": "That is 201 facts and 0 chats from 1 to 15 September 2026 - more than 200 at once. Choose fewer days.",
     "too_many": true
    },
@@ -295,6 +520,7 @@
    "body": {
     "asked": null,
     "available": true,
+    "confirm": null,
     "last": {
      "at": 0,
      "message": "Put back: 2 facts and 2 chats.",
@@ -302,6 +528,7 @@
      "why": ""
     },
     "max_items": 200,
+    "pinned_kept_count": 0,
     "presets": [
      {
       "id": "today",
@@ -352,8 +579,117 @@
      "to": "2026-09-15"
     },
     "available": true,
+    "confirm": null,
     "last": null,
     "max_items": 200,
+    "pinned_kept_count": 0,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": null,
+    "undo_minutes": 10,
+    "waiting": false,
+    "waiting_for": null
+   },
+   "status": 200
+  },
+  "status_confirm": {
+   "body": {
+    "asked": null,
+    "available": true,
+    "confirm": {
+     "expires_in": 120,
+     "id": "hold-id",
+     "route": "/api/memory/forget_range/confirm",
+     "text": "Say yes again to finish. Undo stays available for 10 minutes."
+    },
+    "last": {
+     "at": 0,
+     "message": "Your card is approved. Nothing is forgotten or deleted until you say yes a second time.",
+     "outcome": "confirm",
+     "why": ""
+    },
+    "max_items": 200,
+    "pinned_kept_count": 0,
+    "presets": [
+     {
+      "id": "today",
+      "label": "Today"
+     },
+     {
+      "id": "yesterday",
+      "label": "Yesterday"
+     },
+     {
+      "id": "this_week",
+      "label": "This week"
+     },
+     {
+      "id": "last_week",
+      "label": "Last week"
+     },
+     {
+      "id": "last_7_days",
+      "label": "The last 7 days"
+     },
+     {
+      "id": "this_month",
+      "label": "This month"
+     },
+     {
+      "id": "last_month",
+      "label": "Last month"
+     }
+    ],
+    "title": "Forget a time frame",
+    "undo": null,
+    "undo_minutes": 10,
+    "waiting": false,
+    "waiting_for": null
+   },
+   "status": 200
+  },
+  "status_confirm_expired": {
+   "body": {
+    "asked": null,
+    "available": true,
+    "confirm": null,
+    "last": {
+     "at": 0,
+     "message": "The second yes timed out. Nothing was forgotten or deleted.",
+     "outcome": "confirm_expired",
+     "why": ""
+    },
+    "max_items": 200,
+    "pinned_kept_count": 0,
     "presets": [
      {
       "id": "today",
@@ -396,6 +732,7 @@
    "body": {
     "asked": null,
     "available": true,
+    "confirm": null,
     "last": {
      "at": 0,
      "message": "Nothing was forgotten - you said no.",
@@ -403,6 +740,7 @@
      "why": ""
     },
     "max_items": 200,
+    "pinned_kept_count": 0,
     "presets": [
      {
       "id": "today",
@@ -445,8 +783,10 @@
    "body": {
     "asked": null,
     "available": true,
+    "confirm": null,
     "last": null,
     "max_items": 200,
+    "pinned_kept_count": 0,
     "presets": [
      {
       "id": "today",
@@ -489,6 +829,7 @@
    "body": {
     "asked": null,
     "available": true,
+    "confirm": null,
     "last": {
      "at": 0,
      "message": "Done. You can undo it for 10 minutes.",
@@ -496,6 +837,7 @@
      "why": ""
     },
     "max_items": 200,
+    "pinned_kept_count": 0,
     "presets": [
      {
       "id": "today",
@@ -546,8 +888,10 @@
    "body": {
     "asked": null,
     "available": true,
+    "confirm": null,
     "last": null,
     "max_items": 200,
+    "pinned_kept_count": 0,
     "presets": [
      {
       "id": "today",
@@ -613,7 +957,12 @@
    "status": 409
   }
  },
+ "confirm_words": {
+  "text": "Say yes again to finish. Undo stays available for 10 minutes.",
+  "yes": "Yes, forget them"
+ },
  "limits": {
+  "confirm_seconds": 120,
   "max_items": 200,
   "undo_minutes": 10
  },
@@ -654,6 +1003,7 @@
   }
  ],
  "routes": {
+  "confirm": "/api/memory/forget_range/confirm",
   "preview": "/api/memory/forget_range/preview",
   "status": "/api/memory/forget_range",
   "undo": "/api/memory/forget_range/undo"
