@@ -1403,10 +1403,16 @@ def prompt_block(*, crisis_active: bool = False, temporary_chat: bool = False,
 
 def post_history_hint(spoken_live: bool = False) -> str:
     """One line for just before the final generation step, so a long chat or
-    a long Jarvis Live session does not drift out of character."""
+    a long Jarvis Live session does not drift out of character.
+
+    `spoken_live=True` adds the spoken-delivery clause, and with it the one
+    rule a long Live session drifts away from first: the answer is what the
+    owner hears, so it is said rather than pointed at (`jarvis_live.MODEL_NOTE`
+    says the same at the top of the turn; this is the nearer reminder)."""
     hint = str(current_preset().get("post_history_hint") or "").strip()
     if spoken_live:
-        hint += (" Spoken Live: 1-3 sentences, no Markdown, stay in character.")
+        hint += (" Spoken Live: 1-3 sentences, no Markdown, say the answer itself aloud, "
+                 "never point at the screen, stay in character.")
     return hint
 
 

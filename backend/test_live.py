@@ -2250,6 +2250,68 @@ def t_an_end_nobody_explained_never_blames_the_owner():
           "unknown" not in L.APP_END_REASONS)
 
 
+def t_a_live_answer_is_said_never_pointed_at():
+    """The owner's report of 2026-11-04: "jarvis on the latest Android app
+    version still has responses that are saying to look at the screen when
+    jarvis could clearly read it out loud" ... "it said it's on your screen as
+    the answer instead of reading it out".
+
+    THE CODE THAT PERMITTED IT is `jarvis_live.MODEL_NOTE`: the one Live note
+    (added to a spoken Live turn's request) said "use a screen line only for
+    what you truly cannot say aloud, such as a table of numbers, a picture or
+    a long list." A long list is exactly what the owner was asking for, so the
+    note itself invited the sentence he heard. It is gone: the note now says
+    the answer must be complete as speech, reads the first five items or rows
+    of a list aloud, and never points at the screen.
+
+    The final-step persona hint carries the same rule, and it now really
+    reaches a spoken Live turn: `jarvis_manner.post_history_hint(spoken_live=)`
+    existed since 2026-11-01 but the agent never passed the mark, so the one
+    place nearest the question said nothing about it."""
+    import jarvis_agent
+    import jarvis_manner
+
+    note = L.MODEL_NOTE
+    check("the Live note forbids the screen pointer as the answer",
+          "never the answer" in note and "on the screen" in note.lower(), note)
+    check("...so the old escape hatch ('use a screen line only ... a table of "
+          "numbers ... a long list') is gone",
+          "use a screen line only" not in note.lower()
+          and "table of numbers" not in note.lower()
+          and "long list" not in note.lower(), note)
+    check("...and it says what to do instead: read the key answer in 1-4 "
+          "sentences and the first five items or rows, then the count left",
+          "one to four clear sentences" in note and "first five items" in note
+          and "how many more" in note.lower(), note)
+    check("...while the two rules the note already carried are untouched",
+          "yes-or-no question" in note and L.SIDE_TALK_MARK in note, note)
+
+    # The BUILT request, not only the constant: the agent inserts the note.
+    msgs = [{"role": "system", "content": "rules"},
+            {"role": "user", "content": "what's on my list"}]
+    live = jarvis_agent.with_live_note(msgs)
+    check("the built Live request carries the new rule just before the question",
+          live[-2] == {"role": "system", "content": L.MODEL_NOTE}
+          and live[-1]["content"] == "what's on my list", live)
+    spoken_typed = jarvis_agent.with_spoken_note(msgs)
+    check("a typed spoken turn does not get the Live note",
+          not any(m.get("content") == L.MODEL_NOTE for m in spoken_typed), spoken_typed)
+
+    # The final-step hint, through the agent's own composition.
+    with mock.patch.object(jarvis_manner, "personality_chosen", lambda *a, **k: True):
+        live_msgs = jarvis_agent.with_manner_note(msgs, "warm", spoken_live=True)
+        typed_msgs = jarvis_agent.with_manner_note(msgs, "warm", spoken_live=False)
+    hinted = [m.get("content") or "" for m in live_msgs if "Spoken Live" in (m.get("content") or "")]
+    check("a spoken Live turn's final-step hint says it too",
+          hinted and "never point at the screen" in hinted[0]
+          and "say the answer itself aloud" in hinted[0], live_msgs)
+    check("...and a turn that is not Live keeps the plain persona hint",
+          not any("Spoken Live" in (m.get("content") or "") for m in typed_msgs), typed_msgs)
+    check("...the hint goes just before the newest question, never first",
+          hinted and live_msgs[-2].get("content") == hinted[0]
+          and live_msgs[-1]["content"] == "what's on my list", live_msgs)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":

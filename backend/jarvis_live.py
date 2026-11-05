@@ -766,15 +766,18 @@ SIDE_TALK_MARK = "[not for me]"
 #: for this PC's model - never to the caller's messages, never to a cloud
 #: model (the same placing as SPOKEN_NOTE).
 MODEL_NOTE = (
-    "This is a live spoken conversation. The owner's very short replies, like yes or no, "
+    "This is a live spoken conversation: the owner is listening hands-free and may not be "
+    "looking at the monitor, so the answer must be complete as speech. Never answer that "
+    "the answer is on the screen, in the chat, below, or in a table - a screen line is "
+    "never the answer. When you already have the answer in hand - a tool result, a page "
+    "you read, a quick fact, a list - SAY it: the key answer in one to four clear "
+    "sentences, and when it is a list or a table read the first five items or rows aloud "
+    "as plain prose, then say how many more there are. Write it the way it is said aloud: "
+    "no Markdown, no bullets, no table. The owner's very short replies, like yes or no, "
     "cannot be checked by their voice, so do not end with a yes-or-no question: when you "
     "need a choice, name the options in a few words each, so the owner can say one as a "
-    "full phrase. When you already have the answer in hand - a tool result, a page you "
-    "read, a quick fact - SAY it: never answer that it is on the screen instead of saying "
-    "it, and use a screen line only for what you truly cannot say aloud, such as a table "
-    "of numbers, a picture or a long list. If these words were clearly said to someone "
-    "else in the room and not to you, reply with exactly " + SIDE_TALK_MARK + " and "
-    "nothing else.")
+    "full phrase. If these words were clearly said to someone else in the room and not to "
+    "you, reply with exactly " + SIDE_TALK_MARK + " and nothing else.")
 
 
 def is_side_talk(answer) -> bool:
