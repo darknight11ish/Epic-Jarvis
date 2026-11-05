@@ -8228,7 +8228,7 @@ routed); phone control; commands on this PC; plug-in programs (MCP, id
 big model.
 `tools` is the list the chat's tool loop offers the model
 (`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
-For a tool with an in-app switch (§43 - every tool the model can be offered since 2026-11-04), an Off row's own line says it switches on in Settings, What asks first, with one approval card and Windows Hello. The three tools that have no switch of their own say where their real switch is instead: the data and maths sandbox for `run_data_script`, and Web search for the two conversation grant tools.
+For a tool with an in-app switch (§43 - every tool the model can be offered since 2026-11-04), an Off row's own line says it switches on in Settings, What asks first, with one approval card and Windows Hello. The four tools that have no switch of their own say where their real switch is instead: the data and maths sandbox for `run_data_script`, Web search for the two conversation grant tools, and the product check's own settings line `[product_check] enabled = true`.
 
 Both apps show a row as "`name` - `state_words`", then, only when it is on,
 "Goes to: `where`" and "Asks you first: `asks`" (not when `asks` is "-"),

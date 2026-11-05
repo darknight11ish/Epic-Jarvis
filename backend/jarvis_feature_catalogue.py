@@ -3,7 +3,7 @@
 The owner's feature list, as data: 176 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 0418fbfa1e2daec71f3d52c65762a17b3136ac3a4f8690611828eae57e4974c1); the apps' Features pages read their own
+`features/features.json` (sha256 89203dadd9338b7f98ffb75c95457957f32c7ee4ce1716845082fa20605cea52); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "0418fbfa1e2daec71f3d52c65762a17b3136ac3a4f8690611828eae57e4974c1"
+SOURCE_SHA256 = "89203dadd9338b7f98ffb75c95457957f32c7ee4ce1716845082fa20605cea52"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1610,7 +1610,7 @@ FEATURES = (
         "what": "Every way Jarvis can reach something outside itself, and whether it is on right now.",
         "where": "Settings, What Jarvis can reach.",
         "asks": "No card - it only reads the PC's own settings and the live state of each way out.",
-        "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The three whose own switch decides them say which switch: the data and maths sandbox, and Web search for the two conversation tools.",
+        "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The four whose own switch decides them say which switch: the data and maths sandbox, Web search for the two conversation tools, and the product check, by the line [product_check] enabled = true.",
         "surface": "both",
         "aliases": ["what jarvis can reach"],
         "covers": ["settings.reach", "documents-and-search"],
@@ -1887,7 +1887,7 @@ FEATURES = (
         "what": "Every action Jarvis can take and whether it asks you first, in plain words.",
         "where": "Settings, What asks first - in both apps.",
         "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch for EVERY tool the AI can be offered since 2026-11-04 - the raw ones and the everyday helpers included - PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
-        "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the three whose own switch decides them (the data and maths sandbox, and the two web-search conversation tools) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
+        "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the four whose own switch decides them (the data and maths sandbox, the two web-search conversation tools, and the product check) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
         "surface": "both",
         "covers": ["settings.asks-first", "asks-first", "home-devices", "money-and-health"],
     },
