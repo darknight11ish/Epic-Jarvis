@@ -31,8 +31,16 @@ What you can use today:
   approval needed.
 - **Jarvis can size up the PC's storage, and only clears anything after one
   card that lists every file.** The scan, the dry run and the card are built and
-  tested (see "Storage and space" below); the chat tools that would let you ask
-  for it in words are not wired yet.
+  tested (see "Storage and space" below); asking **how much space is left** is
+  answered from the real disk read, and the chat tools that would start a
+  *cleanup* in words are still not wired.
+- **It can answer what it is running on, how fast, how much it remembers and
+  what it can schedule** - six questions that used to go to the AI model (see
+  "Its own machine, speed and memory" below).
+- **It can answer about twelve pairs of settings together**, and it warns you in
+  one line when one chat message names two of them (see "Two things at once"
+  below). Any *other* two of its own features or settings are answered too: it
+  reads each one's live state and says honestly whether a rule links them.
 
 What is built but not yet connected, said plainly:
 
@@ -75,9 +83,10 @@ a portrait of the running Jarvis, taken the moment you ask:
 |---|---|
 | version and start time | which version of the backend is running, when it started, and what the installer recorded |
 | places | every Settings section and every menu an app can open, by the same ids the screens use |
-| settings | every setting, its section, its live value where one can be read, and how to change it |
+| settings | every setting, its section, its live value - a switch's and a named choice's (the personality, the voice, the focus preset, the hand-off mode and the rest all read their real stored value now) - and how to change it |
 | asks first | every action and whether it reads or asks, straight from the "What asks first" page |
 | abilities | the plain-words feature list, one row per ability |
+| tools | how many tools the backend has built in and which of them are switched on in your own settings file, read live from `[tools].enabled` - the same read the "What asks first" page makes |
 | plugins | the optional add-on folders, whether each is on, and why it is off |
 | stores | how much it is keeping - memories, conversations, receipts - and how to clear each |
 | private | whether App lock or "Hide memory lists and chat history" is on |
@@ -97,18 +106,119 @@ no second list to update - and there is nothing that can disagree with the app.
 
 ## Asking about itself
 
-The plain-words questions already exist and still work through the feature
-guide, which is the project's one place that explains a feature:
+These questions are answered by the PC, in one step, with no AI model in the
+loop - each from the list or module that already owns the fact, so none of them
+can invent an ability:
 
-- "What can you do?"
-- "Where do I change how Jarvis talks?"
-- "What is connected?" (accounts, plugins, the model, the two graphics cards)
-- "What tools do you have?" / "Which of your tools ask before they act?"
+- "What can you do?" - the feature list, counted and grouped.
+- "Where do I change how Jarvis talks?" - the feature guide, with the real
+  Settings place.
+- "What is connected?" - the "What Jarvis can reach" list's ON rows (accounts
+  and services) plus the plug-in folders on this PC. **Not** the model or the
+  graphics cards; ask "are you using both cards" for the cards.
+- "What tools do you have?" - the registered tool count and the tools switched
+  on in your own settings file (`[tools].enabled`), with their plain names.
+- "Which of your tools ask before they act?" - the "What asks first" page's own
+  rows whose words say they ask you first, with the count.
+- "refresh your abilities" - re-reads the inventory above and says in one
+  sentence what changed; nothing restarted, nothing changed, no approval
+  needed. The same read is `POST /api/self/refresh`.
 
 When the portrait is given to a model (a later piece of work), the same kind of
 question will be answerable from the portrait itself, so the answer agrees with
 what Settings shows. Until then, the portrait is the source the apps and the
-desktop's own version check read.
+desktop's own version check read - and the questions above are answered by the
+PC directly, not by the model.
+
+## Its own machine, speed and memory
+
+These were the answers only the AI model gave, because no fixed path owned the
+question - so the number it quoted was invented. Each is now read from the same
+module its own screen or route uses, at the moment you ask:
+
+- "What are you running on?" / "What hardware do you have?" / "Which graphics
+  cards do you have?" - the model and preset last chosen, the card that preset
+  runs on, and every graphics card this PC reports with its memory. The model
+  and preset come from the preset store; the cards from the same hardware read
+  the Hardware screen uses. Ask "are you using both cards" for the both-card
+  lane.
+- "What is your context window?" / "How much context do you have?" - the token
+  figure the chosen preset starts its model with, or that model's measured
+  record. If neither exists it says so and quotes no number.
+- "How fast are you?" / "How many tokens per second?" - the **measured** tokens
+  a second from the benchmark record, with where that figure came from (and
+  "not measured yet" when it has not been).
+- "How much memory do you have?" / "How many things do you remember?" - how
+  many facts the memory store really holds, its current and retired counts and
+  how many names it has. While App lock or Hide memory lists is on, the count
+  is withheld, exactly as the Memory screen withholds it.
+- "How much storage is left?" / "How much disk space?" - each drive's free and
+  total space, the same answer "how much free space do I have" already gave.
+  (`How is my storage getting on?` and a *cleanup* are separate things - see
+  "Storage and space".)
+- "What jobs can you schedule?" / "What can you schedule?" - the scheduler's own
+  registered kinds (reminders, timers, alarms, to-dos and whatever else is
+  installed), the standby-hours schedule, and the job bodies the background
+  engine really has registered. It counts what is there now, not a wish list.
+
+If a value cannot be read, the answer says that in those words. None of these
+six reads a file, changes anything or raises a card.
+
+## Two things at once
+
+One question at a time was always answered well; two things at once used to go
+to the AI model, which is never given your settings. Twelve pairs now have a
+hand-built answer, each checked against the code that really enforces the
+interaction:
+
+- "If I turn off chat history does background learning still work?" - yes. Chat
+  history is the stored transcript; learning reads the PC's own live-turn
+  record, which is kept whether history is on or off.
+- "Does web search use ask before every search?" - with the ask switch on, every
+  search raises its card first; with web search itself off, the ask switch has
+  nothing to ask about.
+- "Does background learning save sensitive topics?" - only when "Also remember
+  sensitive topics automatically" is on, and passwords, PINs and account numbers
+  still wait for a card even then.
+- "Does the second card work with pictures?" (or any per-card feature) - the
+  "One bigger model on both cards" mode needs both cards to itself, so the two
+  cannot run at once; both saved on is reported as a contradiction and neither
+  lane starts.
+- "Does the big model work with both cards?" - the big model holds a card while
+  it runs, so the both-cards mode waits for it to go idle.
+- "Does the voice check apply when I start Live by voice?" - pressing the mic on
+  the paired phone is never checked (the press is the act), and turning the
+  check **off** makes the checks stricter, not weaker.
+- "Does the standby hours stop the second card?" - a standby window stops the
+  second card's lanes and keeps them stopped for the whole window.
+- "Does quiet hours also silence my phone?" - no: the PC's quiet hours cover
+  this PC's own toasts only, and the phone has its own switch.
+- "Does lights without a card need the home tool?" - the setting only removes
+  the approval card; the home-control tool still has to be offered in your
+  settings file.
+- "Does picture mode use the cloud?" - never: the picture lane refuses a cloud
+  model by name and starts with cloud use switched off.
+- "What model and what card does the coding preset use?" - one preset row
+  decides its model, its card and its context window together, so the answer
+  reads that one row (and its measured speed), then says which preset is
+  chosen. "What context window and speed does Fast have?" is the same answer.
+- "Does cloud escalation send my private stuff?" - no. The standing cloud
+  switch only decides whether a hard question may go there; a latched
+  local-only block stops everything, and email, files, credentials and stored
+  memory stay on the local model whatever it says.
+
+Any *other* two of its own features or settings are answered too: it reads each
+one's live state and says plainly whether a rule links them - and when no rule
+does, it says that instead of claiming they work independently. A sentence that
+names no real feature or setting still goes to the model, which is honest about
+not knowing your settings. No interaction is ever invented.
+
+**One chat message cannot change two settings.** If you name two of these pairs
+in one change request ("turn on web search and ask before every search"), the
+answer states the interaction in one line and asks for one of them on its own.
+That is the same rule as always - one card per change - and nothing about an
+approval changes.
+
 
 ## "Open <a place>"
 
