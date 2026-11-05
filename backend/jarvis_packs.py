@@ -40,9 +40,10 @@ is called to turn the pack off after install (the existing move to
 
 WHAT THIS DELIBERATELY DOES NOT DO (phase 1)
 
-  * No code packs. A folder or archive holding a `.py`, `.ps1`, `.exe`, `.dll`
-    or any binary is REFUSED before the card, in one sentence naming the file.
-    Code that runs inside Jarvis needs more than a scan; that is phase 2.
+  * No code packs. A folder or archive holding a `.py`, `.ps1`, `.exe`, `.dll`,
+    `.wasm`, any other executable/script suffix or any binary is REFUSED before
+    the card, in one sentence naming the file. Code that runs inside Jarvis
+    needs more than a scan; that is phase 2.
   * No network source: a local folder and a local `.zip` only. No git, no URL,
     no marketplace. Nothing here opens a socket, starts a program or writes
     outside the skills folder, `skills-off/`, the throwaway unpack folder and
@@ -64,6 +65,7 @@ Standard library only. No network, no subprocess, no import of the pack.
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -96,6 +98,11 @@ CODE_SUFFIXES = frozenset({
     ".sh", ".bash", ".zsh", ".fish", ".command",
     ".js", ".mjs", ".cjs", ".ts", ".jar", ".class", ".war",
     ".so", ".dylib", ".bin", ".elf", ".apk", ".dex",
+    # `.wasm` is a program: it is compiled bytecode that a host runs as code,
+    # so it belongs on the same hard-refusal list as `.py` and `.exe` even
+    # though this project does not run one. The owner's Q2 ruling names it
+    # explicitly (2026-11-05).
+    ".wasm",
 })
 
 #: The ledger's own name, and the receipt folder's, both beside the config.
@@ -108,6 +115,20 @@ DIR_ENV = "JARVIS_PACKS_DIR"
 
 #: What the ledger holds, and what a reader may rely on.
 SCHEMA = 1
+
+#: One of the three states a pack is really in, beside installed / disabled /
+#: removed / missing. `tampered` means a file on disk no longer matches the
+#: SHA-256 manifest pinned at install, so the pack is refused on load until the
+#: owner installs it again (Q3, 2026-11-05: packs are immutable once installed).
+TAMPERED = "tampered"
+
+#: How much of a replacement's unified diff the card and the receipt carry.
+#: A card is read in seconds; the cut is said out loud rather than hidden.
+MAX_DIFF_LINES = 200
+
+#: How many bytes of one file a replacement diff reads. A prompt-only skill is
+#: text and small; a file past this is named but not diffed.
+MAX_DIFF_BYTES = 512 * 1024
 
 #: The files a pack is allowed to be. A skill's own bounds are the scanner's
 #: (`jarvis_skills.MAX_FILES` / `MAX_SKILL_DIR`), read per call, never copied.
@@ -366,6 +387,67 @@ def _inside(root: Path, path: Path) -> bool:
     return path == root or root in path.parents
 
 
+def _is_link(path: Path) -> bool:
+    """A symlink, or a Windows junction. Both are shortcuts out of the folder."""
+    try:
+        if Path(path).is_symlink():
+            return True
+    except OSError:
+        return True
+    try:
+        isjunction = getattr(os.path, "isjunction", None)
+        if isjunction is not None and isjunction(str(path)):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def links_in(folder: Path) -> str:
+    """The first link or escaping path under `folder`, as a relative name.
+
+    Empty means every entry is a plain file or folder that really lives inside
+    the pack. `os.walk(followlinks=False)` is deliberate: a directory link must
+    be SEEN and refused, not followed and read - so this is checked before any
+    file is hashed, and again right before the copy.
+    """
+    root = Path(folder)
+    try:
+        for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+            here = Path(dirpath)
+            for name in list(dirnames) + list(filenames):
+                full = here / name
+                try:
+                    rel = full.relative_to(root).as_posix()
+                except ValueError:
+                    return str(full)
+                if _is_link(full):
+                    return rel
+                if name in filenames:
+                    try:
+                        if not _inside(root, full):
+                            return rel
+                    except OSError:
+                        return rel
+    except OSError:
+        return "."
+    return ""
+
+
+def _text_of(data: bytes) -> Optional[str]:
+    """The text of a byte string, or None when it is not text.
+
+    A prompt-only pack is text; a file with a NUL byte or bytes that are not
+    UTF-8 is already refused by the scan, and is never diffed here.
+    """
+    if b"\0" in data[:65536]:
+        return None
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def _clean_name(value: Any) -> str:
     name = str(value or "").strip()
     if not _NAME_RE.match(name) or len(name) > 64:
@@ -532,6 +614,18 @@ def _scan_folder_folder(folder: Path) -> dict:
                 f"that folder is a Jarvis backend, not a pack - it holds {bad!r} "
                 f"- so nothing was read and nothing was installed",
                 report=report)
+    # A link is a way out of the folder: a symlink or junction can point at any
+    # file on this PC, so a pack that holds one is refused before a byte is
+    # read. This is the folder half of the same rule `_scan_zip` applies to a
+    # `.zip` member (Q2, 2026-11-05: path-traversal symlinks are a hard reject).
+    linked = links_in(folder)
+    if linked:
+        report["observed"]["links"] = [linked]
+        return _refused(
+            f"that folder holds a link or a file that points outside it "
+            f"({linked!r}) - a shortcut to somewhere else on this PC - and a pack "
+            f"is only ever plain files inside its own folder, so nothing was "
+            f"installed", report=report)
     sk = _sk()
     if sk is None:
         return _refused("the skill library is not beside this file, so there is "
@@ -626,6 +720,9 @@ def _scan_folder_folder(folder: Path) -> dict:
     report["compatibility"] = _compatibility(report, manifest)
     if report["compatibility"].get("collision"):
         return _refused(report["compatibility"]["collision"], report=report)
+    same = attach_replacement(report)
+    if same:
+        return _refused(same, report=report)
     report["uninstall"] = {
         "files": [r["path"] for r in rows], "stores": [], "routes": [],
         "jobs": [], "credentials": [], "completeness": "complete"}
@@ -656,28 +753,62 @@ def _scan_folder_folder(folder: Path) -> dict:
 
 
 def _compatibility(report: dict, manifest: dict) -> dict:
-    """Will it work here, and will it break anything? Read, never guessed."""
-    out = {"name": report["pack"].get("name", ""), "collision": ""}
+    """Will it work here, and will it break anything? Read, never guessed.
+
+    A name that the PACK LEDGER already records is not a collision: it is a
+    REPLACEMENT, and `_replacement()` measures the new bytes against the
+    installed ones so the new scan and a unified diff go on one NEW card
+    (Q3, 2026-11-05). A name that is on disk but NOT in the ledger is still a
+    refusal - this module will not overwrite a skill it did not write, because
+    it has no manifest to diff against and no record of which files are its own.
+    """
+    out = {"name": report["pack"].get("name", ""), "collision": "",
+           "replace": {}}
     name = str(report["pack"].get("name") or "")
     if not name:
         out["collision"] = "that pack names no skill, so nothing was installed"
         return out
-    # A name that is already installed, or already turned off, is a collision:
-    # installing would replace a skill the owner has, which is an UPDATE and
-    # gets its own diff and its own card - not a silent overwrite.
-    root, off = _skills_root(), _off_root()
-    for base, where in ((root, "the skills folder"), (off, "the turned-off folder")):
+    known = read_ledger().get("packs") or {}
+    entry = dict(known.get(name) or {}) if isinstance(known, dict) else {}
+    state = str(entry.get("state") or "")
+    # Where this name is on disk right now, if anywhere.
+    found = None
+    for base, where in ((_skills_root(), "the skills folder"),
+                        (_off_root(), "the turned-off folder")):
         if base is None:
             continue
         if (Path(base) / name).exists():
-            out["collision"] = (f"a skill called {name!r} is already in {where}, "
-                                f"so nothing was installed - remove it first, or "
-                                f"give this one a different name")
-            return out
-    known = read_ledger().get("packs") or {}
-    if name in known and str((known.get(name) or {}).get("state")) != "removed":
-        out["collision"] = (f"the pack ledger already records a pack called "
-                            f"{name!r}, so nothing was installed")
+            found = (Path(base) / name, where)
+            break
+    if entry and state != "removed":
+        folder = _folder_of(name)
+        if folder is None:
+            # The record survives, the bytes do not: this is a fresh install of
+            # a name the ledger remembers, not a swap over files that are here.
+            out["replace"] = {
+                "mode": "record-only",
+                "from_sha256": str(entry.get("pack_sha256") or ""),
+                "from_version": str(entry.get("version") or ""),
+                "old_folder": "", "old_state": "missing", "tampered": False,
+            }
+        else:
+            check = verify_pack(name, mark=False)
+            out["replace"] = {
+                "mode": "swap",
+                "from_sha256": str(entry.get("pack_sha256") or ""),
+                "from_version": str(entry.get("version") or ""),
+                "installed_at": str(entry.get("installed_at") or ""),
+                "old_folder": str(folder),
+                "old_state": (TAMPERED if check.get("tampered") else
+                              (state or "installed")),
+                "tampered": bool(check.get("tampered")),
+                "changed_files": list(check.get("changed") or []),
+            }
+    elif found is not None:
+        out["collision"] = (
+            f"a skill called {name!r} is already in {found[1]}, and the pack "
+            f"ledger has no record of installing it, so nothing was installed - "
+            f"remove it first, or give this one a different name")
         return out
     out["python"] = {"running": "%d.%d" % _python_version()}
     want = str((manifest.get("requires") or {}).get("python") or "").strip()
@@ -702,6 +833,153 @@ def _compatibility(report: dict, manifest: dict) -> dict:
     out["writes_to"] = str((_off_root() or Path("skills-off")) / name)
     out["restart"] = _restart_line("skill")
     return out
+
+
+def _source_texts(report: dict) -> dict:
+    """{path: text} for the scanned source's text files. Reads only, writes none.
+
+    This is the NEW half of a replacement diff. The same files were hashed for
+    the report; this reads their text so the owner can see the change, and it
+    refuses nothing on its own: the scan already decided what the pack is.
+    """
+    src = report.get("source") or {}
+    rows = (report.get("digest") or {}).get("files") or []
+    out: dict = {}
+    if str(src.get("type")) == "zip":
+        prefix = str(src.get("prefix") or "")
+        try:
+            with zipfile.ZipFile(Path(str(src.get("ref") or ""))) as archive:
+                for row in rows:
+                    name = str((row or {}).get("path") or "")
+                    if not name or int((row or {}).get("bytes") or 0) > MAX_DIFF_BYTES:
+                        continue
+                    try:
+                        try:
+                            data = archive.read(name)
+                        except KeyError:
+                            data = archive.read(prefix + name)
+                        text = _text_of(data)
+                    except Exception:
+                        continue
+                    if text is not None:
+                        out[name] = text
+        except (OSError, zipfile.BadZipFile):
+            return {}
+        return out
+    folder = Path(str(src.get("ref") or ""))
+    for row in rows:
+        name = str((row or {}).get("path") or "")
+        full = folder / name
+        if not name or not _inside(folder, full):
+            continue
+        try:
+            if full.stat().st_size > MAX_DIFF_BYTES:
+                continue
+            text = _text_of(full.read_bytes())
+        except OSError:
+            continue
+        if text is not None:
+            out[name] = text
+    return out
+
+
+def _diff_against(old_folder: Path, old_rows: list, new_texts: dict) -> dict:
+    """A unified diff of the INSTALLED files against the new pack's text.
+
+    The old side is what is on disk now (so a pack that was changed by hand is
+    diffed as it really is, and the card says the ledger no longer matches it);
+    the new side is the source that was just scanned. Binary files cannot occur
+    in a pack the scan passed, but a file too large to diff is named rather than
+    silently skipped.
+    """
+    old_paths = {}
+    for row in old_rows or []:
+        if isinstance(row, dict) and row.get("path"):
+            old_paths[str(row["path"])] = row
+    added, removed, changed, same = [], [], [], []
+    lines: list = []
+    for path in sorted(set(old_paths) | set(new_texts)):
+        old = old_paths.get(path)
+        new_text = new_texts.get(path)
+        if old is None:
+            added.append(path)
+            if new_text is not None:
+                lines.extend(difflib.unified_diff(
+                    [], new_text.splitlines(),
+                    fromfile=f"not installed/{path}", tofile=f"new/{path}",
+                    lineterm=""))
+            continue
+        if new_text is None:
+            removed.append(path)
+            lines.append(f"--- removed: {path}")
+            continue
+        try:
+            old_text = (Path(old_folder) / path).read_text(
+                encoding="utf-8", errors="replace")
+        except OSError:
+            old_text = ""
+        if old_text == new_text:
+            same.append(path)
+            continue
+        changed.append(path)
+        lines.extend(difflib.unified_diff(
+            old_text.splitlines(), new_text.splitlines(),
+            fromfile=f"installed/{path}", tofile=f"new/{path}", lineterm=""))
+    cut = len(lines) > MAX_DIFF_LINES
+    body = "\n".join(lines[:MAX_DIFF_LINES])
+    files = {"added": added, "removed": removed, "changed": changed,
+             "same": same}
+    bits = []
+    if added:
+        bits.append(f"{len(added)} added")
+    if removed:
+        bits.append(f"{len(removed)} removed")
+    if changed:
+        bits.append(f"{len(changed)} changed")
+    return {"diff": body,
+            "diff_sha256": sha256_bytes("\n".join(lines).encode("utf-8")),
+            "diff_lines": len(lines), "diff_cut": cut, "files": files,
+            "summary": ("Replaces the installed copy: "
+                        + (", ".join(bits) if bits else "no file changed") + ".")}
+
+
+def attach_replacement(report: dict) -> str:
+    """Measure a replacement and put it on the report. Empty means it may go on.
+
+    A non-empty answer is a plain refusal (the same bytes are already installed,
+    so there is nothing to replace). Nothing here writes or swaps anything: the
+    diff is what the card shows, and the swap happens only inside
+    `install_pack()` after `jarvis_skills.install()`'s card is answered.
+    """
+    compat = report.get("compatibility") or {}
+    rep = dict(compat.get("replace") or {})
+    report["replacement"] = {}
+    if not rep:
+        return ""
+    name = str((report.get("pack") or {}).get("name") or "")
+    new_sha = str((report.get("digest") or {}).get("pack_sha256") or "")
+    to_version = str((report.get("pack") or {}).get("version") or "")
+    if rep.get("mode") == "record-only":
+        report["replacement"] = {
+            **rep, "same": False, "to_sha256": new_sha, "to_version": to_version,
+            "diff": "", "diff_sha256": "", "diff_lines": 0, "diff_cut": False,
+            "files": {"added": [], "removed": [], "changed": [], "same": []},
+            "summary": ("The copy the ledger recorded is no longer on this PC, so "
+                        "this is a fresh install of a name it remembers, not a "
+                        "swap over files that are here."),
+        }
+        return ""
+    from_sha = str(rep.get("from_sha256") or "")
+    if from_sha and from_sha == new_sha:
+        return (f"those are the same bytes that are already installed "
+                f"(SHA-256 {new_sha[:12]}...), so there is nothing to replace and "
+                f"nothing was changed")
+    entry = _entry(name)
+    measured = _diff_against(Path(str(rep.get("old_folder") or "")),
+                             entry.get("files") or [], _source_texts(report))
+    report["replacement"] = {**rep, **measured, "same": False,
+                             "to_sha256": new_sha, "to_version": to_version}
+    return ""
 
 
 def _python_version() -> tuple:
@@ -845,6 +1123,13 @@ def _scan_zip(zip_path: Path) -> dict:
                         f"the .zip holds a file that points outside itself "
                         f"({name!r}), so it was not unpacked and nothing was "
                         f"installed", report=report)
+                if "\0" in name or ":" in name:
+                    # A colon is an alternate data stream on Windows: a second,
+                    # invisible body attached to a file whose plain text was
+                    # scanned. A pack is plain files with plain names.
+                    return _refused(
+                        f"the .zip holds a file with a name that is not a plain "
+                        f"name ({name!r}), so nothing was installed", report=report)
                 mode = (info.external_attr >> 16) & 0o170000
                 if mode == 0o120000:
                     return _refused(
@@ -883,6 +1168,10 @@ def _scan_zip(zip_path: Path) -> dict:
     for name in code:
         report["findings"].append(_finding(
             "block", "code_file", "a file that can run on this PC", name))
+    for name in binaries:
+        report["findings"].append(_finding(
+            "block", "binary_file",
+            "a file that is not text, so what it holds cannot be read", name))
     if code or binaries:
         return _refused(CODE_REFUSED.format(
             where=(code or binaries)[0]), report=report)
@@ -934,9 +1223,33 @@ def _scan_zip(zip_path: Path) -> dict:
     report["declared"]["requires"] = dict(manifest.get("requires") or {})
     report["pack"]["version"] = report["pack"]["version"] or str(
         manifest.get("version") or "")
+    # A .zip usually wraps the skill in one folder (`my-skill/SKILL.md`). What
+    # gets INSTALLED is that folder, so the manifest is the files under it,
+    # named relative to it - the same names `file_rows(dest)` will produce.
+    # Everything else in the archive was scanned (a `.py` anywhere still
+    # refused the archive above) but is NOT installed, and is named rather than
+    # silently dropped.
+    prefix = rel.rsplit("/", 1)[0] + "/" if "/" in rel else ""
+    report["source"]["prefix"] = prefix
+    if prefix:
+        inside = [r for r in rows if str(r.get("path") or "").startswith(prefix)]
+        outside = [str(r.get("path") or "") for r in rows
+                   if not str(r.get("path") or "").startswith(prefix)]
+        for row in rows:
+            if str(row.get("path") or "").startswith(prefix):
+                row["path"] = str(row["path"])[len(prefix):]
+        del rows[:]
+        rows.extend(inside)
+        report["ignored"] = outside
+        report["digest"]["pack_sha256"] = pack_digest(rows)
+        report["pack"]["files"] = len(rows)
+        report["pack"]["bytes"] = sum(int(r.get("bytes") or 0) for r in rows)
     report["compatibility"] = _compatibility(report, manifest)
     if report["compatibility"].get("collision"):
         return _refused(report["compatibility"]["collision"], report=report)
+    same = attach_replacement(report)
+    if same:
+        return _refused(same, report=report)
     report["uninstall"] = {"files": [r["path"] for r in rows], "stores": [],
                            "routes": [], "jobs": [], "credentials": [],
                            "completeness": "complete"}
@@ -1022,6 +1335,10 @@ def sentences(report: dict) -> dict:
     changes = (eff.get("what_changes")
                or "It adds one more thing the model may read. It is OFF until "
                   "you turn it on.")
+    rep = report.get("replacement") or {}
+    if rep:
+        changes = ("This REPLACES the copy already installed. " + str(rep.get("summary") or "")
+                   + " " + str(changes))
     safe = (f"Instructions only - no file in it can run"
             f" ({files} file(s), none executable). The digest is {digest[:12]}..., "
             f"and every file's own fingerprint is in the receipt. It is "
@@ -1029,28 +1346,99 @@ def sentences(report: dict) -> dict:
             f"bytes did not change, never who wrote them.")
     compat = report.get("compatibility") or {}
     py = compat.get("python") or {}
-    works = (f"It will work here: Python {py.get('running') or 'is present'}"
-             + (f" meets the {py.get('declared')} it asks for" if py.get("declared") else "")
-             + f", and no skill with that name exists on this PC yet. "
-               f"It is written to {compat.get('writes_to') or 'the skills folder'}, "
-               f"then turned OFF. {report.get('restart') or ''}").strip()
+    if rep:
+        works = (f"It will work here: Python {py.get('running') or 'is present'}"
+                 + (f" meets the {py.get('declared')} it asks for"
+                    if py.get("declared") else "")
+                 + f". It is written to {compat.get('writes_to') or 'the skills folder'}, "
+                   f"then turned OFF, exactly as a first install is. "
+                   f"{report.get('restart') or ''}").strip()
+    else:
+        works = (f"It will work here: Python {py.get('running') or 'is present'}"
+                 + (f" meets the {py.get('declared')} it asks for"
+                    if py.get("declared") else "")
+                 + f", and no skill with that name exists on this PC yet. "
+                   f"It is written to {compat.get('writes_to') or 'the skills folder'}, "
+                   f"then turned OFF. {report.get('restart') or ''}").strip()
     return {"what": what, "changes": changes, "safe": safe, "works": works}
+
+
+def _finding_lines(report: dict) -> list:
+    """The scan's own findings, as card lines. An empty list is said out loud."""
+    findings = [f for f in (report.get("findings") or []) if isinstance(f, dict)]
+    if not findings:
+        return ["  None. No prompt-injection pattern, hidden or bidirectional "
+                "Unicode, dangerous instruction or bundled script was found."]
+    out = []
+    for item in findings[:12]:
+        where = str(item.get("where") or "")
+        out.append(f"  [{str(item.get('severity') or 'note').upper()}] "
+                   f"{item.get('message') or item.get('code') or 'finding'}"
+                   + (f"  ({where})" if where else ""))
+    if len(findings) > 12:
+        out.append(f"  ... and {len(findings) - 12} more, all saved in the receipt.")
+    return out
+
+
+def _replacement_lines(report: dict) -> list:
+    """The replacement half of the card: what is installed, and the diff."""
+    rep = report.get("replacement") or {}
+    if not rep:
+        return []
+    out = [
+        "THIS IS A REPLACEMENT, NOT AN UPDATE",
+        f"  Installed:  version {rep.get('from_version') or 'not declared'}, "
+        f"SHA-256 {str(rep.get('from_sha256') or '')[:16]}..."
+        + (f", at {rep.get('old_folder')}" if rep.get("old_folder") else ""),
+        f"  This pack:  version {rep.get('to_version') or 'not declared'}, "
+        f"SHA-256 {str(rep.get('to_sha256') or '')[:16]}...",
+    ]
+    if rep.get("tampered"):
+        out.append(
+            "  NOTE: the installed copy no longer matches its ledger record - "
+            + ", ".join((rep.get("changed_files") or [])[:4])
+            + (" ..." if len(rep.get("changed_files") or []) > 4 else "")
+            + ". Replacing it is how that is repaired.")
+    out += [
+        "  Nothing is swapped until you say yes. If you say no, the installed "
+        "copy stays exactly as it is.",
+        "",
+        "WHAT CHANGES",
+        f"  {rep.get('summary') or 'The new pack differs from the installed one.'}",
+        "",
+    ]
+    diff = str(rep.get("diff") or "")
+    if diff:
+        for line in diff.splitlines():
+            out.append("  " + (line[:240] + " ..." if len(line) > 240 else line))
+        if rep.get("diff_cut"):
+            out.append(f"  ... the diff was cut at {MAX_DIFF_LINES} lines; the "
+                       f"whole report and diff are saved in the receipt.")
+    elif rep.get("mode") == "record-only":
+        out.append("  The recorded copy is gone from this PC, so there is no "
+                   "installed file to diff against.")
+    else:
+        out.append("  No file changed; only the version label did.")
+    out.append("")
+    return out
 
 
 def card_text(report: dict) -> str:
     """The ONE install card's own words, built from the report.
 
-    It names the pack, where it came from, its digest, what it contains, and
-    the honest boundary. `jarvis_skills.install()` puts this on the card it
+    It names the pack, where it came from, its digest, what it contains, the
+    scan's own findings, and - for a replacement - the installed copy and a
+    unified diff against it. `jarvis_skills.install()` puts this on the card it
     raises; nothing here can skip that card or approve anything.
     """
     pack = report.get("pack") or {}
     src = report.get("source") or {}
     eff = report.get("effectiveness") or {}
-    compat = report.get("compatibility") or {}
+    rep = report.get("replacement") or {}
     said = sentences(report)
+    verb = "Replace the installed skill" if rep else "Install the skill"
     lines = [
-        f"Install the skill {str(pack.get('name') or '')!r}"
+        f"{verb} {str(pack.get('name') or '')!r}"
         + (f" version {pack.get('version')}" if pack.get("version") else "")
         + "?",
         "",
@@ -1061,7 +1449,16 @@ def card_text(report: dict) -> str:
         f"SHA-256:   {str((report.get('digest') or {}).get('pack_sha256') or '')[:16]}...",
         f"Contains:  instructions only - no code ({pack.get('files')} file(s), "
         f"{pack.get('bytes')} bytes)",
-        "",
+    ]
+    ignored = [str(p) for p in (report.get("ignored") or [])]
+    if ignored:
+        lines.append(
+            f"Ignored:   {len(ignored)} file(s) in the .zip are outside the "
+            f"skill's own folder, so they will NOT be installed: "
+            + ", ".join(ignored[:4]) + (" ..." if len(ignored) > 4 else ""))
+    lines.append("")
+    lines += _replacement_lines(report)
+    lines += [
         "WHAT IT IS",
         f"  {said['what']}",
         "",
@@ -1072,6 +1469,11 @@ def card_text(report: dict) -> str:
         "",
         "IS IT SAFE",
         f"  {said['safe']}",
+        "",
+        "SCAN FINDINGS",
+    ]
+    lines += _finding_lines(report)
+    lines += [
         "",
         "WILL IT WORK HERE",
         f"  {said['works']}",
@@ -1085,10 +1487,21 @@ def card_text(report: dict) -> str:
         "WHAT THE SCAN CANNOT DO: it does not sandbox anything, and a clean scan "
         "is not permission.",
         "",
-        "If you say yes, the files are copied in and then turned OFF at once - "
-        "the model is not offered it until you turn it on, which is its own "
-        "card. If you say no, nothing is written at all.",
     ]
+    if rep:
+        lines += [
+            "If you say yes, the new files replace the installed copy and are then "
+            "turned OFF at once - the model is not offered the new version until "
+            "you turn it on, which is its own card. The old copy stays in the "
+            "receipt and in the ledger's history. If you say no, nothing is "
+            "swapped and nothing is written.",
+        ]
+    else:
+        lines += [
+            "If you say yes, the files are copied in and then turned OFF at once - "
+            "the model is not offered it until you turn it on, which is its own "
+            "card. If you say no, nothing is written at all.",
+        ]
     return "\n".join(lines)
 
 
@@ -1121,6 +1534,12 @@ def _extract_zip(zip_path: Path, into: Path) -> tuple:
                                   f"itself ({name!r})")
                 if (info.external_attr >> 16) & 0o170000 == 0o120000:
                     return None, f"the .zip holds a link ({name!r})"
+                if "\0" in name or ":" in name:
+                    # Checked again here, not only in the scan: a colon is an
+                    # alternate data stream on Windows, and this is the second
+                    # read of the archive.
+                    return None, (f"the .zip holds a name that is not a plain "
+                                  f"name ({name!r})")
                 files += 1
                 total += int(info.file_size or 0)
                 if files > MAX_FILES or total > MAX_BYTES:
@@ -1151,7 +1570,30 @@ def _extract_zip(zip_path: Path, into: Path) -> tuple:
         return None, "the .zip holds no SKILL.md"
     if len(found) > 1:
         return None, "the .zip holds more than one skill"
-    return found[0], ""
+    folder = found[0]
+    # A `.zip` GitHub built gets its folder renamed to the skill's own name
+    # first: `my-skill-main/SKILL.md` says `name: my-skill`, and the spec (and
+    # `parse_skill`) require the folder to be the name. The same rule the
+    # Skills screen's `_find_one_skill` applies, in this throwaway copy; the
+    # rename is checked by the same `parse_skill` afterwards.
+    sk = _sk()
+    if sk is not None:
+        try:
+            fm, _body = sk._parse_frontmatter(
+                (folder / "SKILL.md").read_text(encoding="utf-8",
+                                                errors="replace"))
+            wanted = _clean_name(fm.get("name"))
+        except Exception:
+            wanted = ""
+        if wanted and wanted != folder.name:
+            renamed = folder.parent / wanted
+            try:
+                if not renamed.exists():
+                    shutil.move(str(folder), str(renamed))
+                    return renamed, ""
+            except OSError:
+                pass
+    return folder, ""
 
 
 def _write_receipt(report: dict, entry: dict, card: str) -> str:
@@ -1177,6 +1619,18 @@ def _write_receipt(report: dict, entry: dict, card: str) -> str:
         return ""
 
 
+def _restore_folder(backup: Path, folder: Path) -> bool:
+    """Put a saved copy back where it was. False is an answer: the caller says so."""
+    try:
+        if Path(folder).exists():
+            shutil.rmtree(folder)
+        Path(folder).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(backup, folder)
+        return True
+    except OSError:
+        return False
+
+
 def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
     """Scan, then let `jarvis_skills.install()` raise the ONE card, then write.
 
@@ -1186,6 +1640,14 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
     the pack OFF afterwards with the existing `skills-off` move, and records
     every file in the ledger with a receipt. A refusal comes back as a plain
     answer and writes nothing.
+
+    A pack whose name the ledger already records is a REPLACEMENT, and the
+    replacement rules are Q3's (2026-11-05): the new source is scanned from
+    scratch, a unified diff against the installed files goes on the SAME one
+    NEW card as the report, and the swap happens only inside `install()` after
+    that card is answered. The installed copy is saved to the incoming folder
+    first and put back if the copy fails, so a failed replacement cannot lose
+    the version the owner already had.
     """
     sk = _sk()
     menu = _menu()
@@ -1202,7 +1664,14 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
     name = str((report.get("pack") or {}).get("name") or "")
     src = report.get("source") or {}
     ref = Path(str(src.get("ref") or ""))
+    replacement = dict(report.get("replacement") or {})
+    old_folder: Optional[Path] = None
+    old_entry: dict = {}
+    if replacement.get("mode") == "swap" and replacement.get("old_folder"):
+        old_folder = Path(str(replacement["old_folder"]))
+        old_entry = _entry(name)
     cleanup: Optional[Path] = None
+    backup: Optional[Path] = None
     try:
         folder = ref
         if str(src.get("type")) == "zip":
@@ -1222,17 +1691,76 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
             if folder is None:
                 return {"ok": False, "installed": False, "asked": False,
                         "reason": why, "refused": True, "report": report}
+        # The scan checked this too; the copy is a second read, and a link
+        # added between them must not land (Q2: path-traversal links are a hard
+        # reject, and an unread link is exactly that).
+        linked = links_in(folder)
+        if linked:
+            return {"ok": False, "installed": False, "asked": False,
+                    "refused": True, "report": report,
+                    "reason": (f"that pack now holds a link or a file that points "
+                               f"outside it ({linked!r}), so nothing was installed")}
+        if old_folder is not None and old_folder.is_dir():
+            incoming = menu.incoming_root()
+            if incoming is None:
+                return {"ok": False, "installed": False, "asked": False,
+                        "reason": ("a safe copy of the installed one could not be "
+                                   "made, so nothing was swapped and the installed "
+                                   "copy is unchanged")}
+            backup = Path(incoming) / (f"pack-old-{int(time.time() * 1000)}-"
+                                       f"{os.getpid()}")
+            try:
+                shutil.copytree(old_folder, backup)
+            except OSError as exc:
+                return {"ok": False, "installed": False, "asked": False,
+                        "reason": (f"a safe copy of the installed one could not be "
+                                   f"made ({type(exc).__name__}), so nothing was "
+                                   f"swapped and the installed copy is unchanged")}
         card = card_text(report)
-        out = sk.install(folder, trust="third_party",
-                         accept_warnings=bool(accept_warnings), note=card)
+        try:
+            out = sk.install(folder, trust="third_party",
+                             accept_warnings=bool(accept_warnings), note=card)
+        except Exception as exc:
+            restored = False
+            if backup is not None and old_folder is not None:
+                restored = _restore_folder(backup, old_folder)
+            return {"ok": False, "installed": False, "asked": True,
+                    "reason": (f"the install failed ({type(exc).__name__})"
+                               + (", and the installed copy was put back unchanged"
+                                  if restored else "")),
+                    "report": report}
         out["report"] = report
         out["card"] = card
         if not out.get("ok"):
             out["installed"] = False
+            if backup is not None and old_folder is not None:
+                if _restore_folder(backup, old_folder):
+                    out["restored"] = True
+                    out["reason"] = (str(out.get("reason") or "refused")
+                                     + " The installed copy was left exactly as it "
+                                       "was.")
             out["sentences"] = report.get("sentences") or sentences(report)
             return out
         dest = Path(str((_skills_root() or Path(".")) / name))
         rows = file_rows(dest)
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        new_sha = str((report.get("digest") or {}).get("pack_sha256") or "")
+        history = list(old_entry.get("history") or []) if old_entry else []
+        if replacement:
+            history.append({
+                "action": "replaced",
+                "at": now,
+                "from_pack_sha256": str(old_entry.get("pack_sha256")
+                                        or replacement.get("from_sha256") or ""),
+                "to_pack_sha256": new_sha,
+                "from_version": str(old_entry.get("version")
+                                    or replacement.get("from_version") or ""),
+                "to_version": str((report.get("pack") or {}).get("version") or ""),
+                "diff_sha256": str(replacement.get("diff_sha256") or ""),
+                "diff_lines": int(replacement.get("diff_lines") or 0),
+                "tampered_at_replace": bool(replacement.get("tampered")),
+                "previous_receipt": str(old_entry.get("receipt") or ""),
+            })
         entry = {
             "kind": "skill",
             "name": name,
@@ -1240,13 +1768,22 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
             "source": {"type": str(src.get("type") or "folder"),
                        "ref": str(src.get("ref") or ""),
                        "pin": dict(src.get("pin") or {})},
-            "pack_sha256": str((report.get("digest") or {}).get("pack_sha256") or ""),
-            "installed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "pack_sha256": new_sha,
+            "installed_at": now,
             "state": "installed",
             "folder": str((_off_root() or Path(".")) / name),
             "files": rows,
             "installed_files": rows,
+            "history": history,
         }
+        if old_entry.get("installed_at"):
+            entry["first_installed_at"] = str(old_entry["installed_at"])
+        if replacement:
+            entry["replaced_at"] = now
+            entry["replaces"] = (str(old_entry.get("pack_sha256")
+                                     or replacement.get("from_sha256") or ""))
+            entry["replacement_diff_sha256"] = str(
+                replacement.get("diff_sha256") or "")
         # NOTHING IS ENABLED IMPLICITLY. The existing off move is used: the
         # folder goes to `skills-off`, the index row goes, and the model is not
         # offered it - the same state as a skill the owner switched off.
@@ -1263,27 +1800,54 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
             state_line = (f" It could not be turned off automatically "
                           f"({type(exc).__name__}), so it is ON until you switch "
                           f"it off.")
+        current = _folder_of(name)
+        if current is not None:
+            entry["folder"] = str(current)
         receipt = _write_receipt(report, entry, card)
         entry["receipt"] = receipt
+        entry["receipt_scan"] = {
+            "file": receipt,
+            "approved_at": now,
+            "card_text_sha256": sha256_bytes(card.encode("utf-8")),
+            "verdict": str(report.get("verdict") or ""),
+            "warnings": len([f for f in (report.get("findings") or [])
+                             if isinstance(f, dict)
+                             and str(f.get("severity")) == "warn"]),
+            "findings": [dict(f) for f in (report.get("findings") or [])
+                         if isinstance(f, dict)],
+            "pack_sha256": new_sha,
+            "files": rows,
+        }
         if not _save_entry(entry):
             state_line += (" The pack ledger could not be written, so I cannot "
                            "promise a complete removal of this one.")
+        if replacement:
+            said = (f"Replaced {name!r} with the newly scanned pack ({len(rows)} "
+                    f"file(s), digest {new_sha[:12]}...) and turned it OFF at once, "
+                    f"so the model is not offered the new version. The old copy is "
+                    f"kept in the receipt and the ledger's history.")
+        else:
+            said = (f"Installed {name!r} ({len(rows)} file(s), digest "
+                    f"{new_sha[:12]}...) and turned it OFF at once, so the model "
+                    f"is not offered it. It is in "
+                    f"{(_off_root() or Path('skills-off'))}. Say \"turn the {name} "
+                    f"skill on\" when you want it, which is its own card.")
         return {
             "ok": True, "installed": True, "asked": True, "name": name,
             "state": entry["state"], "files": len(rows),
-            "pack_sha256": entry["pack_sha256"], "receipt": receipt,
+            "pack_sha256": new_sha, "receipt": receipt,
             "ledger": str(ledger_path()), "report": report,
+            "replaced": bool(replacement),
             "sentences": report.get("sentences") or sentences(report),
             "restart": _restart_line("skill"),
-            "message": (
-                f"Installed {name!r} ({len(rows)} file(s), digest "
-                f"{entry['pack_sha256'][:12]}...) and turned it OFF at once, so "
-                f"the model is not offered it. It is in "
-                f"{(_off_root() or Path('skills-off'))}. Say \"turn the {name} "
-                f"skill on\" when you want it, which is its own card."
-                + state_line + " " + _restart_line("skill")),
+            "message": said + state_line + " " + _restart_line("skill"),
         }
     finally:
+        if backup is not None:
+            try:
+                shutil.rmtree(backup)
+            except OSError:
+                pass
         if cleanup is not None:
             try:
                 shutil.rmtree(cleanup)
@@ -1304,6 +1868,207 @@ def _folder_of(name: str) -> Optional[Path]:
         if folder.is_dir():
             return folder
     return None
+
+
+# --------------------------------------------------------------------------
+#   Immutability: the manifest is re-checked on every load (Q3, 2026-11-05)
+# --------------------------------------------------------------------------
+
+def _mark_tampered(name: str, entry: dict, missing: list, changed: list) -> None:
+    """Record a tampered pack in the ledger. Never deletes and never edits it.
+
+    A pack already marked with the same files is not written again: `list_packs`
+    and the hub's reads check on every call, and a read must not rewrite the
+    ledger each time it sees the same unchanged tamper.
+    """
+    state = str(entry.get("state") or "")
+    if (state == TAMPERED
+            and sorted(entry.get("tampered_missing") or []) == sorted(missing)
+            and sorted(entry.get("tampered_changed") or []) == sorted(changed)):
+        return
+    if state != TAMPERED:
+        entry["state_before_tamper"] = state or "installed"
+    entry["state"] = TAMPERED
+    entry["tampered_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    entry["tampered_missing"] = sorted(missing)
+    entry["tampered_changed"] = sorted(changed)
+    _save_entry(entry)
+
+
+def _folder_state(folder: Path) -> str:
+    """`disabled` when the folder is in the turned-off folder, else installed."""
+    off = _off_root()
+    try:
+        if off is not None:
+            here = Path(folder).resolve()
+            if here == (Path(off) / Path(folder).name).resolve():
+                return "disabled"
+    except OSError:
+        pass
+    return "installed"
+
+
+def verify_pack(name: str, *, mark: bool = True) -> dict:
+    """Re-hash EVERY file in the pack's manifest against the disk. Read-only.
+
+    Called before a pack is loaded, listed or read. A file that no longer
+    matches the SHA-256 pinned at install - changed, deleted, or replaced - is
+    a refusal: the pack is marked `tampered` in `jarvis-packs.json` and says the
+    file's name. A file the owner ADDED is not tampering and is not reported
+    here; removal already treats it as the owner's own and never deletes it.
+
+    `mark=False` measures without writing, for a card's own text.
+    """
+    clean = _clean_name(name)
+    if not clean:
+        return {"ok": False, "known": False, "name": str(name or ""),
+                "tampered": False, "reason": "that is not a pack name"}
+    entry = _entry(clean)
+    if not entry:
+        return {"ok": False, "known": False, "name": clean, "tampered": False,
+                "reason": f"the pack ledger has no record of {clean!r}"}
+    state = str(entry.get("state") or "")
+    if state == "removed":
+        return {"ok": False, "known": True, "removed": True, "name": clean,
+                "tampered": False,
+                "reason": f"{clean!r} was removed, so there is nothing to load"}
+    folder = _folder_of(clean)
+    if folder is None:
+        return {"ok": False, "known": True, "missing": True, "name": clean,
+                "tampered": False,
+                "reason": (f"the ledger records {clean!r} but its folder is not on "
+                           f"this PC any more")}
+    rows = entry.get("files") or []
+    if not isinstance(rows, list) or not rows:
+        return {"ok": False, "known": True, "name": clean, "tampered": True,
+                "missing": [], "changed": [],
+                "reason": (f"the ledger records no file list for {clean!r}, so its "
+                           f"bytes cannot be checked and it is not loaded")}
+    missing, changed = [], []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        rel = str(row.get("path") or "")
+        try:
+            full = Path(folder) / rel
+        except (TypeError, ValueError):
+            missing.append(rel or "?")
+            continue
+        if not rel or not _inside(folder, full):
+            missing.append(rel or "?")
+            continue
+        if not full.is_file():
+            missing.append(rel)
+            continue
+        try:
+            if _sha256_file(full) != str(row.get("sha256") or ""):
+                changed.append(rel)
+        except OSError:
+            missing.append(rel)
+    if missing or changed:
+        if mark:
+            _mark_tampered(clean, entry, missing, changed)
+        named = ", ".join([*changed, *missing][:4])
+        more = len(missing) + len(changed) - len([*changed, *missing][:4])
+        return {"ok": False, "known": True, "name": clean, "tampered": True,
+                "missing": sorted(missing), "changed": sorted(changed),
+                "reason": (f"{clean!r} has changed on disk since it was installed: "
+                           f"{named}" + (f" and {more} more" if more else "")
+                           + ". Its SHA-256 no longer matches the one recorded at "
+                             "install, so it will not be loaded.")}
+    if state == TAMPERED:
+        # The bytes match the manifest again: the change was undone by hand, so
+        # the record says so instead of leaving a stale warning on a good pack.
+        restored = "disabled" if _folder_state(folder) == "disabled" else "installed"
+        entry["state"] = restored
+        entry.pop("tampered_at", None)
+        entry.pop("tampered_missing", None)
+        entry.pop("tampered_changed", None)
+        entry.pop("state_before_tamper", None)
+        _save_entry(entry)
+    return {"ok": True, "known": True, "name": clean, "tampered": False,
+            "files": len(rows), "pack_sha256": str(entry.get("pack_sha256") or ""),
+            "folder": str(folder), "state": _folder_state(folder)}
+
+
+def verify_all() -> dict:
+    """Every pack the ledger still lists, re-checked. A missing file is a defect."""
+    ledger = read_ledger()
+    rows = []
+    for name, entry in sorted((ledger.get("packs") or {}).items()):
+        if not isinstance(entry, dict) or str(entry.get("state")) == "removed":
+            continue
+        rows.append(verify_pack(str(name)))
+    bad = [str(r.get("name") or "") for r in rows if r.get("tampered")]
+    return {"ok": not bad, "checked": len(rows), "tampered": bad, "packs": rows,
+            "note": ("Every file the ledger recorded is re-hashed against the disk. "
+                     "A pack that no longer matches is refused and marked tampered.")}
+
+
+def load_pack(name: str) -> dict:
+    """Load ONE pack's text, after re-checking its whole manifest.
+
+    This is the pack manager's load door, and the rule is Q3's: an installed
+    pack is immutable, so every load re-hashes the manifest first. A pack that
+    fails is NOT returned, and the ledger marks it `tampered` so `pack_list` and
+    the next scan both say so.
+    """
+    check = verify_pack(name)
+    if not check.get("ok"):
+        return {"ok": False, "loaded": False, "name": str(name or ""),
+                "tampered": bool(check.get("tampered")),
+                "reason": str(check.get("reason") or "it could not be checked")}
+    folder = _folder_of(str(check["name"]))
+    if folder is None:
+        return {"ok": False, "loaded": False, "name": str(check["name"]),
+                "reason": "its folder is gone"}
+    try:
+        text = (Path(folder) / "SKILL.md").read_text(encoding="utf-8",
+                                                     errors="replace")
+    except OSError as exc:
+        return {"ok": False, "loaded": False, "name": str(check["name"]),
+                "reason": f"its SKILL.md could not be read ({type(exc).__name__})"}
+    return {"ok": True, "loaded": True, "name": str(check["name"]),
+            "body": text, "folder": str(folder),
+            "pack_sha256": str(check.get("pack_sha256") or ""),
+            "files": int(check.get("files") or 0),
+            "note": ("Re-checked against the SHA-256 manifest before it was read: "
+                     "every file still matches what you approved.")}
+
+
+def repin_after_enable(name: str) -> dict:
+    """Re-pin the manifest after the existing ON card approved the folder again.
+
+    Turning a packed skill on runs `jarvis_skills.install()` on the turned-off
+    copy: the scanner and its ONE card run again, and the files are copied back
+    with whatever the owner approved. That is not tampering - a person said yes -
+    so the manifest is re-taken here, with the old digest kept in the history.
+    """
+    clean = _clean_name(name)
+    if not clean:
+        return {"ok": False, "reason": "that is not a pack name"}
+    entry = _entry(clean)
+    if not entry:
+        return {"ok": False, "reason": f"the ledger has no record of {clean!r}"}
+    folder = _folder_of(clean)
+    if folder is None:
+        return {"ok": False, "reason": f"{clean!r} has no folder on this PC"}
+    rows = file_rows(folder)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    history = list(entry.get("history") or [])
+    history.append({"action": "enabled", "at": now,
+                    "from_pack_sha256": str(entry.get("pack_sha256") or ""),
+                    "to_pack_sha256": pack_digest(rows)})
+    entry.update(files=rows, installed_files=rows, folder=str(folder),
+                 state=_folder_state(folder), repinned_at=now,
+                 pack_sha256=pack_digest(rows), history=history)
+    for key in ("tampered_at", "tampered_missing", "tampered_changed",
+                "state_before_tamper"):
+        entry.pop(key, None)
+    wrote = _save_entry(entry)
+    return {"ok": bool(wrote), "name": clean, "folder": str(folder),
+            "files": len(rows), "pack_sha256": entry["pack_sha256"],
+            "ledger_written": bool(wrote)}
 
 
 def plan_remove(name: str) -> dict:
@@ -1482,8 +2247,12 @@ def remove_pack(name: str) -> dict:
 def list_packs() -> dict:
     """Every pack the ledger knows, plus what is on disk without a record.
 
-    Read-only. The three states are kept apart because they are three
-    different problems for the owner: installed, turned off, and removed.
+    Read-only for the files. Each pack's whole manifest is re-hashed against the
+    disk as it is listed (Q3: an installed pack is immutable), so a pack whose
+    bytes changed behind Jarvis's back is shown as `tampered` and is marked so
+    in the ledger. The states are kept apart because they are different problems
+    for the owner: installed, turned off, tampered, removed, missing.
+
     Nothing here imports a pack or reads its body.
     """
     ledger = read_ledger()
@@ -1502,21 +2271,32 @@ def list_packs() -> dict:
                          "pack_sha256": entry.get("pack_sha256") or "",
                          "files": len(entry.get("files") or []),
                          "installed_at": entry.get("installed_at") or "",
+                         "tampered": False, "tampered_files": [],
                          "note": "removed - the ledger keeps the record"})
             continue
+        check = verify_pack(name) if folder is not None else {}
+        tampered = bool(check.get("tampered"))
+        if tampered:
+            state = TAMPERED
+        if folder is None:
+            state = "missing"
         rows.append({
             "name": name, "kind": entry.get("kind") or "skill",
             "version": entry.get("version") or "",
-            "state": state if folder is not None else "missing",
+            "state": state,
             "on_disk": folder is not None,
             "source": entry.get("source") or {},
             "pack_sha256": entry.get("pack_sha256") or "",
             "files": len(entry.get("files") or []),
             "installed_at": entry.get("installed_at") or "",
             "folder": str(folder) if folder else "",
-            "note": "" if folder is not None else
-                    ("its folder is gone from this PC, so the ledger's record is "
-                     "all that is left"),
+            "tampered": tampered,
+            "tampered_files": sorted([*(check.get("changed") or []),
+                                      *(check.get("missing") or [])]),
+            "note": (str(check.get("reason") or "") if tampered else
+                     ("" if folder is not None else
+                      ("its folder is gone from this PC, so the ledger's record is "
+                       "all that is left"))),
         })
     # On disk but not in the ledger: installed some other way. Named, never
     # dropped - a list that hides one is the failure this tool removes.
@@ -1575,10 +2355,14 @@ def list_packs() -> dict:
 
 def _self_check() -> dict:
     """What this module can see right now. Read-only."""
-    return {"module": "jarvis_packs", "version": 1,
+    packs = read_ledger().get("packs") or {}
+    return {"module": "jarvis_packs", "version": 2,
             "ledger": str(ledger_path()), "receipts": str(receipts_dir()),
             "skills_dir": str(_skills_root()), "off_dir": str(_off_root()),
-            "packs": len((read_ledger().get("packs") or {})),
+            "packs": len(packs),
+            "tampered": sorted(str(n) for n, e in packs.items()
+                               if isinstance(e, dict)
+                               and str(e.get("state")) == TAMPERED),
             "jarvis_skills": _sk() is not None,
             "jarvis_skill_menu": _menu() is not None,
             "python": "%d.%d" % _python_version()}

@@ -3425,7 +3425,12 @@ def _packs_tool_text(which: str) -> str:
                 "scanned first; a pack with code in it is refused in plain words "
                 "and never becomes a card. A clean one raises ONE approval card "
                 "showing the whole scan, and nothing is written until that yes. "
-                "Afterwards it is turned OFF. Never invent a path.")
+                "If a pack with that name is already installed, the same call is "
+                "a REPLACEMENT: the new files are scanned from scratch and a "
+                "unified diff against the installed ones is on the same ONE new "
+                "card; nothing is swapped before the yes. There is no update "
+                "that skips the scan or the card. Afterwards it is turned OFF. "
+                "Never invent a path.")
     return ("Remove ONE skill pack by the name pack_list shows. It raises ONE card "
             "naming exactly the files the ledger recorded, then deletes exactly "
             "those; a file the pack did not write is kept and named. Refuses when "

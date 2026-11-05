@@ -2072,6 +2072,18 @@ $PATCHES = @(
     # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'bench.patch'
+
+    # packs-tamper-on-load.patch (2026-11-05) - the pack manager's immutability
+    # rule reaches the SKILL BODY loader. `jarvis_packs.py` pins every file's
+    # SHA-256 at install in jarvis-packs.json; this patch adds the one check in
+    # `jarvis_skills.load()` that re-hashes that manifest before the body
+    # becomes instructions, and refuses a pack that no longer matches (the
+    # module marks it `tampered`). A skill the pack manager did not install is
+    # not in its ledger and is untouched, and with the module absent the door
+    # is exactly as it was. It sits immediately BEFORE plugin-loader.patch,
+    # which MUST stay the last entry of all (tools/check_plugins.py): it is a
+    # core patch, and only drop-in folders follow the loader.
+    'packs-tamper-on-load.patch'
     'plugin-loader.patch'
 )
 

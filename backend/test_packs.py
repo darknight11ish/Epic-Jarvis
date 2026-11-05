@@ -10,9 +10,31 @@ refused for the whole run:
     compatibility answer - and NO file appears anywhere;
   * **code is refused in one sentence, before any card.** A folder holding a
     `.py` is refused with the plain sentence that names the file, `asked` is
-    False, the gate is never called, and not one byte is written;
-  * **a .zip's bounds are refusals.** A member that climbs out (`../`), and a
-    symlink member, are each refused before anything is unpacked;
+    False, the gate is never called, and not one byte is written. Every suffix
+    the owner's Q2 ruling names - including `.wasm` - is driven, not just `.py`;
+  * **a folder link is refused.** A junction inside a pack is a way out of it,
+    so the scan refuses the pack before it hashes a byte (a junction is used
+    where this PC will not let a test make a symlink; the check covers both);
+  * **a .zip's bounds are refusals.** A member that climbs out (`../`), a
+    symlink member, and a member with an alternate-stream colon in its name are
+    each refused before anything is unpacked;
+  * **a name the ledger knows is a REPLACEMENT, and a new card shows a unified
+    diff.** The new source is scanned from scratch, the diff against the
+    installed files is in the one card's text, and with the gate stubbed to
+    refuse the installed copy does not change by one byte; with it stubbed to
+    approve the new bytes land and the old digest is kept in the history;
+  * **the same bytes are not a replacement.** Re-scanning what is installed is
+    a plain refusal and never becomes a card;
+  * **a name on disk with no ledger record is still refused.** The pack manager
+    will not overwrite a skill it did not write, because it has no manifest for
+    it;
+  * **tampering is caught on load and marked.** A reference file changed by hand
+    (not SKILL.md, which the core's own drift check already covers) makes
+    `verify_pack` refuse, `load_pack` refuse, `pack_list` show `tampered`, the
+    ledger record it, and the skill hub stop offering it - and restoring the
+    bytes clears the mark;
+  * **there is no update command.** The four pack tools are the only ones, none
+    is named update/replace, and the module defines no in-place updater;
   * **a collision is refused.** A skill whose name is already installed does
     not overwrite it and does not become a card;
   * **install is one card, and nothing lands before it.** With the gate stubbed
@@ -480,12 +502,377 @@ def t_nothing_here_opens_a_socket_or_starts_a_process():
     check("scanning opens no socket", calls == [], repr(calls))
 
 
+def make_junction(link: Path, target: Path) -> bool:
+    """A directory junction. This PC will not let a test make a symlink, and a
+    junction is the same escape from a folder - the scan must refuse both."""
+    try:
+        link.parent.mkdir(parents=True, exist_ok=True)
+        if link.exists() or link.is_symlink():
+            return False
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+        return True
+    except Exception:
+        return False
+
+
+def t_every_law_listed_code_file_is_refused():
+    """Q2 (2026-11-05): every executable suffix named by the ruling, not just .py."""
+    suffixes = [".py", ".pyc", ".ps1", ".bat", ".cmd", ".sh", ".exe", ".dll",
+                ".so", ".pyd", ".js", ".ts", ".wasm"]
+    refused_ok, named_ok = True, True
+    for i, suffix in enumerate(suffixes):
+        folder = make_skill(SOURCE / f"code-{i}", f"code-{i}",
+                            extra={f"payload{suffix}": "not really code\n"})
+        report = P.scan_source(str(folder))
+        if report.get("verdict") != "refuse":
+            refused_ok = False
+            print(f"       {suffix} was NOT refused: {report.get('verdict')!r}")
+        if f"payload{suffix}" not in str(report.get("refusal") or ""):
+            named_ok = False
+            print(f"       {suffix} refusal did not name the file: "
+                  f"{report.get('refusal')!r}")
+    check("every suffix the Q2 ruling names is refused", refused_ok,
+          ", ".join(suffixes))
+    check("... and each refusal names the file that would run", named_ok)
+    gate, calls = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        out = P.install_pack(str(SOURCE / "code-0"))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("a code pack is refused before the gate, and nothing is written",
+          out.get("asked") is False and calls == []
+          and not (SKILLS / "code-0").exists() and not (OFF / "code-0").exists(),
+          repr(out)[:200])
+
+
+def t_a_zip_code_member_or_stream_name_is_refused():
+    wasm = SCRATCH / "wasm.zip"
+    with zipfile.ZipFile(wasm, "w") as zf:
+        zf.writestr("SKILL.md", "---\nname: wasm-pack\ndescription: x\n---\nbody")
+        zf.writestr("payload.wasm", b"\x00asm")
+    report = P.scan_source(str(wasm))
+    check("a .zip holding a .wasm member is refused",
+          report.get("verdict") == "refuse"
+          and "payload.wasm" in str(report.get("refusal")),
+          str(report.get("refusal")))
+    stream = SCRATCH / "stream.zip"
+    with zipfile.ZipFile(stream, "w") as zf:
+        zf.writestr("SKILL.md", "---\nname: stream-pack\ndescription: x\n---\nbody")
+        zf.writestr("notes.md:hidden", "invisible body")
+    report = P.scan_source(str(stream))
+    check("a .zip member with an alternate-stream colon is refused",
+          report.get("verdict") == "refuse"
+          and "plain name" in str(report.get("refusal")),
+          str(report.get("refusal")))
+
+
+def t_a_folder_link_is_refused():
+    outside = SCRATCH / "outside-pack"
+    outside.mkdir(parents=True, exist_ok=True)
+    (outside / "secret.md").write_text("not part of the pack\n", "utf-8")
+    folder = make_skill(SOURCE / "linked", "linked-skill",
+                        extra={"references/real.md": "real\n"})
+    link = folder / "references" / "outside"
+    if not make_junction(link, outside):
+        print("  SKIPPED  a folder link could not be made on this PC, so the "
+              "link half did NOT run and did NOT pass.")
+        return
+    try:
+        report = P.scan_source(str(folder))
+        check("a folder holding a junction is refused",
+              report.get("verdict") == "refuse", repr(report.get("verdict")))
+        check("the refusal names the link",
+              "outside" in str(report.get("refusal")), str(report.get("refusal")))
+        gate, calls = fresh_gate(allowed=True)
+        SK._gate = gate
+        try:
+            out = P.install_pack(str(folder))
+        finally:
+            SK._gate = fresh_gate(allowed=True)[0]
+        check("... nothing is installed and nobody is asked",
+              out.get("ok") is False and out.get("asked") is False and calls == [],
+              repr(out)[:200])
+        check("... no folder landed in the skills or off folder",
+              not (SKILLS / "linked-skill").exists()
+              and not (OFF / "linked-skill").exists())
+    finally:
+        try:
+            os.rmdir(link)          # removes the junction, never its target
+        except OSError:
+            pass
+
+
+def t_a_zip_wrapper_folder_is_read_from_the_skill_folder():
+    """A .zip usually wraps the skill: the manifest is the skill's own folder."""
+    z = SCRATCH / "wrapped.zip"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("my-skill/SKILL.md",
+                    GOOD_SKILL_MD.format(name="wrapped-skill",
+                                         description="wrapped in a folder"))
+        zf.writestr("my-skill/references/notes.md", "a note\n")
+        zf.writestr("README.md", "not part of the skill\n")
+    report = P.scan_source(str(z))
+    check("a wrapped .zip scans as one skill",
+          report.get("verdict") == "clean", repr(report.get("refusal")))
+    check("... the manifest is the skill's own files, relative to its folder",
+          sorted(r["path"] for r in report["digest"]["files"])
+          == ["SKILL.md", "references/notes.md"],
+          repr([r["path"] for r in report["digest"]["files"]]))
+    check("... a file outside the skill's folder is named, not silently dropped",
+          report.get("ignored") == ["README.md"], repr(report.get("ignored")))
+    gate, _ = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        out = P.install_pack(str(z))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("the wrapped .zip installs", out.get("ok") is True, repr(out)[:200])
+    entry = (P.read_ledger().get("packs") or {}).get("wrapped-skill") or {}
+    on_disk = P.pack_digest(P.file_rows(OFF / "wrapped-skill"))
+    check("... the recorded manifest is the folder as it really landed",
+          P.pack_digest(entry.get("files") or []) == on_disk
+          and entry.get("pack_sha256") == on_disk,
+          f"{entry.get('pack_sha256')} vs {on_disk}")
+    check("... and the file it did not install is not in the ledger",
+          sorted(r["path"] for r in entry.get("files") or [])
+          == ["SKILL.md", "references/notes.md"],
+          repr([r["path"] for r in (entry.get("files") or [])]))
+
+
+def t_a_replacement_is_a_new_scan_with_a_unified_diff():
+    """Q3 (2026-11-05): replacement is a full scan plus a diff on a NEW card."""
+    v1 = make_skill(SOURCE / "v1", "swap-test", description="the old thing",
+                    extra={"references/guide.md": "line one\nline two\n"})
+    gate, _ = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        first = P.install_pack(str(v1))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("the first version installed", first.get("ok") is True, repr(first)[:200])
+    old_receipt = Path(str(first.get("receipt") or ""))
+    old_sha = str(first.get("pack_sha256") or "")
+    v2 = make_skill(SOURCE / "v2", "swap-test", description="the new thing",
+                    extra={"references/guide.md": "line one\nline changed\n"})
+    report = P.scan_source(str(v2))
+    check("a same-name pack scans as a replacement, not a collision",
+          report.get("verdict") in ("clean", "review") and not report.get("refusal"),
+          str(report.get("refusal"))[:200])
+    rep = report.get("replacement") or {}
+    check("... it says it will swap", rep.get("mode") == "swap", repr(rep)[:200])
+    check("... the installed digest is the one it measured against",
+          rep.get("from_sha256") == old_sha, repr(rep.get("from_sha256")))
+    changed = (rep.get("files") or {}).get("changed") or []
+    check("... every changed file is named",
+          "SKILL.md" in changed and "references/guide.md" in changed,
+          repr(rep.get("files")))
+    diff = str(rep.get("diff") or "")
+    check("... the diff is unified and names both sides",
+          "--- installed/SKILL.md" in diff and "+++ new/SKILL.md" in diff
+          and "-description: the old thing" in diff
+          and "+description: the new thing" in diff, diff[:300])
+    check("... and it has a fingerprint of its own",
+          len(str(rep.get("diff_sha256") or "")) == 64)
+    card = P.card_text(report)
+    check("the ONE card says this is a REPLACEMENT",
+          "THIS IS A REPLACEMENT" in card and "Replace the installed skill" in card,
+          card[:300])
+    check("... and carries the unified diff", "--- installed/SKILL.md" in card)
+    check("... and the whole new scan report",
+          "SCAN FINDINGS" in card and "WILL IT WORK HERE" in card)
+    # The gate REFUSES: the installed copy must not change by one byte.
+    gate, calls = fresh_gate(allowed=False, reason="not now")
+    SK._gate = gate
+    try:
+        refused_out = P.install_pack(str(v2))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    live = (OFF / "swap-test" / "SKILL.md").read_text("utf-8")
+    check("a refused replacement card changes nothing",
+          refused_out.get("ok") is False and "the old thing" in live
+          and "the new thing" not in live, repr(refused_out)[:200])
+    check("... the installed reference is untouched too",
+          (OFF / "swap-test" / "references" / "guide.md").read_text("utf-8")
+          == "line one\nline two\n")
+    check("... the card that was refused carried the diff",
+          calls and "THIS IS A REPLACEMENT" in calls[0]["prompt"]
+          and "--- installed/SKILL.md" in calls[0]["prompt"],
+          (calls[0]["prompt"][:300] if calls else "no card"))
+    # The gate APPROVES: now, and only now, the swap happens.
+    gate, calls = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        out = P.install_pack(str(v2))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("an approved replacement swaps the files",
+          out.get("ok") is True and out.get("replaced") is True, repr(out)[:300])
+    live = (OFF / "swap-test" / "SKILL.md").read_text("utf-8")
+    check("... the new bytes are the installed ones",
+          "the new thing" in live and "the old thing" not in live)
+    check("... the old receipt is still on disk", old_receipt.is_file(),
+          str(old_receipt))
+    entry = (P.read_ledger().get("packs") or {}).get("swap-test") or {}
+    history = entry.get("history") or []
+    check("... the ledger keeps the replaced digest",
+          bool(history) and history[-1].get("action") == "replaced"
+          and history[-1].get("from_pack_sha256") == old_sha
+          and history[-1].get("to_pack_sha256") == out.get("pack_sha256"),
+          repr(history)[:300])
+    check("... the installed copy still verifies",
+          P.verify_pack("swap-test").get("ok") is True)
+    check("... the receipt is recorded inside jarvis-packs.json",
+          (entry.get("receipt_scan") or {}).get("pack_sha256")
+          == entry.get("pack_sha256"))
+
+
+def t_the_same_bytes_are_not_a_replacement():
+    folder = make_skill(SOURCE / "same", "same-test", description="one thing")
+    gate, _ = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        first = P.install_pack(str(folder))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("same-test installed", first.get("ok") is True, repr(first)[:200])
+    report = P.scan_source(str(folder))
+    check("re-scanning exactly what is installed is a plain refusal",
+          report.get("verdict") == "refuse"
+          and "same bytes" in str(report.get("refusal")),
+          str(report.get("refusal")))
+    gate, calls = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        out = P.install_pack(str(folder))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("... it never becomes a card, and nothing is written",
+          out.get("asked") is False and calls == []
+          and out.get("reason") and "same bytes" in str(out["reason"]),
+          repr(out)[:200])
+
+
+def t_a_name_on_disk_without_a_ledger_record_is_refused():
+    loose = SKILLS / "loose-skill"
+    loose.mkdir(parents=True, exist_ok=True)
+    (loose / "SKILL.md").write_text(
+        GOOD_SKILL_MD.format(name="loose-skill", description="hand made"),
+        "utf-8")
+    folder = make_skill(SOURCE / "loose", "loose-skill")
+    report = P.scan_source(str(folder))
+    check("a name on disk that the ledger does not know is still refused",
+          report.get("verdict") == "refuse"
+          and "no record" in str(report.get("refusal")),
+          str(report.get("refusal")))
+    check("... the skill that was already there was not overwritten",
+          "hand made" in (loose / "SKILL.md").read_text("utf-8"))
+    shutil.rmtree(loose)
+
+
+def t_a_changed_file_is_tampered_and_refused_on_load():
+    """Q3: every file's sha256 is re-checked on load, and a change is marked."""
+    folder = make_skill(SOURCE / "tamper", "tamper-test",
+                        extra={"references/notes.md": "trusted\n"})
+    gate, _ = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        first = P.install_pack(str(folder))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("tamper-test installed", first.get("ok") is True, repr(first)[:200])
+    notes = OFF / "tamper-test" / "references" / "notes.md"
+    notes.write_text("changed behind jarvis's back\n", "utf-8")
+    verified = P.verify_pack("tamper-test")
+    check("a changed reference file is caught by the manifest",
+          verified.get("ok") is False and verified.get("tampered") is True
+          and "references/notes.md" in (verified.get("changed") or []),
+          repr(verified)[:300])
+    entry = (P.read_ledger().get("packs") or {}).get("tamper-test") or {}
+    check("... and the ledger marks the pack tampered",
+          entry.get("state") == "tampered"
+          and "references/notes.md" in (entry.get("tampered_changed") or []),
+          repr(entry.get("state")))
+    loaded = P.load_pack("tamper-test")
+    check("load_pack refuses it and says why",
+          loaded.get("ok") is False and loaded.get("tampered") is True
+          and "changed on disk" in str(loaded.get("reason")),
+          repr(loaded)[:300])
+    row = {r["name"]: r for r in P.list_packs().get("packs") or []}.get("tamper-test") or {}
+    check("pack_list shows it as tampered, with the file named",
+          row.get("state") == "tampered" and row.get("tampered") is True
+          and "references/notes.md" in (row.get("tampered_files") or []),
+          repr(row)[:300])
+    # The hub is one of the load paths this repository owns: it must stop
+    # offering the pack and refuse to read its manuals.
+    shutil.move(str(OFF / "tamper-test"), str(SKILLS / "tamper-test"))
+    ix = SK._read_index()
+    ix["tamper-test"] = {"trust": "third_party", "sha256": "",
+                         "description": "a tampered skill"}
+    SK._write_index(ix)
+    try:
+        import jarvis_skill_hub as H
+        visible = H.visible_skills(None)
+        hidden = [r.get("name") for r in visible.get("hidden") or []]
+        check("the skill hub stops offering a tampered pack",
+              "tamper-test" in hidden, repr(visible)[:300])
+        refs = H.references("tamper-test")
+        check("... and refuses to read its manuals",
+              refs.get("ok") is False and refs.get("tampered") is True,
+              repr(refs)[:200])
+    finally:
+        ix = SK._read_index()
+        ix.pop("tamper-test", None)
+        SK._write_index(ix)
+        shutil.move(str(SKILLS / "tamper-test"), str(OFF / "tamper-test"))
+    # Restoring the bytes by hand clears the mark: it is a measurement, not a ban.
+    notes.write_text("trusted\n", "utf-8")
+    check("restoring the approved bytes clears the tampered mark",
+          P.verify_pack("tamper-test").get("ok") is True)
+    entry = (P.read_ledger().get("packs") or {}).get("tamper-test") or {}
+    check("... and the ledger says disabled again",
+          entry.get("state") == "disabled", repr(entry.get("state")))
+    check("... so the pack loads again", P.load_pack("tamper-test").get("ok") is True)
+
+
+def t_there_is_no_update_command():
+    import ast
+    import jarvis_agent as AG
+    names = sorted(str(n) for n in AG.TOOLS if str(n).startswith("pack_"))
+    check("the only pack tools are the four",
+          names == ["pack_inspect", "pack_install", "pack_list", "pack_remove"],
+          repr(names))
+    check("none of them is an update or replace verb",
+          not any(word in n for n in names
+                  for word in ("update", "upgrade", "replace")))
+    # Read the module as a PROGRAM, not as text: a function named like an
+    # updater would be found however it is formatted or renamed around.
+    tree = ast.parse((HERE / "jarvis_packs.py").read_text("utf-8"))
+    functions = sorted(n.name for n in ast.walk(tree)
+                       if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)))
+    updaters = [n for n in functions
+                if n.lower().startswith(("update_", "upgrade_", "replace_",
+                                         "pack_update", "pack_upgrade",
+                                         "pack_replace"))]
+    check("the module defines no in-place updater", updaters == [], repr(updaters))
+
+
 def main():
     for fn in (t_a_clean_skill_scans_into_a_full_report,
                t_a_python_file_is_refused_and_nothing_is_written,
+               t_every_law_listed_code_file_is_refused,
+               t_a_zip_code_member_or_stream_name_is_refused,
                t_a_zip_that_climbs_or_links_is_refused,
+               t_a_folder_link_is_refused,
+               t_a_zip_wrapper_folder_is_read_from_the_skill_folder,
                t_a_name_collision_is_refused,
+               t_a_name_on_disk_without_a_ledger_record_is_refused,
                t_install_is_one_card_and_writes_only_after_it,
+               t_a_replacement_is_a_new_scan_with_a_unified_diff,
+               t_the_same_bytes_are_not_a_replacement,
+               t_a_changed_file_is_tampered_and_refused_on_load,
+               t_there_is_no_update_command,
                t_the_ledger_records_every_file_and_hash,
                t_remove_deletes_exactly_the_ledger_files_and_keeps_owner_files,
                t_installing_enables_nothing,

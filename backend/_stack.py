@@ -641,7 +641,16 @@ RATCHET = {
     #: the published base forwards and reverses it back byte for byte. A
     #: ratchet: it may still only go down, and the day the walk seeds a target
     #: from `jarvis-backend/` this goes with the rest.
-    "jarvis_skills.py": 5,
+    #:
+    #: RAISED 2026-11-05, 5 -> 6, for `packs-tamper-on-load.patch` (the pack
+    #: manager's Q3 immutability rule). Its ONE hunk inserts the manifest check
+    #: into `jarvis_skills.load()`, and its context - load()'s own "no SKILL.md"
+    #: return and the `_read_index()` line under it - is the owner's original
+    #: text, which no earlier patch writes. Honest rather than drift: the same
+    #: file, the same reason, and pinned in tools/check_patch_original_text.py
+    #: (1 hunk / 6 lines) as the twenty-fourth exception. A ratchet: it may
+    #: still only go down.
+    "jarvis_skills.py": 6,
 }
 
 

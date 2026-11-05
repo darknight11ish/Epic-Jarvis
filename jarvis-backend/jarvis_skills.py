@@ -740,6 +740,23 @@ def load(name: str, mark_use: bool = True) -> dict:
     if not (dest / "SKILL.md").is_file():
         return {"ok": False, "reason": f"no skill called {name}"}
 
+    # A pack the pack manager installed is IMMUTABLE once installed (the
+    # owner's Q3 ruling, 2026-11-05): jarvis_packs pinned every file's SHA-256
+    # in jarvis-packs.json at install, and the WHOLE manifest is re-checked
+    # here before the body becomes instructions. A pack that no longer matches
+    # is refused and marked `tampered` by that module. A skill the pack manager
+    # did not install is not in its ledger and is unaffected - and when the
+    # module is not beside this file, this door is exactly as it was.
+    try:
+        import jarvis_packs as _packs
+        _pack_check = _packs.verify_pack(name)
+    except Exception:
+        _pack_check = None
+    if _pack_check is not None and _pack_check.get("tampered"):
+        return {"ok": False, "changed": True, "tampered": True,
+                "reason": str(_pack_check.get("reason")
+                              or f"{name} has changed on disk since it was installed")}
+
     ix = _read_index()
     row = ix.get(name, {})
     try:

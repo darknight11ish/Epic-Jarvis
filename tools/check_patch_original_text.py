@@ -101,8 +101,15 @@ added 2026-11-02, is `skill-install-note.patch` at position 166: all three of
 its hunks read the owner's own `jarvis_skills.py` - install()'s signature, its
 docstring and the `_gate(...)` call it already makes - and that file is one of
 the five the patcher edits, so `backend/_stack.py` has no stand-in for those
-lines and nothing earlier in the walk writes them. The pin below records
-all TWENTY-THREE - those thirteen, plus `private-chat.patch` at position 152, added
+lines and nothing earlier in the walk writes them. Added 2026-11-05:
+`packs-tamper-on-load.patch` (immediately before `plugin-loader.patch`, which
+must stay last of the stack): its one hunk reads
+two blocks of the owner's own `jarvis_skills.load()` - the "no skill called"
+return and the `_read_index()` line under it - to insert the pack manager's
+immutable-manifest check on the body loader, and nothing earlier in the walk
+has ever touched `load()`. The pin below records all of them (49 patches today,
+25 of them after the audit's position 29) - those thirteen, plus
+`private-chat.patch` at position 152, added - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -223,6 +230,14 @@ PIN = {
     # backend/test_skill_menu.py applies it to the published base forwards and
     # reverses it back byte for byte.
     "skill-install-note.patch":                (3, 22),    # position 166
+    # immediately before plugin-loader.patch (2026-11-05) - the pack manager's
+    # immutable-manifest check in `jarvis_skills.load()`. ONE hunk, and its
+    # context is two blocks of the owner's own load() - the "no skill called"
+    # return and `_read_index()` under it - which no earlier patch writes. The
+    # walk materialises it; backend/_stack.py's RATCHET moves jarvis_skills.py
+    # 5 -> 6 for the same honest reason, and backend/test_packs.py proves the
+    # load door refuses a pack whose manifest no longer matches.
+    "packs-tamper-on-load.patch":               (1, 6),     # position 170 - the loader stays last
     # position 137 - 2 hunks / 15 lines were the PROTECTED-rule change. RAISED
     # 2026-10-18 to 5/59 for the DEF-012 and I6 hunks: gate_tool's whole-args
     # prompt, latch_taint's process-local fallback, and clear_taint's reset are

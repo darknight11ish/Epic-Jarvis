@@ -432,6 +432,19 @@ def _row(name: str, row: dict, folder: Optional[Path], enabled: bool) -> dict:
         skill, why = _parse(folder, trust=str(row.get("trust") or "third_party"))
     scripts = _scripts_in(folder) if folder is not None else []
     n = len(scripts)
+    # Q3 (2026-11-05): a pack's whole SHA-256 manifest is re-checked as it is
+    # listed, and a pack that no longer matches is shown as changed rather than
+    # silently offered. The check is the pack manager's; a skill that was not
+    # installed by it is simply not in its ledger and answers unchanged.
+    tampered, tampered_files = False, []
+    try:
+        import jarvis_packs as _packs
+        check = _packs.verify_pack(name)
+        tampered = bool(check.get("tampered"))
+        tampered_files = sorted([*(check.get("changed") or []),
+                                 *(check.get("missing") or [])])
+    except Exception:
+        pass
     out = {
         "name": name,
         "description": row.get("description", "") or (skill.description if skill else ""),
@@ -448,7 +461,11 @@ def _row(name: str, row: dict, folder: Optional[Path], enabled: bool) -> dict:
         # train the owner to stop reading it.
         "inert": inert_line(n) if n else "",
         "parses": skill is not None,
-        "why": why if skill is None else "",
+        "tampered": tampered,
+        "tampered_files": tampered_files,
+        "why": why if skill is None else (
+            "it has changed on disk since it was installed, so it is not loaded "
+            "until it is installed again" if tampered else ""),
     }
     return out
 
@@ -895,6 +912,15 @@ def set_state(body: dict) -> tuple:
         rows = _read_off()
         rows.pop(name, None)
         _write_off(rows)
+        # A pack the pack manager installed is IMMUTABLE once installed, and its
+        # SHA-256 manifest is the ledger's. Turning it on just ran the scanner and
+        # its ONE card again, so the manifest is re-taken with the old digest kept
+        # in the history: this is an approved change, not tampering (Q3, 2026-11-05).
+        try:
+            import jarvis_packs as _packs
+            _packs.repin_after_enable(name)
+        except Exception:
+            pass
         # install() writes a FRESH index row (uses 0, no notes). The skill's
         # own history should survive being switched off and on again, so it is
         # put back - but only when the text is the one that was turned off:
