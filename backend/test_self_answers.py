@@ -162,18 +162,22 @@ def all_four_are_read_only():
 
 def tools_answer_is_the_registry_and_the_live_file():
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 51,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 55,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
-          inv["enabled"] == 13, str(inv["enabled"]))
+          inv["enabled"] == 17, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "51 tools" in reply, reply[:120])
-    check("it names the switched-on count", "13 of them are switched on" in reply,
+    check("it names the registered count", "55 tools" in reply, reply[:120])
+    check("it names the switched-on count", "17 of them are switched on" in reply,
           reply[:160])
+    # The list is capped at about fourteen names plus "and N more", so the
+    # two named here are ones a fresh install really shows. "Web search"
+    # fell past the cap when the four pack tools joined the shipped list
+    # (2026-11-05), which is the cap working, not the answer losing it.
     check("it names a REAL tool in plain words",
-          "Calculator" in reply and "Web search" in reply, reply[:200])
+          "Calculator" in reply and "drop-in plugins" in reply, reply[:200])
     check("it never repeats the old 136 as a tool count", "136 tools" not in reply)
     # ONE TRUTH: the chat answer, /api/self and the refresh sentence agree.
     c = SP.counts(SP.build(refresh=True))
@@ -202,7 +206,7 @@ def tools_answer_follows_a_real_settings_file():
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
         check("... and says the other 50 are not switched on",
-              bool(reply) and "other 50 are built in but not switched on" in reply,
+              bool(reply) and "other 54 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:

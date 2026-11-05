@@ -82,8 +82,9 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
     "calculator", "change_setting", "conversation_find", "conversation_open",
-    "feature_guide", "memory_search", "my_files", "phone_apps", "plugin_list",
-    "plugin_switch", "refresh_abilities", "self_portrait", "web_search",
+    "feature_guide", "memory_search", "my_files", "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
+    "plugin_list", "plugin_switch", "refresh_abilities", "self_portrait",
+    "web_search",
 ]
 
 #: (b) Tools a cloud lane may be offered. NONE: the tool loop is local-only
@@ -111,7 +112,8 @@ PRIVATE_CHAT_ALLOWED = []
 OFFERED_FRESH = [
     "approve_web_search_for_conversation", "calculator", "change_setting",
     "conversation_find", "conversation_open", "feature_guide", "memory_search",
-    "phone_apps", "plugin_list", "plugin_switch", "refresh_abilities",
+    "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
+    "plugin_list", "plugin_switch", "refresh_abilities",
     "self_portrait", "stop_web_search_approval", "web_search",
 ]
 
@@ -139,7 +141,12 @@ CATALOGUE = [
     "email_check", "feature_guide", "file_read", "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
-    "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
+    "notes_search",
+    # The pack tools (2026-11-05): list and inspect are read-only under the gate
+    # action skill_list; install raises its one card inside jarvis_skills.install;
+    # remove raises one card naming exactly the files in the pack ledger.
+    "pack_inspect", "pack_install", "pack_list", "pack_remove",
+    "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
     "read_web_page",
     # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh

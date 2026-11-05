@@ -964,6 +964,15 @@ SHIPPED = (
     # plugins/registry.json says which features fit and why the rest do not.
     # Standard library only, no network, no child process, writes nothing.
     "jarvis_plugins.py",
+    # The pack manager (2026-11-05): add a prompt-only skill from a local
+    # folder or a local .zip, after a FULL pre-install scan report (safety,
+    # compatibility, effectiveness), and remove it completely. Adds no route:
+    # the four doors are chat tools in jarvis_agent.py (pack_list, pack_inspect,
+    # pack_install, pack_remove), which is why this ships whole and needs no
+    # patch. Reuses jarvis_skills.install() and jarvis_skill_menu for the
+    # scanner, the ONE card and the skills-off move - it re-implements neither.
+    # Standard library only, no network, no child process, imports no pack.
+    "jarvis_packs.py",
     # The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5):
     # ONE clearly-labelled opt-in for fiction and role-play that is never the
     # everyday assistant and never a default, AND the abliterated models

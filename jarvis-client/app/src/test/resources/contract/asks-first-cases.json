@@ -1443,6 +1443,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -1809,6 +1813,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -3307,6 +3343,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -3673,6 +3713,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -5166,6 +5238,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -5532,6 +5608,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -7020,6 +7128,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -7386,6 +7498,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -8894,6 +9038,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -9260,6 +9408,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -10763,6 +10943,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -11129,6 +11313,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -12617,6 +12833,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -12983,6 +13203,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -14485,6 +14737,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -14851,6 +15107,38 @@
       "last": null,
       "on": false,
       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
       "waiting": false
      },
      {
@@ -16344,6 +16632,10 @@
        "phone_apps",
        "plugin_list",
        "plugin_switch",
+       "pack_list",
+       "pack_inspect",
+       "pack_install",
+       "pack_remove",
        "refresh_abilities",
        "self_portrait",
        "setup_quiz"
@@ -16714,6 +17006,38 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "pack_list",
+      "last": null,
+      "on": false,
+      "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_inspect",
+      "last": null,
+      "on": false,
+      "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_install",
+      "last": null,
+      "on": false,
+      "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "pack_remove",
+      "last": null,
+      "on": false,
+      "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -16840,6 +17164,10 @@
   "phone_apps",
   "plugin_list",
   "plugin_switch",
+  "pack_list",
+  "pack_inspect",
+  "pack_install",
+  "pack_remove",
   "refresh_abilities",
   "self_portrait",
   "setup_quiz"

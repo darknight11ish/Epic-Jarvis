@@ -444,6 +444,11 @@ TIER_EXTRA = (
     "goals_list", "goal_add", "goal_progress", "goal_done",
     "conversation_find", "conversation_open",
     "phone_apps", "plugin_list", "plugin_switch",
+    # Packs (2026-11-05): the four shipped ON in [tools].enabled, each really
+    # decided by its own line there - list and inspect only read, install and
+    # remove each raise their ONE card. So a switch on this page is real, the
+    # same reason every other row in this group is here.
+    "pack_list", "pack_inspect", "pack_install", "pack_remove",
     "refresh_abilities", "self_portrait", "setup_quiz",
 )
 
@@ -458,7 +463,7 @@ TIER_EXTRA = (
 NOT_A_SWITCH = ("run_data_script",) + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: three above. 48 at 2026-11-04.
+#: three above. 52 at 2026-11-05 (48 before the four pack tools).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)

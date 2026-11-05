@@ -2004,11 +2004,22 @@ star_floor = 25        # ...but never fewer than this many
 # clearing stays the route, an app action or the fast path, always behind its
 # ONE `conversation_clear` card.
 #
+# `pack_list`, `pack_inspect`, `pack_install` and `pack_remove` ALSO ship ON
+# (2026-11-05, the owner's plug-in/skill manager, phase 1). A pack is a skill
+# added from a folder or a .zip on this PC; `pack_list` and `pack_inspect` are
+# READ-ONLY and go through the gate's own `skill_list` action (tier `auto`, no
+# card), and `pack_install` raises exactly ONE `modify_own_code` card showing the
+# full pre-install scan - the same card and the same action the Skills screen
+# already raises. `pack_remove` shows ONE card naming exactly the files the
+# ledger recorded before it deletes them. A pack the scan refuses (anything with
+# code in it, in phase 1) is a plain answer and never becomes a card. Nothing is
+# enabled by installing: the pack is moved to `skills-off` straight afterwards.
+#
 # Everything else here stays opt-in - send_email, browser_control,
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)

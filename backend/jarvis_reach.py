@@ -190,6 +190,19 @@ TOOL_NAMES = {
     "plugin_list": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
     "plugin_switch": "Switching ONE of Jarvis's own drop-in plugins on (one card) "
                      "or off (instant); it takes effect the next time Jarvis starts",
+    # Packs (2026-11-05; jarvis_packs.py, JARVIS-API section 190). test_reach.py
+    # requires plain words for every tool in jarvis_agent.TOOLS. Two of the four
+    # only read; installing is ONE modify_own_code card showing the whole scan,
+    # and removing is ONE card naming exactly the files it deletes.
+    "pack_list": "Listing the skill packs on this PC, where each came from and "
+                 "whether it is installed, off or removed (read-only)",
+    "pack_inspect": "Scanning one skill pack before installing it: what it is, "
+                    "what it changes, whether it is safe and whether it works here "
+                    "(read-only, nothing written)",
+    "pack_install": "Installing ONE skill pack from a folder or .zip on this PC "
+                    "(one card showing the whole scan; nothing lands until you say yes)",
+    "pack_remove": "Removing ONE skill pack: one card naming exactly the files it "
+                   "would delete, and the files it did not write are kept",
     # What Jarvis is made of, and the owner's own old conversations (2026-11-03;
     # jarvis_self_portrait.py). test_reach.py requires plain words for every
     # tool; the two conversation reads change nothing and the clear is ONE card
