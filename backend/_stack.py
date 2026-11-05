@@ -610,17 +610,33 @@ RATCHET = {
     #: position 164 to that patch's 163.
     #:
     #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 59 and
-    #: `by_patch` names `web-search-grant.patch: 4` (21 lines in all, pinned by
-    #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
+    #: `by_patch` names `handsfree.patch: 1` and `web-search-grant.patch: 3`
+    #: (18 lines; both pinned by tools/check_patch_original_text.py - see the
+    #: 2026-11-04 note below for why web-search fell from 4 hunks to 3).
+    #: backend/test_web_search_grant.py
     #: applies the patch to the published base and reverses it byte for byte. A
     #: ratchet: it may still only go down.
     #:
-    #: 2026-11-04, RAISED from 59 for `handsfree.patch`: ONE hunk, 3 lines, and
-    #: honest rather than drift - its context is the `if __name__` tail at the
-    #: end of the owner's file, the same owner-only text web-search-grant.patch's
-    #: own end-of-file hunk already reads. The patch has to sit BEFORE that one so
-    #: unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
-    "jarvis_gate.py": 60,
+    #: 2026-11-04, `handsfree.patch` joins this file and the count stays 59.
+    #: Its ONE hunk reads the owner's own `if __name__` tail (3 lines) at the
+    #: END of the file - honest rather than drift, the same owner-only text
+    #: web-search-grant.patch's own end-of-file hunk reads, and pinned by
+    #: tools/check_patch_original_text.py at 1 hunk / 3 lines. It is applied
+    #: BEFORE web-search-grant.patch (so unknown-risk-approvable.patch stays the
+    #: last writer of jarvis_gate.py), and its block then follows web-search's at
+    #: the end of the file: web-search's own EOF hunk gains those lines as
+    #: trailing context, which is why that patch now reads 3 hunks / 18 lines
+    #: instead of 4 / 21. One hunk in, one hunk out: measured 59 before and 59
+    #: after, so the ratchet does not move.
+    #:
+    #: THIS WAS BRIEFLY RAISED TO 60, and the raise was withdrawn when it was
+    #: measured: handsfree.patch's three context lines had been written without
+    #: the context-marker space, so `git apply` refused the patch in both
+    #: directions and the walk could not place its block - web-search's trailing
+    #: context then matched nothing and one MORE hunk drifted. The markers are
+    #: fixed (the patch round-trips through the published base byte for byte),
+    #: and the walk reads 59 again. A ratchet only goes down.
+    "jarvis_gate.py": 59,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s
