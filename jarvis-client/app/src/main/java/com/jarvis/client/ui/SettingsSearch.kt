@@ -1,6 +1,7 @@
 package com.jarvis.client.ui
 
 import com.jarvis.client.net.Calendar
+import com.jarvis.client.net.Handsfree
 import com.jarvis.client.net.MenuCatalog
 import com.jarvis.client.net.ModelLane
 
@@ -619,6 +620,30 @@ object SettingsSearch {
                 "The five built-in arrangements are read-only. Duplicate one to make it yours.",
             ),
             source = SCREEN,
+        ),
+        Row(
+            key = "handsfree", title = Handsfree.SECTION,
+            // One word is deliberately absent: "voice". Typing "voice" must
+            // still answer Voice first and the features directory second, and a
+            // third row matching it would make the owner's own heading the
+            // third answer to a word he did not type about hands-free. "spoken"
+            // and "confirm" say the same thing to a reader.
+            label = "Hands-free; hands free mode; read approval cards out loud; " +
+                "listening for confirm or deny; say confirm or deny; answer a card " +
+                "without touching it; spoken confirm; spoken deny; text message " +
+                "without typing; send a text; write a text message to a contact; " +
+                "SMS; microphone window",
+            // Both quotes are net/Handsfree.kt's own constants - the plate that
+            // draws them prints those strings rather than writing its own - so
+            // the words a search answers to are the words the screen shows.
+            quotes = listOf(
+                "Jarvis reads each approval card out loud on this phone, then listens for your answer",
+                "The microphone opens only while a card is being answered",
+            ),
+            // No `titles`: the one switch's title is `Handsfree.ON`/`OFF`, which
+            // are two of this module's constants rather than a literal in the
+            // plate, and the switch-name walk only covers the rows it lists.
+            source = listOf("net/Handsfree.kt") + SCREEN,
         ),
         Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,

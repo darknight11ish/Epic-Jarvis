@@ -453,12 +453,17 @@ class LiveService : Service() {
                 // The microphone is shared (voice/MicOwner.kt): call recording
                 // outranks Live, and while it is armed or recording Live keeps
                 // its recorder CLOSED - paused, not killed, because Android
-                // 14+ refuses to start a microphone service from the
-                // background and a stopped Live could not come back.
-                if (!may.mic || MicNow.callRecordingHolds()) {
+                // 14+ refuses to start a microphone service from the background
+                // and a stopped Live could not come back.
+                if (!may.mic || !MicNow.mayOpen(MicOwner.Use.LIVE).allowed) {
                     // Closed, not ignored: Android's microphone sign goes off,
                     // and so does the car's call mode - Live must not leave a
                     // car showing a call while it is muted or a card waits.
+                    //
+                    // The same question is what pauses Live while the hands-free
+                    // answer window (2026-11-04) or the talk button holds the
+                    // microphone: closed here rather than merely skipped, and
+                    // reopened by the next pass once the microphone is free.
                     close()
                     stopRoute()
                     delay(IDLE_MS)
@@ -673,7 +678,14 @@ class LiveService : Service() {
             audioMode(),
             voice.speaker.voiceCall,
             ownMicCall = route?.callMode == true,
-        )
+        ) &&
+            // Hands-free (2026-11-04): the answer window has the microphone,
+            // and this window closes for it. It is the same question the two
+            // conditions above answer - "may the microphone stay open" - and it
+            // is asked of the ONE ledger (voice/MicOwner.kt) rather than of
+            // another feature's state, so every part that records obeys one
+            // rule. Live reopens on the next pass once the window is over.
+            MicNow.mayOpen(MicOwner.Use.LIVE).allowed
     }
 
     private suspend fun send(clip: ShortArray) {

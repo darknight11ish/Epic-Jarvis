@@ -2754,6 +2754,47 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
+  is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
+  setting he can turn OFF from chat, Jarvis Live, or Settings ... ANY approval
+  card ... automatically READ OUT, and he can answer 'confirm' or 'deny'
+  verbally ... he specifically wants Jarvis to WRITE TEXT MESSAGES to
+  contacts"*). The feature splits along the device line, and the split is the
+  point rather than an accident of time: **the PC keeps the authority and the
+  phone keeps the body.** The PC transcribes the recorded answer, checks it
+  against the owner's voice print and decides - the phone cannot, because a
+  client never does speech-to-text (CLAUDE.md), and because "is this the
+  owner?" must be answered where the print lives. The phone reads the card out
+  through its own speaker, records the PC's own ANSWER window (a minute at most,
+  or the card's shorter countdown, with the clip capped at the PC's 30 seconds),
+  and sends the text message, because a Windows PC has no phone's speaker, no
+  microphone in a pocket and no SMS service. So the four routes
+  (`GET /api/handsfree` and `POST /api/handsfree` - ONE path for the read and
+  the switch, as the frozen contract has it - `POST /api/handsfree/answer`,
+  `POST /api/phone/result`) are classified
+  `phone-only` in `tools/check_parity.py` for as long as the desktop does not
+  call them; the desktop's own half of the same frozen contract (its own
+  setting, its own read of the mode) is another lane's, and the day it calls the
+  first of those routes the checker's rule 6 fails by name and it
+  moves to `ported`, which is the right change then. **This phone half lands
+  AHEAD of its PC half, and says so plainly.** None of those routes exists
+  in `main` yet: no module serves one, no `handsfree_card` or `phone_command` is
+  ever sent, and `main`'s `docs/JARVIS-API.md` documents none of them - that
+  record
+  describes what exists, and a route written into it before its code would be
+  the one kind of fiction this project keeps out of that file. So the feature is
+  INERT until the PC half lands: every surface shows the contract's own 404
+  sentence ("Hands-free is not available on this PC yet."), no microphone is
+  opened, and nothing claims a mode that cannot be on. The phone was built
+  against the FROZEN contract, whose four shapes are written down in
+  `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
+  request owns `JARVIS-API.md` section 186 for them. Nothing else about the
+  feature is one-sided: a card raised for something the owner asked is answered
+  on the SAME card either way, `handsfree_card`, `phone_command` and
+  `phone_result` ride the
+  one existing event stream, and the spoken audio is the existing
+  `POST /api/voice/say` - no second speech path exists for this feature.
+
 - **The self-benchmark has no screen on either app yet, and the measuring is
   this PC's whichever app asks** (2026-11-04; `backend/jarvis_bench.py`,
   `backend/bench.patch`; JARVIS-API §185). Phase 1 built and tested the engine
