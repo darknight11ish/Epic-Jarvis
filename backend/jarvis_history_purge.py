@@ -1295,6 +1295,7 @@ def benchmark(chats_count: int = BENCH_CHATS, turns: int = BENCH_TURNS) -> dict:
     elapsed_ms = 0
     source = ""
     chats_there = 0
+    scrub_words = 0
     # ISOLATION, and it is not optional: `purge_held_receipts` and `delete`
     # both reach the receipts store, which reads `JARVIS_RECEIPTS_DB` or the
     # live config folder. Pointed at `work` for the length of the run.
@@ -1324,10 +1325,19 @@ def benchmark(chats_count: int = BENCH_CHATS, turns: int = BENCH_TURNS) -> dict:
             started = time.monotonic()
             held = log.take_out(ids) or {}
             deleted = len(held)
+            # THE RECEIPTS SCRUB IS PAID HERE, DELIBERATELY (audit finding 2).
+            # `purge_held_receipts` needs the live key to read a held row's
+            # words, and a COPY cannot have it - so on this path it would
+            # silently return 0 and the number quoted to the owner would leave
+            # out a cost a real purge pays: one pass over the receipts table per
+            # 200 words. The same number of passes is paid here with this
+            # benchmark's own throwaway phrases, which touch nothing.
             try:
-                log.purge_held_receipts(held)
+                words = _bench_words(messages)
+                scrub_words = len(words)
+                RCPT.purge_many(words)
             except Exception:
-                pass
+                scrub_words = 0
             held = {}
             elapsed_ms = int(round((time.monotonic() - started) * 1000))
         else:
@@ -1339,6 +1349,8 @@ def benchmark(chats_count: int = BENCH_CHATS, turns: int = BENCH_TURNS) -> dict:
             held = built["log"].take_out(built["ids"]) or {}
             deleted = len(held)
             try:
+                # The synthetic rows were sealed with a key this process still
+                # holds, so the real scrub runs here and its cost is real.
                 built["log"].purge_held_receipts(held)
             except Exception:
                 pass
@@ -1361,7 +1373,7 @@ def benchmark(chats_count: int = BENCH_CHATS, turns: int = BENCH_TURNS) -> dict:
             pass
     out = {"schema": SCHEMA, "measured": True, "at": int(_now()),
            "chats": deleted, "built": chats_there, "messages": messages,
-           "receipts_rows": receipts,
+           "receipts_rows": receipts, "receipts_words": scrub_words,
            "elapsed_ms": elapsed_ms,
            "per_chat_ms": round(elapsed_ms / deleted, 3) if deleted else None,
            "method": ("the same two calls a purge makes - one take_out() for the "
@@ -1459,6 +1471,15 @@ def _bench_synthetic(CH, work: Path, chats_count: int, turns: int) -> dict:
                          "bench", 0, 0, "", os.urandom(240)))
         messages = int(c.execute("SELECT COUNT(*) FROM turns").fetchone()[0] or 0)
     return {"log": log, "ids": ids, "messages": messages, "chats": chats_count}
+
+
+def _bench_words(messages: int, cap: int = 20000) -> list:
+    """As many throwaway phrases as the purge would hand the receipts scrub, so
+    the same number of table passes is paid. They are this benchmark's own
+    words: nothing in a real receipts store contains them, so nothing is
+    matched and nothing is written."""
+    return [f"benchmark phrase {i} of the purge timing run"
+            for i in range(min(max(0, int(messages)), cap))]
 
 
 def _bench_receipts(rcpt, path: Path, rows: int = 120) -> int:
@@ -1688,11 +1709,13 @@ def handle_post(route: str, body, **kw) -> tuple:
 
 
 def handle_get(route: str, query: str = "") -> tuple:
-    """No GET: every route here either measures with a body or deletes."""
+    """No GET at all: the three routes measure with a body or delete, and the
+    capability answer is `capability()` (the chat fast path and, if an app ever
+    needs it, its own route in its own change). Serving it here as a fourth,
+    undocumented GET was a surface nobody had asked for - found in this
+    module's own audit and removed rather than documented."""
     if route in ROUTES:
         return 405, {"ok": False, "error": "use POST for this"}
-    if route == "/api/history/purge/speed":
-        return 200, capability()
     return 404, {"ok": False, "error": "no such route"}
 
 
@@ -1727,7 +1750,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     def do_GET(self):
         parts = urlsplit(str(getattr(self, "path", "") or ""))
         route = parts.path.rstrip("/")
-        if route not in ROUTES and route != "/api/history/purge/speed":
+        if route not in ROUTES:
             return get0(self)
         if not _allowed(self):
             return None

@@ -33334,18 +33334,21 @@ re-measure.
 Measured **on this PC, 2026-11-04** (a history built for the purpose in a temp
 folder, six messages a chat, three runs each, median):
 
-| chats | messages | time to delete |
+| chats | messages | time to delete (median of 5) |
 |---|---|---|
-| 120 | 720 | **47 ms** |
+| 120 | 720 | **63 ms** |
 | 500 | 3,000 | **94 ms** |
-| 1,000 | 6,000 | **141 ms** |
-| 2,000 | 12,000 | **265 ms** |
-| 500 | 10,000 | **172 ms** |
+| 1,000 | 6,000 | **156 ms** |
+| 2,000 | 12,000 | **359 ms** |
+| 500 | 10,000 | **250 ms** |
 
 So the answer to the owner's question is: batching does **not** make it slow.
-A thousand chats is about a fifth of a second; two thousand is about a quarter
-of a second. What takes real time is the card and the two yeses, and that is the
-owner's own time.
+A thousand chats is about a sixth of a second; two thousand is about a third of
+a second. What takes real time is the card and the two yeses, and that is the
+owner's own time. (The receipts scrub is part of the number: the same count of
+phrases a real purge hands it is handed to a temp receipts store, one pass over
+the table per 200, because a COPY's rows cannot be decrypted and the scrub would
+otherwise be silently missing from the number quoted.)
 
 The same measurement, said in words, is what the fast path answers when the
 owner asks (§186.8):
