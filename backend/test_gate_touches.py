@@ -714,6 +714,12 @@ def t_the_patch_is_registered_and_carries_the_change():
              # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
              # rewrites nothing this patch wrote.
              "bench.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing this patch wrote.

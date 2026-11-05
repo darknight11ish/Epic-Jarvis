@@ -1519,7 +1519,24 @@ SHIPPED = (
     # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
     # it. Standard library only, loopback only, no card and no model at import.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_bench.py"
+    "jarvis_bench.py",
+    # Hands-free mode (jarvis_handsfree.py, 2026-11-04; the owner's own
+    # request): `[handsfree] enabled` OFF by default, one ask-tier card to turn
+    # it on and an instant, cardless OFF; every waiting approval card read out
+    # to the phone as a `handsfree_card` event carrying the card's own notice
+    # words; ONE card answered from one spoken clip - verified against the
+    # owner's voice print BEFORE any words are made, decided only by a closed
+    # yes/no vocabulary inside a 60-second window, through the same
+    # `jarvis_gate.decide()` a touch-approve uses; and one approved text
+    # message handed to the phone (`phone_command`), which resolves the contact
+    # and sends it - this PC never stores a number and never claims a text was
+    # sent until the phone says so. Its routes come from the drop-in folder
+    # `plugins/ready/handsfree` (its own install()), so it adds no patch to
+    # `jarvis_hud.py`; the gate's own rows are `backend/handsfree.patch`.
+    # Standard library only, no network, no audio device: the clip arrives in
+    # the request body. The same entry is at the end of $SHIPPED in
+    # scripts/apply-patches.ps1.
+    "jarvis_handsfree.py"
 )
 
 

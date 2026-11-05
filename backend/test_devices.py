@@ -591,6 +591,12 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
                                 # rewrites nothing this patch wrote.
                                 "bench.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",

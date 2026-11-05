@@ -83,7 +83,8 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 FULL_ENABLED = [
     "calculator", "change_setting", "conversation_find", "conversation_open",
     "feature_guide", "memory_search", "my_files", "phone_apps", "plugin_list",
-    "plugin_switch", "refresh_abilities", "self_portrait", "web_search",
+    "plugin_switch", "refresh_abilities", "self_portrait", "send_text_message",
+    "web_search",
 ]
 
 #: (b) Tools a cloud lane may be offered. NONE: the tool loop is local-only
@@ -152,6 +153,13 @@ CATALOGUE = [
     "retirement_whatif", "run_data_script",
     "self_portrait",
     "send_email", "send_file_to_phone",
+    # Texting a contact (2026-11-04, hands-free mode): a REAL message from the
+    # owner's own phone, in their name, which cannot be unsent. In the shipped
+    # template's list but withheld from every turn until the mode is on
+    # (`offered_tools`), so it is not in FULL_ENABLED; it is here because a
+    # cloud or private turn must never be offered it, and this list is where
+    # that decision is recorded.
+    "send_text_message",
     "set_reminder",
     "set_timer", "setup_quiz", "shell_exec", "stop_web_search_approval", "tidy_inbox",
     "todo_add", "todo_done",

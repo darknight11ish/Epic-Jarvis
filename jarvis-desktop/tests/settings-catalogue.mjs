@@ -151,11 +151,11 @@ await check("the catalogue is the fixture, row for row and in order", async () =
   }
 });
 
-await check("the fixture says how many rows there are, and it is 33 desktop toggles", async () => {
-  assert.equal(FIX.counts.desktop, 33);
-  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 33);
+await check("the fixture says how many rows there are, and it is 34 desktop toggles", async () => {
+  assert.equal(FIX.counts.desktop, 34);
+  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 34);
   assert.equal(FIX.counts.phone, 3);
-  assert.equal(FIX.counts.all, 36);
+  assert.equal(FIX.counts.all, 37);
   // The number this whole feature was briefed with was wrong once already
   // ("all 19"): the 19 is the count of rows with a BARE `<label class="toggle">`,
   // and the seven rows that also carry a label id were left out of it.
@@ -172,8 +172,11 @@ await check("the fixture says how many rows there are, and it is 33 desktop togg
   // Wave B's "Personalize Jarvis" reminder (2026-11-03) carries a label id, so
   // the bare count stays 25 while the desktop total moves to 33: 32 to 33, and
   // the with-id rows 7 to 8.
+  // "Hands-free mode" (2026-11-04, JARVIS-API section 186) is BARE as well
+  // (the label has no id; only the span inside it does), so the bare count
+  // moves 25 to 26 and the desktop total 33 to 34.
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;
-  assert.equal(bare, 25, "the bare-label count moved - re-read the 33 claim");
+  assert.equal(bare, 26, "the bare-label count moved - re-read the 34 claim");
   assert.equal(FIX.counts.desktop, bare + 8);
 });
 
@@ -306,11 +309,14 @@ await check("every row's id, span ids, label, detail and attributes match the pa
 
 /* ── 3. The rows the PC owns keep their words as a FALLBACK only ─────────── */
 
-await check("ten rows are marked as PC-worded, and they are the right ten", async () => {
+await check("eleven rows are marked as PC-worded, and they are the right eleven", async () => {
   const fallback = FIX.rows.filter((r) => r.fallback).map((r) => r.id);
   assert.deepEqual(fallback, [
     "sky-show", "voice-one-moment", "voice-heard-sound", "mn-humor", "coach-enabled",
     "sec-app-lock", "sec-private", "cv-face-switch", "ws-enabled", "ws-ask",
+    // Hands-free mode (2026-11-04): the PC sends the label and the long
+    // explanation; this page keeps them as its fallback, word for word.
+    "hf-enabled",
   ], "the fallback list moved");
   // TEN, and an earlier brief said twelve. The two it should not have counted:
   //
@@ -322,7 +328,7 @@ await check("ten rows are marked as PC-worded, and they are the right ten", asyn
   //
   // If this fails with 12, someone has re-added one of them. The list is a
   // claim about which rows the PC words, so it is worth being exact about.
-  assert.equal(fallback.length, 10);
+  assert.equal(fallback.length, 11);
   assert.ok(!fallback.includes("spd-accept"));
   assert.ok(!fallback.includes("cv-better-switch"));
 });
@@ -343,6 +349,9 @@ await check("every fallback row still reads its words from the PC, not from here
     "cv-face-switch": "voice-panel.js",
     "ws-enabled": "web-search-settings.js",
     "ws-ask": "web-search-settings.js",
+    // Hands-free mode (2026-11-04): the PC sends `label` and `detail` on
+    // GET /api/handsfree and this module paints both spans.
+    "hf-enabled": "handsfree-settings.js",
   };
   for (const c of FIX.rows.filter((r) => r.fallback)) {
     const file = sources[c.id];

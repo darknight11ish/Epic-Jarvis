@@ -9059,6 +9059,15 @@ CHANGE_BY_ASKING = frozenset({
     # (`_read_voice_check_locked`) answers a real True/False, so the receipt is
     # a read and not a claim.
     "voice_check_locked",
+    # Hands-free mode (2026-11-04, the owner's own request: "a handfree setting
+    # that i can turn off in chat, jarvis live, or through settings").
+    # `set_handsfree` calls jarvis_handsfree.request_enabled, the ONE writer its
+    # route and its Settings row use: OFF is immediate and cardless, ON is ONE
+    # ask-tier card (`handsfree_enable`, a risky approval), so this lane raises
+    # nothing of its own and reports "waiting" rather than done. Its reader
+    # (`_read_handsfree`) answers a real True/False, so the read-back below is a
+    # read and not a claim.
+    "handsfree",
     "web_search", "smartwatch_notifications", "phone_notifications",
     "screen_picture", "headless_browser", "sandbox_exec", "media_index",
     "briefing_senders", "big_coder", "better_voice", "chat_history",

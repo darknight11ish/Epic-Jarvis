@@ -208,6 +208,7 @@
             <a href="#limits">Limits and frequency</a>
             <a href="#email-sending">Sending email</a>
             <a href="#sandbox">Data and maths sandbox</a>
+            <a href="#handsfree">Hands-free mode</a>
             <a href="#media-index">Searchable recordings and videos</a>
           </div>
           <div class="settings-jump-place">
@@ -3658,7 +3659,6 @@
             <input id="sbx-switch" type="checkbox" />
             <span id="sbx-switch-label">Let Jarvis run small Python scripts for sums and averages</span>
           </label>
-        <!-- settings-toggles:end -->
           <p class="note" id="sbx-link-note" hidden></p>
           <p class="sc-line" id="sbx-line" role="status"></p>
           <p class="note" id="sbx-state" hidden></p>
@@ -3666,6 +3666,35 @@
         </div>
         <p class="state" id="sbx-reading" role="status">Asking Jarvis…</p>
       </section>
+
+      <!-- ── Hands-free mode (2026-11-04, the owner's own request) ───────────
+           Every waiting approval card is read out to the phone, and one word
+           (yes/yeah/confirm/approve/do it/go ahead/okay, or no/nope/deny/
+           cancel/stop/don't) answers THAT one card inside a minute. It also
+           answers the cards that would otherwise wait for Windows Hello, which
+           is what the card that turns it on says. OFF by default. Turning it ON
+           raises ONE approval card; turning it OFF is instant and cardless.
+           The switch is handsfree-settings.js -> src-tauri/src/handsfree.rs ->
+           GET/POST /api/handsfree -> jarvis_handsfree.py (JARVIS-API §186). -->
+      <section class="card" id="handsfree">
+        <h2 id="hf-title">Hands-free mode</h2>
+        <p class="note" id="hf-note">Cards are read out to your phone and a spoken yes or no answers them. Off by default. Turning it on raises one approval card; turning it off is instant.</p>
+        <p class="state" id="hf-state" role="status">Asking Jarvis…</p>
+        <div id="hf-body" hidden>
+          <label class="toggle">
+            <input id="hf-enabled" type="checkbox" />
+            <span>
+              <span id="hf-enabled-label">Hands-free mode</span>
+              <span class="toggle-detail" id="hf-enabled-detail"></span>
+            </span>
+          </label>
+          <p class="sc-line" id="hf-enabled-status" role="status"></p>
+          <p class="note" id="hf-window" hidden></p>
+          <p class="note" id="hf-phone" hidden></p>
+          <span class="status" id="hf-status" role="status"></span>
+        </div>
+      </section>
+        <!-- settings-toggles:end -->
 
       <!-- ── Searchable recordings and videos (F5 S2, 2026-10-19) ──────────
            The owner chose to keep READABLE transcript text, ON by default, and
@@ -3866,6 +3895,7 @@
 <script type="module" src="todo-carryover-settings.js"></script>
     <script type="module" src="prompt-coach-settings.js"></script>
     <script type="module" src="thinking-settings.js"></script>
+    <script type="module" src="handsfree-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
     <script type="module" src="hud-window-settings.js"></script>
 <script type="module" src="pictures-settings.js"></script>

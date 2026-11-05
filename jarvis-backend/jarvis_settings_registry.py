@@ -348,6 +348,12 @@ SECTIONS: tuple = (
             app="desktop"),
     Section("asks-first", ("what asks first", "asks first settings")),
     Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
+    # Hands-free mode (2026-11-04, the owner's own request; jarvis_handsfree.py,
+    # JARVIS-API section 186): the PC's own Settings card. `app="desktop"` until
+    # the phone lane's own Settings row lands, so "open hands-free" opens the
+    # one card that exists today and the phone is told nothing it cannot do.
+    Section("handsfree", ("hands-free mode", "hands free mode", "hands-free settings",
+                          "the hands-free page"), app="desktop"),
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
     # The skills menu (2026-11-02, JARVIS-API section 178): the PC's Settings
     # card that lists the skills Jarvis may follow, installs one from a folder
@@ -711,6 +717,28 @@ def _missing(name: str) -> Outcome:
     return Outcome(False, f"Your PC's Jarvis does not have {name} yet - run "
                           "apply-patches.ps1 on the PC.")
 
+
+
+# --- hands-free mode (jarvis_handsfree.py, 2026-11-04) ----------------
+
+def set_handsfree(on: bool, *, peer=None, local=None) -> Outcome:
+    """Turn hands-free mode on or off - through the module's own writer.
+
+    ONE card to turn it ON (`handsfree_enable`, a risky approval: it changes
+    what an approval needs from then on), instant and cardless to turn it OFF.
+    `jarvis_handsfree.request_enabled` is the ONE implementation the chat
+    phrase, the Settings row and the Live voice path all reach, and it is the
+    same function the module's own route calls - never a second writer.
+    """
+    try:
+        import jarvis_handsfree as HF
+    except Exception:
+        return _missing("hands-free mode")
+    code, out = HF.request_enabled(bool(on), peer=peer, local=local)
+    if code >= 400 or out.get("ok") is False:
+        said = str(out.get("error") or out.get("message") or "").strip()
+        return Outcome(False, said or "That did not work.")
+    return _say(code, out or {}, on_ok="Hands-free mode is on.")
 
 
 # --- the prompt coach (jarvis_prompt_coach.py) ----------------------------
@@ -2195,6 +2223,24 @@ SETTINGS_ROWS: tuple = (
         "desktop",
         indent=10,
         label_span_is_wrapper=True),
+    SettingRow(
+        "hf-enabled",
+        "handsfree",
+        "",
+        "hf-enabled-label",
+        "hf-enabled-detail",
+        'Hands-free mode',
+        '',
+        34,
+        "handsfree",
+        "desktop",
+        indent=10,
+        has_detail=True,
+        fallback=True),
+    # Hands-free mode (2026-11-04; jarvis_handsfree.py, JARVIS-API section 186).
+    # The last row on the page: appended, never inserted, so every other row's
+    # own position is untouched. The row is the switch; the card above it in
+    # Settings says what it does, and the words are the PC's own.
     # ------------------------------------------------------------------
     #   The phone's own two rows. There is no desktop toggle for
     #   either, so they are never spliced into settings.html; the
@@ -2315,6 +2361,18 @@ BOOL_SETTINGS: tuple = (
                ("prompt coach", "the prompt coach", "prompt coaching",
                 "coaching my prompts"),
                "prompt-coach", set_prompt_coach),
+    # Hands-free mode (2026-11-04, the owner's own request; jarvis_handsfree.py,
+    # docs/JARVIS-API.md section 186). ONE card to turn it on
+    # (`handsfree_enable`), instant to turn it off - the module's own
+    # request_enabled decides that, never this table. Its section is the
+    # Settings card that carries the switch, and the feature list's own row
+    # covers `settings.handsfree`, so "how do I change this?" points at a real
+    # switch. The names are exactly the words the owner used ("hands-free",
+    # "handsfree"), including the spacing a speech-to-text engine may return.
+    BoolSetting("handsfree",
+               ("hands-free mode", "hands free mode", "hands-free", "hands free",
+                "handsfree", "hands free setting"),
+               "handsfree", set_handsfree),
     # The Anti-Slop filter (2026-10-28, `miqdadbadjuber/anti-slop` v3.2.23,
     # MIT, rules distilled into jarvis_antislop.py). A cardless preference in
     # both directions: it changes the WORDS Jarvis writes and nothing else -

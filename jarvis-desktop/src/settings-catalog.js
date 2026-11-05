@@ -6,12 +6,12 @@
 
 export const SCHEMA = 1;
 export const COUNTS = {
-  "all": 36,
-  "desktop": 33,
+  "all": 37,
+  "desktop": 34,
   "phone": 3,
-  "fallback": 10,
-  "setting": 35,
-  "desktop_setting": 32
+  "fallback": 11,
+  "setting": 36,
+  "desktop_setting": 33
 };
 export const MARKERS = {
   "begin": "<!-- settings-toggles:begin (tools/gen_settings_cases.py writes these; do not edit) -->",
@@ -737,6 +737,28 @@ export const ROWS = [
     "label": "Let Jarvis run small Python scripts for sums and averages",
     "detail": "",
     "fallback": false,
+    "checked": false,
+    "hidden": false,
+    "data_live": false,
+    "setting_row": true,
+    "phone_key": null,
+    "source": null
+  },
+  {
+    "id": "hf-enabled",
+    "setting": "handsfree",
+    "owner": "desktop",
+    "section": "handsfree",
+    "order": 34,
+    "indent": 10,
+    "input": "hf-enabled",
+    "input_open": null,
+    "row_id": null,
+    "label_span": "hf-enabled-label",
+    "detail_span": "hf-enabled-detail",
+    "label": "Hands-free mode",
+    "detail": "",
+    "fallback": true,
     "checked": false,
     "hidden": false,
     "data_live": false,

@@ -2072,6 +2072,21 @@ $PATCHES = @(
     # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'bench.patch'
+    # handsfree.patch (2026-11-04) - hands-free mode's gate rows, and nothing
+    # else: TWO `_RISK` rows (`send_text_message`, `handsfree_enable`), ONE
+    # `_TOOL_ACTIONS` line, and TWO `_NO_RULE_FROM_DENIAL` lines. The routes
+    # come from the drop-in folder plugins/ready/handsfree and the logic lives
+    # in the shipped jarvis_handsfree.py. Every hunk is ADDED at the end of a
+    # dict/set whose tail an earlier patch writes (read_web_page from
+    # readpage.patch, stop_web_search_approval from the web-search patch), so
+    # the stack walk materialises no pre-image of the owner's own file.
+    #
+    # It appends immediately before plugin-loader.patch (which must stay LAST
+    # of all). Every patch that enumerates "the patches written after me" has
+    # had its name added there (test_devices.py, test_gate_risk_rows.py,
+    # test_gate_touches.py, test_referee.py, test_screen_attach.py,
+    # test_hud_manual_lane_gate.py, test_phone_app_allowlist.py).
+    'handsfree.patch'
     'plugin-loader.patch'
 )
 
@@ -2867,6 +2882,14 @@ $SHIPPED = @(
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     'jarvis_bench.py'
+    # Hands-free mode (jarvis_handsfree.py, 2026-11-04; the owner's own
+    # request): the `[handsfree] enabled` switch, the card read-out, the one
+    # spoken answer through the existing gate decision, and the text message
+    # handed to the phone. Its routes come from the drop-in folder
+    # plugins/ready/handsfree (the module's own install()), so it adds no patch
+    # to jarvis_hud.py; the gate's own rows are backend/handsfree.patch. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_handsfree.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

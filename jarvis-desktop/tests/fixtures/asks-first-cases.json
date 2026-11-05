@@ -829,6 +829,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -980,6 +989,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -2462,6 +2480,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -2613,6 +2640,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -4091,6 +4127,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -4241,6 +4286,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -5714,6 +5768,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -5864,6 +5927,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -7337,6 +7409,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -7487,6 +7568,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -8973,6 +9063,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -9124,6 +9223,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -10602,6 +10710,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -10752,6 +10869,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"

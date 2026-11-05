@@ -279,6 +279,25 @@ CLASSIFICATION = {
     # settings MIRROR, not a second editor, and it grows no catalogue
     # (ARCHITECTURE section 8, and the row in its one-sided-on-purpose table).
     # The read-only POST /api/antislop/audit is in BACKEND_ONLY below.
+    # Hands-free mode (2026-11-04; JARVIS-API section 186; backend
+    # jarvis_handsfree.py, plugins/ready/handsfree). GET reads the switch, the
+    # answer window, the closed vocabulary and whether a phone can take a text;
+    # POST is the switch itself: OFF at once and cardless, ON one ask-tier card
+    # (`handsfree_enable`) through the ordinary approval path. Desktop: Settings,
+    # Hands-free mode (src-tauri/src/handsfree.rs get_handsfree/set_handsfree,
+    # settings window only, drawn by src/handsfree-settings.js). The answer route
+    # and the phone's own result route are in BACKEND_ONLY below: the phone half
+    # (speaking a card out and recording the answer) is the Android lane's own
+    # change against this contract, and until it lands no window calls them.
+    "/api/handsfree": ("deliberate", "Hands-free mode's one switch (2026-11-04; "
+                        "JARVIS-API section 186; jarvis_handsfree.py, "
+                        "plugins/ready/handsfree). GET is a read; POST "
+                        "{\"enabled\": bool} turns it OFF at once and cardless, "
+                        "and ON through ONE ask-tier card (`handsfree_enable`, a "
+                        "risky approval) that a person answers - this route never "
+                        "decides that card. Desktop: Settings, Hands-free mode. "
+                        "The answer route and the phone's result route are in "
+                        "BACKEND_ONLY below until the phone lane lands."),
     "/api/antislop": ("ported", "The Anti-Slop filter (2026-10-28; JARVIS-API section 159; backend jarvis_antislop.py, vendoring the MIT-licensed miqdadbadjuber/anti-slop ruleset). GET reads the whole state (enabled, mode, scopes, dials, show_delivery_gate_on_ui_tasks); POST is ONE change at once, with no approval card either way and no model call - it filters the wording of an answer, opens no way out of the PC, reads no folder and takes no action. OFF costs 0 prompt tokens and rewrites nothing. Desktop: Settings, How Jarvis talks, Anti-Slop filter (src-tauri/src/antislop.rs get_antislop/set_antislop, settings window only; the card is src/antislop-settings.js + src/antislop.js). Phone: Settings, How Jarvis talks (net/Antislop.kt, ui/screens/AntislopPlate.kt, JarvisRuntime setAntislop/setAntislopMode), the master switch, the During/After mode and the em-dash box - the three scopes, the Delivery Gate switch and the dials are the desktop card on purpose (ARCHITECTURE section 8). The read-only POST /api/antislop/audit is in BACKEND_ONLY below."),
     # The Jarvis-owned local calendar's four routes are declared ONCE, at the END
     # of this table (search `/api/calendar`): `planned`, because the phone calls
@@ -966,6 +985,31 @@ PHONE_STATUSES = {"phone-only", "desktop-todo"}
 # When an app starts calling one of these, the check FAILS and says to remove
 # the entry: a backend-only reason that has stopped being true is a lie.
 BACKEND_ONLY = {
+    # Hands-free mode's two phone-facing routes (2026-11-04; JARVIS-API section
+    # 186; jarvis_handsfree.py, plugins/ready/handsfree). Backend only on BOTH
+    # apps today, and deliberately: `/api/handsfree/answer` takes the owner's
+    # spoken clip and `/api/phone/result` is the phone's own word on a text it
+    # sent - the Android lane builds the phone half against the frozen contract
+    # in JARVIS-API section 186 (read the card out, record one answer, post the
+    # result) in its own PR, so neither app calls them on this tree. The PC's own
+    # Settings card calls `/api/handsfree`, which is on the table above as
+    # `ported`. Nothing else on this list approves anything: the answer route
+    # decides ONE card through the same `jarvis_gate.decide()` a tap uses, and the
+    # result route only records what the phone says and never invents a receipt.
+    "/api/handsfree/answer": "2026-11-04's hands-free mode (JARVIS-API section "
+                             "186): ONE spoken answer for ONE card that was read "
+                             "out - the clip is transcribed on the PC, the "
+                             "owner's voice print is checked first, and a closed "
+                             "yes/no list decides. Called by the phone half, which "
+                             "is the Android lane's own PR against the frozen "
+                             "contract; no app on this tree calls it yet.",
+    "/api/phone/result": "2026-11-04's hands-free mode (JARVIS-API section 186): "
+                         "the phone's own word on a text message it was asked to "
+                         "send (ok, a receipt, or why it did not). Until it "
+                         "arrives nothing on the PC says a text was sent, and an "
+                         "id this PC never handed out is refused rather than "
+                         "recorded. Called by the phone half, which is the Android "
+                         "lane's own PR; no app on this tree calls it yet.",
     # Habit check-ins and the owner's own mood log (2026-11-02, JARVIS-API
     # section 180). Backend only on BOTH apps today: this lane is the
     # backend half, and the Habits / Mood section on the Reminders screen is

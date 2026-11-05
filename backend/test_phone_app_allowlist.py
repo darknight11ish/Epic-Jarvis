@@ -661,6 +661,12 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
           "the loader",
           "phone-apps.patch" in order
           and order[order.index("phone-apps.patch") + 1] == "bench.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
           order[-3:])
     patch = (HERE / "phone-apps.patch").read_text(encoding="utf-8")
     check("the patch touches jarvis_hud.py only - no jarvis_gate.py hunk, "
