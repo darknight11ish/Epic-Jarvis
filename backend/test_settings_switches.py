@@ -115,32 +115,34 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    # 21 since 2026-11-02: the conversation-scoped web-search approval and its
-    # instant stop were taken OFF this list (they were added on 2026-11-01 and
-    # needed the owner to switch them on, which the field test of 2026-11-02
-    # proved never happened: no tool offered, no grant card, and a false
-    # "Search is approved"). They ride with web search now
-    # (jarvis_agent.GRANT_ASK_TOOLS), so there is no row to switch; a switch the
-    # turn ignored would be a lie. That is Tier A 15 -> 13, Tier B unchanged at
-    # 8, and the identity below keeps the tuple and the tiers in step.
-    # test_asks_first.py carries the same 21 and the same reason.
-    check("the tiered in-app rows: 21, Tier A + Tier B, calendar_read kept",
-          AF.TOOLS_SWITCHABLE == tuple(AF.TIER_A) + tuple(AF.TIER_B)
-          and len(AF.TOOLS_SWITCHABLE) == 21)
+    # 48 since 2026-11-04: the owner's decision made EVERY tool the AI model
+    # can be offered switchable - the raw Tier C set and the everyday helpers
+    # included. The only three that are not are the ones whose own switch
+    # decides them (the data sandbox and the two web-search grant tools, which
+    # ride with web search); a switch the turn ignored would be a lie.
+    # test_asks_first.py carries the same 48 and the same reason.
+    check("the in-app rows: 48, every tool the model can be offered",
+          AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
+                                  + tuple(t for t in AF.TIER_C
+                                          if t not in AF.NOT_A_SWITCH)
+                                  + AF.TIER_UNLISTED + AF.TIER_EXTRA)
+          and len(AF.TOOLS_SWITCHABLE) == 48)
     for action in AF.TOOLS_SWITCHABLE:
         real = AF.real_tool(action)
         check(f"{action}: the tool it switches ({real}) is a real tool in jarvis_agent.TOOLS",
               real in AG.TOOLS, sorted(AG.TOOLS)[:8])
-        write_toml(["calculator"])
+        write_toml(["plugin_scan"])
         code, out = route(action, True)
         check(f"{action}: ON through the real route writes the settings file",
               code == 202 or code == 200, (code, out))
         got = enabled_in_file()
         check(f"{action}: the file now lists {real} (and never the action's own name if that differs)",
               real in got and (action == real or action not in got), got)
-        if real not in ("my_spending", "retirement_whatif"):
-            # The two money/retirement tools are hidden or offered by their own
-            # setup rule, so only the file line is asserted for them here.
+        if real not in ("my_spending", "retirement_whatif", "browser_control",
+                        "rea_investigate", "my_files"):
+            # Those five are offered by their own setup rule as well as the
+            # file (a listed folder, the second card's browser lane, [rea]
+            # enabled), so only the file line is asserted for them here.
             check(f"{action}: the model is offered it (jarvis_agent.offered_tools)",
                   real in AG.offered_tools(got), AG.offered_tools(got))
         st = AF.tools_status(here=True)
@@ -151,7 +153,7 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
         code, out = route(action, False)
         got = enabled_in_file()
         check(f"{action}: OFF is instant and removes it",
-              code == 200 and real not in got and "calculator" in got, (code, got))
+              code == 200 and real not in got and "plugin_scan" in got, (code, got))
         check(f"{action}: ... and the model is no longer offered it",
               real not in AG.offered_tools(got))
 

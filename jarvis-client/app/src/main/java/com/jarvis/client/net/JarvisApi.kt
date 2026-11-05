@@ -1,6 +1,7 @@
 package com.jarvis.client.net
 
 import android.util.Log
+import com.jarvis.client.call.CallRecordRules
 import com.jarvis.client.data.AppControl
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
@@ -3768,6 +3769,35 @@ class JarvisApi(
             }
         }
 
+    // ------------------------------------------------ call recording ----
+    // The phone's half of the frozen contract of 2026-11-04 ([CallRecordWire]).
+    // A recording is cut into pieces on this phone and posted one at a time;
+    // the PC appends them in `seq` order, turns them into words, works out who
+    // was speaking and writes ONE note in its Obsidian vault. The phone sends
+    // no words and writes no note - it cannot even reach the vault.
+    //
+    // All three go through [postObject], so they carry the token,
+    // `X-Jarvis-Client: hud` and `X-Jarvis-Surface: phone` like every other
+    // request, and none of them logs it.
+
+    /** `POST /api/call/recording/start` - the date and the audio's shape; answers the PC's session id. */
+    suspend fun callRecordStart(startedAtMs: Long): ApiResult<JsonObject> =
+        postObject(CallRecordRules.START_PATH, CallRecordWire.startBody(startedAtMs))
+
+    /**
+     * `POST /api/call/recording/chunk` - one base64 piece, at `seq`, for `session`.
+     *
+     * The SAME `seq` is retried when this fails, never the next number: the
+     * PC's file is the order it receives them in, so skipping one would put a
+     * hole in the middle of the audio that nothing later repairs.
+     */
+    suspend fun callRecordChunk(session: String, seq: Int, pcm: ByteArray): ApiResult<JsonObject> =
+        postObject(CallRecordRules.CHUNK_PATH, CallRecordWire.chunkBody(session, seq, pcm))
+
+    /** `POST /api/call/recording/finish` - the full length, an optional title, and the consent flag. */
+    suspend fun callRecordFinish(session: String, durationSec: Long, title: String? = null): ApiResult<JsonObject> =
+        postObject(CallRecordRules.FINISH_PATH, CallRecordWire.finishBody(session, durationSec, title))
+
     // ------------------------------------------------------------ voice ----
 
     /**
@@ -3894,6 +3924,43 @@ class JarvisApi(
                         obj != null -> ApiResult.Ok(resp.code to obj)
                         resp.isSuccessful -> ApiResult.Ok(resp.code to null)
                         resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * A hands-free POST whose REFUSALS are ordinary answers (docs/JARVIS-API.md
+     * section 186.3 and 186.5): 403 is "the mode is off / the voice was not the
+     * owner's / the enable card was declined", 409 is "no read-out, past the
+     * window, the card is gone", and 503 is "a check could not run". Every one
+     * of them carries the PC's own sentence in `say` (or `error`), written for
+     * the owner, so the body is kept and the status is passed on.
+     *
+     * The two that stay failures are the two that are NOT about hands-free:
+     * 401 is a bad token, and 404 is a PC that has never heard of the route -
+     * neither is the desktop's sentence about an answer or a switch. A 2xx with
+     * no JSON body is still an answer, with null.
+     *
+     * Uses the general [client]: the enable request waits for a person to
+     * decide its card, and the answer route runs a voice check and a
+     * transcription before it replies, so neither is a short call.
+     */
+    private suspend fun postTold(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
                         else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
                     }
                 }
@@ -4058,6 +4125,66 @@ class JarvisApi(
      */
     suspend fun setWakeWord(enabled: Boolean): ApiResult<Unit> =
         postJson("/api/voice/wake", """{"enabled":$enabled}""")
+
+    // ----------------------------------------------------------- hands-free ----
+    // The owner's request of 2026-11-04. net/Handsfree.kt carries the whole
+    // frozen contract, every line of plain words, and the honest degradation
+    // against a PC that does not have the feature yet; this is only the wire.
+    //
+    // All four routes are the phone's half of one feature: the PC decides
+    // (it is the one with the voice print and the transcription), the phone
+    // reads out, listens and sends the text. `probe` is used for the read, and
+    // [postTold] for the two POSTs because the frozen contract answers a
+    // REFUSAL with 403 (the mode is off, the voice was not the owner's, the
+    // enable card was declined) and puts the sentence in the body - which
+    // `postVoice` would have turned into "bad token" and thrown away.
+
+    /**
+     * `GET /api/handsfree` - the state.
+     *
+     * A 404 is the honest "this PC does not have hands-free yet"
+     * ([ApiError.NotFound]), and every surface says [Handsfree.NOT_HERE] for
+     * it rather than drawing a switch that does nothing. Nothing here claims
+     * the mode is on: [Handsfree.readOf] is what turns the body into that.
+     */
+    suspend fun handsfree(): ApiResult<kotlinx.serialization.json.JsonObject> = probe(Handsfree.PATH)
+
+    /**
+     * `POST /api/handsfree {"enabled": bool}` - the switch (section 186.3).
+     *
+     * The contract's shape: 200 {ok, enabled, changed, message} once the mode
+     * is on (or already on), 403 when its own enable card was refused, 409 when
+     * the settings file cannot be written, 503 when the gate cannot run. All of
+     * those sentences are the PC's ([postTold]); a 404 is the honest "this PC
+     * does not have hands-free yet" and is shown as [Handsfree.NOT_HERE].
+     */
+    suspend fun setHandsfree(enabled: Boolean): ApiResult<Handsfree.Enabled> =
+        postTold(Handsfree.PATH, Handsfree.enabledBody(enabled))
+            .map { (_, body) -> Handsfree.Enabled.of(body) }
+
+    /**
+     * `POST /api/handsfree/answer` - one recorded clip, base64 in JSON.
+     *
+     * The body is the owner's voice and is never logged. A refusal the PC
+     * explains - and every documented refusal does, in `say` - comes back as
+     * [Handsfree.Answer] with `ok = false` and the PC's own sentence, because
+     * those words are written for the owner and are the most useful thing to
+     * show. Only 401 (a bad token) and 404 (no such route) stay failures.
+     */
+    suspend fun answerHandsfree(cardId: String, wav: ByteArray): ApiResult<Handsfree.Answer> =
+        postTold(Handsfree.ANSWER_PATH, Handsfree.answerBody(cardId, wav))
+            .map { (_, body) -> Handsfree.answerOf(body) }
+
+    /**
+     * `POST /api/phone/result` - what happened to a `phone_command`.
+     *
+     * Sent for every command, including the ones this phone refused and the
+     * ones it could not carry out at all: a PC that asked for a text and heard
+     * nothing back would have no way to tell "not sent" from "still working".
+     */
+    suspend fun phoneResult(id: String, ok: Boolean, receipt: String, why: String): ApiResult<Unit> =
+        postJson(Handsfree.RESULT_PATH, Handsfree.resultBody(id, ok, receipt, why))
+
 
     /**
      * "Train my voice": sends the owner's recorded clips to the desktop.

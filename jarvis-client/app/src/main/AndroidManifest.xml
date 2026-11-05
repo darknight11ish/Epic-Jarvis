@@ -86,6 +86,44 @@
          never at launch: a permission dialog on first run, before the app has
          shown what it is for, is the one most people refuse. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Hands-free: writing a text message to a contact (the owner's request of
+         2026-11-04; net/SmsSend.kt, service/HandsfreeService.kt).
+
+         BOTH ARE RUNTIME PERMISSIONS, asked for ONCE, when the owner turns
+         hands-free on - with a sentence naming what they are for, before the
+         dialog appears (ui/screens/HandsfreeSection.kt). Neither is asked for
+         at launch, and neither is asked for by any other feature: with them
+         denied, hands-free still reads cards out and still takes a spoken
+         answer - the only thing that stops working is writing a text, and the
+         row says so in words rather than showing a button that fails.
+
+         WHY SEND_SMS AND NOT THE SMS APP. The owner asked for Jarvis to WRITE
+         the message, not to open a composer he then has to send. The other
+         route (`ACTION_SENDTO` with an `sms_body`) needs no permission at all,
+         but it hands the words to another app and the owner presses Send there,
+         which is not hands-free. docs/UI-CUTTING-EDGE-2026-10-09.md §16.7 A3
+         settled that question for "you say send" at the time; the owner's
+         2026-11-04 request is the later word, and the decision fragment
+         `decisions.d/2026-11-04-handsfree-android.md` records the change.
+
+         What it costs, said plainly: an app holding SEND_SMS can send a text
+         without the owner seeing a composer, which is why this app sends
+         exactly ONE message, only after the PC's own `phone_command` named the
+         person and the words, only after the exact-name lookup below found
+         exactly one number, and never reports "sent" without Android's own
+         RESULT_OK. The message is not recorded in the SMS app's history
+         (Android only files it there for the default SMS app), and that is not
+         asked for: becoming the default SMS app is refused by the design
+         record, and this app does not want to own the owner's inbox.
+
+         READ_CONTACTS is for the NAME only: the PC says "Alex", the phone turns
+         it into a number and sends. Nothing is cached, nothing is stored, and
+         no contact detail is ever sent to the PC - the result says whether it
+         was sent, never who to. A name matching more than one number sends
+         nothing and says so. -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
     <!-- Reading the pairing QR code on the PC (docs/PAIRING-DESIGN.md §8.3,
          ui/screens/QrScanScreen.kt). Asked for only when the owner taps
          "Scan the code on your PC", after one sentence saying why; refused,
@@ -458,6 +496,21 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- Recording a phone call (service/CallRecordService.kt; the owner's
+             request of 2026-11-04). A foreground service of type microphone:
+             Android does not let a normal app capture a call's own audio
+             (`VOICE_CALL` is privileged), so the recording is the MICROPHONE
+             with the call on speaker - both voices caught acoustically. It
+             starts only from the owner's own act (the "record call" chat
+             directive, or Arm on the Settings card), never at boot, and its
+             notification stays for the whole call with Stop and the reminder
+             to tell the other person. No phone-state permission is asked for:
+             the call is noticed from Android's audio mode, like Live. -->
+        <service
+            android:name=".service.CallRecordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <!-- "Watch with me" on this phone (service/ScreenWatchService.kt;
              docs/SCREEN-DESIGN.md section 4): the screen shared while the
              owner has it on, and only then. Started from the app's own Home
@@ -469,6 +522,24 @@
             android:name=".service.ScreenWatchService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
+
+        <!-- Hands-free (the owner's request, 2026-11-04;
+             service/HandsfreeService.kt): a card is read out, then a ten-second
+             window records the owner saying "confirm" or "deny", and the clip
+             is uploaded for the PC to transcribe and decide. It is the
+             microphone because a card can arrive while the app is in the
+             background (the whole point of the mode), so it needs the same
+             permission "hey Jarvis" already declares - and its own service and
+             type, not a mode of Live's, because it is started and stopped by
+             the PC's own state and must keep working with Live off.
+             Started ONLY while the PC says the mode is armed, from the app's
+             own foreground; START_NOT_STICKY, never at boot. Android shows the
+             microphone indicator only while the window is actually recording,
+             which is the ten seconds after a read-out. -->
+        <service
+            android:name=".service.HandsfreeService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
 
         <!-- The Overlay path of "Floating Jarvis" (data/FloatingAvatar.kt).
              specialUse, not any of the other types: it holds a window, not

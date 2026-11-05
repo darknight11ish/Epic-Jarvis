@@ -782,7 +782,8 @@ screen's words only", and it is **off by default**.
 How it is kept off the card, and why it does not share the everyday Ollama:
 
 - It runs in its own `ollama serve` on 127.0.0.1:11437 (this PC only; not
-  11434, and not 11435 or 11436, which are the second and third card's) with
+  11434, not 11435 or 11436, which are the second card's lane and the everyday
+  lane's, and not 11438, the third card's own default) with
   `CUDA_VISIBLE_DEVICES=-1` (Ollama's own documented way to force the
   processor: "use an invalid GPU ID (e.g., "-1")", docs/gpu.md), `OLLAMA_VULKAN=0`,
   AMD's variables at -1, one model and one request at a time, and
