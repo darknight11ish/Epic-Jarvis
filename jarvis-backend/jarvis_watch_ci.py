@@ -332,9 +332,17 @@ def runner_default(args: list, timeout: float = 25.0) -> str:
     The ONLY way this module reaches the network, and it is not a new tool: it
     is the same `gh` program the rest of this repository's tooling already uses.
     A test never gets here - every entry point takes `runner=`.
+
+    The child gets `jarvis_child_env.inherited()`, never this process's whole
+    environment, like every other spawn in this backend: `gh` needs PATH and
+    the user's profile folders (it keeps its own sign-in in its config file, so
+    it works without `GH_TOKEN`), and it must never be handed
+    HUD_TOKEN/JARVIS_TOKEN. `inherited()` strips anything that looks like a
+    secret, so those cannot leak even if one is set later.
     """
+    import jarvis_child_env
     p = subprocess.run([_gh(), *args], capture_output=True, text=True,
-                       timeout=timeout)
+                       timeout=timeout, env=jarvis_child_env.inherited())
     if p.returncode != 0:
         raise RuntimeError(f"gh {' '.join(args[:3])} exited {p.returncode}")
     return p.stdout or ""

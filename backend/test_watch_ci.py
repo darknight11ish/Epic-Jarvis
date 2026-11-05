@@ -644,17 +644,87 @@ def t_the_job_body_asks_before_it_reads_github():
         C.alert_mode = real
 
 
+def _calls_outside_defs(node):
+    """Every `ast.Call` under `node` that is not inside a def or a class."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(child, ast.Call):
+            yield child
+        yield from _calls_outside_defs(child)
+
+
+def _reference(node) -> str:
+    """The name an AST node mentions: `x`, `a.x`, or a string constant."""
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        return node.attr
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    return ""
+
+
+def _called_name(call) -> str:
+    return _reference(call.func) if isinstance(call, ast.Call) else ""
+
+
+def _is_call_named(node, name: str, *, receiver: str = "") -> bool:
+    """Is `node` a call to `name`, optionally on `receiver.name`?"""
+    if not isinstance(node, ast.Call) or _called_name(node) != name:
+        return False
+    if not receiver:
+        return True
+    func = node.func
+    return (isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name)
+            and func.value.id == receiver)
+
+
 def t_the_job_body_is_registered_by_name_and_starts_nothing():
-    src = (HERE / "jarvis_watch_ci.py").read_text(encoding="utf-8")
+    """Read the module's TREE, never its text.
+
+    `"literal" in src` and `src.count(...)` are SOURCE PINS: they go red when
+    the code is reformatted and stay green when the invariant is broken in a
+    spelling nobody thought of. Every claim below is an `ast` node instead, so
+    a comment, a docstring or a line break cannot decide the answer - and
+    `tools/check_no_source_pins.py` measures this file at zero because of it.
+    """
+    tree = ast.parse((HERE / "jarvis_watch_ci.py").read_text(encoding="utf-8"))
     check("the handler name is watch_pr_checks", C.HANDLER == "watch_pr_checks")
-    check("registration is by NAME, never a stored callable",
-          "jarvis_jobs.register(HANDLER, handler)" in src)
-    for forbidden in ("threading.Thread(", "while True", "Timer(",
-                      "register_kind", "setInterval"):
+    by_name = [n for n in ast.walk(tree)
+               if _is_call_named(n, "register", receiver="jarvis_jobs")
+               and [a.id for a in n.args if isinstance(a, ast.Name)]
+               == ["HANDLER", "handler"]]
+    check("registration is by NAME, never a stored callable", len(by_name) == 1,
+          [(n.lineno, _called_name(n)) for n in by_name])
+    hits = {
+        "threading.Thread(": [n for n in ast.walk(tree)
+                              if _is_call_named(n, "Thread", receiver="threading")],
+        "while True": [n for n in ast.walk(tree)
+                       if isinstance(n, ast.While)
+                       and isinstance(n.test, ast.Constant)
+                       and n.test.value is True],
+        "Timer(": [n for n in ast.walk(tree) if _is_call_named(n, "Timer")],
+        "register_kind": [n for n in ast.walk(tree)
+                          if _reference(n) == "register_kind"],
+        "setInterval": [n for n in ast.walk(tree)
+                        if _reference(n) == "setInterval"],
+    }
+    for forbidden, found in hits.items():
         check(f"the module starts no polling of its own ({forbidden})",
-              src.count(forbidden) == 0, src.count(forbidden))
-    check("it registers nothing at import time",
-          "register_job()\n" not in src.split('if __name__')[0].split("def register_job")[0])
+              not found, [getattr(n, "lineno", None) for n in found])
+    # `it registers nothing at import time`: a module-level call to
+    # `register_job()`, outside every def and outside the `if __name__` guard.
+    import_calls = []
+    for stmt in tree.body:
+        if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            continue
+        if isinstance(stmt, ast.If) and "__name__" in ast.dump(stmt.test):
+            continue                    # the `if __name__ == "__main__"` guard
+        import_calls.extend(c for c in _calls_outside_defs(stmt)
+                            if _called_name(c) == "register_job")
+    check("it registers nothing at import time", not import_calls,
+          [(c.lineno, _called_name(c)) for c in import_calls])
 
 
 def t_the_ci_body_is_reachable_from_the_one_startup_call_that_exists():

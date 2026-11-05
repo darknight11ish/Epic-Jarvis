@@ -69,7 +69,6 @@ it is one `apply-patches.ps1` copies in.
 | 148 | `voiceprint` | Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it reaches a model. |
 | 149 | `receipts` | action receipts and one-click undo: every action that CHANGES something leaves a receipt saying what changed, with one button to put it back. |
 | 150 | `auto-router` | estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and all four safety gates must pass first. |
-| 150 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 | 151 | `vault` | a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value. |
 | 152 | `notion-obsidian` | bring a Notion export into an Obsidian vault: ids off the names, properties as frontmatter, databases as a note and a .base, links rewritten, attachments moved, with one-click Undo. |
 | 154 | `self-improve` | two read-only diagnostic GETs: a file:line-cited answer to a question about Jarvis's own source, and the three-outcome check that Ollama is telling Jarvis the truth about what the local model can do. |
@@ -87,6 +86,7 @@ it is one `apply-patches.ps1` copies in.
 | 170 | `protected-items` | a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act. |
 | 171 | `send-file` | send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path. |
 | 172 | `skill-menu` | the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\.hermes\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all. |
+| 173 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 
 ## What stays in the core
 

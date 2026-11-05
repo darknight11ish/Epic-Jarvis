@@ -12,8 +12,8 @@ Jarvis.
 
 - Module the loader calls: `jarvis_watch_ci.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: 150, after every folder the old patch stack had
-  (`receipts` at 149), so its path is checked in the order it was added rather
+- Position in the loader's order: 173, after the highest folder already there
+  (`skill-menu` at 172), so its path is checked in the order it was added rather
   than in the middle of somebody else's
 
 The module itself is shipped by `scripts/apply-patches.ps1` like every other
