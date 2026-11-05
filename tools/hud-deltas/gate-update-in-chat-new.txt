@@ -1,0 +1,3 @@
+    "desktop_update",  # jarvis_quick.py acts only on tier "ask": ONE card per start of an update, which only the desktop's own update.rs can run - so a "no" here answers that one card, never a standing rule (update-in-chat.patch)
+    "storage_cleanup",  # jarvis_storage_health.py acts only on tier "ask": ONE card listing every path a cleanup would delete or quarantine, so a "no" answers that one card and never becomes a standing rule (jarvis_storage_health.py, shipped whole - no patch of its own)
+})

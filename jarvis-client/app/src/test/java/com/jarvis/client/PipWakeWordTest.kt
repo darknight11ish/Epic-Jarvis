@@ -232,12 +232,20 @@ class PipWakeWordTest {
     fun `the listener keeps listening while the window is up`() {
         val service = file(
             "jarvis-client/app/src/main/java/com/jarvis/client/service/WakeWordService.kt")
-        // The pause conditions are exactly these two: the talk button owns the
-        // microphone, or Live runs on this phone. A PiP window must never
-        // become a third one - that is the bug this test exists to prevent.
+        // The pause conditions: the talk button owns the microphone, Live runs
+        // on this phone, or call recording is armed/recording (the one
+        // arbitration point, voice/MicOwner.kt, added 2026-11-04). A PiP
+        // window must never become a fourth one - that is the bug this test
+        // exists to prevent - so the pin reads the three that ARE allowed and
+        // then proves the window is not among them.
         assertTrue("the talk-button / Live pause condition changed",
             service.contains(
-                "if (voice.phase.value == VoiceSession.Phase.CAPTURING || JarvisRuntime.liveOnHere())"))
+                "if (voice.phase.value == VoiceSession.Phase.CAPTURING ||\n" +
+                    "                    JarvisRuntime.liveOnHere() ||\n" +
+                    "                    MicNow.callRecordingHolds()",
+            ))
+        assertTrue("the microphone arbitration must be asked, not assumed",
+            service.contains("MicNow.callRecordingHolds()"))
         assertFalse("the listener must not know about the PiP window",
             service.contains("PipPresence"))
         assertFalse("the listener must not pause for the PiP window",
