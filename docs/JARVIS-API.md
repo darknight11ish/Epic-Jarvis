@@ -2190,8 +2190,8 @@ neither app says it would.
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
 | `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item, the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
-| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
-| `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | **planned**: built on the backend, no app calls it yet - the second tap is the apps lane | not yet (same lane as the desktop) | `forget-range.patch` - **§64**. The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Reclassify `ported` when both apps draw the second tap. |
+| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis - `pinned_kept`'s titles with them, `redact()` in `brain/forget_range.rs`) | `JarvisRuntime.forgetRangeRead` (the same words out while hidden: `ForgetRange.redact`) | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
+| `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | `forget_range_write("confirm")`: the held id and a literal `true`, refused while the list is hidden, held on a stale link | `JarvisRuntime.forgetRangeWrite("confirm")`, the same body and the same holds | `forget-range.patch` - **§64**. **ported.** The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Both apps show the PC's `confirm.text` and the minutes left, send nothing but the id and `true`, say every `400`/`409` in the PC's own words, and keep the 10-minute Undo the `200` starts. |
 | `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the second yes: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
 | `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | Since 2026-09-28 the overnight tidy is built, **review cards only** (§78): `enabled: true` puts its one daily look on the scheduler, `enabled: false` removes it at once - sent alone, it is not held on a stale link in either app ("Turn off overnight tidying"; it only makes Jarvis ask less). Before that, `enabled` only recorded the wish. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
@@ -14752,6 +14752,16 @@ line). Desktop: a card on the Brain's History tab (`forget-range.js`,
 apps' words and the real answers: `forget-range-cases.json`
 (`tools/gen_forget_range_cases.py`).
 
+Both apps draw the two yesses: the pinned chats kept (as kept - no tick box,
+never in the count on "Forget these" and never in what it sends), the measured
+`estimate.text` above the button, and, once the card is approved, the PC's own
+`confirm.text`, the minutes left and one more tap carrying the held `id` and a
+literal `yes: true`. Every `400` and `409` is shown in the PC's own words, and
+the status is read again after one, because the card, the hold or the Undo has
+moved on. While the private lists are hidden, `pinned_kept`'s titles are
+hidden with every other title - it is a list of chat titles, as `chats` is
+(the desktop's Rust `redact()`, the phone's `ForgetRange.redact`).
+
 ### 64.1 Which facts, which chats, which days
 
 - **Facts by when Jarvis SAVED them** (`created`), never by their "true
@@ -14934,40 +14944,51 @@ what I said ..." is told plainly that this forgets, and "Erase the words"
 is per fact. A spoken "yes" or "approve" matches nothing and approves
 nothing - the second yes is a tap on the confirm block, never a voice.
 
-### 64.6 What the apps must do
+### 64.6 What the apps do
 
 - Show the list with **every item ticked** (except a support record, which
   starts unticked - §64.1), the owner free to untick any; send **only the
   ticked ids**, in one request. Never approve anything - and never send the
   confirm for the owner: the second yes is their tap.
-- **Draw the second tap (apps lane, not built yet).** After the card is
-  approved, poll the status: `confirm` non-null means nothing has been
-  removed yet. Show "Yes, forget them" (`confirm_words.yes` in the fixture)
-  and post `{"id": confirm.id, "yes": true}` to `confirm.route`; a 400
-  keeps the list, a 409 means it is gone/changed and nothing happened.
-  **Do not treat the card's approval as done**: the deletion is only after
-  the 200 from `/confirm` (then the status says `last.outcome` "done").
+- **Draw the second tap (both apps, 2026-11-05).** After the card is approved
+  the status carries `confirm`; non-null means nothing has been removed yet.
+  Both apps show "Yes, forget them" (`confirm_words.yes`, each app's
+  `EXTRA.confirm_yes`), the PC's own `confirm.text` and the minutes left, and
+  post `{"id": confirm.id, "yes": true}` to `confirm.route`. The body is BUILT
+  from those two values in each app (the desktop's Rust `confirm_body`, the
+  phone's `ForgetRange.confirmBody`), never passed through from the page, so
+  neither app can send a `yes` that is not the literal boolean. A 400 keeps the
+  list, a 409 means the hold is gone, the items changed, a card still waits or
+  an Undo is open - nothing happened; both are shown in the PC's own words and
+  the status is read again after one. **The card's approval is not done**: the
+  deletion is only after the 200 from `/confirm` (then the status says
+  `last.outcome` "done"), and the 10-minute Undo it starts is drawn like any
+  other.
 - **A pinned chat is never sent** (it is not in `chats`) and never rendered
-  as tickable; show the `pinned_kept` names as kept, with "N pinned chats
-  are kept", and the `estimate.text` line as the measured time.
+  as tickable; both apps show the `pinned_kept` names as kept, with the PC's
+  own "N pinned chats are kept" and why, and the `estimate.text` line as the
+  measured time before the owner is asked.
 - Once the PC says the change happened (`last.outcome` "done"), an app that
   was IN one of the deleted chats starts a new conversation and says so
   (§18.6). And History reads its list again at once after a change or an
   Undo (desktop: it used to wait for its 15-second re-read).
-- **"Forget these" waits for a live link** (rule 4) and, on the desktop, is
-  refused while the list's words are hidden (the owner must be able to
-  read what goes); **Undo is never held**.
+- **"Forget these" and the second yes wait for a live link** (rule 4) and are
+  refused while the list's words are hidden (the owner must be able to read
+  what goes); **Undo is never held**.
 - **Hidden lists**: while "Hide memory lists and chat history" (phone) or
   "Windows Hello for memory lists and chat history" (desktop) hides the
-  Brain's lists, or App lock has locked Jarvis, the list's words are
-  hidden - the counts and the days stay - until Show is confirmed. The
-  status (an open Undo) carries no words and stays. **The apps lane must
-  add `pinned_kept` (titles) to the desktop's `redact()`** along with
-  `facts`/`chats`, and hide it on the phone the same way: this PR adds the
-  key, and the existing redactor does not know it yet.
-- The words are the contract's (`words`), in both apps; the second tap's
-  two sentences are in the fixture's `confirm_words` until the apps lane
-  adds them to their own copies.
+  Brain's lists, or App lock has locked Jarvis, the list's words are hidden -
+  the counts and the days stay - until Show is confirmed. The status (an open
+  Undo) carries no words and stays. `pinned_kept` carries chat TITLES, so it is
+  hidden with `facts`/`chats`: the desktop's Rust `redact()` empties it, and
+  the phone's `ForgetRange.redact` blanks its titles out of what the plate
+  holds.
+- The words are the contract's (`words`), in both apps. The second tap's two
+  sentences are the PC's own constants and are NOT in `words` (that map is
+  generated and compared key for key): each app holds them - with the pinned
+  chats' three sentences and the "N min left to say yes" line - in its own
+  `EXTRA` map, checked word for word against `backend/jarvis_forget_range.py`
+  and the fixture's `confirm_words`.
 
 ## 65. Customer-support chats - Jarvis chats with a company's support for you (added 2026-09-28; built, not yet tried against a real site)
 
@@ -26546,9 +26567,14 @@ boolean: `true` means that action asks first today (its tier in
 accepted run, for a re-run's prefill and for a first-run offer to show once.
 
 `version` is the question-set version (`2` today), and `completed_version` is
-the one the owner last finished or accepted (`0` when never, `1` for a file
-completed before the new questions - so the first launch after deploy offers
-the new ones once, instead of claiming the old file is current). `runs` is how
+the one the owner last finished - every question answered - or explicitly kept
+with "Keep current settings" (`0` when never, `1` for a file completed before
+the new questions, so the first launch after deploy offers the new ones once
+instead of claiming the old file is current). **A partial apply does not move
+it** (DEF-043, 2026-11-04): answering one question saves that answer and counts
+a run, but the offer, the HUD banner and the chat line stay until all 25 are
+answered, so `completed_version` and `answered_count` never disagree about the
+same read. `runs` is how
 many applies have been accepted. `dismissed_at` is when "Not now" was last
 pressed, or `null`. `in_progress` is where the desktop card is
 (`{section, question, started_at, draft_answers}`), or `{}` when it has not
@@ -26616,9 +26642,13 @@ order (tightening and cosmetic changes first, then the carded ONs), and:
   `not-changed` or `failed`, and a plain sentence;
 * only then are the owner's own answers and `completed_at` saved (atomically)
   in `<CONFIG_DIR>/setup.json`. **No chat, fact, voice, picture or file is
-  written** - the file holds choice ids and one timestamp. A damaged file is
-  reported by `GET /api/data-health` like every other settings JSON; this
-  module falls back to "no answers" rather than raising.
+  written** - the file holds choice ids and one timestamp. `completed_version`
+  becomes `QUIZ_VERSION` only when every question now has an answer; a partial
+  apply saves what it was given, counts the run and leaves completion where it
+  was, so the offer/banner/chat line continue (DEF-043, 2026-11-04). A partial
+  retake also keeps an older `completed_version` a file already had. A damaged
+  file is reported by `GET /api/data-health` like every other settings JSON;
+  this module falls back to "no answers" rather than raising.
 
 A body that is not a JSON object, or `answers` that is not an object, is 400 in
 plain words. **Two more refusals were added by the 2026-10-20 audit (Gemini
@@ -26755,6 +26785,19 @@ same card, and the row is absent, not greyed, once the quiz is done. Nothing
 steals focus: the Settings window opens only after the first-run walkthrough
 and when the owner presses "Finish now".
 
+**The prompt line follows the same switch** (DEF-044, 2026-11-04). On a local
+turn, `jarvis_agent.setup_state_note()` adds ONE system line - "Personalize
+Jarvis: the setup quiz is unfinished - N of 25 answered ... nothing in chat may
+apply them" - just before the newest user message, only while
+`completed_version` is behind `version` AND the `[notifications] setup` switch
+(`jarvis_notify_prefs.read()["setup"]`, the "Personalize Jarvis" switch on both
+apps' Notifications cards, on by default) is on. Turning the reminder off is
+the owner saying they do not want to be reminded, and a chat line is a
+reminder; turning it back on restores the line. A finished quiz costs no
+tokens, and the line is local-model only. It reads `setup.json` and the one
+notification value - it never calls `apply()`, never raises a card, and never
+touches a setting.
+
 **Phone: the same questions, read-only.** `net/SetupQuestionnaire.kt` and
 `ui/screens/SetupQuestionnairePlate.kt`, on Settings. It reads
 `GET /api/setup`, prefills the last accepted answers and draws the same 25
@@ -26812,13 +26855,19 @@ no-PC rule: the question set is 25 in seven sections with the 14 existing ids
 unchanged and in their order; every new `choice`/`number` change names a real
 Settings row and one of its own Option ids; a partial retake keeps every
 earlier answer, and an old three-key file reads as version 1 with
-`completed_version` 1; `progress()` writes only `in_progress` and preserves
+`completed_version` 1; a partial apply saves its answer and counts its run but
+does NOT move `completed_version` (the offer, banner and chat line stay), while
+an apply with all 25 answered does (DEF-043); `progress()` writes only
+`in_progress` and preserves
 every other key, refuses a non-object and a body with nothing to record, cleans
 a bogus draft answer away, and is refused with 403 from another device; the
 progress route keeps the origin/token order and a bad body is 400;
 `{"keep_current": true}` sets `completed_version` without touching an answer or
-calling `apply()`; and the module still imports no model lane, switches no
-model, and `_run_setup_quiz` carries no `confirm`.
+calling `apply()`; `setup_state_note()` adds its one line only while the quiz is
+unfinished AND the "Personalize Jarvis" notification switch is on, and with the
+switch off the turn gets the plain messages back (DEF-044); and the module still
+imports no model lane, switches no model, and `_run_setup_quiz` carries no
+`confirm`.
 
 typed text, and the patch's own pins (two routes, harness position, no
 install-block line, `_stack.py`'s RATCHET unchanged).
@@ -30739,11 +30788,39 @@ protection, never "protect everything".
 | `POST /api/protection/propose` | the chat path | **ONE** card, action `protect_item`; 202 `waiting` and a job id; 400/409 before any card |
 | `GET /api/protection/propose?id=` | either app | the proposal's end: `waiting` / `added` / `denied` / `failed` |
 
-The chat ability is the model tool **`protect_from_jarvis`** (`{kind, target,
-mode}`): the model proposes, the owner decides on ONE ordinary approval card,
-and the store is written only after that verdict, with `added_by: "chat"`. The
-model never writes the list itself and never claims it happened until the PC
-says so. A removal is loosening and always raises one card, whichever app asks.
+The chat ability is the model tool **`protect_from_jarvis`** (`{action, kind,
+target, mode}`, `action` = `add` | `remove` | `list`, default `add`). It has
+three actions since 2026-11-04, because the owner asked to set folder-level
+restrictions by plain chat: `add` and `remove` each raise ONE ordinary approval
+card - `protect_item` and `unprotect_item` respectively - and the store is
+written only after that verdict, with `added_by: "chat"`; `list` changes
+nothing, so it answers with **no card** (the whole list, or ONE named target
+checked in it: `check: true/false` plus the entry). The model never writes the
+list itself and never claims it happened until the PC says so. Removal is
+loosening and always raises one card, whichever app or chat asks. The card
+words and the tier are the list's own; a `list` answer can never write.
+
+**The same door without the model (2026-11-04).** `jarvis_quick.py`'s fixed
+phrasings reach `jarvis_protection`'s own functions directly - `handle_propose`
+(one `protect_item` card), `handle_remove` (one `unprotect_item` card), and
+`handle_get` / `status_for` for the read. They are the SAME functions the tool
+and the apps' routes use, not a second mechanism:
+
+| said in chat | what happens |
+|---|---|
+| "restrict the folder D:\\Photos from Jarvis", "restrict D:\\Photos", "stop Jarvis reading C:\\X", "don't let Jarvis touch C:\\X" | ONE `protect_item` card; the folder becomes **blocked** once it is approved |
+| "unrestrict D:\\Photos", "let Jarvis read D:\\Photos again", "stop protecting D:\\Photos" | ONE `unprotect_item` card; the entry leaves only on the card's yes |
+| "what folders are restricted?", "which files are blocked?" | the real list, no card |
+| "is Jarvis blocked from C:\\X?" | `Yes` / `No` about THAT path, read from the store, no card |
+
+A sentence that names a path acts on that path; one that only DESCRIBES a
+folder ("the folder with my medical scans") names no path, so the answer ASKS
+for the whole path and quotes the sentence to repeat ("restrict the folder
+D:\\Medical scans from Jarvis"). No target is ever guessed - protecting the
+wrong folder is itself a failure - and the answer never falls back to a generic
+"I cannot", which is the failure the owner reported. A private chat refuses the
+change like every mutation. Both apps chat through the same `/api/chat`, so
+this works from the PC and the phone alike with no client change.
 Both actions ship as `"ask"` in both copies of `jarvis-framework.toml`; the gate
 has no `_RISK` row for them yet (a drop-in module adds no patch, and risk rows
 are written by patches), so they are unclassified: the gate forces them to
@@ -30869,7 +30946,11 @@ package name is never matched against this list. Likewise a `folder`/`file`
 entry is a PC path.
 `POST /api/protection/add` is PC-only and raises no card; the chat add and every
 removal are one card each. Adding from the phone is not missing, only one step
-slower: the owner asks in chat and the same `protect_item` card waits.
+slower: the owner asks in chat and the same `protect_item` card waits. Removing
+and asking what is on the list are one chat sentence from either app too (§171.2
+has the owner's phrasings), and nothing about that is one-sided: the phone chats
+through the same `/api/chat`, so it gets the same cards and the same real-state
+answers with no client change.
 
 **Implemented and proved in this repository, NOT deployed to the owner's live
 PC by this change** - the live deploy is its own pass, so the owner's apps do
@@ -33751,3 +33832,220 @@ uses stand-ins for all three); no phone has ever received a `phone_command` or
 sent an SMS; and the desktop Settings row and the phone's screens are the two
 app lanes' own work. A desk test with a real clip and the owner's phone is the
 next step, and it is a field test, not a unit test.
+## 187. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
+
+A watcher that speaks about everything gets muted. That is the whole of this
+section. Three patterns from `deepseek-ai/dsh-superagent-prototype` (MIT) were
+adopted on the owner's decision of 2026-11-04 - *"implement Part II patterns 1,
+2, 3 and 5B ... natively in Python"* - because they are the mechanisms that stop
+a GitHub watcher becoming noise, and because the same slice can close a defect
+this project already had: **a backend restart lost a pending approval card**
+(the job row survived; the event that told the apps about it did not).
+
+Three modules and one drop-in folder carry it:
+
+| Piece | File | What it is |
+| :--- | :--- | :--- |
+| stage one, pure | `backend/jarvis_watch_policy.py` | `gate()`: which checks are required, one batch per (pr, head_sha), the settle rules. Imports nothing from Jarvis - no disk, no network, no model. |
+| the watcher | `backend/jarvis_watch_ci.py` | poll `gh`, fold the seven checks into one thread, log a decision row (`observe`) or notify (`active`), the decisions ring buffer, `watch-receipts.json`, the job body `watch_pr_checks`. |
+| the record | `backend/jarvis_outbox.py` | what is still owed to the owner, written to `outbox.json` BEFORE it is said, re-announced on startup. |
+| the route | `plugins/ready/watch-decisions/` | calls `jarvis_watch_ci.install()` for the one GET below. No patch: `jarvis_hud.py` is not shipped, and a route there would need a hunk in its dispatch tuple. |
+
+### 187.1 The three modes, and why the middle one is the default
+
+`WATCH_MODES = ("off", "observe", "active")` (`backend/jarvis_watch.py`).
+
+- **`off`** - nothing is polled, nothing is recorded. This is what "no watcher"
+  means, and it is the state of a machine that has never created a
+  `watch_pr_checks` job.
+- **`observe`** - the WHOLE pipeline runs: poll, batch, gate, and (only for a
+  failed required check) the second stage. Nothing interrupts. One decision row
+  is written instead, saying exactly what would have been said.
+- **`active`** - the same pipeline, and a terminal verdict is delivered.
+
+**A new proactive rule defaults to `observe`.** The setting is
+`[watch] pr_checks_mode` in the owner's settings file, and an absent,
+unreadable or misspelt value reads as `observe` - never as `active`, because a
+typo in a settings file must not turn a shadow watcher into one that speaks.
+Promotion is the owner's own edit once the log below has no noise in it; there
+is no route that promotes it, and nothing here auto-promotes.
+
+**Nothing becomes always-on.** `jarvis_watch_ci.py` registers a job body and
+answers a route; it starts no thread, no timer and no polling of its own. The
+watcher looks at a pull request only when a `watch_pr_checks` job names one,
+created through the existing `POST /api/jobs`.
+
+### 187.2 `GET /api/watch/decisions?limit=50`
+
+The read that makes `observe` worth having: *"what would your GitHub watcher
+have told me today?"* Newest first, `limit` clamped to 1..200 (default 50,
+anything that is not a whole number is treated as 50 rather than refused - this
+is a read). Origin and token checked exactly like every other route.
+
+```json
+{"available": true, "mode": "observe",
+ "modes": ["off", "observe", "active"],
+ "required_jobs": ["rust", "frontend", "backend", "backend-windows",
+                   "credential-manager", "powershell-5", "phone-unit-tests"],
+ "informational_jobs": ["audit", "python-advisories"],
+ "count": 2,
+ "decisions": [
+   {"id": 2, "at": 1762300000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "would_notify",
+    "reason_code": "ci_all_required_green", "verdict": "all_green",
+    "mode": "observe", "shadow_reason_code": "observe_shadow_logged",
+    "delivery": "shadow", "receipt_key": "1135:a1b2c3d4e...:all_green",
+    "preview_text": "PR #1135 is green: all 7 required checks passed and GitHub says it is mergeable (a1b2c3d4e)."},
+   {"id": 1, "at": 1762299000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "ignored",
+    "reason_code": "ci_still_running_debounced", "verdict": "running",
+    "mode": "observe", "shadow_reason_code": "", "delivery": "shadow",
+    "preview_text": "PR #1135: 3 of 7 required checks finished, none failed - staying quiet until it settles (a1b2c3d4e)."}],
+ "reasons": {"ci_all_required_green": "All 7 required checks passed and the PR is mergeable", "...": "..."}}
+```
+
+Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
+`preview_text`; the rest is for reading the log later.
+
+- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`.
+- `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
+  `notification:<id>`, `repo:<name>`.
+- `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule
+  dropped it) or `notified` (active mode, and it was delivered).
+- `reason_code` is a CLOSED set, `WATCH_REASONS` in `backend/jarvis_watch.py`:
+  `ci_all_required_green`, `ci_required_failed`, `ci_still_running_debounced`,
+  `ci_green_not_mergeable`, `ci_no_required_checks`, `duplicate_sha_state`,
+  `observe_shadow_logged`, `filtered_bot_actor`, `notification_for_you`,
+  `attention_budget_dropped`, `repo_check_clean`, `repo_check_failed`,
+  `watch_off`, `source_not_allowed`, `unreadable_trigger`. A client that does not
+  know a new code must fall back to showing `preview_text`, which is always a
+  whole sentence in the owner's words.
+- `preview_text` is the EXACT one-line message that was, or would have been,
+  shown. Never more than one line: a `\n` in it is a bug, and the suite says so.
+- In `observe` mode a `would_notify` row also carries
+  `shadow_reason_code: "observe_shadow_logged"` - the reason code that says
+  "written down instead of delivered". `reason_code` still names the verdict, so
+  the log answers both questions at once.
+- `delivery` is `shadow` (observe), `sent`, `dropped` (the interruption budget
+  said no - the arbiter's own decision, `§123.4`), `failed` (the notifier raised;
+  the outbox is still holding it) or `already`.
+
+The buffer holds the newest 500 rows in `watch-decisions.json`, written
+temp-file-then-rename, so a crash leaves the previous whole file.
+
+### 187.3 One batch per pull request, and the seven that matter
+
+A pull request runs **seven** checks that gate a merge - `rust`, `frontend`,
+`backend`, `backend-windows`, `credential-manager`, `powershell-5`,
+`phone-unit-tests` - plus `audit` and `python-advisories`, which are
+**informational**. The seven were read from the repository ruleset itself; the
+two informational ones are red on `main` regularly and merges still land, which
+is what "informational" means. They finish minutes apart (`rust` in about three,
+`frontend` in five, `backend` in fifty-five to sixty), so:
+
+- `thread_key = f"pr:{number}:{head_sha[:9]}"` - ONE thread per commit. A new
+  push is a new thread, a new batch and a new receipt.
+- **fail fast**: any required check whose conclusion is `FAILURE`,
+  `TIMED_OUT` or `ACTION_REQUIRED` speaks ONCE, immediately. So does any other
+  terminal non-`SUCCESS` (`CANCELLED`, `STALE`, `NEUTRAL`, `SKIPPED`) - a
+  required check that ended without passing would otherwise hold the batch open
+  for ever, and on a protected branch it blocks the merge.
+- **settle green**: all seven `SUCCESS` *and* `mergeable == "MERGEABLE"` speaks
+  ONCE. All seven green with `CONFLICTING`/`UNKNOWN` is its own sentence
+  (`ci_green_not_mergeable`), because green is not mergeable.
+- **quiet while it works**: any required check still running, none failed ->
+  `ci_still_running_debounced`, and NOTHING is delivered however many times it
+  is polled.
+- **`audit` and `python-advisories` never trigger a notification.** They are
+  dropped by name before any count is taken, so a red `audit` on a green pull
+  request produces `ci_all_required_green` and one quiet line.
+
+**Idempotent receipts** (`watch-receipts.json`, newest 2000) are keyed
+`(pr_number, head_sha, terminal_verdict)`. A terminal verdict is recorded once -
+in `observe` mode too, so promoting a watcher later cannot re-report a commit
+that is already finished - and every later poll of that commit answers
+`duplicate_sha_state` and delivers nothing. The verdict is part of the key on
+purpose: a commit that fails `rust`, is re-run and settles green owes the owner
+two different sentences.
+
+### 187.4 The two-stage gate, and what may never reach stage two
+
+1. **`gate(trigger, thread)`** - pure. Allowlists, required-vs-informational
+   names, receipts, settle rules, bot filtering. No disk, no network, no model,
+   no clock: `now` is an argument. `backend/test_watch_ci.py` parses its imports
+   and fails if one of them could reach anything.
+2. **`assess()`** - reached ONLY when the gate admits a terminal failure of a
+   REQUIRED check. It reads the failing run's own log through the same
+   deterministic `gh` path the poll uses (the run id is taken from the check's
+   own details URL, never guessed) and formats the one line. A filtered event, a
+   duplicate, an informational check, a bot notification and a quiet batch never
+   reach it, and the suite proves that with a counter that must stay at zero.
+
+**No model is called on this PC by this slice, said plainly.**
+`assess_failure()` has a `summarizer` seam and nothing passes one: the line is
+built by plain string work over the log. So this is 0 GPU today, and the seam is
+where a local-model summary would go if that is ever wanted.
+
+### 187.5 The durable outbox, and what a restart owes (pattern 5B)
+
+`backend/jarvis_outbox.py` holds what Jarvis still owes the owner, in
+`outbox.json` beside `jobs.db` (`JARVIS_OUTBOX_PATH` overrides it; the path is
+resolved on each call so a moved queue moves it). Three kinds, and the kind is
+part of the dedupe key:
+
+| kind | key | settled by |
+| :--- | :--- | :--- |
+| `job_card` | `job:<id>:grant:<action>` | being ANSWERED: `answer()`, `_stop_denied()`, `cancel()` |
+| `job_done` | `job:<id>:<state>` | being delivered |
+| `pr_ci_notice` | `<thread_key>:<verdict>` | being delivered (or dropped by the arbiter) |
+
+The order is the guarantee, and it is the same everywhere: **write it down, then
+record the receipt, then deliver, then settle.** A crash after the write leaves a
+pending entry that the next start re-announces; a crash after the receipt cannot
+cause a second report. The file is written to a temp name, flushed and renamed,
+so a reader never sees half of one.
+
+On startup `jarvis_jobs._init()` re-hydrates, once per process:
+parked jobs with a pending grant get their `job_card` entry back (the ROW is the
+authority, so this also covers a card from a build with no outbox), then every
+pending entry is announced once. That is what closes the restart card loss: the
+card is re-announced, and it is still the owner's to answer - rehydration
+APPROVES NOTHING, and `decide_grant()` remains the only thing that decides a
+grant. A cancelled job's card is settled by the cancel (the owner already
+answered), and a cancelled job gets no completion notice, because telling
+somebody about the interruption they asked to stop is the interruption.
+
+**The honest limit: this is at-least-once, not exactly-once.** A process that
+dies between the send and the settle repeats ONE notice on the next start. It
+cannot do the opposite - an entry that exists is an entry somebody will be told
+about - because the write comes first. Given one repeated notice or one lost
+approval card, this takes the repeat.
+
+Settled entries are pruned back to 500; a pending one is never dropped, however
+old, because dropping it is the defect this module exists to prevent.
+
+### 187.6 Tests
+
+`backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
+plain Python with a fake clock, a fake `gh` runner and temp files - no network,
+no `gh`, no model. Between them: observe-vs-active (including that observe calls
+the notifier ZERO times), the quiet period, fail fast, the all-green settle,
+informational checks ignored, duplicate-receipt silence, a new push being a new
+thread, a fixed failure then green owing two sentences, `gate` never calling
+`assess` for a filtered event, a crash between the write and the send being
+delivered exactly once afterwards, a restart re-announcing an unanswered card
+once and not repeating a delivered notice, and the route's own wrapper.
+
+### 187.7 What is NOT built, and said plainly
+
+- **No app screen for this route yet.** It is read on the PC while the mode is
+  being decided; `tools/check_parity.py` classifies it `BACKEND_ONLY` with that
+  reason, and `docs/ARCHITECTURE.md` §8 carries the one-sided row. When a screen
+  is built it goes on BOTH apps.
+- **No promotion route and no auto-promotion.** The mode is the owner's settings
+  file.
+- **No push, merge, label or comment.** This watcher reads; the only writes it
+  can make are its own three files and the notification it hands to the arbiter.
+- **The second stage never calls a model today** (§187.4).
+- **Not measured on the owner's PC**: the route and the job body are tested
+  against the real modules and a fake `gh`, not against a live pull request.

@@ -583,7 +583,7 @@ def _read_wav_default(raw: bytes):
 def _decode_clip(data_b64, sample_rate, read_wav: Optional[Callable] = None) -> tuple:
     """(samples, rate) from the request body, or raise Refused."""
     if not isinstance(data_b64, str) or not data_b64.strip():
-        raise Refused('need {"card_id", "data_b64"}')
+        raise Refused("That answer needs the card's id and the recorded sound.")
     try:
         raw = base64.b64decode(data_b64, validate=False)
     except (binascii.Error, ValueError):
@@ -594,15 +594,15 @@ def _decode_clip(data_b64, sample_rate, read_wav: Optional[Callable] = None) -> 
         raise Refused(f"That recording is longer than {int(MAX_SECONDS)} seconds, "
                       "which is more than one answer should need.")
     if not isinstance(sample_rate, int):
-        raise Refused('need {"sample_rate": 16000} (a whole number of Hz)')
+        raise Refused("That answer needs the sound's rate as a whole number, usually 16000.")
     if not 8000 <= sample_rate <= 48000:
-        raise Refused('need {"sample_rate": 16000} (a whole number of Hz)')
+        raise Refused("That answer needs the sound's rate as a whole number, usually 16000.")
     got = (read_wav or _read_wav_default)(raw)
     if not got:
         raise Refused(SAID_BAD_CLIP)
     samples, rate = got
     if not isinstance(sample_rate, int) or not 8000 <= sample_rate <= 48000:
-        raise Refused('need {"sample_rate": 16000} (a whole number of Hz)')
+        raise Refused("That answer needs the sound's rate as a whole number, usually 16000.")
     if int(rate) != int(sample_rate):
         raise Refused(f"The clip says {int(rate)} Hz but the request says "
                       f"{int(sample_rate)} Hz, so nothing was decided.")
@@ -705,7 +705,7 @@ def answer(card_id, data_b64, sample_rate=SAMPLE_RATE, *, gate=None,
     if not isinstance(card_id, str) or not card_id.strip():
         return 400, {"ok": False, "heard": "", "decision": "refused",
                      "card_state": "unchanged",
-                     "error": 'need {"card_id": "<the card read out>"}'}
+                     "error": "That answer needs the id of the card that was read out."}
     card_id = card_id.strip()
     at = _now(now)
     with _READY_LOCK:
@@ -1051,18 +1051,18 @@ def handle_post(route: str, body) -> tuple[int, dict]:
         if not isinstance(body, dict):
             return 400, {"ok": False, "heard": "", "decision": "refused",
                          "card_state": "unchanged",
-                         "error": 'need {"card_id", "data_b64"}'}
+                         "error": "That answer needs the card's id and the recorded sound."}
         return answer(body.get("card_id"), body.get("data_b64"),
                       body.get("sample_rate", SAMPLE_RATE))
     if route == PHONE_RESULT_PATH:
         return phone_result(body)
-    return 404, {"error": "not found"}
+    return 404, {"error": "That is not one of the hands-free addresses here."}
 
 
 def handle_get(route: str) -> tuple[int, dict]:
     if route == PATH:
         return 200, status()
-    return 404, {"error": "not found"}
+    return 404, {"error": "That is not one of the hands-free addresses here."}
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:

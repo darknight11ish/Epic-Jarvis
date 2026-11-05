@@ -119,6 +119,12 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # the plan text it is also given, and is not `_gate_prompt`'s line. Two pins
     # (a `src` read and its two comparisons on lines 402/404) became behaviour.
     "backend/test_file_to_phone.py": 9,
+    # 2026-11-05 (folder restrictions by plain chat, #1166): its new suite keeps
+    # two source-text pins on the dead "protection_change" branch it replaced -
+    # the branch must stay gone, and its broken offered-test (a gate action name
+    # compared against tool names) with it. Measured with `--measure` on the
+    # branch; recorded as debt, not approval - the ratchet only turns DOWN.
+    "backend/test_folder_restrictions.py": 2,
     "backend/test_animal.py": 6,
     # 2026-10-30: the live-repair tool's suite pins the exact anchor lines it
     # inserts (the two `_RISK` rows, the two history routes, and since the

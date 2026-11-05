@@ -4,7 +4,15 @@
  * and the reading; this draws them into `#forget-range` and sends the
  * owner's taps through two Rust commands (brain/forget_range.rs):
  * `forget_range_read` (the status, or the list for some days) and
- * `forget_range_write` ("forget" - the PC raises ONE card - or "undo").
+ * `forget_range_write` ("forget" - the PC raises ONE card - the second yes
+ * "confirm", or "undo").
+ *
+ * The two yeses (owner, 2026-11-04): "Forget these" asks the PC for the ONE
+ * approval card and changes nothing; approving the card makes the PC HOLD the
+ * checked items for two minutes, and the status then carries `confirm`. This
+ * page draws that as one more line and one more tap ("Yes, forget them"),
+ * which sends the held id and a literal `yes: true`. Nothing on this page
+ * approves a card - the card is answered in the Jarvis bar, like any other.
  *
  * Kept out of brain.js on purpose, so the History tab's other cards and this
  * one never edit the same lines. brain.js only calls `showForgetRange()`
@@ -16,9 +24,15 @@
  * - Nothing is removed from here: "Forget these" only asks the PC, which
  *   raises ONE approval card listing every item, answered in the Jarvis
  *   bar like any other. This page never approves anything.
- * - "Forget these" is greyed while the link is stale or down (rule 4; Rust
- *   refuses it too) and while the list is hidden (the owner must be able to
- *   read what goes). Undo is never greyed: it only puts back.
+ * - The pinned chats the PC is keeping are drawn as KEPT: no tick box, never
+ *   in the count on "Forget these", and never in what it sends.
+ * - "Forget these" and the second yes are greyed while the link is stale or
+ *   down (rule 4; Rust refuses them too) and while the list is hidden (the
+ *   owner must be able to read what goes). Undo is never greyed: it only puts
+ *   back.
+ * - A 409 from either step is said in the PC's own words, never swallowed -
+ *   and the status is read again straight after it, because a 409 means the
+ *   card, the hold or the Undo has moved on.
  * - Hidden with the Brain's private lists, with Show.
  *
  * @module forget-range-panel
@@ -30,13 +44,18 @@ import {
   allTicked,
   BRAIN_PLACE_KEY,
   chatKindTag,
+  confirmBody,
+  EXTRA,
   HISTORY_CHANGED,
   HISTORY_PLACE,
   dayOf,
   fill,
   forgetBody,
   forgetLabel,
+  holdLeftLine,
   isWhen,
+  messagesLine,
+  pinnedKeptLine,
   PLACE,
   readPreview,
   readStatus,
@@ -63,7 +82,8 @@ const state = {
   said: "",
   saidTone: "",
   reading: false,
-  undoTimer: null,
+  /** The 20-second re-read while an Undo or a held second yes is open. */
+  tickTimer: null,
 };
 
 /** Buttons that send a change and wait for a live link. */
@@ -194,7 +214,16 @@ function previewArgs() {
   return { preview: true, from: state.from, to: state.to, kinds };
 }
 
-async function readPreviewNow() {
+/**
+ * Reads the list for the chosen days.
+ *
+ * `keepSaid`: leave the status line alone. Reading the list normally starts a
+ * fresh one (the old "the list changed" no longer applies), but when the page
+ * has just said the PC's own answer - a refusal, "Put back", "Forgot 2 facts" -
+ * re-reading the list must not wipe the very sentence the owner needs to read
+ * (a 409's "read the list again" was being erased by doing exactly that).
+ */
+async function readPreviewNow({ keepSaid = false } = {}) {
   if (state.choice === "custom" && !(isWhen(state.from) && isWhen(state.to))) {
     say(WORDS.bad_date, "bad");
     return;
@@ -218,7 +247,7 @@ async function readPreviewNow() {
       const listed = new Set(state.preview.chats.map((x) => `chat:${x.id}`));
       for (const k of tickedExtra) if (listed.has(k)) state.ticked.add(k);
     }
-    say("");
+    if (!keepSaid) say("");
   } catch (error) {
     state.preview = null;
     say(errorText(error), "bad");
@@ -317,8 +346,9 @@ async function forgetNow() {
     say(String((out && out.message) || WORDS.waiting), "ok");
   } catch (error) {
     say(errorText(error), "bad");
-    // The list changed since it was read: read it again.
-    if (/list changed/i.test(errorText(error))) await readPreviewNow();
+    // The list changed since it was read: read it again, without wiping the
+    // refusal that says so.
+    if (/list changed/i.test(errorText(error))) await readPreviewNow({ keepSaid: true });
   }
   await readStatusNow();
   paint();
@@ -332,31 +362,70 @@ async function undoNow() {
     say(errorText(error), "bad");
   }
   await readStatusNow();
-  if (state.preview && state.preview.available) await readPreviewNow();
+  // The list under an Undo is read again - quietly, so "Put back: 2 facts and
+  // 2 chats." stays on the page.
+  if (state.preview && state.preview.available) await readPreviewNow({ keepSaid: true });
+  paint();
+}
+
+/**
+ * The SECOND yes: the id the PC is holding and a literal `true` (the card was
+ * the first yes and deleted nothing). Its answer is the PC's own sentence -
+ * `Forgot 2 facts and deleted 2 chats. Undo is available for 10 minutes.` -
+ * and a refusal is the PC's own too: no hold, an expired hold, items that
+ * changed, a card still waiting, or an Undo already open. Nothing is
+ * swallowed, and the status is read again after either, so the line, the
+ * second yes and the Undo banner always say what the PC actually holds.
+ */
+async function confirmNow() {
+  const c = state.status && state.status.confirm;
+  if (!c) return;
+  try {
+    const out = await invoke("forget_range_write", {
+      action: "confirm",
+      body: confirmBody(c.id),
+    });
+    say(String((out && out.message) || ""), "ok");
+  } catch (error) {
+    say(errorText(error), "bad");
+  }
+  await readStatusNow();
+  // Quietly: the PC's sentence stays, and a 409's "read the list again" is
+  // what the re-read is for - not something to erase while doing it.
+  if (state.preview && state.preview.available) await readPreviewNow({ keepSaid: true });
   paint();
 }
 
 /* ── Drawing ──────────────────────────────────────────────────────────── */
 
-function scheduleUndoTick() {
-  clearTimeout(state.undoTimer);
-  state.undoTimer = null;
-  if (!(state.status && state.status.undo)) return;
-  // The minutes left, and the moment the ten minutes are over. Only the
-  // Undo line is redrawn while it lasts, so a date being typed or a box
-  // being ticked is not disturbed; the whole card only when it ends.
-  state.undoTimer = setTimeout(async () => {
-    state.undoTimer = null;
+/**
+ * While an Undo or a held second yes is open: the minutes left, and the
+ * moment it ends. Only that line is redrawn while it lasts, so a date being
+ * typed or a box being ticked is not disturbed; the whole card only when it
+ * is over. Both clocks are the PC's - this only asks it again.
+ */
+function scheduleTicks() {
+  clearTimeout(state.tickTimer);
+  state.tickTimer = null;
+  const s = state.status;
+  if (!(s && (s.undo || s.confirm))) return;
+  state.tickTimer = setTimeout(async () => {
+    state.tickTimer = null;
     const box = root();
     if (!box || box.closest("[hidden]")) {
-      scheduleUndoTick();
+      scheduleTicks();
       return;
     }
     await readStatusNow();
-    const line = box.querySelector(".fr-undo-text");
-    if (state.status && state.status.undo && line) {
-      line.textContent = undoLine(state.status.undo);
-      scheduleUndoTick();
+    const now = state.status;
+    if (now && now.undo) {
+      const line = box.querySelector(".fr-undo-text");
+      if (line) line.textContent = undoLine(now.undo);
+      scheduleTicks();
+    } else if (now && now.confirm) {
+      const left = box.querySelector(".fr-confirm-left");
+      if (left) left.textContent = holdLeftLine(now.confirm);
+      scheduleTicks();
     } else {
       paint();
     }
@@ -376,6 +445,7 @@ function paint() {
   } else {
     if (s.undo) out.push(undoBanner(s.undo));
     if (s.waiting) out.push(el("p", "hint fr-waiting", WORDS.waiting));
+    else if (s.confirm) out.push(confirmBlock(s.confirm));
     else if (s.last && s.last.message && !s.undo && s.last.outcome !== "done") {
       out.push(el("p", "fr-last", s.last.message));
     }
@@ -388,7 +458,25 @@ function paint() {
   said.dataset.tone = state.saidTone;
   out.push(said);
   box.replaceChildren(...out);
-  scheduleUndoTick();
+  scheduleTicks();
+}
+
+/**
+ * The second yes the PC is holding: its own sentence, how long is left, and
+ * one danger button. Not a card - nothing here approves or denies anything.
+ */
+function confirmBlock(c) {
+  const box = el("div", "fr-confirm");
+  box.append(el("p", "fr-confirm-text", c.text || EXTRA.confirm_text));
+  box.append(el("p", "fr-confirm-left", holdLeftLine(c)));
+  const go = button(EXTRA.confirm_yes, confirmNow, { isLive: true, danger: true,
+    id: "forget-range-confirm" });
+  go.dataset.title = "Forgets the facts and deletes the chats you ticked. Undo stays for 10 " +
+    "minutes.";
+  const end = el("div", "row end");
+  end.append(go);
+  box.append(end);
+  return box;
 }
 
 function undoBanner(undo) {
@@ -488,6 +576,17 @@ function listPart(s) {
   }
   if (p.tooMany || p.empty) return part;
   if (p.chatsWhy) part.append(el("p", "empty failed", p.chatsWhy));
+  // The chats this Forget is KEEPING (owner, 2026-11-04). Above the tickable
+  // lists on purpose: the owner sees what stays before what goes. Nothing
+  // here is a tick box and nothing here is ever sent.
+  if (p.pinnedKept.length) {
+    part.append(el("h3", "fr-head",
+      pinnedKeptLine(p.pinnedKeptCount || p.pinnedKept.length)));
+    part.append(el("p", "note fr-pinned-why", EXTRA.pinned_why));
+    const rows = el("div", "rows");
+    for (const x of p.pinnedKept) rows.append(keptRow(x));
+    part.append(rows);
+  }
   if (p.kinds.includes("facts") && p.facts.length) {
     part.append(el("h3", "fr-head", `${WORDS.facts_head} (${p.facts.length})`));
     part.append(el("p", "note", WORDS.erase_note));
@@ -506,12 +605,15 @@ function listPart(s) {
     }
     part.append(rows);
   }
+  // How long it takes, measured by the PC from the counts just read, said
+  // BEFORE the owner is asked for the card (owner, 2026-11-04).
+  if (p.estimate.text) part.append(el("p", "fr-estimate", p.estimate.text));
   const n = forgetBody(p, state.ticked);
   const count = n.facts.length + n.chats.length;
   const go = button(forgetLabel(count), forgetNow, { isLive: true, danger: true,
     id: "forget-range-go" });
   go.dataset.title = "Asks you first, with ONE approval card listing everything ticked.";
-  if (!count || s.waiting || s.undo) {
+  if (!count || s.waiting || s.confirm || s.undo) {
     go.dataset.off = "true";
     syncLive(go);
   }
@@ -519,6 +621,34 @@ function listPart(s) {
   end.append(go);
   part.append(end);
   return part;
+}
+
+/**
+ * One pinned chat, drawn as KEPT: a title and its message count, no check box
+ * and no tap - there is nothing here to tick or untick.
+ */
+function keptRow(x) {
+  const row = el("div", "row-item fr-item fr-kept");
+  const body = el("span", "row-main");
+  body.append(el("span", "row-title", x.title));
+  body.append(el("span", "row-meta", messagesLine(x.messages)));
+  row.append(body);
+  return row;
+}
+
+/** Keeps "Forget these" in step with the ticks: its count, and whether the PC
+ *  can be asked at all right now (a card waiting, a second yes held, an Undo
+ *  open, a stale link). One place, so the two callers cannot drift. */
+function syncGo() {
+  const go = document.getElementById("forget-range-go");
+  const p = state.preview;
+  if (!go || !p) return;
+  const n = forgetBody(p, state.ticked);
+  const count = n.facts.length + n.chats.length;
+  const s = state.status || {};
+  go.textContent = forgetLabel(count);
+  go.dataset.off = !count || s.waiting || s.confirm || s.undo ? "true" : "false";
+  syncLive(go);
 }
 
 function item(key, main, label, tags, warn = "") {
@@ -530,16 +660,7 @@ function item(key, main, label, tags, warn = "") {
   box.addEventListener("change", () => {
     if (box.checked) state.ticked.add(key);
     else state.ticked.delete(key);
-    const go = document.getElementById("forget-range-go");
-    const p = state.preview;
-    if (go && p) {
-      const n = forgetBody(p, state.ticked);
-      const count = n.facts.length + n.chats.length;
-      go.textContent = forgetLabel(count);
-      const s = state.status || {};
-      go.dataset.off = !count || s.waiting || s.undo ? "true" : "false";
-      syncLive(go);
-    }
+    syncGo();
   });
   const text = el("span", "row-main");
   text.append(el("span", "row-title", main));

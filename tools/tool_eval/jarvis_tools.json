@@ -666,10 +666,18 @@
   "type": "function",
   "function": {
    "name": "protect_from_jarvis",
-   "description": "Protect a folder, file or program on the owner's PC from Jarvis. mode blocked = no access at all; readonly = reads allowed, writes/actions refused. Use when the owner asks Jarvis not to touch something.",
+   "description": "The owner's Protected from Jarvis list: folders, files and programs Jarvis may not touch. add: one card, then blocked or readonly. remove: one card. list: the real list, or ONE target checked - no card. Use for protect, restrict, keep out, don't let Jarvis touch, unrestrict, or what is restricted.",
    "parameters": {
     "type": "object",
     "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "add",
+       "remove",
+       "list"
+      ]
+     },
      "kind": {
       "type": "string",
       "enum": [
@@ -680,7 +688,7 @@
      },
      "target": {
       "type": "string",
-      "description": "the whole path for a folder or file, or the program's executable name like notepad.exe"
+      "description": "a folder/file's whole path, or a program's executable name (notepad.exe); list: ONE target to check, or empty for all"
      },
      "mode": {
       "type": "string",
@@ -690,11 +698,7 @@
       ]
      }
     },
-    "required": [
-     "kind",
-     "target",
-     "mode"
-    ]
+    "required": []
    }
   }
  },

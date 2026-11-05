@@ -75,6 +75,75 @@ DB_PATH = Path(os.environ.get("JARVIS_WATCH_DB", str(_CFG_DIR / "watch.db")))
 UA = "jarvis-watch/1.0 (personal, non-commercial)"
 API = "https://api.github.com"
 
+# --------------------------------------------------------------------------
+#   How loud a watcher is allowed to be (pattern 1, 2026-11-04)
+# --------------------------------------------------------------------------
+# A proactive watcher has three states, not two, and the middle one is the
+# point. `observe` runs the WHOLE pipeline - polling, batching, evaluation,
+# receipts - and never interrupts anybody: it writes a decision row (see
+# `jarvis_watch_policy.py` and `jarvis_watch_ci.py`) saying what it would have
+# said. That is how a rule earns `active`: the owner reads
+# `GET /api/watch/decisions?limit=50` and promotes it once the log shows no
+# noise. The alternative - build the rule, switch it on, get interrupted - is
+# how a watcher ends up muted.
+#
+# NEW PROACTIVE RULES DEFAULT TO `observe`. Nothing existing changed: the topic
+# watcher below is a PULL and has no mode at all, because it never speaks
+# unless asked, and this tuple is about the rules that would otherwise reach
+# out. `off` is still what "no watcher" means - the CI watcher is off until a
+# job names a pull request, and its ALERT mode is `observe` even then.
+WATCH_MODES: tuple = ("off", "observe", "active")
+
+#: The closed set of reasons a decision row may carry. Closed on purpose: the
+#: owner reads these rows to decide whether a watcher is trustworthy, so a
+#: free-text reason would be unpublishable. `jarvis_watch_ci.py` only returns
+#: keys from here, and `backend/test_watch_ci.py` checks both directions.
+WATCH_REASONS: dict = {
+    # -- pull-request CI (the seven required checks) ----------------------
+    "ci_all_required_green": "All 7 required checks passed and the PR is mergeable",
+    "ci_required_failed": "Required check {failed_job} failed on {head_sha}",
+    "ci_still_running_debounced": "Checks still running ({done}/7 complete) - "
+                                  "batched, waiting for settle",
+    "ci_green_not_mergeable": "All 7 required checks passed but GitHub does "
+                              "not report the PR as mergeable",
+    "ci_no_required_checks": "This PR reports none of the 7 required checks, "
+                             "so it is not one this watcher judges",
+    # -- dedupe, filtering, and the shadow log ----------------------------
+    "duplicate_sha_state": "Already reported this exact (pr, head_sha, verdict)",
+    "observe_shadow_logged": "Recorded in observe mode (would notify if the "
+                             "mode were active)",
+    "filtered_bot_actor": "Sent by a bot or GitHub App, so never a person "
+                          "asking for something",
+    "notification_for_you": "A GitHub notification that is not from a bot and "
+                            "has not been reported",
+    "attention_budget_dropped": "The interruption budget was spent, so this "
+                                "was offered and dropped",
+    # -- this PC's own checkers, and the switch ---------------------------
+    "repo_check_clean": "This PC's checker suite passed",
+    "repo_check_failed": "This PC's checker suite failed",
+    "watch_off": "The watcher is switched off; nothing was polled or recorded",
+    "source_not_allowed": "The event came from a source this watcher does not read",
+    "unreadable_trigger": "The poll answered something this watcher could not read",
+}
+
+
+def pr_checks_mode() -> str:
+    """The CI watcher's alert mode: `[watch] pr_checks_mode` in the owner's
+    settings file, `observe` when it is absent or unreadable.
+
+    FAILING TO `observe` RATHER THAN TO `active` IS THE POINT. A settings file
+    with a typo in it must not turn a shadow watcher into one that speaks; the
+    cost of being wrong in this direction is that the owner sees the log instead
+    of a notification, and the cost of being wrong in the other is the spam that
+    made this feature necessary.
+    """
+    try:
+        value = str(_cfg("pr_checks_mode", "observe") or "").strip().lower()
+    except Exception:                                    # pragma: no cover
+        return "observe"
+    return value if value in WATCH_MODES else "observe"
+
+
 _LOCK = threading.RLock()
 _inited = False
 
@@ -588,6 +657,20 @@ def register_job() -> bool:
         return out
 
     jarvis_jobs.register("watch_github", handler)
+    # THE CI WATCHER'S BODY REGISTERS HERE TOO, and this is the honest place
+    # for it (2026-11-04). A job body must be registered by name before a route
+    # can offer it, and the ONE start-up call that does that on this PC is
+    # `jarvis_watch.register_job()`, from `jarvis_hud.main()` (jobs-routes.patch).
+    # Registering the sibling at the same call means the new `watch_pr_checks`
+    # body is runnable without a second hunk in that patch - and without this
+    # module knowing anything about how the CI watcher works, because the whole
+    # of it is that module's own `register_job()`. Off unless a job asks for it:
+    # registering a body starts nothing.
+    try:
+        import jarvis_watch_ci
+        jarvis_watch_ci.register_job()
+    except Exception:
+        pass
     return True
 
 
