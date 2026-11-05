@@ -186,7 +186,13 @@ def t_the_patch_and_the_base():
              # /api/bench routes), anchored inside hardware.patch's own added
              # blocks. It touches no gate list, no tier row and no _RISK row, so
              # it rewrites nothing this patch wrote.
-             "bench.patch"}
+             "bench.patch",
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It touches jarvis_gate.py only (one _TOOL_ACTIONS line, its own
+             # action's _RISK row at the end of the file, and a
+             # _NO_RULE_FROM_DENIAL union) - no line this patch wrote.
+             "product-check.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

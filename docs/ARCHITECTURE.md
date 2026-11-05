@@ -4477,6 +4477,8 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 **Habit check-ins and the mood log are backend only today, on BOTH apps, and that is a lane boundary rather than a platform decision** (2026-11-02; the owner's life-coach set, JARVIS-API §180; `backend/jarvis_habits.py` and `backend/jarvis_mood.py`, installed by the drop-in folders `plugins/ready/habits` and `plugins/ready/mood`; the two decisions are `decisions.d/2026-11-02-mood-log-recorded.md` and `decisions.d/2026-11-02-habit-mood-never-learned.md`). The routes are built, documented and classified backend-only in `tools/check_parity.py`: `GET`/`POST /api/habits` with tick/untick/stop, the weekly review and its on/off, and `GET`/`POST /api/mood`. **Neither app has a screen for either feature** - no habit row, no tick control, no 1-5 mood plate and no chart - so this is one gap on both sides at once, not one app missing what the other has. The UI half is the next lane, and when it is built it goes on BOTH apps on these same routes and stores: the phone's Reminders screen beside Reminders / Daily to-do / Goals, and the PC's equivalent (the owner's placement decision D3). Already decided and not the UI lane's to re-decide: no score, streak, percentage or praise anywhere; the mood chart is a picture of the owner's own taps and never a judgement; a tick and a mood entry raise no card; and neither store's data is ever learned, by construction rather than by a card (`backend/test_learning_exclusion.py`).
 
+**The product check's browser read is the PC's, and that is one-sided on purpose** (2026-11-04; the owner's choice *"Wire the existing product check into Jarvis"*, JARVIS-API §186; `backend/jarvis_product_check.py`, installed by the drop-in folder `plugins/ready/product-check`; the route is named in `tools/check_parity.py`'s `BACKEND_ONLY` with this reason). The check opens ONE Amazon product page in the owner's own VISIBLE, SIGNED-IN Chromium - the window and the persistent browser profile live on this PC - and the card that authorises it is in `jarvis_owner_check.PC_ONLY_ACTIONS`: only this PC may approve it, with Windows Hello, and the phone's copy of that set draws no Approve button. The `POST /api/product/check` route refuses a caller over the mesh with `403 pc_only` before the body is read. **The report has no phone screen, and neither app has a report screen yet**: the chat answer is the surface that works today (code-written, caveat first, counts and every set-aside reason), and a desktop report screen is the named follow-up - it would be DESKTOP-ONLY for the same reason, so it is not a parity miss. What is NOT one-sided is the reading: a model turn started from either app runs on this PC, but the CARD is only shown to this PC's owner, so in practice the check is asked for and read at the PC.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -5487,3 +5489,63 @@ route that writes from this module is the carded conversation clear (§13.4).
 - **No mobile self screen and no mobile window fleet.** The portrait is a read
   both apps can make; the phone has no screen for it yet and one chat at a time.
   Both are recorded in §8 rather than left to be read as oversights.
+
+### 13.9 The product check: one PC-only door, evidence instead of a score
+
+**Added 2026-11-04** (the owner's choice *"Wire the existing product check into
+Jarvis"*; JARVIS-API §186; `backend/jarvis_product_check.py`). Three modules had
+shipped and nothing imported them: the offline engine
+(`jarvis_product_research.py`, eight deterministic signals and a validator for
+the local model's quotes), the read half (`jarvis_product_read.py`, one
+Amazon product page's HTML to review records) and the capture seam
+(`jarvis_product_capture.py`, four page states and a driver it never fetches
+with). This section is how the door is built, and it follows §3's one
+permission model rather than inventing a second one.
+
+**The permission shape.** ONE model tool, `product_check`, and ONE route,
+`POST /api/product/check`, raise the SAME one card under the action
+`product_check`, tier `ask` in both shipped `[autonomy.tiers]` copies. The tool
+is in `jarvis_agent.NEEDS_A_PERSON`, so a settings file that loosened the tier
+still cannot run it with nobody asked. The action is in
+`jarvis_owner_check.PC_ONLY_ACTIONS`, so only this PC may approve it and only
+with Windows Hello; the phone's copy of that set refuses it and draws no
+Approve button. Both apps hold Approve on a stale event stream like every card
+(rule 4). The route is PC-only for the same reason and refuses a mesh caller
+before the body is read. Turning the feature on is **not** a card: it is one
+hand edit of `[product_check] enabled`, off by default in both shipped copies,
+missing-reads-as-off; while it is off the tool is not even offered to the model.
+
+**The read is a read.** The card names the page and says read-only, and only
+after the yes does the capture driver open ONE page in the owner's own visible,
+signed-in Chromium through `jarvis_browser_control.read_page_html(session,
+url)` - the browser module's public read-only seam (§4's egress boundary
+applies to that request: the site sees this PC's address and the request cannot
+be taken back). The seam does one navigation and one read of the loaded
+document, with downloads refused and every dialog dismissed, and the profile is
+persistent so a sign-in the owner completed once survives a restart. There is
+no click, no typing, no form, no second page, no CAPTCHA solved and no retry
+against a challenge; a cart/checkout/order/account/payment/sign-in address is
+refused by its shape before the card is even raised. The page's words are
+outside text (§3's tool loop): never learned, never acted on, and nothing about
+the page is written to disk.
+
+**Evidence, never a verdict.** The report is the engine's own: the sample
+caveat first, the eight signals with counts, thresholds and examples, every
+set-aside review with every reason, what could not be checked, and a small
+named-rule verdict with what would change it. There is **no trust score and no
+per-review fake/real label**, and there is no field where one could be put:
+people and LLMs are at chance telling AI-written reviews from real ones
+(`docs/DESIGN-PRODUCT-RESEARCH.md`), so a number would be false precision. The
+chat answer is written by code (`jarvis_product_check.chat_answer`) and
+delivered in place of the model's own words (`deliver_product_report`), so the
+model cannot add a score or a verdict; the engine ignores any score or verdict
+a model output carries.
+
+**What is not built, and is named rather than implied.** No app screen draws
+the report yet - the chat answer is the surface that works - and a desktop
+report screen is the follow-up. The route is therefore classified backend-only
+in `tools/check_parity.py`, with the phone omission recorded in §8. No real
+Amazon page has been parsed by a test, no test drives a real browser, and no
+one-time Amazon sign-in has been exercised: those are field tests on the
+owner's PC, and `backend/test_product_check_wiring.py` says so in its own
+words rather than implying a live proof.

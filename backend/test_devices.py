@@ -591,6 +591,14 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
                                 # rewrites nothing this patch wrote.
                                 "bench.patch",
+                                # product-check.patch (2026-11-04, the product
+                                # check's wiring) is appended after this patch,
+                                # immediately before plugin-loader.patch. It
+                                # adds one _TOOL_ACTIONS line and, at the end
+                                # of jarvis_gate.py, its own action's _RISK row
+                                # and a _NO_RULE_FROM_DENIAL union - nothing
+                                # devices.patch wrote, so it rewrites nothing.
+                                "product-check.patch",
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",

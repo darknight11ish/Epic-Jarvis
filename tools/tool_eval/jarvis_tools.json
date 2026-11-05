@@ -406,6 +406,25 @@
  {
   "type": "function",
   "function": {
+   "name": "product_check",
+   "description": "Check one Amazon product page for sponsored-review and incentive patterns. Use when: the owner gives an Amazon product link and asks whether its reviews look sponsored, bought, incentivised or trustworthy, or asks you to product-check a listing. Do NOT use it for an ordinary web page, for flights or prices, or for a shop that is not Amazon. It reads ONE page in the owner's own signed-in browser window after one approval card, and returns reasons, counts and examples - never a trust score and never a fake/real verdict for one review. To read a page's words out loud rather than check a product's reviews, use read_web_page.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "url": {
+      "type": "string",
+      "description": "the Amazon product page's full address (https://)"
+     }
+    },
+    "required": [
+     "url"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "calendar_read",
    "description": "Read the owner's calendar events for the next N days. Read-only. For messages, use email_check.",
    "parameters": {

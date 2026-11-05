@@ -1519,7 +1519,20 @@ SHIPPED = (
     # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
     # it. Standard library only, loopback only, no card and no model at import.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_bench.py"
+    "jarvis_bench.py",
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the
+    # owner's choice "wire the existing product check"): the ONE model tool,
+    # the ONE PC-only route POST /api/product/check, the card's words and the
+    # plain-words answer, over the engine/read/capture modules that shipped
+    # unwired on 2026-10-25/26. OFF by default ([product_check] enabled =
+    # false in both settings copies); the tool is not even offered while it is
+    # off. Its routes come from its own install(), called by the drop-in folder
+    # plugins/ready/product-check; product-check.patch is the gate's
+    # _TOOL_ACTIONS/_RISK rows for the action, and the browser read is the
+    # public read_page_html seam in jarvis_browser_control.py. Nothing about a
+    # page is stored; the report has no trust score and no per-review verdict.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_product_check.py"
 )
 
 

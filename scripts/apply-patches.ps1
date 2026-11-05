@@ -2072,6 +2072,19 @@ $PATCHES = @(
     # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'bench.patch'
+    # The product check's gate rows (product-check.patch, 2026-11-04; the
+    # owner's choice "wire the existing product check"). ONE `_TOOL_ACTIONS`
+    # entry and, appended at the end of the file, the action's `_RISK` row and
+    # its "a denial is not a standing rule" entry. It touches jarvis_gate.py
+    # only: the module itself is a drop-in (plugins/ready/product-check) and
+    # its tier line is in both shipped settings copies.
+    #
+    # It appends immediately before plugin-loader.patch (which must stay LAST
+    # of all) and after bench.patch, so the last jarvis_gate.py hunk before it
+    # is `unknown-risk-approvable.patch`'s: its own context is the state those
+    # patches leave, with no later patch's lines to invent. Every patch that
+    # enumerates "the patches written after me" has had its name added there.
+    'product-check.patch'
     'plugin-loader.patch'
 )
 
@@ -2867,6 +2880,20 @@ $SHIPPED = @(
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     'jarvis_bench.py'
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the
+    # owner's choice "wire the existing product check"): the ONE model tool,
+    # the ONE PC-only route POST /api/product/check, the card's words and the
+    # plain-words answer, over the engine/read/capture modules that shipped
+    # unwired on 2026-10-25/26. OFF by default ([product_check] enabled =
+    # false in both settings copies), and the tool is not even offered while it
+    # is off. Its route comes from its own install(), called by the drop-in
+    # folder plugins\ready\product-check; product-check.patch is the gate's
+    # _TOOL_ACTIONS/_RISK rows for the action, and the browser read is the
+    # public read_page_html seam in jarvis_browser_control.py. Nothing about a
+    # page is stored; the report has no trust score and no per-review verdict.
+    # The same entry, in the same position, is in backend/_where.py's SHIPPED
+    # list (backend/test_shipped_modules.py fails if the two disagree).
+    'jarvis_product_check.py'
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -477,15 +477,20 @@ def main(argv=None):
     # plugin-switch row joined the merged matrix, so 101 + 1 -> 102
     # Command-Only, 174 + 1 -> 175 features. Measured from the contract, not
     # chosen.
+    # 2026-11-04 (product-check wiring): the product check joined as one
+    # Command-Only row - one chat request and one report, with the settings
+    # file's own [product_check] enabled line as its door rather than a
+    # registered switch - so 102 + 1 -> 103 Command-Only, 175 + 1 -> 176
+    # features. Measured from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 102, LAB_ALWAYS: 12,
+        LAB_COMMAND: 103, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/102/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/103/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/102/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/16/103/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

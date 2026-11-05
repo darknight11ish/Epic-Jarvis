@@ -78,6 +78,12 @@ NO_PATCH = {
     "auto-router",
     "media-index",
     "notion-obsidian",
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the owner's
+    # choice "wire the existing product check"): its ONE route comes from its
+    # own install(), called by the drop-in loader, so the folder is the whole
+    # of its wiring and no patch is added to `jarvis_hud.py` (the gate's own
+    # two rows are `product-check.patch`, which is a core patch).
+    "product-check",
     "receipts",
     "sandbox",
     "self-improve",

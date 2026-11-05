@@ -1675,6 +1675,29 @@
     ]
   },
   {
+    "id": "product-check",
+    "group": "Money and health",
+    "title": "Check a product's reviews",
+    "what": "A read-only product check: give Jarvis one Amazon product link and it reads that page in your own signed-in browser, then reports what the reviews themselves show - Verified Purchase and Vine badges, incentive wording, near-duplicate text, review-date bursts, the rating shape, generic prose and reviews that do not match the product - with counts, examples and every review set aside and why.",
+    "where": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+    "asks": "ONE card naming the product page, on the PC only: \"Read this product page in your own browser session? Read-only; nothing is bought or added to a cart.\" A cart, checkout, order, account, payment or sign-in address is refused before any card, and a non-Amazon address is refused too.",
+    "limit": "Off by default. Amazon only, and it reads the sample Amazon chose to show - never all of the reviews, so the report's caveat comes first. It never buys, orders, adds to a cart, signs in, types or clicks, solves a CAPTCHA, follows a link or stores the page; it says plainly what it could not check. There is no trust score and no fake/real verdict for any review - the report is evidence, counts and reasons.",
+    "surface": "desktop",
+    "surface_reason": "The visible browser window it reads in, and the sign-in that window keeps, are on the PC, so the card can only be approved there; the phone has no tool, no switch and no report screen for the product check yet (docs/ARCHITECTURE.md section 8).",
+    "aliases": [
+      "product check",
+      "check a product",
+      "sponsored reviews",
+      "fake reviews",
+      "unbiased product research",
+      "product research"
+    ],
+    "gate": [
+      "product_check"
+    ],
+    "covers": []
+  },
+  {
     "id": "home-status",
     "group": "Home",
     "title": "Ask how the house is",

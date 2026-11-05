@@ -378,6 +378,12 @@ LESSON_EXEMPT = {
     "reminder-actions": "the Reminders lesson was written before a reminder could carry an action and does not teach it; this is a work item for the teaching side, and until then the HUD's own Then row says, in one sentence under the field, what will happen when the reminder goes off",
     "anti-slop": "one switch, one mode and one line saying what OFF costs, on the How Jarvis talks card that already has its own lesson; a lesson would repeat the card's own words, and the card is the lesson",
     "plugin-switch": "the two chat tools and the modify_own_code card are the whole feature, and both answers already say what a toggle means: it lands the next time Jarvis starts; a lesson would repeat the card and the reply",
+    # The product check (2026-11-04) is ONE card and ONE report, and the
+    # report IS the teaching: every count, every set-aside reason and the
+    # sample caveat are on the answer the owner reads, and the card says what
+    # the read does before it happens. There is no screen yet to teach, and a
+    # lesson would paraphrase the report the owner is already holding.
+    "product-check": "the one card and the report are the whole feature, and the report itself says what every count and set-aside reason means; a lesson would repeat the answer the owner is already reading",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

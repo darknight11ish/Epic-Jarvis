@@ -1113,6 +1113,13 @@ BACKEND_ONLY = {
     "/api/bench/run/{id}": "How one benchmark run is going, and its numbers when it is done (`state`, `step`, `of`, `partial`, `result`) - JARVIS-API section 185, jarvis_bench.py. The read a screen polls while a run is going; no app polls it yet (DESIGN.md phase 2 desktop, phase 5 phone). When a screen lands it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/cancel": "Stopping the benchmark run in flight (JARVIS-API section 185; jarvis_bench.py): the repeat already running is NOT killed, because a request cut off mid-answer leaves Ollama's counters unusable, and the run row says PARTIAL. No app calls it yet - the Cancel button is DESIGN.md phase 2 on the desktop and phase 5 on the phone - and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/history": "The benchmark's OWN history, newest first, from `bench.jsonl` - never `/api/history` and never the chat history (JARVIS-API section 185; jarvis_bench.py). Filters are exact matches on the stored model/lane/preset names. The separate History window is DESIGN.md phase 3 on the desktop and phase 5 on the phone, so no window reads it yet; when one does it goes on BOTH apps, and the DELETE beside it arrives with that window because phase 1 has no delete (ARCHITECTURE section 8).",
+    # The product check's ONE route (2026-11-04, the owner's choice "wire the
+    # existing product check"). PC-ONLY by design: the browser window and the
+    # signed-in profile it reads with are on this PC, so a phone caller gets 403
+    # before the body is read - this is the one route that must NOT go on both
+    # apps, and the report screen it feeds is the named follow-up lane. The
+    # chat tool is the door that works today, on the PC.
+    "/api/product/check": "The product check's report endpoint (JARVIS-API section 186; jarvis_product_check.py, installed by plugins/ready/product-check). POST one Amazon product address -> ONE PC-only approval card -> the engine's reasons report. It reads the page in the owner's own signed-in browser window on THIS PC, so it is refused from any other device (403 pc_only) by design, not ported: ARCHITECTURE section 8's one-sided table records why. No app screen calls it yet - the report is delivered in the chat answer today, and the desktop/phone report screen is the named follow-up - so when one lands it is DESKTOP-ONLY and must NOT be treated as a parity miss.",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

@@ -33167,3 +33167,144 @@ on the card (its sentence leads with `PARTIAL:`), a failed run that writes
 `ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
 500-run cap keeping whole runs, the byte ceiling, the allowlist, the
 three-run comparison floor, and that no run can start without `confirm`.
+
+## 186. The product check: one tool, one route, and why there is no score
+
+**Status: wired on 2026-11-04, OFF by default, Amazon only.** The owner's
+choice that day was *"Wire the existing product check into Jarvis"*. The
+offline engine (`backend/jarvis_product_research.py`), the read half
+(`backend/jarvis_product_read.py`) and the capture seam
+(`backend/jarvis_product_capture.py`) shipped on 2026-10-25/26 and nothing
+imported them. `backend/jarvis_product_check.py` is the wiring; its design
+record is `docs/DESIGN-PRODUCT-RESEARCH.md`.
+
+```
+POST /api/product/check
+```
+
+**THE SWITCH.** `[product_check] enabled = false` in both shipped
+`jarvis-framework.toml` copies. Read fresh on every turn and every route call;
+a missing section, an unreadable file, or any value that is not a real `true`
+reads as OFF (fail closed). While it is off the model is **not offered** the
+tool at all, and the route answers `503` with the module's own sentence.
+Turning it on is one hand edit; there is no in-app switch and no card for the
+switch (the same shape as `[price_radar]`).
+
+### 186.1 The model tool: `product_check`
+
+| | |
+|---|---|
+| tool | `product_check` |
+| arguments | `{"url": "<one Amazon product address>"}` (required) |
+| gate action | `product_check`, tier `ask` in both shipped `[autonomy.tiers]` |
+| PC-only | yes - `jarvis_owner_check.PC_ONLY_ACTIONS`; only this PC approves it, with Windows Hello, and the phone's copy of that set refuses it too |
+| a person's yes | always: the tool is in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still cannot run it with nobody asked |
+| stale link | Approve is held on a stale event stream by both apps, like every card (rule 4); this adds no exemption |
+| card | ONE per address: *"Read this product page in your own browser session? Read-only; nothing is bought or added to a cart."* plus the address in full and what the read does not do |
+| off by default | yes; also not offered at all until `[product_check] enabled = true` |
+
+The address is checked **before** the card, with no network:
+`jarvis_product_capture.product_address_problem()` requires an http(s) Amazon
+product address with an ASIN (`/dp/<ASIN>` or `/gp/product/<ASIN>`) and
+`readonly_problem()` refuses a cart, checkout, order, account, payment or
+sign-in address **by whole path segments** (a product slug containing "Order"
+is still fine). A refusal is a plain sentence to the model and **no card**.
+
+**What the read does, after the yes.** ONE page, in the owner's own visible
+Chromium: `jarvis_browser_control.read_page_html(session, url)`, the browser
+module's documented public read-only seam (added 2026-11-04 for exactly this).
+The profile is persistent (the config folder's `browser-profile`), so a
+sign-in the owner completed once survives a restart. One navigation and one
+read of the loaded document: **no click, no typing, no form, no download, no
+second page, no CAPTCHA solved and no retry against a challenge.** A challenge
+page raises `ChallengeDetected` and the owner is told to open the page
+themselves; a sign-in page raises `OwnerLoginRequired` with *"sign in to
+Amazon once in Jarvis's browser window, then run the product check again.
+Jarvis never sees or types the password"*. The page's words are outside text:
+never learned, never acted on, and **nothing about the page is written to
+disk** (no file, cache, database or log).
+
+**The report.** The engine's report, plus the read half's listing and warnings
+and a `capture` block. The chat answer is written by code
+(`jarvis_product_check.chat_answer`), not by the model, so nothing can be added
+to it: the model's own words about the check are held and dropped, the same way
+the retirement what-if's figures are (`jarvis_agent.deliver_product_report`).
+Shape:
+
+```json
+{
+  "ok": true,
+  "engine": {"name": "jarvis_product_research", "network": false, "read_only": true},
+  "sample": {"caveat": "This is what Amazon chose to show, not all of the reviews. ...",
+             "raw": 6, "readable": 6, "with_text": 6, "dated": 6,
+             "verified_known": 6, "vine_known": 6, "listing_review_count": 1234},
+  "signals": {"verified_purchase_share": {"available": true, "counts": {},
+              "thresholds": {}, "examples": [], "flags": [], "note": ""},
+              "and the other seven, in ENGINE.SIGNAL_NAMES order": {}},
+  "aspects": {"available": false, "why": "no model output", "agreed": [],
+              "complained": [], "mixed": []},
+  "set_aside": {"reviews": [{"reviewer": "Reviewer 6", "rating": 5,
+                             "verified": false, "vine": false, "date": "2026-10-02",
+                             "reasons": ["one", "two"], "snippet": "..."}],
+                "total": 2, "more": 0},
+  "verdict": {"code": "risky", "words": "...", "reasons": [],
+              "what_would_change_it": []},
+  "could_not_check": ["one", "two"],
+  "plain_words": {"sample": ["the caveat", "..."], "agreed": []},
+  "source_url": "https://www.amazon.com/dp/...",
+  "listing": {"title": "...", "star_rating": 4.3, "rating_count": 1234,
+              "asin": "...", "url": "..."},
+  "warnings": [{"code": "...", "words": "..."}],
+  "capture": {"browser": "the owner's own signed-in browser session, one page",
+              "read_only": true, "stored": false, "network": false}
+}
+```
+
+`sample.caveat` is the **first field of `sample`**, and the chat answer's
+**first line**. Every set-aside review stays in the sample's counts and is
+listed with every reason; the report's own cap (40 rows, with `more` counting
+the rest) is stated in the answer rather than hidden.
+
+**NEVER A TRUST SCORE, NEVER A PER-REVIEW FAKE/REAL VERDICT.** There is no
+field for either, in the engine or here, for the measured reason in
+`docs/DESIGN-PRODUCT-RESEARCH.md`: people and LLMs are at chance telling
+AI-written reviews from real ones, so a number or a label would be false
+precision. The report is counts, examples, reasons and a small named-rule
+verdict; `backend/test_product_check_wiring.py` pins the absence structurally.
+
+### 186.2 The route: `POST /api/product/check`
+
+| | |
+|---|---|
+| route | `POST /api/product/check` |
+| body | `{"url": "<one Amazon product address>"}` |
+| success | `200` and the JSON report above |
+| refused from another device | `403 {"ok": false, "error": ..., "pc_only": true}` **before the body is read** (`jarvis_owner_check.from_this_pc`, fail closed) |
+| switch off | `503 {"ok": false, "enabled": false, "error": "<the module's sentence>"}` |
+| bad address | `400 {"ok": false, "error": ..., "kind": "..."}` - no card, nothing opened |
+| card not approved | `403 {"ok": false, "error": ..., "kind": "denied"/"timed_out"/"refused"}` - nothing opened |
+| action not at `ask` | `503` - no card is raised under a loosened tier |
+| installed by | its own `install()`, called by the drop-in folder `plugins/ready/product-check` - no patch to `jarvis_hud.py` |
+| auth | the server's own origin + token checks, then PC-only - no new scheme |
+
+**The route WAITS for the card** and returns the report in the same response:
+the desktop is the only caller, the card is on its screen, and a request that
+returned `202` would need a second route and a screen to poll it. A denial or a
+lapse is a plain `403` and nothing is opened. **No app screen calls this route
+yet** - the chat tool is the door that works today - so
+`tools/check_parity.py` lists it in `BACKEND_ONLY` with that reason; the
+desktop/phone report screen is the named follow-up, and it is **desktop-only by
+design** because the browser window and profile are on the PC
+(`docs/ARCHITECTURE.md` section 8).
+
+**PROVED BY** `backend/test_product_check_wiring.py` (fixtures only, fake
+driver and fake gate): the switch off-by-default and fail-closed, the tool's
+registration/schema/tier/PC-only/NEEDS_A_PERSON, the exact card question, every
+address refusal before a card, challenge and owner-login refusals, the report
+shape with the caveat first, every set-aside reason, the no-score/no-verdict
+pin, the route's 403/400/503/200 paths and its one card, the gate rows in the
+published base and `product-check.patch`, the card words, the feature row, and
+no network call anywhere. **NOT VERIFIED in this container:** no real Amazon
+page has been parsed, no real browser has been driven by a test, and no
+one-time Amazon sign-in has been exercised - those are field tests on the
+owner's PC, and this document says so rather than implying otherwise.

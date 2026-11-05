@@ -164,6 +164,11 @@ TITLES = {
     # over, then that one page's words are read out. Its own name, not
     # "page_read" above: that one is the watch's per-look fetch.
     "read_web_page": "read a web page out loud",
+    # jarvis_product_check.py (2026-11-04): ONE card per Amazon product page,
+    # then that page is read in the owner's own signed-in browser and the
+    # reasons report is built. Its own name, not "read_web_page": that one
+    # fetches a page out loud, this one reads a product's reviews.
+    "product_check": "read a product page in your own browser",
     # --- GitHub watches in "tell me when" (2026-09-28)
     "github_read": "check GitHub for a \"tell me when\"",
     # --- models and graphics cards
@@ -403,6 +408,9 @@ SUMMARY = {
     "news_read": "read a news feed you added",
     "page_read": "fetch a page you're watching",
     "read_web_page": "read a web page out loud",
+    # The product check (2026-11-04) - its own short summary, the same words
+    # as its title: one Amazon product page, read-only, in the owner's browser.
+    "product_check": "read a product page in your own browser",
     # --- GitHub watches in "tell me when"
     "github_read": "check GitHub for a \"tell me when\"",
     # --- models and graphics cards

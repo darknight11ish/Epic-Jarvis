@@ -166,7 +166,18 @@ PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "r
                              # so only the PC it runs on can say yes - with
                              # Windows Hello. A phone approving it would promise an
                              # install nothing on the phone can perform.
-                             "desktop_update"})
+                             "desktop_update",
+                             # 2026-11-04: the product check opens ONE Amazon
+                             # product page in the owner's own signed-in browser
+                             # window. That window, and the profile it is signed
+                             # in with, are on this PC; a phone approving it would
+                             # promise a read nothing on the phone can perform,
+                             # and the card is about the owner's own browsing
+                             # session, so it is PC-only with Windows Hello. It is
+                             # read-only and NOT in SMALL_ACTIONS: the card is a
+                             # person's yes, and the Windows Hello check is the
+                             # one that says it was this person at this PC.
+                             "product_check"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 

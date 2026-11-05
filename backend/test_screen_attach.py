@@ -518,6 +518,12 @@ def t_hygiene():
              # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
              # rewrites nothing this patch wrote.
              "bench.patch",
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It adds one _TOOL_ACTIONS line, its own action's _RISK row at the
+             # end of jarvis_gate.py, and a _NO_RULE_FROM_DENIAL union - no line
+             # this patch's POST /api/screen wrapper wrote.
+             "product-check.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no line
              # this patch POST /api/screen wrapper wrote.

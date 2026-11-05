@@ -139,7 +139,13 @@ CATALOGUE = [
     "email_check", "feature_guide", "file_read", "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
-    "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
+    "notes_search", "phone_apps", "plugin_list", "plugin_switch",
+    # The product check (2026-11-04, the owner's choice "wire the existing
+    # product check"): ONE Amazon product page, one PC-only card, tier "ask".
+    # NOT in FULL_ENABLED - `[product_check] enabled = false` ships, and the
+    # tool is not even offered while it is off - and not in a cloud or
+    # private-turn allow-list (both are empty by design).
+    "product_check", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
     "read_web_page",
     # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh

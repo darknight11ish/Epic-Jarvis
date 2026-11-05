@@ -303,6 +303,10 @@
       "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)"
     },
     {
+      "action": "product_check",
+      "title": "Jarvis wants to read a product page in your own browser"
+    },
+    {
       "action": "protect_item",
       "title": "Jarvis wants to protect a folder, file or program from Jarvis"
     },
@@ -1373,6 +1377,18 @@
       }
     },
     {
+      "action": "product_check",
+      "notice": {
+        "title": "Jarvis wants to read a product page in your own browser",
+        "summary": "Jarvis wants to read a product page in your own browser.",
+        "full": "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored. nothing has happened yet.",
+        "body": "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "protect_item",
       "notice": {
         "title": "Jarvis wants to protect a folder, file or program from Jarvis",
@@ -2112,6 +2128,7 @@
     "handoff_keep_offering",
     "loosen_what_asks_first",
     "pair_device",
+    "product_check",
     "register_approval_key",
     "restore_backup",
     "unretire_shared_key"

@@ -211,6 +211,7 @@ import json
 import re
 from dataclasses import dataclass, field, asdict, replace
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse, urlunparse
 
@@ -1240,6 +1241,23 @@ _MAIN_CONTENT_JS = r"""
 }
 """
 
+# Runs in the page for read_page_html: the WHOLE document, minus the parts
+# that are not words a reader sees (scripts, styles, noscript, link/meta, svg).
+# This is deliberately not _MAIN_CONTENT_JS: a product page's review list can
+# sit outside <main> on some page shapes, and the product check's parser needs
+# the listing title, the rating and the reviews together. Capped like every
+# other read here.
+_FULL_PAGE_HTML_JS = r"""
+(maxChars) => {
+  const root = document.body || document.documentElement;
+  if (!root) return '';
+  const clone = root.cloneNode(true);
+  for (const el of clone.querySelectorAll('script, style, noscript, link, meta, svg')) el.remove();
+  const out = clone.outerHTML || '';
+  return out.length > maxChars ? out.slice(0, maxChars) : out;
+}
+"""
+
 # Runs in the page after a step: resolves once nothing in the DOM has
 # changed for `quiet` ms, or after `max` ms whatever happens.
 _DOM_QUIET_JS = r"""
@@ -1277,6 +1295,16 @@ _SENSITIVE_FIELD_JS = r"""
 _sessions: dict = {}
 _browser = None
 _playwright = None
+#: The persistent-profile page a READ-ONLY caller (the product check) uses,
+#: by session, and the context behind it. Separate from `_sessions` on
+#: purpose: a reader page is never driven by run(), never typed into and
+#: never clicked, so it must not be reachable through a Plan's session name.
+_reader_pages: dict = {}
+_reader_contexts: dict = {}
+#: The profile folder inside the config directory. A sign-in the owner
+#: completes once in this window survives a Jarvis restart, which is the
+#: whole point of the product check's one-time login.
+_READER_PROFILE_DIRNAME = "browser-profile"
 
 # The one test-only override: test_browser_control_live.py flips this to run
 # headless in a container with no display. Nothing in this project sets it,
@@ -1476,6 +1504,8 @@ def close(session: Optional[str] = None) -> None:
     them."""
     global _browser, _playwright
     names = [session] if session is not None else list(_sessions)
+    names += [n for n in (_reader_pages if session is None else [session])
+              if n not in names]
     for name in names:
         page = _sessions.pop(name, None)
         _events.pop(name, None)
@@ -1486,6 +1516,18 @@ def close(session: Optional[str] = None) -> None:
                 page.context.close()
             except Exception:
                 pass
+        reader = _reader_pages.pop(name, None)
+        context = _reader_contexts.pop(name, None)
+        if context is not None:
+            try:
+                context.close()
+            except Exception:
+                pass
+        elif reader is not None:
+            try:
+                reader.context.close()
+            except Exception:
+                pass
     if session is not None:
         return
     if _browser is not None:
@@ -1494,6 +1536,133 @@ def close(session: Optional[str] = None) -> None:
     if _playwright is not None:
         _playwright.stop()
         _playwright = None
+
+
+# ---------------------------------------------------------------------------
+#   A public, READ-ONLY page read for another feature
+# ---------------------------------------------------------------------------
+#
+# WHY THIS IS HERE, AND NOT A SECOND BROWSER STACK. The product check
+# (jarvis_product_check.py) needs one page's HTML, read in the owner's own
+# SIGNED-IN browser window. That machinery already exists in this module - a
+# visible Chromium, downloads refused, dialogs dismissed, a page per named
+# session - but it was all private, and the readable HTML was produced inside
+# _default_act(). Reaching into those private names from another module would
+# mean two modules sharing one undocumented contract, so this is the small
+# PUBLIC seam instead:
+#
+#   read_page_html(session, url)       open `url` in a page of this session
+#                                      and return the page's HTML.
+#   open_page_for_owner(session, url)  open `url` and leave it on screen for
+#                                      the OWNER to sign in to a site once.
+#
+# The difference from _page_for()'s tabs: these run in a PERSISTENT profile
+# (the config folder's browser-profile), so a sign-in the owner completes
+# once is still there after Jarvis restarts. That is the whole point of the
+# product check's one-time login. Everything else is shared, never copied:
+# the same `_wire_page` listeners, the same `accept_downloads=False`, the
+# same visible window, and `close()` closes these too.
+#
+# READ-ONLY BY CONSTRUCTION. read_page_html() does ONE navigation and ONE
+# evaluate(): no click, no typing, no form, no download and no second
+# address in it. It refuses a non-http(s) address before the browser is even
+# touched, and the caller's own URL policy (the product check's
+# cart/checkout/order/account/payment list) refuses its addresses BEFORE it
+# calls this. NEVER a CAPTCHA: a challenge is simply what the page's HTML
+# says it is, and the caller classifies it instead of retrying.
+#
+# WHAT IS NOT TESTED HERE, PLAINLY. No test in this repository opens this
+# browser or fetches a page: the suites inject a fake reader, because CI has
+# no Playwright, no display and no Amazon account. A machine without
+# Playwright gets one plain ImportError naming that, and the product check
+# turns it into the sentence the owner reads.
+
+
+def _reader_profile_dir() -> Path:
+    """Where the persistent browser profile lives: the config folder, so it
+    sits with the rest of the owner's own state (never the repository)."""
+    try:
+        import jarvis_framework as fw
+        base = Path(fw.CONFIG_DIR)
+    except Exception:
+        import os
+        base = Path(os.environ.get("OPENJARVIS_CONFIG_DIR")
+                    or os.environ.get("JARVIS_CONFIG_DIR")
+                    or (Path.home() / ".openjarvis"))
+    return base / _READER_PROFILE_DIRNAME
+
+
+def _reader_page(session: str):
+    """The persistent-profile page for `session`, launched on first use.
+
+    Visible, like every other browser window this module opens, and with
+    downloads refused. A Playwright that is not installed raises ImportError
+    here, which the caller reports in plain words rather than swallowing."""
+    if session in _reader_pages:
+        return _reader_pages[session]
+    global _playwright
+    if _playwright is None:
+        from playwright.sync_api import sync_playwright  # type: ignore
+        _playwright = sync_playwright().start()
+    context = _reader_contexts.get(session)
+    if context is None:
+        profile = _reader_profile_dir()
+        profile.mkdir(parents=True, exist_ok=True)
+        context = _playwright.chromium.launch_persistent_context(  # type: ignore
+            str(profile), headless=_HEADLESS, accept_downloads=False,
+            **_LAUNCH_OPTIONS)
+        _reader_contexts[session] = context
+    page = context.pages[0] if context.pages else context.new_page()
+    _wire_page(session, page)
+    _reader_pages[session] = page
+    return page
+
+
+def read_page_html(session: str, url: str, *,
+                   max_chars: int = _MAX_PAGE_HTML_CHARS,
+                   timeout_ms: int = _NAV_TIMEOUT_MS) -> str:
+    """Open ONE address in the owner's own browser session and return its HTML.
+
+    READ-ONLY: one navigation, one read of the loaded document, and nothing
+    else. No click, no typing, no form, no download, no second address. The
+    page is loaded in the persistent profile, so a site the owner signed in
+    to once in this window is still signed in on the next call or after a
+    restart. `session` keeps one page per caller (the product check uses
+    "product-check"); `max_chars` bounds what comes back, the same cap
+    `read_page` uses, and a page longer than that is cut - the caller's
+    warnings say so.
+
+    Raises RuntimeError for anything that is not one http(s) address, and
+    ImportError when Playwright is not installed. A page that is a sign-in
+    page or a CAPTCHA is NOT an error here: it is returned as HTML, and the
+    caller classifies it (jarvis_product_capture) and refuses honestly.
+    """
+    target = str(url or "").strip()
+    if not re.match(r"^https?://", target, re.I):
+        raise RuntimeError("read_page_html needs one http(s) address")
+    page = _reader_page(str(session or "default"))
+    page.goto(target, wait_until="domcontentloaded", timeout=int(timeout_ms))
+    _settle(page, "navigate")
+    html = page.evaluate(_FULL_PAGE_HTML_JS, int(max_chars))
+    return html if isinstance(html, str) else ""
+
+
+def open_page_for_owner(session: str, url: str, *,
+                        timeout_ms: int = _NAV_TIMEOUT_MS) -> str:
+    """Open ONE address and LEAVE IT ON SCREEN for the owner to use.
+
+    This is the one-time-login seam's window: the product check opens the
+    site's sign-in page here and stops. Jarvis types nothing - the owner
+    signs in, and the persistent profile keeps that sign-in for the next
+    read. Returns the address the page ended up on. Same read-only promise as
+    read_page_html: one navigation, no click and no typing by Jarvis."""
+    target = str(url or "").strip()
+    if not re.match(r"^https?://", target, re.I):
+        raise RuntimeError("open_page_for_owner needs one http(s) address")
+    page = _reader_page(str(session or "default"))
+    page.goto(target, wait_until="domcontentloaded", timeout=int(timeout_ms))
+    _settle(page, "navigate")
+    return str(getattr(page, "url", "") or target)
 
 
 def _page_gone_events(page, exc: Exception) -> list:

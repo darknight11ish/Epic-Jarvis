@@ -112,6 +112,12 @@ def t_the_patch_is_registered_last():
              # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
              # rewrites nothing this patch wrote.
              "bench.patch",
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It adds one _TOOL_ACTIONS line, its own action's _RISK row at the
+             # end of jarvis_gate.py (after the rows this patch removes), and a
+             # _NO_RULE_FROM_DENIAL union - it rewrites none of the stale rows.
+             "product-check.patch",
              # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
              # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
              # ADDED after the rows this patch removes, and it rewrites neither.
