@@ -2774,6 +2774,38 @@ backend routes, in both directions; the rest are listed here only.
   POSTs as `phone-only` in the phone's own pull request and the GET as
   `BACKEND_ONLY` here, so no undecided drift is hidden while both land.
 
+- **Recording a phone call happens on the PHONE alone, and that is one-sided on
+  purpose** (2026-11-04; the owner's request *"add the ability to record a call
+  when he says the keyword 'record call'"*). The owner says "record call" (or
+  presses Arm in Settings, Voice), the phone records the call, and the PC turns
+  the audio into words, dates it, works out who was speaking and writes ONE note
+  in his Obsidian vault named with the date and time. Three things make each
+  side the only place its half can happen, and none of them is a preference:
+  1. **The recording cannot exist on the PC.** The call rings on the phone, and
+     Android does not let a normal app capture the call's own audio stream
+     (`VOICE_CALL` is privileged; a sideloaded app never holds it). So the phone
+     records its **microphone** with the call on speaker - both voices caught
+     acoustically - at 16 kHz, mono, PCM16LE, in 64 KiB pieces. The desktop has
+     no microphone in that call and, if it had, would be recording a room.
+  2. **The words and the note cannot happen on the phone.** A client must not do
+     speech-to-text (the standing rule), and the vault is a folder on this PC
+     that the phone cannot see. So the phone sends PCM and a date, and the PC
+     transcribes, dates, diarises and writes the note.
+  3. **The surface follows from both.** The phone draws the one control (Arm /
+     Stop, the armed line, the "N waiting to send" line) and owns the recording
+     notification with its consent reminder; the desktop reads and opens the note
+     through the notes surface it already has. It does not start, stop or watch a
+     recording, and it never holds one.
+  The three routes are `POST /api/call/recording/start`, `/chunk` and `/finish`
+  (the frozen contract of 2026-11-04; the PC half's own section in
+  docs/JARVIS-API.md is its copy) and `tools/check_parity.py` classifies all
+  three as **phone-only**, with the reasoning above beside each line. A dropped
+  connection loses nothing: the pieces are written to this app's own files
+  directory BEFORE they are posted, and a recording the PC has not taken is kept
+  and offered again (its own notification says so). The desktop is deliberately
+  not given a "record the call" control: on the PC it could only record a room
+  and confuse that for the call.
+
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
   open at once"*; JARVIS-API §184.5). The desktop opens extra copies of its own
