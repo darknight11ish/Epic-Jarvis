@@ -493,6 +493,21 @@ CLOUD_SAY_YES_LANES_NEW_FILE = "hud-cloud-say-yes-lanes-new.txt"
 UPDATE_IN_CHAT_OLD_FILE = "gate-update-in-chat-old.txt"
 UPDATE_IN_CHAT_NEW_FILE = "gate-update-in-chat-new.txt"
 
+#: bench.patch (2026-11-04, the self-benchmark's controls screen): the two regions
+#: its two hunks insert - the three GET branches (and their handler bodies) in front
+#: of the `/api/search` dispatch, and the POST pair in front of the search route
+#: tuple. Each OLD block is deliberately the ONE live line the hunk inserts before
+#: (it must appear exactly once; a missing or duplicated anchor refuses the file),
+#: and each NEW block is the hunk's own 68/38 `+` lines followed by that same line,
+#: so the pair is the patch's own hunk with only its context trimmed. Both anchors
+#: were measured exactly once in the published base HUD and in a copy of the owner's
+#: live HUD, 2026-11-04. See the entry's comment for why this is `regions` and not
+#: `hunks` or `anchor`.
+BENCH_ROUTES_OLD_FILE = "hud-bench-routes-old.txt"
+BENCH_ROUTES_NEW_FILE = "hud-bench-routes-new.txt"
+BENCH_RUN_OLD_FILE = "hud-bench-run-old.txt"
+BENCH_RUN_NEW_FILE = "hud-bench-run-new.txt"
+
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
 #:   or_probes: a second set that proves presence when a LATER patch in the stack
@@ -1107,6 +1122,59 @@ DELTA_TABLE = {
                     "replace_file": JOBS_ROUTES_H3_OLD_FILE,
                     "probes": ('"/api/jobs", "/api/jobs/answer", "/api/holds/cancel",',)},
             },
+        },
+    },
+    # bench.patch (2026-11-04, the self-benchmark's controls screen): A BRAND-NEW
+    # PATCH FALSE-GREENED under the loose fallback rule, which is DEF-035's shape
+    # for a patch that did not exist when that defect was written. Measured
+    # read-only on a COPY of the owner's live folder (2026-11-04): its
+    # `jarvis_hud.py` holds ZERO occurrences of `/api/bench`, and yet
+    # `patch_presence` answered PRESENT - because this patch adds 62 lines the
+    # rule accepts as distinctive and TEN of them are boilerplate every other
+    # route already has (`if not _origin_ok(self):`, both the 403 and the 401
+    # sentences, `from urllib.parse import parse_qs`, the JSON-body parse and its
+    # two errors, the dict check). ONE present line is enough for the fallback,
+    # so every deploy wave from a ref carrying bench.patch would print "already
+    # present" and never carry the routes. This entry is the sanctioned per-patch
+    # remedy, and its FOUR probes are all dispatch lines only this patch adds:
+    # all four present means the whole block is in, any one missing means the
+    # block is carried.
+    #
+    # WHY `regions` AND NOT `anchor`/`hunks`: the patch has TWO hunks, both pure
+    # insertions (the three GET branches and their handler bodies before
+    # `if path == "/api/search":`, the POST pair before the search route tuple),
+    # so one anchor insert cannot express it. `hunks: True` was tried FIRST and
+    # MEASURED WRONG on a half-applied file: the GET hunk's inserted block ENDS
+    # with the same three lines its own pre-image STARTS with (the previous
+    # route's `return self._send(503, ...)` tail), so after one insert its
+    # six-line pre-image still matches once, and the per-hunk "already applied"
+    # test (`all(added) and old not in text`) can never fire - a file that
+    # already had the GET block and lacked the POST one got the GET block a
+    # SECOND time (backend/test_reconcile_live_backend.py proves it). The two
+    # region pairs carry the same bytes with one anchor line each, and each
+    # region's own probe (`if path == "/api/bench":` / the POST route tuple)
+    # skips a region that is already there, so the block lands EXACTLY ONCE and
+    # a half-applied pair is completed instead of duplicated. The block files
+    # are the patch's own `+` lines followed by that anchor line - see the
+    # BENCH_*_FILE comment above; measured 2026-11-04, each anchor appears
+    # exactly once in the published base HUD and in a copy of the live HUD.
+    "bench.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                '        if path == "/api/bench":',
+                '        if path.startswith("/api/bench/run/"):',
+                '        if path == "/api/bench/history":',
+                '        if route in ("/api/bench/run", "/api/bench/cancel"):',
+            ),
+            "regions": (
+                {"file": BENCH_ROUTES_NEW_FILE,
+                 "replace_file": BENCH_ROUTES_OLD_FILE,
+                 "probes": ('        if path == "/api/bench":',)},
+                {"file": BENCH_RUN_NEW_FILE,
+                 "replace_file": BENCH_RUN_OLD_FILE,
+                 "probes": ('        if route in ("/api/bench/run", '
+                            '"/api/bench/cancel"):',)},
+            ),
         },
     },
 }

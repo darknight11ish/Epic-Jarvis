@@ -277,5 +277,45 @@ class CallRecordSourcePinTest {
         assertTrue("the store is this app's own files directory", src.contains("CallRecordStore.folder(filesDir)"))
     }
 
+    @Test
+    fun `a repeated seq is recovered from the pc's own expected number`() {
+        // The audit's D3: a crash between the PC's 200 and the phone's own
+        // sent.txt line must not retry the same seq for ever.
+        val chunks = source("call/CallRecordChunks.kt")
+        assertTrue("the phone reads the 409's expected",
+            chunks.contains("CallRecordWire.expected(body)"))
+        assertTrue("and records every seq below it as sent",
+            chunks.contains("session.markSentBelow(expected)"))
+        assertTrue("then keeps going instead of retrying the same seq",
+            chunks.contains("if (recovered) continue"))
+        val service = service()
+        assertTrue("the service sends through that loop, not its own",
+            service.contains("CallRecordChunks.send("))
+        assertFalse("the old retry-the-same-seq loop is gone", serviceCode().contains(
+            "ok = res is ApiResult.Ok && CallRecordWire.ok(res.value)"))
+        assertTrue("and the store only writes numbers for chunks it holds",
+            source("call/CallRecordStore.kt").contains("fun markSentBelow(expected: Int): Int"))
+    }
+
+    @Test
+    fun `a denied or unsendable recording can be deleted, after a confirmation`() {
+        // The audit's D7: no more "kept on this phone" with no way to remove it.
+        val plate = source("ui/screens/CallRecordPlate.kt")
+        assertTrue("the plate offers the delete", plate.contains("CallRecordNow.discard(context)"))
+        assertTrue("behind a confirmation that asks first",
+            plate.contains("CallRecordRules.DELETE_ASK_TITLE"))
+        assertTrue("with a way to keep it instead", plate.contains("\"Keep it\""))
+        assertTrue("and no confirmation while nothing is waiting",
+            plate.contains("if (status.waiting > 0)"))
+        val service = serviceCode()
+        assertTrue("the service deletes only what the PC has NOT taken",
+            service.contains("store?.discardUnsent()"))
+        assertTrue("and says how many went, in words",
+            service.contains("CallRecordRules.deleted(gone)"))
+        assertTrue("the store itself never touches a finished recording",
+            source("call/CallRecordStore.kt").contains(
+                "for (session in unsent()) {\n            session.remove()"))
+    }
+
     private fun manifest(): String = repoFile(manifest).readText()
 }

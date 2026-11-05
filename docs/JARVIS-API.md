@@ -2189,9 +2189,10 @@ neither app says it would.
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted (the deletion runs before the window is saved, and a failure there answers 500 with what really happened - see §18.3). Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
-| `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the 10-minute Undo, the days a spoken request filled in). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item; nothing changes before a person approves. `409` a card already waiting, an Undo still open, or the list changed since it was read (`"changed": true`). |
-| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label - at most 200 together, else counts only. A read: never held. |
-| `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the card's approval: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
+| `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item, the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
+| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
+| `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | **planned**: built on the backend, no app calls it yet - the second tap is the apps lane | not yet (same lane as the desktop) | `forget-range.patch` - **§64**. The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Reclassify `ported` when both apps draw the second tap. |
+| `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the second yes: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
 | `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | Since 2026-09-28 the overnight tidy is built, **review cards only** (§78): `enabled: true` puts its one daily look on the scheduler, `enabled: false` removes it at once - sent alone, it is not held on a stale link in either app ("Turn off overnight tidying"; it only makes Jarvis ask less). Before that, `enabled` only recorded the wish. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
 | `/api/attention/unmute` | POST | `{}` | `attention.rs:121` | `JarvisApi.kt:471` | Response is `budget()`, not `status()`, so the desktop re-reads rather than applying half an update. |
@@ -6417,8 +6418,9 @@ the times stay, so a timer still counts down.
 - **A routine (21.15) has its own gaps, all of them small and all of them
   stated there**: the Windows toast names the part only in words (it has no
   per-part buttons), the phone shows a part only while connected, and a part
-  whose question is never answered keeps its routine waiting instead of
-  silently moving on.
+  whose question is never answered is never announced as lost — once every
+  part has fired, the next occurrence starts without it, and an untimed part
+  that never fired keeps the routine silent until it is answered.
 
 ### 21.10 "Also on my phone" (added 2026-09-26, the phone only)
 
@@ -7452,10 +7454,13 @@ later. The Windows toast names the part in words and carries no per-part buttons
 this build — the HUD's row and the phone's notification are where a part is
 answered. A part with three buttons leaves no Stop on the Android notification,
 which is already true of an `ask` reminder (21.14). A part whose question is never
-answered keeps its routine waiting rather than guessing that it was done: the
-routine's own Done on the last part is what ends it. And a routine whose parts
-never get answered does not roll on to the next occurrence — say Done on it, or
-delete it.
+answered is not guessed to have been done: the routine's own Done on the last part
+is what ends it. A part left unanswered is never announced as lost, though. Once
+every part has fired, the next occurrence arrives and re-seeds, announcing its part
+1, and the parts left unanswered are dropped without a word. If an untimed part
+never fired because the part before it was never answered, nothing re-seeds: the
+routine keeps the next occurrence as its wake time, announces nothing, and waits
+until that part is answered or the routine is deleted.
 
 **Back-compat and rollback.** A job with no parts carries **no new key at all**, in
 the payload or in the event, and `status()` gains the additive marker `"steps":
@@ -8281,8 +8286,13 @@ the list, the spoken answer or the route.
 "what do you have access to?", "what are you connected to?" and close
 phrasings (whole sentences only, the owner's own typed or said words) from
 `jarvis_reach.sentence()` - the same list, in one answer, host names only
-(no account name). A near miss ("what can you reach on the top shelf") goes
-to the model, as does pasted text.
+(no account name). **The answer also carries the `tools` block** (2026-11-04):
+`view()`'s "Tools the AI model is offered" is said in the same sentence, from
+the same rows, so "which tools do you have" is answered by the one place that
+reads `[tools].enabled` and the API and the spoken form cannot disagree
+(`backend/test_reach.py`'s `t_the_spoken_answer_names_the_tools_the_api_holds`).
+A near miss ("what can you reach on the top shelf") goes to the model, as does
+pasted text.
 
 ### 24.5 Known gaps, said plainly
 
@@ -14707,12 +14717,32 @@ ask, by voice or typing, to forget what Jarvis learned or said in a time
 frame - "forget what you learned last week", "delete my chats from 1 to 15
 September". Nothing is removed at once: both apps show the exact facts and
 chats from that time, each ticked; the owner can untick any; ONE approval
-card listing every item is decided by tapping only - never by voice.
-Approved, the facts are **forgotten** (retired, exactly as Forget does -
-never erased) and the chats **deleted**, with **10 minutes to Undo**.
+card listing every item is decided by tapping only - never by voice, and
+since 2026-11-04 it is the FIRST of two yesses. After the second yes the
+facts are **forgotten** (retired, exactly as Forget does - never erased)
+and the chats **deleted**, with **10 minutes to Undo**.
 Erasing a fact's words for good stays the separate, per-fact "Erase the
 words" (§19). This is the one exception to "irreversible bulk actions stay
 off the API" (§18).
+
+**Extended 2026-11-04 (the owner's decision), not replaced.** Asking "clear
+old chats" or "delete the conversations from last week" now reaches this
+same feature - it was answering "I don't have a built-in 'clear old chats'
+action and I don't track how long that would take", and both halves of that
+were wrong. Three things changed, all additive:
+
+- **Pinned chats are kept.** A pinned chat is never on the tickable list and
+  is never deleted by this action; the list, the card and the status say how
+  many pinned chats from those days are kept. Pinned *facts* are unchanged
+  (there a pin means "always in mind", not "never touch").
+- **A measured answer to "how long would that take".** Every preview carries
+  an `estimate` computed from the counts it just measured (never a guess, and
+  never "I don't track that"), and a spoken question is answered from it.
+- **Two yesses.** The approval card is the FIRST yes and changes nothing: it
+  holds the checked items for 120 seconds. Only `POST /confirm` with a
+  literal `yes: true` - the SECOND yes - forgets the facts and deletes the
+  chats. The platform gate (Windows Hello on the PC, the phone's screen lock)
+  stays on the card, where a person approves.
 
 `backend/jarvis_forget_range.py` (shipped whole), installed by
 `forget-range.patch` (the startup `install()` block, and the gate's risk
@@ -14734,6 +14764,13 @@ apps' words and the real answers: `forget-range-cases.json`
   deleted. One that also has messages from outside the days is marked
   (`spills`), in both apps and on the card: "Also has messages from outside
   these days - the whole chat is deleted."
+- **A PINNED chat is never deleted (added 2026-11-04).** Pinning is the
+  owner's own "keep this", so it outranks a later "forget that week": a
+  pinned chat is not in the tickable `chats` list (the list budget of 200
+  counts only what can be ticked), and a request that names one anyway is
+  refused `409` with `"changed": true` - never a silent delete. The preview
+  carries the kept ones as `pinned_kept` and `pinned_kept_count`, the status
+  carries `pinned_kept_count`, and the card says "N pinned chats are kept".
 - **Days are the PC's own local time, and inclusive**: "1 to 15 September"
   runs from midnight at the start of the 1st to the end of the 15th. A frame
   may carry a time of day ("this morning": midnight to 11:59 am).
@@ -14752,12 +14789,19 @@ apps' words and the real answers: `forget-range-cases.json`
 ### 64.2 The routes
 
 `GET /api/memory/forget_range` - the status:
-`{"available": true, "waiting", "waiting_for", "undo": null | {"until",
+`{"available": true, "waiting", "waiting_for", "confirm": null | {"route",
+"id", "expires_in", "text"}, "pinned_kept_count", "undo": null | {"until",
 "seconds_left", "minutes_left", "facts", "chats", "frame", "said"}, "last":
 null | {"outcome", "message", "at"}, "asked": null | {"id", "from", "to",
 "said", "kinds"}, "max_items": 200, "undo_minutes": 10, "presets": [{"id",
 "label"}]}`. `asked` is a request said or typed in the last 30 minutes -
-the days the apps fill in.
+the days the apps fill in. `confirm` is non-null exactly while a card has
+been approved and its items wait for the SECOND yes: `id` is the held id,
+`expires_in` counts down from 120, and `text` is "Say yes again to finish.
+Undo stays available for 10 minutes." It is not an error state when it
+disappears. `pinned_kept_count` is the number of pinned chats from the
+range that are being kept (0 when neither a card nor a second yes is
+waiting).
 
 `GET /api/memory/forget_range/preview?preset=<id>&kinds=facts,chats` or
 `?from=2026-09-01&to=2026-09-15&kinds=...` (`from`/`to`: `YYYY-MM-DD`, or
@@ -14767,22 +14811,45 @@ the days the apps fill in.
 {"from", "to", "said", "start", "end"}, "kinds", "facts": [{"id", "text",
 "saved", "label", "pinned", "between_us"}], "chats": [{"id", "title",
 "started", "updated", "turns", "in_frame", "spills", "label"}], "counts":
-{"facts"?, "chats"?}, "too_many", "empty", "said", "chats_why"}`.
-`chats_why`: the chats could not be read (the history key). `400` a date
-that is not one, a frame in the future, a kind that is not `facts` or
+{"facts"?, "chats"?}, "pinned_kept": [{"id", "title", "messages"}],
+"pinned_kept_count", "estimate": {"facts", "chats", "messages", "seconds",
+"text"}, "too_many", "empty", "said", "chats_why"}`.
+`chats` holds only what may be ticked (pinned chats are in `pinned_kept`).
+`estimate.seconds` is the measured cost of this batch, never less than 1:
+20 ms per fact retired, 5 ms per chat taken out and 0.1 ms per message row,
+each rounded UP from a 2026-11-04 measurement on the owner's PC (best of
+three; best measured: 15.7 ms, 0.82 ms, 0.016 ms), and `text` is the human
+sentence. Over the cap the sentence says the batch must be narrowed, that
+each request covers 200 items and that repeating the request covers the
+rest. `chats_why`: the chats could not be read (the history key). `400` a
+date that is not one, a frame in the future, a kind that is not `facts` or
 `chats` - its sentence in `error`.
 
 `POST /api/memory/forget_range {"from", "to", "facts": [<int>], "chats":
 ["<id>"]}` - the two dates exactly as the preview wrote them, and the ids
 still ticked. Every id is checked again: still in use (a fact) or still
-kept (a chat), and still from those days - anything else is `409
-{"changed": true}` ("The list changed since you read it ... Read the list
-again."), so nothing off the list the owner read can ride on the card.
-**202** `{"waiting": true, "counts"}` and ONE card. `400` nothing ticked,
-more than 200, a bad id or date. `409` a card already waiting, or an Undo
-still open (one Undo window at a time: "You can still undo the last time
-frame you forgot, for about N more minutes..."). `503` the tier is not
-`ask`, or the chats cannot be read.
+deletable (a chat - a pinned one is not), and still from those days -
+anything else is `409 {"changed": true}` ("The list changed since you read
+it ... Read the list again."), so nothing off the list the owner read can
+ride on the card. **202** `{"waiting": true, "counts",
+"pinned_kept_count", "confirm": {"route", "id", "expires_in": 120,
+"text"}}` and ONE card - and **nothing is forgotten or deleted**: the card
+is the FIRST yes. `400` nothing ticked, more than 200, a bad id or date.
+`409` a card already waiting, a second yes already held, or an Undo still
+open (one Undo window at a time: "You can still undo the last time frame
+you forgot, for about N more minutes..."). `503` the tier is not `ask`, or
+the chats cannot be read.
+
+`POST /api/memory/forget_range/confirm {"id": "<held id>", "yes": true}` -
+the SECOND yes. `yes` must be the literal JSON `true`; a string `"yes"`,
+`1` or anything else is `400` and the hold STAYS, so a mistyped client can
+try again without losing the list. On success `200 {"ok": true,
+"facts_forgotten": n, "chats_deleted": m, "pinned_kept": k, "undo":
+{"until": "<iso>", "seconds": 600}}`: only now are the facts forgotten and
+the chats deleted, and only now does the 10-minute Undo start. `409` when
+there is no hold, the hold expired (120 s after the card was approved), the
+items changed since the card was approved (`"changed": true`), a card is
+still waiting, or an Undo is already open - nothing changes in any of them.
 
 `POST /api/memory/forget_range/undo {}` - `200 {"ok": true, "restored":
 {"facts", "chats"}, "not_restored": {"facts", "chats"}, "message"}`; `409`
@@ -14799,13 +14866,24 @@ the 10 minutes the chats are gone for good) - so approving it is a risky
 approval: Windows Hello on the PC, the screen lock on the phone. Title:
 "Jarvis wants to forget what it learned and delete chats from the days you
 chose". Its text lists EVERY fact word for word and every chat's title,
-with their dates and the "whole chat is deleted" note, then: "For 10
-minutes after you approve, one tap on Undo puts everything back ...
-Nothing is removed unless you approve this card. Saying yes out loud does
-not approve it." A "no" is never turned into a proposed memory
-(`_NO_RULE_FROM_DENIAL`).
+with their dates and the "whole chat is deleted" note, the pinned chats
+kept ("3 pinned chats are kept. Pinning a chat keeps it out of this list and
+away from this Forget."), the measured estimate, and the two yesses: "This
+card is the first yes: nothing is removed when you approve it. You are
+asked to say yes a second time (\"Yes, forget them\"), and only then does it
+happen." Then: "For 10 minutes after the second yes, one tap on Undo puts
+everything back ... Nothing is removed unless you approve this card AND say
+yes again. Saying yes out loud does not approve it." A "no" is never turned
+into a proposed memory (`_NO_RULE_FROM_DENIAL`).
 
-### 64.4 Approved, and Undo
+### 64.4 The first yes, the second yes, and Undo
+
+The card is the FIRST yes and changes nothing. On approval the checked
+items are held for `HOLD_SECONDS` (120) - in memory only, never on disk -
+and the status's `confirm` block appears. `POST /confirm` with the literal
+`yes: true` is the SECOND yes; without it, or after the 120 seconds, the
+hold is simply dropped and nothing was changed. The platform gate runs on
+the card (Windows Hello / phone screen lock), not on the confirm.
 
 - Each fact: `jarvis_memory.retire()`, the call Forget makes - so it gets
   Forget's own "forgotten" mark (`meta.forgotten_at`): a question about the
@@ -14831,30 +14909,51 @@ last week", "delete my chats from 1 to 15 September", "forget everything
 from yesterday", "forget what I said this morning", "forget what I told
 you on Tuesday", "delete my chats from the last 3 days", "... since
 Friday", "... between 30 August and 5 September". "What you learned" is
-facts, "my chats" chats, "what I said" or "everything" both. It **removes
+facts, "my chats" chats, "what I said" or "everything" both. Since
+2026-11-04 the owner's own words are understood too: **"clear old chats"**
+(and "clear old conversations", "delete old chats"), **"clear the chats
+from 3 September"**, **"clear conversations from <date>"**, **"delete the
+conversations from last week / last month"**, **"forget chats from
+yesterday"**, with or without facts in the same sentence. A date-less
+"clear old chats" **asks which days** - naming what it can do and that
+pinned chats are always kept - instead of denying the capability, and a
+**"how long would that take"** is answered from the preview's measured
+`estimate` ("For 1 to 15 September 2026: About 1 second to forget 3
+facts..."), or asks which days when there is no range yet. It **removes
 nothing**: it fills in `asked`, says how many facts and chats are on the
 list and where ("I've put the list in Brain, under Forget a time frame: 4
 facts and 2 chats from 21 to 27 September 2026. Check it, untick anything
-you want to keep, and tap Forget these, then Approve on the card. Nothing
-is removed until you do - saying yes out loud does not approve it."), and
-puts `open_brain: "forget-range"` in `X-Jarvis-Route`, so the app it was
-asked from opens that place. **A date it cannot be sure of is a question**,
-and opens nothing: "on Monday" said on a Monday, "3/9" (two ways to read
-it), "the 3rd" (which month?), "last night", 31 February, a month that has
-not happened yet this year. "Erase what I said ..." is told plainly that
-this forgets, and "Erase the words" is per fact. A spoken "yes" or
-"approve" matches nothing and approves nothing.
+you want to keep, and tap Forget these, then Approve on the card and say
+yes a second time. Nothing is removed until you do - saying yes out loud
+does not approve it."), and puts `open_brain: "forget-range"` in
+`X-Jarvis-Route`, so the app it was asked from opens that place. **A date
+it cannot be sure of is a question**, and opens nothing: "on Monday" said
+on a Monday, "3/9" (two ways to read it), "the 3rd" (which month?), "last
+night", 31 February, a month that has not happened yet this year. "Erase
+what I said ..." is told plainly that this forgets, and "Erase the words"
+is per fact. A spoken "yes" or "approve" matches nothing and approves
+nothing - the second yes is a tap on the confirm block, never a voice.
 
 ### 64.6 What the apps must do
 
 - Show the list with **every item ticked** (except a support record, which
   starts unticked - §64.1), the owner free to untick any; send **only the
-  ticked ids**, in one request. Never approve anything.
-- Once the PC says the card was approved (the status's `last.outcome`
-  "done"), an app that was IN one of the deleted chats starts a new
-  conversation and says so (§18.6). And History reads its list again at
-  once after a change or an Undo (desktop: it used to wait for its 15-second
-  re-read).
+  ticked ids**, in one request. Never approve anything - and never send the
+  confirm for the owner: the second yes is their tap.
+- **Draw the second tap (apps lane, not built yet).** After the card is
+  approved, poll the status: `confirm` non-null means nothing has been
+  removed yet. Show "Yes, forget them" (`confirm_words.yes` in the fixture)
+  and post `{"id": confirm.id, "yes": true}` to `confirm.route`; a 400
+  keeps the list, a 409 means it is gone/changed and nothing happened.
+  **Do not treat the card's approval as done**: the deletion is only after
+  the 200 from `/confirm` (then the status says `last.outcome` "done").
+- **A pinned chat is never sent** (it is not in `chats`) and never rendered
+  as tickable; show the `pinned_kept` names as kept, with "N pinned chats
+  are kept", and the `estimate.text` line as the measured time.
+- Once the PC says the change happened (`last.outcome` "done"), an app that
+  was IN one of the deleted chats starts a new conversation and says so
+  (§18.6). And History reads its list again at once after a change or an
+  Undo (desktop: it used to wait for its 15-second re-read).
 - **"Forget these" waits for a live link** (rule 4) and, on the desktop, is
   refused while the list's words are hidden (the owner must be able to
   read what goes); **Undo is never held**.
@@ -14862,8 +14961,13 @@ this forgets, and "Erase the words" is per fact. A spoken "yes" or
   "Windows Hello for memory lists and chat history" (desktop) hides the
   Brain's lists, or App lock has locked Jarvis, the list's words are
   hidden - the counts and the days stay - until Show is confirmed. The
-  status (an open Undo) carries no words and stays.
-- The words are the contract's (`words`), in both apps.
+  status (an open Undo) carries no words and stays. **The apps lane must
+  add `pinned_kept` (titles) to the desktop's `redact()`** along with
+  `facts`/`chats`, and hide it on the phone the same way: this PR adds the
+  key, and the existing redactor does not know it yet.
+- The words are the contract's (`words`), in both apps; the second tap's
+  two sentences are in the fixture's `confirm_words` until the apps lane
+  adds them to their own copies.
 
 ## 65. Customer-support chats - Jarvis chats with a company's support for you (added 2026-09-28; built, not yet tried against a real site)
 
@@ -32479,9 +32583,15 @@ not re-import every module once a second:
                "names": ["..."], "section": "learning", "value": true,
                "value_known": true, "changeable": true,
                "how_to_change": "..."},
+              {"id": "personality", "kind": "choice", "label": "...", "names": ["..."],
+               "section": "manner", "value": "Warm Collaborator",
+               "value_known": true, "value_why": "", "options": ["..."],
+               "changeable": true, "how_to_change": "..."},
               {"id": "face", "kind": "choice", "label": "...", "names": ["..."],
                "section": "appearance-card", "value": null,
-               "value_known": false, "options": ["..."],
+               "value_known": false,
+               "value_why": "The value could not be read on this PC just now ...",
+               "options": ["..."],
                "changeable": true, "how_to_change": "..."}],
  "asks_first": {"available": true, "why": "",
    "groups": [{"group": "Reading your own things",
@@ -32490,6 +32600,10 @@ not re-import every module once a second:
  "abilities": [{"id": "typing", "group": "Talking",
                 "title": "Type a message and read the answer",
                 "surface": "both"}],
+ "tools": {"registered": 51, "registered_names": ["..."],
+           "enabled": 13, "enabled_names": ["..."],
+           "source": "jarvis_agent.TOOLS and jarvis_asks_first.tools_enabled_set()",
+           "why": ""},
  "plugins": [{"id": "mood", "module": "jarvis_mood", "on": true,
               "loaded": true, "why_not": ""}],
  "stores": [{"id": "memory", "label": "What Jarvis learned", "available": true,
@@ -32507,7 +32621,8 @@ not re-import every module once a second:
 |---|---|---|
 | `version` | the `VERSION` file beside the backend when there is one, `jarvis_events`' own `_STARTED`/`API_VERSION`, and the installer's `_jarvis-state.json` (184.7) | a path into the owner's folders; `identity` is sha256 only and `resealed` accepts a 7-40 character hex ref |
 | `places` | `jarvis_settings_registry.SECTIONS` (one row each, kind `settings_section`) and `jarvis_menus.MENUS` (kind `menu`) - imported, never typed here (the module's `places()`) | an id the two registries do not have |
-| `settings` | `BOOL_SETTINGS` (kind `switch`), `CHOICE_SETTINGS` (kind `choice`) and `NUMBER_SETTINGS` (kind `number`, the one shipped row `live_idle_seconds` with its `low`/`high`/`unit`); a switch's `value` is `jarvis_feature_guide.read_state()`, "the one public reader"; a number's is `jarvis_limits.value_of()` where it can be read; a choice's `value` says `null` with `value_known: false` because no public reader exists for it yet. Measured on the tree this was written from: **46 rows** = 35 switches + 10 choices + 1 number | a value that could not be read: it is `null`, never "off" |
+| `settings` | `BOOL_SETTINGS` (kind `switch`), `CHOICE_SETTINGS` (kind `choice`) and `NUMBER_SETTINGS` (kind `number`, the one shipped row `live_idle_seconds` with its `low`/`high`/`unit`); a switch's `value` is `jarvis_feature_guide.read_state()`, "the one public reader"; a number's is `jarvis_limits.value_of()` where it can be read; a choice's value is `jarvis_settings_registry.current_value()` -> the owning module's own reader (`ChoiceSetting.now()`), so the personality, voice, focus preset, hand-off mode and the rest report their real current value. Measured on the tree this was written from: **47 rows** = 36 switches + 10 choices + 1 number, and **9 of the 10 choices** really read a value here (the face needs the desktop's appearance view; without it the row says `value_known: false` and `value_why`) | a value that could not be read: it is `null`, never "off"; an unknown choice says `value_why` and never invents one |
+| `tools` | `jarvis_agent.TOOLS` (registered) and `jarvis_asks_first.tools_enabled_set()` - the owner's own `[tools].enabled` through the same read the "What asks first" page makes (enabled). Measured on this tree: **51 registered, 13 enabled**. `enabled` is `null` when the settings file cannot be read, never 0 | a guessed or defaulted tool list: unreadable says so in `why` |
 | `asks_first` | `jarvis_asks_first.view(here=False)` - the same page both apps draw, not reworded | a permission the gate does not keep |
 | `abilities` | `jarvis_feature_guide.features()` - the feature rows both apps' Features pages show; only id/group/title/surface, because the PROSE stays in `jarvis_feature_guide`, the one module allowed to explain a feature | a sentence a model or a plugin wrote |
 | `plugins` | `jarvis_plugins.available()`/`status()`: the drop-in folders, whether each is on, loaded, and why not | a plugin's own body or summary |
@@ -32529,6 +32644,28 @@ row whose value cannot be read says `null` (or `count: null` with `why_not` /
 `count_why`) rather than guessing, and an unread switch is never reported as
 off. This is the injection-surface rule the research called F10: a self-model
 is text that reaches the model, so it is fixed data or nothing.
+
+**Added 2026-11-04 (self-awareness phase 3).** Two additions, both read-only
+and both inside this existing section:
+
+- `version.app_version_said` is ONE plain sentence. When the `VERSION` file is
+  beside the backend it names the version; when it is not (a checkout, or a
+  deployed backend folder, which carries modules and not repository files) it
+  says plainly that the app version could not be read, names the backend schema
+  and points at the deploy reseal - it is never blank, never `null`, and never
+  a guessed number. `app_version` stays exactly as it was (`"unknown"`), so an
+  older caller is unaffected.
+- The model's own `self_portrait` tool (`jarvis_agent._run_self_portrait`) now
+  hands back a `live_settings` digest beside the counts: `{available,
+  switches: {setting_id: true|false}, choices: {setting_id: chosen option},
+  unreadable: [setting_id], on, off, preset, preset_title, preset_model,
+  model, more}`. It is built by `jarvis_self_portrait.live_settings_digest()`
+  from the SAME `settings()` read this route serves - one source, no default -
+  and it is bounded (`DIGEST_MAX`). `preset`/`preset_model` are the chosen
+  preset and the model it plans to run; `model` is the PC's running-model
+  record and is `""` when none is recorded. It carries ids and values only: no
+  phrase, path or secret, and an unreadable switch is listed in `unreadable`
+  rather than shown as `false`.
 
 ### 184.3 The ids come from the two registries, not from a fourth list
 
@@ -32710,6 +32847,8 @@ The version block is in the portrait (184.2) and alone at `GET
 - `app_version` is the short `VERSION` file beside the backend when the folder
   has one; a checkout answers `"unknown"` with `app_version_source` naming why,
   because a deployed backend folder carries modules, not repository files.
+  `app_version_said` (added 2026-11-04, 184.2) says the same thing in one plain
+  sentence - or says plainly that it could not be read - and is never blank.
 - `deploy` is the installer's OWN record (`_jarvis-state.json` beside
   `jarvis_hud.py`, read at most once per 60 s): `recorded`, the run's schema and
   time, how many deployed files were recorded and verified, the sha256 of the
@@ -32882,14 +33021,29 @@ before and after, and answers one small document
 
 ```json
 {"ok": true, "schema": "jarvis-self-portrait/1", "client": "hud",
- "counts": {"places": 190, "settings": 46, "tools": 21, "abilities": 140,
-            "plugins": 48, "settings_places": 59, "menu_places": 131,
+ "counts": {"places": 190, "settings": 48,
+            "tools": 13, "tools_enabled": 13, "tools_registered": 51,
+            "asks_first_rows": 136,
+            "abilities": 175, "plugins": 0, "settings_places": 59,
+            "menu_places": 131,
             "stored_memory": 42, "stored_conversations": 31,
             "app_version": "...", "started_at": 1790000000.0},
  "changed": {"<key>": {"before": ..., "after": ...}},
  "said": "I re-read what I can do and have now: ... Everything matches what I
           had. Nothing was restarted."}
 ```
+
+**`counts["tools"]` is the tool count, and it used to be a lie.** On the tree the
+2026-11-04 self-awareness audit measured, `tools` held **136** - the number of
+asks-first permission rows - and the model's own `self_portrait` tool handed that
+dict straight back, so "how many tools do you have" could be answered "136" while
+the backend had **51** tools and **13** switched on. Since 2026-11-04 the key holds
+`tools_enabled` (the owner's `[tools].enabled`, read through
+`jarvis_asks_first.tools_enabled_set()` - the same read the What-asks-first page
+makes), with **`tools_registered`** beside it, and the old number kept under its
+true name, **`asks_first_rows`**. The old key name still exists, so a caller that
+only knows `tools` keeps working - it now gets the true number. An unreadable
+settings file is `null` in both tool keys, never 0.
 
 The sentence names every number it read, says "Nothing was restarted" in both
 cases, and when something moved names each key that changed - a setting count, a
@@ -33127,15 +33281,23 @@ anything.
 `worst_repeat_ok`, and `words` - the one sentence both apps display, built in
 the engine so the desktop and the phone cannot word the same result two
 different ways. **No prompt text is ever stored**: the prefill prompt is
-generated from a fixed, counted word list with a per-repeat tag and is thrown
-away, and what is stored is how many tokens Ollama said it really counted. The
+generated from a fixed, counted word list with a per-repeat tag **at the front**
+- Ollama serves the LONGEST COMMON PREFIX from its cache, so a tag at the tail
+would leave the whole word body cacheable and every repeat after the first
+would measure the tail instead of the depth - and it is thrown away; what is
+stored is how many tokens Ollama said it really counted. The
 allowlist is why `{"prompt": ...}` handed in by a caller that made a mistake is
 dropped rather than written.
 
-**THE ADVICE SENTENCE IS BUILT AND TESTED; ITS ROUTE IS PHASE 4.**
+**THE ADVICE SENTENCE IS BUILT AND TESTED, AND IT IS NOT REACHABLE YET.**
 `jarvis_bench.advice()` returns `{note, numbers, enough}` from `bench.jsonl` and
 nothing else - it cannot run a benchmark, delete a row, or reach the network.
-**Under three usable runs of a model it refuses to compare**, with "Only 2
+**There is no route for it on this tree**: `/api/bench/advice` does not exist in
+`backend/bench.patch`, there is no `benchmark_results` chat tool and no app
+draws an "Explain this result" button; the only caller in this repository is
+`backend/test_bench.py`, and `tools/check_parity.py`'s bench block says so
+beside the five routes that DO exist. **Under three usable runs of a model it
+refuses to compare**, with "Only 2
 runs of that model are on file; three are needed before I compare them" - the
 same floor `jarvis_speed.compare_latency()` refuses under, because two lists of
 two can differ by 40% from noise alone. At three it names the fastest and the
@@ -33148,17 +33310,19 @@ of DESIGN section 6 that phase 1 does **not** wire are `/api/bench/history/{id}`
 and its DELETE (the separate History window, phase 3), `/api/bench/presets`
 (two routes - benchmark presets are phase 4), `/api/bench/advice` (phase 4) and
 the read-only `benchmark_results` chat tool (phase 4). The desktop Benchmark
-panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5;
-until then `tools/check_parity.py` carries these five routes in `BACKEND_ONLY`
-with the lane named in each reason, because neither app calls any of them on
-this tree - a state that check FAILS the day an app starts calling one, which is
-the point of putting it there. **Nothing here has been measured on real
+panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5.
+**The five routes that DO exist are the ones `tools/check_parity.py` carries in
+`BACKEND_ONLY`**, with the lane named in each reason, because neither app calls
+any of them on this tree - a state that check FAILS the day an app starts
+calling one, which is the point of putting it there. **The routes above do not
+exist yet, so the checker classifies none of them**: an entry there would name a
+route the backend does not serve. **Nothing here has been measured on real
 hardware**: `backend/test_bench.py` drives every formula and every refusal from
 a fake Ollama reply and fake `nvidia-smi` text, and one real run is a field
 test, not a test (DESIGN section 12) - a CI runner has no cards and no models,
 so those rows are BLOCKED, never PASS.
 
-**PROVED BY** `backend/test_bench.py`: 236 checks, 0 failed - every refusal row
+**PROVED BY** `backend/test_bench.py`: 253 checks, 0 failed - every refusal row
 of DESIGN section 2 with its exact sentence, the 318x trap (a reply of 318/317/
 23 ms must yield 43.48 and must NOT yield 13,826), the fully-cached case, absent
 is not zero, generation rate against a literal, both time-to-first-token
@@ -33167,7 +33331,12 @@ on the card (its sentence leads with `PARTIAL:`), a failed run that writes
 `ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
 500-run cap keeping whole runs, the byte ceiling, the allowlist, the
 three-run comparison floor, and that no run can start without `confirm`.
-
+**Two guards were added on 2026-11-04, and each failed before its fix:** the
+prefill prompt's per-repeat tag now leads, so two repeats at one depth share no
+word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
+3,653 characters - a tail measurement), and `lane` is dropped when it is not one
+of the three, because it used to sit in both the text-field and the enum table
+and the text-field branch won ("everyday lane" was stored as "everyday lan").
 
 ## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
 
@@ -33386,4 +33555,3 @@ once and not repeating a delivered notice, and the route's own wrapper.
 - **The second stage never calls a model today** (§186.4).
 - **Not measured on the owner's PC**: the route and the job body are tested
   against the real modules and a fake `gh`, not against a live pull request.
-

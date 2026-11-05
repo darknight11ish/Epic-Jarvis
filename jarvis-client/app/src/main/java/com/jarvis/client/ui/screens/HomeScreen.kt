@@ -101,6 +101,8 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -2034,6 +2036,12 @@ private fun StatusLine(
     // - see com.jarvis.client.ModelWords. Only ever drawn from the PC's own
     // `ollama` field, never from a read that failed.
     val modelDown = com.jarvis.client.ModelWords.isDown(state.status?.ollama)
+    // Hands-free (the owner's request, 2026-11-04): the one-line state, where
+    // the app already says whether anything is wrong - "Hands-free" while the
+    // PC has it armed, "Hands-free: not on this PC" when the PC answered 404,
+    // and nothing at all while it is simply off. Never a second dot and never a
+    // colour of its own: it is one more fact about a link that is already drawn.
+    val handsfreeLine by com.jarvis.client.JarvisRuntime.handsfreeLine.collectAsState()
 
     // Two different facts, never merged into one word: whether the stream is up,
     // and whether Jarvis is busy. Collapsing them is how a client ends up
@@ -2078,6 +2086,10 @@ private fun StatusLine(
             }
             if (state.pending.isNotEmpty()) add("${state.pending.size} waiting")
             state.status?.model?.let { add(it) }
+            // Hands-free: whether this PC is reading cards out to this phone.
+            // Last but one, so the model's own warning below keeps the final
+            // word - that one is the thing that needs doing.
+            handsfreeLine?.let { add(it) }
             // Last, so the one thing that needs doing is the last word on the
             // line rather than buried in the middle of it.
             com.jarvis.client.ModelWords.homeSuffix(state.status?.ollama)?.let { add(it) }
@@ -5008,6 +5020,12 @@ private fun Composer(
         AnswerMenuLine(line, onDismiss = { askLine = null })
         Spacer(Modifier.height(6.dp))
     }
+    // Hands-free (the owner's request, 2026-11-04): while a card's answer
+    // window is open the MICROPHONE IS NOT FREE, so the talk button is drawn
+    // greyed and the line below the box says why. Without this the owner would
+    // tap the mic, start a second recorder over the window, and neither would
+    // hear a clean "confirm".
+    val handsfreeNow by com.jarvis.client.JarvisRuntime.handsfreeNow.collectAsState()
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
@@ -5096,7 +5114,8 @@ private fun Composer(
         if (state.voiceOffered) {
             Spacer(Modifier.width(8.dp))
             VoiceButton(
-                enabled = state.link == LinkState.CONNECTED && !state.streaming,
+                enabled = state.link == LinkState.CONNECTED && !state.streaming &&
+                    !handsfreeNow.listening,
                 capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
                 micLevel = micLevel,
                 onBegin = actions.onVoiceBegin,
@@ -5104,6 +5123,20 @@ private fun Composer(
                 onCancel = actions.onVoiceCancel,
             )
         }
+    }
+    // The talk button's own state while a hands-free answer window is open:
+    // the words are the shared constant, so the button, the notification and
+    // the Settings row cannot describe the same ten seconds differently.
+    if (handsfreeNow.listening) {
+        Gap(6)
+        Text(
+            com.jarvis.client.net.Handsfree.LISTENING,
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.warnInk,
+            modifier = Modifier.semantics {
+                liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+            },
+        )
     }
     // Why Send is greyed, while the link is down (feature sweep on the
     // owner's phone, 2026-10-10). It said nothing at all before: the owner

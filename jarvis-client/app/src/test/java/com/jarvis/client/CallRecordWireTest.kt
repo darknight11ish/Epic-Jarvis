@@ -126,6 +126,25 @@ class CallRecordWireTest {
     }
 
     @Test
+    fun `a refused chunk's expected is read, and nothing is guessed without it`() {
+        // The field that makes a crash recoverable: the PC names the seq it
+        // wants next, so the phone can mark everything below it as sent.
+        assertEquals(3, CallRecordWire.expected(obj("""{"ok":false,"expected":3}""")))
+        // Every other refusal - the card still waiting, the recording refused,
+        // the feature off - carries no `expected`, and must mark NOTHING sent.
+        assertNull(CallRecordWire.expected(obj("""{"ok":false,"state":"waiting"}""")))
+        assertNull(CallRecordWire.expected(obj("""{"ok":false,"error":"off"}""")))
+        // A value that is not a sensible whole number is ignored, never used.
+        assertNull(CallRecordWire.expected(obj("""{"ok":false,"expected":"3"}""")))
+        assertNull(CallRecordWire.expected(obj("""{"ok":false,"expected":0}""")))
+        assertNull(CallRecordWire.expected(obj("""{"ok":false,"expected":-4}""")))
+        assertNull(CallRecordWire.expected(obj("""{"ok":false,"expected":1.5}""")))
+        assertNull(CallRecordWire.expected(null))
+        // An ACCEPTED chunk is not a refusal, whatever else is in the body.
+        assertNull(CallRecordWire.expected(obj("""{"ok":true,"expected":3}""")))
+    }
+
+    @Test
     fun `finish reads the note and a pending note says it is pending`() {
         val done = CallRecordWire.finished(obj("""{"ok":true,"note":"pending","receipt":"r-1"}"""))
         assertEquals("pending", done?.note)

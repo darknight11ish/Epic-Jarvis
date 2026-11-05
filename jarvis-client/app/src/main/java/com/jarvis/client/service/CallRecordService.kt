@@ -29,6 +29,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.call.CallRecordNow
+import com.jarvis.client.call.CallRecordChunks
 import com.jarvis.client.call.CallRecordRules
 import com.jarvis.client.call.CallRecordStore
 import com.jarvis.client.call.Chunker
@@ -48,6 +49,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonObject
 
 /**
  * Records a phone call - on the MICROPHONE, because Android will not give this
@@ -85,8 +87,9 @@ import kotlinx.coroutines.sync.withLock
  * writes the note. A chunk that cannot be sent is retried with the SAME
  * sequence number; if the PC is unreachable the audio stays on disk and the
  * notification says so. Nothing is ever thrown away because a network was
- * down - the ONE exception is a recording under a second, which has no audio
- * worth a note and is discarded out loud.
+ * down - the exceptions are a recording under a second, which has no audio
+ * worth a note and is discarded out loud, and the owner's own Delete on the
+ * plate, which asks first and deletes only what the PC has not taken.
  *
  * THE MICROPHONE IS SHARED, so it is arbitrated: call recording claims it
  * through [MicNow] / [MicOwner] when it arms, and Live, the wake word and the
@@ -205,6 +208,22 @@ class CallRecordService : Service() {
                     sendWaiting(attempts = SEND_NOW_ATTEMPTS)
                     // Nothing is armed or recording: this service was only up
                     // to send, and it goes away when that has been tried.
+                    if (state.phase == CallRecordRules.Phase.OFF) stopSelf()
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_DISCARD -> {
+                // THE OWNER'S OWN DISCARD, after the plate's confirmation. A
+                // recording whose card was denied, or that cannot be sent, must
+                // not sit on this phone for ever with no way to remove it (the
+                // privacy audit's D7). Only what the PC has NOT taken is ever
+                // deleted: `discardUnsent` cannot touch a finished recording.
+                // It needs no microphone and no foreground notification, so a
+                // started service is enough - the app is in front on the plate.
+                scope.launch {
+                    val gone = store?.discardUnsent() ?: 0
+                    stopWords = CallRecordRules.deleted(gone)
+                    publish()
                     if (state.phase == CallRecordRules.Phase.OFF) stopSelf()
                 }
                 return START_NOT_STICKY
@@ -615,21 +634,22 @@ class CallRecordService : Service() {
             if (pc == null) return false
             session.setPcSession(pc)
         }
-        while (true) {
-            val chunk = session.nextUnsent() ?: break
-            var tries = 0
-            var ok = false
-            while (!ok && tries < attempts) {
-                val res = JarvisRuntime.api.callRecordChunk(pc, chunk.seq, chunk.read())
-                ok = res is ApiResult.Ok && CallRecordWire.ok(res.value)
-                if (!ok) {
-                    tries++
-                    if (tries < attempts) delay(backoff(tries))
-                }
-            }
-            if (!ok) return false
-            session.markSent(chunk.seq)
-        }
+        // EVERY chunk the PC does not have, in order - including the retry that
+        // a crash needs. A 409 naming `expected` means the PC already holds
+        // every seq below it, so those are recorded as sent and the loop moves
+        // on to the real gap instead of retrying the same number for ever
+        // (call/CallRecordChunks.kt, and the privacy audit's D3).
+        val server = pc
+        val sent = CallRecordChunks.send(
+            session = session,
+            attempts = attempts,
+            post = { seq, pcm ->
+                val res = JarvisRuntime.api.callRecordChunk(server, seq, pcm)
+                (res as? ApiResult.Ok<JsonObject>)?.value
+            },
+            pause = { tries -> delay(backoff(tries)) },
+        )
+        if (!sent) return false
         if (!complete) return true
         var tries = 0
         while (tries < attempts) {
@@ -816,6 +836,8 @@ class CallRecordService : Service() {
         const val ACTION_ARM = "com.jarvis.client.CALL_RECORD_ARM"
         const val ACTION_STOP = "com.jarvis.client.CALL_RECORD_STOP"
         const val ACTION_SEND_WAITING = "com.jarvis.client.CALL_RECORD_SEND"
+        /** The owner's own discard, from the plate's confirmed Delete. */
+        const val ACTION_DISCARD = "com.jarvis.client.CALL_RECORD_DISCARD"
 
         /** 16 kHz, as the contract's `sample_rate`. */
         private const val RATE = CallRecordRules.SAMPLE_RATE

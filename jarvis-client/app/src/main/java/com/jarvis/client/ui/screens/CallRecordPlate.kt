@@ -4,12 +4,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +52,10 @@ internal fun CallRecordCard() {
     val context = LocalContext.current
     val status by CallRecordNow.status.collectAsState()
     val chrome = LocalChrome.current
+
+    // Is the "Delete this recording?" confirmation up? Nothing is removed
+    // until Delete is tapped; "Keep it" (or a tap outside) changes nothing.
+    var confirmingDelete by remember { mutableStateOf(false) }
 
     // The queue on disk is the truth about what is still waiting, not a
     // number left over from a service that has since stopped. Not re-read
@@ -148,7 +157,9 @@ internal fun CallRecordCard() {
 
         // Anything finished that the PC has not taken. Nothing is ever thrown
         // away because a network was down, so this is the one place it is
-        // offered again.
+        // offered again - and the one place the owner can throw it away on
+        // purpose: a card this PC denied, or a recording that cannot be sent,
+        // must not sit on the phone for ever (the privacy audit's D7).
         if (status.waiting > 0) {
             Gap(8)
             Text(
@@ -166,6 +177,37 @@ internal fun CallRecordCard() {
                 modifier = Modifier.fillMaxWidth(),
                 onClick = { CallRecordNow.sendWaiting(context) },
             )
+            Gap(4)
+            Secondary(
+                text = if (status.waiting == 1) {
+                    CallRecordRules.DELETE_ONE
+                } else {
+                    CallRecordRules.DELETE_MANY
+                },
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { confirmingDelete = true },
+            )
         }
+    }
+
+    // The confirmation, in the app's own asking style: what goes, what stays,
+    // and that it cannot be undone. Nothing is deleted until Delete is tapped,
+    // and "Keep it" is the way out - the same shape "Forget this sample?" uses.
+    if (confirmingDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmingDelete = false },
+            title = { Text(CallRecordRules.DELETE_ASK_TITLE) },
+            text = { Text(CallRecordRules.DELETE_ASK) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingDelete = false
+                    CallRecordNow.consumeSaid()
+                    CallRecordNow.discard(context)
+                }) { Text("Delete") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingDelete = false }) { Text("Keep it") }
+            },
+        )
     }
 }
