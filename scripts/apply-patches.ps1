@@ -2898,6 +2898,7 @@ $SHIPPED = @(
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     'jarvis_bench.py'
 
+    'jarvis_quotes.py'           # quotes.patch: the local public-domain corpus, a `quote` kind, and the model-free fast path
 )
 
 # The settings file. Installed only where none exists; never overwritten.

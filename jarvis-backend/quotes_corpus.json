@@ -1,0 +1,868 @@
+{
+ "quotes": [
+  {
+   "text": "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.",
+   "author": "Jane Austen",
+   "work": "Pride and Prejudice",
+   "year": 1813,
+   "source_id": "pg:pride-and-prejudice",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I declare after all there is no enjoyment like reading! How much sooner one tires of anything than of a book!",
+   "author": "Jane Austen",
+   "work": "Pride and Prejudice",
+   "year": 1813,
+   "source_id": "pg:pride-and-prejudice",
+   "licence": "public-domain"
+  },
+  {
+   "text": "There is no charm equal to tenderness of heart.",
+   "author": "Jane Austen",
+   "work": "Emma",
+   "year": 1815,
+   "source_id": "pg:emma",
+   "licence": "public-domain"
+  },
+  {
+   "text": "To be, or not to be, that is the question.",
+   "author": "William Shakespeare",
+   "work": "Hamlet",
+   "year": 1603,
+   "source_id": "se:hamlet",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "There is nothing either good or bad, but thinking makes it so.",
+   "author": "William Shakespeare",
+   "work": "Hamlet",
+   "year": 1603,
+   "source_id": "se:hamlet",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "This above all: to thine own self be true.",
+   "author": "William Shakespeare",
+   "work": "Hamlet",
+   "year": 1603,
+   "source_id": "se:hamlet",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "Brevity is the soul of wit.",
+   "author": "William Shakespeare",
+   "work": "Hamlet",
+   "year": 1603,
+   "source_id": "se:hamlet",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "The readiness is all.",
+   "author": "William Shakespeare",
+   "work": "Hamlet",
+   "year": 1603,
+   "source_id": "se:hamlet",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "All the world's a stage, and all the men and women merely players.",
+   "author": "William Shakespeare",
+   "work": "As You Like It",
+   "year": 1599,
+   "source_id": "se:as-you-like-it",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "The fault, dear Brutus, is not in our stars, but in ourselves, that we are underlings.",
+   "author": "William Shakespeare",
+   "work": "Julius Caesar",
+   "year": 1599,
+   "source_id": "se:julius-caesar",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "Cowards die many times before their deaths; the valiant never taste of death but once.",
+   "author": "William Shakespeare",
+   "work": "Julius Caesar",
+   "year": 1599,
+   "source_id": "se:julius-caesar",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "Life's but a walking shadow, a poor player that struts and frets his hour upon the stage.",
+   "author": "William Shakespeare",
+   "work": "Macbeth",
+   "year": 1606,
+   "source_id": "se:macbeth",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "We are such stuff as dreams are made on.",
+   "author": "William Shakespeare",
+   "work": "The Tempest",
+   "year": 1611,
+   "source_id": "se:the-tempest",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "Some are born great, some achieve greatness, and some have greatness thrust upon them.",
+   "author": "William Shakespeare",
+   "work": "Twelfth Night",
+   "year": 1601,
+   "source_id": "se:twelfth-night",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "All that glisters is not gold.",
+   "author": "William Shakespeare",
+   "work": "The Merchant of Venice",
+   "year": 1596,
+   "source_id": "se:the-merchant-of-venice",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "Uneasy lies the head that wears a crown.",
+   "author": "William Shakespeare",
+   "work": "Henry IV, Part 2",
+   "year": 1597,
+   "source_id": "se:henry-iv-part-2",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "We few, we happy few, we band of brothers.",
+   "author": "William Shakespeare",
+   "work": "Henry V",
+   "year": 1599,
+   "source_id": "se:henry-v",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "Love is not love which alters when it alteration finds.",
+   "author": "William Shakespeare",
+   "work": "Sonnets",
+   "year": 1609,
+   "source_id": "se:sonnets",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "Shall I compare thee to a summer's day? Thou art more lovely and more temperate.",
+   "author": "William Shakespeare",
+   "work": "Sonnets",
+   "year": 1609,
+   "source_id": "se:sonnets",
+   "licence": "cc0-1.0"
+  },
+  {
+   "text": "It was the best of times, it was the worst of times.",
+   "author": "Charles Dickens",
+   "work": "A Tale of Two Cities",
+   "year": 1859,
+   "source_id": "pg:a-tale-of-two-cities",
+   "licence": "public-domain"
+  },
+  {
+   "text": "It is a far, far better thing that I do, than I have ever done.",
+   "author": "Charles Dickens",
+   "work": "A Tale of Two Cities",
+   "year": 1859,
+   "source_id": "pg:a-tale-of-two-cities",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Take nothing on its looks; take everything on evidence. There's no better rule.",
+   "author": "Charles Dickens",
+   "work": "Great Expectations",
+   "year": 1861,
+   "source_id": "pg:great-expectations",
+   "licence": "public-domain"
+  },
+  {
+   "text": "It is not down on any map; true places never are.",
+   "author": "Herman Melville",
+   "work": "Moby-Dick",
+   "year": 1851,
+   "source_id": "pg:moby-dick",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I know not all that may be coming, but be it what it will, I'll go to it laughing.",
+   "author": "Herman Melville",
+   "work": "Moby-Dick",
+   "year": 1851,
+   "source_id": "pg:moby-dick",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The mass of men lead lives of quiet desperation.",
+   "author": "Henry David Thoreau",
+   "work": "Walden",
+   "year": 1854,
+   "source_id": "pg:walden",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I went to the woods because I wished to live deliberately, to front only the essential facts of life.",
+   "author": "Henry David Thoreau",
+   "work": "Walden",
+   "year": 1854,
+   "source_id": "pg:walden",
+   "licence": "public-domain"
+  },
+  {
+   "text": "If a man does not keep pace with his companions, perhaps it is because he hears a different drummer.",
+   "author": "Henry David Thoreau",
+   "work": "Walden",
+   "year": 1854,
+   "source_id": "pg:walden",
+   "licence": "public-domain"
+  },
+  {
+   "text": "A foolish consistency is the hobgoblin of little minds.",
+   "author": "Ralph Waldo Emerson",
+   "work": "Essays: First Series",
+   "year": 1841,
+   "source_id": "pg:essays-first-series",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Trust thyself: every heart vibrates to that iron string.",
+   "author": "Ralph Waldo Emerson",
+   "work": "Essays: First Series",
+   "year": 1841,
+   "source_id": "pg:essays-first-series",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Nothing great was ever achieved without enthusiasm.",
+   "author": "Ralph Waldo Emerson",
+   "work": "Essays: First Series",
+   "year": 1841,
+   "source_id": "pg:essays-first-series",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Do not act as if thou wert going to live ten thousand years. Death hangs over thee. While thou livest, while it is in thy power, be good.",
+   "author": "Marcus Aurelius",
+   "work": "Meditations",
+   "year": 1862,
+   "source_id": "pg:meditations",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Men are disturbed not by things, but by the opinions about things.",
+   "author": "Epictetus",
+   "work": "Enchiridion",
+   "year": 1877,
+   "source_id": "pg:enchiridion",
+   "licence": "public-domain"
+  },
+  {
+   "text": "There are more things, Lucilius, likely to frighten us than there are to crush us; we suffer more often in imagination than in reality.",
+   "author": "Seneca",
+   "work": "Moral Letters to Lucilius",
+   "year": 1917,
+   "source_id": "pg:moral-letters",
+   "licence": "public-domain"
+  },
+  {
+   "text": "While we are postponing, life speeds by.",
+   "author": "Seneca",
+   "work": "Moral Letters to Lucilius",
+   "year": 1917,
+   "source_id": "pg:moral-letters",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The beginning is the most important part of the work.",
+   "author": "Plato",
+   "work": "The Republic",
+   "year": 1871,
+   "source_id": "pg:the-republic",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Wonder is the feeling of a philosopher, and philosophy begins in wonder.",
+   "author": "Plato",
+   "work": "Theaetetus",
+   "year": 1871,
+   "source_id": "pg:theaetetus",
+   "licence": "public-domain"
+  },
+  {
+   "text": "All men by nature desire to know.",
+   "author": "Aristotle",
+   "work": "Metaphysics",
+   "year": 1908,
+   "source_id": "ws:metaphysics-ross",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Learning without thought is labour lost; thought without learning is perilous.",
+   "author": "Confucius",
+   "work": "The Analects",
+   "year": 1861,
+   "source_id": "ws:analects-legge",
+   "licence": "public-domain"
+  },
+  {
+   "text": "He who knows other men is discerning; he who knows himself is intelligent.",
+   "author": "Laozi",
+   "work": "Tao Te Ching",
+   "year": 1891,
+   "source_id": "ws:tao-te-ching-legge",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Supreme excellence consists in breaking the enemy's resistance without fighting.",
+   "author": "Sun Tzu",
+   "work": "The Art of War",
+   "year": 1910,
+   "source_id": "pg:the-art-of-war",
+   "licence": "public-domain"
+  },
+  {
+   "text": "From so simple a beginning endless forms most beautiful and most wonderful have been, and are being, evolved.",
+   "author": "Charles Darwin",
+   "work": "On the Origin of Species",
+   "year": 1859,
+   "source_id": "pg:origin-of-species",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Reading maketh a full man; conference a ready man; and writing an exact man.",
+   "author": "Francis Bacon",
+   "work": "The Essays",
+   "year": 1625,
+   "source_id": "bartlett:the-essays",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Truth is the daughter of time, not of authority.",
+   "author": "Francis Bacon",
+   "work": "Novum Organum",
+   "year": 1620,
+   "source_id": "bartlett:novum-organum",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The mind is its own place, and in itself can make a heaven of hell, a hell of heaven.",
+   "author": "John Milton",
+   "work": "Paradise Lost",
+   "year": 1667,
+   "source_id": "pg:paradise-lost",
+   "licence": "public-domain"
+  },
+  {
+   "text": "No man is an island, entire of itself; every man is a piece of the continent, a part of the main.",
+   "author": "John Donne",
+   "work": "Devotions upon Emergent Occasions",
+   "year": 1624,
+   "source_id": "pg:devotions",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Laws are like cobwebs, which may catch small flies, but let wasps and hornets break through.",
+   "author": "Jonathan Swift",
+   "work": "Gulliver's Travels",
+   "year": 1726,
+   "source_id": "pg:gullivers-travels",
+   "licence": "public-domain"
+  },
+  {
+   "text": "To err is human, to forgive, divine.",
+   "author": "Alexander Pope",
+   "work": "An Essay on Criticism",
+   "year": 1711,
+   "source_id": "pg:essay-on-criticism",
+   "licence": "public-domain"
+  },
+  {
+   "text": "A little learning is a dangerous thing.",
+   "author": "Alexander Pope",
+   "work": "An Essay on Criticism",
+   "year": 1711,
+   "source_id": "pg:essay-on-criticism",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Lost time is never found again.",
+   "author": "Benjamin Franklin",
+   "work": "Poor Richard's Almanack",
+   "year": 1758,
+   "source_id": "bartlett:poor-richard",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Well done is better than well said.",
+   "author": "Benjamin Franklin",
+   "work": "Poor Richard's Almanack",
+   "year": 1758,
+   "source_id": "bartlett:poor-richard",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Government, even in its best state, is but a necessary evil.",
+   "author": "Thomas Paine",
+   "work": "Common Sense",
+   "year": 1776,
+   "source_id": "pg:common-sense",
+   "licence": "public-domain"
+  },
+  {
+   "text": "We hold these truths to be self-evident, that all men are created equal.",
+   "author": "Thomas Jefferson",
+   "work": "The Declaration of Independence",
+   "year": 1776,
+   "source_id": "ws:declaration-of-independence",
+   "licence": "public-domain"
+  },
+  {
+   "text": "That government of the people, by the people, for the people, shall not perish from the earth.",
+   "author": "Abraham Lincoln",
+   "work": "The Gettysburg Address",
+   "year": 1863,
+   "source_id": "ws:gettysburg-address",
+   "licence": "public-domain"
+  },
+  {
+   "text": "With malice toward none, with charity for all.",
+   "author": "Abraham Lincoln",
+   "work": "Second Inaugural Address",
+   "year": 1865,
+   "source_id": "ws:second-inaugural",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I cannot live without books.",
+   "author": "Thomas Jefferson",
+   "work": "Letter to John Adams",
+   "year": 1815,
+   "source_id": "bartlett:jefferson-letters",
+   "licence": "public-domain"
+  },
+  {
+   "text": "He who knows only his own side of the case, knows little of that.",
+   "author": "John Stuart Mill",
+   "work": "On Liberty",
+   "year": 1859,
+   "source_id": "pg:on-liberty",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The greatest thing a human soul ever does in this world is to see something, and tell what it saw in a plain way.",
+   "author": "John Ruskin",
+   "work": "Modern Painters",
+   "year": 1843,
+   "source_id": "pg:modern-painters",
+   "licence": "public-domain"
+  },
+  {
+   "text": "What do we live for, if it is not to make life less difficult to each other?",
+   "author": "George Eliot",
+   "work": "Middlemarch",
+   "year": 1871,
+   "source_id": "pg:middlemarch",
+   "licence": "public-domain"
+  },
+  {
+   "text": "It is a narrow mind which cannot look at a subject from various points of view.",
+   "author": "George Eliot",
+   "work": "Middlemarch",
+   "year": 1871,
+   "source_id": "pg:middlemarch",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I am no bird; and no net ensnares me: I am a free human being with an independent will.",
+   "author": "Charlotte Brontë",
+   "work": "Jane Eyre",
+   "year": 1847,
+   "source_id": "pg:jane-eyre",
+   "licence": "public-domain"
+  },
+  {
+   "text": "All happy families are alike; each unhappy family is unhappy in its own way.",
+   "author": "Leo Tolstoy",
+   "work": "Anna Karenina",
+   "year": 1878,
+   "source_id": "pg:anna-karenina",
+   "licence": "public-domain"
+  },
+  {
+   "text": "There is nothing like a dream to create the future.",
+   "author": "Victor Hugo",
+   "work": "Les Misérables",
+   "year": 1862,
+   "source_id": "pg:les-miserables",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Why, sometimes I've believed as many as six impossible things before breakfast.",
+   "author": "Lewis Carroll",
+   "work": "Alice's Adventures in Wonderland",
+   "year": 1865,
+   "source_id": "pg:alices-adventures",
+   "licence": "public-domain"
+  },
+  {
+   "text": "It's a poor sort of memory that only works backwards.",
+   "author": "Lewis Carroll",
+   "work": "Through the Looking-Glass",
+   "year": 1871,
+   "source_id": "pg:through-the-looking-glass",
+   "licence": "public-domain"
+  },
+  {
+   "text": "You see, but you do not observe.",
+   "author": "Arthur Conan Doyle",
+   "work": "The Adventures of Sherlock Holmes",
+   "year": 1892,
+   "source_id": "pg:adventures-of-sherlock-holmes",
+   "licence": "public-domain"
+  },
+  {
+   "text": "It is a capital mistake to theorise before one has data.",
+   "author": "Arthur Conan Doyle",
+   "work": "The Adventures of Sherlock Holmes",
+   "year": 1892,
+   "source_id": "pg:adventures-of-sherlock-holmes",
+   "licence": "public-domain"
+  },
+  {
+   "text": "When you have eliminated the impossible, whatever remains, however improbable, must be the truth.",
+   "author": "Arthur Conan Doyle",
+   "work": "The Sign of the Four",
+   "year": 1890,
+   "source_id": "pg:sign-of-the-four",
+   "licence": "public-domain"
+  },
+  {
+   "text": "We are all in the gutter, but some of us are looking at the stars.",
+   "author": "Oscar Wilde",
+   "work": "Lady Windermere's Fan",
+   "year": 1892,
+   "source_id": "pg:lady-windermeres-fan",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The books that the world calls immoral are books that show the world its own shame.",
+   "author": "Oscar Wilde",
+   "work": "The Picture of Dorian Gray",
+   "year": 1890,
+   "source_id": "pg:the-picture-of-dorian-gray",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The reasonable man adapts himself to the world; the unreasonable one persists in trying to adapt the world to himself.",
+   "author": "George Bernard Shaw",
+   "work": "Man and Superman",
+   "year": 1903,
+   "source_id": "pg:man-and-superman",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The madman is not the man who has lost his reason. The madman is the man who has lost everything except his reason.",
+   "author": "G. K. Chesterton",
+   "work": "Orthodoxy",
+   "year": 1908,
+   "source_id": "pg:orthodoxy",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Believe me, my young friend, there is nothing - absolutely nothing - half so much worth doing as simply messing about in boats.",
+   "author": "Kenneth Grahame",
+   "work": "The Wind in the Willows",
+   "year": 1908,
+   "source_id": "pg:the-wind-in-the-willows",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Success is to be measured not so much by the position that one has reached in life as by the obstacles which he has overcome while trying to succeed.",
+   "author": "Booker T. Washington",
+   "work": "Up from Slavery",
+   "year": 1901,
+   "source_id": "pg:up-from-slavery",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Hope is the thing with feathers that perches in the soul.",
+   "author": "Emily Dickinson",
+   "work": "Poems",
+   "year": 1890,
+   "source_id": "pg:poems-dickinson",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Forever is composed of nows.",
+   "author": "Emily Dickinson",
+   "work": "Poems",
+   "year": 1890,
+   "source_id": "pg:poems-dickinson",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The brain is wider than the sky.",
+   "author": "Emily Dickinson",
+   "work": "Poems",
+   "year": 1890,
+   "source_id": "pg:poems-dickinson",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Do I contradict myself? Very well then I contradict myself, (I am large, I contain multitudes.)",
+   "author": "Walt Whitman",
+   "work": "Leaves of Grass",
+   "year": 1855,
+   "source_id": "pg:leaves-of-grass",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Two roads diverged in a wood, and I - I took the one less traveled by, and that has made all the difference.",
+   "author": "Robert Frost",
+   "work": "Mountain Interval",
+   "year": 1916,
+   "source_id": "bartlett:mountain-interval",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The woods are lovely, dark and deep, but I have promises to keep, and miles to go before I sleep.",
+   "author": "Robert Frost",
+   "work": "New Hampshire",
+   "year": 1923,
+   "source_id": "bartlett:new-hampshire",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The world is too much with us; late and soon, getting and spending, we lay waste our powers.",
+   "author": "William Wordsworth",
+   "work": "Poems, in Two Volumes",
+   "year": 1807,
+   "source_id": "bartlett:poems-wordsworth",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Water, water, everywhere, nor any drop to drink.",
+   "author": "Samuel Taylor Coleridge",
+   "work": "Lyrical Ballads",
+   "year": 1798,
+   "source_id": "bartlett:lyrical-ballads",
+   "licence": "public-domain"
+  },
+  {
+   "text": "To see a World in a Grain of Sand, And a Heaven in a Wild Flower.",
+   "author": "William Blake",
+   "work": "Poems",
+   "year": 1863,
+   "source_id": "bartlett:poems-blake",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Look on my Works, ye Mighty, and despair!",
+   "author": "Percy Bysshe Shelley",
+   "work": "Poems",
+   "year": 1818,
+   "source_id": "bartlett:poems-shelley",
+   "licence": "public-domain"
+  },
+  {
+   "text": "A thing of beauty is a joy for ever.",
+   "author": "John Keats",
+   "work": "Endymion",
+   "year": 1818,
+   "source_id": "bartlett:endymion",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Beauty is truth, truth beauty, - that is all ye know on earth, and all ye need to know.",
+   "author": "John Keats",
+   "work": "Poems",
+   "year": 1819,
+   "source_id": "bartlett:poems-keats",
+   "licence": "public-domain"
+  },
+  {
+   "text": "To strive, to seek, to find, and not to yield.",
+   "author": "Alfred, Lord Tennyson",
+   "work": "Poems",
+   "year": 1842,
+   "source_id": "bartlett:poems-tennyson",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I am the master of my fate, I am the captain of my soul.",
+   "author": "William Ernest Henley",
+   "work": "Poems",
+   "year": 1875,
+   "source_id": "bartlett:poems-henley",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Ah, but a man's reach should exceed his grasp, or what's a heaven for?",
+   "author": "Robert Browning",
+   "work": "Men and Women",
+   "year": 1855,
+   "source_id": "bartlett:men-and-women",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Lives of great men all remind us we can make our lives sublime.",
+   "author": "Henry Wadsworth Longfellow",
+   "work": "Poems",
+   "year": 1838,
+   "source_id": "bartlett:poems-longfellow",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Culture is the best which has been thought and said in the world.",
+   "author": "Matthew Arnold",
+   "work": "Culture and Anarchy",
+   "year": 1869,
+   "source_id": "pg:culture-and-anarchy",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The strong do what they can and the weak suffer what they must.",
+   "author": "Thucydides",
+   "work": "History of the Peloponnesian War",
+   "year": 1874,
+   "source_id": "pg:peloponnesian-war",
+   "licence": "public-domain"
+  },
+  {
+   "text": "There is a time for many words, and there is also a time for sleep.",
+   "author": "Homer",
+   "work": "The Odyssey",
+   "year": 1900,
+   "source_id": "pg:the-odyssey",
+   "licence": "public-domain"
+  },
+  {
+   "text": "They can because they think they can.",
+   "author": "Virgil",
+   "work": "The Aeneid",
+   "year": 1697,
+   "source_id": "pg:the-aeneid",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Midway upon the journey of our life I found myself within a forest dark, for the straightforward pathway had been lost.",
+   "author": "Dante Alighieri",
+   "work": "The Divine Comedy",
+   "year": 1867,
+   "source_id": "pg:the-divine-comedy",
+   "licence": "public-domain"
+  },
+  {
+   "text": "For the strength of the Pack is the Wolf, and the strength of the Wolf is the Pack.",
+   "author": "Rudyard Kipling",
+   "work": "The Jungle Book",
+   "year": 1894,
+   "source_id": "pg:the-jungle-book",
+   "licence": "public-domain"
+  },
+  {
+   "text": "We live, as we dream - alone.",
+   "author": "Joseph Conrad",
+   "work": "Heart of Darkness",
+   "year": 1899,
+   "source_id": "pg:heart-of-darkness",
+   "licence": "public-domain"
+  },
+  {
+   "text": "The great tragedy of Science - the slaying of a beautiful hypothesis by an ugly fact.",
+   "author": "Thomas Henry Huxley",
+   "work": "Collected Essays",
+   "year": 1893,
+   "source_id": "pg:collected-essays-huxley",
+   "licence": "public-domain"
+  },
+  {
+   "text": "If I have seen further it is by standing on the shoulders of Giants.",
+   "author": "Isaac Newton",
+   "work": "Letter to Robert Hooke",
+   "year": 1675,
+   "source_id": "bartlett:newton",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Chance favours the prepared mind.",
+   "author": "Louis Pasteur",
+   "work": "Lecture at Lille",
+   "year": 1854,
+   "source_id": "bartlett:pasteur",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Power tends to corrupt, and absolute power corrupts absolutely.",
+   "author": "John Dalberg-Acton",
+   "work": "Letter to Bishop Creighton",
+   "year": 1887,
+   "source_id": "bartlett:acton",
+   "licence": "public-domain"
+  },
+  {
+   "text": "What does not kill me makes me stronger.",
+   "author": "Friedrich Nietzsche",
+   "work": "Twilight of the Idols",
+   "year": 1889,
+   "source_id": "ws:twilight-of-the-idols",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Man is born free, and everywhere he is in chains.",
+   "author": "Jean-Jacques Rousseau",
+   "work": "The Social Contract",
+   "year": 1762,
+   "source_id": "pg:the-social-contract",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I think, therefore I am.",
+   "author": "René Descartes",
+   "work": "Meditations on First Philosophy",
+   "year": 1641,
+   "source_id": "ws:meditations-descartes",
+   "licence": "public-domain"
+  },
+  {
+   "text": "When a man knows he is to be hanged in a fortnight, it concentrates his mind wonderfully.",
+   "author": "Samuel Johnson",
+   "work": "Boswell's Life of Johnson",
+   "year": 1775,
+   "source_id": "bartlett:boswell",
+   "licence": "public-domain"
+  },
+  {
+   "text": "I am not afraid of storms, for I am learning how to sail my ship.",
+   "author": "Louisa May Alcott",
+   "work": "Little Women",
+   "year": 1868,
+   "source_id": "pg:little-women",
+   "licence": "public-domain"
+  },
+  {
+   "text": "To every thing there is a season, and a time to every purpose under the heaven.",
+   "author": "The Bible (King James Version)",
+   "work": "Ecclesiastes",
+   "year": 1611,
+   "source_id": "ws:kjv-ecclesiastes",
+   "licence": "public-domain"
+  },
+  {
+   "text": "Where there is no vision, the people perish.",
+   "author": "The Bible (King James Version)",
+   "work": "Proverbs",
+   "year": 1611,
+   "source_id": "ws:kjv-proverbs",
+   "licence": "public-domain"
+  },
+  {
+   "text": "All that we are is the result of what we have thought.",
+   "author": "The Dhammapada",
+   "work": "The Dhammapada",
+   "year": 1881,
+   "source_id": "ws:dhammapada-muller",
+   "licence": "public-domain"
+  }
+ ]
+}

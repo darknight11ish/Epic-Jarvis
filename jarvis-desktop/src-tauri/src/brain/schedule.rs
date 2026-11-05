@@ -1308,6 +1308,9 @@ pub(crate) fn toast_title(kind: &str) -> &'static str {
         "todo" => "To-do",
         "briefing" => "Morning briefing",
         "tellme" => "Tell me when",
+        // A quote (backend jarvis_quotes.py, 2026-11-05): both apps' words
+        // (coming-up.js, net/Schedule.kt).
+        "quote" => "Quote of the day",
         _ => "Jarvis",
     }
 }
@@ -1329,17 +1332,21 @@ pub(crate) fn lock_screen_words(kind: &str) -> &'static str {
         "todo" => "Jarvis: a to-do item is due.",
         "briefing" => "Jarvis: your morning briefing is ready.",
         "tellme" => TELLME_LOCK_SCREEN,
+        "quote" => "Jarvis: a quote is ready.",
         _ => "Jarvis: something is due.",
     }
 }
 
 /// (title, body) for a job that went off. `private`: App lock is on or the
 /// private lists are hidden - then the body is the lock-screen words only,
-/// never the job's own.
+/// never the job's own. `said`: the words THIS firing says, when the PC sent
+/// any on the event (a quote, 2026-11-05) - read before the job's own text,
+/// and never while `private`, like every other kind.
 pub(crate) fn toast_words(
     kind: &str,
     job: Option<&serde_json::Value>,
     private: bool,
+    said: &str,
 ) -> (String, String) {
     let title = toast_title(kind).to_string();
     let fallback = job
@@ -1353,6 +1360,12 @@ pub(crate) fn toast_words(
     };
     if private {
         return (title, fallback);
+    }
+    // A quote's words change at every firing, so the PC sends them on the
+    // event rather than on the job. Only a quote sends `said`, and an older PC
+    // sends none, which is exactly today's behaviour.
+    if !said.trim().is_empty() {
+        return (title, said.trim().to_string());
     }
     // A "tell me when" says its `alert` - made on the PC from the owner's
     // own words - never its `text`, which is what is watched.
@@ -1573,7 +1586,12 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     }
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
-    let (title, mut body) = toast_words(&kind, job.as_ref(), private);
+    let (title, mut body) = toast_words(
+        &kind,
+        job.as_ref(),
+        private,
+        data.get("text").and_then(|v| v.as_str()).unwrap_or(""),
+    );
     // A routine's PART (2026-11-03, the owner's ask): one notification per part,
     // and the notice says WHICH one - "Reminder · 2 of 4" in the title, which is
     // a count and so is safe while the words are hidden - and the part's OWN
@@ -1727,7 +1745,7 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
     }
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
-    let (title, body) = toast_words("tellme", job.as_ref(), private);
+    let (title, body) = toast_words("tellme", job.as_ref(), private, "");
     let age_s = job
         .as_ref()
         .and_then(|j| j.get("age_s"))
@@ -2716,20 +2734,20 @@ mod tests {
         let job = serde_json::json!({"id": "s0123456789", "kind": "reminder",
             "text": "call Mum", "lock_screen": "Jarvis: a reminder is due.",
             "missed": "missed at 07:00"});
-        let (t, b) = toast_words("reminder", Some(&job), false);
+        let (t, b) = toast_words("reminder", Some(&job), false, "");
         assert_eq!(t, "Reminder");
         assert_eq!(b, "call Mum (missed at 07:00 - the PC was off or asleep.)");
-        let (_, b) = toast_words("reminder", Some(&job), true);
+        let (_, b) = toast_words("reminder", Some(&job), true, "");
         assert_eq!(b, "Jarvis: a reminder is due.");
         assert!(!b.contains("Mum"));
-        let (t, b) = toast_words("timer", None, false);
+        let (t, b) = toast_words("timer", None, false, "");
         assert_eq!(
             (t.as_str(), b.as_str()),
             ("Timer done", "Jarvis: your timer is done.")
         );
         let timer = serde_json::json!({"kind": "timer", "text": "pasta"});
         assert_eq!(
-            toast_words("timer", Some(&timer), false).1,
+            toast_words("timer", Some(&timer), false, "").1,
             "The pasta timer is done."
         );
     }
@@ -2768,16 +2786,16 @@ mod tests {
             "text": "an email from Alex arrives", "alert": "An email from Alex arrived.",
             "lock_screen": TELLME_LOCK_SCREEN});
         assert_eq!(
-            toast_words("tellme", Some(&job), false),
+            toast_words("tellme", Some(&job), false, ""),
             (
                 "Tell me when".to_string(),
                 "An email from Alex arrived.".to_string()
             )
         );
-        let (_, b) = toast_words("tellme", Some(&job), true);
+        let (_, b) = toast_words("tellme", Some(&job), true, "");
         assert_eq!(b, TELLME_LOCK_SCREEN);
         assert!(!b.contains("Alex"));
-        assert_eq!(toast_words("tellme", None, false).1, TELLME_LOCK_SCREEN);
+        assert_eq!(toast_words("tellme", None, false, "").1, TELLME_LOCK_SCREEN);
         let hidden = redact_list(serde_json::json!({"jobs": [job], "todo": []}));
         assert!(!hidden.to_string().contains("Alex"));
     }

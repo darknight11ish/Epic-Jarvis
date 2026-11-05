@@ -184,6 +184,10 @@ export const LOCK_SCREEN = Object.freeze({
 /** The title of the review decks' own daily job. */
 export const REVIEW_JOB_TITLE = "Card review";
 
+/** A quote job's title (backend jarvis_quotes.KIND, 2026-11-05): the words
+ *  arrive with each firing, so the row says what kind of thing it is. */
+export const QUOTE_JOB_TITLE = "Quote of the day";
+
 /** The tag on a row, by kind. */
 export const KIND_TAGS = Object.freeze({
   timer: "timer",
@@ -198,6 +202,8 @@ export const KIND_TAGS = Object.freeze({
   // Review decks' own daily job (backend jarvis_decks.KIND): Decks owns it,
   // so it is named plainly and offers no Pause or Delete here.
   review: "card review",
+  // A quote (backend jarvis_quotes.KIND, 2026-11-05).
+  quote: "quote",
 });
 
 /** A snoozed copy's tag ends with this ("alarm, snoozed"). */
@@ -473,6 +479,8 @@ export function titleOf(job) {
   }
   if (job.kind === "nexttime") return job.hidden || !words ? NEXT_TIME_TITLE : words;
   if (job.kind === "today") return job.hidden || !words ? TODAY_CARD_TITLE : words;
+  // A quote has no words of its own on the job - each firing carries its own.
+  if (job.kind === "quote") return QUOTE_JOB_TITLE;
   if (words) return words;
   return job.kind === "alarm" ? "Alarm" : job.kind === "todo" ? "To-do" : "Reminder";
 }

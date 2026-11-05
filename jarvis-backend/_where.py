@@ -1562,8 +1562,11 @@ SHIPPED = (
     # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
     # it. Standard library only, loopback only, no card and no model at import.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_bench.py"
+    "jarvis_bench.py",
 
+    # The quote corpus and its picker (2026-11-05): a kind of job on the
+    # one scheduler, and the model-free "send me a quote" path.
+    "jarvis_quotes.py",
 )
 
 
