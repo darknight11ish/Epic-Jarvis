@@ -1,0 +1,69 @@
+        if path == "/api/bench":
+            # bench.patch (2026-11-04): the self-benchmark's controls screen
+            # (jarvis_bench.py; DESIGN.md sections 3 and 6). READ-ONLY: the two
+            # cards, what each lane has installed, the ladders the controls
+            # snap to, whether a run is in flight, and the last run. It starts
+            # and loads NOTHING. `?model=` adds that model's layer count and
+            # trained context; that is one /api/show round trip and is paid
+            # only when a model is actually picked.
+            if not _origin_ok(self):
+                return self._send(403, {"error": "cross-origin request refused"})
+            if not _token_ok(self):
+                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            try:
+                from urllib.parse import parse_qs
+                qs = (parse_qs(self.path.split("?", 1)[1])
+                      if "?" in self.path else {})
+                pick = (qs.get("model") or [""])[0]
+                lane = (qs.get("lane") or ["everyday"])[0]
+                import jarvis_bench
+                return self._send(200, jarvis_bench.controls_view(model=pick,
+                                                                 lane=lane))
+            except Exception as exc:
+                return self._send(503, {"available": False,
+                                        "error": f"{type(exc).__name__}: {exc}"})
+
+        if path.startswith("/api/bench/run/"):
+            # bench.patch (2026-11-04): how the run is going, and its numbers
+            # when it is done. A screen polls this; a two-minute benchmark never
+            # holds a request thread. 200 {state: running|done|failed, step, of,
+            # partial, result?}; 404 when no run has that id.
+            if not _origin_ok(self):
+                return self._send(403, {"error": "cross-origin request refused"})
+            if not _token_ok(self):
+                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            try:
+                import jarvis_bench
+                code, out = jarvis_bench.view(path[len("/api/bench/run/"):])
+                return self._send(code, out)
+            except Exception as exc:
+                return self._send(503, {"available": False,
+                                        "error": f"{type(exc).__name__}: {exc}"})
+
+        if path == "/api/bench/history":
+            # bench.patch (2026-11-04): the benchmark history, newest first -
+            # its OWN file (`bench.jsonl`), never the chat history and never
+            # `/api/history`. ?limit=&model=&lane=&preset=. Numbers, model and
+            # lane names, and a short machine reason; never a word the owner
+            # said and never a prompt. This route is the read half; deleting a
+            # row arrives with the history window (DESIGN.md phase 3).
+            if not _origin_ok(self):
+                return self._send(403, {"error": "cross-origin request refused"})
+            if not _token_ok(self):
+                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            try:
+                from urllib.parse import parse_qs
+                qs = (parse_qs(self.path.split("?", 1)[1])
+                      if "?" in self.path else {})
+                limit = (qs.get("limit") or ["20"])[0]
+                import jarvis_bench
+                return self._send(200, jarvis_bench.history(
+                    limit=int(limit) if str(limit).isdigit() else 20,
+                    model=(qs.get("model") or [""])[0],
+                    lane=(qs.get("lane") or [""])[0],
+                    preset=(qs.get("preset") or [""])[0]))
+            except Exception as exc:
+                return self._send(503, {"available": False,
+                                        "error": f"{type(exc).__name__}: {exc}"})
+
+        if path == "/api/search":
