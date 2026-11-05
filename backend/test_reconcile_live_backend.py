@@ -69,6 +69,17 @@ real PC:
      provable AFTER that deploy: no-expiry's regions are rewritten by this later
      patch, so its entry's `or_probes` is the proof that survives, and the two
      gate-digest probes were moved onto lines the later patch leaves alone.
+  13. the 2026-11-04 bench.patch false-green (DEF-035's shape for a BRAND-NEW patch):
+     A patch that did not exist when the defect was written is reported ALREADY
+     PRESENT on a HUD with none of it, because its added block carries ten lines
+     every other route has (`if not _origin_ok(self):`, both the 403 and the 401
+     sentences, the JSON-body parse lines) and one present line is enough for the
+     fallback. Measured on a COPY of the owner's live folder: `/api/bench` occurs
+     ZERO times there, `distinctive_added_lines` yields 62 candidates and ten are
+     present. The entry's four dispatch probes make that file ABSENT, and its two
+     region pairs carry the block - proved byte-for-byte against `git apply` on the
+     published base, inserted exactly once (a half-applied pair is completed, not
+     duplicated) and idempotent on the next plan.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
@@ -3850,6 +3861,119 @@ def t_the_jobs_routes_delta_carries_its_four_hunks_byte_for_byte():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   The 2026-11-04 bench.patch false-green (DEF-035's shape, BRAND-NEW patch)
+# --------------------------------------------------------------------------
+
+def t_the_bench_patch_is_carried_not_false_greened():
+    """A patch that did not exist when DEF-035 was written false-greens the same way.
+
+    Measured read-only on a COPY of the owner's live folder (2026-11-04): its
+    `jarvis_hud.py` holds ZERO occurrences of `/api/bench`, and yet the fallback rule
+    called `bench.patch` present. `distinctive_added_lines` yields 62 candidates for
+    it and TEN of them are in that file - `if not _origin_ok(self):`, the 403 and the
+    401 sentences, `from urllib.parse import parse_qs`, the JSON-body parse and its
+    two errors, the dict check - because every route carries the same boilerplate, and
+    ONE present line is enough. The published base HUD is the same shape (the stack up
+    to 2026-10-14, no bench route), so it is the fixture: the bug is reproduced on it,
+    then the entry carries the block exactly once and a second plan stages nothing.
+    """
+    root = tmpdir()
+    try:
+        base = BASE_HUD.read_text(encoding="utf-8")
+        raw = patch_text("bench.patch").decode("utf-8")
+        added = R.parse_patch_files(raw)["jarvis_hud.py"]["added"]
+        pre = R.patch_pre_image(raw, "jarvis_hud.py")
+        hunks = R.patch_hunks(raw, "jarvis_hud.py")
+        check("bench.patch has TWO HUD hunks and both pre-images appear exactly once",
+              len(hunks) == 2
+              and all(base.count("\n".join(h["old"])) == 1 for h in hunks),
+              [(len(h["old"]), base.count("\n".join(h["old"]))) for h in hunks])
+        present = [line for line in R.distinctive_added_lines(added, pre)
+                   if line in base]
+        check("the fixture has NONE of the patch's routes", "/api/bench" not in base)
+        check("... but TEN of its 62 distinctive added lines are already in it",
+              len(present) == 10, present)
+        for line in ("if not _origin_ok(self):",
+                     'return self._send(403, {"error": "cross-origin request refused"})',
+                     'return self._send(401, {"error": "bad or missing X-Jarvis-Token"})'):
+            check(f"... the shared boilerplate {line!r} is one of them",
+                  line in present, present)
+        state, why = R.patch_presence("bench.patch", "jarvis_hud.py", added, base,
+                                      table={}, pre_image=pre)
+        check("the loose fallback rule calls that HUD ALREADY_PRESENT (the bug)",
+              state == R.PRESENT, (state, why))
+        entry = (R.DELTA_TABLE.get("bench.patch") or {}).get("jarvis_hud.py") or {}
+        regions = tuple(entry.get("regions") or ())
+        check("the bench entry carries two region pairs and four post-image probes",
+              len(regions) == 2 and len(entry.get("probes") or ()) == 4
+              and not entry.get("hunks"), entry)
+        check("... every probe is a line the patch ADDS, never one its pre-image shows",
+              all(str(p) in "\n".join(added) and str(p) not in pre
+                  for p in entry.get("probes") or ()), entry.get("probes"))
+        for region, hunk in zip(regions, hunks):
+            old_lines = R._delta_lines(str(region.get("replace_file") or ""))
+            new_lines = R._delta_lines(str(region.get("file") or ""))
+            anchor = hunk["new"][-3]
+            check(f"the {region.get('file')} OLD block is ONE anchor line, in the pre-image",
+                  old_lines == (anchor,) and anchor in hunk["old"]
+                  and base.count(anchor) == 1, old_lines)
+            check(f"... its NEW block is that hunk's own added lines + that anchor",
+                  new_lines == tuple(hunk["added"]) + (anchor,), len(new_lines))
+            check(f"... its probe is a line only that block adds",
+                  bool(region.get("probes"))
+                  and all(str(p) in "\n".join(new_lines)
+                          and str(p) not in "\n".join(old_lines)
+                          for p in region.get("probes") or ()),
+                  region.get("probes"))
+        state2, why2 = R.patch_presence("bench.patch", "jarvis_hud.py", added, base,
+                                        pre_image=pre)
+        check("with its entry the SAME HUD is ABSENT, so the block is carried",
+              state2 == R.ABSENT, (state2, why2))
+        live = make_base_live(root, "bench", {"jarvis_hud.py": base})
+        before = (live / "jarvis_hud.py").read_bytes()
+        show = show_patches("bench.patch")
+        deltas, staged, refusals = R.plan_deltas(
+            live, ["bench.patch"], show=show, repo=REPO, state_patches=[])
+        check("the bench delta is planned exactly ONCE, as an insert",
+              refusals == [] and len(deltas) == 1 and deltas[0].patch == "bench.patch"
+              and deltas[0].status == "insert", (refusals, deltas))
+        text = staged.get("jarvis_hud.py", "")
+        check("... it is what git apply makes of bench.patch, byte for byte",
+              text == git_apply_oracle(base, ["bench.patch"], "jarvis_hud.py"),
+              (len(text), len(base)))
+        check("... both dispatch sites landed, not one",
+              all(line in text for line in
+                  ('        if path == "/api/bench":',
+                   '        if path.startswith("/api/bench/run/"):',
+                   '        if path == "/api/bench/history":',
+                   '        if route in ("/api/bench/run", "/api/bench/cancel"):')))
+        check("... the staged HUD still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        check("... and the live fixture file was never touched",
+              (live / "jarvis_hud.py").read_bytes() == before)
+        # A half-applied pair is FINISHED, never duplicated: hunk 1's block already
+        # written, hunk 2's not.
+        (live / "jarvis_hud.py").write_bytes(
+            base.replace("\n".join(hunks[0]["old"]),
+                         "\n".join(hunks[0]["new"]), 1).encode("utf-8"))
+        _half, staged_half, refusals_half = R.plan_deltas(
+            live, ["bench.patch"], show=show, repo=REPO, state_patches=[])
+        check("a half-applied bench block is completed, not inserted twice",
+              refusals_half == []
+              and staged_half.get("jarvis_hud.py") == text
+              and "\n".join(hunks[0]["new"]) in text, (refusals_half,))
+        # Pretend the deploy wrote the whole thing: the second plan must prove it.
+        (live / "jarvis_hud.py").write_bytes(text.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, ["bench.patch"], show=show, repo=REPO, state_patches=[])
+        check("a second plan sees bench.patch ALREADY_PRESENT and stages nothing",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"], (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -3915,7 +4039,8 @@ def main():
                t_a_mid_apply_failure_rolls_back_and_prints_the_backup,
                t_a_plugin_failure_rolls_back_the_already_written_files,
                t_a_probe_failure_keeps_the_complete_write_and_names_the_backup,
-               t_cli_rollback_restores_from_a_backup_folder):
+               t_cli_rollback_restores_from_a_backup_folder,
+               t_the_bench_patch_is_carried_not_false_greened):
         fn()
     print()
     if FAILED:

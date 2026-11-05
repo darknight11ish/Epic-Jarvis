@@ -342,6 +342,116 @@ and 607 rows in `jarvis-data-snapshots`. (That was 2026-10-13, before the
 destination became the folder you choose - see "Where it lands" below for where
 the runs go now and what the task has to be refreshed to.)
 
+**A note on the clock, because the numbers look inconsistent.** The task is
+registered for 03:00, and Windows reports the next run as **02:00**. Both are
+right: the trigger is stored in local *standard* time, so it fires at 03:00
+while daylight saving is in effect and at 02:00 once it ends. That is Windows
+behaving normally, not a second timer. It is mentioned only so that nobody
+spends an evening chasing the hour.
+
+## The four weekly runs that failed without saying so (2026-11-04)
+
+This is the failure this file did not describe, found on the PC on 2026-11-04.
+
+**What it looked like.** The backup folder's `last-run.txt` still said `OK` from
+**2026-10-25**, and held a sealed snapshot from that morning. Beside it sat a
+`.partial-msiqbffm.partial` entry that showed as 0 bytes in a folder listing and
+was dated **2026-11-01 03:00:01**. Task Scheduler said the task's last run was
+2026-11-01 03:00:00 with **LastTaskResult `1`** - a failure. So the runs on
+2026-11-01 (and every Sunday after) failed, and the folder went on saying `OK`.
+
+**The cause was a path length, not a passphrase or a lock.** On 2026-10-30 a new
+folder appeared in `~/.openjarvis`: **`apps/`**, holding a generated Android
+project with a Gradle build tree and a `.git` in it. One file inside it -
+
+```
+~/.openjarvis/apps/.tasks/field-test-app-.../app/build/intermediates/
+  desugar_graph/debug/dexBuilderDebug/out/currentProject/jar_.../graph.bin
+```
+
+- is a **235-character path where it lives**, which is why nothing else on the
+PC ever complained about it. A snapshot is built inside the destination in a
+`.partial-XXXXXXXX.partial` folder, and that name alone is 42 characters longer,
+so the same file asked for a **274-character destination path**. Windows has
+long paths switched off on this PC (`LongPathsEnabled = 0`), and the copy came
+back as:
+
+```
+FileNotFoundError: [WinError 3] The system cannot find the path specified
+```
+
+which reads like a missing folder and is really a name that is too long. 12 of
+the 339 files were over the limit. The copy died on the 46th and took the run
+with it.
+
+**Why nobody was told.** `cmd_backup` caught `Refused` and nothing else, so an
+`OSError` went straight out of `main()`. The task runs `pythonw.exe`, which has
+no console, so the traceback went nowhere at all. Nothing wrote `last-run.txt`,
+nothing removed the half-built `.partial` folder, and the only witness was the
+task's own result code. It would have done that every Sunday for ever.
+
+**What is fixed, in `tools/jarvis_data_backup.py`:**
+
+* **the cause**: a destination path over `MAX_WINDOWS_PATH` now gets Windows'
+  own `\\?\` prefix (`_long_path`), so the copy succeeds instead of crashing.
+  This is needed in every place the tool reads its own snapshot back, not only
+  the copy - the first attempt at this fix still failed at the **sealing** step,
+  which walks the same files;
+* **one file cannot take the snapshot down**: a file that will not copy becomes
+  a `PROBLEM` in the manifest and the snapshot is kept as `-INCOMPLETE`. A run
+  that did not verify now says so instead of disappearing;
+* **every way out writes a record**: `last-run.txt` saying `FAILED` reaches the
+  destination **and** the installed folder, however the run ends - a refusal, an
+  `OSError`, a crash, a killed task. It used to be written only into the
+  destination, so an unplugged destination left an older `OK` standing in the
+  installed folder: a failed run looking like a pass;
+* **it cleans up after itself**: a failed run removes its own half-built
+  folder, and a new run clears any `.partial-XXXXXXXX.partial` left by a killed
+  one. That matches this tool's own name shape and nothing else;
+* **sealing failures no longer leave the data readable**: `_seal_folder` used to
+  be wrapped in `except Refused`, so a full disk left the whole snapshot sitting
+  there in the clear while the run reported failure;
+* **read-only files are deleted properly**: git marks its object files
+  read-only, and `shutil.rmtree` stopped on the first one - which is why the
+  plaintext copy could not be removed after a successful seal.
+
+**Measured after the fix, on this PC, into a temporary folder:** a full sealed
+snapshot completed in **5.3 s** - `jarvis-snap-20261104-161013.jba`,
+**2,669,292 bytes**, 20 databases, 5,724 rows, **341 other files** - and
+`verify` reported `every database opens and matches its manifest`, exit 0. The
+size is larger than the 264 KB of 2026-10-25 because `apps/` did not exist then;
+nothing was being left out before, it simply was not there.
+
+**What still has to be done on this PC**, because a fix in the repository does
+not change the copy the timer runs:
+
+```powershell
+# 1. replace the installed copy with the fixed one and re-register the task
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\tools\jarvis_data_backup.py" install --register-task
+
+# 2. remove the half-built folder the failed run left (this one, by name)
+Remove-Item -LiteralPath 'C:\Users\pcadmin\Documents\Jarvis Backups\.partial-msiqbffm.partial' -Recurse -Force
+
+# 3. make sure the next run really happened, after 2026-11-08 02:00
+Get-Content 'C:\Users\pcadmin\Documents\Jarvis Backups\last-run.txt'
+Get-ScheduledTaskInfo -TaskName 'Jarvis Personal Data Backup' | Select-Object LastRunTime,LastTaskResult
+```
+
+Step 1 must come before 2 only in the sense that both must happen before the
+next Sunday; the partial folder is inert either way, and deleting it is tidying,
+not a repair.
+
+**One thing this PC cannot tell us.** `Microsoft-Windows-TaskScheduler/Operational`
+is **disabled** on this machine, so there are no event-log entries for
+2026-11-01 at all. The exit code above is the task's own `LastTaskResult`, and
+the cause is a reproduction - the same source, the same destination depth, the
+same `WinError 3` - not an event log. Turning that log on would make the next
+such failure much cheaper to diagnose:
+
+```
+wevtutil sl Microsoft-Windows-TaskScheduler/Operational /e:true
+```
+
 ## What is kept, and for how long
 
 **The newest 4**, and older ones are deleted as new ones arrive. Weekly, that
@@ -349,10 +459,13 @@ is about a month of history: enough to walk back a bad write noticed a
 fortnight later, and few enough that this cannot pile up the way the code
 backups did (23 of those had to be pruned by hand on 2026-10-13).
 
-Retention only ever deletes things this tool made, named `jarvis-snap-*`.
-Your `.jbak` files and the older plain copy are not touched by it - the test
-suite proves that by putting both in the folder and keeping six snapshots
-beside them.
+Retention only ever deletes things this tool made: entries named
+`jarvis-snap-*`, and its own half-built `.partial-XXXXXXXX.partial` folders
+(the exact name `tempfile.mkdtemp` gives them - a `.something.partial` written
+by any other program does not match and is left alone). Your `.jbak` files and
+the older plain copy are not touched by it - the test suite proves that by
+putting both in the folder, along with a stranger's `.partial` file, and
+keeping six snapshots beside them.
 
 ## Putting it back, and the test that was actually run
 

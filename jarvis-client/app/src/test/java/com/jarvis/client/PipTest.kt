@@ -452,15 +452,18 @@ class PipTest {
         // Measured on main before this slice (2026-10-30): five services carry
         // a foregroundServiceType, each for its own already-shipped job. A PiP
         // window does not keep anything alive that is not already alive (§1),
-        // so this number must not move FOR THIS FEATURE.
+        // so this number must not move.
         //
-        // SIX since 2026-11-04, and not by PiP: `service/CallRecordService.kt`
-        // is the call recorder's own microphone service - its own feature, its
-        // own pull request and its own notification. The pin stays an exact
-        // number precisely so the next slice has to come here and say which
-        // service it was and why.
+        // SEVEN since 2026-11-04, and neither is this feature: hands-free added
+        // `HandsfreeService` (foregroundServiceType="microphone") because a
+        // card can arrive while the app is in the background and the answer
+        // window has to record, and call recording added its own
+        // `CallRecordService` (also "microphone") - each its own feature, own
+        // pull request and own notification. Picture-in-picture still adds
+        // none - that is what this test is for - and the exact count is the pin
+        // that makes an unannounced eighth visible.
         assertEquals("a service gained or lost a foregroundServiceType",
-            6, Regex("foregroundServiceType=").findAll(manifest).count())
+            7, Regex("foregroundServiceType=").findAll(manifest).count())
         // And the sixth really is the recorder, not a second microphone for
         // the window: it is declared with the microphone type and the window
         // is not mentioned beside it.
