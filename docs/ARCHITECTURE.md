@@ -2906,6 +2906,17 @@ backend routes, in both directions; the rest are listed here only.
   editor, so a phone toggle for `/api/skills/state` is the one piece of this
   that could reasonably go on both apps next - `install` and `edit` should
   not, for the reasons above.
+- **A turned-off skill can be removed on the PC only, and the phone must not
+  remove one** (2026-11-05; JARVIS-API §178). The copy the PC's menu parks in
+  `skills-off\` is deleted by `POST /api/skills/state {"remove": true}` - the
+  Settings card's own Remove on a turned-off row - because
+  `jarvis_skills.uninstall()` resolves a name only under the skills folder, so
+  that copy was beyond every removal door in either app. The phone gains no
+  door to it: its list never shows the skill, and there is deliberately no
+  route that would let a client delete a folder it cannot see. The phone's
+  Remove stays exactly what it always was - ONE installed skill, after its
+  "are you sure?" - so what is one-sided here is the delete of a parked copy,
+  not removal itself.
 - **The phone's mic press does not check the voice print, and the desktop's
   talk button still does - one-sided on purpose** (2026-11-02; the owner's
   words: *"when i do the mic press to make a short verbal message to jarvis,

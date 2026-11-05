@@ -44,6 +44,7 @@ export const ACTIONS = [
   "import_scan",
   "enable",
   "disable",
+  "remove_off",
   "edit",
 ];
 

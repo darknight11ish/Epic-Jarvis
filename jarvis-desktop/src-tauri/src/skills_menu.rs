@@ -24,6 +24,14 @@
 //!   skill is installed again from `skills-off\`.
 //! * `disable`      - `POST /api/skills/state {"on": false}`: immediate, never
 //!   held - it only takes an ability away, and nothing is deleted.
+//! * `remove_off`   - `POST /api/skills/state {"remove": true}`: deletes ONE
+//!   skill that is ALREADY turned off, i.e. the copy this menu parked in
+//!   `skills-off\`. Immediate and never held: it is out of the load path
+//!   already, so it only takes something away. It is the one door to that
+//!   copy - `brain_remove_skill` cannot see `skills-off\`, because
+//!   `jarvis_skills.uninstall` resolves a name only under the skills folder -
+//!   and the PC refuses an installed name outright, so the two doors never
+//!   reach the same folder.
 //! * `edit`         - `POST /api/skills/edit`: the same scanner and the same
 //!   ONE card, for a SKILL.md the owner changed here.
 //!
@@ -170,6 +178,23 @@ pub(crate) fn plan(
                 },
             ))
         }
+        "remove_off" => {
+            // Deleting a skill this menu itself parked in `skills-off\`. That
+            // copy is beyond `brain_remove_skill` (the PC resolves an uninstall
+            // name only under the skills folder), so without this a skill the
+            // owner switched off could be switched back on and never got rid
+            // of. No card and never held: it is already out of the load path,
+            // so this only takes a capability away, exactly like `disable`.
+            let skill = text(name);
+            if skill.is_empty() {
+                return Err("Name a skill first.".to_string());
+            }
+            Ok(Plan::Post(
+                STATE_PATH,
+                serde_json::json!({ "name": skill, "remove": true }),
+                WRITE_TIMEOUT,
+            ))
+        }
         "edit" => {
             let skill = text(name);
             if skill.is_empty() {
@@ -259,7 +284,7 @@ fn stale(app: &AppHandle) -> bool {
     app.state::<crate::stream::StreamState>().link().stale
 }
 
-/// The skills menu: one command, nine actions, all of them the PC's.
+/// The skills menu: one command, ten actions, all of them the PC's.
 #[tauri::command]
 pub async fn skills_menu(
     app: AppHandle,
@@ -344,6 +369,7 @@ mod tests {
             "import_scan",
             "enable",
             "disable",
+            "remove_off",
             "edit",
         ] {
             assert!(
@@ -372,12 +398,50 @@ mod tests {
             "scan",
             "import_scan",
             "disable",
+            "remove_off",
         ] {
             assert!(!held(action), "{action} must not be held");
         }
         for action in ["install", "enable", "edit"] {
             assert!(held(action), "{action} raises a card and must be held");
         }
+    }
+
+    #[test]
+    fn a_turned_off_skill_is_deleted_on_the_state_route_and_nowhere_else() {
+        // The off list's Remove. It must be the SAME route that parked the
+        // folder (the PC's own state door), with `remove` and no `on`, so there
+        // are two questions on one route rather than a second removal path for
+        // an installed skill - that one is still `brain_remove_skill`.
+        match plan(
+            "remove_off",
+            &none(),
+            &none(),
+            &Some("a-skill".into()),
+            &none(),
+            false,
+        ) {
+            Ok(Plan::Post(route, body, _)) => {
+                assert_eq!(route, "/api/skills/state");
+                assert_eq!(body["name"], serde_json::json!("a-skill"));
+                assert_eq!(body["remove"], serde_json::json!(true));
+                assert!(
+                    body.get("on").is_none(),
+                    "remove and on are opposite questions; never both"
+                );
+            }
+            other => panic!("{other:?}"),
+        }
+        assert!(plan(
+            "remove_off",
+            &none(),
+            &none(),
+            &Some("  ".into()),
+            &none(),
+            false
+        )
+        .unwrap_err()
+        .contains("Name a skill"));
     }
 
     #[test]
