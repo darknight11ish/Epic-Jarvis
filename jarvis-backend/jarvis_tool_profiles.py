@@ -45,31 +45,28 @@ __all__ = [
     "names", "profile", "answer_about", "context_for",
 ]
 
-#: The four switch states a tool can be in, and what each one MEANS here.
-#: Decided from the shipped config path, never from taste:
+#: The three switch states a tool can be in, and what each one MEANS here.#: Decided from the shipped config path, never from taste:
 #:   always-available - offered with no owner action, because it is in the
 #:                      shipped `[tools].enabled` list (or rides with a tool
 #:                      that is: the two web-search approval tools).
-#:   switchable       - a real in-app Settings -> Tools switch. Off until the
-#:                      owner turns it on.
-#:   settings-file    - no in-app switch at all: the only way in is a name
-#:                      typed into `[tools].enabled` in jarvis-framework.toml.
-#:   off-by-default   - its own module switch ships OFF and decides whether the
-#:                      tool is offered at all, whatever the tool list says.
-#:
-#: 2026-11-04, main's 71d4d6a01 (the owner: "Switch any of them on in the app"):
-#: EVERY ability the model can be offered now has an in-app switch, 48 of them,
-#: all but `jarvis_asks_first.NOT_A_SWITCH`'s three. So `settings-file` is a
-#: real state with NO tool in it today. It is kept for a future tool whose only
-#: way in really is the file, and this paragraph says plainly that it is empty
-#: now, so a reader is never told a state is in use when it is not.
-#: `switchable` therefore no longer
-#: means "the only switchable one": the 13 tools that are already in the shipped
-#: list are `always-available` (no action needed, and they can be switched OFF
-#: from the page), and `rea_investigate` is `off-by-default` because its own
-#: `[rea] enabled` ships false and outranks the tool list.
-TIER_VALUES = ("switchable", "settings-file", "always-available", "off-by-default")
-
+#:   switchable       - a real in-app switch on Settings, What asks first,
+#:                      "Let the AI use this" (jarvis_asks_first.
+#:                      TOOLS_SWITCHABLE: 48 of the 51 tools at 2026-11-04).
+#:                      Off until the owner turns it on.
+#:   off-by-default   - jarvis_asks_first.NOT_A_SWITCH: its own module switch
+#:                      (or the tool it rides with) ships OFF and decides
+#:                      whether the tool is offered at all, whatever the tool
+#:                      list says.
+#: There is deliberately no fourth state. "No in-app switch, add it to
+#: `[tools].enabled` by hand" WAS a real class until 2026-11-04, and the owner
+#: reversed it: every tool the model can be offered now has a switch on the
+#: Tools page, so a profile claiming otherwise would be false. `switchable`
+#: therefore no longer means "the only switchable one": the 13 tools that are
+#: already in the shipped list are `always-available` (no action needed, and
+#: they can be switched OFF from the page), and `rea_investigate` is
+#: `off-by-default` because its own `[rea] enabled` ships false and outranks the
+#: tool list.
+TIER_VALUES = ("switchable", "always-available", "off-by-default")
 #: What a profile may say it TOUCHES. A small closed vocabulary, so the test can
 #: check a claim against the module instead of accepting any prose. A tool that
 #: reaches more than one reads as a comma-separated list ("files, phone"), and
@@ -1715,8 +1712,7 @@ PROFILES: dict = {
                 "Android app, a captured session or a database - what it is built "
                 "from, without running it - and can also run ONE bounded live "
                 "capture of a process, a browser, an Electron app or a native "
-                "window when reading the files is not enough.",
-        "gives": [
+                "window when reading the files is not enough.",        "gives": [
             "See what a JavaScript or Electron program is made of",
             "Inspect an APK, or open a native binary and read its overview",
             "Read a stored web capture (HAR or SAZ) or a SQLite database",
@@ -1725,8 +1721,7 @@ PROFILES: dict = {
             "app or a native window when reading the files is not enough",
             "Ask the doctor action what this PC is actually able to inspect",
         ],
-        "touches": "files, process",
-        "limits": [
+        "touches": "files, process",        "limits": [
             "Its own switch ships OFF (`[rea] enabled = false`) and outranks "
             "everything else; its name must also be in `[tools].enabled`, which the "
             "\"Inspecting a program, app or binary with REA\" row in Settings -> "
@@ -1739,8 +1734,7 @@ PROFILES: dict = {
             "Jarvis may look in\"; the module refuses by name only the six phone "
             "commands that would install, remove, push a file to, start or stop "
             "something on the phone, because the owner already has a separate "
-            "approved path for those",
-            "Targets must be inside \"Folders Jarvis may look in\" and must not be "
+            "approved path for those",            "Targets must be inside \"Folders Jarvis may look in\" and must not be "
             "a private place - a credentials store, a browser profile or Jarvis's "
             "own data folder is refused",
             "The pinned REA package is a one-time hand install at exactly 6.7.0 "
@@ -2063,7 +2057,6 @@ FAMILIES: dict = {
 _TIER_SENTENCE = {
     "always-available": "On by default.",
     "switchable": "Off until you switch it on in the app.",
-    "settings-file": "Off until you add it to the settings file yourself.",
     "off-by-default": "Off until you turn on its own switch.",
 }
 
