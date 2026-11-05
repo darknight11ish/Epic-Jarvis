@@ -22,6 +22,7 @@ auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa37
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10Z	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
 auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14Z	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route
 auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44Z	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
+bench.patch	bench/d5cf03f.patch	d5cf03f6cdfa36168230309274d47ff975a975b2	2026-11-04T09:37:20-08:00	feat(bench): measure token speed on this PC - phase 1 backend
 big-coder.patch	big-coder/f13d795.patch	f13d795116434212bccbf09fe36402e0f5b750fd	2026-10-11T07:54:49-07:00	the 30B coder: both cards, with Jarvis paused
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14Z	Big model: big-model.patch, the install lists, and parity
 bind-wildcard.patch	bind-wildcard/90b5682.patch	90b56829c140336a1591ce45c10675ace8cbc02b	2026-09-24T00:20:54Z	Bind address: ship the backend half as a new patch, not an edit

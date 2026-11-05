@@ -477,9 +477,13 @@ class MenuVisibilityTest {
         // own Edit HUD, a display preference rather than a feature switch, so
         // there is no menu to hide it under and the row is always drawn. Its
         // CARDS are menu ids and keep their own places; the EDITOR row has none.
+        // "Hands-free" (2026-11-04) is the same shape as "Home screen": the
+        // mode is phone-only in this slice - the PC's half of the feature is the
+        // other lane's - so there is no catalogue menu id to hide it under and
+        // its row is always drawn.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify", "app-control",
-                "files", "protection", "model-lane", "edit-hud")
+                "files", "protection", "model-lane", "edit-hud", "handsfree")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

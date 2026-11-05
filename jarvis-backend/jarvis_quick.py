@@ -1670,6 +1670,32 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if _REACH.fullmatch(s):
         return Intent("reach_list")
 
+    # --- the three data-backed self-questions and the refresh (2026-11-04) -----
+    # docs/SELF-AWARENESS.md said these already worked and three of the four
+    # answered nothing, so the sentence went to the model and was invented.
+    # Before the reach list is not needed (that one has its own words); after it
+    # so "what are you connected to" keeps the reach answer it has always had.
+    got = _self_answers(s)
+    if got is not None:
+        return got
+
+    # --- the twelve pair rules (2026-11-04) ----------------------------------
+    # A sentence that names TWO things and asks what they do together. Before
+    # the settings grammar on purpose: "does web search use ask before every
+    # search" names two switches, and the grammar must not take half of it.
+    # Only the table's own whole sentences match; anything else falls through.
+    got = _pair_question(s)
+    if got is not None:
+        return got
+
+    # --- ANY two real features/settings (2026-11-04, SA-3 part B) -------------
+    # After the twelve proven pairs, so a pair with a rule always keeps its own
+    # answer. This only answers when at least one half is a real name here, or
+    # the sentence says it is about Jarvis; ordinary conversation falls through.
+    got = _two_entity_question(s)
+    if got is not None:
+        return got
+
     # --- "who are you?" (jarvis_identity.py, feasibility I131) ---------------------
     if _WHO_ARE_YOU.fullmatch(s):
         return Intent("identity_help")
@@ -1706,6 +1732,14 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # and "stop the animal's nodding" are ours; a tail that names no animal
     # option falls through untouched.
     got = _animal(s)
+    if got is not None:
+        return got
+
+    # --- a change that names TWO settings the pair table calls a pair --------
+    # (2026-11-04) - BEFORE the settings grammar, so the pair sentence is not
+    # half-matched into a single-setting change. Nothing is changed: one card
+    # per change is the rule, and the answer says the interaction instead.
+    got = _settings_pair_change(s)
     if got is not None:
         return got
 
@@ -7699,6 +7733,30 @@ _PHONE_CONTROL = re.compile(
     r"(?:tap|swipe|control|unlock|use)\s+(?:on\s+)?my\s+phone\b.*"
     r"|(?:send|write|type)\s+(?:a\s+|an\s+)?(?:text|message|sms)\s+(?:on|from|with)\s+"
     r"my\s+phone\b.*")
+#: The other capability subjects (2026-11-04, the self-awareness audit's gap 9).
+#: Only three subjects had an honest off-answer; files, screen and the calendar
+#: had none, so "can you read my files" went to the model. Each is checked
+#: against the SAME live tool set the three above use - the one the turn reads -
+#: so an enabled tool keeps its own real path and nothing is refused that works.
+#: The shapes are the TIDIED sentence ("can you " is stripped before this runs),
+#: exactly like _EMAIL_READ below.
+_FILES_READ = re.compile(
+    r"(?:read|see|open|access|search)\s+(?:any\s+of\s+)?(?:my|the)\s+"
+    r"(?:files|documents|folders|docs)\b.*"
+    r"|do\s+you\s+have\s+access\s+to\s+(?:my|the)\s+(?:files|documents|folders)\b.*")
+_SCREEN_SEE = re.compile(
+    # "look at my screen" AND "read my screen" are DELIBERATELY absent: both
+    # are PR #691's own Live reads (JARVIS-API.md section 153; the phrases are
+    # pinned in test_voice_reflex.py's READS_691 through
+    # jarvis_voice_ui.SCREEN_ASK) and this fast path must not intercept them.
+    # What is left is the CAPABILITY question - "can you see my screen", "do
+    # you have access to my screen" - which #691 does not answer and the model
+    # used to invent. An imperative "read" is #691's, never this one's.
+    r"see\s+(?:my|the)\s+(?:screen|desktop|monitor)\b.*"
+    r"|do\s+you\s+have\s+access\s+to\s+(?:my|the)\s+(?:screen|desktop|monitor)\b.*")
+_CALENDAR_ACCESS = re.compile(
+    r"(?:read|see|check|access)\s+(?:my|the)\s+(?:calendar|calendars|schedule)\b.*"
+    r"|do\s+you\s+have\s+access\s+to\s+(?:my|the)\s+(?:calendar|calendars|schedule)\b.*")
 _JOBS_DOOR = re.compile(
     r"(?:start|create|make|begin|run|queue)\s+(?:me\s+)?(?:a\s+|an\s+)?"
     r"(?:background\s+|long\s+)?job\b.*"
@@ -8020,6 +8078,41 @@ def _honest_chat_prompt(s: str) -> Optional[Intent]:
         return Intent("honest_chat", {"shape": "capability_off",
                                       "subject": "Tapping or controlling your phone from chat",
                                       "action": "control_phone"})
+    # -- the other three subjects (2026-11-04, audit gap 9) -------------------
+    # The SAME live tool set decides, so a tool that IS offered keeps its own
+    # real path and this cannot refuse an ability the owner has. Each subject
+    # gets BOTH answers: a real "yes" naming the tools that are on, and the
+    # capability_off refusal when they are not - so "can you do X" is never
+    # answered by the model either way.
+    if _FILES_READ.fullmatch(s):
+        on = [n for n in ("file_read", "my_files") if n in tools]
+        if on:
+            return Intent("honest_chat", {"shape": "capability_on",
+                                          "subject": "Reading your files from chat",
+                                          "tools": on})
+        return Intent("honest_chat", {"shape": "capability_off",
+                                      "subject": "Reading your files from chat",
+                                      "action": "file_read"})
+    if _CALENDAR_ACCESS.fullmatch(s):
+        if "calendar_read" in tools:
+            return Intent("honest_chat", {"shape": "capability_on",
+                                          "subject": "Reading your calendar from chat",
+                                          "tools": ["calendar_read"]})
+        return Intent("honest_chat", {"shape": "capability_off",
+                                      "subject": "Reading your calendar from chat",
+                                      "action": "calendar_read"})
+    if _SCREEN_SEE.fullmatch(s):
+        # Seeing the screen is a SETTING, not a model tool: picture mode (the
+        # `screen_picture` switch) is what reads it. On -> the honest yes, off ->
+        # that switch's own words, unreadable -> step aside and say nothing.
+        off = _switch_is_off("picture-mode")
+        if off is True:
+            return Intent("honest_chat", {"shape": "setting_off", "row": "picture-mode"})
+        if off is False:
+            return Intent("honest_chat", {"shape": "capability_on",
+                                          "subject": "Seeing your screen from chat",
+                                          "tools": ["picture mode"]})
+        return None
     # -- app-only doors: jobs and spending are read in the apps -------------
     if _JOBS_DOOR.fullmatch(s):
         return Intent("honest_chat", {"shape": "feature_door", "row": "jobs"})
@@ -8097,6 +8190,20 @@ def _run_honest_chat(f: dict) -> Result:
         subject = str(f.get("subject") or "That")
         action = str(f.get("action") or "")
         return Result(_tool_off_words(subject, action), "honest_chat")
+    if shape == "capability_on":
+        # The honest YES (2026-11-04): the ability really is offered, and the
+        # names come from the LIVE read that said so - never a typed list.
+        subject = str(f.get("subject") or "That")
+        names = [str(n) for n in (f.get("tools") or ()) if str(n or "").strip()]
+        said = f"Yes - {subject[0].lower() + subject[1:] if subject else 'that'} is "
+        said += "available to me right now"
+        if names:
+            said += ": " + _self_list(names) + " " + (
+                "is" if len(names) == 1 else "are") + " switched on in your settings"
+        said += (". Being offered does not skip an approval: Settings, \"What asks "
+                 "first\" has the rule for each action, and nothing was read or "
+                 "changed by this answer.")
+        return Result(said, "honest_chat")
     if shape == "feature_door":
         row_id = str(f.get("row") or "")
         row, _ = _read_switch(row_id)
@@ -9815,6 +9922,168 @@ _REACH = re.compile(
 
 REACH_MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 "
                  "on the PC.")
+
+#: THE THREE DATA-BACKED SELF-QUESTIONS docs/SELF-AWARENESS.md promised and the
+#: code did not answer (2026-11-04 self-awareness audit, gap 4). Each is a
+#: WHOLE sentence, and each is answered from the module that already owns the
+#: fact - jarvis_agent.TOOLS + the live [tools].enabled, jarvis_asks_first's
+#: own view, jarvis_reach's own view - so none of them can invent an ability.
+#: "refresh your abilities" is the fourth: it re-reads the self portrait, which
+#: changes nothing and restarts nothing.
+_SELF_TOOLS = re.compile(
+    r"(?:what|which)\s+tools\s+(?:do\s+you|does\s+jarvis|have\s+you|are\s+you)\s+"
+    r"(?:have|got|use|using|offered)\b.*"
+    r"|what\s+tools\s+(?:can\s+you\s+use|are\s+you\s+using|do\s+you\s+use|"
+    r"do\s+you\s+have)\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?tools\s*\??$")
+
+_SELF_TOOLS_ASK = re.compile(
+    r"(?:which|what)\s+(?:of\s+)?(?:your|the|jarvis'?s?)\s+tools\s+"
+    r"(?:ask|asks|need|needs)\b.*"
+    # A bare "which tools ask ..." only when it names APPROVAL. Without this
+    # tail "which tools ask for a password" would be answered with the
+    # asks-first list - a different question.
+    r"|(?:which|what)\s+tools\s+(?:ask|need\s+my\s+approval)\s+"
+    r"(?:before|first|for\s+my|me\b)\b.*"
+    r"|(?:do|does)\s+(?:any\s+of\s+)?(?:your|the)\s+tools\s+ask\b.*")
+
+_SELF_CONNECTED = re.compile(
+    r"what\s+(?:is|are)\s+(?:currently\s+)?connected(?:\s+(?:right\s+)?now)?\s*\??$"
+    r"|what\s+have\s+you\s+got\s+connected\s*\??$"
+    r"|what\s+is\s+hooked\s+up\s*\??$")
+
+_SELF_REFRESH = re.compile(
+    r"(?:refresh|re-?read|reload)\s+(?:your|jarvis'?s?)\s+"
+    r"(?:abilities|capabilities|features|inventory|functions?|self)\b.*"
+    r"|refresh\s+abilities\s*\??$")
+
+# ---- the six subsystems that had no deterministic answer (2026-11-04) ------
+#
+# THE MEASURED GAP (self-awareness audit, gap 9): "what are you running on",
+# "what is your context window", "how fast are you", "how much memory do you
+# have", "how much storage is left" and "what jobs can you schedule" all went
+# to the language model, although the answer is measured on this PC by a module
+# that already serves a route. Each shape below is a WHOLE sentence and each
+# answer reads that module's own reader at answer time - the same one its route
+# uses - so there is no second source of truth and no typed number:
+#
+#   hardware, model, card, preset  jarvis_hardware.status(), jarvis_presets
+#   context and speed              jarvis_power_switch.lane_context() /
+#                                  jarvis_model_knowledge.bench_for()
+#   memory                         jarvis_self_portrait.stores()
+#   storage                        jarvis_pc_facts (the SAME pc_facts intent
+#                                  its other phrasings already answer through)
+#   scheduled jobs                 jarvis_schedule.KINDS / jarvis_jobs.handlers()
+#
+# A value that cannot be read says so and is never turned into a made-up
+# number. All six are read-only and are listed in READ_ONLY_INTENTS.
+
+#: "what are you running on", "what hardware do you have", and the card forms.
+#: "which graphics card are you USING" is deliberately answered with the CARD
+#: facts rather than a lane claim: the lane state is `both_cards`'s question.
+_SELF_RUNNING = re.compile(
+    r"(?:what|which)\s+(?:are\s+you|is\s+jarvis|does\s+jarvis)\s+"
+    r"(?:running\s+on|run\s+on)\b.*"
+    r"|what\s+hardware\s+(?:do\s+you|does\s+jarvis|have\s+you)\s+(?:have|got|use|run)\b.*"
+    r"|what\s+hardware\s+are\s+you\s+(?:on|using|running)\b.*"
+    r"|(?:what|which)\s+(?:graphics\s+|video\s+)?cards?\s+"
+    r"(?:do\s+you|does\s+jarvis|have\s+you)\s+(?:have|got)\b.*"
+    r"|(?:what|which)\s+(?:graphics\s+card|gpu|video\s+card)\s+(?:are\s+you|is\s+jarvis)\s+"
+    r"(?:using|running\s+on|on)\b.*"
+    r"|(?:what|which)\s+(?:graphics\s+card|gpu|video\s+card)\s+do\s+you\s+use\b.*")
+
+#: "what is your context window", "how much context do you have".
+_SELF_CONTEXT = re.compile(
+    r"what\s+(?:is|s)\s+your\s+context(?:\s+(?:window|size|length))?\b.*"
+    r"|how\s+(?:much|big|large|long)\s+(?:is\s+)?(?:your\s+)?context"
+    r"(?:\s+(?:window|size|length))?\s*(?:do\s+you\s+have|have\s+you\s+got|is\s+it)?\b.*"
+    r"|what\s+context\s+(?:window|size|length)\s+do\s+you\s+"
+    r"(?:have|use|run)\b.*")
+
+#: "how fast are you", "how many tokens per second".
+_SELF_SPEED = re.compile(
+    r"how\s+fast\s+(?:are\s+you|do\s+you\s+(?:run|go|answer)|is\s+jarvis|"
+    r"does\s+jarvis\s+(?:run|go|answer))\b.*"
+    r"|how\s+many\s+tokens?\s+(?:per|a|each)\s+second\b.*"
+    r"|what(?:'s|\s+is)\s+your\s+(?:tokens?\s+(?:per|a)\s+second|speed|tok/s)\b.*"
+    r"|how\s+fast\s+(?:is\s+)?(?:the|your)\s+model\b.*")
+
+#: "how much memory do you have", "how many things do you remember". The
+#: member forms say "you"/"jarvis" so "how much memory do I have" keeps the
+#: PC-facts RAM answer it has always had.
+_SELF_MEMORY = re.compile(
+    r"how\s+much\s+memory\s+(?:do\s+you|does\s+jarvis|have\s+you)\s+"
+    r"(?:have|got|keep|hold|store)\b.*"
+    r"|how\s+many\s+(?:things|facts|memories)\s+(?:do\s+you|does\s+jarvis|have\s+you)\s+"
+    r"(?:remember|know|have|keep|hold|store)\b.*"
+    # The BARE sentence only: "what do you remember about my sister" is a
+    # question about the facts themselves, not about how many are kept.
+    r"|what\s+do\s+you\s+remember\s*$")
+
+#: "how much storage is left", "how much disk space". Routed to the SAME
+#: pc_facts answer the storage question already has (`space_all`), so there is
+#: one disk reader and one sentence, not a second one in this file. The
+#: "my storage" forms are deliberately ABSENT: "what is my storage on Google"
+#: is not this PC's disk.
+#:
+#: The "is there" form is a WHOLE SENTENCE here, with no tail. A sentence that
+#: names a device - "how much free disk space is there ON MY PC" - is PC help's
+#: own disk question (`_PC_HELP` "disk", which answers free GB and % per drive),
+#: and `_self_answers` runs BEFORE `_pc_help`, so `.*` there intercepted it
+#: (test_pc_help.py). Without the tail it falls through to that existing route.
+_SELF_STORAGE = re.compile(
+    r"how\s+much\s+(?:free\s+)?(?:storage|space|disk\s+space|disk|room)\s+"
+    r"(?:is\s+(?:left|free|available)|do\s+(?:you|we)\s+have|have\s+you\s+got)\b.*"
+    r"|how\s+much\s+(?:free\s+)?(?:storage|space|disk\s+space|disk)\s+"
+    r"(?:is\s+there|remains?|left)(?:\s+(?:left|available|free))?"
+    # The bare question: "how much disk space", "how much storage left".
+    r"|how\s+much\s+(?:free\s+)?(?:storage|space|disk\s+space|disk)(?:\s+left)?\s*$")
+
+#: "what jobs can you schedule", "what can you schedule".
+_SELF_JOBS = re.compile(
+    r"what\s+(?:jobs|things|tasks)\s+(?:can|could)\s+you\s+"
+    r"(?:schedule|run\s+on\s+a\s+schedule|set\s+up)\b.*"
+    r"|what\s+can\s+(?:you|jarvis)\s+(?:schedule|run\s+on\s+a\s+schedule)\b.*"
+    r"|what\s+(?:can|could)\s+you\s+schedule\b.*"
+    r"|what\s+(?:scheduled|recurring)\s+(?:jobs|things|tasks)\s+"
+    r"(?:can\s+you\s+(?:run|schedule)|do\s+you\s+have)\b.*")
+
+SELF_TOOLS_MISSING = ("Your PC's Jarvis cannot list its tools yet - run apply-patches.ps1 "
+                      "on the PC.")
+
+
+def _self_answers(s: str) -> Optional[Intent]:
+    """The promises docs/SELF-AWARENESS.md made, answered with no model.
+
+    Each shape is a whole sentence and each answer reads the module that owns
+    the fact (see the three `_run_*` functions below). A near miss - "what
+    tools do I need for this job" - names no "you"/"jarvis" and falls through
+    exactly as before.
+    """
+    if _SELF_TOOLS_ASK.fullmatch(s):
+        return Intent("tools_asking")
+    if _SELF_TOOLS.fullmatch(s):
+        return Intent("tools_inventory")
+    if _SELF_CONNECTED.fullmatch(s):
+        return Intent("connected_list")
+    if _SELF_REFRESH.fullmatch(s):
+        return Intent("self_refresh")
+    # The six that only the language model answered before (2026-11-04).
+    if _SELF_RUNNING.fullmatch(s):
+        return Intent("how_running")
+    if _SELF_CONTEXT.fullmatch(s):
+        return Intent("how_context")
+    if _SELF_SPEED.fullmatch(s):
+        return Intent("how_fast")
+    if _SELF_MEMORY.fullmatch(s):
+        return Intent("how_memory")
+    if _SELF_STORAGE.fullmatch(s):
+        # ONE disk reader: the pc_facts answer the other storage phrasings use.
+        return Intent("pc_facts", {"shape": "space_all"})
+    if _SELF_JOBS.fullmatch(s):
+        return Intent("how_jobs")
+    return None
+
 
 SAYABLE_MISSING = ("Your PC's Jarvis cannot list things you can say yet - run "
                    "apply-patches.ps1 on the PC.")
@@ -12839,6 +13108,17 @@ _K_MODELS_LIST = re.compile(
 _K_PRESETS_LIST = re.compile(
     r"(?:what|which)\s+presets?\s+(?:do\s+you\s+have|are\s+there|exist|can\s+i\s+use)\b.*"
     r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?presets?\s*\??$")
+# "the focus preset" is the CHOICE setting `focus_preset`, not a preset named
+# "focus" (2026-11-04, the self-awareness audit's gap 6). Its own answer lists
+# the real preset ROWS and which one is chosen; `_run_preset_detail` would say
+# "There is no preset called focus", which was a denial of something real.
+_K_FOCUS_PRESETS = re.compile(
+    r"(?:what|which)\s+(?:is|are)\s+(?:the\s+|my\s+|your\s+)?focus\s+presets?"
+    r"(?:\s+setting)?\s*\??$"
+    r"|(?:what|which)\s+focus\s+presets?\s+(?:am\s+i\s+using|is\s+chosen|is\s+selected|"
+    r"do\s+i\s+have|are\s+there|can\s+i\s+use)\b.*"
+    r"|(?:what|which)\s+focus\s+presets?\s+(?:is|are)\s+(?:on|active|selected|chosen)\b.*"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+|your\s+|all\s+)?focus\s+presets?\s*\??$")
 _K_PRESET_DETAIL = re.compile(
     r"(?:what\s+does|what\s+is|explain|describe)\s+(?:the\s+)?(.+?)\s+preset"
     r"(?:\s+(?:change|do|mean|load|run|use))?\s*\??$"
@@ -12972,8 +13252,56 @@ def _resolve_model(text) -> str:
     return want if looks_ref else ""
 
 
+def _preset_name_is_a_setting(name: str) -> bool:
+    """True when `name` is a real SETTING's own name, not a preset's.
+
+    "what is the focus preset" is a question about the 22-option choice
+    `focus_preset`; `_K_PRESET_DETAIL` read it as a preset called "focus" and
+    answered "There is no preset called focus" - a denial of something that
+    really exists (2026-11-04 self-awareness audit, gap 6). The settings
+    registry's own exact matcher decides, so no name is typed here, and the
+    sentence falls through to the settings answer that already knows how to
+    explain a choice and read its value.
+    """
+    if not name:
+        return False
+    try:
+        import jarvis_settings_registry as R
+        # The pattern's own name is the word BEFORE "preset" ("focus"), while
+        # the registry's setting is "the focus preset"; try both spellings and
+        # let the registry's exact matcher decide.
+        return any(
+            find(candidate) is not None
+            for find in (R.find_choice_setting, R.find_bool_setting)
+            for candidate in (name, f"{name} preset"))
+    except Exception:                       # noqa: BLE001 - older PC
+        return False
+
+
+def _is_focus_setting_name(name: str) -> bool:
+    """Is this word the `focus_preset` CHOICE setting's own name?"""
+    text = " ".join(str(name or "").strip().split())
+    if not text:
+        return False
+    try:
+        import jarvis_settings_registry as R
+        for candidate in (text, f"{text} preset"):
+            got = R.find_choice_setting(candidate)
+            if got is not None and str(getattr(got, "key", "")) == "focus_preset":
+                return True
+    except Exception:                       # noqa: BLE001 - older PC
+        return False
+    return False
+
+
 def _model_chat(s: str) -> Optional[Intent]:
     """The model/preset question shapes. Never a switch unless the words name one."""
+    # The focus preset is a SETTING first: "what is the focus preset" and "what
+    # model does the focus preset use" both belong to its own answer (2026-11-04,
+    # gap 6). Checked first, because `_K_PRESET_DETAIL` would read it as a preset
+    # called "focus" and `_preset_model_ask` as the model of one.
+    if _K_FOCUS_PRESETS.fullmatch(s):
+        return Intent("focus_presets")
     # FIRST, deliberately: "what model are you using in the coding preset"
     # also fits _K_MODEL_CURRENT's "are you using" prefix, and the preset
     # question must win - it is the one with a fact to quote. The owner's own
@@ -12981,6 +13309,8 @@ def _model_chat(s: str) -> Optional[Intent]:
     # was answered by the model, which guessed qwen3.5:9b.
     name = _preset_model_ask(s)
     if name is not None:
+        if _is_focus_setting_name(name):
+            return Intent("focus_presets")
         return Intent("preset_model", {"name": name})
     if _K_BOTH_CARDS.fullmatch(s):
         return Intent("both_cards")
@@ -13006,7 +13336,11 @@ def _model_chat(s: str) -> Optional[Intent]:
         return Intent("models_list")
     m = _K_PRESET_DETAIL.fullmatch(s)
     if m:
-        return Intent("preset_detail", {"name": m.group(1) or m.group(2) or ""})
+        name = m.group(1) or m.group(2) or ""
+        # A real SETTING called "<name> preset" is not a preset: let the
+        # settings registry explain it instead of denying it exists.
+        if not _preset_name_is_a_setting(name):
+            return Intent("preset_detail", {"name": name})
     m = _K_PRESET_SWITCH.fullmatch(s)
     if m:
         return Intent("preset_switch", {"name": m.group(1) or m.group(2) or ""})
@@ -13264,6 +13598,1349 @@ def _run_both_cards() -> Result:
     return Result(" ".join(parts), "both_cards")
 
 
+# --------------------------------------------------------------------------
+#   The pair table: twelve hand-built two-thing answers (2026-11-04)
+# --------------------------------------------------------------------------
+#
+# WHY A TABLE AND NOT AN ENGINE. The self-awareness audit measured 42 sentences
+# that named two things together: 37 went straight to the language model, which
+# is never given the settings, and exactly one (both_cards, above) produced a
+# real combined answer. Both_cards is the proof of the shape: one hand-built
+# path that reads several real things at once and says what they do together.
+#
+# So this is deliberately NOT a general reasoning engine. It is TWELVE rows
+# (ten from phase 2, plus a preset's own model/card row and the cloud's own
+# local-only-privacy row). Each row is one sentence (or a few close ones), one
+# `read()` that returns the live
+# values from the modules that own them, and one `say()` that turns those values
+# into a sentence. Nothing is computed that the code does not already enforce:
+#
+#   * every row's interaction is checked in a real module, and the file:line is
+#     written beside the row;
+#   * every value is read at ANSWER time through the module's own reader - the
+#     same one its route or its switch uses - so there is no second source;
+#   * a value that cannot be read says so and is never turned into "on"/"off";
+#   * a sentence that is not one of the rows falls through exactly as before:
+#     no rule is ever invented for it.
+#
+# The same table answers the two-setting CHANGE warning (`settings_pair_note`):
+# when a chat change request names two settings this table calls a pair, the
+# answer says the interaction in one line and then asks for one of them at a
+# time. Nothing about a card, a tier or an approval changes.
+
+#: The live value of a registry switch, through `jarvis_feature_guide`'s own
+#: reader table - the SAME read the feature answer and `/api/self` use, so a
+#: pair can never disagree with "is X on?". None means "could not read it".
+def _pair_switch(key: str) -> Optional[bool]:
+    try:
+        import jarvis_feature_guide as FG
+        value = FG.read_state(key)
+    except Exception:                       # noqa: BLE001 - said as unknown
+        return None
+    return value if isinstance(value, bool) else None
+
+
+def _pair_on_off(value: Optional[bool]) -> str:
+    return ("on" if value else "off") if isinstance(value, bool) else "unreadable"
+
+
+# ---- 1. chat history x background learning ---------------------------------
+#
+# PROVEN: `jarvis_chat_log._note_live` writes the live-turn registry that
+# automatic learning reads "on every /api/chat request whether or not history
+# is on, because automatic learning must work either way"
+# (jarvis_chat_log.py:1585-1587); `jarvis_auto_learn`'s "Seen live" check reads
+# that registry (jarvis_auto_learn.py:56-62). So the history switch controls the
+# STORED transcript, not the registry learning needs.
+
+def _pair_chat_learning_read() -> dict:
+    return {"history": _pair_switch("chat_history"),
+            "learning": _pair_switch("background_learning")}
+
+
+def _pair_chat_learning_say(v: dict) -> str:
+    hist, learn = v.get("history"), v.get("learning")
+    if hist is None and learn is None:
+        return ("I cannot read either switch on this PC right now, so I will not guess "
+                "what they do together.")
+    if learn is None:
+        return ("I cannot read whether background learning is on, so I cannot say what "
+                "turning chat history off would do to it.")
+    if learn is False:
+        return ("Background learning is off, so chat history makes no difference to it: "
+                "nothing is being learned either way. Turn learning on and it works "
+                "whether chat history is on or off.")
+    if hist is None:
+        return ("Background learning is on. I cannot read whether chat history is on, so "
+                "I cannot say more than that: learning does not need it either way.")
+    if hist:
+        return ("Both are on, and they do different jobs: chat history keeps the "
+                "conversation itself (encrypted, on this PC), and background learning "
+                "reads the turns as they arrive to save facts about you. Turning chat "
+                "history OFF later would not stop learning - the PC keeps its own "
+                "live-turn record whether history is on or off, and learning reads "
+                "that, not the stored transcript.")
+    return ("Chat history is off and background learning is still on - and that is "
+            "correct, not a contradiction. Chat history switches the STORED "
+            "conversation; background learning reads the PC's own live-turn record, "
+            "which is kept whether history is on or off. So learning keeps working, "
+            "and no transcript is kept.")
+
+
+def _pair_chat_learning_conflict(v: dict) -> str:
+    hist, learn = v.get("history"), v.get("learning")
+    if learn is False:
+        return ("Background learning is off, so chat history makes no difference to "
+                "what is learned - nothing is.")
+    return ("Chat history and background learning do different jobs: turning history "
+            "off keeps the stored transcript out but does NOT stop learning, which "
+            "reads the PC's live-turn record instead.")
+
+
+# ---- 2. web search x ask before every web search ---------------------------
+#
+# PROVEN: `jarvis_search.plan()` returns `turned_off` the moment the `enabled`
+# flag is not True, BEFORE any ask logic runs (jarvis_search.py:849-853), and
+# `ask_every_time` is a separate flag that raises a card for a search that IS
+# allowed to run (jarvis_search.py:264-291, 336-376). So with web search off
+# there is nothing for the ask switch to ask about.
+
+def _pair_search_read() -> dict:
+    out = {"enabled": None, "ask": None, "provider": "", "why": ""}
+    try:
+        import jarvis_search as S
+        got = S.settings()
+        out["enabled"] = got.get("enabled") if isinstance(got.get("enabled"), bool) else None
+        out["ask"] = (got.get("ask_every_time")
+                      if isinstance(got.get("ask_every_time"), bool) else None)
+        out["provider"] = str(S.name(got.get("provider")) or "")
+        out["why"] = str(got.get("why") or "")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        out["why"] = "the search module is not installed here"
+    return out
+
+
+def _pair_search_say(v: dict) -> str:
+    enabled, ask, provider = v.get("enabled"), v.get("ask"), v.get("provider") or ""
+    if enabled is None or ask is None:
+        return ("I cannot read the web-search switches on this PC right now, so I will "
+                "not guess what they do together.")
+    where = f" ({provider})" if provider else ""
+    if not enabled:
+        return (f"Web search itself is off{where}, so nothing is searched at all - and "
+                f"\"ask before every web search\" has nothing to ask about while it is "
+                f"off. Turning the ask switch on would change nothing on its own: web "
+                f"search has to be on first.")
+    if ask:
+        return (f"Web search is on{where} and \"ask before every web search\" is on: "
+                f"every search raises its own approval card first, showing the exact "
+                f"words that would be sent, and nothing is sent until you answer it.")
+    return (f"Web search is on{where} and \"ask before every web search\" is off: a "
+            f"search that comes straight from your own question goes without asking. "
+            f"The other gates still ask - after outside text, or when the search words "
+            f"would repeat something private. Turning the ask switch on makes every "
+            f"search ask, and that one loosens nothing, so it takes effect at once.")
+
+
+def _pair_search_conflict(v: dict) -> str:
+    enabled, ask = v.get("enabled"), v.get("ask")
+    if enabled is False:
+        return ("Web search is off, so \"ask before every web search\" has nothing to "
+                "ask about - turn web search on first.")
+    if ask:
+        return ("With \"ask before every web search\" on, EVERY search raises a card "
+                "first, so turning web search on alone will not search silently.")
+    return ("With \"ask before every web search\" off, a search from your own question "
+            "goes without asking; turning web search on does not change that.")
+
+
+# ---- 3. background learning x remember sensitive topics --------------------
+#
+# PROVEN: `jarvis_auto_learn`'s "Sensitive" check cards a sensitive fact unless
+# "Also remember sensitive topics automatically" is on
+# (jarvis_auto_learn.py:88-99), and even with it on passwords, PINs, account
+# and ID numbers, birthdays, phone numbers and email addresses are STILL a card
+# (`jarvis_sensitive.always_asks`, the owner's 2026-09-24 decision).
+
+def _pair_sensitive_read() -> dict:
+    out = {"learning": _pair_switch("background_learning"),
+           "sensitive": _pair_switch("learn_sensitive_topics"),
+           "always": []}
+    try:
+        import jarvis_sensitive as SEN
+        out["always"] = [str(x).replace("_", " ") for x in
+                         (getattr(SEN, "ALWAYS_ASKS_KINDS", ()) or ())]
+    except Exception:                       # noqa: BLE001 - the kinds are optional
+        out["always"] = []
+    return out
+
+
+def _pair_sensitive_say(v: dict) -> str:
+    learning, sensitive = v.get("learning"), v.get("sensitive")
+    if learning is None or sensitive is None:
+        return ("I cannot read the learning switches on this PC right now, so I will "
+                "not guess what they do together.")
+    if not learning:
+        return ("Background learning is off, so this pair does nothing today: nothing "
+                "is learned, sensitive or not. The sensitive switch only decides "
+                "whether a sensitive fact waits for your yes once learning is on.")
+    if sensitive:
+        return ("Background learning is on and \"Also remember sensitive topics "
+                "automatically\" is on: a sensitive fact (health, money, private "
+                "details about other people) is saved without a per-fact yes. The "
+                "hard patterns are still a card even so - passwords, PINs, account "
+                "and ID numbers, birthdays, phone numbers and email addresses always "
+                "wait for you.")
+    return ("Background learning is on and \"Also remember sensitive topics "
+            "automatically\" is off: an ordinary fact is saved without asking, and a "
+            "sensitive one waits for its own card instead - approving that card saves "
+            "it. "
+            "Turning the sensitive switch on would save those without a per-fact "
+            "yes - and it loosens a rule, so it raises one card first.")
+
+
+def _pair_sensitive_conflict(v: dict) -> str:
+    learning, sensitive = v.get("learning"), v.get("sensitive")
+    if learning is False:
+        return ("Background learning is off, so \"remember sensitive topics\" has "
+                "nothing to save - turn learning on first.")
+    if sensitive:
+        return ("With \"remember sensitive topics\" on, a sensitive fact is saved "
+                "without a per-fact yes - but passwords, PINs and account numbers "
+                "still wait for a card.")
+    return ("With \"remember sensitive topics\" off, a sensitive fact waits for its "
+            "own card; ordinary facts are still saved automatically.")
+
+
+# ---- 4. One bigger model on both cards x a per-card feature ----------------
+#
+# PROVEN: `jarvis_second_card.conflict_ids` returns every per-card feature that
+# is really on, and `_combined_conflict` is that answer as a yes/no
+# (jarvis_second_card.py:3441-3463); both saved on at once is reported as a
+# contradiction, not a choice, and NEITHER lane is started
+# (jarvis_second_card.py:3478-3482, 3499-3503).
+
+def _pair_second_card_read() -> dict:
+    out = {"combined": None, "conflicts": [], "mode": "", "why": ""}
+    try:
+        import jarvis_second_card as SC
+        sw = SC._read_switches()        # read only; status() would reconcile lanes
+        det = SC.detect()
+        out["combined"] = bool(sw.get("combined"))
+        ids = SC.conflict_ids(sw)
+        titles = {str(f.get("id")): str(f.get("title") or f.get("id"))
+                  for f in getattr(SC, "FEATURES", ()) or ()}
+        out["conflicts"] = [titles.get(str(i), str(i)) for i in ids]
+        out["mode"] = str(SC.current_mode(sw, det) or "")
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["why"] = "the second-card module is not installed here"
+    return out
+
+
+def _pair_second_card_say(v: dict) -> str:
+    if v.get("combined") is None:
+        return ("I cannot read the second card's switches on this PC right now, so I "
+                "will not guess what they do together.")
+    conflicts = list(v.get("conflicts") or ())
+    if not v.get("combined") and not conflicts:
+        return ("Both are off right now, so they are not fighting: \"One bigger model "
+                "on both cards\" is off, and no per-card feature is on either. Turning "
+                "the combined mode on needs both cards to itself, so it refuses while "
+                "any per-card feature is on; turning a per-card feature on needs one "
+                "card, so it waits while the combined mode runs.")
+    if v.get("combined") and conflicts:
+        return ("Those two are set against each other right now: \"One bigger model on "
+                "both cards\" is on, and " + "; ".join(conflicts) + " is on too. "
+                "Neither lane is started in that state - it is a contradiction, not a "
+                "choice - so the cards are left free. Turn one of them off and the "
+                "other can run.")
+    if v.get("combined"):
+        return ("\"One bigger model on both cards\" is on: one model runs across both "
+                "cards, and the per-card features cannot run at the same time because "
+                "the model has both cards to itself. They are all off now.")
+    return ("A per-card feature is on - " + "; ".join(conflicts) + " - so \"One bigger "
+            "model on both cards\" cannot run: it needs both cards to itself. That is "
+            "one model per card instead, which is what is set up now.")
+
+
+def _pair_second_card_conflict(v: dict) -> str:
+    if v.get("combined"):
+        return ("\"One bigger model on both cards\" needs both cards to itself, so it "
+                "will not run while any per-card feature is on.")
+    return ("A per-card feature needs one card to itself, so it will not run while "
+            "\"One bigger model on both cards\" is on.")
+
+
+# ---- 5. the big model x One bigger model on both cards ---------------------
+#
+# PROVEN: `jarvis_second_card.big_model_holds` returns why the second Ollama must
+# not start on a card because the big model is using it, and the combined lane
+# checks it before starting (jarvis_second_card.py:3524-3528, 1256-1283).
+
+def _pair_big_combined_read() -> dict:
+    out = {"big_model": _pair_switch("big_model"), "combined": None, "held": ""}
+    try:
+        import jarvis_second_card as SC
+        sw = SC._read_switches()
+        out["combined"] = bool(sw.get("combined"))
+        det = SC.detect()
+        second = det.get("second") or {}
+        held = SC.big_model_holds(str(second.get("uuid") or ""),
+                                  str(second.get("name") or ""))
+        out["held"] = str(held or "")
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["held"] = ""
+    return out
+
+
+def _pair_big_combined_say(v: dict) -> str:
+    big, combined, held = v.get("big_model"), v.get("combined"), v.get("held") or ""
+    if big is None or combined is None:
+        return ("I cannot read the big model's switch or the second card's on this PC "
+                "right now, so I will not guess what they do together.")
+    if held:
+        return (f"They collide right now, and the PC is holding back: {held}. So \"One "
+                f"bigger model on both cards\" waits until the big model has let the "
+                f"card go, rather than fighting it for the memory.")
+    if not big:
+        return ("The big model is off, so it holds no card and the both-cards mode is "
+                "free to run. Turning the big model on lets it take a card for itself; "
+                "while it is using one, \"One bigger model on both cards\" waits.")
+    return ("The big model is on, and right now it is not holding the second card, so "
+            "the both-cards mode can run. When the big model does take that card, the "
+            "both-cards lane waits for it to go idle rather than starting on top of "
+            "it.")
+
+
+def _pair_big_combined_conflict(v: dict) -> str:
+    if v.get("held"):
+        return (f"The big model is using the card ({v.get('held')}), so the both-cards "
+                f"mode waits for it.")
+    return ("The big model takes a card for itself while it runs, so \"One bigger "
+            "model on both cards\" waits for it to go idle.")
+
+
+# ---- 6. the voice check x a Live session started by voice ------------------
+#
+# PROVEN: `jarvis_live.voice_check_needed` is THE rule (jarvis_live.py:1165-1205):
+# a mic press on the paired phone is never checked ("the press is the act"),
+# and turning the setting OFF makes the checks STRICTER, not weaker - every
+# trigger is then checked and `locked` is ignored.
+
+def _pair_voice_read() -> dict:
+    out = {"setting": None, "mic": None, "live_locked": None, "live_unlocked": None}
+    try:
+        import jarvis_live as L
+        setting = bool(L.voice_check_setting())
+        out["setting"] = setting
+        out["mic"] = bool(L.voice_check_needed(
+            L.TRIGGER_MIC_PRESS, device="phone", setting_on=setting))
+        out["live_locked"] = bool(L.voice_check_needed(
+            L.TRIGGER_LIVE_START, device="phone", locked=True, setting_on=setting))
+        out["live_unlocked"] = bool(L.voice_check_needed(
+            L.TRIGGER_LIVE_START, device="phone", locked=False, setting_on=setting))
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["setting"] = None
+    return out
+
+
+def _pair_voice_say(v: dict) -> str:
+    setting = v.get("setting")
+    if setting is None:
+        return ("I cannot read the voice-check setting on this PC right now, so I will "
+                "not guess what it does when Live is started by voice.")
+    if setting:
+        return ("The voice check is on. A Live session started by pressing the mic on "
+                "your PAIRED PHONE is not voice-checked at all - the press itself is "
+                "the act - while starting it on a LOCKED phone's wake word is checked. "
+                "Turning the voice check OFF does not weaken that: it makes every "
+                "remaining trigger check, and the phone being unlocked stops being an "
+                "exemption.")
+    return ("The voice check is OFF, and that makes the checks STRICTER, not weaker: "
+            "with it off EVERY trigger is checked, and a phone saying it is unlocked "
+            "is ignored - the old, full checks. The one thing that still skips the "
+            "check is pressing the mic on the paired phone, because the press is the "
+            "act, and that is true whatever the setting says.")
+
+
+def _pair_voice_conflict(v: dict) -> str:
+    if v.get("setting"):
+        return ("The voice check is on, so a Live start on a locked phone is checked; "
+                "a mic press on the paired phone is never checked (the press is the "
+                "act).")
+    return ("The voice check is OFF, which makes the checks STRICTER: every trigger "
+            "is checked and \"my phone is unlocked\" is ignored.")
+
+
+# ---- 7. the standby hours x the second card's lanes ------------------------
+#
+# PROVEN: `jarvis_second_card.sleep` stops the second, third and combined Ollama
+# and keeps them stopped (jarvis_second_card.py:3625-3648); `_still_asleep`
+# refuses to start a lane while the PC is on standby (jarvis_second_card.py:
+# 3661-3674) and both reconcilers obey it (jarvis_second_card.py:3511-3516,
+# 3433-3436). The standby schedule is `jarvis_standby_schedule.KIND`.
+
+def _pair_standby_read() -> dict:
+    out = {"asleep": None, "lane": "", "combined": "", "third": "", "job": None}
+    try:
+        import jarvis_second_card as SC
+        out["asleep"] = bool(SC.asleep())
+        out["lane"] = str(SC.lane_state())
+        out["combined"] = str(SC.combined_lane_state())
+        out["third"] = str(SC.third_lane_state())
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["asleep"] = None
+    try:
+        import jarvis_standby_schedule as SB
+        out["job"] = SB.status()
+    except Exception:                   # noqa: BLE001 - no scheduler here
+        out["job"] = None
+    return out
+
+
+def _pair_standby_say(v: dict) -> str:
+    if v.get("asleep") is None:
+        return ("I cannot read the second card's lanes on this PC right now, so I will "
+                "not guess what a standby window does to them.")
+    job = v.get("job") or {}
+    when = ""
+    if isinstance(job, dict) and job.get("when"):
+        when = f" (the one on the list: {str(job.get('when')).strip()})"
+    running = [name for name, state in (("the second card's lane", v.get("lane")),
+                                        ("the both-cards lane", v.get("combined")),
+                                        ("the third lane", v.get("third")))
+               if state in ("starting", "running")]
+    if v.get("asleep"):
+        return ("Jarvis is on standby now" + when + ", and that stops the second card's "
+                "model lanes - the second card's own lane, the both-cards lane and the "
+                "third - and keeps them stopped for the whole window. Background "
+                "learning never wakes a card; something you ask for after standby ends "
+                "does." + ((" " + " and ".join(running) + " is still running, which "
+                           "means it has not been reconciled yet.") if running else ""))
+    return ("A standby window" + (when or "") + " stops the second card's model lanes "
+            "for the whole window - the second card's own lane, the both-cards lane "
+            "and the third - and they stay stopped until Jarvis leaves standby. Right "
+            "now Jarvis is not on standby, and " +
+            ((" and ".join(running) + " is running.") if running else
+             "no second-card lane is running."))
+
+
+def _pair_standby_conflict(v: dict) -> str:
+    return ("A standby window stops the second card's model lanes and keeps them "
+            "stopped for the whole window - standby wins over a lane.")
+
+
+# ---- 8. the PC's quiet hours x the phone's notifications -------------------
+#
+# PROVEN: `jarvis_notify_prefs` is "which of THIS PC's own toasts fire, and the
+# quiet hours window" (jarvis_notify_prefs.py:1, 12) - the PC's four toggles and
+# its quiet-hours window. The phone's notifications are their own switch and
+# their own sender (`jarvis_phone_notifications.settings`), so the PC's quiet
+# hours cannot silence the phone.
+
+def _pair_quiet_read() -> dict:
+    out = {"quiet": None, "quiet_from": "", "quiet_to": "", "phone": None}
+    try:
+        import jarvis_notify_prefs as NP
+        prefs = NP.read()
+        out["quiet"] = (prefs.get("quiet_enabled")
+                        if isinstance(prefs.get("quiet_enabled"), bool) else None)
+        out["quiet_from"] = str(prefs.get("quiet_start") or "")
+        out["quiet_to"] = str(prefs.get("quiet_end") or "")
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["quiet"] = None
+    try:
+        import jarvis_phone_notifications as PN
+        got = PN.settings()
+        out["phone"] = got.get("enabled") if isinstance(got.get("enabled"), bool) else None
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["phone"] = None
+    return out
+
+
+def _pair_quiet_say(v: dict) -> str:
+    quiet, phone = v.get("quiet"), v.get("phone")
+    if quiet is None or phone is None:
+        return ("I cannot read the PC's quiet hours or the phone's notifications on this "
+                "PC right now, so I will not guess what they do together.")
+    window = ""
+    if quiet and v.get("quiet_from") and v.get("quiet_to"):
+        window = f" ({v['quiet_from']} to {v['quiet_to']})"
+    if not quiet:
+        return ("The PC's quiet hours are off" + window + ", and the phone's "
+                "notifications are " + _pair_on_off(phone) + ". These are two separate "
+                "switches for two separate devices: the quiet-hours window is this "
+                "PC's own toasts only, so it can never silence the phone.")
+    return ("The PC's quiet hours are on" + window + ", and the phone's notifications "
+            "are " + _pair_on_off(phone) + ". Quiet hours cover THIS PC's own toasts "
+            "only - they are not the phone's, so the phone keeps notifying you through "
+            "its own switch. Turning quiet hours on is not a way to silence the phone.")
+
+
+def _pair_quiet_conflict(v: dict) -> str:
+    return ("The PC's quiet-hours window silences this PC's own toasts only; the "
+            "phone's notifications are a separate switch on the phone and keep "
+            "arriving.")
+
+
+# ---- 9. lights without a card x the home-control tool ----------------------
+#
+# PROVEN: `jarvis_asks_first.lights_on` is the "lights without a card" setting
+# (jarvis_asks_first.py:2181-2195), and the light command itself only runs when
+# the home-control tool is offered to the model - `jarvis_quick`'s own
+# `_LIGHTS` refusal reads the live `[tools].enabled` and says the real tool is
+# off (jarvis_quick.py, the "lights without a card" measured bug note,
+# 2026-10-31). A setting cannot turn on a light the tool cannot reach.
+
+def _pair_lights_read() -> dict:
+    out = {"setting": None, "home": None, "lights": None}
+    try:
+        import jarvis_asks_first as ASK
+        out["setting"] = bool(ASK.lights_on())
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["setting"] = None
+    tools = _enabled_tools_turn()
+    out["home"] = "home_control" in tools
+    out["lights"] = "home_control" in tools
+    return out
+
+
+def _pair_lights_say(v: dict) -> str:
+    setting, home = v.get("setting"), v.get("home")
+    if setting is None or not isinstance(home, bool):
+        return ("I cannot read the lights setting or the home-control tool on this PC "
+                "right now, so I will not guess what they do together.")
+    if not home:
+        return ("The home-control tool is not offered to me in this PC's settings file "
+                "(jarvis-framework.toml, [tools].enabled), so no light can be turned on "
+                "at all - and \"lights without a card\" is " + _pair_on_off(setting) +
+                ". That switch only decides whether a light command asks first; it "
+                "cannot reach a light the tool cannot reach.")
+    if setting:
+        return ("The home-control tool is on and \"lights without a card\" is on, so a "
+                "light command runs without raising an approval card first. The card "
+                "is the switch: turning the setting off makes every light command ask "
+                "again.")
+    return ("The home-control tool is on and \"lights without a card\" is off, so a "
+            "light command raises its approval card first and nothing is switched "
+            "until you answer it. Turning the setting on removes that card - it "
+            "loosens a rule, so it raises one card of its own first.")
+
+
+def _pair_lights_conflict(v: dict) -> str:
+    if not v.get("home"):
+        return ("The home-control tool is off in your settings file, so no light "
+                "command can run whatever the \"lights without a card\" setting says.")
+    return ("\"Lights without a card\" only removes the approval card from a light "
+            "command; the home-control tool still has to be offered in [tools].enabled.")
+
+
+# ---- 10. picture mode x a cloud model --------------------------------------
+#
+# PROVEN: the picture lane refuses a model whose name looks like a cloud model
+# (jarvis_screen_picture.py:1030-1031, 337-340) and sets OLLAMA_NO_CLOUD=1
+# (jarvis_screen_picture.py:770), so switching cloud escalation on never sends a
+# picture away: rule 1 of the project, and this module enforces it for itself.
+
+def _pair_picture_cloud_read() -> dict:
+    out = {"picture": None, "model": "", "cloud": None, "provider": ""}
+    try:
+        import jarvis_screen_picture as SP
+        view = SP.view()
+        out["picture"] = view.get("enabled") if isinstance(view.get("enabled"), bool) else None
+        out["model"] = str(view.get("model_name") or view.get("model") or "")
+        out["cloud"] = bool(SP.is_cloud_model(out["model"])) if out["model"] else False
+    except Exception:                   # noqa: BLE001 - said as unknown
+        out["picture"] = None
+    try:
+        import jarvis_presets as P
+        state = P.cloud_state() or {}
+        out["provider"] = str(state.get("provider_name") or state.get("provider") or "")
+    except Exception:                   # noqa: BLE001 - no cloud here is fine
+        out["provider"] = ""
+    return out
+
+
+def _pair_picture_cloud_say(v: dict) -> str:
+    picture, cloud = v.get("picture"), v.get("cloud")
+    if picture is None:
+        return ("I cannot read the picture mode's state on this PC right now, so I will "
+                "not guess what it does with the cloud.")
+    provider = v.get("provider") or ""
+    where = f" ({provider})" if provider else ""
+    if cloud:
+        return ("They collide: the picture model's name looks like a CLOUD model, and "
+                "picture mode refuses that - your screen would leave this PC. The "
+                "picture lane is not started until a model that runs here is chosen.")
+    if picture:
+        return ("Picture mode is on and uses a model that runs on this PC" +
+                (f" ({v.get('model')})" if v.get("model") else "") + ", so a picture of "
+                "your screen stays here. Turning cloud escalation on" + where + " does "
+                "not change that: the picture lane sets OLLAMA_NO_CLOUD and refuses a "
+                "cloud model by name, because your screen never goes to a cloud service.")
+    return ("Picture mode is off, so nothing of your screen is being read. When it is "
+            "on it uses a model that runs on this PC and refuses a cloud model by "
+            "name - turning cloud escalation on" + where + " would not send a picture "
+            "anywhere.")
+
+
+def _pair_picture_cloud_conflict(v: dict) -> str:
+    return ("Picture mode never uses a cloud model: the lane is started with "
+            "OLLAMA_NO_CLOUD and refuses a model whose name looks like a cloud one, so "
+            "cloud escalation cannot send your screen anywhere.")
+
+
+# ---- 11. a preset, the model it runs and the card it runs it on -------------
+#
+# PROVEN: ONE `jarvis_presets.Preset` row decides a preset's model, its lane
+# (and so its card) and its context window TOGETHER - `Preset`'s own fields,
+# jarvis_presets.py:69-123, and every row in `PRESETS`:126-360 - and
+# `apply_preset` starts the lane that same row names (jarvis_presets.py:1068+).
+# So "what model and what card" is one lookup, never two answers that could
+# disagree. The speed is the measured record `jarvis_model_knowledge.bench_for`
+# - the same record the "how fast are you" answer quotes.
+
+def _pair_preset_read(f=None) -> dict:
+    out = {"available": False, "rows": [], "row": {}, "chosen": "", "bench": {},
+           "focus": False,
+           "asked": " ".join(str((f or {}).get("name") or "").split())}
+    try:
+        import jarvis_presets as P
+    except Exception:                       # noqa: BLE001 - said as unknown
+        return out
+    out["available"] = True
+    lanes = getattr(P, "LANES", {}) or {}
+    rows = []
+    for p in getattr(P, "PRESETS", ()) or ():
+        lane = dict(lanes.get(str(getattr(p, "lane", "")), {}) or {})
+        try:
+            context = int(getattr(p, "context", 0) or 0)
+        except (TypeError, ValueError):
+            context = 0
+        rows.append({"id": str(getattr(p, "id", "")),
+                     "title": str(getattr(p, "title", "")),
+                     "model": str(getattr(p, "model", "")),
+                     "card": str(lane.get("card") or ""),
+                     "port": lane.get("port"),
+                     "context": context,
+                     "heavy": bool(getattr(p, "heavy_mode", False))})
+    out["rows"] = rows
+    try:
+        out["chosen"] = str(P.choice() or "")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        out["chosen"] = ""
+    # "THE FOCUS PRESET" IS A SETTING, NOT A PRESET ID (2026-11-04, gap 6). Its
+    # own value IS a preset id, so a model/card/context question about it is a
+    # question about the preset chosen right now. Without this, "what model and
+    # what card does the focus preset use" answered "there is no preset called
+    # focus" - the same denial phase 2 fixed for the plain sentence, arriving
+    # through this row's shape instead of the preset-detail one.
+    out["focus"] = _is_focus_setting_name(str(out["asked"]))
+    want = " ".join(str(out["asked"] or "").lower().replace("-", " ").replace("_", " ").split())
+    if out["focus"] and out["chosen"]:
+        want = " ".join(str(out["chosen"]).lower()
+                        .replace("-", " ").replace("_", " ").split())
+    for row in rows:
+        rid = " ".join(str(row["id"]).lower().replace("-", " ").replace("_", " ").split())
+        title = " ".join(str(row["title"]).lower().split())
+        if want and want in (rid, title):
+            out["row"] = row
+            break
+    if out["row"].get("model"):
+        try:
+            import jarvis_model_knowledge as K
+            out["bench"] = dict(K.bench_for(out["row"]["model"]) or {})
+        except Exception:                   # noqa: BLE001 - no bench is honest
+            out["bench"] = {}
+    return out
+
+
+def _pair_preset_say(v: dict) -> str:
+    if not v.get("available"):
+        return ("I cannot read this PC's preset rows right now (the preset module is "
+                "missing), so I will not guess which model or card a preset uses.")
+    rows = v.get("rows") or []
+    if not rows:
+        return ("The preset module answered with no rows on this PC, so I cannot tell "
+                "you which model or card a preset uses.")
+    asked = str(v.get("asked") or "").strip()
+    row = v.get("row") or {}
+    if not row and v.get("focus"):
+        chosen = str(v.get("chosen") or "").strip()
+        if chosen:
+            return (f"The focus preset is the choice in Settings that picks which preset "
+                    f'applies. This PC records "{chosen}" as chosen, but that id is not '
+                    f"one of its preset rows, so I will not guess its model, card or "
+                    f"context.")
+        return ("The focus preset is the choice in Settings that picks which preset "
+                "applies, not a preset of its own. No preset is recorded as chosen on "
+                "this PC right now, so I cannot name the model, card or context it "
+                "would use.")
+    if not row:
+        names = ", ".join(str(r.get("title") or r.get("id")) for r in rows)
+        return (f'There is no preset called "{asked}" on this PC. The presets are: '
+                + names + ".")
+    title, model = str(row.get("title") or ""), str(row.get("model") or "")
+    card = str(row.get("card") or "").strip()
+    context = int(row.get("context") or 0)
+    if not model:
+        return (f'"{title}" runs no model of its own on this PC, so there is no model '
+                f"and card to name for it.")
+    text = f'"{title}" runs {model}'
+    if card and card.lower().startswith("both"):
+        text += f" across {card} as one pooled lane"
+    elif card:
+        text += f" on the {card}"
+    if context:
+        text += f", with {context:,} tokens of context"
+    text += "."
+    if v.get("focus"):
+        text = (f'The focus preset is the choice in Settings that picks which preset '
+                f'applies, and "{title}" is the one chosen on this PC right now. ') + text
+    bench = v.get("bench") or {}
+    speed = bench.get("tok_s")
+    if isinstance(speed, (int, float)):
+        text += f" It is measured at about {float(speed):.1f} tokens a second on this PC"
+        source = str(bench.get("source") or "").strip()
+        text += f" ({source})." if source else "."
+        if bench.get("measured_here") is False:
+            text += " That figure was not measured on this PC."
+    else:
+        text += (" I have no measured speed for that model on this PC, so I will not "
+                 "quote one.")
+    chosen = str(v.get("chosen") or "")
+    if v.get("focus"):
+        pass                    # the opening sentence already named it as the chosen one
+    elif not chosen:
+        text += " This PC does not record which preset is chosen right now."
+    elif chosen == str(row.get("id")):
+        text += " It is the preset chosen on this PC right now."
+    else:
+        chosen_title = chosen
+        for other in rows:
+            if str(other.get("id")) == chosen:
+                chosen_title = str(other.get("title") or chosen)
+                break
+        text += f' It is not the preset chosen right now - "{chosen_title}" is.'
+    return text
+
+
+def _pair_preset_conflict(v: dict) -> str:
+    row = v.get("row") or {}
+    if not row:
+        return ("A preset is ONE row: it names the model, the card and the context "
+                "window together, so a preset cannot take one from another.")
+    card = str(row.get("card") or "its own card")
+    return (f'A preset names its model and its card together: "{row.get("title")}" '
+            f'always runs {row.get("model") or "its model"} on {card}, never on '
+            f"another preset's card.")
+
+
+# ---- 12. cloud escalation x local-only privacy ------------------------------
+#
+# PROVEN: `jarvis_presets.cloud_state()` is the ONE cloud read the chat may use
+# (jarvis_presets.py:645-692: provider, key presence, whether it can be used,
+# and the standing escalation switch). The LOCAL-ONLY half is a hard block with
+# its own reader: `jarvis_auto_router.taint_latched()` (jarvis_auto_router.py:
+# 308-346) returns True while any taint is latched, while the gate module is
+# absent ("nothing is known to be safe") or while a project is not marked
+# shareable - it never returns "safe" by default. The project's rule 1 (email,
+# files, credentials, stored memory stay on the local model) is stated by
+# `jarvis_presets.cloud_state_line()`, jarvis_presets.py:738-742.
+
+def _pair_cloud_privacy_read() -> dict:
+    out = {"available": False, "provider": "", "escalate": None,
+           "key_saved": None, "ready": "", "taint": None, "taint_why": ""}
+    try:
+        import jarvis_presets as P
+        st = P.cloud_state() or {}
+        out["available"] = bool(st.get("available"))
+        out["provider"] = str(st.get("provider_name") or st.get("provider") or "")
+        out["escalate"] = st.get("escalate") if isinstance(st.get("escalate"), bool) else None
+        out["key_saved"] = (st.get("key_saved")
+                            if isinstance(st.get("key_saved"), bool) else None)
+        out["ready"] = str(st.get("ready") or "")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        out["available"] = False
+    try:
+        import jarvis_auto_router as AR
+        latched, why = AR.taint_latched()
+        out["taint"] = bool(latched)
+        out["taint_why"] = str(why or "")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        out["taint"] = None
+        out["taint_why"] = "the local-only block could not be read"
+    return out
+
+
+def _pair_cloud_privacy_say(v: dict) -> str:
+    if not v.get("available"):
+        return ("I cannot read the cloud state on this PC right now (the module that "
+                "owns it is missing), so I will not guess what it does with private "
+                "material.")
+    provider = str(v.get("provider") or "")
+    escalate = v.get("escalate")
+    taint = v.get("taint")
+    why = str(v.get("taint_why") or "").strip()
+    head = "No cloud service is chosen on this PC, so no question can be sent to one at all"
+    if provider:
+        head = (f"A cloud service is chosen on this PC ({provider})")
+        if escalate is True:
+            head += (", and the standing escalation switch is ON - so a hard question "
+                     "may go there without a per-question yes")
+        elif escalate is False:
+            head += (", but the standing escalation switch is OFF - so every cloud turn "
+                     "still needs your yes")
+        else:
+            head += ", and I cannot read its escalation switch just now"
+    head += "."
+    if v.get("key_saved") is False:
+        head += " No API key is saved for it, so nothing could be sent anyway."
+    elif v.get("ready"):
+        head += " The PC says it cannot be used right now: " + str(v["ready"]).rstrip(".") + "."
+    if taint is None:
+        return (head + " I cannot read the local-only block on this PC, so I will not "
+                "claim what may leave.")
+    if taint:
+        return (head + " Cloud escalation never overrides the local-only block, and "
+                "right now that block is ON"
+                + (f" ({why})" if why else "") +
+                ": nothing can be sent to a cloud service - private or not - until it "
+                "clears. Email, files, credentials and stored memory stay on the local "
+                "model regardless.")
+    return (head + " Cloud escalation never overrides the local-only block: right now "
+            "no taint is latched, so an ordinary question may go there, but a turn "
+            "with email, files, credentials, stored memory, a picture, a screen or a "
+            "tainted conversation stays on this PC - that is the project's rule 1, and "
+            "this PC's own cloud description states it.")
+
+
+def _pair_cloud_privacy_conflict(v: dict) -> str:
+    if v.get("taint") is True:
+        why = str(v.get("taint_why") or "").strip()
+        return ("The local-only block is ON" + (f" ({why})" if why else "") +
+                ", so nothing can leave this PC even with cloud escalation on.")
+    return ("Cloud escalation only decides whether a hard question MAY go to a cloud "
+            "service; email, files, credentials, stored memory, a picture, a screen or "
+            "a tainted conversation stay on this PC whatever it says.")
+
+
+#: THE TABLE. `keys` is the two registry switch keys the row is about (empty for
+#: a row whose second half is not a registry switch); `conflict` is the ONE-LINE
+#: warning the two-setting change answer uses. `args` means the row's `read`
+#: takes the intent's own fields (a named preset), and every other row's read
+#: takes none.
+_PAIR_RULES = (
+    {"id": "chat_history_learning", "title": "chat history and background learning",
+     "rx": None, "keys": frozenset({"chat_history", "background_learning"}),
+     "read": _pair_chat_learning_read, "say": _pair_chat_learning_say,
+     "conflict": _pair_chat_learning_conflict},
+    {"id": "web_search_ask", "title": "web search and ask before every search",
+     "rx": None, "keys": frozenset({"web_search", "ask_before_every_search"}),
+     "read": _pair_search_read, "say": _pair_search_say,
+     "conflict": _pair_search_conflict},
+    {"id": "learning_sensitive", "title": "background learning and sensitive facts",
+     "rx": None, "keys": frozenset({"background_learning", "learn_sensitive_topics"}),
+     "read": _pair_sensitive_read, "say": _pair_sensitive_say,
+     "conflict": _pair_sensitive_conflict},
+    {"id": "second_card_features", "title": "both-card mode and a per-card feature",
+     "rx": None, "keys": frozenset({"second_card_combined"}),
+     "read": _pair_second_card_read, "say": _pair_second_card_say,
+     "conflict": _pair_second_card_conflict},
+    {"id": "big_model_combined", "title": "the big model and both-card mode",
+     "rx": None, "keys": frozenset({"big_model", "second_card_combined"}),
+     "read": _pair_big_combined_read, "say": _pair_big_combined_say,
+     "conflict": _pair_big_combined_conflict},
+    {"id": "voice_check_live", "title": "the voice check and Live started by voice",
+     "rx": None, "keys": frozenset({"voice_check_locked"}),
+     "read": _pair_voice_read, "say": _pair_voice_say,
+     "conflict": _pair_voice_conflict},
+    {"id": "standby_lanes", "title": "standby hours and the second card's lanes",
+     "rx": None, "keys": frozenset(),
+     "read": _pair_standby_read, "say": _pair_standby_say,
+     "conflict": _pair_standby_conflict},
+    {"id": "quiet_hours_phone", "title": "the PC's quiet hours and the phone",
+     "rx": None, "keys": frozenset({"pc_quiet_hours", "phone_notifications"}),
+     "read": _pair_quiet_read, "say": _pair_quiet_say,
+     "conflict": _pair_quiet_conflict},
+    {"id": "lights_home_tool", "title": "lights without a card and the home tool",
+     "rx": None, "keys": frozenset({"lights_without_card"}),
+     "read": _pair_lights_read, "say": _pair_lights_say,
+     "conflict": _pair_lights_conflict},
+    {"id": "picture_cloud", "title": "picture mode and the cloud",
+     "rx": None, "keys": frozenset({"screen_picture"}),
+     "read": _pair_picture_cloud_read, "say": _pair_picture_cloud_say,
+     "conflict": _pair_picture_cloud_conflict},
+    {"id": "preset_model_card", "title": "a preset, its model and its card",
+     "rx": None, "keys": frozenset(), "args": True,
+     "read": _pair_preset_read, "say": _pair_preset_say,
+     "conflict": _pair_preset_conflict},
+    {"id": "cloud_privacy", "title": "cloud escalation and local-only privacy",
+     "rx": None, "keys": frozenset(),
+     "read": _pair_cloud_privacy_read, "say": _pair_cloud_privacy_say,
+     "conflict": _pair_cloud_privacy_conflict},
+)
+
+#: Pair id -> the whole-sentence shapes that name it. A shape is here ONLY when
+#: it names both halves of the pair; "does web search work" is not one of these.
+_PAIR_SHAPES = {
+    "chat_history_learning": re.compile(
+        r"if\s+i\s+turn\s+(?:off|on)\s+(?:my\s+)?chat\s+history\s+"
+        r"(?:does|will|would)\s+(?:background\s+)?learning\s+"
+        r"(?:still\s+)?(?:work|run|save)\b.*"
+        r"|does\s+turning\s+off\s+(?:my\s+)?chat\s+history\s+"
+        r"(?:stop|break|affect)\s+(?:background\s+)?learning\b.*"
+        r"|can\s+(?:background\s+)?learning\s+(?:still\s+)?work\s+"
+        r"(?:if|when|with)\s+(?:my\s+)?chat\s+history\s+(?:is\s+)?off\b.*"
+        r"|what\s+happens\s+if\s+i\s+turn\s+off\s+(?:my\s+)?chat\s+history\b.*"
+        r"|do\s+chat\s+history\s+and\s+(?:background\s+)?learning\s+"
+        r"(?:work\s+together|conflict|clash|interact)\b.*"),
+    "web_search_ask": re.compile(
+        r"does\s+web\s+search\s+(?:use|respect|follow|obey)\s+"
+        r"(?:my\s+)?(?:ask|asking)\s+before\s+every\s+(?:web\s+)?search\b.*"
+        r"|(?:if|when)\s+i\s+(?:turn|switch)\s+on\s+(?:my\s+)?(?:ask|asking)\s+before\s+"
+        r"every\s+(?:web\s+)?search\s+(?:what\s+happens\s+to\s+)?web\s+search\b.*"
+        r"|(?:can|does)\s+(?:you|web\s+search)\s+search\s+the\s+web\s+"
+        r"(?:without|with)\s+asking\s+me\b.*"
+        r"|(?:is|are)\s+(?:my\s+)?(?:ask|asking)\s+before\s+every\s+(?:web\s+)?search\s+"
+        r"(?:and|with)\s+web\s+search\b.*"
+        r"|web\s+search\s+(?:and|with|plus)\s+(?:my\s+)?(?:ask|asking)\s+before\s+"
+        r"every\s+(?:web\s+)?search\b.*"),
+    "learning_sensitive": re.compile(
+        r"(?:if|when)\s+(?:the\s+)?(?:also\s+)?remember\s+sensitive\s+topics\s+"
+        r"automatically\s+is\s+on\s+(?:what|does|do|is)\b.*"
+        r"|does\s+(?:background\s+)?learning\s+(?:save|remember|keep)\s+"
+        r"(?:my\s+)?sensitive\s+(?:topics|facts|things)\b.*"
+        r"|(?:can|does)\s+(?:background\s+)?learning\s+(?:save|remember)\s+"
+        r"sensitive\s+(?:topics|facts|things)\s+automatically\b.*"
+        r"|(?:background\s+)?learning\s+(?:and|with|plus)\s+"
+        r"(?:my\s+)?(?:also\s+remember\s+)?sensitive\s+topics\b.*"),
+    "second_card_features": re.compile(
+        r"(?:does|do)\s+(?:the\s+)?(?:second\s+card|bigger\s+model\s+on\s+both\s+cards|"
+        r"both[-\s]cards?\s+mode|combined\s+mode)\s+(?:and|with|work\s+with|conflict\s+with)\s+"
+        r"(?:the\s+)?(?:per[-\s]card\s+features?|second[-\s]card\s+features?|"
+        r"pictures?|vision|browser\s+control|longer\s+conversations?|wiki|study|referee)\b.*"
+        r"|(?:can|does)\s+(?:a\s+)?(?:per[-\s]card|second[-\s]card)\s+feature\s+"
+        r"(?:run|work)\s+(?:with|while)\s+(?:the\s+)?(?:bigger\s+model\s+on\s+both\s+cards|"
+        r"both[-\s]cards?\s+mode|combined\s+mode)\b.*"
+        r"|(?:is|are)\s+(?:the\s+)?(?:second[-\s]card\s+features?|pictures?)\s+(?:on|off)\s+"
+        r"(?:and|with)\s+(?:the\s+)?(?:second\s+card|both[-\s]cards?)\b.*"),
+    "big_model_combined": re.compile(
+        r"(?:does|can)\s+(?:the\s+)?big\s+model\s+(?:work|run)\s+(?:with|on|while)\s+"
+        r"(?:the\s+)?(?:second\s+card|both\s+cards|bigger\s+model\s+on\s+both\s+cards|"
+        r"both[-\s]cards?\s+mode)\b.*"
+        r"|(?:big\s+model\s+and|and\s+the\s+big\s+model)\s+(?:the\s+)?(?:second\s+card|"
+        r"both\s+cards|both[-\s]cards?\s+mode)\b.*"
+        r"|(?:does|can)\s+(?:the\s+)?(?:second\s+card|both[-\s]cards?\s+mode)\s+"
+        r"(?:work|run)\s+with\s+(?:the\s+)?big\s+model\b.*"),
+    "voice_check_live": re.compile(
+        r"(?:does|do)\s+(?:the\s+)?voice\s+check\s+(?:still\s+)?(?:apply|run|happen)\s+"
+        r"(?:when|if)\s+(?:i\s+)?(?:start|starting)\s+(?:a\s+)?(?:live|jarvis\s+live)\s+"
+        r"(?:by|with)\s+(?:my\s+)?voice\b.*"
+        r"|(?:can|does)\s+(?:i|you)\s+start\s+(?:a\s+)?(?:live|jarvis\s+live)\s+"
+        r"(?:by|with)\s+(?:my\s+)?voice\s+without\s+(?:the\s+)?voice\s+check\b.*"
+        r"|(?:the\s+)?voice\s+check\s+(?:and|with)\s+(?:a\s+)?(?:live|jarvis\s+live)\s+"
+        r"(?:session\s+)?(?:started\s+)?by\s+voice\b.*"),
+    "standby_lanes": re.compile(
+        r"(?:does|do)\s+(?:the\s+)?standby\s+(?:hours|window|schedule|time)\s+"
+        r"(?:stop|free|shut\s+down|unload|close)\s+(?:the\s+)?(?:second\s+card|"
+        r"both\s+cards|model\s+lane|graphics\s+card)\b.*"
+        r"|(?:what|how)\s+(?:does|do)\s+(?:the\s+)?standby\s+(?:hours|window|schedule)"
+        r"\s+(?:do|affect)\s+(?:to\s+)?(?:the\s+)?(?:second\s+card|model\s+lane|"
+        r"graphics\s+card)\b.*"
+        r"|(?:the\s+)?standby\s+(?:hours|window|schedule)\s+(?:and|with)\s+"
+        r"(?:the\s+)?(?:second\s+card|model\s+lane)\b.*"),
+    "quiet_hours_phone": re.compile(
+        r"(?:does|do)\s+(?:the\s+)?(?:pc\s+)?quiet\s+hours\s+(?:also\s+)?"
+        r"(?:silence|mute|stop|quiet)\s+(?:my\s+)?phone\b.*"
+        r"|(?:do|does)\s+(?:my\s+)?phone\s+notifications?\s+(?:still\s+)?"
+        r"(?:come|fire|ring|work)\s+(?:through|during|in)\s+(?:the\s+)?quiet\s+hours\b.*"
+        r"|(?:the\s+)?quiet\s+hours\s+(?:and|with)\s+(?:my\s+)?phone\s+"
+        r"notifications\b.*"),
+    "lights_home_tool": re.compile(
+        r"(?:does|do)\s+(?:the\s+)?lights?\s+without\s+a\s+card\s+"
+        r"(?:need|require|work\s+with)\s+(?:the\s+)?(?:home|home\s+control)\s+tool\b.*"
+        r"|(?:can|do)\s+(?:the\s+)?lights?\s+(?:turn\s+on|work)\s+(?:without|with)\s+"
+        r"(?:the\s+)?home\s+(?:control\s+)?tool\b.*"
+        r"|(?:the\s+)?lights?\s+without\s+a\s+card\s+(?:and|with)\s+(?:the\s+)?"
+        r"home\s+(?:control\s+)?tool\b.*"),
+    "picture_cloud": re.compile(
+        r"(?:does|do)\s+(?:the\s+)?picture\s+mode\s+(?:use|need|send|go\s+to)\s+"
+        r"(?:the\s+)?cloud\b.*"
+        r"|(?:can|does)\s+(?:a\s+)?(?:picture|screenshot)\s+(?:of\s+my\s+screen\s+)?"
+        r"(?:go|be\s+sent)\s+to\s+the\s+cloud\b.*"
+        r"|(?:the\s+)?picture\s+mode\s+(?:and|with)\s+(?:the\s+)?cloud\b.*"),
+    # Row 11 names ONE preset and asks for the model + card (or context + speed)
+    # that its single row decides together. Each alternative is its own regex
+    # because Python's `re` refuses one group name in two branches; `name` is
+    # the preset the sentence names, and the row's `args` hands it to `read()`.
+    "preset_model_card": (
+        re.compile(
+            r"(?:what|which)\s+(?:ai\s+)?model\s+(?:and|plus)\s+(?:what|which)\s+"
+            r"(?:graphics\s+|video\s+)?card\s+(?:does|do|is|has)\s+(?:the\s+)?"
+            r"(?P<name>.+?)\s+preset\s+(?:use|run|have|on)\b.*"),
+        re.compile(
+            r"(?:what|which)\s+(?:graphics\s+|video\s+)?card\s+(?:and|plus)\s+"
+            r"(?:what|which)\s+(?:ai\s+)?model\s+(?:does|do|is|has)\s+(?:the\s+)?"
+            r"(?P<name>.+?)\s+preset\s+(?:use|run|have|on)\b.*"),
+        re.compile(
+            r"(?:what|which)\s+(?:context\s+window|context)\s+(?:and|plus)\s+"
+            r"(?:what|which\s+)?(?:speed|tokens\s+a\s+second|tokens\s+per\s+second)\s+"
+            r"(?:does|do|has)\s+(?:the\s+)?(?P<name>.+?)\s+(?:preset\s+)?"
+            r"(?:have|use|run|get)\b.*"),
+        re.compile(
+            r"(?:what|which)\s+(?:speed|tokens\s+a\s+second|tokens\s+per\s+second)\s+"
+            r"(?:and|plus)\s+(?:what|which\s+)?(?:context\s+window|context)\s+"
+            r"(?:does|do|has)\s+(?:the\s+)?(?P<name>.+?)\s+(?:preset\s+)?"
+            r"(?:have|use|run|get)\b.*"),
+    ),
+    # Row 12 names the cloud (or its escalation) AND the local-only/private side.
+    # A sentence that names only the cloud keeps its own answer elsewhere.
+    "cloud_privacy": re.compile(
+        r"(?:does|do|can|will)\s+(?:the\s+)?cloud(?:\s+(?:escalation|fallback|model|"
+        r"turn|service|mode))?\s+(?:send|leak|upload|share|override|break|bypass|"
+        r"get|see|read)\s+(?:my\s+|the\s+|any\s+)?(?:private|personal|local[-\s]only|"
+        r"files?|emails?|memory|memories|credentials?|screen|picture|screenshots?)\b.*"
+        r"|(?:if|when)\s+(?:the\s+)?cloud(?:\s+(?:escalation|fallback|model|service))?"
+        r"\s+(?:is|gets?)\s+on\s+(?:does|do|will|is|are)\s+(?:my\s+|the\s+)?"
+        r"(?:private|personal|local[-\s]only|email|files?|memory|memories)\b.*"
+        r"|(?:do|does)\s+(?:the\s+)?cloud(?:\s+escalation)?\s+and\s+local[-\s]only"
+        r"(?:\s+privacy)?\s+(?:conflict|clash|interact|fight)\b.*"
+        r"|(?:is|are)\s+(?:the\s+)?cloud(?:\s+escalation)?\s+(?:safe|compatible|ok|fine)"
+        r"\s+with\s+(?:local[-\s]only|private|privacy)\b.*"),
+}
+
+for _rule in _PAIR_RULES:
+    _rule["rx"] = _PAIR_SHAPES.get(str(_rule["id"]))
+
+_PAIR_BY_ID = {str(rule["id"]): rule for rule in _PAIR_RULES}
+
+
+def _pair_question(s: str) -> Optional[Intent]:
+    """The pair whose own sentence this is, or None - never a guess.
+
+    A row that declares `args` carries its own named groups in the intent's
+    fields (the preset a model/card question names); every other row answers
+    from the live reads alone.
+    """
+    for rule in _PAIR_RULES:
+        patterns = rule.get("rx")
+        if patterns is None:
+            continue
+        if isinstance(patterns, re.Pattern):
+            patterns = (patterns,)
+        for rx in patterns:
+            m = rx.fullmatch(s)
+            if m is None:
+                continue
+            fields = {"pair": str(rule["id"])}
+            if rule.get("args"):
+                fields.update({k: " ".join(str(v or "").split())
+                               for k, v in (m.groupdict() or {}).items() if v})
+            return Intent("pair_answer", fields)
+    return None
+
+
+def _run_pair_answer(f: dict) -> Result:
+    """One table row's answer: read the live values, say what they do together."""
+    rule = _PAIR_BY_ID.get(str(f.get("pair") or ""))
+    if rule is None:
+        return Result(PAIR_UNKNOWN_WORDS, "pair_answer")
+    try:
+        values = rule["read"](f) if rule.get("args") else rule["read"]()
+    except Exception:                       # noqa: BLE001 - said, never raised
+        values = {}
+    try:
+        said = str(rule["say"](values) or "").strip()
+    except Exception:                       # noqa: BLE001 - said, never raised
+        said = ""
+    if not said:
+        return Result("I could not read what those two do together on this PC just now, "
+                      "so I will not guess.", "pair_answer")
+    return Result(said, "pair_answer")
+
+
+PAIR_UNKNOWN_WORDS = ("I do not have a rule for that pair, so I am not going to invent "
+                      "one. I can answer about: " + "; ".join(
+                          str(r["title"]) for r in _PAIR_RULES) + ".")
+
+
+def _pair_conflict_line(keys) -> str:
+    """The ONE-LINE warning for two named settings, or "" when they are no pair."""
+    pair = frozenset(str(k) for k in (keys or ()))
+    if len(pair) != 2:
+        return ""
+    for rule in _PAIR_RULES:
+        if rule["keys"] != pair or not callable(rule.get("conflict")):
+            continue
+        try:
+            values = rule["read"]()
+            return str(rule["conflict"](values) or "").strip()
+        except Exception:                   # noqa: BLE001 - no warning is safe
+            return ""
+    return ""
+
+
+# --------------------------------------------------------------------------
+#   ANY two real features/settings: live states, and whether a rule applies
+# --------------------------------------------------------------------------
+#
+# THE GENERIC LOOKUP (Gemini ruling, 2026-11-04, SA-3 part B). The table above
+# answers twelve hand-proven pairs. This answers ANY other two-thing sentence
+# whose halves ARE a real feature or setting on this PC: each half's live state
+# is read from the registry/feature reader that owns it, and the answer says
+# plainly whether a known rule links them.
+#
+# IT DOES NOT CLAIM INDEPENDENCE. The ruling's sample wording says two unlinked
+# settings "work independently"; this code cannot prove that, so it says the
+# honest thing instead - no rule in the code links them, so it will not claim
+# that changing one turns the other off. A name this PC does not have is said to
+# be unknown. A sentence that names no Jarvis thing and never says "Jarvis",
+# "feature" or "setting" is ordinary conversation and falls through untouched.
+
+_ENTITY_SHAPES = (
+    re.compile(r"(?:does|do|can|will)\s+(?P<a>.+?)\s+(?:work|go|run|play)\s+"
+               r"(?:together\s+)?with\s+(?P<b>.+?)(?:\s+together)?\s*\??$"),
+    re.compile(r"(?:do|does|can|will)\s+(?P<a>.+?)\s+and\s+(?P<b>.+?)\s+"
+               r"(?:work|go|run|play)\s+(?:well\s+)?together\s*\??$"),
+    re.compile(r"(?:is|are)\s+(?P<a>.+?)\s+compatible\s+with\s+(?P<b>.+?)\s*\??$"),
+    re.compile(r"(?:do|does|can)\s+(?P<a>.+?)\s+and\s+(?P<b>.+?)\s+"
+               r"(?:conflict|clash)\b.*$"),
+    re.compile(r"(?P<a>.+?)\s+and\s+(?P<b>.+?)\s+together\s*\??$"),
+)
+
+#: A CHANGE verb at the START of one half. A sentence that asks for a change is
+#: never the two-thing answer: "turn on web search and chat history together"
+#: used to be read as the entity "turn on web search" and answered "that does
+#: not match a name" - nonsense, and it hid the change lane underneath, which
+#: is the one that says one change at a time (2026-11-04, found while finishing
+#: this lane). Anchored to the START of the half on purpose: a real setting name
+#: may CONTAIN one of these words ("the humour switch"), and that one must still
+#: answer.
+_CHANGE_LEAD = re.compile(
+    r"(?:(?:please|jarvis)\s+)?"
+    r"(?:(?:can|could|would|will|do|does)\s+(?:you|i|we)\s+)?"
+    r"(?:the\s+)?"
+    r"(?:turn|switch|set|change|make|enable|disable|put|add|remove|delete|"
+    r"activate|deactivate|toggle)\b", re.I)
+
+
+def _entity_for(name: str) -> Optional[dict]:
+    """One real feature or setting this name IS, or None - exact names only.
+
+    Settings are tried first because their live value has its own reader;
+    a feature row's state comes from the same `jarvis_feature_guide` state
+    token the feature-difference answer carries. A near miss resolves to None
+    and is said to be unknown - this never fuzzy-matches a name into an answer.
+    """
+    text = " ".join(str(name or "").strip().strip("\"'").split())
+    if not text:
+        return None
+    setting = None
+    try:
+        import jarvis_settings_registry as R
+        setting = R.find_bool_setting(text) or R.find_choice_setting(text)
+    except Exception:                       # noqa: BLE001 - try the features
+        setting = None
+    if setting is not None:
+        key = str(getattr(setting, "key", ""))
+        names = [str(n) for n in (getattr(setting, "names", ()) or ())]
+        label = names[0] if names else key
+        if hasattr(setting, "options"):
+            value = None
+            try:
+                import jarvis_settings_registry as R2
+                value = R2.current_value(setting)
+            except Exception:               # noqa: BLE001 - said as unknown
+                value = None
+            known = isinstance(value, str) and bool(value.strip())
+            return {"kind": "setting", "id": key, "label": label,
+                    "value": value if known else None, "known": known,
+                    "state": value if known else "unreadable"}
+        value = _pair_switch(key)
+        return {"kind": "setting", "id": key, "label": label,
+                "value": value, "known": isinstance(value, bool),
+                "state": _pair_on_off(value)}
+    try:
+        import jarvis_feature_guide as FG
+        row = FG.find_exact(text)
+    except Exception:                       # noqa: BLE001 - no guide, no answer
+        row = None
+    if row is None:
+        return None
+    try:
+        import jarvis_feature_guide as FG2
+        state = FG2.state_token(row)
+    except Exception:                       # noqa: BLE001 - said as unknown
+        state = "unreadable"
+    return {"kind": "feature", "id": str(row.get("id") or ""),
+            "label": str(row.get("title") or row.get("id") or ""),
+            "value": None, "known": False, "state": state}
+
+
+#: A feature state token -> the clause that says it in plain words. The tokens
+#: are `jarvis_feature_guide.state_token`'s own, so the two answers cannot
+#: disagree about what "on" means; only the grammar differs.
+_ENTITY_FEATURE_STATE = {
+    "on": "is on",
+    "off": "is off",
+    "partly on": "is partly on",
+    "cannot be read on this PC": "has a switch, but it could not be read on this PC",
+    "a control this build cannot read as on/off":
+        "has a control this build cannot read as on/off",
+    "no on/off switch": "has no on/off switch",
+    "always on (core safety rule)": "is always on as a core safety rule",
+    "always available by command": "is always available by command",
+    "Settings only, no chat control": "is set in Settings only",
+    "a setting read and changed on this PC": "is set and read on this PC",
+}
+
+
+def _entity_state_words(e: dict) -> str:
+    """One honest clause: what this thing IS and its live state right now."""
+    label = e.get("label") or e.get("id")
+    state = str(e.get("state") or "")
+    if e.get("kind") == "setting":
+        if e.get("known") is True and state not in ("on", "off"):
+            return f'"{label}" is "{state}"'
+        if e.get("known") is True:
+            return f'"{label}" is {state}'
+        return f'"{label}" is a setting here, but its value could not be read just now'
+    return f'"{label}" {_ENTITY_FEATURE_STATE.get(state, "is " + state)}'
+
+
+def _run_two_entity(f: dict) -> Result:
+    """Both halves' live state, plus one honest line on whether a rule links them."""
+    a_name = " ".join(str(f.get("a") or "").split())
+    b_name = " ".join(str(f.get("b") or "").split())
+    a, b = _entity_for(a_name), _entity_for(b_name)
+    if a is None and b is None:
+        return Result(
+            f'Neither "{a_name}" nor "{b_name}" matches a feature or setting name I '
+            f"can read, so I cannot tell you how they work together - and I will not "
+            f"invent one.", "two_entity_answer")
+    clauses = []
+    live = []
+    if a is not None:
+        clauses.append(_entity_state_words(a))
+        live.append(a["kind"] == "feature" or a.get("known") is True)
+    else:
+        clauses.append(f'"{a_name}" does not match a feature or setting name I can read')
+    if b is not None:
+        clauses.append(_entity_state_words(b))
+        live.append(b["kind"] == "feature" or b.get("known") is True)
+    else:
+        clauses.append(f'"{b_name}" does not match a feature or setting name I can read')
+    parts = [("Right now, " if all(live) else "") + " and ".join(clauses) + "."]
+    rule_line = ""
+    if a is not None and b is not None and a["kind"] == "setting" and b["kind"] == "setting":
+        rule_line = _pair_conflict_line([a["id"], b["id"]])
+    if rule_line:
+        parts.append("A known rule links them: " + rule_line)
+    elif a is not None and b is not None:
+        parts.append("No rule in my code links those two, so I cannot say that changing "
+                     "one turns the other off or changes it - I have no such rule to "
+                     "show you, and I will not invent one.")
+    return Result(" ".join(parts), "two_entity_answer")
+
+
+def _two_entity_question(s: str) -> Optional[Intent]:
+    """The two real things this sentence names, or None when it names no pair."""
+    for rx in _ENTITY_SHAPES:
+        m = rx.fullmatch(s)
+        if m is None:
+            continue
+        a = " ".join(str(m.group("a") or "").split())
+        b = " ".join(str(m.group("b") or "").split())
+        if len(a) < 2 or len(b) < 2:
+            continue
+        if _CHANGE_LEAD.match(a) or _CHANGE_LEAD.match(b):
+            # A request to change something is not a question about two things
+            # working together. It belongs to the change lanes further down,
+            # which answer it with the one-change rule - so this returns None
+            # rather than trying another shape on the same words.
+            return None
+        if _entity_for(a) is None and _entity_for(b) is None:
+            # Ordinary conversation ("does a car work with water") stays the
+            # model's; only a sentence that says it is about Jarvis's own
+            # things gets the honest "I do not have that one" answer.
+            if _feature_context_ok(s) or _feature_explicit(s):
+                return Intent("two_entity_answer", {"a": a, "b": b})
+            return None
+        return Intent("two_entity_answer", {"a": a, "b": b})
+    return None
+
+
+#: The lead-ins a two-setting CHANGE request uses. A sentence that names two
+#: settings but is not a change ("does web search use ask before every search")
+#: is a question and belongs to the pair shapes above.
+_TWO_SETTING_CHANGE = re.compile(
+    r"(?:turn|switch|set|change|make|enable|disable|put)\b.*")
+
+
+def _two_setting_mentions(s: str) -> list:
+    """The registry switches this sentence names, longest name first per setting.
+
+    The names are the registry's OWN (`BoolSetting.names`), the words Settings
+    shows - so no second list of setting names can drift from the app. A name
+    that is part of a longer name in the same sentence does not count twice.
+    """
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - no registry, no answer
+        return []
+    hits = []
+    for setting in getattr(R, "BOOL_SETTINGS", ()) or ():
+        names = sorted((str(n or "").strip().lower() for n in
+                        (getattr(setting, "names", ()) or ())), key=len, reverse=True)
+        for name in names:
+            if name and re.search(r"(?<!\w)" + re.escape(name) + r"(?!\w)", s):
+                hits.append((name, str(setting.key)))
+                break
+    # A name inside a longer matched name is the SAME mention, not a second one
+    # ("ask before every web search" contains "web search").
+    keys = []
+    for name, key in sorted(hits, key=lambda pair: -len(pair[0])):
+        if any(name in other for other, _k in hits if other != name):
+            continue
+        if key not in keys:
+            keys.append(key)
+    return keys
+
+
+def _settings_pair_change(s: str) -> Optional[Intent]:
+    """A change request naming TWO settings this table calls a pair, or None.
+
+    NOTHING IS CHANGED HERE. One sentence cannot raise two cards, so the answer
+    names the interaction and asks for one setting at a time - exactly the rule
+    the project already keeps (one card per change). A sentence naming two
+    settings with no rule between them, or naming a setting that is not a
+    switch, falls through to the model as it did before.
+    """
+    if not _TWO_SETTING_CHANGE.fullmatch(s):
+        return None
+    keys = _two_setting_mentions(s)
+    if len(keys) != 2:
+        return None
+    if not _pair_conflict_line(keys):
+        return None
+    return Intent("settings_pair_note", {"first": keys[0], "second": keys[1]})
+
+
+def _run_settings_pair_note(f: dict) -> Result:
+    """The one-line interaction plus "one setting at a time". Changes nothing."""
+    keys = [str(f.get("first") or ""), str(f.get("second") or "")]
+    line = _pair_conflict_line(keys)
+    if not line:
+        return Result("I could not read what those two do together on this PC just now, "
+                      "so I will not guess. Nothing was changed.", "settings_pair_note")
+    return Result(
+        "I change one setting per message - each change that loosens a rule raises its "
+        "own card, and one sentence cannot raise two. " + line +
+        " Say one of them on its own and I will ask for that one. Nothing was changed.",
+        "settings_pair_note")
+
+
 def _model_record() -> str:
     """The model this PC's own state records, never the chosen preset's model.
 
@@ -13367,6 +15044,75 @@ def _run_presets_list() -> Result:
     said = ('%d presets - %s. Ask "what does <preset> change?" for its model, '
             "window and honest cost." % (len(rows), "; ".join(parts)))
     return Result(said, "presets_list")
+
+
+def _run_focus_presets() -> Result:
+    """"What is the focus preset?" - every preset ROW and which one is chosen.
+
+    THE COLLISION FIX (2026-11-04, the self-awareness audit's gap 6). "The focus
+    preset" is the CHOICE setting `focus_preset`, whose options are this PC's
+    model presets - not a preset called "focus". The rows come from
+    `jarvis_presets.PRESETS`, the module that owns them and whose `apply_preset`
+    starts the lane each row names, and the chosen one from
+    `jarvis_presets.choice()` - the file the PC really writes. An absent or
+    unreadable preset module, or a choice file that cannot be read, says so
+    plainly instead of reading as an empty list.
+    """
+    try:
+        import jarvis_presets as P
+        rows = list(getattr(P, "PRESETS", ()) or ())
+    except Exception:                       # noqa: BLE001 - older/damaged PC
+        return Result("I cannot read this PC's preset rows right now (the preset "
+                      "module is missing), so I cannot list the focus presets or "
+                      "their models.", "focus_presets")
+    if not rows:
+        return Result("The preset module answered with no rows on this PC, so I "
+                      "cannot list the focus presets or their models.", "focus_presets")
+    parts = []
+    for p in rows:
+        model = str(getattr(p, "model", "") or "")
+        try:
+            context = int(getattr(p, "context", 0) or 0)
+        except (TypeError, ValueError):
+            context = 0
+        line = f"{getattr(p, 'title', '')}: {model or 'no local model'}"
+        if context:
+            line += f", {context:,} tokens"
+        parts.append(line)
+    said = ("The focus preset is a choice in Settings, not one preset: it picks which "
+            f"of this PC's {len(rows)} model presets is applied. They are: "
+            + "; ".join(parts) + ".")
+    try:
+        chosen = str(P.choice() or "")
+    except Exception:                       # noqa: BLE001 - said, never guessed
+        chosen = ""
+        said += " This PC could not read which preset is chosen right now."
+    if chosen:
+        title = chosen
+        for p in rows:
+            if str(getattr(p, "id", "")) == chosen:
+                title = str(getattr(p, "title", "") or chosen)
+                break
+        said += f' The one chosen on this PC right now is "{title}".'
+    elif "could not read" not in said:
+        # `jarvis_presets.choice()` answers None for BOTH "nothing applied yet"
+        # and "a file I could not read", because it swallows every failure. The
+        # two are not the same sentence to the owner, so only the absent file
+        # may be reported as "none chosen"; a choice file that exists and does
+        # not name a readable preset says exactly that (2026-11-04).
+        try:
+            present = bool(P._choice_path().is_file())
+        except Exception:                   # noqa: BLE001 - said as unknown
+            present = False
+        if present:
+            said += (" There is a preset choice file on this PC that does not name a "
+                     "preset I can read, so I cannot say which one is chosen right now.")
+        else:
+            said += (" No preset has been applied on this PC yet, so none is chosen "
+                     "right now.")
+    said += (' Ask "what does <preset> change?" for one row\'s cost and card, or say '
+             '"use the <preset> preset" to apply it - that raises ONE approval card.')
+    return Result(said, "focus_presets")
 
 
 def _run_preset_detail(name) -> Result:
@@ -13610,6 +15356,451 @@ def _run_reach(intent: Intent) -> Result:
         return Result(jarvis_reach.sentence(), intent.name)
     except Exception:
         return Result(REACH_MISSING, intent.name)
+
+
+# --------------------------------------------------------------------------
+#   The self-questions the doc promised (2026-11-04)
+# --------------------------------------------------------------------------
+#
+# docs/SELF-AWARENESS.md told the owner that "What tools do you have?",
+# "Which of your tools ask before they act?" and "What is connected?" already
+# worked through the feature guide. Driven, all three answered nothing and
+# went to the model, which has no state to answer them from. Each answer below
+# is built from the module that already owns the fact, at answer time, so a
+# typed list cannot drift: jarvis_agent.TOOLS + the live [tools].enabled,
+# jarvis_asks_first.view(), jarvis_reach.view(), jarvis_plugins.available().
+# None of them changes anything; all four are in READ_ONLY_INTENTS.
+
+
+def _self_list(items, cap: int = 14) -> str:
+    """`a, b and c`; `a, ... and N more` past `cap` - one answer, not a dump."""
+    got = [str(i) for i in items if str(i or "").strip()]
+    if not got:
+        return ""
+    if len(got) > cap:
+        return ", ".join(got[:cap]) + f" and {len(got) - cap} more"
+    if len(got) == 1:
+        return got[0]
+    return ", ".join(got[:-1]) + " and " + got[-1]
+
+
+def _tool_label(name: str) -> str:
+    """A tool's plain-words name, from jarvis_reach's own table."""
+    try:
+        import jarvis_reach as RE
+        return str(RE.TOOL_NAMES.get(str(name), str(name)))
+    except Exception:
+        return str(name)
+
+
+def _run_tools_inventory(intent: Intent) -> Result:
+    """"What tools do you have?" - the registry's own list and live offer.
+
+    THE COUNTS COME FROM ONE PLACE: `jarvis_self_portrait.tool_inventory()`,
+    the same read `/api/self` and the model's self_portrait tool now use, so
+    the chat answer, the portrait and the refresh sentence cannot say three
+    different numbers. It is built at answer time from `jarvis_agent.TOOLS`
+    and the same `[tools].enabled` read the turn makes; an unreadable settings
+    file says so instead of reading as "no tools".
+    """
+    try:
+        import jarvis_self_portrait as SP
+        inv = SP.tool_inventory()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    registered = inv.get("registered")
+    if not isinstance(registered, int):
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    head = f"I have {registered} tools built in."
+    if inv.get("enabled") is None:
+        return Result(
+            head + " I cannot read which of them the AI model is offered right "
+            "now - the settings file did not answer, so I will not guess.",
+            intent.name)
+    offered = [str(n) for n in (inv.get("enabled_names") or ())]
+    if not offered:
+        return Result(
+            head + " None of them are switched on right now: your settings file "
+            "(jarvis-framework.toml, [tools].enabled) names no tool.",
+            intent.name)
+    body = (f" {len(offered)} of them are switched on in your settings file: "
+            f"{_self_list([_tool_label(n) for n in offered])}.")
+    if len(offered) < registered:
+        body += (f" The other {registered - len(offered)} are built in but not "
+                 f"switched on - jarvis-framework.toml, [tools].enabled, is the "
+                 f"list, and Settings, \"What asks first\", has the switches for "
+                 f"the ones an app can change.")
+    body += (" A tool's own switch can still hold it back for one turn - web "
+             "search, browser control and the data sandbox have their own - so "
+             "the live page is Settings, \"What asks first\".")
+    return Result(head + body, intent.name)
+
+
+def _run_tools_asking(intent: Intent) -> Result:
+    """"Which of your tools ask before they act?" - the asks-first page's rows.
+
+    The page is the project's one list of what asks first, and its rows are the
+    actions the gate decides; the answer counts and names the ones whose own
+    words say they ask. Re-using the page is what keeps this from inventing a
+    permission the gate does not keep.
+    """
+    try:
+        import jarvis_asks_first as AF
+        view = AF.view(here=False)
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result(SELF_TOOLS_MISSING, intent.name)
+    asking = []
+    for group in view.get("groups") or ():
+        for row in group.get("rows") or ():
+            says = str((row or {}).get("says") or "")
+            # THE PAGE'S OWN "ask" WORD, not a prefix: "Asks when Jarvis made
+            # the mark" is a narrower rule and must not be counted as "asks you
+            # first every time".
+            if says == AF.SAYS.get("ask"):
+                asking.append(str(row.get("title") or row.get("id") or ""))
+    if not asking:
+        return Result("Nothing asks you first right now - the \"What asks first\" "
+                      "page is where that would be listed.", intent.name)
+    return Result(
+        f"{len(asking)} actions ask you first before they act - for example: "
+        f"{_self_list(asking, cap=6)}. The \"What asks first\" page has every one, "
+        f"written by the PC, in Settings in both apps.", intent.name)
+
+
+def _run_connected(intent: Intent) -> Result:
+    """"What is connected?" - the reach page's ON rows plus the plug-ins."""
+    try:
+        import jarvis_reach as RE
+        view = RE.view()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result(REACH_MISSING, intent.name)
+    on = []
+    for row in view.get("rows") or ():
+        if (row or {}).get("on"):
+            where = str(row.get("where") or "").split(" (as ")[0]
+            on.append(str(row.get("name") or "") + (f": {where}" if where else ""))
+    head = ("Right now these are connected or reachable from this PC: "
+            + "; ".join(on) + "." if on else
+            "Nothing is connected from this PC right now.")
+    try:
+        import jarvis_plugins as P
+        plugins = len(P.available() or ())
+    except Exception:                       # noqa: BLE001 - no folder is not a fault
+        plugins = None
+    if plugins is None:
+        plugins_bit = " I cannot read the plug-in folder on this PC just now."
+    elif plugins:
+        plugins_bit = f" Plug-ins installed on this PC: {plugins}."
+    else:
+        plugins_bit = " No plug-ins are installed on this PC."
+    return Result(head + plugins_bit + " Anything not on this list stays on this "
+                  "PC. This list is written by the PC from its settings, not by "
+                  "the AI model.", intent.name)
+
+
+def _run_self_refresh(intent: Intent) -> Result:
+    """"Refresh your abilities" - the self portrait's own refresh, said.
+
+    The same read-only refresh `POST /api/self/refresh` and the
+    `refresh_abilities` model tool use: it clears two caches, re-reads the
+    inventory and says what moved. No card, no restart, no change.
+    """
+    try:
+        import jarvis_self_portrait as SP
+        out = SP.refresh()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("Your PC's Jarvis cannot re-read its abilities yet - run "
+                      "apply-patches.ps1 on the PC.", intent.name)
+    said = str((out or {}).get("said") or "").strip()
+    return Result(said or "I re-read what I can do. Nothing was restarted.",
+                  intent.name)
+
+
+# --------------------------------------------------------------------------
+#   The six subsystems that only the language model answered (2026-11-04)
+# --------------------------------------------------------------------------
+#
+# The self-awareness audit drove these ten families of question and every one
+# of them fell to the local model, although the measured answer was already in
+# the tree: the hardware/preset/lane readers, the speed record, the memory
+# store, the disk reader and the two schedulers. Each builder below calls the
+# module that owns the fact, at answer time, and says "not measured" or "not
+# readable" in those words when there is nothing to read. No number is typed
+# here and no second reader is added.
+
+AS_IS_MISSING = ("Your PC's Jarvis cannot read that about itself yet - run "
+                 "apply-patches.ps1 on the PC.")
+
+
+def _how_running_words() -> str:
+    """What model, preset and cards, from the preset store and the hardware read."""
+    bits = []
+    model = _model_record()
+    preset_id = ""
+    try:
+        import jarvis_presets as P
+        preset_id = str(P.choice() or "")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        preset_id = ""
+    row = _preset_row(preset_id)
+    lane = (row or {}).get("lane") or {}
+    card = str(lane.get("card") or "").strip()
+    ctx = 0
+    try:
+        ctx = int((row or {}).get("context") or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    title = str((row or {}).get("title") or "")
+    if model or title:
+        if model:
+            head = f"I am running {model}"
+            if card:
+                # The Coding preset's lane card is the words "both cards", so
+                # "on the both cards" must read "across both cards".
+                head += (f" across {card}" if card.lower().startswith("both")
+                         else f" on the {card}")
+            if title:
+                head += f' under the "{title}" preset'
+            if ctx:
+                head += f", with {ctx:,} tokens of context"
+            bits.append(head + ".")
+        else:
+            # No running record: name the chosen preset's model as the PLAN -
+            # never as the model that is running (the same split
+            # `_run_model_current` makes).
+            plan = str((row or {}).get("model") or "")
+            said = (f'This PC does not record which model is running. The preset '
+                    f'chosen is "{title}"'
+                    + (f", which uses {plan}" if plan else "")
+                    + (f" on the {card}" if card and not card.lower().startswith("both")
+                       else (f" across {card}" if card else ""))
+                    + (f", with {ctx:,} tokens of context" if ctx else "") + ".")
+            bits.append(said)
+    else:
+        bits.append("This PC does not record which model or preset is loaded, so I "
+                    "cannot name what I am running on right now.")
+    # The cards themselves: jarvis_hardware's own read, the one its route serves.
+    try:
+        import jarvis_hardware as H
+        status = H.status()
+        cards = [c for c in (status.get("cards") or ()) if isinstance(c, dict)]
+    except Exception:                       # noqa: BLE001 - said as unknown
+        cards = []
+        status = {}
+    if cards:
+        named = []
+        for c in cards:
+            name = str(c.get("name") or "a graphics card")
+            total = c.get("total_gb")
+            free = c.get("free_gb")
+            extra = []
+            if isinstance(total, (int, float)):
+                extra.append(f"{float(total):.1f} GB")
+            if isinstance(free, (int, float)):
+                extra.append(f"{float(free):.1f} GB free")
+            named.append(name + (f" ({', '.join(extra)})" if extra else ""))
+        bits.append(f"This PC has {len(cards)} graphics "
+                    f"{'card' if len(cards) == 1 else 'cards'}: "
+                    + _self_list(named, cap=4) + ".")
+        if not status.get("available", True):
+            bits.append("The hardware read says it could not see the cards just now, "
+                        "so that list may be incomplete.")
+    else:
+        bits.append("I could not read this PC's graphics cards just now, so I will not "
+                    "name one.")
+    # The second card's own switches, only if they can be read: whether a
+    # feature there is on is a real state, not a claim about the hardware.
+    try:
+        import jarvis_second_card as SC
+        sw = SC._read_switches()        # read only; status() would reconcile lanes
+        on = [str(f.get("title") or f.get("id")) for f in (getattr(SC, "FEATURES", ()) or ())
+              if (sw.get("features") or {}).get(str(f.get("id")))]
+        combined = bool(sw.get("combined"))
+    except Exception:                       # noqa: BLE001 - said as nothing extra
+        on, combined = [], False
+    if combined:
+        bits.append("The both-cards mode (\"One bigger model on both cards\") is on.")
+    elif on:
+        bits.append("A per-card feature is on: " + _self_list(on) + ".")
+    else:
+        bits.append("No second-card feature is switched on, so the second card is "
+                    "free right now.")
+    bits.append('Ask "are you using both cards" for the both-card lane.')
+    return " ".join(bits)
+
+
+def _how_context_words() -> str:
+    """The context window the loaded preset starts its model with."""
+    model = _model_record()
+    preset_id = ""
+    try:
+        import jarvis_presets as P
+        preset_id = str(P.choice() or "")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        preset_id = ""
+    row = _preset_row(preset_id)
+    try:
+        ctx = int((row or {}).get("context") or 0)
+    except (TypeError, ValueError):
+        ctx = 0
+    title = str((row or {}).get("title") or "")
+    if ctx:
+        return (f"My context window is {ctx:,} tokens"
+                + (f" - the figure the \"{title}\" preset starts "
+                   f"{model or 'its model'} with" if title else "")
+                + ". That is how much of the conversation and the prompt can be held "
+                  "at once; older turns are compacted before they are dropped.")
+    # No preset row: the model's own measured record is the next real read.
+    try:
+        import jarvis_model_knowledge as K
+        bench = K.bench_for(model) if model else None
+        if bench and bench.get("context_tokens"):
+            return (f"My context window is {int(bench['context_tokens']):,} tokens - "
+                    f"the measured figure for {model} on this PC.")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        pass
+    return ("I cannot read the context window on this PC right now: no preset is "
+            "chosen and no measured record names one, so I will not quote a number.")
+
+
+def _how_fast_words() -> str:
+    """The measured tokens a second for the running model, and where it came from."""
+    model = _model_record()
+    if not model:
+        # No model record: the chosen preset's own model is the plan, and the
+        # speed record is keyed by model name, so quote that one - never a
+        # model this PC did not name.
+        try:
+            import jarvis_presets as P
+            model = str((_preset_row(str(P.choice() or "")) or {}).get("model") or "")
+        except Exception:                   # noqa: BLE001 - said as unknown
+            model = ""
+    try:
+        import jarvis_model_knowledge as K
+        bench = K.bench_for(model) if model else None
+    except Exception:                       # noqa: BLE001 - said as unknown
+        bench = None
+    if not bench:
+        return ("I have not measured how fast I am on this PC yet, so I will not invent "
+                "a number. Brain, Models lists every model's measured speed once one "
+                "has been measured.")
+    speed = bench.get("tok_s")
+    source = str(bench.get("source") or "").strip()
+    if not isinstance(speed, (int, float)):
+        return ("The speed record for " + (model or "the model") + " on this PC has no "
+                "measured tokens a second in it yet, so I will not invent a number.")
+    said = f"About {float(speed):.1f} tokens a second for {model or 'the model'} on this PC"
+    said += f" ({source})." if source else "."
+    if bench.get("measured_here") is False:
+        said += " That figure was not measured on this PC."
+    return said
+
+
+def _how_memory_words() -> str:
+    """How many facts the memory store holds, through the portrait's own read."""
+    try:
+        import jarvis_self_portrait as SP
+        stores = SP.stores()
+    except Exception:                       # noqa: BLE001 - said as unknown
+        return AS_IS_MISSING
+    mem = next((s for s in stores or () if (s or {}).get("id") == "memory"), None)
+    if not mem:
+        return "I cannot read the memory store on this PC, so I will not guess."
+    if not mem.get("available"):
+        why = str(mem.get("why_not") or "").strip()
+        return ("I cannot read the memory store on this PC" +
+                (f" ({why})" if why else "") + ", so I will not guess how much I "
+                "remember. Settings, Memory (Brain, Memory on the phone) is where it "
+                "is listed.")
+    counts = mem.get("counts") or {}
+    total = mem.get("count")
+    parts = []
+    if isinstance(total, int):
+        current = counts.get("current")
+        retired = counts.get("retired")
+        facts = counts.get("facts")
+        entities = counts.get("entities")
+        said = f"I am keeping {total:,} things about you"
+        halves = []
+        if isinstance(facts, int):
+            halves.append(f"{facts:,} facts")
+        if isinstance(current, int):
+            halves.append(f"{current:,} current")
+        if isinstance(retired, int):
+            halves.append(f"{retired:,} retired")
+        if halves:
+            said += " (" + ", ".join(halves) + ")"
+        if isinstance(entities, int) and entities:
+            said += f", naming {entities:,} people, places or things"
+        parts.append(said + ".")
+    else:
+        parts.append("I cannot count what I remember on this PC just now, so I will "
+                     "not quote a number.")
+    parts.append("Memory in Settings (Brain, Memory on the phone) lists every one, "
+                 "with a Forget on it.")
+    return " ".join(parts)
+
+
+def _how_jobs_words() -> str:
+    """What can be scheduled, from both schedulers' own registries."""
+    kinds = []
+    try:
+        import jarvis_schedule as S
+        for name, kind in sorted((S.KINDS or {}).items()):
+            noun = str(getattr(kind, "noun", "") or "").strip()
+            kinds.append(f"{noun or name}")
+    except Exception:                       # noqa: BLE001 - said as unknown
+        kinds = []
+    handlers = []
+    try:
+        import jarvis_jobs as J
+        handlers = [str(h) for h in (J.handlers() or ())]
+    except Exception:                       # noqa: BLE001 - said as unknown
+        handlers = []
+    parts = []
+    if kinds:
+        parts.append("The PC's scheduler can set these right now: "
+                     + _self_list(kinds) + ".")
+    else:
+        parts.append("The PC's scheduler is not answering, so I cannot list what it "
+                     "can set.")
+    try:
+        import jarvis_standby_schedule as SB
+        parts.append("Standby hours are their own schedule kind (\""
+                     + str(SB.KIND) + "\"), so Jarvis can put itself on standby for a "
+                     "window you set.")
+    except Exception:                       # noqa: BLE001 - not here is fine
+        pass
+    if handlers:
+        parts.append("The background-job engine can run these jobs: "
+                     + _self_list(handlers) + ".")
+    else:
+        parts.append("The background-job engine has no job bodies registered on this "
+                     "PC right now, so it can run none.")
+    parts.append("Reminders, timers and alarms are set by asking - \"remind me at 8\", "
+                 "\"set a timer for 10 minutes\" - and each says when it will fire "
+                 "before it is created.")
+    return " ".join(parts)
+
+
+def _run_how_running(intent: Intent) -> Result:
+    return Result(_how_running_words(), intent.name)
+
+
+def _run_how_context(intent: Intent) -> Result:
+    return Result(_how_context_words(), intent.name)
+
+
+def _run_how_fast(intent: Intent) -> Result:
+    return Result(_how_fast_words(), intent.name)
+
+
+def _run_how_memory(intent: Intent) -> Result:
+    return Result(_how_memory_words(), intent.name)
+
+
+def _run_how_jobs(intent: Intent) -> Result:
+    return Result(_how_jobs_words(), intent.name)
 
 
 def _run_identity(intent: Intent) -> Result:
@@ -17116,6 +19307,35 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_search(intent)
     if n == "reach_list":
         return _run_reach(intent)
+    if n == "tools_inventory":
+        return _run_tools_inventory(intent)
+    if n == "tools_asking":
+        return _run_tools_asking(intent)
+    if n == "connected_list":
+        return _run_connected(intent)
+    if n == "self_refresh":
+        return _run_self_refresh(intent)
+    # The six subsystems that only the model answered before (2026-11-04).
+    if n == "how_running":
+        return _run_how_running(intent)
+    if n == "how_context":
+        return _run_how_context(intent)
+    if n == "how_fast":
+        return _run_how_fast(intent)
+    if n == "how_memory":
+        return _run_how_memory(intent)
+    if n == "how_jobs":
+        return _run_how_jobs(intent)
+    # The ten pair rules (2026-11-04): read two real states and say what they do
+    # together. Read-only, no card, no model.
+    if n == "pair_answer":
+        return _run_pair_answer(f)
+    if n == "two_entity_answer":
+        return _run_two_entity(f)
+    # A change naming TWO settings this table calls a pair: the interaction in
+    # one line, and one setting at a time. It changes nothing itself.
+    if n == "settings_pair_note":
+        return _run_settings_pair_note(f)
     if n == "calendar_setup":
         # "connect my calendar", "set up a calendar bridge for me" (2026-10-28):
         # a read-only answer from the reader's own state - it names the real
@@ -17192,6 +19412,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_models_list()
     if n == "presets_list":
         return _run_presets_list()
+    if n == "focus_presets":
+        # "what is the focus preset" - the setting's 9 model rows and the chosen
+        # one, never "there is no preset called focus" (2026-11-04, gap 6).
+        return _run_focus_presets()
     if n == "preset_detail":
         return _run_preset_detail(intent.f.get("name") or "")
     if n == "preset_model":
@@ -17753,6 +19977,23 @@ READ_ONLY_INTENTS = frozenset({
     "personality_refine_failed", "personality_show", "personality_show_missing",
     "personality_status", "project_log",
     "reach_list", "sayable_help", "screen_status", "search_explain", "settings_choice_bad",
+    # The self-questions docs/SELF-AWARENESS.md promises (2026-11-04): each only
+    # reads a registry or a view, and the refresh re-reads the portrait without
+    # changing or restarting anything - so none may take back what "cancel
+    # that" would undo.
+    "tools_inventory", "tools_asking", "connected_list", "self_refresh",
+    # The six subsystems that only the model answered (2026-11-04): each reads
+    # a real state - the preset/hardware readers, the speed record, the memory
+    # store, the disk reader, the two schedulers - and changes nothing, so none
+    # may take back what "cancel that" would undo. The pair answers and the
+    # two-setting warning are read-only for the same reason: the warning CHANGES
+    # NOTHING, it only says the interaction and asks for one setting at a time.
+    "how_running", "how_context", "how_fast", "how_memory", "how_jobs",
+    "pair_answer", "settings_pair_note",
+    # The generic two-thing lookup and the focus-preset answer (2026-11-04,
+    # SA-3): both read the registry/feature rows and the preset choice file and
+    # change nothing, so neither may take back what "cancel that" would undo.
+    "two_entity_answer", "focus_presets",
     "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
     "settings_browser_mode_bad",
     # Reading the Anti-Slop filter (2026-10-28): "is anti-slop on?" changes
