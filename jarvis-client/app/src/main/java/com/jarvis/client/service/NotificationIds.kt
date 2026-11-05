@@ -28,6 +28,10 @@ object NotificationIds {
     const val AVATAR_OVERLAY = 0x4A58
     const val SCREEN_WATCH = 0x4A59
 
+    // Call recording (2026-11-04): the one ongoing notice while a call is
+    // recorded - armed, then recording with the clock, then Stop.
+    const val CALL_RECORD = 0x4A5A
+
     // Reminders and alarms (also given a tag per job, but kept distinct anyway).
     const val SCHEDULE = 0x3100
 
@@ -36,6 +40,10 @@ object NotificationIds {
     const val SUPPORT_CHAT = 0x3201
     const val HANDOFF = 0x3202
     const val WAKE_RESUME = 0x3203
+
+    // "Call recording kept on this phone": a finished recording the PC has not
+    // taken yet, kept on this phone until it can be sent.
+    const val CALL_RECORD_WAITING = 0x3204
 
     // Approvals: one summary line, then one number per waiting card from FIRST up.
     const val APPROVAL_SUMMARY = 0x4AFF
@@ -50,11 +58,13 @@ object NotificationIds {
         "WAKE_WORD" to WAKE_WORD,
         "AVATAR_OVERLAY" to AVATAR_OVERLAY,
         "SCREEN_WATCH" to SCREEN_WATCH,
+        "CALL_RECORD" to CALL_RECORD,
         "SCHEDULE" to SCHEDULE,
         "CHATBOT" to CHATBOT,
         "SUPPORT_CHAT" to SUPPORT_CHAT,
         "HANDOFF" to HANDOFF,
         "WAKE_RESUME" to WAKE_RESUME,
+        "CALL_RECORD_WAITING" to CALL_RECORD_WAITING,
         "APPROVAL_SUMMARY" to APPROVAL_SUMMARY,
         "APPROVAL_FIRST" to APPROVAL_FIRST,
     )
