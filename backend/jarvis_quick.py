@@ -292,6 +292,7 @@ stays the model's.
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import threading
@@ -6279,6 +6280,7 @@ PLUGIN_CATALOGUE = (
     ('vault-organizer', 'plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the own...'),
     ('vault', 'a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value.'),
     ('voiceprint', "Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it..."),
+    ('watch-decisions', 'what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.'),
 )
 
 
@@ -8221,19 +8223,54 @@ def _run_honest_chat(f: dict) -> Result:
 # `jarvis_limits`'s own row titles, `jarvis_asks_first`'s switch words and
 # `jarvis_feature_guide`'s rows. Reads only: no card, no write, no model.
 
+#: How long the chat reply waits for the owner's verdict before it says a card
+#: is waiting. The card itself has no deadline and both apps poll it, so this is
+#: only the chat sentence's own patience - the same 1.5 s jarvis_protection's
+#: routes use.
+_PROTECT_CARD_WAIT_S = 1.5
+
 _PROTECT_READ = re.compile(
     r"(?:what(?:'s| is)|show me|list|tell me|see)\s+(?:what(?:'s| is)\s+)?"
     r"(?:currently\s+)?protected\b.*"
     r"|what(?:'s| is)\s+on\s+my\s+protected\s+(?:list|items)\b.*"
-    r"|is\s+anything\s+protected\b.*")
+    r"|is\s+anything\s+protected\b.*"
+    # 2026-11-04, the owner's own words for the same list: "what folders are
+    # restricted?", "which files are blocked?", "is Jarvis blocked from C:\X?".
+    # A NAMED target is answered about that target from the real store; no
+    # target answers with the whole list. Still read-only: no card, no write.
+    r"|(?:what|which)\s+(?:folders?|files?|programs?|things?|items?)\s+"
+    r"(?:are|is)\s+(?:restricted|blocked|protected)\b.*"
+    r"|(?:what|which)\s+(?:folders?|files?|programs?|things?)\s+"
+    r"(?:have|did)\s+(?:i|you)\s+(?:restricted|blocked|protected)\b.*"
+    r"|(?:show|list)\s+(?:me\s+)?(?:the\s+)?(?:restricted|blocked|protected)\s+"
+    r"(?:folders?|files?|programs?|things?|items?)\b.*"
+    r"|(?:is|are)\s+(?:jarvis|you)\s+(?:blocked|restricted|prevented|stopped)\s+"
+    r"(?:from|by)\s+(?P<target>.+)"
+    r"|(?:is|are)\s+(?P<target2>.+?)\s+(?:restricted|blocked|protected)\b.*")
 _PROTECT_REMOVE = re.compile(
     r"(?:remove|take|clear|undo)\s+(?:the\s+)?protection\s+(?:from|on)\s+(?P<target>.+)"
     r"|unprotect\s+(?P<target2>.+)"
-    r"|stop\s+jarvis\s+from\s+(?:touching|reading|opening|using)\s+(?P<target3>.+)"
+    r"|unrestrict\s+(?P<target5>.+)"
+    r"|stop\s+protecting\s+(?P<target7>.+)"
+    r"|let\s+jarvis\s+(?:read|touch|open|use|see|access)\s+(?P<target6>.+?)\s+again"
     r"|(?:remove|take)\s+(?P<target4>.+?)\s+(?:from|off)\s+(?:the\s+)?protected\b.*")
 _PROTECT_ADD = re.compile(
     r"(?:protect|exclude)\s+(?:my|the|this|these|those)\s+(?P<target>.+)"
-    r"|add\s+(?P<target2>.+?)\s+to\s+(?:the\s+)?protected\b.*")
+    r"|add\s+(?P<target2>.+?)\s+to\s+(?:the\s+)?protected\b.*"
+    r"|restrict\s+(?P<target3>.+)"
+    r"|block\s+jarvis\s+(?:from\s+)?(?:reading|touching|opening|using|seeing|"
+    r"accessing)\s+(?P<target4>.+)"
+    # "stop Jarvis reading X" is a RESTRICTION request - it asks for the folder
+    # to be protected - and the owner's own list of phrasings groups it with
+    # "restrict", not with "unrestrict". (The old grammar filed it under
+    # removal because "stop Jarvis from touching" reads both ways; what the
+    # owner means is "make Jarvis stop", i.e. block it.)
+    r"|stop\s+jarvis\s+(?:from\s+)?(?:reading|touching|opening|using|seeing|"
+    r"accessing)\s+(?P<target8>.+)"
+    r"|don'?t\s+let\s+jarvis\s+(?:read|touch|open|use|see|access)\s+(?P<target5>.+)"
+    r"|jarvis\s+(?:may|must|should|can)\s+not\s+(?:read|touch|open|use|see|"
+    r"access|have access to)\s+(?P<target6>.+)"
+    r"|never\s+let\s+jarvis\s+(?:read|touch|open|use|see|access)\s+(?P<target7>.+)")
 _LIGHTS = re.compile(
     r"turn\s+(?:on|off)\s+(?:the\s+|my\s+|a\s+)?(?:living\s+room|kitchen|bedroom|"
     r"office|hall|front\s+room|lounge|dining\s+room|bathroom)?\s*"
@@ -8451,21 +8488,31 @@ def _quiet_hours_words() -> str:
 
 def _honest_early(_text: str, s: str) -> Optional[Intent]:
     """Off-state / state-read sentences that must beat the feature grammar."""
-    # The protection list, and the one-card rule for changing it.
-    if _PROTECT_READ.fullmatch(s):
-        return Intent("honest_state", {"shape": "protection_read"})
+    # The protection list, and a REAL change when a path is named (2026-11-04).
+    #
+    # This used to answer every protect/unprotect sentence with the rule
+    # ("raising a card ...") and change nothing - and its own "is the tool
+    # offered" test compared GATE ACTION names against a list of TOOL names, so
+    # it always said the tool was not offered and pointed at Settings. That is
+    # the wrong answer the owner hit. A change sentence is now its own mutating
+    # intent, applied through the feature's real route (and its real card); a
+    # sentence that names no path is answered with a plain ask for the path -
+    # never a guess, never a generic "I cannot".
+    m = _PROTECT_READ.fullmatch(s)
+    if m:
+        target = next((g for g in m.groups() if g), "")
+        return Intent("honest_state", {"shape": "protection_read",
+                                       "target": target.strip()})
     m = _PROTECT_REMOVE.fullmatch(s)
     if m:
         target = next((g for g in m.groups() if g), "")
-        return Intent("honest_state", {"shape": "protection_change",
-                                       "op": "remove",
-                                       "target": target.strip()})
+        return Intent("protection_apply", {"op": "remove",
+                                           "target": target.strip()})
     m = _PROTECT_ADD.fullmatch(s)
     if m:
         target = next((g for g in m.groups() if g), "")
-        return Intent("honest_state", {"shape": "protection_change",
-                                       "op": "add",
-                                       "target": target.strip()})
+        return Intent("protection_apply", {"op": "add",
+                                           "target": target.strip()})
     # A real light/plug/fan command: the home-control tool, not the setting.
     # The feature guide's own displayed control phrase ("turn on lights without
     # asking") must keep reaching the SETTING, so it is left alone here.
@@ -8514,6 +8561,125 @@ def _honest_early(_text: str, s: str) -> Optional[Intent]:
     return None
 
 
+def _protection_path(text) -> str:
+    """The PC path the owner actually typed in `text`, or "".
+
+    A drive-letter path (the only kind a Windows install has) and a POSIX one
+    (the suite runs on Linux CI too) are both accepted. The path stops at a
+    sentence word that cannot be part of it - "... from Jarvis" survives
+    normalise as a trailing " from". NOTHING is guessed: a described folder
+    ("the one with my medical scans") has no path, so this returns "" and the
+    caller asks the owner for it rather than protecting the wrong folder.
+    """
+    m = re.search(r"(?:[A-Za-z]:[\\/]|/)[^\"'<>|?*\n]+", str(text or ""))
+    if not m:
+        return ""
+    raw = m.group(0).strip()
+    raw = re.split(r"\s+(?:from|so|and|because|please)\b", raw, maxsplit=1,
+                   flags=re.I)[0]
+    return raw.strip().rstrip(".,;:!?")
+
+
+def _protection_named_target(text) -> str:
+    """The part of a "what is restricted?" sentence that names ONE target, or "".
+
+    Only a real path or a program name is worth checking against the store; a
+    vague "is a file protected?" keeps the whole-list answer instead of being
+    answered about the words "a file".
+    """
+    target = str(text or "").strip()
+    if not target:
+        return ""
+    if _protection_path(target):
+        return target
+    if target.lower().endswith(".exe"):
+        return target
+    return ""
+
+
+def _protection_apply_words(P, op: str, path: str, item: dict, code: int,
+                            body: dict) -> str:
+    """What chat says after the real route was asked, read from its own answer."""
+    body = body if isinstance(body, dict) else {}
+    job = P.job_state(body.get("id")) if body.get("id") else {}
+    state = str(job.get("state") or body.get("state") or "")
+    kind = str((item or {}).get("kind") or "folder")
+    target = str((item or {}).get("target") or path)
+    mode = str((item or {}).get("mode") or "blocked")
+    card = P.card_prompt(kind, target, mode, removal=(op == "remove"))
+    if state == "added":
+        return (f"Done - {target} is on your Protected from Jarvis list as "
+                f"{P.mode_words(mode)}. Jarvis will not touch it.")
+    if state == "removed":
+        return f"Done - {target} is no longer protected from Jarvis."
+    if state in ("denied", "timed_out"):
+        return ("Nothing was changed: that card was not approved, so the list "
+                "is exactly as it was.")
+    if state == "failed":
+        return ("Nothing was changed: "
+                + (str(job.get("message") or "").strip() or "the change failed."))
+    if code == 202:
+        return (f"One approval card is waiting: {card}. Nothing has changed "
+                "yet - approve it and I will do it.")
+    return str(body.get("error")
+               or "That could not be started, so nothing was changed.")
+
+
+def _run_protection_apply(f: dict) -> Result:
+    """A concrete "restrict <path>" / "unrestrict <path>", through the REAL route.
+
+    The change is made by jarvis_protection's OWN chat doors - ``handle_propose``
+    (ONE ``protect_item`` card) and ``handle_remove`` (ONE ``unprotect_item``
+    card) - the same functions the model tool, the desktop and the phone use.
+    So the card, its words, its tier and the store are the feature's own; this
+    file adds no second mechanism and can loosen nothing without that card.
+
+    Only a path the owner really typed is acted on. A described folder has no
+    path to check, so the answer ASKS for the whole path and names the exact
+    sentence to repeat - it never guesses at a folder (protecting the wrong one
+    is itself a failure), and it never falls through to a generic "I cannot do
+    that" either: the fixed path is the chat door that works on a default
+    install, where the model tool is not in `[tools].enabled`.
+    """
+    P = _protection_module()
+    if P is None:
+        return Result("The Protected from Jarvis list is not installed on this "
+                      "PC right now, so nothing was changed.", "protection_apply")
+    path = _protection_path(str(f.get("target") or ""))
+    if not path:
+        asked = "the folder" if str(f.get("op") or "") == "add" else "that folder"
+        return Result(
+            "I can set that from chat, but I need the whole path of " + asked +
+            " - a description is not enough to know which folder, and I will "
+            "not guess at one. Say it like \"restrict the folder D:\\Medical "
+            "scans from Jarvis\" (or \"unrestrict D:\\Medical scans\"), and one "
+            "approval card will ask you.", "protection_apply")
+    op = "remove" if str(f.get("op") or "") == "remove" else "add"
+    if op == "remove":
+        item = P.item_for_target(path)
+        if not item:
+            return Result(f"{path} is not on your Protected from Jarvis list, so "
+                          "there is nothing to remove and nothing was changed.",
+                          "protection_apply")
+        code, body = P.handle_remove({"id": item["id"]},
+                                     wait_s=_PROTECT_CARD_WAIT_S)
+        return Result(_protection_apply_words(P, op, path, item, code, body),
+                      "protection_apply")
+    kind = ("folder" if os.path.isdir(path)
+            else "file" if os.path.isfile(path) else "folder")
+    code, body = P.handle_propose({"kind": kind, "target": path,
+                                   "mode": "blocked"},
+                                  wait_s=_PROTECT_CARD_WAIT_S)
+    item = {}
+    if isinstance(body, dict):
+        if body.get("id"):
+            item = P.job_state(body["id"]).get("item") or {}
+        elif body.get("item"):
+            item = body.get("item") or {}
+    return Result(_protection_apply_words(P, op, path, item, code, body),
+                  "protection_apply")
+
+
 def _run_honest_state(f: dict) -> Result:
     """The stateful reads: the protection list, the job list, the phone state."""
     shape = str(f.get("shape") or "")
@@ -8522,6 +8688,19 @@ def _run_honest_state(f: dict) -> Result:
         if P is None:
             return Result("I cannot read the Protected from Jarvis list on this "
                           "PC right now.", "honest_state")
+        target = _protection_named_target(f.get("target"))
+        if target:
+            got = P.status_for(target)
+            if got["protected"]:
+                item = got["item"]
+                return Result(
+                    f"Yes - {item.get('target')} is on your Protected from Jarvis "
+                    f"list as {_protection_mode_words(P, item.get('mode'))}, so "
+                    f"Jarvis may not touch it.", "honest_state")
+            return Result(
+                f"No - {target} is not on your Protected from Jarvis list, so "
+                f"Jarvis is not blocked from it. To add it, say \"restrict "
+                f"{target}\" and one card will ask you.", "honest_state")
         try:
             code, body = P.handle_get()
         except Exception:
@@ -8547,21 +8726,6 @@ def _run_honest_state(f: dict) -> Result:
             words = (f"{len(items)} {noun} {verb} protected from Jarvis: "
                      + "; ".join(parts) + extra + ".")
         return Result(f"{words} {change}".strip(), "honest_state")
-    if shape == "protection_change":
-        P = _protection_module()
-        op = str(f.get("op") or "")
-        verb = "Removing protection" if op == "remove" else "Adding protection"
-        rule = (str(getattr(P, "CHANGE_CARD", "") or "") if P is not None else "")
-        offered = ("protect_item" in _enabled_tools_turn()
-                   or "unprotect_item" in _enabled_tools_turn())
-        if offered:
-            head = f"{verb} from chat raises one approval card."
-        else:
-            head = (f"{verb} from chat needs the protection tool, which is not "
-                    f"offered to me on this PC, so I cannot start its card here "
-                    f"in chat. Do it in Settings, Protected from Jarvis on the PC: "
-                    f"adding there is immediate.")
-        return Result(f"{head} {rule}".strip(), "honest_state")
     if shape == "jobs_read":
         try:
             import jarvis_jobs as J
@@ -18937,6 +19101,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_cloud_honesty(f)
     if n == "honest_state":
         return _run_honest_state(f)
+    if n == "protection_apply":
+        # A REAL change to the Protected from Jarvis list asked in chat
+        # (2026-11-04): its own mutating intent, so a private chat refuses it
+        # like every other change, and the card comes from jarvis_protection's
+        # own route. A sentence with no path is answered with a plain ask for
+        # the whole path - never a guessed target, never a generic refusal.
+        return _run_protection_apply(f)
     # Keyboard shortcuts (2026-10-31 honesty fix): fixed answers from the
     # measured desktop tables; the phone is told the keys are on the PC. No
     # card, no state read, no model.
