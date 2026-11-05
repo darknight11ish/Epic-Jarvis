@@ -11111,7 +11111,7 @@ the app"**. So every tool the AI model can be offered is switchable ON from the
 Tools page, one approval card each. The only limits left are the five
 non-negotiable rules (`CLAUDE.md`) and the shape below.
 
-**The 55 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
+**The 56 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
 
 - **Notes and reading:** `calendar_read`, `notes_search`,
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
@@ -11131,16 +11131,19 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 - **Everyday helpers:** `calculator`, `memory_search`, `file_read`,
   `web_search`, `my_files`, `propose_plan`, `change_setting`, `feature_guide` -
   the tools the earlier slice left out.
-- **Jarvis's own tools (19):** `goals_list`, `goal_add`, `goal_progress`,
+- **Jarvis's own tools (20):** `goals_list`, `goal_add`, `goal_progress`,
   `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
   `plugin_list`, `plugin_switch`, `send_text_message`, `refresh_abilities`,
-  `self_portrait`, `setup_quiz`, and - since 2026-11-05 - the six on-demand
-  GitHub tools `github_list`, `github_read_file`, `github_ci_status`,
-  `github_comment`, `github_open_issue`, `github_rerun_workflow` (the three
-  reads share the `github_inspect` action, the other three their own; every
-  use still raises its own card). The twelve before the GitHub six shipped ON
-  and had no switch row at all before 2026-11-04; `send_text_message` came
-  with hands-free the same day as the GitHub six.
+  `self_portrait`, `setup_quiz`, `approval_policy` - the switch that offers
+  the approval-policy TOOL at all (it never changes a policy by itself;
+  §193 is the changing, and every loosening still needs its own card) - and,
+  since 2026-11-05, the six on-demand GitHub tools `github_list`,
+  `github_read_file`, `github_ci_status`, `github_comment`,
+  `github_open_issue`, `github_rerun_workflow` (the three reads share the
+  `github_inspect` action, the other three their own; every use still raises
+  its own card). The twelve before the GitHub six shipped ON and had no
+  switch row at all before 2026-11-04; `send_text_message` came with
+  hands-free the same day as the GitHub six.
 
 **Four known tools are NOT switches of their own**, because the turn ignores
 their line in `[tools].enabled` - a switch whose state the turn ignored would
@@ -11176,7 +11179,7 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (55), not just Tier A/B. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (56), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11198,9 +11201,10 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
                              "why": <the plain note>}}
 ```
 
-`items` lists all 55 switches at 2026-11-05 (48 at 2026-11-04, plus the six
-GitHub tools and hands-free's `send_text_message` - every tool the AI model can be
-offered except the four below), grouped; `vault` is the vault organizer's
+`items` lists all 56 switches at 2026-11-05 (48 at 2026-11-04, plus the six
+GitHub tools, hands-free's `send_text_message` and the approval-policy tool's
+`approval_policy` - every tool the AI model can be offered except the four
+below), grouped; `vault` is the vault organizer's
 separate switch; `not_switchable` names the four tools whose own switch decides
 them, with the PC's own sentence, so the page points at the real switch instead
 of drawing one that would do nothing. `extra` is D4 (the owner, 2026-11-04):

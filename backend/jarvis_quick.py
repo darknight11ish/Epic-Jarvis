@@ -15868,8 +15868,14 @@ def _run_tools_inventory(intent: Intent) -> Result:
             head + " None of them are switched on right now: your settings file "
             "(jarvis-framework.toml, [tools].enabled) names no tool.",
             intent.name)
+    # EVERY switched-on tool is named, up to a bound. The sentence promises the
+    # list ("N of them are switched on ... :"), so cutting one off behind "and
+    # N more" hides a tool that really is offered - the enabled set is 15 today
+    # and the old 14-item cap dropped the last one. The bound stays so a file
+    # that names every tool cannot turn this answer into a dump; past it the
+    # "and N more" form is still the honest one.
     body = (f" {len(offered)} of them are switched on in your settings file: "
-            f"{_self_list([_tool_label(n) for n in offered])}.")
+            f"{_self_list([_tool_label(n) for n in offered], cap=30)}.")
     if len(offered) < registered:
         body += (f" The other {registered - len(offered)} are built in but not "
                  f"switched on - jarvis-framework.toml, [tools].enabled, is the "

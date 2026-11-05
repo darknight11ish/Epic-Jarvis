@@ -1464,6 +1464,10 @@
      "name": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)"
     },
     {
+     "id": "approval_policy",
+     "name": "Changing what needs a card, a second yes or Windows Hello, one thing at a time (asking LESS takes one PC-only card and Windows Hello; asking more is instant)"
+    },
+    {
      "id": "approve_web_search_for_conversation",
      "name": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)"
     },
