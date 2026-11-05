@@ -804,11 +804,18 @@ three cards give **23.45 GiB** of room by the formula above (28.00 total, minus
 2.30 the desktop takes and 2.25 of fit gap); a second estimate from the one
 real measurement is 22.65 GiB, and the plan treats 23.45 as the optimistic end.
 At 32,768 the Q4 coder is calculated at **19.50 GiB**, `gemma4:31b-it-qat` at
-**19.06 GiB** and the 27B at **18.21 GiB** - about 1.32, 1.46 and 1.74 GiB per
+**19.06 GiB** and the 27B at **18.21 GiB** - about 1.32, 1.46 and 1.75 GiB per
 card. The owner's preference is at least 1.5 GiB/card: the Q3 tag at 49,152 is
 the only rung that meets it (**17.72 GiB** calculated), and the plan still
 recommends the Q4 coder at 32,768 because the owner asked for an upgrade and a
 better quant keeps the measured window and work pattern.
+
+**Neither app claims any of these figures.** `jarvis_presets.hardware_block()`'s
+own `future_not_a_preset` line - which both apps render on their hardware plate -
+still says the 27B is a future "max quality" experiment, "not a preset", and
+"no figure is claimed until it is measured"; that line is deliberately left
+exactly as it is. The numbers above are this plan's arithmetic, written down so
+the research is not lost, and not something either app tells the owner.
 
 **What must be measured before any of it is trusted, in this order:**
 
