@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **50 drop-in modules**, in [`ready/`](ready/) -
+- **51 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **29** replace a patch, and are generated from it;
-  - **21** replace no patch: they were born as folders, and
+  - **22** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **143 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -57,7 +57,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 21 were never patches. There is nothing in the core
+These 22 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -84,9 +84,10 @@ it is one `apply-patches.ps1` copies in.
 | 165 | `self-portrait` | what Jarvis is made of on this PC: every place it can open (imported from the Settings and menu registries), every setting with its live on/off value, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only, never a secret, a path or a word of chat. |
 | 168 | `android-builder` | Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for the install. The card for the build names the exact command and says that a first build downloads Gradle and the Android Gradle plugin. |
 | 169 | `notes-edit` | browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and the sha256 the edit started from so two editors cannot clobber each other. |
-| 170 | `protected-items` | a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act. |
-| 171 | `send-file` | send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path. |
-| 172 | `skill-menu` | the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\.hermes\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all. |
+| 171 | `protected-items` | a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act. |
+| 172 | `send-file` | send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path. |
+| 173 | `skill-menu` | the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\.hermes\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all. |
+| 174 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 
 ## What stays in the core
 

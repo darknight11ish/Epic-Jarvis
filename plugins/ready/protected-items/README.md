@@ -14,7 +14,7 @@ folder into the backend's `jarvis_plugins\` folder (or run
 - The module itself is one of the ones this repository already ships
   (`backend/jarvis_protection.py`), copied into the backend by
   `scripts/apply-patches.ps1` exactly as before. This folder does not change it.
-- Position in the loader order: 170 (after `android-builder`). There is no
+- Position in the loader order: 171 (after `history-purge`). There is no
   patch behind it: this feature was born as a folder.
 
 ## The routes
@@ -26,6 +26,16 @@ POST /api/protection/remove           ONE card (action unprotect_item)
 POST /api/protection/propose          the chat path - ONE card (protect_item)
 GET  /api/protection/propose?id=      how one proposal ended
 ```
+
+Chat reaches the SAME routes, not a copy of them (2026-11-04): the model tool
+`protect_from_jarvis` has three actions - `add`, `remove` and `list` (add and
+remove raise the ONE card above; `list` reads the store with no card) - and
+`jarvis_quick.py`'s fixed phrasings ("restrict the folder C:\X from Jarvis",
+"stop Jarvis reading C:\X", "unrestrict C:\X", "what folders are restricted?",
+"is Jarvis blocked from C:\X?") call `handle_propose`, `handle_remove` and
+`handle_get`/`status_for` directly. Both apps chat through the same
+`/api/chat`, so a folder-level restriction can be set by plain chat from the
+PC and the phone alike.
 
 ## Two modes
 

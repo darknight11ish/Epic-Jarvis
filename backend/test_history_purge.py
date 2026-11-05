@@ -55,7 +55,7 @@ no model, and NOTHING here touches the owner's own history or memory):
 WHAT IT DOES NOT PROVE, plainly: that a human was present at the Windows Hello
 prompt or the phone's fingerprint reader. The backend cannot see either; it
 checks a signature from a key that only this owner's install holds. That limit
-is written in the module docstring and in docs/JARVIS-API.md section 186 - it is
+is written in the module docstring and in docs/JARVIS-API.md section 187 - it is
 not hidden here.
 """
 from __future__ import annotations

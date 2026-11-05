@@ -2190,8 +2190,8 @@ neither app says it would.
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
 | `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item, the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
-| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
-| `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | **planned**: built on the backend, no app calls it yet - the second tap is the apps lane | not yet (same lane as the desktop) | `forget-range.patch` - **§64**. The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Reclassify `ported` when both apps draw the second tap. |
+| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis - `pinned_kept`'s titles with them, `redact()` in `brain/forget_range.rs`) | `JarvisRuntime.forgetRangeRead` (the same words out while hidden: `ForgetRange.redact`) | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
+| `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | `forget_range_write("confirm")`: the held id and a literal `true`, refused while the list is hidden, held on a stale link | `JarvisRuntime.forgetRangeWrite("confirm")`, the same body and the same holds | `forget-range.patch` - **§64**. **ported.** The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Both apps show the PC's `confirm.text` and the minutes left, send nothing but the id and `true`, say every `400`/`409` in the PC's own words, and keep the 10-minute Undo the `200` starts. |
 | `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the second yes: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
 | `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | Since 2026-09-28 the overnight tidy is built, **review cards only** (§78): `enabled: true` puts its one daily look on the scheduler, `enabled: false` removes it at once - sent alone, it is not held on a stale link in either app ("Turn off overnight tidying"; it only makes Jarvis ask less). Before that, `enabled` only recorded the wish. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
@@ -14752,6 +14752,16 @@ line). Desktop: a card on the Brain's History tab (`forget-range.js`,
 apps' words and the real answers: `forget-range-cases.json`
 (`tools/gen_forget_range_cases.py`).
 
+Both apps draw the two yesses: the pinned chats kept (as kept - no tick box,
+never in the count on "Forget these" and never in what it sends), the measured
+`estimate.text` above the button, and, once the card is approved, the PC's own
+`confirm.text`, the minutes left and one more tap carrying the held `id` and a
+literal `yes: true`. Every `400` and `409` is shown in the PC's own words, and
+the status is read again after one, because the card, the hold or the Undo has
+moved on. While the private lists are hidden, `pinned_kept`'s titles are
+hidden with every other title - it is a list of chat titles, as `chats` is
+(the desktop's Rust `redact()`, the phone's `ForgetRange.redact`).
+
 ### 64.1 Which facts, which chats, which days
 
 - **Facts by when Jarvis SAVED them** (`created`), never by their "true
@@ -14934,40 +14944,51 @@ what I said ..." is told plainly that this forgets, and "Erase the words"
 is per fact. A spoken "yes" or "approve" matches nothing and approves
 nothing - the second yes is a tap on the confirm block, never a voice.
 
-### 64.6 What the apps must do
+### 64.6 What the apps do
 
 - Show the list with **every item ticked** (except a support record, which
   starts unticked - §64.1), the owner free to untick any; send **only the
   ticked ids**, in one request. Never approve anything - and never send the
   confirm for the owner: the second yes is their tap.
-- **Draw the second tap (apps lane, not built yet).** After the card is
-  approved, poll the status: `confirm` non-null means nothing has been
-  removed yet. Show "Yes, forget them" (`confirm_words.yes` in the fixture)
-  and post `{"id": confirm.id, "yes": true}` to `confirm.route`; a 400
-  keeps the list, a 409 means it is gone/changed and nothing happened.
-  **Do not treat the card's approval as done**: the deletion is only after
-  the 200 from `/confirm` (then the status says `last.outcome` "done").
+- **Draw the second tap (both apps, 2026-11-05).** After the card is approved
+  the status carries `confirm`; non-null means nothing has been removed yet.
+  Both apps show "Yes, forget them" (`confirm_words.yes`, each app's
+  `EXTRA.confirm_yes`), the PC's own `confirm.text` and the minutes left, and
+  post `{"id": confirm.id, "yes": true}` to `confirm.route`. The body is BUILT
+  from those two values in each app (the desktop's Rust `confirm_body`, the
+  phone's `ForgetRange.confirmBody`), never passed through from the page, so
+  neither app can send a `yes` that is not the literal boolean. A 400 keeps the
+  list, a 409 means the hold is gone, the items changed, a card still waits or
+  an Undo is open - nothing happened; both are shown in the PC's own words and
+  the status is read again after one. **The card's approval is not done**: the
+  deletion is only after the 200 from `/confirm` (then the status says
+  `last.outcome` "done"), and the 10-minute Undo it starts is drawn like any
+  other.
 - **A pinned chat is never sent** (it is not in `chats`) and never rendered
-  as tickable; show the `pinned_kept` names as kept, with "N pinned chats
-  are kept", and the `estimate.text` line as the measured time.
+  as tickable; both apps show the `pinned_kept` names as kept, with the PC's
+  own "N pinned chats are kept" and why, and the `estimate.text` line as the
+  measured time before the owner is asked.
 - Once the PC says the change happened (`last.outcome` "done"), an app that
   was IN one of the deleted chats starts a new conversation and says so
   (§18.6). And History reads its list again at once after a change or an
   Undo (desktop: it used to wait for its 15-second re-read).
-- **"Forget these" waits for a live link** (rule 4) and, on the desktop, is
-  refused while the list's words are hidden (the owner must be able to
-  read what goes); **Undo is never held**.
+- **"Forget these" and the second yes wait for a live link** (rule 4) and are
+  refused while the list's words are hidden (the owner must be able to read
+  what goes); **Undo is never held**.
 - **Hidden lists**: while "Hide memory lists and chat history" (phone) or
   "Windows Hello for memory lists and chat history" (desktop) hides the
-  Brain's lists, or App lock has locked Jarvis, the list's words are
-  hidden - the counts and the days stay - until Show is confirmed. The
-  status (an open Undo) carries no words and stays. **The apps lane must
-  add `pinned_kept` (titles) to the desktop's `redact()`** along with
-  `facts`/`chats`, and hide it on the phone the same way: this PR adds the
-  key, and the existing redactor does not know it yet.
-- The words are the contract's (`words`), in both apps; the second tap's
-  two sentences are in the fixture's `confirm_words` until the apps lane
-  adds them to their own copies.
+  Brain's lists, or App lock has locked Jarvis, the list's words are hidden -
+  the counts and the days stay - until Show is confirmed. The status (an open
+  Undo) carries no words and stays. `pinned_kept` carries chat TITLES, so it is
+  hidden with `facts`/`chats`: the desktop's Rust `redact()` empties it, and
+  the phone's `ForgetRange.redact` blanks its titles out of what the plate
+  holds.
+- The words are the contract's (`words`), in both apps. The second tap's two
+  sentences are the PC's own constants and are NOT in `words` (that map is
+  generated and compared key for key): each app holds them - with the pinned
+  chats' three sentences and the "N min left to say yes" line - in its own
+  `EXTRA` map, checked word for word against `backend/jarvis_forget_range.py`
+  and the fixture's `confirm_words`.
 
 ## 65. Customer-support chats - Jarvis chats with a company's support for you (added 2026-09-28; built, not yet tried against a real site)
 
@@ -26546,9 +26567,14 @@ boolean: `true` means that action asks first today (its tier in
 accepted run, for a re-run's prefill and for a first-run offer to show once.
 
 `version` is the question-set version (`2` today), and `completed_version` is
-the one the owner last finished or accepted (`0` when never, `1` for a file
-completed before the new questions - so the first launch after deploy offers
-the new ones once, instead of claiming the old file is current). `runs` is how
+the one the owner last finished - every question answered - or explicitly kept
+with "Keep current settings" (`0` when never, `1` for a file completed before
+the new questions, so the first launch after deploy offers the new ones once
+instead of claiming the old file is current). **A partial apply does not move
+it** (DEF-043, 2026-11-04): answering one question saves that answer and counts
+a run, but the offer, the HUD banner and the chat line stay until all 25 are
+answered, so `completed_version` and `answered_count` never disagree about the
+same read. `runs` is how
 many applies have been accepted. `dismissed_at` is when "Not now" was last
 pressed, or `null`. `in_progress` is where the desktop card is
 (`{section, question, started_at, draft_answers}`), or `{}` when it has not
@@ -26616,9 +26642,13 @@ order (tightening and cosmetic changes first, then the carded ONs), and:
   `not-changed` or `failed`, and a plain sentence;
 * only then are the owner's own answers and `completed_at` saved (atomically)
   in `<CONFIG_DIR>/setup.json`. **No chat, fact, voice, picture or file is
-  written** - the file holds choice ids and one timestamp. A damaged file is
-  reported by `GET /api/data-health` like every other settings JSON; this
-  module falls back to "no answers" rather than raising.
+  written** - the file holds choice ids and one timestamp. `completed_version`
+  becomes `QUIZ_VERSION` only when every question now has an answer; a partial
+  apply saves what it was given, counts the run and leaves completion where it
+  was, so the offer/banner/chat line continue (DEF-043, 2026-11-04). A partial
+  retake also keeps an older `completed_version` a file already had. A damaged
+  file is reported by `GET /api/data-health` like every other settings JSON;
+  this module falls back to "no answers" rather than raising.
 
 A body that is not a JSON object, or `answers` that is not an object, is 400 in
 plain words. **Two more refusals were added by the 2026-10-20 audit (Gemini
@@ -26755,6 +26785,19 @@ same card, and the row is absent, not greyed, once the quiz is done. Nothing
 steals focus: the Settings window opens only after the first-run walkthrough
 and when the owner presses "Finish now".
 
+**The prompt line follows the same switch** (DEF-044, 2026-11-04). On a local
+turn, `jarvis_agent.setup_state_note()` adds ONE system line - "Personalize
+Jarvis: the setup quiz is unfinished - N of 25 answered ... nothing in chat may
+apply them" - just before the newest user message, only while
+`completed_version` is behind `version` AND the `[notifications] setup` switch
+(`jarvis_notify_prefs.read()["setup"]`, the "Personalize Jarvis" switch on both
+apps' Notifications cards, on by default) is on. Turning the reminder off is
+the owner saying they do not want to be reminded, and a chat line is a
+reminder; turning it back on restores the line. A finished quiz costs no
+tokens, and the line is local-model only. It reads `setup.json` and the one
+notification value - it never calls `apply()`, never raises a card, and never
+touches a setting.
+
 **Phone: the same questions, read-only.** `net/SetupQuestionnaire.kt` and
 `ui/screens/SetupQuestionnairePlate.kt`, on Settings. It reads
 `GET /api/setup`, prefills the last accepted answers and draws the same 25
@@ -26812,89 +26855,183 @@ no-PC rule: the question set is 25 in seven sections with the 14 existing ids
 unchanged and in their order; every new `choice`/`number` change names a real
 Settings row and one of its own Option ids; a partial retake keeps every
 earlier answer, and an old three-key file reads as version 1 with
-`completed_version` 1; `progress()` writes only `in_progress` and preserves
+`completed_version` 1; a partial apply saves its answer and counts its run but
+does NOT move `completed_version` (the offer, banner and chat line stay), while
+an apply with all 25 answered does (DEF-043); `progress()` writes only
+`in_progress` and preserves
 every other key, refuses a non-object and a body with nothing to record, cleans
 a bogus draft answer away, and is refused with 403 from another device; the
 progress route keeps the origin/token order and a bad body is 400;
 `{"keep_current": true}` sets `completed_version` without touching an answer or
-calling `apply()`; and the module still imports no model lane, switches no
-model, and `_run_setup_quiz` carries no `confirm`.
+calling `apply()`; `setup_state_note()` adds its one line only while the quiz is
+unfinished AND the "Personalize Jarvis" notification switch is on, and with the
+switch off the turn gets the plain messages back (DEF-044); and the module still
+imports no model lane, switches no model, and `_run_setup_quiz` carries no
+`confirm`.
 
 typed text, and the patch's own pins (two routes, harness position, no
 install-block line, `_stack.py`'s RATCHET unchanged).
 
-## 148. Reverse engineering with REA: one tool, one allow-list, no route (added 2026-10-20)
+## 148. Reverse engineering with REA: the full toolbox through one tool, one card per action (added 2026-10-20, expanded 2026-11-04)
 
-The owner asked for "reverse engineer anything" integration. The upstream is REA
-(`morluto/rea`, npm `rea-agents@6.7.0`, MIT) - a separate local program that inspects a file the
-owner names. It is **not** linked into Jarvis, no code is copied, and it is installed once by the
-owner at the pinned version. It ships **OFF**.
+The owner asked for "reverse engineer anything" integration on 2026-10-20, and on
+2026-11-04, asked how far it should go, chose **"Also install the full REA toolbox"**: *"debug
+and patch, not just read: attach a debugger, watch a running program, use Frida and patch files -
+the real toolkit, all local"*, plus REA's own package installed by Jarvis and all of its actions
+exposed through the one tool. The upstream is REA (`morluto/rea`, npm `rea-agents@6.7.0`, MIT) -
+a separate local program. It is **not** linked into Jarvis, no code is copied, and it ships
+**OFF**.
 
 **Why one tool and not 207.** REA's MCP server really serves **207 tools**. Measured from the
 real server on 2026-10-20: 723,936 bytes of input schemas and 92,270 bytes of descriptions -
 about **272,000 tokens** by `jarvis_agent.estimate_tokens`'s own rule, many times the 9B model's
-whole window. So `backend/jarvis_rea.py` exposes ONE tool, `rea_investigate`, with a fixed action
-list; the model never names a REA tool and never sees REA's schemas. The existing MCP bridge
-(`jarvis_mcp.py`) supplies the transport (a Windows Job Object, the stdio JSON-RPC reader, the
-caps) - this module does not write a second MCP client. The bridge's read-only-first rule would
-hide every REA tool anyway: only 2 of REA's 71 inspection-family tools claim `readOnlyHint`.
+whole window. So `backend/jarvis_rea.py` exposes ONE tool, `rea_investigate`, and the model never
+sees REA's schemas. The existing MCP bridge (`jarvis_mcp.py`) supplies the transport (a Windows
+Job Object, the stdio JSON-RPC reader, the caps) - this module does not write a second MCP
+client. The bridge's read-only-first rule would hide every REA tool anyway: only 2 of REA's 71
+inspection-family tools claim `readOnlyHint`.
 
 **Two switches, both off by default.** `[rea] enabled = false` in the template, and the tool must
 also be named in `[tools].enabled`. With either missing the tool costs no tokens and is not
-offered. The owner installs the package once, by hand (Jarvis never runs `npx` and never
-downloads):
+offered.
 
-    npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund
+**The one tool, and its 200 actions.** Arguments: `action`, `target` (a full path inside "Folders
+Jarvis may look in", when the action takes a file or folder), `arguments` (that action's own
+settings, by name), and for the two first-slice actions `query`/`what` and `format`. Actions:
 
-**The one tool.** Arguments: `action`, `target` (a full path inside "Folders Jarvis may look
-in"), and for the query action `query`/`what`; `format` for a saved capture. Actions:
+| category | what it covers (REA's own tool names, one action each) |
+|---|---|
+| ready / install | `doctor`, `install` |
+| the first slice | `inspect_javascript_app`, `inspect_binary`, `inspect_apk`, `inspect_capture`, `inspect_sqlite`, `open_native_binary`, `query_native_binary` |
+| static analysis | one action per REA tool: `inspect_pe_resources`, `analyze_swift_types`, `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_go_binary`, `inspect_rust_binary`, `inspect_firmware_regions`, `inspect_packet_capture`, `decode_android_resources`, ... |
+| dynamic debugging | `start_gdb_session`, `close_gdb_session`, `gdb_console`, `gdb_session_status`, `start_rizin_debug_session`, `close_rizin_debug_session`, `rizin_debug_command`, `rizin_debug_session_status`, `execute_rizin_command`, `cutter_command`, `list_cutter_sessions` |
+| Frida | `start_frida_session`, `close_frida_session`, `load_frida_script`, `unload_frida_script`, `instrument_with_frida`, `resume_frida_session`, `frida_session_status`, `list_frida_devices`, `list_frida_processes` |
+| live runtime capture | `capture_process_scenario`, `capture_native_ui_scenario`, `capture_browser_scenario`, `capture_electron_scenario`, `capture_web_screenshot`, `observe_javascript_runtime`, `observe_web_session`, `observe_web_execution`, `observe_native_ui`, `observe_native_calls` |
+| process memory | `read_bytes`, `search_bytes`, `read_function_instructions`, `trace_native_values` |
+| sessions | `binary_session`, `close_binary`, `list_documents`, `list_segments`, `list_procedures`, `list_strings`, `list_names`, `list_bookmarks`, `gdb_session_status`, ... |
+| export (local folder only) | `export_evidence_bundle`, `export_web_scripts`, `pull_adb_file`, `pull_adb_package`, `capture_adb_screen`, `collect_adb_bugreport`, `extract_artifact`, `extract_firmware`, `recover_javascript_sources` |
+| the owner's own phone | every ADB READ and CAPTURE: `list_adb_devices`, `list_adb_packages`, `list_adb_processes`, `read_adb_logcat`, `read_adb_setting`, `inspect_adb_*`, `capture_adb_screen`, `collect_adb_bugreport`, `pull_adb_*` |
 
-| action | what it does | engine needed |
-|---|---|---|
-| `doctor` | what this PC can inspect, and the pinned install's identity; reads only | none |
-| `inspect_javascript_app` | static Electron/JavaScript graph from a folder or `.asar` | none |
-| `inspect_binary` | sections, segments, symbols, metadata inputs of an exe/dll/so | none |
-| `inspect_capture` | a saved HAR or SAZ web capture | none |
-| `inspect_sqlite` | a SQLite database's schema | Node 24.15+/26+ |
-| `inspect_apk` | an APK's manifest, SDK, permissions, classes | JADX (`REA_JADX_MCP_JAR`) |
-| `open_native_binary` | open a binary in a read-only decompiler | Ghidra/IDA/Hopper/Kuna |
-| `query_native_binary` | `overview` / `strings` / `xrefs` / `function` on the open binary | as above |
+The full list is `jarvis_rea.ACTION_ORDER` (200 names), and the model's schema enum is read from
+that same tuple, so the two cannot drift. Every name there was measured on this PC on 2026-11-04
+by starting the pinned package's own server and asking `tools/list`: **207 tools**, catalogue
+digest `af39310c...`, which is what this module pins. No name is guessed, and the names the first
+slice refused that no REA tool answers to (including `debug_with_gdb`) are gone.
+
+**One gap in the catalogue itself.** REA 6.7.0 has no "apply this patch file" tool. Patching a
+local copy is done with a debugger session's own commands (`cutter_command`,
+`rizin_debug_command`, `gdb_console`, `instrument_with_frida`), so no action claims to patch a
+file when only the session's memory changed. GDB sessions are Linux-only in REA, so on this
+Windows PC those four actions refuse before the card and say why.
+
+**The owner's Q1 guardrails, enforced in this module (2026-11-04).** The ruling approved the
+full toolbox with five guardrails; two were already code (rule 2's local-only scan of every
+setting, rule 5's pinned install). The other three were the recorded residual and are now
+enforced in `jarvis_rea.py`, before the card, not trusted to REA:
+
+1. **A credential store is never a target.** `lsass` (by name or `lsass.exe`), `vaultcmd`,
+   Windows Credential Manager's own folders (`Microsoft\Credentials`, `Microsoft\Protect`,
+   `Windows\NTDS\ntds.dit`), and the browser login stores (`Login Data`, `cookies.sqlite`,
+   `logins.json`, `key4.db`) are refused by process name, by file name and by any part of a
+   path. A live action (`capture_*`, `observe_*`, `start_*_session`, `instrument_with_frida`,
+   `load_frida_script`, `gdb_console`, `rizin_debug_command`, `cutter_command`,
+   `execute_rizin_command`, the process-memory reads) is scanned in **every** setting, because a
+   command, a script or an `argv` list can name the store instead of a plain path. Every other
+   action is scanned where a setting names a file or a program, so a static read of a copied
+   `logins.json` is refused the same way - while a search query that merely contains the word is
+   not, because a word is not a target. The sentence says which rule it serves and that nothing
+   was run: `CREDENTIAL_REFUSED`.
+2. **Nothing is written in place.** `cutter_command`, `rizin_debug_command`,
+   `execute_rizin_command`, `gdb_console`, `instrument_with_frida` and `load_frida_script` are
+   the write-capable surfaces. A command carrying a write form - rizin's `w` family (`w`, `wa`,
+   `wb`, `wt`, `wx`, `wo`, `wv`, `wop`, ...) and `oo+`/`ood`, GDB's `set write on`, `restore`,
+   `dump binary|ihex|srec|verilog|tekhex` and `set {type}addr`, Frida's `Memory.write*` /
+   `writeByteArray` / `writeUtf8String` / `writePointer` / `File.write` / `writeAll` - is refused
+   unless it names a NEW `<name>.patched<extension>` output inside a listed folder, or the
+   session's own file is already such a copy (remembered from `start_rizin_debug_session`).
+   `C:\Windows\`, `C:\Program Files\Windows Defender\`, and `python.exe` (and `pythonw.exe`),
+   `jarvis-desktop.exe`, `ollama.exe` are refused as patch targets outright. An allowed write
+   records a **before/after SHA-256 receipt** in the module (`write_receipts()`, and in the
+   result), so "the original is untouched" is a measurement: the original's hash before and
+   after, whether it changed, and the new file's hash.
+3. **Every live session has a deadline.** A live action takes `duration_limit_sec` - **60 by
+   default, 300 at most** - which is this module's own setting: it is never sent to REA, it is
+   named on the one card, and it caps the call's own timeout, so a live call cannot sit there
+   longer than the card said. A watch window setting (`duration_ms`, `observation_ms`,
+   `timeout_ms`) longer than the approved duration is refused before the card. The module keeps
+   a registry of live sessions with their deadlines; a session that outlives its deadline is
+   detached with REA's own `close_frida_session` / `close_gdb_session` /
+   `close_rizin_debug_session`, and when that cannot be done the REA helper itself is terminated
+   (which takes every hook and child with it). This happens in a `finally`, so a failed or
+   timed-out call detaches too.
+
+**Still not enforced, said plainly.** (a) Rizin's own `>file` redirection writes a text dump; it
+is not on the ruling's list and is not analysed as a write, because it cannot overwrite the file
+being analysed. (b) A Frida script given by path is read and scanned up to 200 KB; a longer
+script is only partly scanned, and an unreadable one is not scanned at all. (c) The write forms
+are the ruling's named list: a write reached through some other primitive (GDB's `call`, for one)
+is not detected, and a command that sources ANOTHER script by path (`rizin -i`, GDB's `source`)
+is not read - the card still shows the command itself, which is what the owner approves. (d) The
+deadline is enforced by the call's own timeout and by the registry sweep at the next live call;
+if the whole Jarvis process dies mid-call, the helper dies with it (a Windows Job Object) but no
+close tool is called. (e) The receipt proves the original's bytes did not change; it does not say
+what the `.patched` copy differs by.
 
 **Every call is ONE approval card.** `rea_investigate` is in `jarvis_agent.NEEDS_A_PERSON`, so a
-person's yes is required whatever the tier. `prepare()` validates the action, the target and the
-engine **before** the card, so a bad request never asks and never starts a program. The target
-must pass the existing `jarvis_documents.allowed_path()` folder rule **and** this module's own
-private-place refusal (`~/.openjarvis`, browser profiles, credential stores, `.ssh`/`.gnupg`,
-`Windows\System32\config`); a listed folder that contains those still cannot be inspected there.
+person's yes is required whatever the tier - including for `doctor` and `install`. `prepare()`
+validates the action, its settings, its engine and its target **before** the card, so a bad
+request never asks and never starts a program. The target must pass the existing
+`jarvis_documents.allowed_path()` folder rule **and** this module's own private-place refusal
+(`~/.openjarvis`, browser profiles, credential stores, `.ssh`/`.gnupg`, `Windows\System32\config`);
+a listed folder that contains those still cannot be inspected there. An output folder is the one
+case where the path need not exist yet.
 
-**Default-deny, not a denylist.** The model chooses an action, never a REA tool. The only REA
-operations this module can send are the eight above plus the read-only queries they use. ADB
-device mutators, runtime/browser/process capture, debugger sessions and evidence export are
-refused twice over (no action, and an explicit deny set in the module). The REA child receives
-`jarvis_child_env`'s allow-list plus only the provider paths the owner set - never `HUD_TOKEN`,
-`JARVIS_TOKEN` or any `*_KEY`.
+**Everything stays on this PC (rules 1 and 2).** Every string in `arguments`, and `target`,
+is checked: a URL, a `host:port`, a UNC network share or a bare remote address in a setting whose
+name says it is an address is refused unless it is loopback (`127.0.0.1`, `localhost`, `::1`).
+That is why `capture_browser_scenario` can drive a local page but not a website, and why Frida's
+`remote` and CDP's `cdp_endpoint` have to point at this machine.
+
+**Closed-world settings, not a denylist.** The model chooses an action, never a REA tool: an
+action not in the table is refused. Inside an action, a setting name that is not one of that
+tool's own top-level settings (read from the pinned catalogue) is refused with the list of the
+ones it does have, and a required setting that is missing is refused the same way - so nothing
+unexpected is ever sent, and no 724 KB of schemas has to be shipped to say so. One setting is
+this module's own and is never sent: `duration_limit_sec`, accepted on a live action only, taken
+out of the settings before the call and carried on the card instead. The runtime identity check
+(`binary_session`) confirms the running program is `rea-agents@6.7.0` with the 207-tool catalog
+and digest this build was written against; a mismatch closes the session.
+
+**What is refused, and the rule it serves.** ONE card per call (rule 4). Nothing leaves this PC
+(rules 1 and 2). The REA child receives `jarvis_child_env`'s allow-list plus only the provider
+paths and switches the owner set - never `HUD_TOKEN`, `JARVIS_TOKEN`, any `*_KEY`, or REA's own
+`REA_TOKEN` (rule 3). MIT stays MIT (rule 5). The only by-name refusal left is the six ADB device
+**mutators** (`install_adb_package`, `uninstall_adb_package`, `push_adb_file`, `start_adb_app`,
+`start_adb_activity`, `stop_adb_app`), and that one is cross-module ownership rather than a core
+rule: phone changes already belong to `control_phone` / `[phone_apps]`, with their own card and
+allow-list. Debuggers, Frida, live capture, process memory, export and ADB reads are all ordinary
+card-gated actions - and every one of them is now under the three Q1 guardrails above: a
+credential store is refused as a target, a write is refused unless it lands on a new `.patched`
+copy, and a live session carries a duration the owner saw on the card and is detached when it
+runs out.
+
+**It installs itself (the owner's decision).** The `install` action runs
+`npm install --prefix <config>/tools/rea rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund`
+after its own card, then the static egress scan and `doctor`. It installs exactly the pinned
+version, writes only inside that folder, and refuses to call the result ready if the package's
+`package.json` carries an `install`/`preinstall`/`postinstall` script or if the scan finds a known
+analytics or telemetry host in the package's own `dist/`. **The owner's four-point audit's point 3
+did not exist in code before this** - the docstring named the scan and nothing performed it - so
+it is implemented (`egress_report`) rather than "kept intact". Points 1 and 2 were re-measured on
+this PC on 2026-11-04: the npm tarball's sha512 matches `PINNED_INTEGRITY` exactly, and
+`package.json` has no lifecycle scripts.
 
 **What comes back.** Chat-template markers are stripped, prompt-injection patterns are flagged,
 secrets are scrubbed by `jarvis_scrub`, the text is cut to 6000 characters, and the result is
 labelled `untrusted`; the conversation is latched local with
 `jarvis_gate.latch_taint(why="rea_analysis")`. The module reports Evidence ids only when REA's own
-answer carries them. A runtime identity check (`binary_session`) confirms the running program is
-`rea-agents@6.7.0` with the 207-tool catalog this build was written against; a mismatch closes the
-session and refuses.
-
-**What this does not do.** No HTTP route, no patch, no new gate action or tier. No runtime capture
-(that needs its own switch and a card naming the exact program/URL), no evidence-bundle export
-(needs `jarvis_file_guardian` and a folder rule), no ADB anything (Jarvis's app-control path owns
-phone actions), and no new route, patch, tier or switch.
-
-**The vetted skill (Slice 2).** `skills/reverse-engineer-anything/SKILL.md` adapts
-the upstream skill for this façade. It names only Jarvis's own tool `rea_investigate`
-(`requires_tools`), says every call is one approval card and that the skill grants
-nothing, pins `rea-agents@6.7.0` with the tarball's sha512, records the four-point
-pre-install audit as evidence for the owner, and carries no shell, npx or install
-instruction. The upstream `references/` files are deliberately not shipped: they teach
-direct REA CLI/MCP tools this façade never exposes. The MIT credit is in the
-hand-written half of `THIRD-PARTY-NOTICES.txt`.
+answer carries them. Since 2026-11-04 the tool is no longer in `jarvis_claims.READ_ONLY_TOOLS`:
+it can patch, export and install, so an "I did it" after it is a claim the checker must read.
 
 **Readiness (`doctor`, read-only, no network).** `jarvis_rea.doctor()` answers with
 `ready: true|false` and one plain `why` sentence, plus these signals:
@@ -26905,39 +27042,43 @@ hand-written half of `THIRD-PARTY-NOTICES.txt`.
 | package present | `installed` | a `rea-agents` package exists under `<user>\.openjarvis\tools\rea` |
 | pinned version | `version_pinned_ok` | exactly 6.7.0 (and MIT) |
 | recorded sha512 | `integrity.ok` | npm's local record compared with the pinned tarball: true, false, or null |
+| egress scan | `egress.ok`, `egress.hosts`, `egress.telemetry` | the static scan of the package's own `dist/`: which remote hosts it names, and whether one is a known analytics or telemetry service (false refuses readiness) |
+| the audit's four lifecycle names | `egress.lifecycle` | `preinstall`/`install`/`postinstall` found in the package (false refuses readiness) |
 | signatures | `signatures.checked` | always false here: npm signatures and SLSA provenance need the network |
-| Tier 1 static | `tier1_static_ready` | package + pin + supported Node |
+| Tier 1 static | `tier1_static_ready` | package + pin + supported Node + clean scans |
 | Tier 2 Ghidra | `tier2_ghidra_ready` | `GHIDRA_INSTALL_DIR` and `JAVA_HOME` both set |
 | Tier 2 JADX | `tier2_jadx_ready` | `REA_JADX_MCP_JAR` or a `jadx` on PATH |
+| can it install | `install_ready`, `install_why` | a supported Node and npm on PATH |
+| per action | `actions[name].available`, `.why` | whether this PC can do that action right now, and one plain reason when it cannot (JADX, Ghidra, adb, JEB, tshark, or GDB being Linux-only) |
 
-Verified on the development PC, 2026-10-20: Node **v22.23.2**; no package
-(`~/.openjarvis/tools/rea` absent); `npm ls -g rea-agents` empty; no `[rea]` section in
-the live framework file. `doctor()` therefore reports `ready: false`,
-`why: "no rea-agents package under ..."`, and `integrity.ok: null`. A recorded sha512
-that differs from the pin makes `ready: false` with a plain sentence; a missing local
-lockfile leaves `integrity.ok: null` (unknown, not a pass) while the version check still
-applies. Signatures are never guessed: `signatures.why` says why they are unchecked.
+**No route, no patch, no tier change.** There is still no `GET /api/rea/doctor` and no
+`jarvis_rea.install()` wiring into the HUD: the actions are reached through the model tool, which
+is what the owner asked for. `jarvis_gate`'s mapping is unchanged (`rea_investigate` ->
+`run_shell_on_host`, tier `ask`), so this is not a new gate action and no patch is added. Nothing
+here becomes a new switch: the two that already existed still decide everything.
 
-**No route in this slice.** There is no `GET /api/rea/doctor`. `jarvis_rea.py` has no
-`install()` and the HUD has no REA wiring, so adding a route would need a patch and a
-new place in the request gate - a later slice, not this one. When that wiring exists, a
-Settings readiness card reads the same payload directly from `doctor()`; the field names
-in the table above are its contract. Nothing here becomes a new gate action, tier,
-patch or switch.
-
-Nothing is measured by this change: the façade's refusals and wrapping are covered by
-`backend/test_rea.py`, while a real REA analysis is NOT-TESTABLE on CI (no engines, no
-pinned install) and is not claimed as tested.
-
-Tests: `backend/test_rea.py` - private targets refused before any start, the operation allowlist
-blocks every ADB/runtime/debug/export tool, the child environment carries no Jarvis secret, the
-taint latch is called, markers stripped and secrets scrubbed and injections flagged, the bounded
-output, the Node version range (22.19+/24.11+/26+, never 23/25), missing-engine refusals before
-the card, one compact tool in exactly one group selected by the tool diet, and off-by-default
-gating on both switches. Slice 2 adds the doctor readiness states (not installed, pinned,
-wrong version, sha512 match/mismatch/unknown, no subprocess and no network inside `doctor`)
-and the skill-text checks (no npx, no package-manager install, no shell fence, pinned version
-and sha512, one-card/read-only wording).
+Tests: `backend/test_rea.py` - private targets refused before any start, every one of the 200
+actions maps to exactly one tool in a fixture of the pinned catalogue's 207 names, every action's
+card action is `ask`, the retained refusals are exactly the six ADB mutators, an unknown action
+and an unknown setting are refused, a remote endpoint is refused, an output folder may be absent
+while a target may not, the install runs the pinned version only and refuses a package with an
+install script or a telemetry host, the egress scan reads a fixture package, timeouts per action
+class, the child environment carries no Jarvis secret, the taint latch is called, markers
+stripped and secrets scrubbed and injections flagged, the bounded output, the Node version range
+(22.19+/24.11+/26+, never 23/25), missing-engine refusals before the card, one compact tool in
+exactly one group selected by the tool diet, and off-by-default gating on both switches. The
+three Q1 guardrails have their own checks: each credential store (LSASS, `vaultcmd`, Credential
+Manager's folders, `Login Data`, `cookies.sqlite`, `logins.json`, `key4.db`) denied as a live
+target and a static one, an ordinary program and file still allowed, every rizin/GDB/Frida write
+form denied, a NEW `.patched` path allowed with its before/after SHA-256 receipt, Windows,
+Windows Defender and Jarvis's own programs denied as patch targets, the 60-second default and
+the 300-second ceiling on the card, a longer watch window refused, a fake clock proving a
+session under its deadline stays and over it is detached with the family's close tool, and the
+`finally` path detaching a call that timed out or failed (with the helper terminated when it
+cannot be detached by name). A real
+REA analysis is NOT-TESTABLE on CI (no engines, no pinned install) and is not claimed as tested;
+so is a real Frida attach, a real patch and a real deadline expiry on a live program - those are
+covered by fakes and a fake clock, and are not claimed as driven.
 
 ## 149. Searchable recordings and videos: readable words and a video's on-screen text kept on the PC, ON by the owner's decision (F5 S2+S3, added 2026-10-19/20)
 
@@ -30134,6 +30275,27 @@ nothing.
   makes the pane say a job started now would never run - and what makes the
   create route answer 503.
 
+**The attention fields are optional, and absence is normal (2026-11-04).**
+Each job row MAY carry:
+
+- **`waits_for_person`**: a real boolean, the PC's own answer to "does this job
+  wait for a person?". When a row carries it, both apps BELIEVE IT over
+  anything they could derive - the server can see a card that a client cannot.
+  `null`/absent is not `false`: it means "the PC did not decide", and both apps
+  then derive the answer from `state` as below.
+- **`dismissed_by_owner`**: a real boolean, meaningful on a `failed` row. A
+  failure the owner has already put aside is not still asking for him.
+
+**No backend in this repository sends either field yet.** That is why the
+derivation is part of the contract, not a temporary stub: both apps compute
+
+    state in ("waiting_approval", "blocked", "needs_input")
+    or (state == "failed" and not dismissed_by_owner)
+
+from the row the read already carries, so a payload without the two fields is
+the ordinary case and must keep working. A client must keep that fallback when
+a later backend starts sending `waits_for_person`.
+
 **Both keys are also how a client tells an older PC from a busy one.** A body
 with no `ticking` at all is a backend that predates this section, so neither
 POST exists on it: both apps keep the read-only list they always had and say
@@ -30166,6 +30328,26 @@ absence is load-bearing and is not the same fact as an empty list.
   `tools/check_parity.py` classifies `/api/jobs/answer` as **`ported`**.
   `BackgroundJobsTest.kt` holds the parse, the two bodies, both answers' words
   and the wiring.
+- **Attention first, BOTH apps (2026-11-04, pattern 4).** The job list under the
+  form is two sections, decided by ONE predicate per platform (desktop
+  `src/attention.js`; phone `net/JobAttention.kt`) and readable from either
+  app's `state` field:
+  - **"Needs you"** holds every job whose approval, answer, retry or failure a
+    person has to look at, drawn expanded with the job's own action. An EMPTY
+    "Needs you" is not created at all - no heading, no empty box, no reserved
+    gap - so it costs **zero pixels**.
+  - **"Quiet / healthy"** is ONE collapsed line, e.g. `Quiet / healthy · 3
+    background jobs — 1 still running, 2 finished · last finished 5m ago`, that
+    opens on a click (desktop) or tap (phone) to the same rows. Counts and the
+    finish time are printed only when the payload supports them.
+
+  The split is STABLE (the read's own order on both sides), so a row never
+  jumps between two reads of the same answer. It adds no polling (the existing
+  refresh path redraws it), no new action and no approval: the only controls in
+  the sections are the ones each row already had (a one-shot grant answer,
+  Cancel). Tests: `jarvis-desktop/tests/attention-first.mjs` (truth table and
+  the one-line summary, plus Playwright DOM checks for the zero-pixel empty
+  state and the folded bar) and `AttentionFirstTest.kt`.
 
 ### 169.5 What is proven, and what is not
 
@@ -30606,11 +30788,39 @@ protection, never "protect everything".
 | `POST /api/protection/propose` | the chat path | **ONE** card, action `protect_item`; 202 `waiting` and a job id; 400/409 before any card |
 | `GET /api/protection/propose?id=` | either app | the proposal's end: `waiting` / `added` / `denied` / `failed` |
 
-The chat ability is the model tool **`protect_from_jarvis`** (`{kind, target,
-mode}`): the model proposes, the owner decides on ONE ordinary approval card,
-and the store is written only after that verdict, with `added_by: "chat"`. The
-model never writes the list itself and never claims it happened until the PC
-says so. A removal is loosening and always raises one card, whichever app asks.
+The chat ability is the model tool **`protect_from_jarvis`** (`{action, kind,
+target, mode}`, `action` = `add` | `remove` | `list`, default `add`). It has
+three actions since 2026-11-04, because the owner asked to set folder-level
+restrictions by plain chat: `add` and `remove` each raise ONE ordinary approval
+card - `protect_item` and `unprotect_item` respectively - and the store is
+written only after that verdict, with `added_by: "chat"`; `list` changes
+nothing, so it answers with **no card** (the whole list, or ONE named target
+checked in it: `check: true/false` plus the entry). The model never writes the
+list itself and never claims it happened until the PC says so. Removal is
+loosening and always raises one card, whichever app or chat asks. The card
+words and the tier are the list's own; a `list` answer can never write.
+
+**The same door without the model (2026-11-04).** `jarvis_quick.py`'s fixed
+phrasings reach `jarvis_protection`'s own functions directly - `handle_propose`
+(one `protect_item` card), `handle_remove` (one `unprotect_item` card), and
+`handle_get` / `status_for` for the read. They are the SAME functions the tool
+and the apps' routes use, not a second mechanism:
+
+| said in chat | what happens |
+|---|---|
+| "restrict the folder D:\\Photos from Jarvis", "restrict D:\\Photos", "stop Jarvis reading C:\\X", "don't let Jarvis touch C:\\X" | ONE `protect_item` card; the folder becomes **blocked** once it is approved |
+| "unrestrict D:\\Photos", "let Jarvis read D:\\Photos again", "stop protecting D:\\Photos" | ONE `unprotect_item` card; the entry leaves only on the card's yes |
+| "what folders are restricted?", "which files are blocked?" | the real list, no card |
+| "is Jarvis blocked from C:\\X?" | `Yes` / `No` about THAT path, read from the store, no card |
+
+A sentence that names a path acts on that path; one that only DESCRIBES a
+folder ("the folder with my medical scans") names no path, so the answer ASKS
+for the whole path and quotes the sentence to repeat ("restrict the folder
+D:\\Medical scans from Jarvis"). No target is ever guessed - protecting the
+wrong folder is itself a failure - and the answer never falls back to a generic
+"I cannot", which is the failure the owner reported. A private chat refuses the
+change like every mutation. Both apps chat through the same `/api/chat`, so
+this works from the PC and the phone alike with no client change.
 Both actions ship as `"ask"` in both copies of `jarvis-framework.toml`; the gate
 has no `_RISK` row for them yet (a drop-in module adds no patch, and risk rows
 are written by patches), so they are unclassified: the gate forces them to
@@ -30736,7 +30946,11 @@ package name is never matched against this list. Likewise a `folder`/`file`
 entry is a PC path.
 `POST /api/protection/add` is PC-only and raises no card; the chat add and every
 removal are one card each. Adding from the phone is not missing, only one step
-slower: the owner asks in chat and the same `protect_item` card waits.
+slower: the owner asks in chat and the same `protect_item` card waits. Removing
+and asking what is on the list are one chat sentence from either app too (§171.2
+has the owner's phrasings), and nothing about that is one-sided: the phone chats
+through the same `/api/chat`, so it gets the same cards and the same real-state
+answers with no client change.
 
 **Implemented and proved in this repository, NOT deployed to the owner's live
 PC by this change** - the live deploy is its own pass, so the owner's apps do
@@ -33339,7 +33553,225 @@ word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
 of the three, because it used to sit in both the text-field and the enum table
 and the text-field branch won ("everyday lane" was stored as "everyday lan").
 
-## 186. Clearing old chats by date: a card, TWO yeses, a platform ticket, pinned chats kept, and the facts those chats taught erased with them (backend, routes for both apps, added 2026-11-04)
+## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
+
+A watcher that speaks about everything gets muted. That is the whole of this
+section. Three patterns from `deepseek-ai/dsh-superagent-prototype` (MIT) were
+adopted on the owner's decision of 2026-11-04 - *"implement Part II patterns 1,
+2, 3 and 5B ... natively in Python"* - because they are the mechanisms that stop
+a GitHub watcher becoming noise, and because the same slice can close a defect
+this project already had: **a backend restart lost a pending approval card**
+(the job row survived; the event that told the apps about it did not).
+
+Three modules and one drop-in folder carry it:
+
+| Piece | File | What it is |
+| :--- | :--- | :--- |
+| stage one, pure | `backend/jarvis_watch_policy.py` | `gate()`: which checks are required, one batch per (pr, head_sha), the settle rules. Imports nothing from Jarvis - no disk, no network, no model. |
+| the watcher | `backend/jarvis_watch_ci.py` | poll `gh`, fold the seven checks into one thread, log a decision row (`observe`) or notify (`active`), the decisions ring buffer, `watch-receipts.json`, the job body `watch_pr_checks`. |
+| the record | `backend/jarvis_outbox.py` | what is still owed to the owner, written to `outbox.json` BEFORE it is said, re-announced on startup. |
+| the route | `plugins/ready/watch-decisions/` | calls `jarvis_watch_ci.install()` for the one GET below. No patch: `jarvis_hud.py` is not shipped, and a route there would need a hunk in its dispatch tuple. |
+
+### 186.1 The three modes, and why the middle one is the default
+
+`WATCH_MODES = ("off", "observe", "active")` (`backend/jarvis_watch.py`).
+
+- **`off`** - nothing is polled, nothing is recorded. This is what "no watcher"
+  means, and it is the state of a machine that has never created a
+  `watch_pr_checks` job.
+- **`observe`** - the WHOLE pipeline runs: poll, batch, gate, and (only for a
+  failed required check) the second stage. Nothing interrupts. One decision row
+  is written instead, saying exactly what would have been said.
+- **`active`** - the same pipeline, and a terminal verdict is delivered.
+
+**A new proactive rule defaults to `observe`.** The setting is
+`[watch] pr_checks_mode` in the owner's settings file, and an absent,
+unreadable or misspelt value reads as `observe` - never as `active`, because a
+typo in a settings file must not turn a shadow watcher into one that speaks.
+Promotion is the owner's own edit once the log below has no noise in it; there
+is no route that promotes it, and nothing here auto-promotes.
+
+**Nothing becomes always-on.** `jarvis_watch_ci.py` registers a job body and
+answers a route; it starts no thread, no timer and no polling of its own. The
+watcher looks at a pull request only when a `watch_pr_checks` job names one,
+created through the existing `POST /api/jobs`.
+
+### 186.2 `GET /api/watch/decisions?limit=50`
+
+The read that makes `observe` worth having: *"what would your GitHub watcher
+have told me today?"* Newest first, `limit` clamped to 1..200 (default 50,
+anything that is not a whole number is treated as 50 rather than refused - this
+is a read). Origin and token checked exactly like every other route.
+
+```json
+{"available": true, "mode": "observe",
+ "modes": ["off", "observe", "active"],
+ "required_jobs": ["rust", "frontend", "backend", "backend-windows",
+                   "credential-manager", "powershell-5", "phone-unit-tests"],
+ "informational_jobs": ["audit", "python-advisories"],
+ "count": 2,
+ "decisions": [
+   {"id": 2, "at": 1762300000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "would_notify",
+    "reason_code": "ci_all_required_green", "verdict": "all_green",
+    "mode": "observe", "shadow_reason_code": "observe_shadow_logged",
+    "delivery": "shadow", "receipt_key": "1135:a1b2c3d4e...:all_green",
+    "preview_text": "PR #1135 is green: all 7 required checks passed and GitHub says it is mergeable (a1b2c3d4e)."},
+   {"id": 1, "at": 1762299000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "ignored",
+    "reason_code": "ci_still_running_debounced", "verdict": "running",
+    "mode": "observe", "shadow_reason_code": "", "delivery": "shadow",
+    "preview_text": "PR #1135: 3 of 7 required checks finished, none failed - staying quiet until it settles (a1b2c3d4e)."}],
+ "reasons": {"ci_all_required_green": "All 7 required checks passed and the PR is mergeable", "...": "..."}}
+```
+
+Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
+`preview_text`; the rest is for reading the log later.
+
+- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`.
+- `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
+  `notification:<id>`, `repo:<name>`.
+- `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule
+  dropped it) or `notified` (active mode, and it was delivered).
+- `reason_code` is a CLOSED set, `WATCH_REASONS` in `backend/jarvis_watch.py`:
+  `ci_all_required_green`, `ci_required_failed`, `ci_still_running_debounced`,
+  `ci_green_not_mergeable`, `ci_no_required_checks`, `duplicate_sha_state`,
+  `observe_shadow_logged`, `filtered_bot_actor`, `notification_for_you`,
+  `attention_budget_dropped`, `repo_check_clean`, `repo_check_failed`,
+  `watch_off`, `source_not_allowed`, `unreadable_trigger`. A client that does not
+  know a new code must fall back to showing `preview_text`, which is always a
+  whole sentence in the owner's words.
+- `preview_text` is the EXACT one-line message that was, or would have been,
+  shown. Never more than one line: a `\n` in it is a bug, and the suite says so.
+- In `observe` mode a `would_notify` row also carries
+  `shadow_reason_code: "observe_shadow_logged"` - the reason code that says
+  "written down instead of delivered". `reason_code` still names the verdict, so
+  the log answers both questions at once.
+- `delivery` is `shadow` (observe), `sent`, `dropped` (the interruption budget
+  said no - the arbiter's own decision, `§123.4`), `failed` (the notifier raised;
+  the outbox is still holding it) or `already`.
+
+The buffer holds the newest 500 rows in `watch-decisions.json`, written
+temp-file-then-rename, so a crash leaves the previous whole file.
+
+### 186.3 One batch per pull request, and the seven that matter
+
+A pull request runs **seven** checks that gate a merge - `rust`, `frontend`,
+`backend`, `backend-windows`, `credential-manager`, `powershell-5`,
+`phone-unit-tests` - plus `audit` and `python-advisories`, which are
+**informational**. The seven were read from the repository ruleset itself; the
+two informational ones are red on `main` regularly and merges still land, which
+is what "informational" means. They finish minutes apart (`rust` in about three,
+`frontend` in five, `backend` in fifty-five to sixty), so:
+
+- `thread_key = f"pr:{number}:{head_sha[:9]}"` - ONE thread per commit. A new
+  push is a new thread, a new batch and a new receipt.
+- **fail fast**: any required check whose conclusion is `FAILURE`,
+  `TIMED_OUT` or `ACTION_REQUIRED` speaks ONCE, immediately. So does any other
+  terminal non-`SUCCESS` (`CANCELLED`, `STALE`, `NEUTRAL`, `SKIPPED`) - a
+  required check that ended without passing would otherwise hold the batch open
+  for ever, and on a protected branch it blocks the merge.
+- **settle green**: all seven `SUCCESS` *and* `mergeable == "MERGEABLE"` speaks
+  ONCE. All seven green with `CONFLICTING`/`UNKNOWN` is its own sentence
+  (`ci_green_not_mergeable`), because green is not mergeable.
+- **quiet while it works**: any required check still running, none failed ->
+  `ci_still_running_debounced`, and NOTHING is delivered however many times it
+  is polled.
+- **`audit` and `python-advisories` never trigger a notification.** They are
+  dropped by name before any count is taken, so a red `audit` on a green pull
+  request produces `ci_all_required_green` and one quiet line.
+
+**Idempotent receipts** (`watch-receipts.json`, newest 2000) are keyed
+`(pr_number, head_sha, terminal_verdict)`. A terminal verdict is recorded once -
+in `observe` mode too, so promoting a watcher later cannot re-report a commit
+that is already finished - and every later poll of that commit answers
+`duplicate_sha_state` and delivers nothing. The verdict is part of the key on
+purpose: a commit that fails `rust`, is re-run and settles green owes the owner
+two different sentences.
+
+### 186.4 The two-stage gate, and what may never reach stage two
+
+1. **`gate(trigger, thread)`** - pure. Allowlists, required-vs-informational
+   names, receipts, settle rules, bot filtering. No disk, no network, no model,
+   no clock: `now` is an argument. `backend/test_watch_ci.py` parses its imports
+   and fails if one of them could reach anything.
+2. **`assess()`** - reached ONLY when the gate admits a terminal failure of a
+   REQUIRED check. It reads the failing run's own log through the same
+   deterministic `gh` path the poll uses (the run id is taken from the check's
+   own details URL, never guessed) and formats the one line. A filtered event, a
+   duplicate, an informational check, a bot notification and a quiet batch never
+   reach it, and the suite proves that with a counter that must stay at zero.
+
+**No model is called on this PC by this slice, said plainly.**
+`assess_failure()` has a `summarizer` seam and nothing passes one: the line is
+built by plain string work over the log. So this is 0 GPU today, and the seam is
+where a local-model summary would go if that is ever wanted.
+
+### 186.5 The durable outbox, and what a restart owes (pattern 5B)
+
+`backend/jarvis_outbox.py` holds what Jarvis still owes the owner, in
+`outbox.json` beside `jobs.db` (`JARVIS_OUTBOX_PATH` overrides it; the path is
+resolved on each call so a moved queue moves it). Three kinds, and the kind is
+part of the dedupe key:
+
+| kind | key | settled by |
+| :--- | :--- | :--- |
+| `job_card` | `job:<id>:grant:<action>` | being ANSWERED: `answer()`, `_stop_denied()`, `cancel()` |
+| `job_done` | `job:<id>:<state>` | being delivered |
+| `pr_ci_notice` | `<thread_key>:<verdict>` | being delivered (or dropped by the arbiter) |
+
+The order is the guarantee, and it is the same everywhere: **write it down, then
+record the receipt, then deliver, then settle.** A crash after the write leaves a
+pending entry that the next start re-announces; a crash after the receipt cannot
+cause a second report. The file is written to a temp name, flushed and renamed,
+so a reader never sees half of one.
+
+On startup `jarvis_jobs._init()` re-hydrates, once per process:
+parked jobs with a pending grant get their `job_card` entry back (the ROW is the
+authority, so this also covers a card from a build with no outbox), then every
+pending entry is announced once. That is what closes the restart card loss: the
+card is re-announced, and it is still the owner's to answer - rehydration
+APPROVES NOTHING, and `decide_grant()` remains the only thing that decides a
+grant. A cancelled job's card is settled by the cancel (the owner already
+answered), and a cancelled job gets no completion notice, because telling
+somebody about the interruption they asked to stop is the interruption.
+
+**The honest limit: this is at-least-once, not exactly-once.** A process that
+dies between the send and the settle repeats ONE notice on the next start. It
+cannot do the opposite - an entry that exists is an entry somebody will be told
+about - because the write comes first. Given one repeated notice or one lost
+approval card, this takes the repeat.
+
+Settled entries are pruned back to 500; a pending one is never dropped, however
+old, because dropping it is the defect this module exists to prevent.
+
+### 186.6 Tests
+
+`backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
+plain Python with a fake clock, a fake `gh` runner and temp files - no network,
+no `gh`, no model. Between them: observe-vs-active (including that observe calls
+the notifier ZERO times), the quiet period, fail fast, the all-green settle,
+informational checks ignored, duplicate-receipt silence, a new push being a new
+thread, a fixed failure then green owing two sentences, `gate` never calling
+`assess` for a filtered event, a crash between the write and the send being
+delivered exactly once afterwards, a restart re-announcing an unanswered card
+once and not repeating a delivered notice, and the route's own wrapper.
+
+### 186.7 What is NOT built, and said plainly
+
+- **No app screen for this route yet.** It is read on the PC while the mode is
+  being decided; `tools/check_parity.py` classifies it `BACKEND_ONLY` with that
+  reason, and `docs/ARCHITECTURE.md` §8 carries the one-sided row. When a screen
+  is built it goes on BOTH apps.
+- **No promotion route and no auto-promotion.** The mode is the owner's settings
+  file.
+- **No push, merge, label or comment.** This watcher reads; the only writes it
+  can make are its own three files and the notification it hands to the arbiter.
+- **The second stage never calls a model today** (§186.4).
+- **Not measured on the owner's PC**: the route and the job body are tested
+  against the real modules and a fake `gh`, not against a live pull request.
+
+## 187. Clearing old chats by date: a card, TWO yeses, a platform ticket, pinned chats kept, and the facts those chats taught erased with them (backend, routes for both apps, added 2026-11-04)
 
 The owner's ask, in his own words: *"how long does it take for you to clear old
 chats if i batched a lot of them together?"* - and the bug behind it. The live
@@ -33365,14 +33797,14 @@ line §184 draws for `conversation_clear`).
 "Forget a time frame" (`jarvis_forget_range.py`) already clears a date range,
 and this section does not replace it:
 
-| | §64 Forget a time frame | §186 Clear old chats by date |
+| | §64 Forget a time frame | §187 Clear old chats by date |
 |---|---|---|
 | the facts it taught | **retired** - hidden, words kept | **erased** - the words are gone (`MemoryStore.erase`) |
 | pinned chats | not looked at | **kept**, unless the preview asked for them |
 | how it is approved | ONE approval card (`memory_forget_range`) | **two separate yeses**, the second needing a platform ticket |
 | Undo | ten minutes, one tap | **none**, and the card says so |
 
-### 186.1 The routes
+### 187.1 The routes
 
 All three are POST, behind the token and the origin check like every other
 private route, and all three answer **423** while App lock or "Hide memory
@@ -33381,7 +33813,7 @@ the lists are hidden, so nothing may be started.
 
 | Route | Body | Answers | Deletes? |
 |---|---|---|---|
-| `/api/history/purge/preview` | `{from, to, include_facts, include_pinned}` | the card (186.2) and a `preview_id` good for 10 minutes | **never** |
+| `/api/history/purge/preview` | `{from, to, include_facts, include_pinned}` | the card (187.2) and a `preview_id` good for 10 minutes | **never** |
 | `/api/history/purge/confirm` | `{preview_id, step: 1}` | `{confirmed: true, next: "second_yes_required", confirm_id, restated: {...}}` | **never** |
 | `/api/history/purge/confirm` | `{preview_id, confirm_id, step: 2, auth_ticket}` | `{deleted: {conversations, messages, facts}, audit_id, elapsed_ms}` | **this is the only path that deletes** |
 | `/api/history/purge/cancel` | `{preview_id}` | `{ok, cancelled: true}` and the preview is dropped | **never** |
@@ -33393,7 +33825,7 @@ preview invalidates the one before it, so a card on screen can never be
 approved after it has been superseded. There is no bulk form, no preset list
 and no "always allow" anywhere in it.
 
-### 186.2 The card
+### 187.2 The card
 
 `preview` answers 200 with:
 
@@ -33444,7 +33876,7 @@ and no "always allow" anywhere in it.
   because their chat was pinned, and the count of chats that also hold messages
   from outside the window and therefore go **in full**.
 
-### 186.3 Pinned chats are never deleted by accident
+### 187.3 Pinned chats are never deleted by accident
 
 The pin already exists (§18.3: `pinned`/`pinned_at` and `POST /api/history/pin`)
 and this module only **reads** it.
@@ -33461,7 +33893,7 @@ and this module only **reads** it.
   (`kept.pinned`) and in the audit line. A pin set after the card is a pin the
   owner meant.
 
-### 186.4 Facts: selected by provenance, never by a guess
+### 187.4 Facts: selected by provenance, never by a guess
 
 A fact records the conversation it was said in, in its own `meta`
 (`jarvis_memory.MemoryStore.add` writes `meta["conversation_id"]`, which is what
@@ -33485,7 +33917,7 @@ vector rows, and VACUUMs `memory.db` so the words are gone from the file rather
 than merely unreachable. That is deliberately stronger than §64, which
 **forgets** (retires) the facts and keeps their words.
 
-### 186.5 The auth ticket - the contract both apps build to
+### 187.5 The auth ticket - the contract both apps build to
 
 The second yes is signed by the app, and the backend checks the signature. The
 text that is signed is exactly
@@ -33538,7 +33970,7 @@ asserted by the caller, so it chooses *which* key is expected, never *who* the
 caller is. This is written down rather than glossed over because it is the
 honest boundary of a local-only trust model.
 
-### 186.6 The audit line
+### 187.6 The audit line
 
 Every deletion appends ONE line to `~/.openjarvis/purge-audit.jsonl`:
 
@@ -33559,7 +33991,7 @@ the ordinary audit log (`history.purge.refused`, the reason only).
 `read_audit(limit)` returns the newest lines for an app that wants to show
 them.
 
-### 186.7 What it measures, and the answer to the owner's question
+### 187.7 What it measures, and the answer to the owner's question
 
 `POST /api/history/purge/preview` is not the only measurement: the module also
 answers *"how long does that take?"* from this PC's own state, by running the
@@ -33589,7 +34021,7 @@ the table per 200, because a COPY's rows cannot be decrypted and the scrub would
 otherwise be silently missing from the number quoted.)
 
 The same measurement, said in words, is what the fast path answers when the
-owner asks (§186.8):
+owner asks (§187.8):
 
 > Your chats are kept on this PC, encrypted, in `<path>` (`<n>` bytes on disk).
 > There are `<n>` conversations with `<n>` messages in all, `<n>` of them pinned
@@ -33607,7 +34039,7 @@ owner asks (§186.8):
 If any part of that could not be read, the sentence **says which part** and
 refuses to guess (`unknown`); it never says "I do not track".
 
-### 186.8 The self-knowledge half
+### 187.8 The self-knowledge half
 
 The measured answer is `jarvis_history_purge.capability()`:
 
@@ -33637,9 +34069,9 @@ chat history"*, *"do my chats expire"*. `X-Jarvis-Route`'s `quick` field carries
 half is not taken on trust**: `keep_days` is the measured switch (0, 30, 90 or
 365) and the sentence says "nothing expires automatically" only when it is 0.
 
-### 186.9 What this section does NOT claim
+### 187.9 What this section does NOT claim
 
-* **A human was present.** See §186.5: the backend checks a signature, not a
+* **A human was present.** See §187.5: the backend checks a signature, not a
   face. The one thing it can promise is that no caller without an owner-held
   secret, both yeses and a 90-second window can delete anything.
 * **The bytes freed.** `estimated_bytes_freed` is an estimate and says so.

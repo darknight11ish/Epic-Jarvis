@@ -238,7 +238,7 @@ def t_the_module_is_shipped_twinned_and_catalogued():
     check("the generated catalogue lists the folder as a no-patch drop-in",
           len(folder) == 1 and folder[0].get("module") == "jarvis_notes_edit", folder)
     check("the registry is not stale (the folder count rose, and one more ready module)",
-          registry.get("folder_count") == 21 and registry.get("ready_count") == 49,
+          registry.get("folder_count") == 22 and registry.get("ready_count") == 51,
           {registry.get("folder_count"), registry.get("ready_count")})
     docs = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs have the section", "## 170. The Obsidian notes editor" in docs)

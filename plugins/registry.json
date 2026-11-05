@@ -7,8 +7,8 @@
     "core": 143,
     "missing": 0
   },
-  "folder_count": 21,
-  "ready_count": 50,
+  "folder_count": 22,
+  "ready_count": 51,
   "folders": [
     {
       "name": "skill-hub",
@@ -158,7 +158,7 @@
       "name": "protected-items",
       "module": "jarvis_protection",
       "install": "handler",
-      "stack_order": 170,
+      "stack_order": 171,
       "summary": "a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -166,7 +166,7 @@
       "name": "send-file",
       "module": "jarvis_send_file",
       "install": "handler",
-      "stack_order": 171,
+      "stack_order": 172,
       "summary": "send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path.",
       "why": "born as a folder: it replaces no patch"
     },
@@ -174,8 +174,16 @@
       "name": "skill-menu",
       "module": "jarvis_skill_menu",
       "install": "handler",
-      "stack_order": 172,
+      "stack_order": 173,
       "summary": "the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\\.hermes\\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "watch-decisions",
+      "module": "jarvis_watch_ci",
+      "install": "handler",
+      "stack_order": 174,
+      "summary": "what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.",
       "why": "born as a folder: it replaces no patch"
     }
   ],
