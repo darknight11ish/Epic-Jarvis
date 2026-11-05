@@ -4557,6 +4557,9 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 **Habit check-ins and the mood log are backend only today, on BOTH apps, and that is a lane boundary rather than a platform decision** (2026-11-02; the owner's life-coach set, JARVIS-API §180; `backend/jarvis_habits.py` and `backend/jarvis_mood.py`, installed by the drop-in folders `plugins/ready/habits` and `plugins/ready/mood`; the two decisions are `decisions.d/2026-11-02-mood-log-recorded.md` and `decisions.d/2026-11-02-habit-mood-never-learned.md`). The routes are built, documented and classified backend-only in `tools/check_parity.py`: `GET`/`POST /api/habits` with tick/untick/stop, the weekly review and its on/off, and `GET`/`POST /api/mood`. **Neither app has a screen for either feature** - no habit row, no tick control, no 1-5 mood plate and no chart - so this is one gap on both sides at once, not one app missing what the other has. The UI half is the next lane, and when it is built it goes on BOTH apps on these same routes and stores: the phone's Reminders screen beside Reminders / Daily to-do / Goals, and the PC's equivalent (the owner's placement decision D3). Already decided and not the UI lane's to re-decide: no score, streak, percentage or praise anywhere; the mood chart is a picture of the owner's own taps and never a judgement; a tick and a mood entry raise no card; and neither store's data is ever learned, by construction rather than by a card (`backend/test_learning_exclusion.py`).
 
+
+**The watchers' decision log is read on the PC today, and neither app draws it - one-sided on purpose for now** (2026-11-04; the owner-forwarded dsh-superagent spec, Part II pattern 1; JARVIS-API §186.2; `backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`). `GET /api/watch/decisions?limit=50` is the read that makes `observe` mode worth having: what the GitHub watcher would have said, with a closed reason code and the exact preview line, so the owner can promote it to `active` on evidence rather than on hope. **Neither app has a screen for it yet**, and `tools/check_parity.py` classifies the route `BACKEND_ONLY` with that reason rather than leaving it undecided. This is a deliberate desk-first order, not a platform decision: the arithmetic ("is this watcher quiet enough to speak?") is done at the PC, and a notification about noise is not something to interrupt the phone with. When a screen is built it goes on BOTH apps on this same module and the same store - a Work-pane row in the desktop's Work plate and the phone's Work/journal screen - and at that point the route moves out of `BACKEND_ONLY`. Nothing on this route writes, approves, pushes or merges; it is a read of rows another module already wrote.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -5567,3 +5570,83 @@ route that writes from this module is the carded conversation clear (§13.4).
 - **No mobile self screen and no mobile window fleet.** The portrait is a read
   both apps can make; the phone has no screen for it yet and one chat at a time.
   Both are recorded in §8 rather than left to be read as oversights.
+
+## 14. Watchers, the attention budget, and what a restart owes (added 2026-11-04)
+
+The owner's decision of 2026-11-04 adopted four patterns from
+`deepseek-ai/dsh-superagent-prototype` (MIT), specified in the owner-forwarded
+"Part II" and built natively here. This section says where each one lives and
+what it is bounded by; `docs/JARVIS-API.md` §186 has the route and the row
+shapes.
+
+- **`observe` before `active`.** A proactive watcher has three states, not two.
+  `observe` runs the WHOLE pipeline - poll, batch, gate, and the second stage
+  for a failed required check - and writes one structured decision row instead
+  of interrupting. `active` delivers. `off` does nothing at all. A new rule
+  defaults to `observe`, and an unreadable `[watch] pr_checks_mode` reads as
+  `observe` rather than `active`: a typo in a settings file must not turn a
+  shadow watcher into one that speaks. Promotion is the owner's own edit of his
+  settings file; there is no route that promotes, and nothing auto-promotes.
+  The rows are served by `GET /api/watch/decisions?limit=50`
+  (`backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`).
+
+- **One batch per thread, and the seven checks that matter.** A pull request is
+  ONE thread, `pr:<number>:<head sha[:9]>`, because its seven required checks
+  finish minutes apart and a watcher that speaks per check sends seven messages
+  about one pull request. Fail fast on the first required failure; settle once
+  when all seven are green AND GitHub says the pull request is mergeable; stay
+  silent (`ci_still_running_debounced`) while any required check is still
+  running and none has failed. `audit` and `python-advisories` are
+  informational - red on `main` while merges land - and are dropped BY NAME
+  before any count, so they can never be the reason for a notification.
+  Idempotent receipts in `watch-receipts.json`, keyed
+  `(pr_number, head_sha, terminal_verdict)`, mean twenty polls of one commit
+  alert once; a re-run that changes the verdict is a second, genuinely new
+  sentence. The rules live in `backend/jarvis_watch_policy.py`.
+
+- **The two-stage gate is structural, not promised.**
+  `backend/jarvis_watch_policy.py` imports nothing from Jarvis and nothing that
+  can reach a disk, a network or a model; it has no clock (every entry point
+  takes `now`). So "a filtered event never reaches the stage that can cost
+  anything" is a property of the import list, and `backend/test_watch_ci.py`
+  fails if that list grows a way out. Stage two (`assess_failure()`) is reached
+  only for a terminal failure of a REQUIRED check, reads the failing run's log
+  through the same deterministic `gh` path the poll uses, and formats its line
+  with plain string work. **No model is called** - the `summarizer` seam exists
+  and nothing passes one.
+
+- **The durable outbox, and what a restart owes (the restart card loss).**
+  `backend/jarvis_outbox.py` holds what is still owed in `outbox.json` beside
+  `jobs.db`: three kinds (`job_card`, `job_done`, `pr_ci_notice`), each with a
+  deterministic `(kind, key)`, written to a temp name, flushed and renamed
+  BEFORE anything is said. `jarvis_jobs._park()` and `_finish()` write there
+  before they publish, and `_init()` re-announces whatever is still owed, once
+  per process: a parked job with a pending grant gets its card back (the row is
+  the authority, so this also covers a card from a build with no outbox) and
+  every pending entry is announced once. A card is settled by being ANSWERED
+  (`answer()`, `_stop_denied()`, `cancel()`), not by being announced, so an
+  unanswered card survives a restart instead of vanishing. Rehydration re-
+  ANNOUNCES; it approves nothing, and `decide_grant()` is still the only thing
+  that decides a grant. `status()["outbox"]` says how much is owed.
+  **The limit is stated rather than hidden: this is at-least-once.** A process
+  that dies between the send and the settle repeats one notice on the next
+  start; it cannot lose one, because the write comes first.
+
+- **Nothing here is always-on, and nothing here is a new permission.** The CI
+  watcher is a job body registered by NAME (`watch_pr_checks`, in
+  `jarvis_watch_ci.register_job()`, called from the one start-up hook that
+  already exists - `jarvis_watch.register_job()`, which `jarvis_hud.main()`
+  calls - so no patch needed a second line) and runs only when a job created
+  through `POST /api/jobs` names a pull request; its handler asks
+  `github_read` before
+  it reads GitHub, exactly like `watch_github` (a job created with
+  `needs: ["github_read"]` already carries that yes). It starts no thread and
+  no timer of its own. The modules add no card, no tier, no capability and no
+  route that writes; the only notification path is the existing arbiter
+  (`jarvis_arbiter.deliver`), which owns the interruption budget.
+
+- **Both apps, or the reason written down.** `GET /api/watch/decisions` is
+  `BACKEND_ONLY` in `tools/check_parity.py` today because neither app draws it
+  yet; §8, "One-sided on purpose", says why and where a screen would go. The
+  tests are `backend/test_watch_ci.py` and `backend/test_outbox.py` (plain
+  Python, fake clock, fake `gh`, temp files: no network, no model).

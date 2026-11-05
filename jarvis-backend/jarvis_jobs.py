@@ -348,6 +348,17 @@ def _init() -> None:
         _write(lambda c: c.executescript(_SCHEMA))
         _write(_reclaim)
         _inited = True
+        # WHAT A RESTART STILL OWES (2026-11-04, the restart card loss). The
+        # rows survive a restart; the EVENTS that announced them do not, so a
+        # parked card nobody answered came back silent and a completion nobody
+        # was told about was simply gone. `_resume_owed()` re-announces both,
+        # once per process, from the durable outbox. Wrapped because a job
+        # queue must open even when the notification half cannot: this is how
+        # the owner is told, never what does the work.
+        try:
+            _resume_owed()
+        except Exception as exc:                        # noqa: BLE001
+            _audit("jobs.resume_failed", {"error": type(exc).__name__})
 
 
 def _reclaim(c: sqlite3.Connection) -> dict:
@@ -402,8 +413,14 @@ def _max_attempts() -> int:
 
 def shutdown(timeout: float = 5.0) -> None:
     """Stop the writer thread. For a clean process exit and for tests, which
-    need to point DB_PATH somewhere else between cases."""
-    global _WRITER, _inited, _WRITER_ERROR
+    need to point DB_PATH somewhere else between cases.
+
+    `_RESUMED` is cleared here too, and that is what makes the suites' restart
+    tests honest: `shutdown()` is already the module's documented "this process
+    is over" hook (it resets `_inited`), so the next `_init()` behaves exactly
+    like a fresh process starting - including re-announcing what is owed.
+    """
+    global _WRITER, _inited, _WRITER_ERROR, _RESUMED
     with _WRITER_LOCK:
         t, _WRITER = _WRITER, None
     if t is not None and t.is_alive():
@@ -411,6 +428,8 @@ def shutdown(timeout: float = 5.0) -> None:
         t.join(timeout)
     with _INIT_LOCK:
         _inited = False
+    with _RESUME_LOCK:
+        _RESUMED = False
     _WRITER_ERROR = None
     _WRITER_READY.clear()
 
@@ -512,6 +531,148 @@ def _emit(row: dict, note: str = "", force: bool = True) -> None:
         })
     except Exception:
         pass
+
+
+# --------------------------------------------------------------------------
+#   The outbox: what is owed to the owner, written down BEFORE it is said
+# --------------------------------------------------------------------------
+# The defect this half closes is in jarvis_outbox.py's own docstring, and it is
+# short: an event is a moment, a row is a record. A backend that restarts
+# between "this job needs your yes" and "you answered it" used to lose the
+# question silently - the row was still `waiting_approval`, and nothing ever
+# said so again. Now every parked question and every completion is written to a
+# durable outbox with a deterministic `(kind, key)` BEFORE the event is
+# published, and `_resume_owed()` re-announces whatever is still owed when the
+# process starts.
+#
+# THE ONE THING THIS DOES NOT DO, BY DESIGN: it does not answer, approve, widen
+# or retry anything. Rehydration re-ANNOUNCES a question; the question is still
+# answered by `decide_grant()` and by nothing else. Rule 4 is untouched.
+
+_RESUME_LOCK = threading.Lock()
+_RESUMED = False
+
+
+def _outbox():
+    """The durable outbox, or None when the module is not shipped.
+
+    Bound to THIS database's folder on every call, because `DB_PATH` is a module
+    global the suites move between cases and `shutdown()` re-opens the module.
+    """
+    try:
+        import jarvis_outbox as ob
+    except Exception:                                   # noqa: BLE001
+        return None
+    try:
+        ob.bind(Path(DB_PATH).parent / "outbox.json")
+    except Exception:                                   # noqa: BLE001
+        pass
+    return ob
+
+
+def card_key(job_id: str, action: str) -> str:
+    """The deterministic `(kind, key)` for one parked question.
+
+    Deterministic because it IS the dedupe: the same job asking for the same
+    action a hundred ticks apart is one card, and the entry is settled by
+    `decide_grant()` (the one funnel every answer goes through) or `cancel()` rather than by being announced.
+    """
+    return f"job:{job_id}:grant:{str(action or '')[:60]}"
+
+
+def done_key(job_id: str, state: str) -> str:
+    return f"job:{job_id}:{str(state or 'done')[:20]}"
+
+
+def _row_payload(row: dict, note: str = "") -> dict:
+    """The smallest copy of a row a re-announcement needs.
+
+    NOT the params and NOT the result: those are the owner's own material, and
+    the same rule `_emit` follows applies to anything this module writes down -
+    an event carries a label and a state, never the words of the work.
+    """
+    return {"row": {"id": row.get("id"), "state": row.get("state"),
+                    "progress": row.get("progress"),
+                    "label": (row.get("label") or "")[:80],
+                    "tainted": bool(row.get("tainted"))},
+            "note": str(note or "")[:120]}
+
+
+def _emit_entry(entry: dict):
+    """The outbox's sender for both job kinds: publish one `job` event.
+
+    Returns False for a CARD, which is how a card stays owed: being announced is
+    not being answered. A completion notice returns True and is settled, because
+    once it has been published there is nothing left to do with it.
+    """
+    if not isinstance(entry, dict):
+        return True
+    payload = entry.get("payload")
+    row = (payload or {}).get("row") if isinstance(payload, dict) else None
+    if not isinstance(row, dict) or not row.get("id"):
+        return True
+    _emit(row, note=str((payload or {}).get("note") or "")[:120])
+    return False if entry.get("kind") == "job_card" else True
+
+
+def _resume_owed() -> dict:
+    """Re-hydrate into the active queue what a restart still owes. Once.
+
+    Both halves are needed, and for different reasons:
+
+      1. every parked job with a pending grant has its `job_card` entry put
+         back. The ROW is the authority on whether a question is still open, so
+         this also covers a card parked by a build that had no outbox at all;
+      2. every pending entry - a card just put back, or a notice written a
+         moment before a crash - is announced ONCE through `rehydrate()`.
+
+    It re-announces; it never answers. Nothing here can approve a grant.
+    """
+    global _RESUMED
+    with _RESUME_LOCK:
+        if _RESUMED:
+            return {"announced": [], "cards": 0}
+        _RESUMED = True
+    ob = _outbox()
+    if ob is None:
+        return {"announced": [], "cards": 0}
+
+    def _go(c: sqlite3.Connection):
+        out = []
+        for j in c.execute("SELECT * FROM jobs WHERE state='waiting_approval' "
+                           "AND cancel=0").fetchall():
+            acts = [g["action"] for g in c.execute(
+                "SELECT action FROM job_grants WHERE job_id=? AND state='pending' "
+                "AND used IS NULL", (j["id"],)).fetchall()]
+            if acts:
+                out.append((dict(j), acts))
+        return out
+
+    cards = 0
+    for raw, actions in _write(_go):
+        row = _row(raw)
+        for action in actions:
+            payload = _row_payload(row, f"needs {action}")
+            st = ob.enqueue("job_card", card_key(row["id"], action), payload)
+            if st.get("state") == "pending":
+                cards += 1
+    announced = ob.rehydrate(_emit_entry, kinds=("job_card", "job_done"))
+    if cards or announced:
+        _audit("jobs.resumed", {"cards": cards, "announced": len(announced)})
+    return {"announced": announced, "cards": cards}
+
+
+def outbox_status() -> dict:
+    """What is still owed, for `status()` and the boot banner."""
+    ob = _outbox()
+    if ob is None:
+        return {"available": False}
+    try:
+        got = ob.status()
+    except Exception as exc:                            # noqa: BLE001
+        return {"available": False, "why": type(exc).__name__}
+    got["available"] = True
+    return got
 
 
 # --------------------------------------------------------------------------
@@ -1113,21 +1274,41 @@ def pending_grants(job_id: Optional[str] = None) -> list[dict]:
 
 def decide_grant(grant_id: str, approved: bool, by: str = "hud") -> bool:
     """Answer one capability request. False if it is unknown or already
-    answered, so a second tap cannot revive a spent grant."""
+    answered, so a second tap cannot revive a spent grant.
+
+    This is the ONE funnel every answer goes through, so it is also where the
+    question stops being owed: the outbox entry for that (job, action) is
+    settled here - approved or denied, the owner has answered, and a card that
+    stayed pending would be re-announced by every future restart.
+    """
     _init()
 
-    def _go(c: sqlite3.Connection) -> bool:
+    def _go(c: sqlite3.Connection):
+        row = c.execute(
+            "SELECT job_id, action FROM job_grants WHERE id=? AND state='pending' "
+            "AND used IS NULL", (grant_id,)).fetchone()
+        if row is None:
+            return None
         cur = c.execute(
             "UPDATE job_grants SET state=?, decided=?, decided_by=? "
             "WHERE id=? AND state='pending' AND used IS NULL",
             ("granted" if approved else "denied", time.time(),
              str(by or "hud")[:64], grant_id))
-        return cur.rowcount > 0
-    ok = _write(_go)
-    if ok:
-        _audit("jobs.grant_decided", {"grant": grant_id,
-                                      "approved": bool(approved), "by": by})
-    return ok
+        return dict(row) if cur.rowcount > 0 else None
+    got = _write(_go)
+    if not got:
+        return False
+    ob = _outbox()
+    if ob is not None:
+        try:
+            ob.resolve("job_card", card_key(str(got.get("job_id") or ""),
+                                            str(got.get("action") or "")),
+                       why="approved" if approved else "denied")
+        except Exception:                               # noqa: BLE001
+            pass
+    _audit("jobs.grant_decided", {"grant": grant_id,
+                                  "approved": bool(approved), "by": by})
+    return True
 
 
 def answer(job_id: str, approved: bool, by: str = "hud") -> dict:
@@ -1177,6 +1358,10 @@ def answer(job_id: str, approved: bool, by: str = "hud") -> dict:
         return {"ok": False, "status": 409, "reason": "already_answered",
                 "error": "that grant has already been answered; nothing changed",
                 "job": (get(job_id) or row)}
+    # `decide_grant()` has settled the outbox entry for this (job, action): the
+    # question is answered, so it is no longer owed. A job that asks for the
+    # same action again on a later tick parks afresh and gets a fresh entry,
+    # because by then it is a new question.
     out = {"ok": True, "status": 200,
            "grant": {"id": grant.get("id"), "action": grant.get("action"),
                      "state": "granted" if approved else "denied",
@@ -1221,6 +1406,13 @@ def _stop_denied(job_id: str, action: str) -> bool:
         _audit("jobs.finished", {"id": job_id, "state": "failed",
                                  "handler": (row or {}).get("handler"),
                                  "why": "grant_denied"})
+        # A refusal answers the question, so the card is no longer owed.
+        ob = _outbox()
+        if ob is not None:
+            try:
+                ob.resolve("job_card", card_key(job_id, action), why="denied")
+            except Exception:                           # noqa: BLE001
+                pass
         if row:
             _emit(row, note=reason[:120])
     return stopped
@@ -1290,7 +1482,29 @@ def _finish(job_id: str, state: str, result: Any = None,
         _audit("jobs.finished", {"id": job_id, "state": row["state"],
                                  "handler": row.get("handler"),
                                  "attempts": row.get("attempts")})
-        _emit(row, note=error[:120] if error else "")
+        note = error[:120] if error else ""
+        # A COMPLETION NOTICE nobody was told about is the other half of the
+        # restart defect: written down first, published second, settled third,
+        # so a crash leaves one pending entry rather than silence. A cancelled
+        # job gets no notice - telling somebody about the interruption they
+        # asked to stop is the thing they were avoiding.
+        #
+        # A notification that could not be WRITTEN is not a reason to silence a
+        # job either: the fallback publishes the event exactly as this module
+        # always did, and the row's own `delivered` column still feeds
+        # `collect()` for the digest.
+        handled = False
+        ob = _outbox() if row["state"] in ("done", "failed") else None
+        if ob is not None:
+            try:
+                handled = ob.deliver("job_done", done_key(job_id, row["state"]),
+                                     _row_payload(row, note), _emit_entry) in (
+                    "sent", "owed", "already")
+            except Exception as exc:                    # noqa: BLE001
+                _audit("jobs.outbox_failed", {"id": job_id,
+                                              "error": type(exc).__name__})
+        if not handled:
+            _emit(row, note=note)
     return row
 
 
@@ -1309,7 +1523,27 @@ def _park(job_id: str, action: str, reason: str) -> Optional[dict]:
     row = _write(_go)
     if row:
         _audit("jobs.waiting", {"id": job_id, "action": action})
-        _emit(row, note=reason[:120] or f"needs {action}")
+        note = reason[:120] or f"needs {action}"
+        # Written down BEFORE it is published: a restart between these lines
+        # re-announces the card instead of losing it. `deliver` answers "owed"
+        # for a card this process already announced, which is what stops a job
+        # that parks every 30 s from saying so every 30 s.
+        #
+        # A notification that could not be WRITTEN is not a reason to fail (or
+        # to silence) a job: the fallback publishes the event exactly as this
+        # module always did, and the row still says what is waiting.
+        handled = False
+        ob = _outbox()
+        if ob is not None:
+            try:
+                handled = ob.deliver("job_card", card_key(job_id, action),
+                                     _row_payload(row, note), _emit_entry) in (
+                    "sent", "owed", "already")
+            except Exception as exc:                    # noqa: BLE001
+                _audit("jobs.outbox_failed", {"id": job_id,
+                                              "error": type(exc).__name__})
+        if not handled:
+            _emit(row, note=note)
     return row
 
 
@@ -1517,17 +1751,28 @@ def cancel(job_id: str, by: str = "hud") -> bool:
             "UPDATE jobs SET cancel=1 WHERE id=? AND state NOT IN "
             "('done','failed','cancelled')", (job_id,))
         if cur.rowcount == 0:
-            return None
+            return None, []
+        actions = [g["action"] for g in c.execute(
+            "SELECT action FROM job_grants WHERE job_id=? AND state='pending'",
+            (job_id,)).fetchall()]
         c.execute("UPDATE jobs SET state='cancelled', finished=? "
                   "WHERE id=? AND state IN ('queued','waiting_approval')",
                   (time.time(), job_id))
         c.execute("UPDATE job_grants SET state='denied', decided=?, "
                   "decided_by=? WHERE job_id=? AND state='pending'",
                   (time.time(), f"cancel:{by}"[:64], job_id))
-        return _fetch(c, job_id)
-    row = _write(_go)
+        return _fetch(c, job_id), actions
+    row, actions = _write(_go)
     if row is None:
         return False
+    # A cancelled job owes nobody its question any more.
+    ob = _outbox()
+    if ob is not None:
+        for action in actions:
+            try:
+                ob.resolve("job_card", card_key(job_id, action), why="cancelled")
+            except Exception:                           # noqa: BLE001
+                pass
     _audit("jobs.cancelled", {"id": job_id, "by": by, "state": row["state"]})
     _emit(row, note="cancelled")
     return True
@@ -1633,6 +1878,11 @@ def status() -> dict:
             "counts": counts,
             "undelivered": undelivered,
             "pending_grants": waiting,
+            # What a restart still owes the owner (2026-11-04). A boot banner
+            # that shows `pending > 0` is showing a card the apps may not have
+            # drawn yet; `jarvis_outbox` re-announces it on this process's own
+            # first init, so a number here is a fact, not a to-do.
+            "outbox": outbox_status(),
             "config": {"max_jobs_per_tick": _cfg("max_jobs_per_tick", 4),
                        "stale_running_seconds": _stale_seconds(),
                        "max_attempts": _max_attempts(),

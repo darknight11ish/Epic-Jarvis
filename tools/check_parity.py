@@ -1117,6 +1117,14 @@ BACKEND_ONLY = {
     "/api/storage/scan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
     "/api/storage/cleanup/plan": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
     "/api/storage/cleanup": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
+    # The watchers' own accountability log (2026-11-04; JARVIS-API section 186;
+    # backend/jarvis_watch_ci.py, plugins/ready/watch-decisions/). ONE read, and
+    # it exists to be read BEFORE a watcher is allowed to interrupt, which is
+    # the arithmetic the owner does at his desk rather than on his phone. No app
+    # has a Work-pane row for it yet; when one does it goes on BOTH apps on this
+    # same module (ARCHITECTURE section 8, 'One-sided on purpose', has the row).
+    "/api/watch/decisions": "the GitHub watcher's decision log (JARVIS-API section 186; jarvis_watch_ci.py: the observe-mode rows - what the watcher would have said, with a closed reason code and the exact preview line - so the owner can promote `observe` to `active` on evidence instead of on hope). Neither app draws it yet; it is read on the PC while the mode is being decided, and a screen goes on BOTH apps when one is built (ARCHITECTURE section 8). It raises no card, writes nothing and calls nothing.",
+
     # The self-benchmark's five phase-1 routes (2026-11-04; jarvis_bench.py,
     # bench.patch, JARVIS-API section 185). BACKEND-ONLY TODAY, and each reason
     # says which lane builds the caller: the project's own phase plan puts the

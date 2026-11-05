@@ -33502,3 +33502,221 @@ word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
 3,653 characters - a tail measurement), and `lane` is dropped when it is not one
 of the three, because it used to sit in both the text-field and the enum table
 and the text-field branch won ("everyday lane" was stored as "everyday lan").
+
+## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
+
+A watcher that speaks about everything gets muted. That is the whole of this
+section. Three patterns from `deepseek-ai/dsh-superagent-prototype` (MIT) were
+adopted on the owner's decision of 2026-11-04 - *"implement Part II patterns 1,
+2, 3 and 5B ... natively in Python"* - because they are the mechanisms that stop
+a GitHub watcher becoming noise, and because the same slice can close a defect
+this project already had: **a backend restart lost a pending approval card**
+(the job row survived; the event that told the apps about it did not).
+
+Three modules and one drop-in folder carry it:
+
+| Piece | File | What it is |
+| :--- | :--- | :--- |
+| stage one, pure | `backend/jarvis_watch_policy.py` | `gate()`: which checks are required, one batch per (pr, head_sha), the settle rules. Imports nothing from Jarvis - no disk, no network, no model. |
+| the watcher | `backend/jarvis_watch_ci.py` | poll `gh`, fold the seven checks into one thread, log a decision row (`observe`) or notify (`active`), the decisions ring buffer, `watch-receipts.json`, the job body `watch_pr_checks`. |
+| the record | `backend/jarvis_outbox.py` | what is still owed to the owner, written to `outbox.json` BEFORE it is said, re-announced on startup. |
+| the route | `plugins/ready/watch-decisions/` | calls `jarvis_watch_ci.install()` for the one GET below. No patch: `jarvis_hud.py` is not shipped, and a route there would need a hunk in its dispatch tuple. |
+
+### 186.1 The three modes, and why the middle one is the default
+
+`WATCH_MODES = ("off", "observe", "active")` (`backend/jarvis_watch.py`).
+
+- **`off`** - nothing is polled, nothing is recorded. This is what "no watcher"
+  means, and it is the state of a machine that has never created a
+  `watch_pr_checks` job.
+- **`observe`** - the WHOLE pipeline runs: poll, batch, gate, and (only for a
+  failed required check) the second stage. Nothing interrupts. One decision row
+  is written instead, saying exactly what would have been said.
+- **`active`** - the same pipeline, and a terminal verdict is delivered.
+
+**A new proactive rule defaults to `observe`.** The setting is
+`[watch] pr_checks_mode` in the owner's settings file, and an absent,
+unreadable or misspelt value reads as `observe` - never as `active`, because a
+typo in a settings file must not turn a shadow watcher into one that speaks.
+Promotion is the owner's own edit once the log below has no noise in it; there
+is no route that promotes it, and nothing here auto-promotes.
+
+**Nothing becomes always-on.** `jarvis_watch_ci.py` registers a job body and
+answers a route; it starts no thread, no timer and no polling of its own. The
+watcher looks at a pull request only when a `watch_pr_checks` job names one,
+created through the existing `POST /api/jobs`.
+
+### 186.2 `GET /api/watch/decisions?limit=50`
+
+The read that makes `observe` worth having: *"what would your GitHub watcher
+have told me today?"* Newest first, `limit` clamped to 1..200 (default 50,
+anything that is not a whole number is treated as 50 rather than refused - this
+is a read). Origin and token checked exactly like every other route.
+
+```json
+{"available": true, "mode": "observe",
+ "modes": ["off", "observe", "active"],
+ "required_jobs": ["rust", "frontend", "backend", "backend-windows",
+                   "credential-manager", "powershell-5", "phone-unit-tests"],
+ "informational_jobs": ["audit", "python-advisories"],
+ "count": 2,
+ "decisions": [
+   {"id": 2, "at": 1762300000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "would_notify",
+    "reason_code": "ci_all_required_green", "verdict": "all_green",
+    "mode": "observe", "shadow_reason_code": "observe_shadow_logged",
+    "delivery": "shadow", "receipt_key": "1135:a1b2c3d4e...:all_green",
+    "preview_text": "PR #1135 is green: all 7 required checks passed and GitHub says it is mergeable (a1b2c3d4e)."},
+   {"id": 1, "at": 1762299000.0, "source": "github_pr_ci",
+    "thread_key": "pr:1135:a1b2c3d4e", "outcome": "ignored",
+    "reason_code": "ci_still_running_debounced", "verdict": "running",
+    "mode": "observe", "shadow_reason_code": "", "delivery": "shadow",
+    "preview_text": "PR #1135: 3 of 7 required checks finished, none failed - staying quiet until it settles (a1b2c3d4e)."}],
+ "reasons": {"ci_all_required_green": "All 7 required checks passed and the PR is mergeable", "...": "..."}}
+```
+
+Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
+`preview_text`; the rest is for reading the log later.
+
+- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`.
+- `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
+  `notification:<id>`, `repo:<name>`.
+- `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule
+  dropped it) or `notified` (active mode, and it was delivered).
+- `reason_code` is a CLOSED set, `WATCH_REASONS` in `backend/jarvis_watch.py`:
+  `ci_all_required_green`, `ci_required_failed`, `ci_still_running_debounced`,
+  `ci_green_not_mergeable`, `ci_no_required_checks`, `duplicate_sha_state`,
+  `observe_shadow_logged`, `filtered_bot_actor`, `notification_for_you`,
+  `attention_budget_dropped`, `repo_check_clean`, `repo_check_failed`,
+  `watch_off`, `source_not_allowed`, `unreadable_trigger`. A client that does not
+  know a new code must fall back to showing `preview_text`, which is always a
+  whole sentence in the owner's words.
+- `preview_text` is the EXACT one-line message that was, or would have been,
+  shown. Never more than one line: a `\n` in it is a bug, and the suite says so.
+- In `observe` mode a `would_notify` row also carries
+  `shadow_reason_code: "observe_shadow_logged"` - the reason code that says
+  "written down instead of delivered". `reason_code` still names the verdict, so
+  the log answers both questions at once.
+- `delivery` is `shadow` (observe), `sent`, `dropped` (the interruption budget
+  said no - the arbiter's own decision, `§123.4`), `failed` (the notifier raised;
+  the outbox is still holding it) or `already`.
+
+The buffer holds the newest 500 rows in `watch-decisions.json`, written
+temp-file-then-rename, so a crash leaves the previous whole file.
+
+### 186.3 One batch per pull request, and the seven that matter
+
+A pull request runs **seven** checks that gate a merge - `rust`, `frontend`,
+`backend`, `backend-windows`, `credential-manager`, `powershell-5`,
+`phone-unit-tests` - plus `audit` and `python-advisories`, which are
+**informational**. The seven were read from the repository ruleset itself; the
+two informational ones are red on `main` regularly and merges still land, which
+is what "informational" means. They finish minutes apart (`rust` in about three,
+`frontend` in five, `backend` in fifty-five to sixty), so:
+
+- `thread_key = f"pr:{number}:{head_sha[:9]}"` - ONE thread per commit. A new
+  push is a new thread, a new batch and a new receipt.
+- **fail fast**: any required check whose conclusion is `FAILURE`,
+  `TIMED_OUT` or `ACTION_REQUIRED` speaks ONCE, immediately. So does any other
+  terminal non-`SUCCESS` (`CANCELLED`, `STALE`, `NEUTRAL`, `SKIPPED`) - a
+  required check that ended without passing would otherwise hold the batch open
+  for ever, and on a protected branch it blocks the merge.
+- **settle green**: all seven `SUCCESS` *and* `mergeable == "MERGEABLE"` speaks
+  ONCE. All seven green with `CONFLICTING`/`UNKNOWN` is its own sentence
+  (`ci_green_not_mergeable`), because green is not mergeable.
+- **quiet while it works**: any required check still running, none failed ->
+  `ci_still_running_debounced`, and NOTHING is delivered however many times it
+  is polled.
+- **`audit` and `python-advisories` never trigger a notification.** They are
+  dropped by name before any count is taken, so a red `audit` on a green pull
+  request produces `ci_all_required_green` and one quiet line.
+
+**Idempotent receipts** (`watch-receipts.json`, newest 2000) are keyed
+`(pr_number, head_sha, terminal_verdict)`. A terminal verdict is recorded once -
+in `observe` mode too, so promoting a watcher later cannot re-report a commit
+that is already finished - and every later poll of that commit answers
+`duplicate_sha_state` and delivers nothing. The verdict is part of the key on
+purpose: a commit that fails `rust`, is re-run and settles green owes the owner
+two different sentences.
+
+### 186.4 The two-stage gate, and what may never reach stage two
+
+1. **`gate(trigger, thread)`** - pure. Allowlists, required-vs-informational
+   names, receipts, settle rules, bot filtering. No disk, no network, no model,
+   no clock: `now` is an argument. `backend/test_watch_ci.py` parses its imports
+   and fails if one of them could reach anything.
+2. **`assess()`** - reached ONLY when the gate admits a terminal failure of a
+   REQUIRED check. It reads the failing run's own log through the same
+   deterministic `gh` path the poll uses (the run id is taken from the check's
+   own details URL, never guessed) and formats the one line. A filtered event, a
+   duplicate, an informational check, a bot notification and a quiet batch never
+   reach it, and the suite proves that with a counter that must stay at zero.
+
+**No model is called on this PC by this slice, said plainly.**
+`assess_failure()` has a `summarizer` seam and nothing passes one: the line is
+built by plain string work over the log. So this is 0 GPU today, and the seam is
+where a local-model summary would go if that is ever wanted.
+
+### 186.5 The durable outbox, and what a restart owes (pattern 5B)
+
+`backend/jarvis_outbox.py` holds what Jarvis still owes the owner, in
+`outbox.json` beside `jobs.db` (`JARVIS_OUTBOX_PATH` overrides it; the path is
+resolved on each call so a moved queue moves it). Three kinds, and the kind is
+part of the dedupe key:
+
+| kind | key | settled by |
+| :--- | :--- | :--- |
+| `job_card` | `job:<id>:grant:<action>` | being ANSWERED: `answer()`, `_stop_denied()`, `cancel()` |
+| `job_done` | `job:<id>:<state>` | being delivered |
+| `pr_ci_notice` | `<thread_key>:<verdict>` | being delivered (or dropped by the arbiter) |
+
+The order is the guarantee, and it is the same everywhere: **write it down, then
+record the receipt, then deliver, then settle.** A crash after the write leaves a
+pending entry that the next start re-announces; a crash after the receipt cannot
+cause a second report. The file is written to a temp name, flushed and renamed,
+so a reader never sees half of one.
+
+On startup `jarvis_jobs._init()` re-hydrates, once per process:
+parked jobs with a pending grant get their `job_card` entry back (the ROW is the
+authority, so this also covers a card from a build with no outbox), then every
+pending entry is announced once. That is what closes the restart card loss: the
+card is re-announced, and it is still the owner's to answer - rehydration
+APPROVES NOTHING, and `decide_grant()` remains the only thing that decides a
+grant. A cancelled job's card is settled by the cancel (the owner already
+answered), and a cancelled job gets no completion notice, because telling
+somebody about the interruption they asked to stop is the interruption.
+
+**The honest limit: this is at-least-once, not exactly-once.** A process that
+dies between the send and the settle repeats ONE notice on the next start. It
+cannot do the opposite - an entry that exists is an entry somebody will be told
+about - because the write comes first. Given one repeated notice or one lost
+approval card, this takes the repeat.
+
+Settled entries are pruned back to 500; a pending one is never dropped, however
+old, because dropping it is the defect this module exists to prevent.
+
+### 186.6 Tests
+
+`backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
+plain Python with a fake clock, a fake `gh` runner and temp files - no network,
+no `gh`, no model. Between them: observe-vs-active (including that observe calls
+the notifier ZERO times), the quiet period, fail fast, the all-green settle,
+informational checks ignored, duplicate-receipt silence, a new push being a new
+thread, a fixed failure then green owing two sentences, `gate` never calling
+`assess` for a filtered event, a crash between the write and the send being
+delivered exactly once afterwards, a restart re-announcing an unanswered card
+once and not repeating a delivered notice, and the route's own wrapper.
+
+### 186.7 What is NOT built, and said plainly
+
+- **No app screen for this route yet.** It is read on the PC while the mode is
+  being decided; `tools/check_parity.py` classifies it `BACKEND_ONLY` with that
+  reason, and `docs/ARCHITECTURE.md` §8 carries the one-sided row. When a screen
+  is built it goes on BOTH apps.
+- **No promotion route and no auto-promotion.** The mode is the owner's settings
+  file.
+- **No push, merge, label or comment.** This watcher reads; the only writes it
+  can make are its own three files and the notification it hands to the arbiter.
+- **The second stage never calls a model today** (§186.4).
+- **Not measured on the owner's PC**: the route and the job body are tested
+  against the real modules and a fake `gh`, not against a live pull request.
