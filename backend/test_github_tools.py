@@ -51,6 +51,7 @@ Standard library only.
 from __future__ import annotations
 
 import ast
+import base64
 import json
 import os
 import re
@@ -217,6 +218,23 @@ def _json_body(call):
     if raw is None:
         return None
     return json.loads(raw.decode("utf-8"))
+
+
+def _file_envelope(text: str, *, encoding: str = "base64") -> str:
+    """The body GitHub REALLY sends for one file: the envelope, not its text.
+
+    `GET /repos/{owner}/{repo}/contents/{path}` answers with
+    `{"encoding": "base64", "content": "<base64>"}` (DEF-042, the shape the
+    suite's fake used to get wrong by returning the plain text), a JSON list
+    for a directory, and `"encoding": "none"` with no content for a file too
+    big for this read or a link rather than a file.
+    """
+    if encoding == "base64":
+        content = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    else:
+        content = ""
+    return json.dumps({"type": "file", "encoding": encoding, "content": content,
+                       "name": "README.md", "path": "README.md", "size": len(text)})
 
 
 # --------------------------------------------------------------------------
@@ -751,9 +769,47 @@ def t_every_tier_is_ask_and_the_tables_are_joined():
               sorted(OC.SMALL_ACTIONS))
 
 
+def t_a_file_read_shows_the_files_text_not_the_envelope():
+    """DEF-042: the contents API answers in base64; the tool shows the FILE.
+
+    Read on 2026-11-04, the tool returned the envelope itself - up to 40,000
+    characters of base64 where its card, `jarvis_agent`'s tool description and
+    `docs/JARVIS-API.md` section 186.1 promise ONE file's text - and this
+    suite's fake returned plain text, so its checks could not catch that. The
+    fake now returns what GitHub really sends, and the checks below fail if the
+    decode is ever removed again.
+    """
+    _r, out = _run("github_read_file", Fake(200, _file_envelope(
+        "# Jarvis\n\nThe README's own words.\n")))
+    text = out.get("text", "")
+    check("a base64 file answer is decoded to the file's own text",
+          out.get("ok") is True and text == "# Jarvis\n\nThe README's own words.",
+          repr(text)[:200])
+    check("... and never the envelope it arrived in",
+          '"encoding"' not in text and '"content"' not in text
+          and "base64" not in text, text[:200])
+
+    _r, out = _run("github_read_file", Fake(200, _file_envelope("")))
+    check("an empty file says so in one sentence, never the envelope",
+          out.get("text") == "That file is empty.", out.get("text"))
+
+    _r, out = _run("github_read_file", Fake(200, json.dumps(
+        [{"name": "a.md", "type": "file", "path": "a.md"}])))
+    check("a directory is a plain sentence, not a JSON list",
+          out.get("ok") is True and "directory" in out.get("text", "")
+          and "[" not in out.get("text", ""), out.get("text"))
+
+    _r, out = _run("github_read_file",
+                   Fake(200, _file_envelope("x", encoding="none")))
+    check("encoding none is a plain sentence, not a silent empty answer",
+          out.get("ok") is True and "did not send that file's text" in out.get("text", "")
+          and "encoding" not in out.get("text", ""), out.get("text"))
+
+
 def t_the_answer_is_bounded_and_unapproved_runs_send_nothing():
-    _r, out = _run("github_read_file", Fake(200, "a" * (GH.MAX_BYTES + 5000)))
-    check("a huge answer is cut, and says so",
+    _r, out = _run("github_read_file", Fake(200, _file_envelope(
+        "a" * (GH.MAX_FILE_CHARS + 5000))))
+    check("a huge file is cut, and says so",
           out.get("ok") and GH.CUT_MARKER in out.get("text", ""),
           len(out.get("text", "")))
     check("... at the file cap, not the socket cap",
@@ -787,6 +843,7 @@ if __name__ == "__main__":
                    t_the_patch_applies_and_reverses_byte_for_byte,
                    t_the_gate_knows_the_six_tools_and_four_actions,
                    t_every_tier_is_ask_and_the_tables_are_joined,
+                   t_a_file_read_shows_the_files_text_not_the_envelope,
                    t_the_answer_is_bounded_and_unapproved_runs_send_nothing):
             print(f"\n--- {fn.__name__} ---")
             try:

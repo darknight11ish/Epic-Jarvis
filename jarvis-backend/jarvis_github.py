@@ -69,6 +69,7 @@ Standard library only.
 """
 from __future__ import annotations
 
+import base64
 import json
 import re
 import urllib.error
@@ -777,6 +778,36 @@ def _ci_words(doc) -> str:
 
 
 def _file_words(text: str) -> str:
+    """The words for ONE file - the file's own text, never GitHub's envelope.
+
+    The contents API (`GET /repos/{owner}/{repo}/contents/{path}`, which
+    `_headers`' `application/vnd.github+json` Accept asks for) answers with
+    `{"encoding": "base64", "content": "<base64>"}` for a file, a JSON LIST for
+    a directory, and `"encoding": "none"` with no content when the file is too
+    big for this read (over 1 MB) or is a symlink/submodule rather than a file.
+    Before 2026-11-04 this returned the envelope as it came, so the tool showed
+    up to 40,000 characters of base64 where its card and the API page promise
+    ONE file's text (DEF-042, fixed with #1128). Each of the other three shapes
+    now gets one plain sentence instead of JSON the model would have to guess
+    at; the cap applies to the DECODED text, which is what the model reads.
+    """
+    doc = _payload(text)
+    if isinstance(doc, list):
+        return ("That path is a directory, not a file - ask for a file inside it.")
+    if isinstance(doc, dict):
+        encoding = str(doc.get("encoding") or "")
+        content = doc.get("content")
+        if encoding == "base64" and isinstance(content, str):
+            try:
+                raw = base64.b64decode(content)
+            except (ValueError, TypeError):
+                return ("GitHub answered with a file this PC could not decode, so "
+                        "there is nothing to show.")
+            return (_cut(raw.decode("utf-8", "replace"), MAX_FILE_CHARS).strip()
+                    or "That file is empty.")
+        if encoding == "none" or str(doc.get("type") or "") == "dir":
+            return ("GitHub did not send that file's text: it is too large for "
+                    "this read, or it is a link rather than a file.")
     if not str(text or "").strip():
         return "That file is empty."
     return _cut(text, MAX_FILE_CHARS).strip()
