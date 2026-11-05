@@ -251,8 +251,18 @@ def t_the_path_follows_the_queue_it_belongs_to():
         check("unbound, it sits beside JARVIS_JOBS_DB",
               O.path() == d / "elsewhere" / "outbox.json", O.path())
         os.environ.pop("JARVIS_JOBS_DB", None)
+        # The settings folder is `jarvis_framework.CONFIG_DIR` when that module
+        # is importable, else OPENJARVIS_CONFIG_DIR / JARVIS_CONFIG_DIR (this
+        # file points both at a temporary "cfg" folder), else ~/.openjarvis.
+        # Assert the RULE, not one machine's spelling of it: `"cfg" in path`
+        # was true on the owner's PC, where the env fallback resolves, and
+        # FALSE in CI, where the shipped base is importable so CONFIG_DIR wins
+        # and names ~/.config/openjarvis - a red that said nothing about the
+        # outbox at all.
+        cfg = O._config_dir()
         check("with neither, it is outbox.json in the settings folder",
-              O.path().name == "outbox.json" and "cfg" in str(O.path()), O.path())
+              O.path() == cfg / "outbox.json" and O.path().name == "outbox.json",
+              (O.path(), cfg))
     finally:
         for k, v in saved.items():
             if v is None:
