@@ -176,7 +176,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          npm install --no-save --no-audit --no-fund playwright
+          # PINNED 2026-11-05: upstream published playwright 1.65.0 at 18:28Z
+          # but its own dependency playwright-core@1.65.0 is not on the
+          # registry (npm resolves the latest playwright, then dies with
+          # ETARGET). Every frontend shard failed on that for ~70 minutes.
+          # Pin the previous good release; unpin when 1.65.0 is complete.
+          npm install --no-save --no-audit --no-fund playwright@1.64.1
           npx playwright install --with-deps chromium
       - name: Every desktop test suite in this shard
         shell: bash
