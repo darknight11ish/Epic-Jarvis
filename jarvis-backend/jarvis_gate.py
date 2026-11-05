@@ -2848,6 +2848,9 @@ _RISK.update({
     # fingerprint - so it is the loosening direction and gets the heaviest
     # card this table has. OFF takes the power away again, instantly.
     "handsfree_enable": ("no", "local", "turns on hands-free mode, where a spoken yes answers an approval card - including the cards that would otherwise wait for Windows Hello or your phone's fingerprint; while it is on, a recording of your voice or a person in the room could answer one, and what it allowed may already have happened by the time you turn it off, which is instant"),
+})
+
+# --------------------------------------------------------------------------
 #   The product check's gate rows (jarvis_product_check.py, 2026-11-04)
 # --------------------------------------------------------------------------
 # THEY ARE HERE, AT THE END OF THE FILE, for the reason the block above gives:
