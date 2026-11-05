@@ -129,6 +129,26 @@ object CallRecordNow {
     }
 
     /**
+     * DELETE the recordings this phone is still holding and the PC never took -
+     * the owner's own discard, reached only through the plate's confirmed
+     * Delete (the privacy audit's D7: a denied or unsendable recording must
+     * not be stuck on the phone for ever).
+     *
+     * A plain started service, not a foreground one: no microphone is opened
+     * and no notification is needed, so this works while the app is in front -
+     * which it is, because the button is on the plate. Nothing the PC has
+     * acknowledged can be deleted ([CallRecordStore.discardUnsent]), and the
+     * last thing said is the count, in words.
+     */
+    fun discard(context: Context) {
+        runCatching {
+            context.startService(
+                Intent(context, CallRecordService::class.java).setAction(CallRecordService.ACTION_DISCARD),
+            )
+        }.onFailure { Log.w(TAG, "could not delete the waiting recordings", it) }
+    }
+
+    /**
      * A chat directive: `arm` arms, and `stop` stops a recording in progress
      * or cancels an arming. An action this app does not know is null, and a
      * null event does nothing at all.
