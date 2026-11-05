@@ -1,5 +1,11 @@
 # Work setups
 
+> **Superseded 2026-10-18.** The nine focus presets replaced these five
+> setups (JARVIS-API §145; the owner's decision of 2026-10-18). The desktop's
+> work surface is the presets, which apply through `/api/work/apply`, and
+> `POST /api/work/choose` is now recorded as `phone-only` (ARCHITECTURE §8).
+> Everything below is the older design's history, including "Still to build".
+
 Five combinations of local models, each chosen for a kind of work, each
 explaining in plain words what it is for **before** the owner starts.
 
