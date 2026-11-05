@@ -641,6 +641,30 @@
  {
   "type": "function",
   "function": {
+   "name": "send_text_message",
+   "description": "Send ONE text message from the owner's phone to one of their contacts. Use only when they ask you to text someone. Give the contact's name exactly as the owner said it and the message word for word. ONE card naming the contact and the exact text; nothing is sent until they approve it, and only while hands-free mode is on.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact": {
+      "type": "string",
+      "description": "the contact's name, as the owner said it"
+     },
+     "text": {
+      "type": "string",
+      "description": "the message, word for word"
+     }
+    },
+    "required": [
+     "contact",
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "protect_from_jarvis",
    "description": "Protect a folder, file or program on the owner's PC from Jarvis. mode blocked = no access at all; readonly = reads allowed, writes/actions refused. Use when the owner asks Jarvis not to touch something.",
    "parameters": {

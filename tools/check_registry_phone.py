@@ -312,6 +312,17 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
         "must_contain": "contentRisk",
     },
+    "settings.handsfree": {
+        "name": "Hands-free mode",
+        "why": ("The PC's Settings card and its GET/POST /api/handsfree switch are one half "
+                "of the owner's hands-free mode; the half that reads a card out and records "
+                "the spoken answer runs in the Android app, which is its own change against "
+                "the frozen contract in JARVIS-API section 186 (docs/ARCHITECTURE.md "
+                "section 8 says so). Until it lands the phone has no hands-free row, so "
+                "\"open hands-free mode\" answers with the honest PC-only sentence."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"handsfree",',
+    },
 }
 
 #: The menu ids the audit found on the phone while the registry called them

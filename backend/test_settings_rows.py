@@ -90,7 +90,11 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: 33 since Wave B's "Personalize Jarvis" (2026-11-03) gave the setup reminder
 #: its switch in Notification Preferences (`notif-setup`, Ruling Q4): one more
 #: toggle row, one more spoken setting, both generated from SETTINGS_ROWS.
-EXPECTED_ROWS = 33
+#: 34 since hands-free mode (2026-11-04, JARVIS-API section 186) added its one
+#: switch (`hf-enabled`) to the sandbox's position: one more toggle row, one
+#: more spoken setting, both generated from SETTINGS_ROWS. It adds NO phone row
+#: - the phone's own hands-free row is the Android lane's separate change.
+EXPECTED_ROWS = 34
 
 #: The rows that are not settings switches, with the reason. These are in
 #: SETTINGS_ROWS (so the page and the table still agree) but carry
@@ -168,11 +172,13 @@ def t_the_count_is_what_it_is():
     bare = len(re.findall(r'^[ \t]*<label class="toggle">[ \t]*$',
                           SETTINGS_HTML.read_text(encoding="utf-8"), re.M))
     # 2026-11-03: the setup row carries a label id too, so 25 bare + 8 with id.
-    check("25 of them are bare `<label class=\"toggle\">`, 8 carry a label id",
-          bare == 25 and len(page) - bare == 8,
+    # 2026-11-04: hands-free mode's `hf-enabled` is one more BARE toggle
+    # (`<label class="toggle">` with no id), so 26 bare + 8 with id.
+    check("26 of them are bare `<label class=\"toggle\">`, 8 carry a label id",
+          bare == 26 and len(page) - bare == 8,
           f"bare={bare}, with-id={len(page) - bare} - this is the trap that "
           f"produced the wrong '19'")
-    check("all 33 desktop rows are described",
+    check(f"all {EXPECTED_ROWS} desktop rows are described",
           len(R.DESKTOP_ROWS) == EXPECTED_ROWS, str(len(R.DESKTOP_ROWS)))
     check("the three phone rows are described too",
           len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 3, str(len(R.SETTINGS_ROWS)))
@@ -221,8 +227,11 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("twenty-one desktop rows are the same switch as a spoken setting",
-          len(linked) == 21, f"{linked} - if this grew, the row was given a setter")
+    check("twenty-two desktop rows are the same switch as a spoken setting",
+          len(linked) == 22, f"{linked} - if this grew, the row was given a setter")
+    # TWENTY-TWO SINCE 2026-11-04: `hf-enabled` (hands-free mode) joined the
+    # linked rows with its own spoken setting, `handsfree`, so the switch can be
+    # flipped by talking as well as by tapping.
     # TWENTY SINCE 2026-11-02: `learning-paraphrase` joined the linked
     # rows with its own spoken setting, `learn_paraphrase`.
     # NINETEEN SINCE 2026-11-01: `voice-one-moment` ("Say \"One moment\" if I'm
@@ -287,15 +296,15 @@ def t_not_switches_are_the_known_one():
               f"setting_row={getattr(row, 'setting_row', None)}")
 
 
-def t_fallback_rows_are_the_known_ten():
-    """Ten rows get their visible words from the PC at read time, so the words
-    in the table are a FALLBACK. The list is a claim about the desktop
+def t_fallback_rows_are_the_known_eleven():
+    """Eleven rows get their visible words from the PC at read time, so the
+    words in the table are a FALLBACK. The list is a claim about the desktop
     JavaScript, so it is pinned here and explained."""
     want = ["sky-show", "voice-one-moment", "voice-heard-sound", "mn-humor",
             "coach-enabled", "sec-app-lock", "sec-private", "cv-face-switch",
-            "ws-enabled", "ws-ask"]
+            "ws-enabled", "ws-ask", "hf-enabled"]
     got = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.fallback)
-    check("ten rows are marked as PC-worded, and they are the right ten",
+    check("eleven rows are marked as PC-worded, and they are the right eleven",
           got == sorted(want), f"{got}\nexpected {sorted(want)}")
     check("spd-accept is NOT one of them (its words are a local constant)",
           not R.setting_row("spd-accept").fallback)
@@ -374,7 +383,7 @@ def t_bool_settings_is_the_measured_thirteen():
     word's; its own comment says so.
 
     Thirty-six since 2026-11-03: `pc_setup_notification`, Wave B's
-    "Personalize Jarvis" reminder. It is one of the twenty-one linked rows
+    "Personalize Jarvis" reminder. It is one of the twenty-two linked rows
     above, because `notif-setup` joined the page with its setter - the same
     shape as the other five PC-notification switches.
 
@@ -385,9 +394,13 @@ def t_bool_settings_is_the_measured_thirteen():
     lane - while the typed phrases and the phone's Voice switch are real.
     `section` is None for one_moment's reason: the "voice" card belongs to the
     wake-word feature.
+
+    Thirty-eight since 2026-11-04: `handsfree`, the spoken name for the
+    hands-free switch behind `hf-enabled` (jarvis_handsfree.py, JARVIS-API
+    section 186).
     """
-    check("BOOL_SETTINGS holds its thirty-seven spoken settings",
-          len(R.BOOL_SETTINGS) == 37, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-eight spoken settings",
+          len(R.BOOL_SETTINGS) == 38, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:
@@ -395,7 +408,7 @@ def main() -> int:
                t_the_count_is_what_it_is, t_row_order_matches_the_page,
                t_indent_matches_the_page, t_label_ids_match_the_page,
                t_setting_links_are_real, t_not_switches_are_the_known_one,
-               t_fallback_rows_are_the_known_ten, t_bool_settings_is_the_measured_thirteen):
+               t_fallback_rows_are_the_known_eleven, t_bool_settings_is_the_measured_thirteen):
         fn()
     print()
     if FAILED:

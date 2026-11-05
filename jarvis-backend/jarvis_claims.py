@@ -180,6 +180,10 @@ ACTING_TOOLS = frozenset({
     # folders is made fetchable by the phone, which can keep a copy - that is
     # an ACT, so a claimed "nothing was done" must not be said after it.
     "send_file_to_phone",
+    # "send_text_message" (2026-11-04, hands-free mode): the phone sends ONE
+    # real text in the owner's name, and a sent text cannot be unsent - an ACT,
+    # so a claimed "nothing was done" must not be said after it.
+    "send_text_message",
     # The conversation-scoped web-search approval and its stop (2026-11-01).
     # Both CHANGE something - what asks for the rest of this chat - so an answer
     # that says "searches in this chat will not ask you any more", in a turn

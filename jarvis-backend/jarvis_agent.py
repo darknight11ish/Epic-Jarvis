@@ -9052,6 +9052,15 @@ TOOL_GROUPS = (
     # web search is (GRANT_ASK_TOOLS, 2026-11-02) and are not a Settings switch.
     ("web_search_grant", "let web searches in this chat stop asking",
      (GRANT_TOOL, REVOKE_TOOL)),
+    # Texting a contact (2026-11-04, hands-free mode; SEND_TEXT_TOOL). Its own
+    # group, the "send_email" shape: ONE deliberate act with its own approval
+    # card, so the model must be able to ask for a text without an email also
+    # appearing. A group rather than the core for the reason the read_web_page
+    # note gives - a group's name and one line are about 20 tokens, paid only
+    # with `[tools] short_list = true` (OFF by default), where its own tool
+    # description would be paid on every turn. Ungrouped is not an option:
+    # tool_offer always shows an ungrouped tool in the short list.
+    ("send_text", "text a contact", (SEND_TEXT_TOOL,)),
 )
 PLUGINS = "plugins"
 
@@ -9195,6 +9204,12 @@ TOOL_HINTS = {
     "send_file_to_phone": (r"\bsend\b.*\bfiles?\b", r"\bfiles?\b.*\bphone\b",
                            r"\bdownload\b", r"\bview (it|the file)\b",
                            r"\bto my phone\b"),
+    # "text Alex that I'm late" (2026-11-04, hands-free mode). \btext\b is the
+    # verb the owner uses ("text mum"); a bare "message" is deliberately NOT
+    # matched here, because email_check and the notes tools already own that
+    # word and this tool SENDS.
+    "send_text_message": (r"\btext\b", r"\btexts?\b.*\b(her|him|them|mum|mom|dad|"
+                          r"wife|husband|friend|contact)\b", r"\bsms\b"),
     "protect_from_jarvis": (r"\bprotect", r"\bexclude\b", r"\bkeep out\b",
                             r"\bread[- ]only\b", r"\bdon.t (let|allow)\b",
                             r"\bblock\b.*\b(jarvis|from)\b"),

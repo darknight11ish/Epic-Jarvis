@@ -3216,7 +3216,8 @@
       "settings.approval-cards",
       "settings.protection",
       "asks-first",
-      "phone-approvals"
+      "phone-approvals",
+      "settings.handsfree"
     ],
     "must_mention": [
       "card",
