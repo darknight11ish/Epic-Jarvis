@@ -552,6 +552,26 @@ def t_the_card_never_names_a_protected_file():
           [n for n in names if n.lower() in (prompt + detail).lower()])
 
 
+
+
+def t_the_card_floor_refuses_a_must_ask_action():
+    """The card dimension's floor is the existing one: a MUST_ASK/HARD_LIMITS
+    action can never lose its card (jarvis_asks_first.request_tier refuses it),
+    so this feature can never be used to make those cardless."""
+    _reset()
+    check("send_email is in both lists that cannot lose a card",
+          "send_email" in AF.MUST_ASK and "send_email" in AF.HARD_LIMITS)
+    gate, writer = Gate(), Writer()
+    code, out = AP.request_change(
+        {"action": "send_email", "field": "card", "value": "auto"},
+        gate=gate, tier_of=lambda a: "ask", spawn=lambda fn: fn(),
+        write=writer, armed=lambda: True, here=True)
+    check("asking to remove its card is refused before any card is raised",
+          code != 202 and bool(out.get("error"))
+          and not gate.calls and not writer.calls, (code, out))
+    check("... and the refusal is one sentence, in plain words",
+          len(str(out.get("error") or "")) > 40, out)
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

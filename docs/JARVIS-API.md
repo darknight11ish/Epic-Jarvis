@@ -34060,3 +34060,32 @@ read-only pages show the new lines. It has no model-free fast-path grammar on
 purpose (ARCHITECTURE section 8 says why). The decision is
 `decisions.d/2026-11-05-approval-policy-chat.md`; the change note is
 `changelog.d/2026-11-05-approval-policy-chat.md`.
+
+### 188.6 The floor, and what the owner can never loosen
+
+Three protections sit under every change, and the module owns only the card
+dimension explicitly:
+
+1. **The card itself.** An action in `jarvis_asks_first.MUST_ASK` or
+   `HARD_LIMITS` can never lose its card, whatever the owner asks: the `card`
+   dimension delegates to `jarvis_asks_first.request_tier`, whose own refusal
+   turns "stop asking before you open the door" into one sentence and changes
+   nothing. The change card's own action, `change_approval_policy`, is in both
+   lists.
+2. **Windows Hello for a risky card.** `jarvis_owner_check.is_risky` decides at
+   approval time, and its prompt rule runs whether or not the settings file asks
+   for it - so removing an `[autonomy.windows_hello]` line can never take the
+   prompt off a risky card. The policy only ever ADDS the check to a card that
+   would otherwise skip it (a "small" card).
+3. **The second yes is the owner's own choice.** It is the one dimension a
+   loosening can really remove, so it is behind the strongest card the system
+   has: ONE `change_approval_policy` card, on this PC only, which itself needs
+   Windows Hello, whose words say exactly what stops being asked, and nothing is
+   written until a person approves it. This is deliberately different from a
+   blanket "risky actions never lose their second yes" floor (Gemini's Q4 option
+   A, 2026-11-05): the owner asked in their own words to be able to change it, an
+   action-level risky test cannot be resolved from this repository at policy time
+   (the gate's risk rows live in the owner's live `jarvis_gate.py`), and treating
+   the 83 `HARD_LIMITS` actions as risky-at-policy-time would refuse the feature
+   for nearly every action the owner would use it on. The strength is moved from
+   a rule to the card.
