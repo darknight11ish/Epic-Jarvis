@@ -2190,8 +2190,8 @@ neither app says it would.
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/history/archive` | POST | `{"id": "<conversation id>", "archived": true \| false}` | `brain_history_act` (Brain, History) and `hud_history_act` (HUD History sidebar) - no confirm: it is reversible | `JarvisRuntime` history act (the phone's History screen) - no confirm: it is reversible | `chat-history.patch` - **§18.3**. **Archive** puts ONE chat away without deleting it; `false` is Unarchive. Reversible, metadata only, no approval card and no confirm step - putting a chat away reveals nothing and sends nothing (Delete keeps its confirm). `GET /api/history?archived=1` lists the archived ones and every row carries `archived`. `200 {"ok": true, "id", "archived"}`; `400` bad body/id; `404` unknown id (nothing written); `423` while App lock or "Hide memory lists and chat history" is on, for every id. |
 | `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item, the estimate and the pinned chats kept - and changing NOTHING: it holds the items for `/confirm`. `409` a card already waiting, a second yes already held, an Undo still open, or the list changed since it was read (`"changed": true`). |
-| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
-| `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | **planned**: built on the backend, no app calls it yet - the second tap is the apps lane | not yet (same lane as the desktop) | `forget-range.patch` - **§64**. The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Reclassify `ported` when both apps draw the second tap. |
+| `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis - `pinned_kept`'s titles with them, `redact()` in `brain/forget_range.rs`) | `JarvisRuntime.forgetRangeRead` (the same words out while hidden: `ForgetRange.redact`) | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label, the pinned chats kept (`pinned_kept`, never tickable) and the measured `estimate` - at most 200 together, else counts only. A read: never held. |
+| `/api/memory/forget_range/confirm` | POST | `{"id": "<held id>", "yes": true}` - the literal JSON `true` | `forget_range_write("confirm")`: the held id and a literal `true`, refused while the list is hidden, held on a stale link | `JarvisRuntime.forgetRangeWrite("confirm")`, the same body and the same holds | `forget-range.patch` - **§64**. **ported.** The SECOND yes: only this route forgets the facts and deletes the chats. `200 {"ok", "facts_forgotten", "chats_deleted", "pinned_kept", "undo": {"until", "seconds"}}`; `400` a `yes` that is not the literal `true` (the hold stays); `409` no hold, an expired hold (120 s), the items changed, a card still waiting, or an Undo already open - nothing changes. Both apps show the PC's `confirm.text` and the minutes left, send nothing but the id and `true`, say every `400`/`409` in the PC's own words, and keep the 10-minute Undo the `200` starts. |
 | `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the second yes: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
 | `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | Since 2026-09-28 the overnight tidy is built, **review cards only** (§78): `enabled: true` puts its one daily look on the scheduler, `enabled: false` removes it at once - sent alone, it is not held on a stale link in either app ("Turn off overnight tidying"; it only makes Jarvis ask less). Before that, `enabled` only recorded the wish. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
@@ -14752,6 +14752,16 @@ line). Desktop: a card on the Brain's History tab (`forget-range.js`,
 apps' words and the real answers: `forget-range-cases.json`
 (`tools/gen_forget_range_cases.py`).
 
+Both apps draw the two yesses: the pinned chats kept (as kept - no tick box,
+never in the count on "Forget these" and never in what it sends), the measured
+`estimate.text` above the button, and, once the card is approved, the PC's own
+`confirm.text`, the minutes left and one more tap carrying the held `id` and a
+literal `yes: true`. Every `400` and `409` is shown in the PC's own words, and
+the status is read again after one, because the card, the hold or the Undo has
+moved on. While the private lists are hidden, `pinned_kept`'s titles are
+hidden with every other title - it is a list of chat titles, as `chats` is
+(the desktop's Rust `redact()`, the phone's `ForgetRange.redact`).
+
 ### 64.1 Which facts, which chats, which days
 
 - **Facts by when Jarvis SAVED them** (`created`), never by their "true
@@ -14934,40 +14944,51 @@ what I said ..." is told plainly that this forgets, and "Erase the words"
 is per fact. A spoken "yes" or "approve" matches nothing and approves
 nothing - the second yes is a tap on the confirm block, never a voice.
 
-### 64.6 What the apps must do
+### 64.6 What the apps do
 
 - Show the list with **every item ticked** (except a support record, which
   starts unticked - §64.1), the owner free to untick any; send **only the
   ticked ids**, in one request. Never approve anything - and never send the
   confirm for the owner: the second yes is their tap.
-- **Draw the second tap (apps lane, not built yet).** After the card is
-  approved, poll the status: `confirm` non-null means nothing has been
-  removed yet. Show "Yes, forget them" (`confirm_words.yes` in the fixture)
-  and post `{"id": confirm.id, "yes": true}` to `confirm.route`; a 400
-  keeps the list, a 409 means it is gone/changed and nothing happened.
-  **Do not treat the card's approval as done**: the deletion is only after
-  the 200 from `/confirm` (then the status says `last.outcome` "done").
+- **Draw the second tap (both apps, 2026-11-05).** After the card is approved
+  the status carries `confirm`; non-null means nothing has been removed yet.
+  Both apps show "Yes, forget them" (`confirm_words.yes`, each app's
+  `EXTRA.confirm_yes`), the PC's own `confirm.text` and the minutes left, and
+  post `{"id": confirm.id, "yes": true}` to `confirm.route`. The body is BUILT
+  from those two values in each app (the desktop's Rust `confirm_body`, the
+  phone's `ForgetRange.confirmBody`), never passed through from the page, so
+  neither app can send a `yes` that is not the literal boolean. A 400 keeps the
+  list, a 409 means the hold is gone, the items changed, a card still waits or
+  an Undo is open - nothing happened; both are shown in the PC's own words and
+  the status is read again after one. **The card's approval is not done**: the
+  deletion is only after the 200 from `/confirm` (then the status says
+  `last.outcome` "done"), and the 10-minute Undo it starts is drawn like any
+  other.
 - **A pinned chat is never sent** (it is not in `chats`) and never rendered
-  as tickable; show the `pinned_kept` names as kept, with "N pinned chats
-  are kept", and the `estimate.text` line as the measured time.
+  as tickable; both apps show the `pinned_kept` names as kept, with the PC's
+  own "N pinned chats are kept" and why, and the `estimate.text` line as the
+  measured time before the owner is asked.
 - Once the PC says the change happened (`last.outcome` "done"), an app that
   was IN one of the deleted chats starts a new conversation and says so
   (§18.6). And History reads its list again at once after a change or an
   Undo (desktop: it used to wait for its 15-second re-read).
-- **"Forget these" waits for a live link** (rule 4) and, on the desktop, is
-  refused while the list's words are hidden (the owner must be able to
-  read what goes); **Undo is never held**.
+- **"Forget these" and the second yes wait for a live link** (rule 4) and are
+  refused while the list's words are hidden (the owner must be able to read
+  what goes); **Undo is never held**.
 - **Hidden lists**: while "Hide memory lists and chat history" (phone) or
   "Windows Hello for memory lists and chat history" (desktop) hides the
-  Brain's lists, or App lock has locked Jarvis, the list's words are
-  hidden - the counts and the days stay - until Show is confirmed. The
-  status (an open Undo) carries no words and stays. **The apps lane must
-  add `pinned_kept` (titles) to the desktop's `redact()`** along with
-  `facts`/`chats`, and hide it on the phone the same way: this PR adds the
-  key, and the existing redactor does not know it yet.
-- The words are the contract's (`words`), in both apps; the second tap's
-  two sentences are in the fixture's `confirm_words` until the apps lane
-  adds them to their own copies.
+  Brain's lists, or App lock has locked Jarvis, the list's words are hidden -
+  the counts and the days stay - until Show is confirmed. The status (an open
+  Undo) carries no words and stays. `pinned_kept` carries chat TITLES, so it is
+  hidden with `facts`/`chats`: the desktop's Rust `redact()` empties it, and
+  the phone's `ForgetRange.redact` blanks its titles out of what the plate
+  holds.
+- The words are the contract's (`words`), in both apps. The second tap's two
+  sentences are the PC's own constants and are NOT in `words` (that map is
+  generated and compared key for key): each app holds them - with the pinned
+  chats' three sentences and the "N min left to say yes" line - in its own
+  `EXTRA` map, checked word for word against `backend/jarvis_forget_range.py`
+  and the fixture's `confirm_words`.
 
 ## 65. Customer-support chats - Jarvis chats with a company's support for you (added 2026-09-28; built, not yet tried against a real site)
 

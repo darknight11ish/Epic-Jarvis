@@ -12,12 +12,18 @@
  * - the page: the days, the ticked list, unticking, "Forget these" sends
  *   ONLY the ticked ids once (the PC raises the card - nothing here
  *   approves), the waiting line, the Undo banner and Undo;
- * - a stale link greys "Forget these" but never Undo;
- * - hidden with the private lists (counts only, Show);
+ * - the extended feature (owner, 2026-11-04): the pinned chats are drawn as
+ *   KEPT and can never be ticked or sent, the measured estimate is said
+ *   before the owner is asked, and the second yes carries the held id and a
+ *   literal `true` - with every 400/409 said in the PC's own words;
+ * - a stale link greys "Forget these" and the second yes, never Undo;
+ * - hidden with the private lists (counts only, Show) - and the PINNED
+ *   chats' titles are hidden with the rest;
  * - "forget what you learned last week" in the Jarvis bar opens the Brain
  *   here, with the days filled in (main.js -> brain.js);
- * - CONTROL: the two commands are the Brain's alone; Rust holds "forget" on
- *   a stale link and refuses it while the list is hidden; Undo is never held;
+ * - CONTROL: the two commands are the Brain's alone; Rust holds "forget" and
+ *   "confirm" on a stale link and refuses them while the list is hidden;
+ *   Undo is never held; the pinned titles are redacted with the other words;
  * - a11y: every control has a name, the status line is a live region.
  */
 import assert from "node:assert/strict";
@@ -27,8 +33,14 @@ import { dirname, join } from "node:path";
 import {
   allTicked,
   BRAIN_PLACE_KEY,
+  confirmBody,
+  EXTRA,
   forgetBody,
   forgetLabel,
+  holdLeftLine,
+  isHoldId,
+  messagesLine,
+  pinnedKeptLine,
   PLACE,
   PRESETS,
   readPreview,
@@ -63,6 +75,39 @@ await check("the words are the contract's and the phone's, word for word", async
   const html = read("src/brain.html");
   assert.ok(html.includes(`<h2>${WORDS.title}</h2>`));
   assert.ok(html.includes(WORDS.under), "the card's note is not the shared words");
+});
+
+/**
+ * The words the contract's `words` map does not carry (the apps lane's half of
+ * the 2026-11-04 feature): five of them are the PC's own constants, word for
+ * word, and the sixth is this page's one line about how long the second yes
+ * has left. Pinned to the backend source, the contract's `confirm_words`, and
+ * the phone - so the two apps and the PC cannot drift apart.
+ */
+await check("the extra words are the PC's own and the phone's, word for word", async () => {
+  const py = readRepo("backend/jarvis_forget_range.py").replace(/"\s*\n\s*"/g, "");
+  const one = (name) => {
+    const at = py.indexOf(`${name} = `);
+    assert.ok(at > 0, `the backend has no ${name}`);
+    return py.slice(at + name.length + 3).split("\n")[0].replace(/^\(?"|"\)?,?$/g, "");
+  };
+  assert.equal(EXTRA.pinned_one, one("PINNED_ONE"));
+  assert.equal(EXTRA.pinned_many, one("PINNED_MANY"));
+  assert.equal(EXTRA.pinned_why, one("PINNED_WHY"));
+  assert.equal(EXTRA.confirm_text, one("CONFIRM_TEXT"));
+  assert.deepEqual({ yes: EXTRA.confirm_yes, text: EXTRA.confirm_text }, CASES.confirm_words);
+  assert.equal(pinnedKeptLine(1), "1 pinned chat is kept");
+  assert.equal(pinnedKeptLine(3), "3 pinned chats are kept");
+  assert.equal(messagesLine(1), "1 message");
+  assert.equal(messagesLine(12), "12 messages");
+  assert.equal(holdLeftLine({ expiresIn: 120 }), "2 min left to say yes");
+  assert.equal(holdLeftLine({ expiresIn: 30 }), "1 min left to say yes");
+  assert.equal(holdLeftLine({ expiresIn: 0 }), "1 min left to say yes");
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/ForgetRange.kt")
+    .replace(/"\s*\+\s*\n\s*"/g, "");
+  for (const [key, words] of Object.entries(EXTRA)) {
+    assert.ok(kt.includes(`"${key}" to "${words}"`), `the phone does not say ${key}: ${words}`);
+  }
 });
 
 await check("every real answer reads", async () => {
@@ -106,6 +151,61 @@ await check("every real answer reads", async () => {
   assert.equal(forgetLabel(2), "Forget these (2)");
 });
 
+/**
+ * The extended feature's answers (owner, 2026-11-04): the pinned chats kept,
+ * the measured estimate, and the held second yes. Nothing here is made up -
+ * every one of these bodies is the real backend's.
+ */
+await check("the extended answers read: pinned kept, the estimate, the held second yes", async () => {
+  // The pinned chats are kept: named in `pinned_kept`, counted, and NEVER on
+  // the tickable list - so they can never be ticked, counted or sent.
+  const pinned = readPreview(C.preview_pinned.body);
+  assert.equal(pinned.pinnedKeptCount, 1);
+  assert.deepEqual(pinned.pinnedKept, [
+    { id: "conv-pinned-01", title: "Pinned planning", messages: 1 }]);
+  assert.deepEqual(pinned.chats.map((c) => c.id), ["conv-poem-00002", "conv-trip-00001"]);
+  const ticked = allTicked(pinned);
+  assert.ok(!ticked.has("chat:conv-pinned-01"), "a pinned chat starts ticked");
+  // Even if something ticked one, it is never sent: the PC would refuse it.
+  assert.deepEqual(forgetBody(pinned,
+    new Set([...ticked, "chat:conv-pinned-01", "chat:conv-poem-00002"])).chats,
+  ["conv-poem-00002", "conv-trip-00001"]);
+  assert.equal(pinnedKeptLine(pinned.pinnedKeptCount), "1 pinned chat is kept");
+
+  // The measured estimate, said before the owner is asked.
+  assert.deepEqual(pinned.estimate, C.preview_pinned.body.estimate);
+  assert.equal(pinned.estimate.text,
+    "About 1 second to forget 2 facts and delete 2 chats (3 messages).");
+  assert.equal(readPreview(C.preview.body).estimate.seconds, 1);
+
+  // The second yes: the held id and a literal `true`, and the PC's sentence.
+  const held = readStatus(C.status_confirm.body);
+  assert.equal(held.waiting, false);
+  assert.deepEqual(held.confirm,
+    { id: "hold-id", expiresIn: 120, text: EXTRA.confirm_text });
+  assert.equal(held.confirm.text, CASES.confirm_words.text);
+  assert.deepEqual(confirmBody(held.confirm.id), { id: "hold-id", yes: true });
+  assert.equal(JSON.stringify(confirmBody(held.confirm.id)),
+    '{"id":"hold-id","yes":true}', "the second yes is not a literal true");
+  for (const bad of ["", "hold id", "a".repeat(129), null, 32]) {
+    assert.equal(isHoldId(bad), false, `an id of ${bad} was accepted`);
+  }
+  assert.equal(isHoldId("0123456789abcdef0123456789abcdef"), true);
+  // Nothing is held unless the PC says so: a mistyped block is not a second
+  // yes, and no card waiting means none either.
+  assert.equal(readStatus(C.status_confirm_expired.body).confirm, null);
+  assert.equal(readStatus(C.status_fresh.body).confirm, null);
+  assert.equal(readStatus(C.status_waiting.body).confirm, null);
+  assert.equal(readStatus({ available: true, confirm: { id: 3 } }).confirm, null);
+  // The timed-out hold is not an error state: the PC says what happened.
+  assert.equal(readStatus(C.status_confirm_expired.body).last.message,
+    "The second yes timed out. Nothing was forgotten or deleted.");
+  // The status still says how many pinned chats are kept, and the preview of
+  // a plain list carries none of them.
+  assert.equal(readStatus(C.status_confirm.body).pinnedKeptCount, 0);
+  assert.deepEqual(readPreview(C.preview.body).pinnedKept, []);
+});
+
 await check("CONTROL: the Brain's two commands; forget held and hidden-refused in Rust, Undo never", async () => {
   const rs = read("src-tauri/src/brain/forget_range.rs");
   const fn = (name) => {
@@ -113,12 +213,47 @@ await check("CONTROL: the Brain's two commands; forget held and hidden-refused i
     return f.slice(0, f.indexOf("\n}\n"));
   };
   const w = fn("forget_range_write");
-  const forgetArm = w.slice(w.indexOf('"forget" =>'), w.indexOf('"undo" =>'));
-  assert.match(forgetArm, /words_hidden\(&app\)[\s\S]*STILL_HIDDEN/);
-  assert.match(forgetArm, /stale\(&app\)[\s\S]*STALE/);
+  const forgetArm = w.slice(w.indexOf('"forget" =>'), w.indexOf('"confirm" =>'));
+  const confirmArm = w.slice(w.indexOf('"confirm" =>'), w.indexOf('"undo" =>'));
+  for (const [name, arm] of [["forget", forgetArm], ["confirm", confirmArm]]) {
+    assert.match(arm, /words_hidden\(&app\)[\s\S]*STILL_HIDDEN/, `${name} is not refused on a hidden list`);
+    assert.match(arm, /stale\(&app\)[\s\S]*STALE/, `${name} is not held on a stale link`);
+  }
   const undoArm = w.slice(w.indexOf('"undo" =>'), w.indexOf("other =>"));
   assert.doesNotMatch(undoArm, /stale|hidden/, "Undo is held or refused");
   assert.match(fn("forget_range_read"), /words_hidden\(&app\)[\s\S]*redact\(answer\)/);
+  // The PRIVACY FIX (the backend lane, 2026-11-04): `pinned_kept` carries chat
+  // TITLES, so redact() must empty it with the other private lists.
+  const redactFn = rs.slice(rs.indexOf("pub(crate) fn redact("));
+  assert.match(redactFn.slice(0, 1200), /"pinned_kept"/,
+    "redact() leaves the pinned chats' titles in a hidden list");
+  // The routes are the contract's, not this app's.
+  for (const [name, path] of [["STATUS_PATH", CASES.routes.status],
+    ["PREVIEW_PATH", CASES.routes.preview], ["UNDO_PATH", CASES.routes.undo],
+    ["CONFIRM_PATH", CASES.routes.confirm]]) {
+    assert.ok(rs.includes(`${name}: &str = "${path}"`), `Rust's ${name} is not ${path}`);
+  }
+  // A body this app can build is only ever the held id and the literal true -
+  // the same rule the PC's 400 enforces.
+  assert.match(rs, /obj\.get\("yes"\) != Some\(&serde_json::Value::Bool\(true\)\)/,
+    "Rust accepts a yes that is not the literal true");
+  assert.match(rs, /Ok\(serde_json::json!\(\{ "id": id, "yes": true \}\)\)/,
+    "Rust sends something other than the held id and a literal true");
+  // The two refusals this app can say before any request is made are the PC's
+  // own sentences (jarvis_forget_range.confirm), so a refusal reads the same
+  // wherever it comes from.
+  const py = readRepo("backend/jarvis_forget_range.py").replace(/"\s*\n\s*"/g, "");
+  const rsFlat = rs.replace(/\\\s*\n\s*/g, "");
+  for (const [name, words] of [
+    ["SECOND_YES_GONE", "There is no second yes waiting - the 2 minutes are up, or it was " +
+      "already answered. Nothing was forgotten or deleted."],
+    ["SECOND_YES_NOT_LITERAL", 'This needs a literal yes: {"id": "<held id>", "yes": true}. ' +
+      "Nothing was forgotten or deleted, and the list is still waiting."],
+  ]) {
+    const quoted = words.replace(/"/g, '\\"');
+    assert.ok(py.includes(quoted), `the backend does not say ${name}: ${words}`);
+    assert.ok(rsFlat.includes(quoted), `the desktop does not say ${name} in the PC's words`);
+  }
   for (const cmd of ["forget_range_read", "forget_range_write"]) {
     assert.match(read("src-tauri/build.rs"), new RegExp(`"${cmd}"`));
     assert.match(read("src-tauri/src/lib.rs"), new RegExp(`brain::forget_range::${cmd},`));
@@ -156,13 +291,20 @@ const SIZE = { width: 1180, height: 1100 };
 /**
  * The Brain with a stand-in for brain/forget_range.rs: reads from the
  * contract file, each write written down in `window.__fr.calls` and
- * answered with the real backend's answer.
+ * answered with the real backend's answer. A refusal throws the PC's own
+ * sentence with its first letter raised, exactly as `backend_refusal` does.
+ *
+ * `confirm`/`afterConfirm`: the second yes's answer and the status behind it.
+ * A hidden list comes back like the real Rust `redact()`: every word, the
+ * pinned chats' titles included, and only the counts left.
  */
 async function historyTab({ status = C.status_fresh.body, preview = C.preview.body, link = {},
   forget = C.forget_waiting, afterForget = C.status_waiting.body, undo = C.undo,
-  afterUndo = C.status_after_undo.body, hidden = false, place = false } = {}) {
+  afterUndo = C.status_after_undo.body, confirm = C.confirm,
+  afterConfirm = C.status_undo.body, hidden = false, place = false } = {}) {
   const page = await K.open(browser, base, "brain.html", { link }, SIZE);
-  await page.evaluate(({ status, preview, forget, afterForget, undo, afterUndo, hidden }) => {
+  await page.evaluate(({ status, preview, forget, afterForget, undo, afterUndo, confirm,
+    afterConfirm, hidden }) => {
     const install = () => {
       const core = window.__TAURI__.core;
       const inner = core.invoke;
@@ -177,24 +319,28 @@ async function historyTab({ status = C.status_fresh.body, preview = C.preview.bo
         if (cmd === "forget_range_read") {
           fr.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
           if (!args || !args.preview) return fr.status;
-          if (fr.hidden) return { ...fr.preview, facts: [], chats: [], hidden: true };
+          if (fr.hidden) {
+            return { ...fr.preview, facts: [], chats: [], pinned_kept: [], hidden: true };
+          }
           return fr.preview;
         }
         if (cmd === "forget_range_write") {
           fr.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
-          const a = args.action === "undo" ? undo : forget;
+          const a = args.action === "undo" ? undo
+            : args.action === "confirm" ? confirm : forget;
           if (a.status >= 400) {
             const e = String(a.body.error || "");
             throw e.charAt(0).toUpperCase() + e.slice(1);
           }
-          fr.status = args.action === "undo" ? afterUndo : afterForget;
+          fr.status = args.action === "undo" ? afterUndo
+            : args.action === "confirm" ? afterConfirm : afterForget;
           return { ...a.body, http: a.status };
         }
         return inner(cmd, args);
       };
     };
     install();
-  }, { status, preview, forget, afterForget, undo, afterUndo, hidden });
+  }, { status, preview, forget, afterForget, undo, afterUndo, confirm, afterConfirm, hidden });
   if (place) {
     // What main.js leaves after "forget what you learned last week", then
     // the Brain window coming forward (Rust's open_fix_place focuses it).
@@ -284,6 +430,158 @@ await check("Undo: the banner says what was done and what is left, one tap, no c
   assert.deepEqual(sent, [["forget_range_write", { action: "undo" }]]);
   assert.equal(said, "Put back: 2 facts and 2 chats.");
   assert.equal(gone, 0);
+  // With a list on the page the answer is read again, and that re-read must
+  // not wipe what the PC said (the same bug the second yes had).
+  const withList = await historyTab({ status: C.status_undo.body });
+  await showList(withList);
+  await withList.locator("#forget-range-undo").click();
+  await withList.waitForTimeout(400);
+  const kept = await withList.locator("#forget-range-said").innerText();
+  const listRead = await withList.evaluate(() => window.__fr.calls.filter(([c, a]) => a.preview).length);
+  await withList.close();
+  assert.equal(kept, "Put back: 2 facts and 2 chats.", "the Undo answer was wiped by the re-read");
+  assert.ok(listRead >= 2, "the list under an Undo was not read again");
+});
+
+/* ── The extended feature (owner, 2026-11-04) ─────────────────────────── */
+
+await check("the pinned chats are kept: drawn, never tickable, never sent - and the estimate is said", async () => {
+  const page = await historyTab({ preview: C.preview_pinned.body });
+  await showList(page);
+  const text = await page.locator("#forget-range").innerText();
+  const keptText = await page.locator("#forget-range .fr-kept").innerText();
+  const keptBoxes = await page.locator("#forget-range .fr-kept input").count();
+  const keys = await page.locator("#forget-range .fr-item input").evaluateAll(
+    (els) => els.map((e) => e.dataset.key));
+  const label = await page.locator("#forget-range-go").innerText();
+  const errors = page.__errors;
+  await page.locator("#forget-range-go").click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page);
+  await page.close();
+  assert.ok(text.includes(pinnedKeptLine(1)), `the kept count is not said:\n${text}`);
+  assert.ok(text.includes(EXTRA.pinned_why), "why the pinned chats are kept is not said");
+  assert.match(keptText, /Pinned planning/);
+  assert.match(keptText, /1 message/);
+  assert.equal(keptBoxes, 0, "a pinned chat was given a tick box");
+  assert.ok(!keys.includes("chat:conv-pinned-01"), "a pinned chat is on the tickable list");
+  assert.equal(keys.length, 4, "the tickable list is not the facts and the unpinned chats");
+  assert.match(text, /About 1 second to forget 2 facts and delete 2 chats \(3 messages\)\./,
+    "the measured estimate is not said before asking");
+  assert.equal(label, "Forget these (3)");
+  assert.deepEqual(sent, [["forget_range_write", { action: "forget", body: {
+    from: "2026-09-01", to: "2026-09-15", facts: [1, 2], chats: ["conv-trip-00001"] } }]]);
+  assert.ok(!JSON.stringify(sent).includes("conv-pinned-01"), "a pinned chat was sent");
+  assert.deepEqual(errors, []);
+});
+
+await check("the second yes: the held id and a literal true, then the Undo banner stays 10 minutes", async () => {
+  const page = await historyTab({ status: C.status_confirm.body });
+  const block = await page.locator(".fr-confirm").innerText();
+  const label = await page.locator("#forget-range-confirm").innerText();
+  const named = await page.getByRole("button", { name: EXTRA.confirm_yes, exact: true }).count();
+  const readsBefore = await page.evaluate(
+    () => window.__fr.calls.filter(([c, a]) => c === "forget_range_read" && !a.preview).length);
+  await page.locator("#forget-range-confirm").click();
+  await page.waitForTimeout(500);
+  const sent = await calls(page);
+  const after = await page.locator("#forget-range").innerText();
+  const confirmGone = await page.locator(".fr-confirm").count();
+  const banner = await page.locator(".fr-undo").innerText();
+  const said = await page.locator("#forget-range-said").innerText();
+  const readsAfter = await page.evaluate(
+    () => window.__fr.calls.filter(([c, a]) => c === "forget_range_read" && !a.preview).length);
+  const errors = page.__errors;
+  await page.close();
+  assert.ok(block.includes(EXTRA.confirm_text), `the PC's second-yes sentence is not shown:\n${block}`);
+  assert.match(block, /2 min left to say yes/);
+  assert.equal(label, EXTRA.confirm_yes);
+  assert.equal(named, 1, "the second yes has no accessible name");
+  // The literal `true`, and the id the PC is holding - nothing else at all.
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0], ["forget_range_write", { action: "confirm", body: { id: "hold-id", yes: true } }]);
+  assert.equal(JSON.stringify(sent[0][1].body), '{"id":"hold-id","yes":true}');
+  assert.equal(confirmGone, 0, "the second yes is still offered after it was answered");
+  assert.match(banner, /10 min left to undo/, "the 10-minute Undo is not kept after the second yes");
+  assert.equal(said, "Forgot 2 facts and deleted 2 chats. Undo is available for 10 minutes.");
+  assert.ok(readsAfter > readsBefore, "the status was not read again after the second yes");
+  assert.match(after, /Forgot 2 facts and deleted 2 chats from 1 to 15 September 2026\./);
+  assert.deepEqual(errors, []);
+});
+
+await check("every refusal of the second yes is said in the PC's own words, never silently", async () => {
+  // All of the PC's second-yes refusals: a `yes` that is not literally true
+  // (400), a wrong id, an expired or missing hold, a card still waiting, an
+  // Undo already open (409). Each one is a sentence on the page - and the
+  // status is read again after it, because the card or the hold has moved on.
+  const names = ["confirm_not_literal", "confirm_wrong_id", "confirm_twice",
+    "confirm_while_card", "confirm_before_card", "confirm_no_hold", "confirm_expired"];
+  for (const name of names) {
+    const page = await historyTab({ status: C.status_confirm.body, confirm: C[name] });
+    const readsBefore = await page.evaluate(
+      () => window.__fr.calls.filter(([c, a]) => c === "forget_range_read" && !a.preview).length);
+    await page.locator("#forget-range-confirm").click();
+    await page.waitForTimeout(350);
+    const said = await page.locator("#forget-range-said").innerText();
+    const tone = await page.locator("#forget-range-said").getAttribute("data-tone");
+    const readsAfter = await page.evaluate(
+      () => window.__fr.calls.filter(([c, a]) => c === "forget_range_read" && !a.preview).length);
+    const errors = page.__errors;
+    await page.close();
+    const words = String(C[name].body.error);
+    assert.equal(said, words, `${name} was not said in the PC's own words`);
+    assert.equal(tone, "bad", `${name} was not marked as a refusal`);
+    assert.ok(readsAfter > readsBefore, `${name} did not read the status again`);
+    assert.deepEqual(errors, [], `${name} threw out of the page`);
+  }
+  // The list on the page is read again after a refusal, not left as it was:
+  // a 409 means something on it moved (the contract's own instruction is
+  // "read the list again"). Only the reads are asserted - which sentence the
+  // PC sends for "the items changed" is the backend's to say, and this
+  // contract file has no confirm case for it, so none is invented here.
+  const again = await historyTab({ status: C.status_confirm.body,
+    confirm: C.confirm_wrong_id, preview: C.preview_pinned.body });
+  await again.locator("#forget-range-show").click();
+  await again.waitForTimeout(300);
+  const listsBefore = await again.evaluate(
+    () => window.__fr.calls.filter(([c, a]) => a.preview).length);
+  await again.locator("#forget-range-confirm").click();
+  await again.waitForTimeout(400);
+  const listsAfter = await again.evaluate(
+    () => window.__fr.calls.filter(([c, a]) => a.preview).length);
+  const said = await again.locator("#forget-range-said").innerText();
+  await again.close();
+  assert.ok(listsAfter > listsBefore, "the list was not read again after a refusal");
+  assert.match(said, /That is not the second yes waiting/);
+});
+
+await check("a stale link greys the second yes too, and a held second yes greys Forget these", async () => {
+  const stale = await historyTab({ status: C.status_confirm.body, link: { stale: true } });
+  const disabled = await stale.locator("#forget-range-confirm").isDisabled();
+  const title = await stale.locator("#forget-range-confirm").getAttribute("title");
+  await stale.close();
+  assert.equal(disabled, true, "the second yes is offered on a stale link");
+  assert.equal(title, WORDS.stale);
+  // While the PC holds a second yes, "Forget these" cannot start another one.
+  const held = await historyTab({ status: C.status_confirm.body, preview: C.preview_pinned.body });
+  await showList(held);
+  const goDisabled = await held.locator("#forget-range-go").isDisabled();
+  await held.close();
+  assert.equal(goDisabled, true, "Forget these is offered while a second yes is held");
+});
+
+await check("hidden with the private lists: the pinned chats' titles are hidden too", async () => {
+  const page = await historyTab({ hidden: true, preview: C.preview_pinned.body });
+  await showList(page);
+  const text = await page.locator("#forget-range").innerText();
+  const kept = await page.locator("#forget-range .fr-kept").count();
+  const confirm = await page.locator("#forget-range-go").count();
+  await page.close();
+  assert.match(text, /4 items, hidden until Windows Hello confirms it is you\./);
+  assert.doesNotMatch(text, /Pinned planning|conv-pinned-01/,
+    "a hidden list still names the pinned chats");
+  assert.equal(kept, 0);
+  assert.equal(confirm, 0, "Forget these offered on a hidden list");
 });
 
 await check("a stale link greys Forget these, never Undo", async () => {
