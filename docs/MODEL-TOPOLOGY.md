@@ -768,6 +768,76 @@ server), does not need to be stopped: measured on the same day, that server's
 model held no video memory when its process was idle, and freeing it changed
 the 2060's used memory by 89 MiB.
 
+### Planned once the third GPU is installed and measured
+
+**Every row and number in this subsection is best-effort and UNMEASURED, and
+nothing here is switched on.** It is the research done on 2026-11-05 for a
+third card - a second RTX 2080 SUPER 8 GB, headless - written down here so it
+lives in git instead of only in untracked scratch notes. **No preset row
+changes until the third card is physically installed and measured on this
+PC**, the same rule the second card was held to. Three models the plan uses may
+already be in the local Ollama store: `qwen3-coder:30b-a3b-q4_K_M`,
+`gemma4:31b-it-qat` and `orcarouter/Qwen3.8-27B-Uncensored:q4_K_M` were listed
+by `ollama list` on 2026-11-04. **None of the three has ever been loaded or
+measured on this PC** - installed is not measured.
+
+Eight presets keep the model, card and window they have today; only Coding
+changes model, and two heavy presets are new on the pooled lane. The
+quantisation is what each file reports to `ollama show`.
+
+| Preset | Model and quantisation | Context | Lane | Planned change |
+|---|---|---:|---|---|
+| `general` | `qwen3.5:9b`, Q4_K_M | 196,608 | 2060 12 GB, port 11436 | none - unchanged |
+| `general_uncensored` | Huihui 9B abliterated, Q4_K_M | 196,608 | 2060 12 GB, port 11436 | none - unchanged |
+| `coding` | `qwen3-coder:30b-a3b-q4_K_M`, Q4_K_M | 32,768 | pooled, port 11450, all three cards | **the one model change** (option A); option B keeps today's `qwen3-coder-30b-a3b-ud-q3-k-xl` (file reports Q3_K_M) at 49,152 |
+| `agentic_vision` | `qwen3.5:9b`, Q4_K_M | 16,384 | 2060 12 GB, port 11436 | none - unchanged |
+| `fast` | `qwen3.5:4b`, Q4_K_M | 16,384 | 2080 SUPER, port 11435 | none - unchanged |
+| `reflect` | `qwen3.5:9b`, Q4_K_M | 196,608 | 2060 12 GB, port 11436 | none - unchanged |
+| `pictures` | `qwen3.5:9b`, Q4_K_M | 32,768 | 2060 12 GB, port 11436 | none - unchanged |
+| `documents` | `qwen3.5:9b`, Q4_K_M | 196,608 | 2060 12 GB, port 11436 | none - unchanged |
+| `browser` | `qwen3.5:9b`, Q4_K_M | 196,608 | 2060 12 GB, port 11436 | none - unchanged |
+| `deep_think` (new) | `gemma4:31b-it-qat`, Q4_0 (as the file reports it) | 32,768 | pooled, port 11450, all three cards | new heavy preset; refuses until measured |
+| `creative` (new) | `orcarouter/Qwen3.8-27B-Uncensored:q4_K_M`, Q4_K_M | 32,768 | pooled, port 11450, all three cards | new heavy preset; refuses until measured |
+
+The arithmetic that makes the plan plausible is calculated, not measured. The
+three cards give **23.45 GiB** of room by the formula above (28.00 total, minus
+2.30 the desktop takes and 2.25 of fit gap); a second estimate from the one
+real measurement is 22.65 GiB, and the plan treats 23.45 as the optimistic end.
+At 32,768 the Q4 coder is calculated at **19.50 GiB**, `gemma4:31b-it-qat` at
+**19.06 GiB** and the 27B at **18.21 GiB** - about 1.32, 1.46 and 1.74 GiB per
+card. The owner's preference is at least 1.5 GiB/card: the Q3 tag at 49,152 is
+the only rung that meets it (**17.72 GiB** calculated), and the plan still
+recommends the Q4 coder at 32,768 because the owner asked for an upgrade and a
+better quant keeps the measured window and work pattern.
+
+**What must be measured before any of it is trusted, in this order:**
+
+1. **The machine.** `nvidia-smi` must show three cards - 12,288 / 8,192 / 8,192
+   MiB, one driver version, `display_active` on exactly one 2080 SUPER. If that
+   is not what it says, stop.
+2. **The pooled lane sees all three.** After a Coding apply, `/api/ps` and the
+   server log's `offloaded N/N layers to GPU` must show the model spread over
+   three cards; `nvidia-smi` per-card memory is the second proof.
+3. **Every model must report `size == size_vram` - 100% on the cards.** A load
+   that does not is a fail, and `load_coder` unloads it and says so in words.
+   The one measured exception is today's Coding window, which is allowed the
+   323.5 MiB spill plus about 9% (352 MiB) and no more; every other load must
+   be exact.
+4. **Decode speed** on the same three fixed coding prompts, reported as a
+   median of three, for every new or changed model. None of the three has a
+   measured speed on this PC and this plan gives none.
+5. **Cold load time** over the third card's link, timed with and without the
+   third card in the pool.
+6. **The 12 GB card still holds the 9B at 196,608 with the third card in the
+   box**, because Windows may re-balance desktop memory across three adapters.
+   That measured figure is 9.17 GiB; if it moves, every single-card row in the
+   table above is affected.
+
+The ladder is walked one cold load at a time, stopping at the first rung that
+spills past 352 MiB: the Q4 coder at 32,768, then 49,152 only if the first
+passed with room, then the Q3 tag at 49,152, then `gemma4:31b-it-qat` at
+32,768, then the 27B at 32,768.
+
 ---
 
 ## The picture reader on the processor (one-card PCs, 2026-09-29)
