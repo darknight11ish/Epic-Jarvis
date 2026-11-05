@@ -3,7 +3,7 @@
 The owner's feature list, as data: 175 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 5949c44f218f31caa961f43ec30c46707fe45649a3594c67bab169eaf5d3bd21); the apps' Features pages read their own
+`features/features.json` (sha256 5dc00215ffbbf8a73ee11623a0876a213f9c0ea54085c7bd60b87890af3ccbb4); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "5949c44f218f31caa961f43ec30c46707fe45649a3594c67bab169eaf5d3bd21"
+SOURCE_SHA256 = "5dc00215ffbbf8a73ee11623a0876a213f9c0ea54085c7bd60b87890af3ccbb4"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -548,10 +548,10 @@ FEATURES = (
         "id": "forget-range",
         "group": "Memory",
         "title": "Forget a time frame",
-        "what": "Forget what Jarvis learned or said over a stretch of days.",
+        "what": "Forget what Jarvis learned or said over a stretch of days. It lists every fact and chat from then and says how long it should take, leaves pinned chats out (and keeps them), and asks a second yes before anything is removed.",
         "where": "Brain, History, Forget a time frame.",
-        "asks": "One card listing every item, decided by tapping only - never by voice. Then 10 minutes to Undo.",
-        "limit": "After the 10 minutes the chats are gone for good. Erasing a fact's words for good stays the separate per-fact action.",
+        "asks": "ONE card listing every item - never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
+        "limit": "At most 200 facts and chats in one go; more than that asks for fewer days, and repeating the request covers the rest. Facts are RETIRED, not erased - their words stay in the history. After the 10 minutes the chats are gone for good.",
         "surface": "both",
         "covers": ["brain.history.forget-range", "memory", "records"],
     },
@@ -1247,7 +1247,7 @@ FEATURES = (
         "group": "Phone",
         "title": "Open an app on your phone",
         "what": "Ask Jarvis to open an app on your phone, and say which apps it may open at all. The list ships empty, so nothing can be opened until you add an app.",
-        "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+        "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone switched on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there); it is off by default. The allowed apps are one line each under [phone_apps] in the same settings file, and there is no Settings screen for the list yet.",
         "asks": "Adding or removing one app raises one approval card naming its friendly name and its exact package id, and nothing is written until you approve it. Opening a listed app is one approved call; each step of the plan is shown on that card.",
         "limit": "The list ships empty, so nothing can be opened until you add an app, and control_phone is off by default. The phone must be connected to the PC over the cable (adb). A com.jarvis package is refused, so Jarvis can never tap its own Approve button.",
         "surface": "both",
@@ -1597,7 +1597,7 @@ FEATURES = (
         "what": "Every way Jarvis can reach something outside itself, and whether it is on right now.",
         "where": "Settings, What Jarvis can reach.",
         "asks": "No card - it only reads the PC's own settings and the live state of each way out.",
-        "limit": "Read-only, and it changes nothing. Which tools can be switched on from Settings, What asks first is decided there; raw shell, computer and browser control, web-page reading, account connection and REA stay settings-file choices.",
+        "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The three whose own switch decides them say which switch: the data and maths sandbox, and Web search for the two conversation tools.",
         "surface": "both",
         "aliases": ["what jarvis can reach"],
         "covers": ["settings.reach", "documents-and-search"],
@@ -1752,8 +1752,8 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Find and grade a library on GitHub",
         "what": "Search GitHub for a coding idea, read the candidates and grade them for this project.",
-        "where": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "asks": "Off until its line is added by hand to the settings file; reading public pages needs no card once it is offered.",
+        "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
+        "asks": "Off until it is switched on; reading public pages needs no card once it is offered.",
         "limit": "Off by default; public GitHub only, no private repo and no token beyond what you configured; it reads pages, it does not install anything.",
         "surface": "both",
         "aliases": ["github research", "github search"],
@@ -1764,8 +1764,8 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Click and type in another program",
         "what": "Click and type in another Windows program by naming its controls.",
-        "where": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "asks": "Off until its line is added by hand to the settings file; each action is one approved call.",
+        "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
+        "asks": "Off until it is switched on; each action is one approved call.",
         "limit": "Off by default; it can only use controls the accessibility tree exposes, never a hidden window, and it does not type passwords.",
         "surface": "both",
         "aliases": ["computer control"],
@@ -1776,8 +1776,8 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Drive one browser tab",
         "what": "Drive one browser tab by naming page elements - click, type, read the page.",
-        "where": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "asks": "Off until its line is added by hand to the settings file; each action is one approved call on the tab you named.",
+        "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and switch on Browser control there too - the second card's browser lane, or the headless browser - then ask.",
+        "asks": "Off until both switches are on; each action is one approved call on the tab you named.",
         "limit": "Off by default; one tab, elements it can name, no other tab and no downloads.",
         "surface": "both",
         "aliases": ["browser control"],
@@ -1788,8 +1788,8 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Run one shell command",
         "what": "Run one shell command on this PC and return its output.",
-        "where": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
-        "asks": "Off until its line is added by hand to the settings file; one approved call per command.",
+        "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
+        "asks": "Off until it is switched on; one approved call per command.",
         "limit": "Off by default; one command and its own output, nothing interactive - it can change files, so keep it off unless you need it.",
         "surface": "both",
         "aliases": ["shell command", "command line"],
@@ -1800,7 +1800,7 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Read one web page out loud",
         "what": "Fetch the one page you named and read its words out loud.",
-        "where": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+        "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask about a page.",
         "asks": "Every read shows the exact address on its own card before anything is fetched. What comes back is outside text - never learned, never acted on.",
         "limit": "Off by default; one page, no links followed, and the page is read only as outside text.",
         "surface": "both",
@@ -1812,8 +1812,8 @@ FEATURES = (
         "group": "The PC itself",
         "title": "Inspect a program or app statically",
         "what": "Statically inspect a program, app or binary and report what it does - strings, imports, structure.",
-        "where": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
-        "asks": "Off by default; every investigation is one approved call.",
+        "where": "Off by default; switch rea_investigate on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and set [rea] enabled = true in the settings file (jarvis-framework.toml) - the tool needs both, then ask.",
+        "asks": "Off until both are on; every investigation is one approved call.",
         "limit": "Off by default; static inspection only - it does not run the program, and a packed or protected binary may tell it little.",
         "surface": "both",
         "aliases": ["reverse engineering"],
@@ -1873,8 +1873,8 @@ FEATURES = (
         "title": "What asks first",
         "what": "Every action Jarvis can take and whether it asks you first, in plain words.",
         "where": "Settings, What asks first - in both apps.",
-        "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch (Tier A/B, see the report), PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
-        "limit": "Tier C (raw shell, computer and browser control, reading one web page, connecting an account, REA) and the tools this slice leaves alone are not offered in-app; they stay a settings-file choice. Nothing switches two tools at once, and the phone is read-only.",
+        "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch for EVERY tool the AI can be offered since 2026-11-04 - the raw ones and the everyday helpers included - PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
+        "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the three whose own switch decides them (the data and maths sandbox, and the two web-search conversation tools) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
         "surface": "both",
         "covers": ["settings.asks-first", "asks-first", "home-devices", "money-and-health"],
     },

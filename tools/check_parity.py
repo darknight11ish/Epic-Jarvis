@@ -718,9 +718,10 @@ CLASSIFICATION = {
     # "Forget a time frame" (the owner's decision of 2026-09-28;
     # backend/jarvis_forget_range.py, forget-range.patch; JARVIS-API section
     # 64). Both apps: the desktop's Brain -> History, the phone's Brain.
-    "/api/memory/forget_range": ("ported", "Forget a time frame: the status (GET - a card waiting, the 10-minute Undo, the days a spoken request filled in) and \"Forget these\" (POST - the ticked ids; the PC raises ONE approval card listing every item). Both apps; held on a stale link and refused while the list is hidden."),
-    "/api/memory/forget_range/preview": ("ported", "Forget a time frame: the facts saved and the chats from some days, each with its words (GET). Both apps; the words hidden with the private lists."),
-    "/api/memory/forget_range/undo": ("ported", "Forget a time frame: Undo within 10 minutes of the card's approval - one tap, no card, never held on a stale link. Both apps."),
+    "/api/memory/forget_range": ("ported", "Forget a time frame: the status (GET - a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept) and \"Forget these\" (POST - the ticked ids; the PC raises ONE approval card listing every item AND changes nothing: it holds them for the second yes). Both apps; held on a stale link and refused while the list is hidden."),
+    "/api/memory/forget_range/preview": ("ported", "Forget a time frame: the facts saved and the chats from some days, each with its words, the pinned chats kept (`pinned_kept`) and the measured `estimate` (GET). Both apps; the words hidden with the private lists - `pinned_kept` must be hidden with them (the apps lane adds it to redact())."),
+    "/api/memory/forget_range/confirm": ("planned", "Forget a time frame: the SECOND yes (owner, 2026-11-04) - POST {\"id\", \"yes\": true} and only then are the facts forgotten and the chats deleted, with the 10-minute Undo. Built on the backend ahead of both apps: the card is the first yes and changes nothing, so neither app can delete anything until it draws the second tap (desktop Brain -> History and the phone's Brain, the apps lane). Reclassify `ported` when both apps call it."),
+    "/api/memory/forget_range/undo": ("ported", "Forget a time frame: Undo within 10 minutes of the second yes - one tap, no card, never held on a stale link. Both apps."),
     "/api/projects": ("ported", "Projects: the list (GET) and creating one (POST). Both apps; the phone creates life projects only (a coding project's folder, and an app Jarvis builds - new or adopted from the list's unlinked_apps - are set up on the PC: nothing on the phone can fill an app, ARCHITECTURE section 8)."),
     "/api/projects/{id}": ("ported", "One project: read it (GET) or change what the owner typed (POST) - instructions, notes, and clearing the folder. Both apps; choosing the folder is the desktop's (the Windows picker, projects_choose_folder)."),
     "/api/projects/{id}/delete": ("ported", "Delete one project after \"are you sure?\". Both apps."),
@@ -1118,19 +1119,29 @@ BACKEND_ONLY = {
     "/api/storage/cleanup": "storage self-scan module (jarvis_storage_health.py); routes wired defensively by the self-portrait plugin, no client screen; client wiring is a follow-up",
     # The self-benchmark's five phase-1 routes (2026-11-04; jarvis_bench.py,
     # bench.patch, JARVIS-API section 185). BACKEND-ONLY TODAY, and each reason
-    # says which lane builds the caller: DESIGN.md's phase plan puts the desktop
-    # Benchmark panel at phase 2, the separate History window at phase 3 and the
-    # phone's BenchScreen at phase 5, so no window calls any of these on this
-    # tree. They are built, tested (backend/test_bench.py, 236 checks) and
+    # says which lane builds the caller: the project's own phase plan puts the
+    # desktop Benchmark panel at phase 2, the separate History window at phase 3
+    # and the phone's BenchScreen at phase 5, so no window calls any of these on
+    # this tree. They are built, tested (backend/test_bench.py, 253 checks) and
     # documented, and the run itself is refused rather than faked when the PC
     # cannot measure. When a screen lands it goes on BOTH apps on this same
-    # store (ARCHITECTURE section 8), and this check FAILS the day one app starts
-    # calling a route still listed here - which is the point of listing it.
-    "/api/bench": "The self-benchmark's controls read (JARVIS-API section 185; jarvis_bench.py, bench.patch): the defaults, the ladders, each lane with its card and its installed models, the two cards and the driver from nvidia-smi, standby, whether a run is in flight, and the last run. Read-only - it starts and loads nothing. The desktop Benchmark panel is DESIGN.md phase 2 and the phone's BenchScreen is phase 5, so no window calls it yet; when one does it goes on BOTH apps (ARCHITECTURE section 8).",
-    "/api/bench/run": "Starting ONE benchmark run (JARVIS-API section 185; jarvis_bench.py, bench.patch). No approval card, by the recorded DESIGN section 7 decision, and `confirm: {model, lane, may_evict: true}` is mandatory - a POST without it measures nothing. Asynchronous: it spawns and returns, and a screen polls /api/bench/run/{id}. DESIGN.md phase 2 (desktop) and phase 5 (phone) build the button; no window calls it yet, and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
-    "/api/bench/run/{id}": "How one benchmark run is going, and its numbers when it is done (`state`, `step`, `of`, `partial`, `result`) - JARVIS-API section 185, jarvis_bench.py. The read a screen polls while a run is going; no app polls it yet (DESIGN.md phase 2 desktop, phase 5 phone). When a screen lands it goes on BOTH apps (ARCHITECTURE section 8).",
-    "/api/bench/cancel": "Stopping the benchmark run in flight (JARVIS-API section 185; jarvis_bench.py): the repeat already running is NOT killed, because a request cut off mid-answer leaves Ollama's counters unusable, and the run row says PARTIAL. No app calls it yet - the Cancel button is DESIGN.md phase 2 on the desktop and phase 5 on the phone - and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
-    "/api/bench/history": "The benchmark's OWN history, newest first, from `bench.jsonl` - never `/api/history` and never the chat history (JARVIS-API section 185; jarvis_bench.py). Filters are exact matches on the stored model/lane/preset names. The separate History window is DESIGN.md phase 3 on the desktop and phase 5 on the phone, so no window reads it yet; when one does it goes on BOTH apps, and the DELETE beside it arrives with that window because phase 1 has no delete (ARCHITECTURE section 8).",
+    # store (ARCHITECTURE section 8, "the self-benchmark has no screen on either
+    # app yet"), and this check FAILS the day one app starts calling a route
+    # still listed here - which is the point of listing it.
+    #
+    # NOT LISTED HERE, because it does not exist: `jarvis_bench.advice()` has NO
+    # route on this tree. There is no `/api/bench/advice`, no `benchmark_results`
+    # chat tool and no app button; `backend/bench.patch` wires exactly the five
+    # routes below, and the only caller of `advice()` is `backend/test_bench.py`.
+    # So there is nothing here to classify - an entry would name a route the
+    # backend does not serve, which is the kind of statement this file exists to
+    # prevent. When phase 4 wires it, `advice()`'s own docstring and this block
+    # are what must change together, and the new route gets an entry below.
+    "/api/bench": "The self-benchmark's controls read (JARVIS-API section 185; jarvis_bench.py, bench.patch): the defaults, the ladders, each lane with its card and its installed models, the two cards and the driver from nvidia-smi, standby, whether a run is in flight, and the last run. Read-only - it starts and loads nothing. The desktop Benchmark panel is phase 2 and the phone's BenchScreen is phase 5, so no window calls it yet; when one does it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/run": "Starting ONE benchmark run (JARVIS-API section 185; jarvis_bench.py, bench.patch). NO APPROVAL CARD, by the decision recorded in decisions.d/2026-11-04-self-benchmark-no-approval-card.md (read-only routes that load and evict a model, so the run stays explicit and backend-only; `confirm: {model, lane, may_evict: true}` is mandatory - a POST without it measures nothing). Asynchronous: it spawns and returns, and a screen polls /api/bench/run/{id}. Phase 2 (desktop) and phase 5 (phone) build the button; no window calls it yet, and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/run/{id}": "How one benchmark run is going, and its numbers when it is done (`state`, `step`, `of`, `partial`, `result`) - JARVIS-API section 185, jarvis_bench.py. The read a screen polls while a run is going; no app polls it yet (phase 2 desktop, phase 5 phone). When a screen lands it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/cancel": "Stopping the benchmark run in flight (JARVIS-API section 185; jarvis_bench.py): the repeat already running is NOT killed, because a request cut off mid-answer leaves Ollama's counters unusable, and the run row says PARTIAL. No app calls it yet - the Cancel button is phase 2 on the desktop and phase 5 on the phone - and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
+    "/api/bench/history": "The benchmark's OWN history, newest first, from `bench.jsonl` - never `/api/history` and never the chat history (JARVIS-API section 185; jarvis_bench.py). Filters are exact matches on the stored model/lane/preset names. The separate History window is phase 3 on the desktop and phase 5 on the phone, so no window reads it yet; when one does it goes on BOTH apps, and the DELETE beside it arrives with that window because phase 1 has no delete (ARCHITECTURE section 8).",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)
@@ -1451,11 +1462,22 @@ RETIRED = {
 #: checker reports as a warning in its own true words ("the phone calls it; the
 #: desktop does not yet"), and they become `ported` when the HUD card lands. The
 #: mechanism stays for the next backend-first route.
-# Empty since 2026-10-31: the last backend-first route (the two `/api/files/...`
-# routes the send-a-file slice built) got its phone client on that day, so its
-# lines were removed and the two routes moved to PHONE_ONLY below. The mechanism
-# stays for the next backend-first route.
-PENDING_CLIENTS = {}
+# The last backend-first route (the two `/api/files/...` routes the send-a-file
+# slice built) got its phone client on 2026-10-31, so its lines were removed and
+# the two routes moved to PHONE_ONLY below. The next one is the SECOND yes of
+# "Forget a time frame" (2026-11-04): the backend lane built the route and its
+# whole two-step flow, and the apps lane draws the second tap in both apps. The
+# slice that wires the first client removes the line and reclassifies the route
+# `ported` (or `todo` while only one app calls it).
+PENDING_CLIENTS = {
+    "/api/memory/forget_range/confirm": (
+        "Forget a time frame's SECOND yes (JARVIS-API section 64, the owner's "
+        "decision of 2026-11-04). The approval card is the FIRST yes and changes "
+        "nothing; only this route, with a literal `yes: true`, forgets the "
+        "facts and deletes the chats. Built on the backend ahead of both apps: "
+        "desktop Brain -> History and the phone's Brain (the apps lane) add the "
+        "second tap, and that slice reclassifies this route."),
+}
 
 
 def _nothing_calls_it(route: str) -> str:

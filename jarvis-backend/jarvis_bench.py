@@ -55,12 +55,16 @@ WHAT IT REFUSES, AND WHY EACH REFUSAL IS A SENTENCE AND NOT A SILENT NO
     something else is using the model measures the QUEUE, not the model, so the
     run is refused rather than quietly wrong.
 
-    NO APPROVAL CARD, and that is a decision with a precedent rather than a
-    shortcut (DESIGN.md section 7): `POST /api/hardware/measure` already runs
-    with no card because it "runs one short prompt per model on this PC and
-    changes no setting", and here the owner is the actor. What a card would
-    have bought is bought explicitly instead: the request must carry
-    `confirm: {model, lane, may_evict: true}`.
+    NO APPROVAL CARD, and that is a RECORDED decision with a precedent rather
+    than a shortcut: `decisions.d/2026-11-04-self-benchmark-no-approval-card.md`
+    (rolled into `docs/DECISIONS.md`) records it and its reasoning. The
+    precedent is `POST /api/hardware/measure`, which already runs with no card
+    because it "runs one short prompt per model on this PC and changes no
+    setting", and here the owner is the actor. What a card would have bought is
+    bought explicitly instead: the request must carry
+    `confirm: {model, lane, may_evict: true}`. (This docstring used to cite
+    "DESIGN.md section 7", and DESIGN.md lives only under `.dsh-scratch/`, so
+    the claim that it was recorded pointed at nothing a reader could check.)
 
 NO NETWORK, NO MODEL AND NO CARD AT IMPORT TIME. Everything that talks to the
 world is an injectable callable (`post`, `get`, `show`, `smi`, `clock`,
@@ -250,8 +254,14 @@ _BOOL_FIELDS = {"warmup", "ok", "spilled", "worst_repeat_ok", "unload"}
 #: Text fields, each with its own cap. `why`/`prefill_why`/`ttft_note`/
 #: `restore_note` are machine reasons; `words` is the one sentence a screen
 #: shows; the two versions are what make two runs comparable at all.
+#:
+#: `lane` is deliberately NOT here: it is a closed vocabulary, and a field in
+#: both tables used to be a real defect - `lane` sat in both, `_clean()` tested
+#: this one first, and `_ENUM_FIELDS`' own promise ("a value outside its list
+#: is dropped") was unreachable for it, so "everyday lane" was cut to 12
+#: characters and stored as a fourth lane. Keep the two tables disjoint.
 _NAME_FIELDS = {
-    "run": 60, "model": 120, "lane": 12, "card": 40,
+    "run": 60, "model": 120, "card": 40,
     "why": MAX_REASON, "prefill_why": MAX_REASON, "ttft_note": MAX_REASON,
     "restore_note": MAX_REASON, "unload_note": MAX_REASON,
     "words": MAX_WORDS, "preset": 40,
@@ -270,6 +280,11 @@ def _clean(row: dict) -> dict:
     caller that made a mistake is dropped here, not written and read back
     later. Booleans are refused in number fields (Python says `True == 1`) and
     a nan or an infinity is dropped, because either one would poison a median.
+
+    A CLOSED VOCABULARY IS CHECKED BEFORE A TEXT FIELD. The two tables are
+    disjoint (`lane` used to be in both, and the name branch won, which is how
+    its enum check became dead code), and the enum branch goes first anyway so
+    a future field added to both cannot bypass its own list.
     """
     out: dict = {}
     for k, v in (row or {}).items():
@@ -283,12 +298,12 @@ def _clean(row: dict) -> dict:
         elif k in _BOOL_FIELDS:
             if isinstance(v, bool):
                 out[k] = v
-        elif k in _NAME_FIELDS:
-            if isinstance(v, str) and v.strip():
-                out[k] = v.strip()[:_NAME_FIELDS[k]]
         elif k in _ENUM_FIELDS:
             if isinstance(v, str) and v in _ENUM_FIELDS[k]:
                 out[k] = v
+        elif k in _NAME_FIELDS:
+            if isinstance(v, str) and v.strip():
+                out[k] = v.strip()[:_NAME_FIELDS[k]]
     return out
 
 
@@ -1191,12 +1206,18 @@ def offloaded_layers(*, log_text: Optional[Callable[[], str]] = None,
 #   The prompt, which is counted and never kept
 # ==========================================================================
 #
-# A FRESH PROMPT FOR EVERY REPEAT (RESEARCH.md section 6, rule 4). If one
-# prompt were reused, every repeat after the first would hit Ollama's cache and
-# look 300x faster - the exact trap this file exists to avoid. So each prompt
-# carries its own tag, and it is generated from a fixed word list with no owner
-# text in it. It is never stored: what is stored is how many tokens Ollama said
-# it really counted.
+# A FRESH PROMPT FOR EVERY REPEAT (RESEARCH.md section 6, rule 4), AND THE PART
+# THAT MAKES IT FRESH COMES FIRST. Ollama serves the LONGEST COMMON PREFIX of a
+# prompt from its cache, so a per-repeat tag at the TAIL leaves the entire word
+# body cacheable: every repeat after the first is served from the cache, the
+# honest `(count - cached)` formula divides the few uncached tail tokens, and
+# the median is a measurement of the tail rather than of the depth. The tag is
+# therefore the FIRST thing on the prompt, and what a cache can still serve is
+# only the tag's own opening characters - a handful of tokens, not `depth`.
+# (The shipped shape until 2026-11-04 put it at the tail, and
+# `backend/test_bench.py` now pins the front.) The prompt is generated from a
+# fixed word list with no owner text in it. It is never stored: what is stored
+# is how many tokens Ollama said it really counted.
 
 #: Neutral, countable words. Nothing about the owner, nothing from a
 #: conversation, nothing that could be a secret by accident.
@@ -1214,14 +1235,21 @@ def prefill_prompt(depth: int, tag: str = "") -> str:
     `prompt_eval_count`, which is what Ollama really counted. Claiming to hit
     an exact token count would be claiming a measurement this file did not
     make.
+
+    THE TAG LEADS, because Ollama's cache is a PREFIX cache. Two repeats of one
+    run share their run id, so a tail tag would leave every word of the body
+    shared and cacheable - the honest formula would then time the tail. With
+    the tag at the front the two prompts diverge within the tag (a few tokens
+    at most), and `depth` tokens of body are genuinely read on every repeat.
     """
     n = max(0, int(depth or 0))
     if n <= 0:
         return "Reply with one short sentence about a thermometer."
     out = [_WORDS[i % len(_WORDS)] for i in range(n)]
-    # The tail is what makes this prompt different from every other one, and it
+    # The head is what makes this prompt different from every other one, and it
     # is counted too, so the depth stays as asked.
-    return " ".join(out) + f"\n\n[{tag}]. Reply with one short sentence."
+    head = f"[{tag}] " if tag else ""
+    return head + " ".join(out) + "\n\nReply with one short sentence."
 
 
 # ==========================================================================
@@ -1728,8 +1756,10 @@ def _one_repeat(*, run_id: str, controls: dict, block_count, repeat: int,
         # No prefill at all: nothing to time on the prompt side, and saying so
         # is better than a 0 that reads as "terribly slow".
         row["prefill_why"] = "no prefill: depth 0"
-    # A fresh prompt every time - the cache would otherwise make every repeat
-    # after the first look 300x faster. See `prefill_prompt`.
+    # A fresh prompt every time, with its per-repeat tag at the FRONT: Ollama
+    # caches the longest common prefix, so a tag at the tail would leave the
+    # whole body cached and every repeat after the first would time the tail,
+    # not the depth (the shape until 2026-11-04). See `prefill_prompt`.
     payload = {
         "model": model,
         "prompt": prefill_prompt(depth, f"{run_id}/r{repeat}/"
@@ -2076,16 +2106,33 @@ def controls_view(*, model: str = "", lane: str = "everyday",
 #   "How did the last benchmark do?" - DESIGN.md section 9
 # ==========================================================================
 #
-# ONE function, two entry points (the read-only chat tool and the "Explain this
-# result" button), so the sentence is identical wherever it is read. It reads
-# `bench.jsonl` and nothing else: it cannot run a benchmark, delete a row, or
-# reach the network. The ROUTE and the model tool are later phases; the
-# sentence and its refusals are here because they are arithmetic over stored
-# numbers, which is exactly what a test can prove.
+# ONE function, two entry points PLANNED (the read-only chat tool
+# `benchmark_results` and the "Explain this result" button), so the sentence is
+# identical wherever it is read. It reads `bench.jsonl` and nothing else: it
+# cannot run a benchmark, delete a row, or reach the network.
+#
+# NOT ROUTED, AND NOT CALLED BY ANYTHING YET - the honest state of this code on
+# 2026-11-04. There is NO `/api/bench/advice` route: `backend/bench.patch` wires
+# exactly five routes (`GET /api/bench`, `GET /api/bench/run/{id}`,
+# `GET /api/bench/history`, `POST /api/bench/run`, `POST /api/bench/cancel`),
+# the `benchmark_results` chat tool does not exist, and no app draws an
+# "Explain this result" button. The only caller in this repository is
+# `backend/test_bench.py`. It is here because the sentence and its refusals are
+# arithmetic over stored numbers, which is exactly what a test can prove, and
+# DESIGN.md's phase plan puts the route and the tool in phase 4. A later reader
+# must not report it as reachable until one of those callers exists - and
+# `tools/check_parity.py`'s bench block says the same thing beside the five
+# routes that DO exist.
 
 def advice(*, model: str = "", lane: str = "", preset: str = "",
            run_id: str = "", log: Optional[BenchLog] = None) -> dict:
     """{note, numbers, enough} - one sentence built only from stored rows.
+
+    NOT ROUTED AND NOT CALLED BY A SCREEN OR A TOOL YET (2026-11-04): there is
+    no `/api/bench/advice` route and no `benchmark_results` chat tool, so the
+    only caller is `backend/test_bench.py`. DESIGN.md phase 4 wires it. See the
+    comment block above; do not describe this sentence as reachable until one
+    of those callers exists.
 
     THE FLOOR IS THREE RUNS, this repo's own rule (`jarvis_speed.MIN_EACH = 3`:
     "two lists of two can differ by 40% from noise alone"). Under three usable

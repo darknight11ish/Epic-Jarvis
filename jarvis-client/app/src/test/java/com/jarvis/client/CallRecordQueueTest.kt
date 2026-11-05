@@ -118,6 +118,42 @@ class CallRecordQueueTest {
     }
 
     @Test
+    fun `a 409's expected marks every chunk below it as sent`() {
+        val session = store().begin(20L)
+        repeat(3) { session.writeChunk(ByteArray(10)) }
+        assertEquals("expected 1 means nothing below it is unsent", 0, session.markSentBelow(1))
+        assertEquals("expected 3 means chunks 1 and 2 are on the PC", 2, session.markSentBelow(3))
+        assertEquals(setOf(1, 2), session.sentSeqs())
+        assertEquals("the real next chunk is the one to send", 3, session.nextUnsent()?.seq)
+        // A value the PC could not mean cannot invent sequence numbers: only
+        // numbers this phone really holds are written.
+        assertEquals(1, session.markSentBelow(99))
+        assertEquals(setOf(1, 2, 3), session.sentSeqs())
+        assertNull(session.nextUnsent())
+    }
+
+    @Test
+    fun `discardUnsent removes every waiting recording and keeps what the pc took`() {
+        val first = store().begin(30L)
+        first.writeChunk(ByteArray(10))
+        val second = store().begin(31L)
+        second.writeChunk(ByteArray(10))
+        second.setPcSession("pc-session-abc")
+        // A recording the PC has already taken: `finished()` is its own
+        // acknowledgement, and this phone has no business deleting it.
+        val taken = store().begin(32L)
+        taken.writeChunk(ByteArray(10))
+        taken.markFinished("Calls/2026-11-04 13.41.md")
+
+        assertEquals("both waiting recordings went", 2, store().discardUnsent())
+        assertFalse("no folder, so no files", first.dir.exists())
+        assertFalse(second.dir.exists())
+        assertTrue("the one the PC took is untouched", taken.dir.exists())
+        assertTrue("nothing is left waiting", store().unsent().isEmpty())
+        assertEquals("a second discard finds nothing", 0, store().discardUnsent())
+    }
+
+    @Test
     fun `an unfinished short chunk is discarded rather than sent as audio`() {
         val session = store().begin(8L)
         session.writeChunk(ByteArray(10))

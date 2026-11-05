@@ -25,6 +25,11 @@ import java.util.Base64
  * POST /api/call/recording/chunk
  *   {"session": "<id>", "seq": <int>, "data_b64": "<base64 PCM>"}
  *   -> 200 {"ok": true, "bytes": <n>}          (retry the SAME seq on failure)
+ *      409 {"ok": false, "expected": <n>}      (the PC wants <n> next: every seq
+ *                                               below it is already held, so the
+ *                                               phone marks those sent and moves
+ *                                               on - this is what makes a crash
+ *                                               after the PC's 200 recoverable)
  *
  * POST /api/call/recording/finish
  *   {"session": "<id>", "duration_sec": <n>, "title": "<optional>",
@@ -126,6 +131,26 @@ object CallRecordWire {
     fun ackedBytes(body: JsonObject?): Long? {
         if (!ok(body)) return null
         return body?.whole("bytes")
+    }
+
+    /**
+     * What a REFUSED `chunk` named as the number it wants next, or null.
+     *
+     * This is the one field that makes a crash recoverable. If the phone died
+     * between the PC's 200 and its own `sent.txt` append, the retry of that
+     * same seq is not the number the PC is waiting for: the PC is waiting for
+     * the seq AFTER the ones it holds, and its 409 carries that number in
+     * `expected` (the frozen contract's own field).
+     *
+     * A body with no `expected` - the card is still waiting, the recording was
+     * refused, the feature is off - is a different failure and answers null:
+     * nothing is marked sent on a guess.
+     */
+    fun expected(body: JsonObject?): Int? {
+        if (body == null || ok(body)) return null
+        val want = body.whole("expected") ?: return null
+        if (want < 1L || want > Int.MAX_VALUE.toLong()) return null
+        return want.toInt()
     }
 
     /** What `finish` came to: the note the PC wrote (or `pending`), and its receipt. */

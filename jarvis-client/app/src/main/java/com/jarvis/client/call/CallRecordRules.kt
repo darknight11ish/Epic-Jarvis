@@ -398,6 +398,39 @@ object CallRecordRules {
     /** Said when the recorder stopped. */
     const val STOPPED_TEXT = "Call recording stopped."
 
+    /** The plate's Delete: what it asks before anything is removed, in the app's own asking style. */
+    const val DELETE_ASK_TITLE = "Delete this recording?"
+
+    /**
+     * The confirmation's sentence. It says where the audio goes, that nothing
+     * was sent, and that there is no undo - the same three things the app's
+     * other "cannot be undone" confirms say.
+     */
+    const val DELETE_ASK =
+        "It is deleted from this phone only. Anything your PC already received stays there, " +
+            "and nothing more will be sent. This cannot be undone."
+
+    /** The plate's button, when one recording is waiting. */
+    const val DELETE_ONE = "Delete the waiting recording"
+
+    /** The plate's button, when more than one is waiting. */
+    const val DELETE_MANY = "Delete all the waiting recordings"
+
+    /** Said after a discard: nothing was sent from here. */
+    const val NOTHING_TO_DELETE = "There was nothing waiting on this phone."
+
+    /**
+     * What to say after the owner deletes the recordings this phone was
+     * holding. Honest about the PC: some pieces may already be there, and this
+     * app cannot and does not reach across to remove them (the PC has its own
+     * delete, and only from the PC).
+     */
+    fun deleted(count: Int): String = when {
+        count <= 0 -> NOTHING_TO_DELETE
+        count == 1 -> "Recording deleted from this phone. Anything your PC already received stays there."
+        else -> "$count recordings deleted from this phone. Anything your PC already received stays there."
+    }
+
     /** The armed line on the app's own screen. */
     const val PLATE_ARMED = "Call recording armed"
 
