@@ -1690,11 +1690,22 @@ def _card_roles(cards: list) -> dict:
     number, and the plan's own words used to call them "#1" and "#2" as if the
     order in the list were a fact about the machine.
 
+    THE MONITOR IS SEARCHED FOR ON EVERY CARD, not only outside `main`
+    (fixed 2026-11-05). It used to search only `rest`, so on a PC whose
+    highest-VRAM card has the monitor it fell through to `rest[0]` - a card
+    with NO monitor - and `_role_words(..., "display")` then called that row
+    "the card with no monitor" while the plan called it the monitor lane. Now
+    a monitor found on the everyday card sets `monitor_on_main`, the display
+    LANE still gets its own card (the Fast/Live model does not need the
+    screen), and `_role_words` says where the monitor really is instead of
+    pretending this card has it.
+
     The three indexes are always integers so every row can be placed even on a
     PC with fewer cards than the plan describes; `display_known` and
     `headless_known` say whether a card was really FOUND for the role, and
     `_role_words` uses them, so a card that is not installed is never described
-    as if it were.
+    as if it were. `display_known` stays False when the display LANE was
+    placed on a card the monitor is NOT on (`monitor_on_main`).
     """
     n = len(cards)
 
@@ -1704,12 +1715,21 @@ def _card_roles(cards: list) -> dict:
 
     main = min(range(n), key=lambda i: (-_vram(cards[i]), i)) if n else 0
     rest = [i for i in range(n) if i != main]
+    # EVERY card is searched for the monitor, not only `rest` (2026-11-05).
+    # A monitor card that is not the everyday card is the display card; if
+    # the only monitor card IS the everyday card, `monitor_on_main` says so
+    # and the Fast/Live lane gets another card.
     display, display_known = None, False
-    for i in rest:
-        if cards[i].get("monitor") is True:
+    for i in range(n):
+        if i != main and cards[i].get("monitor") is True:
             display, display_known = i, True
             break
+    monitor_on_main = bool(display is None and 0 <= main < n
+                           and cards[main].get("monitor") is True)
     if display is None:
+        # No display flag anywhere, or the monitor is on the everyday card:
+        # the Fast/Live lane still needs a card of its own. `monitor_on_main`
+        # makes the words say where the monitor is.
         display = rest[0] if rest else main + 1
     headless, headless_known = None, False
     for i in rest:
@@ -1721,7 +1741,8 @@ def _card_roles(cards: list) -> dict:
     return {"main": int(main), "display": int(display),
             "headless": int(headless),
             "display_known": bool(display_known),
-            "headless_known": bool(headless_known)}
+            "headless_known": bool(headless_known),
+            "monitor_on_main": bool(monitor_on_main)}
 
 
 def _role_words(cards: list, roles: dict, role: str) -> str:
@@ -1746,6 +1767,12 @@ def _role_words(cards: list, roles: dict, role: str) -> str:
         # A known flag needs no explanation; only the UNKNOWN case must be
         # said out loud, so the owner is never told which twin has the monitor
         # when nothing measured it.
+        if roles.get("monitor_on_main"):
+            # The monitor is on the everyday card. This card still runs the
+            # Fast/Live lane, and the words say where the screen really is -
+            # never that this card has it, and never a bare "card with no
+            # monitor" beside a row called the monitor lane (2026-11-05).
+            return f"{word}; the monitor is on the everyday card instead"
         if card.get("monitor") is True:
             return f"{word}, the card with the monitor"
         if card.get("monitor") is False:
@@ -1846,10 +1873,26 @@ def recommendations() -> dict:
                     "documents": f"{everyday}: Documents & Notes, qwen3.5:9b, 196,608 window",
                     "browser": f"{everyday}: Browser & Forms, qwen3.5:9b, 196,608 window",
                 }[p.id]
+                role_text = {
+                    "general": everyday,
+                    "general_uncensored": everyday,
+                    "coding": (f"all the cards (pooled lane, port "
+                               f"{POOLED_PLAN_PORT})"),
+                    "fast": display,
+                    "agentic_vision": headless,
+                    "reflect": everyday,
+                    "pictures": everyday,
+                    "documents": everyday,
+                    "browser": everyday,
+                }[p.id]
+                # EVERY row names its card by ROLE. `_row()`'s fallback is
+                # `f"card {index}"` - an array position the owner cannot see -
+                # and the 2-card PC hit it on Agentic+Vision ("card 2") while
+                # that row's own note said the headless card was not installed
+                # yet (fixed 2026-11-05). The Coding row keeps the pooled
+                # lane's own words, which are already a role, not a position.
                 rows[p.id] = _row(p, idx, cards, False, True, note,
-                                  card_text=("all the cards (pooled lane, port "
-                                             f"{POOLED_PLAN_PORT})"
-                                             if p.id == "coding" else ""))
+                                  card_text=role_text)
         by[str(n)] = rows
     roles = _card_roles(cards)
     return {"by_gpu_count": by,
@@ -1869,7 +1912,13 @@ def recommendations() -> dict:
                 "cards": [
                     {"role": "everyday lane: main chat / everyday, 196,608 tokens",
                      "card": _role_words(cards, roles, "main"), "context": 196608},
-                    {"role": "monitor card's lane: display + Fast/Live, 16,384 tokens",
+                    # The role line follows the fact too: when the monitor is
+                    # on the everyday card, this is the Fast/Live lane on
+                    # another card, not a "monitor card's lane" (2026-11-05).
+                    {"role": (("Fast/Live lane (the monitor is on the everyday "
+                               "card): display + Fast/Live, 16,384 tokens")
+                              if roles.get("monitor_on_main") else
+                              "monitor card's lane: display + Fast/Live, 16,384 tokens"),
                      "card": _role_words(cards, roles, "display"), "context": 16384},
                     {"role": "headless card's lane: Agentic+Vision, 16,384 tokens",
                      "card": _role_words(cards, roles, "headless"), "context": 16384},

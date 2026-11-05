@@ -44,6 +44,7 @@ if missing("jarvis_power.py"):
     sys.path.append(str(HERE / "rebuilt"))
 import jarvis_power as P  # noqa: E402
 import jarvis_power_switch as S  # noqa: E402
+import jarvis_presets as JP  # noqa: E402
 import jarvis_task_control as TC  # noqa: E402
 
 FAILED, PASSED = [], []
@@ -210,6 +211,8 @@ def reset():
         if not getattr(S, "_PENDING", None):
             break
         __import__("time").sleep(0.02)
+    with S._STANDBY_LOCK:
+        S._STANDBY["pooled_stopped"] = False
     P.set_mode("active", "test")
 
 
@@ -327,8 +330,10 @@ def t_standby_asks_the_pooled_lane_to_sleep_too():
     check("... and the owner is told the big coding model was freed too",
           "The pooled coding lane on port 11450 was stopped too." in " ".join(out.get("also") or [])
           and "11450" in out.get("message", ""), out)
-    check("quiet still frees nothing (the pooled lane is woken by the owner, "
-          "not by the mode)", P.current() == "standby", P.current())
+    check("... and standby REMEMBERS that it really stopped the lane, so waking "
+          "can put the chosen Coding preset back (it used to be woken only by "
+          "the owner re-applying the preset; 2026-11-05)",
+          S._STANDBY["pooled_stopped"] is True, S._STANDBY)
     reset()
     asked.clear()
     L.sleep = recorder
@@ -338,6 +343,116 @@ def t_standby_asks_the_pooled_lane_to_sleep_too():
     finally:
         L.sleep = real
     check("... and Quiet does not stop the pooled lane", asked == [], asked)
+
+
+def t_waking_restores_the_chosen_pooled_lane_only_when_standby_stopped_it():
+    """2026-11-05. Standby stopped the Coding preset's 30B model on port 11450
+    and nothing ever started it again: after any standby the still-chosen
+    Coding preset pointed at a stopped port until the owner re-applied it.
+
+    Waking now puts that lane back through
+    `jarvis_model_lanes.start_pooled_lane(by="waking from standby")`, on the
+    background seam the chat warm-up uses, and says so in the answer. Only
+    when BOTH hold: the preset in `choice()` is the pooled one, and standby's
+    own `stopped` flag says it really stopped the lane - a lane that was
+    already down must not be auto-loaded.
+    """
+    import jarvis_model_lanes as L
+
+    real_start, real_choice = L.start_pooled_lane, JP.choice
+    started = []
+
+    def start(**kw):
+        started.append(kw)
+        return 200, {"ok": True, "changed": True, "running": True}
+
+    def engine(stopped, sentence=""):
+        def sleep(why):
+            return {"stopped": stopped, "sentence": sentence}
+        return types.SimpleNamespace(__name__="jarvis_model_lanes", sleep=sleep)
+
+    L.start_pooled_lane = start
+    try:
+        # (i) the chosen preset is the pooled one and standby stopped the lane.
+        reset()
+        JP.choice = lambda: "coding"
+        S.set_mode("standby", gate_check=_auto, models=FakeModels(),
+                   ollama=FakeOllama(), wait_s=WAIT_S,
+                   others=[engine(True, "The pooled coding lane on port 11450 "
+                                        "was stopped too.")])
+        code, out = S.set_mode("active", gate_check=_auto, ollama=FakeOllama(),
+                               warm=lambda fn: fn(), wait_s=WAIT_S)
+        check("coding preset + a lane standby really stopped: waking starts it "
+              "again through the lane's public entry point",
+              code == 200 and len(started) == 1, (code, started, out))
+        check("... and it says it is waking from standby, so the lane's own log "
+              "names the reason",
+              bool(started) and started[0].get("by") == "waking from standby",
+              started)
+        check("... through the same background seam the chat warm-up uses, so "
+              "the power answer never waits for a model load",
+              bool(started) and callable(started[0].get("gate"))
+              and started[0]["gate"]("switch_model", {}, "prompt").allowed is True,
+              started)
+        check("... and the waking answer says what is happening, in plain words",
+              "Standby stopped the Coding preset's pooled lane" in out.get("message", "")
+              and "background on port 11450" in out.get("message", ""), out)
+
+        # (ii) a preset that is not pooled: nothing is started.
+        reset()
+        started.clear()
+        JP.choice = lambda: "general"
+        S.set_mode("standby", gate_check=_auto, models=FakeModels(),
+                   ollama=FakeOllama(), others=[engine(True)], wait_s=WAIT_S)
+        S.set_mode("active", gate_check=_auto, ollama=FakeOllama(),
+                   warm=lambda fn: fn(), wait_s=WAIT_S)
+        check("a preset that is not the pooled one: waking starts nothing",
+              started == [], started)
+
+        # (iii) the lane was already down: standby reports stopped=False, and
+        # waking must not load a lane it did not put down.
+        reset()
+        started.clear()
+        JP.choice = lambda: "coding"
+        S.set_mode("standby", gate_check=_auto, models=FakeModels(),
+                   ollama=FakeOllama(), others=[engine(False)], wait_s=WAIT_S)
+        code, out = S.set_mode("active", gate_check=_auto, ollama=FakeOllama(),
+                               warm=lambda fn: fn(), wait_s=WAIT_S)
+        check("a lane that was already down is never auto-loaded on waking",
+              started == [] and "pooled lane" not in out.get("message", ""),
+              (started, out))
+        # (iv) the owner goes back to Standby while the lane is still loading:
+        # the background start stops it again, so standby's promise (the cards
+        # are free) still holds.
+        reset()
+        started.clear()
+        stopped = []
+        real_stop = L.stop_pooled_lane
+
+        def start_then_standby(**kw):
+            started.append(kw)
+            P.set_mode("standby", "test")     # the owner tapped Standby meanwhile
+            return 200, {"ok": True, "changed": True, "running": True}
+
+        def stop(**kw):
+            stopped.append(kw)
+            return 200, {"ok": True}
+
+        L.start_pooled_lane, L.stop_pooled_lane = start_then_standby, stop
+        try:
+            JP.choice = lambda: "coding"
+            S.set_mode("standby", gate_check=_auto, models=FakeModels(),
+                       ollama=FakeOllama(), others=[engine(True)], wait_s=WAIT_S)
+            S.set_mode("active", gate_check=_auto, ollama=FakeOllama(),
+                       warm=lambda fn: fn(), wait_s=WAIT_S)
+        finally:
+            L.start_pooled_lane, L.stop_pooled_lane = start, real_stop
+        check("... and if Standby comes back while the lane is still loading, "
+              "the background start stops it again so the cards are free",
+              len(stopped) == 1 and stopped[0].get("restore") is False, stopped)
+    finally:
+        L.start_pooled_lane, JP.choice = real_start, real_choice
+        reset()
 
 
 def t_standby_refused_while_a_task_runs():
