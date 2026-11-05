@@ -368,6 +368,7 @@ def t_a_retry_after_the_pc_answered_200_recovers_instead_of_bricking():
 def t_a_chunk_during_the_card_is_refused():
     reset_root()
     release = threading.Event()
+    workers = []
 
     class Waiting:
         allowed = False
@@ -378,8 +379,19 @@ def t_a_chunk_during_the_card_is_refused():
         release.wait(5)
         return Waiting()
 
+    def spawn(worker):
+        # Keep the card's own worker so this test can wait for it at the end.
+        # start() answers 202 BEFORE that worker has settled - which is what is
+        # being proved above - and a worker left running rewrites the receipt
+        # while the NEXT test is clearing this folder. That is the
+        # "Directory not empty" failure CI hit on 2026-11-05: a race in the
+        # suite, not in the route.
+        workers.append(worker)
+        worker.start()
+
     on()
-    code, out = C.start({"started_at": started_now()}, gate=gate, wait_s=0.0)
+    code, out = C.start({"started_at": started_now()}, gate=gate, spawn=spawn,
+                        wait_s=0.0)
     check("start answers 202 while the card waits",
           code == 202 and out.get("state") == "waiting", out)
     session = out["session"]
@@ -388,6 +400,8 @@ def t_a_chunk_during_the_card_is_refused():
     check("a chunk before the card is answered is 409", code == 409, out)
     check("... and names the state", out.get("state") in ("waiting", "refused"), out)
     release.set()
+    for worker in workers:
+        worker.join(10)
 
 
 # --------------------------------------------------------------------------

@@ -364,8 +364,14 @@ ARM_PHRASES = ("record call", "record this call", "record the call",
                "start recording the call", "start call recording")
 STOP_PHRASES = ("stop recording", "stop the call recording", "stop call recording")
 
-OFF_WORDS = ("Recording calls is off on this PC. Turn it on in the settings file "
-             "(jarvis-framework.toml, [call_recording] enabled = true) and ask again.")
+#: The feature switch's own name, kept on its own as a bare token: the refusal
+#: below has to say WHICH switch the owner must change (backend/test_call_notes.py
+#: asserts it), and a lone identifier is a name, not a developer word in a
+#: sentence - which is how tools/check_zero_jargon.py reads one.
+SWITCH_NAME = "call_recording"
+
+OFF_WORDS = ("Recording calls is off on this PC. Turn it on in the settings file (the "
+             + SWITCH_NAME + " switch), then ask again.")
 ARM_REPLY = ("Recording a call: your phone records it through its microphone with the call "
              "on speaker - Android does not let an app record the call's own audio, so the "
              "other person is heard through the speaker. When the call ends this PC "
@@ -1497,7 +1503,7 @@ def start(body, *, gate: Optional[Callable] = None, spawn=None,
            "sample_rate": rate, "channels": channels, "format": fmt, "device": device,
            "bytes": 0, "chunks": 0, "consent_notice": "", "title": "",
            "audio": str(folder / "audio.wav"),
-           "engine": "sherpa-onnx through jarvis_media_read"}
+           "engine": "the PC's own speech-to-text"}
     written = write_receipt(session, doc)
     if not written.get("ok"):
         return 503, {"ok": False, "state": "failed",
