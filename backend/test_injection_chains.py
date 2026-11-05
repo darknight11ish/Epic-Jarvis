@@ -38,8 +38,12 @@ itself - it is not the same thing as an end-to-end probe of a live path.
 
 WHAT ELSE IS PINNED: nothing is reported as BLOCKED any more (the JSON, the
 text output and `--list`); an unknown probe and a root with no `backend/` exit
-2, never 0; `--list` names every probe without running one; and the chain ids
-the mutations name still exist.
+2, never 0; `--list` names every probe without running one; the chain ids
+the mutations name still exist; and the probes cannot be fooled by a settings
+file in the config folder the run inherited (DEF-048, 2026-11-05 - the
+sandbox gives each probe its own empty config folder, because a live read of
+the owner's `~/.openjarvis` made chain5b measure the machine instead of the
+shipped module).
 
 No network, no model, no real backend, no third-party package.
 """
@@ -128,13 +132,13 @@ def _check_work() -> Path:
     return folder
 
 
-def run_checker(root: Path, *args: str, json_out: bool = True):
+def run_checker(root: Path, *args: str, json_out: bool = True, env=None):
     argv = [sys.executable, "-B", str(CHECKER), "--root", str(root),
             "--workdir", str(_check_work()), *args]
     if json_out:
         argv.append("--json")
     done = subprocess.run(argv, cwd=str(REPO), capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", timeout=600)
+                          encoding="utf-8", errors="replace", timeout=600, env=env)
     payload = None
     if json_out:
         try:
@@ -349,6 +353,50 @@ def t_every_mutation_is_caught_for_the_right_reason():
         check(f"{chain_id} (+{name}): the other chains still pass, so the addition is the cause",
               payload.get("passed") == 6,
               f"passed={payload.get('passed')} (mutation: {meaning})")
+
+
+def t_a_caller_settings_file_cannot_change_the_verdict():
+    """DEF-048, 2026-11-05: the chain5b probe must measure the SHIPPED module,
+    not a settings file in the config folder the run inherited.
+
+    Measured on the owner's Windows PC: `%USERPROFILE%\\.openjarvis\\
+    phone-notifications.json` exists there (the feature is ON), so
+    `jarvis_phone_notifications.settings()` returned from its "valid file"
+    branch, and the chain5b mutation - which asks the FileNotFoundError branch
+    to carry a `text` field - was never reached. The suite was green in CI (no
+    such file) and three checks red here. The probe sandbox now points
+    OPENJARVIS_CONFIG_DIR / JARVIS_CONFIG_DIR at its own empty folder; this
+    check pins that by handing the checker a caller folder holding a VALID
+    settings file and requiring the mutation to be caught anyway.
+    """
+    chain_id = "chain5b-phone-notification"
+    base = _fresh_dir(scratch_base(), "chain5b-caller-config")
+    root = copytree_modules(base / "tree")
+    _mutate(root, "jarvis_phone_notifications.py",
+            '        return {"enabled": False, "why": ""}\n',
+            '        return {"enabled": False, "why": "", "text": ""}\n')
+    caller_config = base / "caller-config"
+    caller_config.mkdir()
+    # Exactly the owner's PC shape: a valid file that makes settings() return
+    # from the branch this mutation does NOT touch.
+    (caller_config / "phone-notifications.json").write_text(
+        '{"enabled": true, "changed": 1793503818.9}', "utf-8")
+    env = dict(os.environ,
+               OPENJARVIS_CONFIG_DIR=str(caller_config),
+               JARVIS_CONFIG_DIR=str(caller_config))
+    code, payload, output = run_checker(root, env=env)
+    check("a valid settings file in the caller's config folder cannot hide "
+          "the chain5b mutation", code == 1, output[-900:])
+    if payload is None:
+        check("the checker printed parseable JSON with a caller config", False,
+              output[-400:])
+        return
+    failed = {p["id"]: p for p in payload["probes"] if p["status"] != "pass"}
+    check("it is chain5b that fails, for settings_carry_text",
+          set(failed) == {chain_id}
+          and failed[chain_id].get("reason") == "settings_carry_text",
+          f"failed chains were {sorted(failed)}; "
+          f"reason was {(failed.get(chain_id) or {}).get('reason')!r}")
 
 
 def t_an_absence_probe_is_a_measured_claim():

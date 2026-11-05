@@ -4,7 +4,7 @@ ticket. This is the one route pair in Jarvis that deletes in bulk and cannot be
 undone.
 
 NEW MODULE, shipped whole. `history-purge.patch` is the install block that puts
-its three routes on the running server (docs/JARVIS-API.md section 187);
+its three routes on the running server (docs/JARVIS-API.md section 189);
 everything else is here.
 
 THE OWNER'S REQUEST (2026-11-04, in his own words)
