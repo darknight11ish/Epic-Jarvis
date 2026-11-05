@@ -4,7 +4,7 @@
     python3 tools/gen_forget_range_cases.py            # write both copies
     python3 tools/gen_forget_range_cases.py --check    # compare only
 
-What /api/memory/forget_range, /preview and /undo really answer
+What /api/memory/forget_range, /preview, /confirm and /undo really answer
 (backend/jarvis_forget_range.py, forget-range.patch; docs/JARVIS-API.md
 section 64), in named situations - made by the real code against a real
 memory store and a real, encrypted chat history in a temporary folder,
@@ -15,6 +15,14 @@ nothing written by hand:
 
 (byte-identical). The desktop's Rust and JavaScript tests and the phone's
 ForgetRangeTest build against it.
+
+Since 2026-11-04 the file also carries the SECOND yes: the card is the first
+yes (nothing changes), the approved hold shows up as `confirm` in the status,
+and only POST /confirm with a literal `yes: true` deletes anything. Pinned
+chats are kept and listed under `pinned_kept`; every preview carries the
+measured `estimate`. The fixture's `words` block is still exactly the apps'
+own, so their copies keep matching - the new sentences are under
+`confirm_words` and inside the answers themselves (the apps lane adds them).
 
 It also carries what both apps must say the same way: `words` (the
 backend's own WORDS - the screens' buttons and sentences), the quick
@@ -110,14 +118,17 @@ class _World:
                               "messages": [{"role": "user", "content": words}]},
                              lane="cases", at=when)
 
-    def get(self, route, query=""):
-        code, body = FR.handle_get(route, query, now=NOW, mem=self.mem, chats=self.log)
+    def get(self, route, query="", now=NOW):
+        code, body = FR.handle_get(route, query, now=now, mem=self.mem, chats=self.log)
         return {"status": code, "body": _steady(body)}
 
     def post(self, route, body, gate="approved", now=NOW):
-        code, out = FR.handle_post(route, body, now=now, mem=self.mem, chats=self.log,
-                                   gate=lambda a, d, p: _V(gate == "approved", gate),
-                                   spawn=self.jobs.append)
+        kw = dict(now=now, mem=self.mem, chats=self.log,
+                  gate=lambda a, d, p: _V(gate == "approved", gate),
+                  spawn=self.jobs.append)
+        if route == FR.CONFIRM:
+            kw["timer"] = lambda seconds, fn: None
+        code, out = FR.handle_post(route, body, **kw)
         return {"status": code, "body": _steady(out)}
 
     def answer_card(self):
@@ -132,7 +143,8 @@ class _World:
 
 def _steady(v):
     """The answer with what changes from run to run taken out: when a card
-    was answered (`at`) and the spoken request's own id."""
+    was answered (`at`), the spoken request's own id (12 hex), and the held
+    id the second yes answers (32 hex)."""
     if isinstance(v, dict):
         out = {}
         for k, x in v.items():
@@ -140,6 +152,9 @@ def _steady(v):
                 out[k] = 0
             elif k == "id" and isinstance(x, str) and len(x) == 12:
                 out[k] = "asked-id"
+            elif (k == "id" and isinstance(x, str) and len(x) == 32
+                  and all(c in "0123456789abcdef" for c in x)):
+                out[k] = "hold-id"
             else:
                 out[k] = _steady(x)
         return out
@@ -168,6 +183,8 @@ def cases() -> dict:
     out["preview_bad_date"] = w.get(FR.PREVIEW, "from=1 Sept&to=2026-09-15")
     out["preview_bad_preset"] = w.get(FR.PREVIEW, "preset=someday")
     out["preview_preset_last_week"] = w.get(FR.PREVIEW, "preset=last_week&kinds=facts")
+    # The second yes with nothing held: 409, and nothing is deleted.
+    out["confirm_no_hold"] = w.post(FR.CONFIRM, {"id": "0" * 32, "yes": True})
 
     w = _World("list")
     a, b = _things(w)
@@ -178,16 +195,45 @@ def cases() -> dict:
             "chats": ["conv-poem-00002", "conv-trip-00001"]}
     out["forget_none_ticked"] = w.post(FR.ROUTE, {"from": "2026-09-01", "to": "2026-09-15",
                                                   "facts": [], "chats": []})
+    # A second yes before the card is approved: 409, nothing is deleted.
+    out["confirm_before_card"] = w.post(FR.CONFIRM, {"id": "0" * 32, "yes": True})
     out["forget_waiting"] = w.post(FR.ROUTE, body)
     out["status_waiting"] = w.get(FR.ROUTE)
+    # The second yes while the card is still unanswered: 409, card first.
+    out["confirm_while_card"] = w.post(FR.CONFIRM, {"id": "0" * 32, "yes": True})
     out["forget_second_card"] = w.post(FR.ROUTE, body)
-    w.answer_card()
+    w.answer_card()                      # the card is approved: the items are held
+    held = (FR.status(NOW).get("confirm") or {}).get("id") or "hold-id"
+    out["status_confirm"] = w.get(FR.ROUTE)
+    out["confirm_not_literal"] = w.post(FR.CONFIRM, {"id": held, "yes": "yes"})
+    out["confirm_wrong_id"] = w.post(FR.CONFIRM, {"id": "f" * 32, "yes": True})
+    out["confirm"] = w.post(FR.CONFIRM, {"id": held, "yes": True})
+    out["confirm_twice"] = w.post(FR.CONFIRM, {"id": held, "yes": True})
     out["status_undo"] = w.get(FR.ROUTE)
     out["forget_while_undo"] = w.post(FR.ROUTE, {"from": "2026-09-01", "to": "2026-09-15",
                                                  "facts": [a]}, now=NOW + 60)
     out["undo"] = w.post(FR.UNDO, {}, now=NOW + 120)
     out["undo_nothing"] = w.post(FR.UNDO, {}, now=NOW + 130)
     out["status_after_undo"] = w.get(FR.ROUTE)
+
+    w = _World("pinned")
+    a, b = _things(w)
+    w.chat("conv-pinned-01", "Pinned planning", _at(2026, 9, 5, 9))
+    w.log.set_pin("conv-pinned-01", True)
+    out["preview_pinned"] = w.get(FR.PREVIEW, q)
+    # A stale client that ticked a pinned chat: refused, and it stays.
+    out["forget_pinned_ticked"] = w.post(FR.ROUTE, {"from": "2026-09-01",
+                                                    "to": "2026-09-15",
+                                                    "chats": ["conv-pinned-01"]})
+
+    w = _World("expired")
+    a, b = _things(w)
+    w.post(FR.ROUTE, {"from": "2026-09-01", "to": "2026-09-15", "facts": [a]})
+    w.answer_card()
+    held = (FR.status(NOW).get("confirm") or {}).get("id") or "hold-id"
+    out["confirm_expired"] = w.post(FR.CONFIRM, {"id": held, "yes": True},
+                                    now=NOW + FR.HOLD_SECONDS + 1)
+    out["status_confirm_expired"] = w.get(FR.ROUTE, now=NOW + FR.HOLD_SECONDS + 1)
 
     w = _World("denied")
     a, b = _things(w)
@@ -208,6 +254,12 @@ def cases() -> dict:
                                   mem=w.mem, chats=w.log)
     out["asked_said"] = {"said": said, "opens": opens}
     out["status_asked"] = w.get(FR.ROUTE)
+    said, opens = FR.quick_answer(FR.parse_phrase("how long would that take", NOW), NOW,
+                                  mem=w.mem, chats=w.log)
+    out["asked_estimate"] = {"said": said, "opens": opens}
+    said, opens = FR.quick_answer(FR.parse_phrase("clear old chats", NOW), NOW,
+                                  mem=w.mem, chats=w.log)
+    out["asked_which_days"] = {"said": said, "opens": opens}
 
     w = _World("many")
     with closing(sqlite3.connect(w.mem.path)) as c:
@@ -218,10 +270,15 @@ def cases() -> dict:
     out["preview_too_many"] = w.get(FR.PREVIEW, q)
     FR._reset_for_tests()
     return {
-        "routes": {"status": FR.ROUTE, "preview": FR.PREVIEW, "undo": FR.UNDO},
+        "routes": {"status": FR.ROUTE, "preview": FR.PREVIEW, "undo": FR.UNDO,
+                   "confirm": FR.CONFIRM},
         "words": FR.WORDS,
+        # The second tap the apps draw (the apps lane adds it to its own words)
+        # and the sentence the PC would say.
+        "confirm_words": {"yes": FR.CONFIRM_YES, "text": FR.CONFIRM_TEXT},
         "presets": [{"id": k, "label": v} for k, v in FR.PRESETS],
-        "limits": {"max_items": FR.MAX_ITEMS, "undo_minutes": FR.UNDO_MINUTES},
+        "limits": {"max_items": FR.MAX_ITEMS, "undo_minutes": FR.UNDO_MINUTES,
+                   "confirm_seconds": FR.HOLD_SECONDS},
         "card_title": W.title_for(FR.ACTION),
         "cases": out,
         # A PC without jarvis_forget_range.py / forget-range.patch.
