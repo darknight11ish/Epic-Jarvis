@@ -30739,11 +30739,39 @@ protection, never "protect everything".
 | `POST /api/protection/propose` | the chat path | **ONE** card, action `protect_item`; 202 `waiting` and a job id; 400/409 before any card |
 | `GET /api/protection/propose?id=` | either app | the proposal's end: `waiting` / `added` / `denied` / `failed` |
 
-The chat ability is the model tool **`protect_from_jarvis`** (`{kind, target,
-mode}`): the model proposes, the owner decides on ONE ordinary approval card,
-and the store is written only after that verdict, with `added_by: "chat"`. The
-model never writes the list itself and never claims it happened until the PC
-says so. A removal is loosening and always raises one card, whichever app asks.
+The chat ability is the model tool **`protect_from_jarvis`** (`{action, kind,
+target, mode}`, `action` = `add` | `remove` | `list`, default `add`). It has
+three actions since 2026-11-04, because the owner asked to set folder-level
+restrictions by plain chat: `add` and `remove` each raise ONE ordinary approval
+card - `protect_item` and `unprotect_item` respectively - and the store is
+written only after that verdict, with `added_by: "chat"`; `list` changes
+nothing, so it answers with **no card** (the whole list, or ONE named target
+checked in it: `check: true/false` plus the entry). The model never writes the
+list itself and never claims it happened until the PC says so. Removal is
+loosening and always raises one card, whichever app or chat asks. The card
+words and the tier are the list's own; a `list` answer can never write.
+
+**The same door without the model (2026-11-04).** `jarvis_quick.py`'s fixed
+phrasings reach `jarvis_protection`'s own functions directly - `handle_propose`
+(one `protect_item` card), `handle_remove` (one `unprotect_item` card), and
+`handle_get` / `status_for` for the read. They are the SAME functions the tool
+and the apps' routes use, not a second mechanism:
+
+| said in chat | what happens |
+|---|---|
+| "restrict the folder D:\\Photos from Jarvis", "restrict D:\\Photos", "stop Jarvis reading C:\\X", "don't let Jarvis touch C:\\X" | ONE `protect_item` card; the folder becomes **blocked** once it is approved |
+| "unrestrict D:\\Photos", "let Jarvis read D:\\Photos again", "stop protecting D:\\Photos" | ONE `unprotect_item` card; the entry leaves only on the card's yes |
+| "what folders are restricted?", "which files are blocked?" | the real list, no card |
+| "is Jarvis blocked from C:\\X?" | `Yes` / `No` about THAT path, read from the store, no card |
+
+A sentence that names a path acts on that path; one that only DESCRIBES a
+folder ("the folder with my medical scans") names no path, so the answer ASKS
+for the whole path and quotes the sentence to repeat ("restrict the folder
+D:\\Medical scans from Jarvis"). No target is ever guessed - protecting the
+wrong folder is itself a failure - and the answer never falls back to a generic
+"I cannot", which is the failure the owner reported. A private chat refuses the
+change like every mutation. Both apps chat through the same `/api/chat`, so
+this works from the PC and the phone alike with no client change.
 Both actions ship as `"ask"` in both copies of `jarvis-framework.toml`; the gate
 has no `_RISK` row for them yet (a drop-in module adds no patch, and risk rows
 are written by patches), so they are unclassified: the gate forces them to
@@ -30869,7 +30897,11 @@ package name is never matched against this list. Likewise a `folder`/`file`
 entry is a PC path.
 `POST /api/protection/add` is PC-only and raises no card; the chat add and every
 removal are one card each. Adding from the phone is not missing, only one step
-slower: the owner asks in chat and the same `protect_item` card waits.
+slower: the owner asks in chat and the same `protect_item` card waits. Removing
+and asking what is on the list are one chat sentence from either app too (§171.2
+has the owner's phrasings), and nothing about that is one-sided: the phone chats
+through the same `/api/chat`, so it gets the same cards and the same real-state
+answers with no client change.
 
 **Implemented and proved in this repository, NOT deployed to the owner's live
 PC by this change** - the live deploy is its own pass, so the owner's apps do

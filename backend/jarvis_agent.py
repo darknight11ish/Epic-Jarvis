@@ -964,6 +964,12 @@ PROTECT_TOOL = "protect_from_jarvis"
 PROTECT_ACTION = "protect_item"
 UNPROTECT_ACTION = "unprotect_item"
 
+#: How many entries of the list ONE `list` answer shows the model. The store is
+#: bounded at jarvis_protection.MAX_ITEMS (500) and the model's whole working
+#: memory is about 8,000 tokens, so `count` carries the real number and `more`
+#: says how many were not shown.
+PROTECTION_LIST_SHOWN = 20
+
 
 def _protection():
     """jarvis_protection, or None when a half-deployed install lacks it.
@@ -1638,20 +1644,92 @@ def _run_send_file(args: dict, state, **_) -> dict:
 
 
 
-def _prepare_protect(args: dict):
-    """prepare() for `protect_from_jarvis`: validate, then the card's words.
+class _ProtectionListed:
+    """`prepare()`'s answer for the protection tool's ``list`` action.
 
-    Everything a protected item must satisfy is checked HERE, before the
-    gate: a bad kind, a target that does not exist, a relative path and an
-    already-protected target are refusals with no card (jarvis_protection,
-    2026-10-31). The card is the ordinary one, raised by _one_call's gate.
+    Reading the list (or checking ONE target in it) changes nothing and has
+    nothing to approve, so `_one_call` answers it BEFORE the gate - the same
+    shape `_PhoneAppsListed` uses for the phone's app list. A card here would
+    ask the owner to approve a read.
+    """
+
+    def __init__(self, listed: dict):
+        self.listed = listed
+
+
+class _ProtectionNoChange:
+    """`prepare()`'s answer for a protection change that cannot be one.
+
+    "unrestrict C:\\X" when no entry protects it: a plain reason, no card,
+    nothing changed - the same shape `_PhoneAppsRefused` uses.
+    """
+
+    def __init__(self, problem: str):
+        self.problem = problem
+
+
+def _prepare_protect(args: dict):
+    """prepare() for `protect_from_jarvis`: add, remove or list.
+
+    * ``add`` - validate, then ONE ordinary card (``protect_item``), exactly
+      as before 2026-11-04; the store is written only after the verdict.
+    * ``remove`` - find the entry the owner's target names, then ONE
+      ``unprotect_item`` card: removing LOOSENS what Jarvis may reach, so it
+      always asks, whichever door asked (jarvis_protection.py, 2026-10-31).
+    * ``list`` - read the real store, or check ONE named target in it. There
+      is nothing to approve, so `_one_call` answers it with NO card.
+
+    Every refusal comes BEFORE a card: a bad kind, a target that does not
+    exist, a relative path, an already-protected target, or a removal naming
+    something no entry covers. Nothing is written here.
     """
     try:
         import jarvis_protection as P
     except Exception as exc:                            # noqa: BLE001
         return None, f"Protect something from Jarvis (unavailable: {type(exc).__name__})"
-    kind = str(args.get("kind") or "").strip().lower()
+    action = str(args.get("action") or "add").strip().lower()
+    if action not in ("add", "remove", "list"):
+        action = "add"
     target = args.get("target")
+    if action == "list":
+        wanted = str(target or "").strip()
+        if wanted:
+            got = P.status_for(wanted)
+            said = (f"{got['target']} is on the Protected from Jarvis list as "
+                    f"{P.mode_words(got['mode'])}." if got["protected"] else
+                    f"{got['target']} is not on the Protected from Jarvis list.")
+            listed = {"ok": True, "check": got["protected"],
+                      "target": got["target"],
+                      "protected_item": got["item"] or None,
+                      "modes": list(P.MODES), "change_card": P.CHANGE_CARD}
+        else:
+            got = P.items()
+            said = f"Read the Protected from Jarvis list: {len(got)} thing(s)."
+            # At most PROTECTION_LIST_SHOWN entries reach the model: the store
+            # is bounded at 500, and the model's whole working memory is about
+            # 8,000 tokens. `count` is always the REAL number, so nothing is
+            # overstated, and `more` says how many were not shown.
+            listed = {"ok": True, "count": len(got),
+                      "shown": min(len(got), PROTECTION_LIST_SHOWN),
+                      "items": [P.public_item(i)
+                                for i in got[:PROTECTION_LIST_SHOWN]],
+                      "more": max(0, len(got) - PROTECTION_LIST_SHOWN),
+                      "modes": list(P.MODES), "change_card": P.CHANGE_CARD}
+        return _ProtectionListed(listed), said
+    if action == "remove":
+        item = P.find_item(args.get("id")) if args.get("id") else {}
+        if not item:
+            item = P.item_for_target(target)
+        if not item:
+            named = str(target or "").strip() or "that"
+            return _ProtectionNoChange(
+                f"{named} is not on your Protected from Jarvis list, so there "
+                "is nothing to remove."), ""
+        state = {"action": "remove", "id": item["id"], "kind": item["kind"],
+                 "target": item["target"], "mode": item["mode"]}
+        return state, P.card_prompt(item["kind"], item["target"], item["mode"],
+                                    removal=True)
+    kind = str(args.get("kind") or "").strip().lower()
     mode = str(args.get("mode") or "").strip().lower()
     norm, why = P.validate_request(kind, target, mode,
                                    known_programs=P._running_program_names())
@@ -1660,15 +1738,16 @@ def _prepare_protect(args: dict):
     other = P._duplicate(kind, norm)
     if other:
         raise ValueError(P._duplicate_sentence(other))
-    return ({"kind": kind, "target": norm, "mode": mode},
+    return ({"action": "add", "kind": kind, "target": norm, "mode": mode},
             P.describe_for_tool(kind, norm, mode))
 
 
 def _run_protect(args: dict, plan_obj, **_) -> dict:
-    """execute() for `protect_from_jarvis`: store it - only after the card.
+    """execute() for `protect_from_jarvis`: the change - only after the card.
 
-    `_one_call` runs execute() only on an allowed verdict, and the store
-    write is the whole of it; the model never writes the list itself.
+    `_one_call` runs execute() only on an allowed verdict. ``add`` stores the
+    entry; ``remove`` takes it off. The model never writes the list itself and
+    never claims it happened before this returns.
     """
     try:
         import jarvis_protection as P
@@ -1676,6 +1755,22 @@ def _run_protect(args: dict, plan_obj, **_) -> dict:
         return {"ok": False, "error": "the protection list is not available "
                                       f"here ({type(exc).__name__})"}
     state = plan_obj if isinstance(plan_obj, dict) else {}
+    action = str(state.get("action") or args.get("action") or "add").lower()
+    if action == "remove":
+        item = P.find_item(state.get("id") or args.get("id"))
+        if not item:
+            item = P.item_for_target(state.get("target") or args.get("target"))
+        if not item:
+            return {"ok": False, "error": "that is not on the Protected from "
+                                          "Jarvis list, so nothing was changed"}
+        removed = P.remove_item(item["id"])
+        if not removed:
+            return {"ok": False, "error": "that entry is no longer on the "
+                                          "Protected from Jarvis list, so "
+                                          "nothing was changed"}
+        return {"ok": True, "removed": P.public_item(removed),
+                "said": (f"Done - {removed.get('target')} is no longer "
+                         "protected from Jarvis.")}
     kind = str(state.get("kind") or args.get("kind") or "")
     target = state.get("target") or args.get("target")
     mode = str(state.get("mode") or args.get("mode") or "")
@@ -4280,17 +4375,20 @@ TOOLS: dict = {
         _prepare_send_file, _run_send_file),
     PROTECT_TOOL: Tool(
         PROTECT_TOOL,
-        "Protect a folder, file or program on the owner's PC from Jarvis. "
-        "mode blocked = no access at all; readonly = reads allowed, "
-        "writes/actions refused. Use when the owner asks Jarvis not to touch "
-        "something.",
+        "The owner's Protected from Jarvis list: folders, files and programs "
+        "Jarvis may not touch. add: one card, then blocked or readonly. "
+        "remove: one card. list: the real list, or ONE target checked - no "
+        "card. Use for protect, restrict, keep out, don't let Jarvis touch, "
+        "unrestrict, or what is restricted.",
         {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["add", "remove", "list"]},
             "kind": {"type": "string", "enum": ["folder", "file", "program"]},
             "target": {"type": "string", "description":
-                       "the whole path for a folder or file, or the program's "
-                       "executable name like notepad.exe"},
+                       "a folder/file's whole path, or a program's executable "
+                       "name (notepad.exe); list: ONE target to check, or "
+                       "empty for all"},
             "mode": {"type": "string", "enum": ["blocked", "readonly"]}},
-         "required": ["kind", "target", "mode"]},
+         "required": []},
         _prepare_protect, _run_protect),
     # Spending from a bank export (jarvis_spending.py). Decided under
     # file_read's action - see SPENDING_TOOL.
@@ -9155,9 +9253,27 @@ TOOL_HINTS = {
     "send_file_to_phone": (r"\bsend\b.*\bfiles?\b", r"\bfiles?\b.*\bphone\b",
                            r"\bdownload\b", r"\bview (it|the file)\b",
                            r"\bto my phone\b"),
+    # Protected from Jarvis (2026-10-31; widened 2026-11-04 after a real chat
+    # answer missed the tool). A question in these words hid the tool from the
+    # model, which then answered generically about a capability the backend
+    # really has - so the owner's own vocabulary for the SAME feature is here:
+    # restrict / restriction / folder-level / unrestrict, "stop Jarvis reading",
+    # "let Jarvis read it again", and the two ways of asking what is on the
+    # list. Hints only decide what the model is SHOWN; the card, the tier and
+    # the store are unchanged.
     "protect_from_jarvis": (r"\bprotect", r"\bexclude\b", r"\bkeep out\b",
                             r"\bread[- ]only\b", r"\bdon.t (let|allow)\b",
-                            r"\bblock\b.*\b(jarvis|from)\b"),
+                            r"\bblock\b.*\b(jarvis|from)\b",
+                            r"\brestrict", r"\bunrestrict", r"\brestriction",
+                            r"\bfolder[- ]level\b",
+                            r"\bstop jarvis\b",
+                            r"\bjarvis (?:may|must|should|can) not\b",
+                            r"\blet jarvis\b.*\bagain\b",
+                            r"\b(?:is|are) (?:jarvis|you) (?:blocked|restricted|"
+                            r"prevented|stopped)\b",
+                            r"\b(?:what|which) (?:folders?|files?|programs?|"
+                            r"things?) (?:are|is) (?:restricted|protected|"
+                            r"blocked)\b"),
     "my_spending": (r"\bspending\b", r"\bspend\b", r"\bbank\b", r"\bbills?\b", r"\bmoney\b",
                     r"\btransactions?\b", r"\bexpenses?\b"),
     "retirement_whatif": (r"\bretirement\b", r"\bpension\b", r"\bretire\b", r"what-if"),
@@ -15539,8 +15655,12 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     if name == PROTECT_TOOL:
         # The chat ability asks under its OWN action name (jarvis_protection.py,
         # 2026-10-31): the gate forces an unclassified action to "ask", so the
-        # ONE card is the ordinary one, and no second mechanism exists.
-        action_name = PROTECT_ACTION
+        # ONE card is the ordinary one, and no second mechanism exists. A
+        # removal asks under `unprotect_item` - its own shipped "ask" row and
+        # the same card the apps' own Remove raises (2026-11-04).
+        action_name = (UNPROTECT_ACTION
+                       if str(args.get("action") or "").strip().lower() == "remove"
+                       else PROTECT_ACTION)
     if name == GRANT_TOOL:
         # The conversation-scoped web-search approval (WEB_SEARCH_GRANT): its
         # own action name, tier "ask" in both shipped settings copies, so the
@@ -15632,6 +15752,30 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
         return
+    if name == PROTECT_TOOL and isinstance(state, (_ProtectionListed,
+                                                  _ProtectionNoChange)):
+        # NOTHING TO APPROVE, so no card (2026-11-04). One of two things came
+        # back from _prepare_protect instead of a change: the owner's real
+        # list (or ONE named target's real state), or a plain reason a removal
+        # is not a change at all. A card showing either would ask the owner to
+        # approve nothing; the model is told instead, in the owner's words.
+        if isinstance(state, _ProtectionListed):
+            result = dict(state.listed)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=True)
+            ran = True
+        else:
+            result = {"ok": False,
+                      "error": f"refused: {state.problem} Nothing was changed "
+                               "and nobody was asked."}
+            say_step("tool_refused", name)
+            ran = False
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
+                      "outcome": "no card needed" if ran else "refused"})
+        return
+
     if name == PHONE_APPS_TOOL and isinstance(state, (_PhoneAppsListed, _PhoneAppsRefused)):
         # NOTHING TO APPROVE, so no card (2026-11-02). One of two things came
         # back from _prepare_phone_apps instead of one app to add or remove: the
