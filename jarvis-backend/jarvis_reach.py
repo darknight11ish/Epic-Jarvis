@@ -222,9 +222,7 @@ TOOL_NAMES = {
     # by talking to Jarvis (2026-11-05; jarvis_approval_policy.py). Listed here
     # because test_reach.py requires plain words for every tool: the sentence
     # has to say both halves - it can loosen, and a loosening is never free.
-    "approval_policy": "Changing what needs a card, a second yes or Windows Hello, "
-                       "one thing at a time (asking LESS takes one PC-only card and "
-                       "Windows Hello; asking more is instant)",
+    "approval_policy": "Changing what needs a card, a second yes or Windows Hello",
     "conversation_find": "Finding your old conversations by their titles "
                          "(read-only, titles and dates only)",
     "conversation_open": "Opening one of your old conversations to read it "

@@ -1465,7 +1465,7 @@
     },
     {
      "id": "approval_policy",
-     "name": "Changing what needs a card, a second yes or Windows Hello, one thing at a time (asking LESS takes one PC-only card and Windows Hello; asking more is instant)"
+     "name": "Changing what needs a card, a second yes or Windows Hello"
     },
     {
      "id": "approve_web_search_for_conversation",
