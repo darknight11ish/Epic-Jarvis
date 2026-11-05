@@ -719,8 +719,8 @@ CLASSIFICATION = {
     # backend/jarvis_forget_range.py, forget-range.patch; JARVIS-API section
     # 64). Both apps: the desktop's Brain -> History, the phone's Brain.
     "/api/memory/forget_range": ("ported", "Forget a time frame: the status (GET - a card waiting, the second yes held, the 10-minute Undo, the days a spoken request filled in, the pinned chats kept) and \"Forget these\" (POST - the ticked ids; the PC raises ONE approval card listing every item AND changes nothing: it holds them for the second yes). Both apps; held on a stale link and refused while the list is hidden."),
-    "/api/memory/forget_range/preview": ("ported", "Forget a time frame: the facts saved and the chats from some days, each with its words, the pinned chats kept (`pinned_kept`) and the measured `estimate` (GET). Both apps; the words hidden with the private lists - `pinned_kept` must be hidden with them (the apps lane adds it to redact())."),
-    "/api/memory/forget_range/confirm": ("planned", "Forget a time frame: the SECOND yes (owner, 2026-11-04) - POST {\"id\", \"yes\": true} and only then are the facts forgotten and the chats deleted, with the 10-minute Undo. Built on the backend ahead of both apps: the card is the first yes and changes nothing, so neither app can delete anything until it draws the second tap (desktop Brain -> History and the phone's Brain, the apps lane). Reclassify `ported` when both apps call it."),
+    "/api/memory/forget_range/preview": ("ported", "Forget a time frame: the facts saved and the chats from some days, each with its words, the pinned chats kept (`pinned_kept`) and the measured `estimate` (GET). Both apps; the words hidden with the private lists - `pinned_kept` carries chat TITLES and both apps hide it with the rest (the desktop's Rust `redact()`, the phone's `ForgetRange.redact`)."),
+    "/api/memory/forget_range/confirm": ("ported", "Forget a time frame: the SECOND yes (owner, 2026-11-04) - POST {\"id\", \"yes\": true} and only then are the facts forgotten and the chats deleted, with the 10-minute Undo. Both apps draw it: desktop Brain -> History and the phone's Brain show the held id, the PC's own sentence and the minutes left, send a literal `yes: true` (never a string), and say every 400/409 in the PC's own words. Held on a stale link like \"Forget these\", and refused while the private lists are hidden."),
     "/api/memory/forget_range/undo": ("ported", "Forget a time frame: Undo within 10 minutes of the second yes - one tap, no card, never held on a stale link. Both apps."),
     "/api/projects": ("ported", "Projects: the list (GET) and creating one (POST). Both apps; the phone creates life projects only (a coding project's folder, and an app Jarvis builds - new or adopted from the list's unlinked_apps - are set up on the PC: nothing on the phone can fill an app, ARCHITECTURE section 8)."),
     "/api/projects/{id}": ("ported", "One project: read it (GET) or change what the owner typed (POST) - instructions, notes, and clearing the folder. Both apps; choosing the folder is the desktop's (the Windows picker, projects_choose_folder)."),
@@ -1422,19 +1422,11 @@ RETIRED = {
 #: mechanism stays for the next backend-first route.
 # The last backend-first route (the two `/api/files/...` routes the send-a-file
 # slice built) got its phone client on 2026-10-31, so its lines were removed and
-# the two routes moved to PHONE_ONLY below. The next one is the SECOND yes of
-# "Forget a time frame" (2026-11-04): the backend lane built the route and its
-# whole two-step flow, and the apps lane draws the second tap in both apps. The
-# slice that wires the first client removes the line and reclassifies the route
-# `ported` (or `todo` while only one app calls it).
+# the two routes moved to PHONE_ONLY below. The next one was the SECOND yes of
+# "Forget a time frame" (2026-11-04), whose line was removed on 2026-11-05 when
+# the apps lane wired BOTH apps: it is `ported` now, exactly as the rule above
+# says, and the mechanism stays empty for the next backend-first route.
 PENDING_CLIENTS = {
-    "/api/memory/forget_range/confirm": (
-        "Forget a time frame's SECOND yes (JARVIS-API section 64, the owner's "
-        "decision of 2026-11-04). The approval card is the FIRST yes and changes "
-        "nothing; only this route, with a literal `yes: true`, forgets the "
-        "facts and deletes the chats. Built on the backend ahead of both apps: "
-        "desktop Brain -> History and the phone's Brain (the apps lane) add the "
-        "second tap, and that slice reclassifies this route."),
 }
 
 
