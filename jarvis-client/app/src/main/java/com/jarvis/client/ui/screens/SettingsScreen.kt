@@ -1088,12 +1088,12 @@ fun SettingsScreen(
                 }
             }
             // "Hands-free" (the owner's request, 2026-11-04): ON reads every
-            // approval card out on this phone, opens a ten-second answer
-            // window, and writes a text message to a contact he names. It is
-            // drawn here, last, because that moves no other row's position (see
-            // SETTINGS_ITEM_INDEX) - and it is always drawn, like "App control"
-            // and "What asks first", because this phone's row has no menu id in
-            // the PC's own catalogue yet.
+            // approval card out on this phone, opens the PC's own answer
+            // window for one (up to a minute), and writes a text message to a
+            // contact he names. It is drawn here, last, because that moves no
+            // other row's position (see SETTINGS_ITEM_INDEX) - and it is
+            // always drawn, like "App control" and "What asks first", because
+            // this phone's row has no menu id in the PC's own catalogue yet.
             if (drawn("handsfree")) item(key = "handsfree") {
                 HandsfreeSection(canAct = canAct)
             }

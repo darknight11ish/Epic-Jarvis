@@ -285,12 +285,16 @@ run_plan                  = "ask"
 # else and loosening from the app is refused. Making a line stricter from
 # either app ("ask") needs no card.
 loosen_what_asks_first    = "ask"
-# enable_reading_tool - offering calendar_read, email_read, notes_search or
-# home_read to the AI model at all (adding it to [tools].enabled, below) from
-# the PC's "What asks first" page. Must stay "ask", like the line above: it
-# is a DIFFERENT thing from loosening whether a tool asks first - jarvis_
-# asks_first.py refuses it unless it comes from this PC, with Windows Hello,
-# whatever this line says.
+# enable_reading_tool - offering ONE tool to the AI model at all (adding it to
+# [tools].enabled, below) from the PC's "What asks first" page, one card plus
+# Windows Hello per tool. Since 2026-11-04 that page draws a switch for the
+# model's tools - 48 at 2026-11-04, the raw ones included (shell_exec,
+# control_computer, browser_control) - and each of those cards is this one
+# action. Three tools are not switched here: run_data_script (its own Data
+# sandbox switch) and the two web-search grant tools (they ride with Web
+# search). Must stay "ask", like the line above: it is a DIFFERENT thing from
+# loosening whether a tool asks first - jarvis_asks_first.py refuses it unless
+# it comes from this PC, with Windows Hello, whatever this line says.
 enable_reading_tool       = "ask"
 # "Check for tool updates" (jarvis_tool_updates.py, the owner's own
 # request): the FIRST run ever asks PyPI, crates.io and GitHub over the
