@@ -34,8 +34,14 @@ import java.io.RandomAccessFile
  * WHY `sent.txt` IS APPENDED, NOT REWRITTEN. Appending one short line is
  * cheap and cannot corrupt the earlier lines; a rewritten index could be
  * truncated by a kill halfway through and would then re-upload or skip
- * arbitrarily. A repeated seq after a crash (the line was lost) is safe: the
- * frozen contract says to retry the same seq, and the PC appends in seq order.
+ * arbitrarily. A repeated seq after a crash (the line was lost) is safe
+ * because the PC answers a seq it already holds with 200 (or, on an older PC,
+ * a 409 naming the seq it wants next), and [Session.markSentBelow] records
+ * every number below that one before the retry - see `call/CallRecordChunks.kt`.
+ *
+ * WHAT IS DELETED, AND WHEN. Only two things remove audio: the under-a-second
+ * recording, out loud, and the owner's own discard ([discardUnsent], behind a
+ * confirmation). Nothing is thrown away because a network was down.
  *
  * Pure JVM: `java.io` only, no Android types, no DataStore, no Room. The
  * whole class is exercised by `CallRecordQueueTest` on a temporary folder.
@@ -184,6 +190,36 @@ class CallRecordStore(private val root: File) {
             }
         }
 
+        /**
+         * The PC said it is waiting for [expected]: EVERY chunk below that
+         * number is already on the PC, so record them as sent.
+         *
+         * This is the recovery the repeated seq needed. A crash between the
+         * PC's 200 and [markSent]'s append leaves the chunk on the PC and its
+         * number missing here; the retry then asks for a seq the PC has and
+         * the PC answers 409 with the number it wants next. Without this, the
+         * phone retried that same seq for ever and the recording was never
+         * sendable again (the privacy audit of 2026-11-05, D3).
+         *
+         * Only numbers for chunks that are REALLY on disk are written: the
+         * value comes from the PC, and a wrong or wild one cannot invent
+         * sequence numbers or skip a chunk this phone has not cut yet.
+         * Returns how many numbers were added.
+         */
+        fun markSentBelow(expected: Int): Int {
+            if (expected <= 1) return 0
+            val already = sentSeqs()
+            var marked = 0
+            for (chunk in chunks()) {
+                if (chunk.seq >= expected) break
+                if (chunk.seq !in already) {
+                    markSent(chunk.seq)
+                    marked++
+                }
+            }
+            return marked
+        }
+
         /** How much audio is on disk for this recording. */
         fun bytes(): Long = chunks().sumOf { it.bytes }
 
@@ -238,6 +274,27 @@ class CallRecordStore(private val root: File) {
 
     /** Everything still to send, oldest first. */
     fun unsent(): List<Session> = sessions().filter { !it.finished() }
+
+    /**
+     * DELETE every recording the PC has not taken, and return how many went.
+     *
+     * The owner's own discard (the audit of 2026-11-05, D7): a recording whose
+     * sending was denied, or that cannot be sent, must not sit on this phone
+     * for ever with no way to remove it. This is the ONE place audio is thrown
+     * away on purpose; the caller asks first, in words, and says how many went.
+     *
+     * A recording the PC HAS taken is never touched here - `finished()` is the
+     * PC's own acknowledgement, and the folder is already removed after it -
+     * so this can only delete what this phone still holds.
+     */
+    fun discardUnsent(): Int {
+        var gone = 0
+        for (session in unsent()) {
+            session.remove()
+            if (!session.dir.exists()) gone++
+        }
+        return gone
+    }
 
     companion object {
         /** The folder's name for one recording: `call-<start ms>`. */
