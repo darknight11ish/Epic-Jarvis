@@ -393,14 +393,18 @@
         {
           "index": 0,
           "name": "NVIDIA GeForce RTX 2060",
-          "vram_gib": null,
-          "uuid": ""
+          "vram_gib": 12.0,
+          "uuid": "",
+          "pci_id": "0000:04:00.0",
+          "monitor": null
         },
         {
           "index": 1,
           "name": "NVIDIA GeForce RTX 2080 SUPER",
-          "vram_gib": null,
-          "uuid": ""
+          "vram_gib": 8.0,
+          "uuid": "",
+          "pci_id": "0000:07:00.0",
+          "monitor": null
         }
       ],
       "source": "jarvis_hardware.detect()"
@@ -556,12 +560,12 @@
           "preset": "coding",
           "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "both cards (pooled lane, port 11450)",
           "context": 32768,
           "tok_s": 76.2,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "the agreed 2-GPU mapping: main model on the 2060"
+          "note": "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on the pooled lane (port 11450) across BOTH cards, started on demand; it pauses the other lanes' models while it runs"
         },
         "agentic_vision": {
           "preset": "agentic_vision",
@@ -640,7 +644,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2060 12 GB: main chat/everyday, 196k"
+          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: main chat/everyday, 196,608 window"
         },
         "general_uncensored": {
           "preset": "general_uncensored",
@@ -651,18 +655,18 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2060 12 GB: main chat/everyday, 196k"
+          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: main chat/everyday, 196,608 window"
         },
         "coding": {
           "preset": "coding",
           "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
           "card_index": 0,
-          "card": "NVIDIA GeForce RTX 2060",
+          "card": "all the cards (pooled lane, port 11450)",
           "context": 32768,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "main model on the 2060; the Coding lane (qwen3.5:4b helper) starts on demand on 2080 SUPER #2 (card 2, PCIe 3.0 x4 M.2 adapter)"
+          "note": "qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane (port 11450) across ALL the cards: it is too big for one card, so applying this preset pauses the other lanes' models, starts that lane, and stops it again when another preset is applied"
         },
         "agentic_vision": {
           "preset": "agentic_vision",
@@ -673,7 +677,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2080 SUPER #2 (card 2): Agentic+Vision, qwen3.5:9b with images"
+          "note": "the headless 2080 SUPER (not installed yet): Agentic+Vision, qwen3.5:9b with images"
         },
         "fast": {
           "preset": "fast",
@@ -684,7 +688,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3.5:4b"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:07:00.0); monitor not reported by this PC: display + Fast/Live lane, qwen3.5:4b"
         },
         "reflect": {
           "preset": "reflect",
@@ -695,7 +699,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2060 12 GB (card 0): Reflective Coach, qwen3.5:9b, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Reflective Coach, qwen3.5:9b, 196,608 window"
         },
         "pictures": {
           "preset": "pictures",
@@ -706,7 +710,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2060 12 GB (card 0): Pictures & Screens, qwen3.5:9b with images, 32,768 window"
+          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Pictures & Screens, qwen3.5:9b with images, 32,768 window"
         },
         "documents": {
           "preset": "documents",
@@ -717,7 +721,7 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2060 12 GB (card 0): Documents & Notes, qwen3.5:9b, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Documents & Notes, qwen3.5:9b, 196,608 window"
         },
         "browser": {
           "preset": "browser",
@@ -728,32 +732,33 @@
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "2060 12 GB (card 0): Browser & Forms, qwen3.5:9b, 196,608 window"
+          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Browser & Forms, qwen3.5:9b, 196,608 window"
         }
       }
     },
     "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested",
     "three_gpu_plan": {
       "confirmed": true,
-      "layout": "lane per GPU, never one model split across three cards",
+      "layout": "everyday presets keep one lane per GPU (the everyday lane, the monitor card's lane and the headless card's lane); only on-demand heavy Coding pools the cards on port 11450",
       "cards": [
         {
-          "role": "main chat / everyday",
-          "card": "RTX 2060 12 GB",
+          "role": "everyday lane: main chat / everyday, 196,608 tokens",
+          "card": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB",
           "context": 196608
         },
         {
-          "role": "display + Fast/Live lane",
-          "card": "RTX 2080 SUPER #1",
+          "role": "monitor card's lane: display + Fast/Live, 16,384 tokens",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:07:00.0); monitor not reported by this PC",
           "context": 16384
         },
         {
-          "role": "Agentic+Vision and Coding lane (on demand)",
-          "card": "RTX 2080 SUPER #2",
+          "role": "headless card's lane: Agentic+Vision, 16,384 tokens",
+          "card": "the headless 2080 SUPER (not installed yet)",
           "context": 16384
         }
       ],
-      "link_note": "2080 SUPER #2 likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane; each lane keeps its own model.",
+      "heavy_pooled": "on demand, the Coding preset pauses those three lanes and loads qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane on port 11450 across all the cards. It is too big for one card, so this is the ONE case where a model is split across cards; every other preset keeps one lane per GPU.",
+      "link_note": "the third card likely sits on the B550 chipset through an M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading time, not a lane; each lane keeps its own model.",
       "future_not_a_preset": "Qwen3.8-27B pooled to 28 GB across cards is a future 'max quality' experiment only; it is not a preset and no figure is claimed until it is measured."
     }
   }

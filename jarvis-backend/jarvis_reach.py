@@ -619,11 +619,12 @@ def _tool_row(id_: str, name: str, tool: str, ctx: Ctx, *, configured: bool,
 def _tool_switchable(tool: str) -> bool:
     """Can this tool be offered to the model from an app at all?
 
-    Since the 2026-10-31 tiered ruling (Gemini): Tier A and Tier B tools switch
-    on from Settings, What asks first (ONE PC-only card + Windows Hello each);
-    Tier C (raw shell/computer/browser, reading one web page, connecting an
-    account, REA) and the tools this slice leaves alone stay settings-file
-    choices. `tool` is the TOOL's name ("email_check"), not a row id."""
+    Since the owner's decision of 2026-11-04 (which replaced the ON half of
+    the 2026-10-31 tiered ruling): YES for every tool the AI model can be
+    offered except the three whose own switch decides them - run_data_script
+    (Settings, Data sandbox) and the two conversation web-search tools (they
+    ride with Web search). `tool` is the TOOL's name ("email_check"), not a
+    row id."""
     try:
         import jarvis_asks_first
         return tool in jarvis_asks_first.SWITCHABLE_TOOL_NAMES
@@ -631,59 +632,28 @@ def _tool_switchable(tool: str) -> bool:
         return False
 
 
-#: What each tool that is not switched on from an app CAN DO - the reason it
-#: stays a deliberate step in the settings file. Plain words, for the owner.
-_CAN_DO = {
-    "send_email": "send email from your account",
-    "draft_email": "save drafts into your mailbox",
-    "tidy_inbox": "change your mailbox (archive, star, move to Trash)",
-    "home_control": "change things in your home, such as lights and locks",
-    "github_search": "send search words to GitHub",
-    # The on-demand GitHub tools (2026-11-03). Each line is what the tool can
-    # do, so the "off" row on the page says why it is a deliberate step.
-    "github_list": "read your repositories, pull requests, issues and CI runs from GitHub",
-    "github_read_file": "read one file in a GitHub repository",
-    "github_ci_status": "read how CI went on GitHub",
-    "github_comment": "post a comment on GitHub in your name",
-    "github_open_issue": "open a GitHub issue in your name",
-    "github_rerun_workflow": "start a GitHub workflow run again",
-    "browser_control": "open web pages and click and type in them",
-    "web_search": "send search words to the internet",
-    "control_computer": "click and type in other programs on this PC",
-    "control_phone": "tap and type on your phone",
-    "shell_exec": "run commands on this PC",
-    "append_obsidian_daily": "write into your notes",
-    "append_logseq_journal": "write into your notes",
-    "create_joplin_note": "write into your notes",
-}
-
-
 def _only_in_file(tool: str) -> str:
-    """The plain sentence for a tool that is NOT offered in-app by this slice.
+    """The plain sentence for a tool with no ON switch in the app.
 
-    The 2026-10-31 tiered ruling: Tier C (raw shell/computer/browser, reading
-    one web page, connecting an account, REA) and the nine tools this slice
-    leaves alone stay deliberate settings-file choices; the page says which and
-    why, rather than implying an app switch exists.
+    Since 2026-11-04 that is only: a tool whose own switch decides it (the
+    data sandbox, the two web-search grant tools - and their own sentence says
+    which switch), or a name this PC does not know at all (adding it to the
+    file would offer nothing). It is also the fallback when
+    `jarvis_asks_first` cannot be imported at all - then it says the PC cannot
+    tell which switches exist, rather than naming a file-only rule that no
+    longer exists.
     """
-    what = _CAN_DO.get(tool, "act for you")
     try:
         import jarvis_asks_first as AF
-        raw = tool in tuple(getattr(AF, "TIER_C", ()) or ())
-        unlisted = tool in tuple(getattr(AF, "TIER_UNLISTED", ()) or ())
     except Exception:                       # noqa: BLE001 - module absent
-        raw, unlisted = False, False
-    if raw:
-        why = ("raw shell, computer and browser control, reading one web page, "
-               "connecting an account and REA stay a deliberate settings-file "
-               "choice; REA also needs its own [rea] enabled = true")
-    elif unlisted:
-        why = "this slice does not offer it in-app"
-    else:
-        why = "it is not offered from inside the app by this slice"
-    return (f"It is not switched on from the app: {why}. It can {what}. Add "
-            f"\"{tool}\" to the [tools] enabled list in the settings file on this PC "
-            f"(jarvis-framework.toml) if you want the model offered it.")
+        return ("It is not switched on from the app, and this PC's Jarvis cannot say "
+                "which tools an app can switch - run apply-patches.ps1 on the PC.")
+    note = AF.no_switch_note(tool)
+    if note:
+        return note
+    return (f"It is not a tool this PC's Jarvis knows, so adding \"{tool}\" to the "
+            f"[tools] enabled list in the settings file on this PC "
+            f"(jarvis-framework.toml) would not offer anything.")
 
 
 def _enable_line(tool: str) -> str:
