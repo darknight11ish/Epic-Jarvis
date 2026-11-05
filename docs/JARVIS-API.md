@@ -26378,9 +26378,14 @@ boolean: `true` means that action asks first today (its tier in
 accepted run, for a re-run's prefill and for a first-run offer to show once.
 
 `version` is the question-set version (`2` today), and `completed_version` is
-the one the owner last finished or accepted (`0` when never, `1` for a file
-completed before the new questions - so the first launch after deploy offers
-the new ones once, instead of claiming the old file is current). `runs` is how
+the one the owner last finished - every question answered - or explicitly kept
+with "Keep current settings" (`0` when never, `1` for a file completed before
+the new questions, so the first launch after deploy offers the new ones once
+instead of claiming the old file is current). **A partial apply does not move
+it** (DEF-043, 2026-11-04): answering one question saves that answer and counts
+a run, but the offer, the HUD banner and the chat line stay until all 25 are
+answered, so `completed_version` and `answered_count` never disagree about the
+same read. `runs` is how
 many applies have been accepted. `dismissed_at` is when "Not now" was last
 pressed, or `null`. `in_progress` is where the desktop card is
 (`{section, question, started_at, draft_answers}`), or `{}` when it has not
@@ -26448,9 +26453,13 @@ order (tightening and cosmetic changes first, then the carded ONs), and:
   `not-changed` or `failed`, and a plain sentence;
 * only then are the owner's own answers and `completed_at` saved (atomically)
   in `<CONFIG_DIR>/setup.json`. **No chat, fact, voice, picture or file is
-  written** - the file holds choice ids and one timestamp. A damaged file is
-  reported by `GET /api/data-health` like every other settings JSON; this
-  module falls back to "no answers" rather than raising.
+  written** - the file holds choice ids and one timestamp. `completed_version`
+  becomes `QUIZ_VERSION` only when every question now has an answer; a partial
+  apply saves what it was given, counts the run and leaves completion where it
+  was, so the offer/banner/chat line continue (DEF-043, 2026-11-04). A partial
+  retake also keeps an older `completed_version` a file already had. A damaged
+  file is reported by `GET /api/data-health` like every other settings JSON;
+  this module falls back to "no answers" rather than raising.
 
 A body that is not a JSON object, or `answers` that is not an object, is 400 in
 plain words. **Two more refusals were added by the 2026-10-20 audit (Gemini
@@ -26587,6 +26596,19 @@ same card, and the row is absent, not greyed, once the quiz is done. Nothing
 steals focus: the Settings window opens only after the first-run walkthrough
 and when the owner presses "Finish now".
 
+**The prompt line follows the same switch** (DEF-044, 2026-11-04). On a local
+turn, `jarvis_agent.setup_state_note()` adds ONE system line - "Personalize
+Jarvis: the setup quiz is unfinished - N of 25 answered ... nothing in chat may
+apply them" - just before the newest user message, only while
+`completed_version` is behind `version` AND the `[notifications] setup` switch
+(`jarvis_notify_prefs.read()["setup"]`, the "Personalize Jarvis" switch on both
+apps' Notifications cards, on by default) is on. Turning the reminder off is
+the owner saying they do not want to be reminded, and a chat line is a
+reminder; turning it back on restores the line. A finished quiz costs no
+tokens, and the line is local-model only. It reads `setup.json` and the one
+notification value - it never calls `apply()`, never raises a card, and never
+touches a setting.
+
 **Phone: the same questions, read-only.** `net/SetupQuestionnaire.kt` and
 `ui/screens/SetupQuestionnairePlate.kt`, on Settings. It reads
 `GET /api/setup`, prefills the last accepted answers and draws the same 25
@@ -26644,13 +26666,19 @@ no-PC rule: the question set is 25 in seven sections with the 14 existing ids
 unchanged and in their order; every new `choice`/`number` change names a real
 Settings row and one of its own Option ids; a partial retake keeps every
 earlier answer, and an old three-key file reads as version 1 with
-`completed_version` 1; `progress()` writes only `in_progress` and preserves
+`completed_version` 1; a partial apply saves its answer and counts its run but
+does NOT move `completed_version` (the offer, banner and chat line stay), while
+an apply with all 25 answered does (DEF-043); `progress()` writes only
+`in_progress` and preserves
 every other key, refuses a non-object and a body with nothing to record, cleans
 a bogus draft answer away, and is refused with 403 from another device; the
 progress route keeps the origin/token order and a bad body is 400;
 `{"keep_current": true}` sets `completed_version` without touching an answer or
-calling `apply()`; and the module still imports no model lane, switches no
-model, and `_run_setup_quiz` carries no `confirm`.
+calling `apply()`; `setup_state_note()` adds its one line only while the quiz is
+unfinished AND the "Personalize Jarvis" notification switch is on, and with the
+switch off the turn gets the plain messages back (DEF-044); and the module still
+imports no model lane, switches no model, and `_run_setup_quiz` carries no
+`confirm`.
 
 typed text, and the patch's own pins (two routes, harness position, no
 install-block line, `_stack.py`'s RATCHET unchanged).

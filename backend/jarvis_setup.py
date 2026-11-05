@@ -18,7 +18,8 @@ is CARDLESS and GATELESS by design: it stores the owner's own Option ids and
 the section/question they are on, so it calls no setter, raises no card, does
 not read the taint latch, and can never apply anything. `apply()` still merges
 its answers into the saved ones, so a retake of one question no longer wipes
-the answers it did not ask about.
+the answers it did not ask about; it marks the set finished only when every
+question has an answer (DEF-043, 2026-11-04).
 
 WHAT THIS IS, AND THE ONE THING IT MUST NEVER BECOME. The owner asked for a
 first-run questionnaire (their words, 2026-10-20): "there should be a setup
@@ -1966,9 +1967,15 @@ def apply(answers, confirm: bool = False, *, peer=None, local=None,
     passes none of them.
 
     On the accepted answer the answers are MERGED into the ones already saved
-    (submitted wins), `completed_version` becomes `QUIZ_VERSION` - a partial
-    retake marks the set complete because the owner has seen the new
-    questions by then - `runs` gains one, and `in_progress` is cleared.
+    (submitted wins), `runs` gains one, and `in_progress` is cleared.
+    `completed_version` becomes `QUIZ_VERSION` ONLY when every question now has
+    an answer - the module's own `answered_count()` against `len(QUESTIONS)`.
+    A partial apply saves what it was given and leaves completion where it was
+    (DEF-043, 2026-11-04): before this, one answered question marked the whole
+    quiz finished, so the offer, the HUD banner and the chat line all stopped
+    while the count still said "1 of 25". A partial retake of a file that
+    already completed an OLDER version keeps that version - a run that answers
+    less than everything is not a claim that a newer set is done.
     """
     if confirm is not True:
         return {"ok": False, "confirmed": False,
@@ -2056,8 +2063,18 @@ def apply(answers, confirm: bool = False, *, peer=None, local=None,
     # changed (`test_setup.py` pins that).
     merged = dict(saved["answers"])
     merged.update(_clean_answers(answers))
+    # FINISHED MEANS EVERY QUESTION HAS AN ANSWER, never "Apply was pressed"
+    # (DEF-043, 2026-11-04). `answered_count()` is the one number both apps and
+    # the HUD read, so completion is defined by it rather than by a second
+    # count here: `{"answers": merged}` is the document this save is about to
+    # write (with `in_progress` cleared below), and a question id no longer in
+    # the quiz does not count. A partial apply keeps whatever version the file
+    # had already completed; it never downgrades a legitimate older run, and on
+    # a fresh file it stays 0, so the offer/banner/chat line continue.
+    complete = answered_count({"answers": merged}) >= len(QUESTIONS)
     doc = {"version": SCHEMA_VERSION,
-           "completed_version": QUIZ_VERSION,
+           "completed_version": (QUIZ_VERSION if complete
+                                 else int(saved.get("completed_version") or 0)),
            "runs": int(saved.get("runs") or 0) + 1,
            "dismissed_at": saved.get("dismissed_at"),
            "in_progress": {},
@@ -2153,7 +2170,8 @@ def state(*, readers=None) -> dict:
 
     Wave B (2026-11-03) adds the versioning the first-open offer and the
     "show only new/unanswered" filter read: the question-set `version`, the
-    `completed_version` the owner last finished or accepted, `runs`,
+    `completed_version` the owner last finished (every question answered) or
+    explicitly kept with `{"keep_current": true}`, `runs`,
     `dismissed_at`, the card's `in_progress` place and `answered_count`. Each
     question carries its `section` and its own `version`; `sections` is the
     seven (id, title) pairs in card order, so neither app types them again.
