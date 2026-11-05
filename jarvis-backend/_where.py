@@ -1527,8 +1527,19 @@ SHIPPED = (
     "jarvis_watch_policy.py",
     "jarvis_watch_ci.py",
     "jarvis_outbox.py",
-
-
+    # Per-source independence evidence (jarvis_source_independence.py,
+    # 2026-11-04; the owner's clickable-card answer to "filter out products
+    # that have been sponsored"): ONE supplied page -> disclosure wording,
+    # affiliate and tracking links, urgency wording, a closed per-source
+    # verdict with its evidence, and a plain "what could not be checked"
+    # list. The link and urgency patterns are a Python port of
+    # dakidarts/dark-radar (MIT, credited in THIRD-PARTY-NOTICES.txt); no
+    # JavaScript is vendored. PURE - re and html.parser only; no network, no
+    # browser, no file, no subprocess, no route, no tool and no app surface.
+    # Nothing imports it yet, so a backend without it runs exactly as
+    # before. It sits before the last entry on purpose: the zero-jargon
+    # checker never scans an entry with no trailing comma.
+    "jarvis_source_independence.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate
