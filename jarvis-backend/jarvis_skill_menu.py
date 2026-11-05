@@ -57,9 +57,17 @@ WHAT EACH DOOR DOES, AND WHAT IT CANNOT DO
     attempt. Fixed fields: the `name:` in the frontmatter still has to match
     the folder name, so an edit cannot rename a skill; that would be a new
     install plus a removal.
-  * **Remove** is not here. It already exists (`POST /api/skills/decide` with
-    `{"remove": true}` -> `jarvis_skills.uninstall`), with its "are you sure?"
-    in both apps, and the menu calls that same route.
+  * **Remove of an INSTALLED skill is not here.** It already exists
+    (`POST /api/skills/decide` with `{"remove": true}` ->
+    `jarvis_skills.uninstall`), with its "are you sure?" in both apps, and the
+    menu calls that same route. The one thing that route cannot reach is a
+    skill THIS menu parked in `skills-off\\`: `uninstall()` resolves a name
+    only under the skills folder (`_safe_dest`), so a skill the owner switched
+    off could be switched back on and never got rid of at all. `POST
+    /api/skills/state` with `{"remove": true}` deletes that parked copy - the
+    menu's own bookkeeping, ONE name per request, no card (it is already out of
+    the load path), and it refuses an installed name outright so there are
+    never two doors to the same folder.
 
 WHAT A HERMES SKILL REALLY GETS, SAID ON THE CARD AND ON THE ROW
 
@@ -95,8 +103,8 @@ WHAT THIS DOES NOT DO
   files: no symlink, no absolute path, no `..`, no drive letter, and the same
   file-count and total-size caps `parse_skill` applies.
 - It does not read an email, a document, a note, a web page or tool output.
-- It edits no module and no config; the only files it writes are the skill
-  folders, `skills-off/`, the throwaway unpack folder, and the index row
+- It edits no module and no config; the only files it writes or deletes are the
+  skill folders, `skills-off/`, the throwaway unpack folder, and the index row
   `jarvis_skills.py` already owns.
 
 Its routes come from its own `install()`, called by the
@@ -595,8 +603,8 @@ def menu() -> dict:
         },
         "sentence": INERT_SENTENCE,
         "note": ("Nothing here installs, turns a skill on or edits one without "
-                 "ONE approval card you answer on this PC. Turning one off and "
-                 "removing one are immediate."),
+                 "ONE approval card you answer on this PC. Turning one off, and "
+                 "removing one - installed or turned off - are immediate."),
     }
 
 
@@ -827,6 +835,53 @@ def import_scan() -> tuple:
 #   Turning one off, and back on
 # --------------------------------------------------------------------------
 
+def _discard_off(name: str) -> tuple:
+    """Delete ONE skill that is TURNED OFF, and only that.
+
+    `jarvis_skills.uninstall()` is the one removal for an INSTALLED skill and
+    stays that way: it resolves a name only under the skills folder, which is
+    deliberate. The effect was that a folder THIS module parked in
+    `skills-off\\` was beyond every removal door in either app - a turned-off
+    skill could be turned back on (one card) and never got rid of. This deletes
+    the copy this module parked, plus its own row in `skills-off\\.off.json`,
+    and nothing else.
+
+    No card: the folder is already out of the load path - nothing is offered
+    from it and `load()` cannot find it - so this only takes a capability away,
+    the same rule that makes turning one off immediate. ONE name per request:
+    there is no list form, and an installed name is refused rather than
+    removed.
+    """
+    root, off = skills_root(), off_root()
+    if root is None or off is None:
+        return 503, {"ok": False, "reason": _NO_SKILLS}
+    if (root / name / "SKILL.md").is_file():
+        return 409, {"ok": False, "reason": (
+            f"{name} is installed, not turned off. Remove it with Remove, "
+            f"which is the same question that has always removed a skill.")}
+    dest = off / name
+    if not (dest / "SKILL.md").is_file():
+        return 404, {"ok": False, "reason": f"no turned-off skill called {name}"}
+    _rmtree(dest)
+    if dest.exists():
+        return 503, {"ok": False, "reason": (
+            f"{name} could not be deleted - close anything that has one of its "
+            f"files open and try again")}
+    rows = _read_off()
+    rows.pop(name, None)
+    _write_off(rows)
+    # The pin belongs to a body that no longer exists anywhere. Leaving it
+    # would judge a later skill of the same name against a deleted one.
+    try:
+        import jarvis_content_risk as _cr
+        _cr.unpin("skill", name)
+    except Exception:
+        pass
+    return 200, {"ok": True, "name": name, "enabled": False, "removed": True,
+                 "reason": (f"{name} is deleted. Its folder is gone from this "
+                            f"PC, and there is no undo.")}
+
+
 def set_state(body: dict) -> tuple:
     """POST /api/skills/state. (status, payload).
 
@@ -838,6 +893,10 @@ def set_state(body: dict) -> tuple:
     ON runs the same scanner and the same ONE card as installing it, then
     deletes only the moved copy. A skill that has changed while it was off (or
     that was refused) does not come back on.
+
+    `{"remove": true}` deletes ONE skill that is already turned off - see
+    `_discard_off`. It is the only door to that parked copy, and it refuses an
+    installed name.
     """
     sk = _sk()
     if sk is None:
@@ -845,6 +904,12 @@ def set_state(body: dict) -> tuple:
     name = _clean_name(body.get("name"))
     if not name:
         return 400, {"ok": False, "reason": "need a skill name"}
+    if body.get("remove"):
+        # ONE request, ONE thing: "remove" and "on" are opposite questions.
+        if body.get("on"):
+            return 400, {"ok": False, "reason": (
+                "one request, one thing: send either remove or on, not both")}
+        return _discard_off(name)
     on = bool(body.get("on"))
     root, off = skills_root(), off_root()
     if root is None or off is None:

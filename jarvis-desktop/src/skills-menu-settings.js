@@ -4,7 +4,7 @@
  * `skills_menu.rs`, `backend/jarvis_skill_menu.py`,
  * `plugins/ready/skill-menu/`, JARVIS-API.md section 178).
  *
- * ONE Rust command (`skills_menu`) with nine actions, Settings only:
+ * ONE Rust command (`skills_menu`) with ten actions, Settings only:
  *  - read:        the list - every installed skill, every turned-off one, its
  *                 verdict and its `scripts/` sentence. A read, never held.
  *  - pick_folder / pick_zip: the Windows dialogs, and nothing else.
@@ -18,12 +18,21 @@
  *                 and its own ONE card - there is no "import all".
  *  - enable:      ONE card, then the skill is installed again from skills-off\.
  *  - disable:     at once, never held. Nothing is deleted.
+ *  - remove_off:  deletes ONE skill that is ALREADY turned off - the copy this
+ *                 menu parked in skills-off\. At once, never held: it is out of
+ *                 the load path already, so it only takes something away.
  *  - edit:        the same scanner and the same ONE card for a SKILL.md the
  *                 owner edited here. A block finding never reaches the card.
  *
- * Remove is NOT here: it already exists (POST /api/skills/decide with
- * {"remove": true}) and the Brain's own command does it, with its "are you
- * sure?". This card calls that same command, so there is one removal path.
+ * Remove of an INSTALLED skill is NOT here: it already exists
+ * (POST /api/skills/decide with {"remove": true}) and the Brain's own command
+ * does it, with its "are you sure?". This card calls that same command, so
+ * there is one removal path for an installed skill. The one thing that path
+ * cannot reach is the copy this menu itself parked in skills-off\ - the PC
+ * resolves an uninstall name only under the skills folder - so `remove_off`
+ * deletes that copy through the same state route that parked it, and the PC
+ * refuses an installed name there outright. Two objects, two doors, and no
+ * folder reachable from both.
  *
  * Nothing on this page downloads anything, browses a marketplace, or runs a
  * script inside a skill. The PC's words are shown as they arrive.
@@ -179,11 +188,19 @@ function offRow(skill) {
   li.append(node("span", "sc-gpu-name", `${skill.name} - turned off`));
   line(li, skill.description);
   line(li, skill.inert);
+  const buttons = node("div", "row");
   const on = node("button", "btn small", "Turn on…");
   on.type = "button";
   on.disabled = busy;
   on.addEventListener("click", () => turn(skill.name, true));
-  li.append(on);
+  // Removing a turned-off skill is a different question from turning it back
+  // on, and the PC has a different door for it (see `removeOff`).
+  const rm = node("button", "btn small", "Remove…");
+  rm.type = "button";
+  rm.disabled = busy;
+  rm.addEventListener("click", () => removeOff(skill.name));
+  buttons.append(on, rm);
+  li.append(buttons);
   return li;
 }
 
@@ -360,6 +377,23 @@ async function remove(name) {
       return { ok: false, reason: problemWords(error) };
     }
   });
+  if (!out) return;
+  const words = answerWords(out);
+  say(words || "Done.", out.ok === false ? "bad" : "ok");
+  if (words) announce(words);
+  await load();
+}
+
+/** A TURNED-OFF skill only: the copy this menu parked in skills-off\. */
+async function removeOff(name) {
+  const sure = globalThis.confirm
+    ? globalThis.confirm(
+        `Remove the turned-off skill ${name}? Its folder is deleted from this PC, ` +
+          "and there is no undo.",
+      )
+    : true;
+  if (!sure) return;
+  const out = await working("Removing…", () => ask("remove_off", { name }));
   if (!out) return;
   const words = answerWords(out);
   say(words || "Done.", out.ok === false ? "bad" : "ok");

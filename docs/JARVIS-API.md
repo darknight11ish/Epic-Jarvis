@@ -31810,13 +31810,26 @@ words and is a patch of its own - `backend/skill-install-note.patch`:
 | `GET /api/skills/menu?name=<skill>` | ONE skill, plus its own `SKILL.md` text so the owner can read and edit it | none |
 | `POST /api/skills/install` | `{"path"}` a folder or `.zip` on this PC, or `{"hermes"}` a folder the scan named; `"dry_run": true` stops after the scanner; `"accept_warnings"` for a warning-level skill | **ONE** `modify_own_code` card |
 | `POST /api/skills/import/scan` | a READ-ONLY scan of `%USERPROFILE%\.hermes\skills`: every `SKILL.md`, its verdict, its `scripts/` count. Copies, moves and installs nothing | none |
-| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again | on: **ONE**; off: none |
+| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again. `{"name", "remove": true}` deletes ONE skill that is ALREADY turned off - the parked copy `uninstall` cannot see - and refuses an installed name | on: **ONE**; off and remove: none |
 | `POST /api/skills/edit` | `{"name", "text"}`: the new `SKILL.md`, scanned and installed through the same path | **ONE** |
 
 `GET /api/skills` (the list) and `POST /api/skills/decide` (removal, with its
 "are you sure?") are unchanged and still the only routes both apps call: the
 Settings menu's **Remove** calls the same `brain_remove_skill` command the
 Brain already had, so there is one removal path, not two.
+
+**Two objects, two doors, and never two doors to one folder** (2026-11-05).
+`POST /api/skills/decide` remains the one removal for an INSTALLED skill.
+What it could never reach is the copy this menu itself parked in `skills-off\`:
+`jarvis_skills.uninstall` resolves a name only under the skills folder, so a
+skill the owner switched off could be switched back on (one card) and never got
+rid of - in either app, because the phone's Remove goes through the same route.
+`{"name": "…", "remove": true}` on the state route deletes that one parked
+folder and its row in `skills-off\.off.json`, with **no card**: it is already
+out of the load path, so it only takes a capability away, the same rule that
+makes turning one off immediate. It refuses an installed name outright (with the
+sentence saying to use Remove), refuses `remove` and `on` in the same request,
+and takes ONE name - there is no list form anywhere.
 
 ### 178.3 The safety model, in the order it happens
 
@@ -31893,6 +31906,11 @@ which is the point of the sentence above, not a bug to work around.
   had (`GET /api/skills` and Remove with its "are you sure?"). The five routes
   are classified `deliberate` in `tools/check_parity.py` and the reason is in
   `docs/ARCHITECTURE.md` §8.
+- **No phone delete of a TURNED-OFF skill.** That copy is a folder the PC's
+  menu parked in `skills-off\`; the phone's list never shows it, and it gains
+  no control for it - the same one-sidedness, recorded in
+  `docs/ARCHITECTURE.md` §8. The phone therefore removes an installed skill
+  and nothing else.
 - **No renaming.** An edit cannot change a skill's name: the frontmatter
   `name:` must still match the folder, which is what stops a skill from being
   addressed by a name it does not own. Renaming is a new install plus a
