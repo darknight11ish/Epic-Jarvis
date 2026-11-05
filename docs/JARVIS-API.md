@@ -6415,8 +6415,9 @@ the times stay, so a timer still counts down.
 - **A routine (21.15) has its own gaps, all of them small and all of them
   stated there**: the Windows toast names the part only in words (it has no
   per-part buttons), the phone shows a part only while connected, and a part
-  whose question is never answered keeps its routine waiting instead of
-  silently moving on.
+  whose question is never answered is never announced as lost — once every
+  part has fired, the next occurrence starts without it, and an untimed part
+  that never fired keeps the routine silent until it is answered.
 
 ### 21.10 "Also on my phone" (added 2026-09-26, the phone only)
 
@@ -7450,10 +7451,13 @@ later. The Windows toast names the part in words and carries no per-part buttons
 this build — the HUD's row and the phone's notification are where a part is
 answered. A part with three buttons leaves no Stop on the Android notification,
 which is already true of an `ask` reminder (21.14). A part whose question is never
-answered keeps its routine waiting rather than guessing that it was done: the
-routine's own Done on the last part is what ends it. And a routine whose parts
-never get answered does not roll on to the next occurrence — say Done on it, or
-delete it.
+answered is not guessed to have been done: the routine's own Done on the last part
+is what ends it. A part left unanswered is never announced as lost, though. Once
+every part has fired, the next occurrence arrives and re-seeds, announcing its part
+1, and the parts left unanswered are dropped without a word. If an untimed part
+never fired because the part before it was never answered, nothing re-seeds: the
+routine keeps the next occurrence as its wake time, announces nothing, and waits
+until that part is answered or the routine is deleted.
 
 **Back-compat and rollback.** A job with no parts carries **no new key at all**, in
 the payload or in the event, and `status()` gains the additive marker `"steps":
