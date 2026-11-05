@@ -2223,6 +2223,7 @@ $SHIPPED = @(
     'jarvis_price_sources.py'    # price radar F2: local SearXNG price mentions + dual-persona steering probe (no route yet)
     'jarvis_voices.py'           # voices.patch: custom voices (ZipVoice on the processor); jarvis_speech.say() asks it first
     'jarvis_f5_worker.py'        # the better voice (F5-TTS) as its own program on the second card; jarvis_voices.py starts it
+    'jarvis_voicestudio.py'      # the VoiceStudio sidecar CLIENT: HTTP to 127.0.0.1:11439 only, stdlib plus this repository's proxy-free opener. No AGPL code, no route, no import of its program, no weights; OFF by default ([voicestudio] enabled = false) and nothing calls it yet - the speaking voice is the next slice. docs/VOICESTUDIO.md
     'jarvis_kokoro.py'           # which Kokoro voice pack is installed (v0.19 or v1.0), its voices BY NAME, the pinned v1.0 download; jarvis_voices.py imports it, no patch. Upgrade: backend\README.md "Upgrade the voice pack to Kokoro v1.0"
     'jarvis_bakeoff.py'          # the voice upgrades' bake-off: the owner runs it by hand (py -3 jarvis_bakeoff.py); nothing imports it
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card

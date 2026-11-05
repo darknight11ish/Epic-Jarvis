@@ -2455,3 +2455,34 @@ enabled = false
 # config folder, and Jarvis never sees or types the password.
 [product_check]
 enabled = false
+
+# ------------------------------------------------------------------------
+# VOICESTUDIO - a separate voice program on this PC (owner-approved 2026-11-04)
+#
+# OFF by default, and it stays a SEPARATE program: VoiceStudio is AGPL-3.0, so
+# none of its code is in this repository and none of it is imported. Jarvis
+# sends it a sentence over 127.0.0.1:11439 and gets audio back - the clean
+# arrangement in docs/VOICESTUDIO.md, where nothing is conveyed and nothing
+# derived, and no model weights are shipped or fetched.
+#
+# It is off for a MEASURED reason, not caution: on this PC it needs about
+# 1.95 GB of the 8 GB card, and beside Jarvis's own two resident models the box
+# had only 382 MiB free at its peak - the driver paged ~1.9 GB into system RAM.
+# The verdict is CONTENTION, so VoiceStudio is DEMAND-ONLY: started when it is
+# needed (tools\voicestudio_sidecar.ps1 -Start), released when it is done, and
+# never resident beside Jarvis.
+#
+# Turning this on is a hand edit for now: there is no screen and no route in
+# this slice (the same first-slice position [vault_organizer] took above). The
+# read-only questions still answer while it is false - asking is not using -
+# and jarvis_speech.py does not call this module yet, so switching it on alone
+# changes nothing you would hear. The next slice wires the speaking voice, adds
+# the one-card Settings switch, and only then does ON mean "Jarvis may speak
+# with it".
+#
+# The weights are not covered by this switch and are never shipped: two model
+# licences (k2-fsa/OmniVoice, CC-BY-NC; eustlb/higgs-audio-v2-tokenizer) are
+# accepted once by the OWNER in VoiceStudio's own terms, or every speech
+# request answers 403 (docs/VOICESTUDIO.md, "The first run").
+[voicestudio]
+enabled = false

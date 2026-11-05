@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 176,
+  "feature_count": 178,
   "features": [
     {
       "id": "typing",
@@ -9605,6 +9605,57 @@
         "reason_code": "not-a-setting",
         "owner": "none-needed",
         "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "voicestudio",
+      "name": "A second voice program (VoiceStudio)",
+      "group": "The PC itself",
+      "surface": "desktop",
+      "where": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on A second voice program (VoiceStudio)",
+        "turn_off": "turn off A second voice program (VoiceStudio)",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "search": [
+          "A second voice program (VoiceStudio)"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "search": [
+          "a second voice program (voicestudio)"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on A second voice program (VoiceStudio)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "The VoiceStudio client has no typed command and no Settings control yet: the speaking-voice wiring and its one-card switch are the named next slice.",
         "settings_gap": null,
         "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
       },

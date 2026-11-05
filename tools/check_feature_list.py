@@ -361,6 +361,10 @@ LESSON_EXEMPT = {
     "media-read": "it is one sentence in a chat - name a file and read the "
                   "answer; the module docstring and the tool description are the lesson",
     "quiz": "the deck screen explains itself; it is revision, not a Jarvis feature",
+    # The VoiceStudio client ships before its surface: the speaking-voice
+    # wiring and the one-card Settings switch are the next slice, so there
+    # is nothing to teach yet (docs/VOICESTUDIO.md).
+    "voicestudio": "the client ships before the voice wiring and its Settings switch, so there is nothing to teach yet",
     "decks": "the deck screen explains itself; a deck is yours, not Jarvis's",
     "pc-help": "five answers on one card; the card is the lesson",
     "web-search": "a switch in Settings and a sentence saying search leaves the PC",
