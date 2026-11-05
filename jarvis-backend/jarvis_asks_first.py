@@ -445,6 +445,15 @@ TIER_EXTRA = (
     "conversation_find", "conversation_open",
     "phone_apps", "plugin_list", "plugin_switch",
     "refresh_abilities", "self_portrait", "setup_quiz",
+    # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
+    # 2026-11-03: "Read + actions"). They joined this list when the GitHub
+    # tools branch met the owner's 2026-11-04 decision - EVERY tool the model
+    # can be offered is switchable from an app except the three NOT_A_SWITCH
+    # names - so leaving them nowhere would have been the one hole in that
+    # rule. Each one still raises its own card, and the ACTION they share
+    # (github_inspect for the three reads) stays the "ask" tier.
+    "github_list", "github_read_file", "github_ci_status",
+    "github_comment", "github_open_issue", "github_rerun_workflow",
 )
 
 #: Known tools that are deliberately NOT switches of their own on this page.
@@ -458,7 +467,8 @@ TIER_EXTRA = (
 NOT_A_SWITCH = ("run_data_script",) + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: three above. 48 at 2026-11-04.
+#: three above. 54 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
+#: GitHub tools the tool list had grown without a row of their own).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)

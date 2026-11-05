@@ -70,9 +70,10 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 48 at 2026-11-04. A DIFFERENT thing from SWITCHABLE (above): that is whether
- * an offered tool asks first; this is whether it is offered at all
- * ([tools].enabled).
+ * 54 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
+ * that landed with the GitHub tools branch). A DIFFERENT thing from SWITCHABLE
+ * (above): that is whether an offered tool asks first; this is whether it is
+ * offered at all ([tools].enabled).
  *
  * Until 2026-11-04 this was "the Tier A + Tier B tools only" (the 2026-10-31
  * tiered ruling). The owner reversed the ON half: "few restrictions on its
@@ -102,6 +103,9 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "refresh_abilities", "self_portrait", "setup_quiz",
+  // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
+  "github_list", "github_read_file", "github_ci_status",
+  "github_comment", "github_open_issue", "github_rerun_workflow",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =
