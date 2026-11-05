@@ -739,6 +739,14 @@ NOT_BACKED_UP = {
     # strong: the honest reason is that a restore would only put yesterday's
     # prices back in front of today's question.
     "parking-cache.db": "public parking prices and the place names looked up, kept a day; re-fetched on the next lookup",
+    # key4.db is NOT a Jarvis store and nothing here ever opens it: it is
+    # Firefox's own key database, named in jarvis_rea.py's
+    # `_CREDENTIAL_NAMES` as a credential store REA refuses to read, attach to
+    # or patch. It is written down here because the coverage check in
+    # test_backup.py scans every quoted `.db` name in a backend module and must
+    # be able to see that the name was considered: backing up somebody else's
+    # browser key store is exactly what this archive must never do (2026-11-05).
+    "key4.db": "not a Jarvis store - Firefox's own key database, named only as a credential target REA refuses",
 }
 
 #: Non-SQLite stores under the settings folder that are deliberately NOT

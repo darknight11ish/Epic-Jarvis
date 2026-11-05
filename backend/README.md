@@ -272,7 +272,7 @@ no entry in `jarvis_gate._TOOL_ACTIONS`:
 | `send_file_to_phone` | makes ONE file from the owner's listed folders fetchable by the phone |
 | `protect_from_jarvis` | adds a folder, file or program to "Protected from Jarvis" |
 | `connect_account` | raises the connect-a-calendar-or-GitHub card |
-| `rea_investigate` | starts REA and inspects a program, app or binary |
+| `rea_investigate` | starts REA, then debugs, inspects, patches or instruments a program, app, phone or local service on this PC (the full toolbox since 2026-11-04) |
 
 None of the four carries a `gate_lookup_name` of its own, so the name handed to
 `action_for_tool()` is the tool's own name - and that name was not a key of the
@@ -320,7 +320,9 @@ written to, and none of these four needed a new name.
   `change_own_config` already carries the `"ask"` tier and the card words, so
   nothing is invented.
 - **`"rea_investigate": "run_shell_on_host"`** - `jarvis_rea.py` starts a local
-  MCP program and then puts read-only questions to it, and
+  MCP program and then puts questions and commands to it (since 2026-11-04
+  those include debugger and Frida sessions, live capture, export and the
+  install itself, not only reads), and
   `jarvis_protection.py` names it beside `shell_exec` and `run_data_script` as
   the things that "run programs or scripts". `run_shell_on_host` ships as
   `"ask"` and its own risk row is the worst case this gate already uses for a
@@ -20905,3 +20907,106 @@ person: the desktop and phone suites prove the words and the enabled action,
 and the backend suites prove the order, the refusals and every restore against
 fakes. `start_pooled_lane`'s real run on this PC is the measurement above, not
 a unit test.
+
+## The full REA toolbox: debug, patch and instrument, one card at a time (2026-11-04)
+
+**The owner's decision.** Asked how far reverse engineering should go, he chose
+"Also install the full REA toolbox" - *"debug and patch, not just read: attach a
+debugger, watch a running program, use Frida and patch files - the real
+toolkit, all local"* - plus REA's own package installed by Jarvis and every one
+of its actions reachable through the ONE `rea_investigate` tool. The 2026-10-20
+static-only slice (`docs/JARVIS-API.md` section 148) is superseded.
+
+**What the code does now.** `backend/jarvis_rea.py`'s `ACTIONS` table went from 8
+actions to **200**: the seven the first slice shipped (same names, so the skill
+and the API doc keep working), `doctor`, `install`, and **one action per
+remaining REA tool**, named after the tool. Everything else is unchanged in
+shape: one tool offered to the model, one action per call, one approval card per
+call, the result sanitized and latched local.
+
+**Every name in that table was measured, not guessed.** The pinned
+`rea-agents@6.7.0` was installed into a scratch folder on this PC on 2026-11-04
+and its own MCP server asked for `tools/list`: **207 tools**, and the server's
+own `binary_session` identity reports `mcp_tools: 207` with
+`tools_sha256: af39310c...` - exactly the catalog this module pins. The npm
+tarball's sha512 was re-measured on this PC and matches `PINNED_INTEGRITY`. The
+seven names the old module's `_DENY_EXACT` carried that no REA tool answers to
+(including `debug_with_gdb`) are gone: the real ones are `gdb_console`,
+`gdb_session_status`, `start_gdb_session` and `close_gdb_session`.
+
+**The refusals that are left, and the rule each serves.** ONE card per call
+(rule 4: `rea_investigate` is in `NEEDS_A_PERSON`, so even `doctor` and `install`
+ask). Everything local: a URL, `host:port`, network share or remote endpoint in
+any argument is refused unless it is loopback (rules 1 and 2). The child
+environment stays an allowlist, so no `HUD_TOKEN`, `JARVIS_TOKEN`, `*_KEY` or
+REA's own `REA_TOKEN` reaches it (rule 3). MIT stays MIT (rule 5). The only
+by-name refusal left is the six ADB device **mutators**, and it is not one of the
+five: phone changes already belong to `control_phone` / `[phone_apps]`, with
+their own card and allow-list, so REA keeps every ADB read and capture and none
+of those six.
+
+**It installs itself now.** The `install` action runs
+`npm install --prefix <config>/tools/rea rea-agents@6.7.0 --ignore-scripts
+--no-audit --no-fund` after its own card, then the static egress scan
+(`egress_report`: which remote hosts the package's own `dist/` names, and
+whether any is a known analytics or telemetry service) and `doctor`. It refuses
+to call the result ready if the package carries an `install`/`preinstall`/
+`postinstall` script or names a telemetry host, and it downloads nothing but the
+pinned tarball. **The four-point audit's point 3 did not exist in code before
+this** - the docstring named it and nothing performed it - so it is implemented
+here rather than "kept intact".
+
+**One honest gap in the catalogue itself.** REA 6.7.0 has no "apply this patch
+file" tool. A patch is applied with a debugger session's own commands
+(`cutter_command`, `rizin_debug_command`, `gdb_console`, `instrument_with_frida`)
+against the copy that was opened, so no action claims to patch a file when only
+the session's memory changed. GDB sessions are Linux-only in REA, so on this
+Windows PC those four actions refuse before the card and say why.
+
+**The owner's Q1 guardrails, now enforced in code (2026-11-04).** The ruling that
+approved the full toolbox named five guardrails. Two were already code (the
+local-only scan of every setting, and the pinned install); the other three were
+the recorded residual and are now enforced in `jarvis_rea.py` before the card:
+
+1. **A credential store is never a target.** `lsass`, `vaultcmd`, Credential
+   Manager's own folders and the browser login stores (`Login Data`,
+   `cookies.sqlite`, `logins.json`, `key4.db`) are refused by process name, by
+   file name and by any part of a path. A live action is scanned in every
+   setting (a command or an `argv` list can name the store); any other action is
+   scanned where a setting names a file or a program.
+2. **Nothing is written in place.** Rizin's `w` family and `oo+`/`ood`, GDB's
+   `set write on` / `restore` / `dump ...` and Frida's `Memory.write*` /
+   `File.write` are refused unless the command names a NEW `.patched` output in
+   a listed folder, or the session's own file is already such a copy. Windows,
+   Windows Defender and `python.exe`/`jarvis-desktop.exe`/`ollama.exe` are never
+   a patch target. An allowed write leaves a before/after SHA-256 receipt
+   (`write_receipts()`), so "the original is untouched" is measured.
+3. **Every live session has a deadline.** `duration_limit_sec` (60 by default,
+   300 at most) is the module's own setting: named on the card, never sent to
+   REA, and it caps the call's own timeout. A watch window longer than it is
+   refused. A session that outlives the deadline is detached with REA's own
+   close tool, or by terminating the helper when that is the only way - in a
+   `finally`, so a failed or timed-out call detaches too.
+
+What is still not enforced is written down in `docs/JARVIS-API.md` section 148:
+a rizin `>file` text dump is not analysed, a Frida script passed by path is
+scanned up to 200 KB, the write-form list is the ruling's named list (a write
+through an unlisted primitive, or a command that sources another script, is not
+detected - the card still shows the command itself), the deadline registry is
+swept at the next live call, and the receipt proves the original's bytes are
+unchanged rather than describing the diff.
+
+**The model-facing cost, measured.** The tool's schema is **1,953 tokens**
+(`jarvis_agent.estimate_tokens`), 1,799 of them the 200-name `action` enum. It
+costs nothing on any turn until BOTH `[rea] enabled` and `[tools].enabled` name
+it, which is why it joins `browser_control` and `control_phone` in
+`test_tool_text.py`'s `PER_TOOL_EXCEPT`. `jarvis_claims.READ_ONLY_TOOLS` lost
+`rea_investigate` in the same change: a tool that can patch, export and install
+is not a read.
+
+**Files.** `backend/jarvis_rea.py` (the table, the argument checks, the install
+and the egress scan), `backend/jarvis_agent.py` (the tool's words and schema,
+read from `jarvis_rea.ACTION_ORDER` so the two cannot drift), `backend/
+jarvis_claims.py`, `backend/jarvis_reach.py`, `backend/jarvis_feature_catalogue.py`,
+`skills/reverse-engineer-anything/SKILL.md`, `docs/JARVIS-API.md` section 148,
+`docs/ARCHITECTURE.md`. Tests: `backend/test_rea.py`.

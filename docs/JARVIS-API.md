@@ -26823,78 +26823,166 @@ model, and `_run_setup_quiz` carries no `confirm`.
 typed text, and the patch's own pins (two routes, harness position, no
 install-block line, `_stack.py`'s RATCHET unchanged).
 
-## 148. Reverse engineering with REA: one tool, one allow-list, no route (added 2026-10-20)
+## 148. Reverse engineering with REA: the full toolbox through one tool, one card per action (added 2026-10-20, expanded 2026-11-04)
 
-The owner asked for "reverse engineer anything" integration. The upstream is REA
-(`morluto/rea`, npm `rea-agents@6.7.0`, MIT) - a separate local program that inspects a file the
-owner names. It is **not** linked into Jarvis, no code is copied, and it is installed once by the
-owner at the pinned version. It ships **OFF**.
+The owner asked for "reverse engineer anything" integration on 2026-10-20, and on
+2026-11-04, asked how far it should go, chose **"Also install the full REA toolbox"**: *"debug
+and patch, not just read: attach a debugger, watch a running program, use Frida and patch files -
+the real toolkit, all local"*, plus REA's own package installed by Jarvis and all of its actions
+exposed through the one tool. The upstream is REA (`morluto/rea`, npm `rea-agents@6.7.0`, MIT) -
+a separate local program. It is **not** linked into Jarvis, no code is copied, and it ships
+**OFF**.
 
 **Why one tool and not 207.** REA's MCP server really serves **207 tools**. Measured from the
 real server on 2026-10-20: 723,936 bytes of input schemas and 92,270 bytes of descriptions -
 about **272,000 tokens** by `jarvis_agent.estimate_tokens`'s own rule, many times the 9B model's
-whole window. So `backend/jarvis_rea.py` exposes ONE tool, `rea_investigate`, with a fixed action
-list; the model never names a REA tool and never sees REA's schemas. The existing MCP bridge
-(`jarvis_mcp.py`) supplies the transport (a Windows Job Object, the stdio JSON-RPC reader, the
-caps) - this module does not write a second MCP client. The bridge's read-only-first rule would
-hide every REA tool anyway: only 2 of REA's 71 inspection-family tools claim `readOnlyHint`.
+whole window. So `backend/jarvis_rea.py` exposes ONE tool, `rea_investigate`, and the model never
+sees REA's schemas. The existing MCP bridge (`jarvis_mcp.py`) supplies the transport (a Windows
+Job Object, the stdio JSON-RPC reader, the caps) - this module does not write a second MCP
+client. The bridge's read-only-first rule would hide every REA tool anyway: only 2 of REA's 71
+inspection-family tools claim `readOnlyHint`.
 
 **Two switches, both off by default.** `[rea] enabled = false` in the template, and the tool must
 also be named in `[tools].enabled`. With either missing the tool costs no tokens and is not
-offered. The owner installs the package once, by hand (Jarvis never runs `npx` and never
-downloads):
+offered.
 
-    npm install --prefix "$env:USERPROFILE\.openjarvis\tools\rea" rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund
+**The one tool, and its 200 actions.** Arguments: `action`, `target` (a full path inside "Folders
+Jarvis may look in", when the action takes a file or folder), `arguments` (that action's own
+settings, by name), and for the two first-slice actions `query`/`what` and `format`. Actions:
 
-**The one tool.** Arguments: `action`, `target` (a full path inside "Folders Jarvis may look
-in"), and for the query action `query`/`what`; `format` for a saved capture. Actions:
+| category | what it covers (REA's own tool names, one action each) |
+|---|---|
+| ready / install | `doctor`, `install` |
+| the first slice | `inspect_javascript_app`, `inspect_binary`, `inspect_apk`, `inspect_capture`, `inspect_sqlite`, `open_native_binary`, `query_native_binary` |
+| static analysis | one action per REA tool: `inspect_pe_resources`, `analyze_swift_types`, `inspect_managed_artifact`, `inspect_wasm_artifact`, `inspect_go_binary`, `inspect_rust_binary`, `inspect_firmware_regions`, `inspect_packet_capture`, `decode_android_resources`, ... |
+| dynamic debugging | `start_gdb_session`, `close_gdb_session`, `gdb_console`, `gdb_session_status`, `start_rizin_debug_session`, `close_rizin_debug_session`, `rizin_debug_command`, `rizin_debug_session_status`, `execute_rizin_command`, `cutter_command`, `list_cutter_sessions` |
+| Frida | `start_frida_session`, `close_frida_session`, `load_frida_script`, `unload_frida_script`, `instrument_with_frida`, `resume_frida_session`, `frida_session_status`, `list_frida_devices`, `list_frida_processes` |
+| live runtime capture | `capture_process_scenario`, `capture_native_ui_scenario`, `capture_browser_scenario`, `capture_electron_scenario`, `capture_web_screenshot`, `observe_javascript_runtime`, `observe_web_session`, `observe_web_execution`, `observe_native_ui`, `observe_native_calls` |
+| process memory | `read_bytes`, `search_bytes`, `read_function_instructions`, `trace_native_values` |
+| sessions | `binary_session`, `close_binary`, `list_documents`, `list_segments`, `list_procedures`, `list_strings`, `list_names`, `list_bookmarks`, `gdb_session_status`, ... |
+| export (local folder only) | `export_evidence_bundle`, `export_web_scripts`, `pull_adb_file`, `pull_adb_package`, `capture_adb_screen`, `collect_adb_bugreport`, `extract_artifact`, `extract_firmware`, `recover_javascript_sources` |
+| the owner's own phone | every ADB READ and CAPTURE: `list_adb_devices`, `list_adb_packages`, `list_adb_processes`, `read_adb_logcat`, `read_adb_setting`, `inspect_adb_*`, `capture_adb_screen`, `collect_adb_bugreport`, `pull_adb_*` |
 
-| action | what it does | engine needed |
-|---|---|---|
-| `doctor` | what this PC can inspect, and the pinned install's identity; reads only | none |
-| `inspect_javascript_app` | static Electron/JavaScript graph from a folder or `.asar` | none |
-| `inspect_binary` | sections, segments, symbols, metadata inputs of an exe/dll/so | none |
-| `inspect_capture` | a saved HAR or SAZ web capture | none |
-| `inspect_sqlite` | a SQLite database's schema | Node 24.15+/26+ |
-| `inspect_apk` | an APK's manifest, SDK, permissions, classes | JADX (`REA_JADX_MCP_JAR`) |
-| `open_native_binary` | open a binary in a read-only decompiler | Ghidra/IDA/Hopper/Kuna |
-| `query_native_binary` | `overview` / `strings` / `xrefs` / `function` on the open binary | as above |
+The full list is `jarvis_rea.ACTION_ORDER` (200 names), and the model's schema enum is read from
+that same tuple, so the two cannot drift. Every name there was measured on this PC on 2026-11-04
+by starting the pinned package's own server and asking `tools/list`: **207 tools**, catalogue
+digest `af39310c...`, which is what this module pins. No name is guessed, and the names the first
+slice refused that no REA tool answers to (including `debug_with_gdb`) are gone.
+
+**One gap in the catalogue itself.** REA 6.7.0 has no "apply this patch file" tool. Patching a
+local copy is done with a debugger session's own commands (`cutter_command`,
+`rizin_debug_command`, `gdb_console`, `instrument_with_frida`), so no action claims to patch a
+file when only the session's memory changed. GDB sessions are Linux-only in REA, so on this
+Windows PC those four actions refuse before the card and say why.
+
+**The owner's Q1 guardrails, enforced in this module (2026-11-04).** The ruling approved the
+full toolbox with five guardrails; two were already code (rule 2's local-only scan of every
+setting, rule 5's pinned install). The other three were the recorded residual and are now
+enforced in `jarvis_rea.py`, before the card, not trusted to REA:
+
+1. **A credential store is never a target.** `lsass` (by name or `lsass.exe`), `vaultcmd`,
+   Windows Credential Manager's own folders (`Microsoft\Credentials`, `Microsoft\Protect`,
+   `Windows\NTDS\ntds.dit`), and the browser login stores (`Login Data`, `cookies.sqlite`,
+   `logins.json`, `key4.db`) are refused by process name, by file name and by any part of a
+   path. A live action (`capture_*`, `observe_*`, `start_*_session`, `instrument_with_frida`,
+   `load_frida_script`, `gdb_console`, `rizin_debug_command`, `cutter_command`,
+   `execute_rizin_command`, the process-memory reads) is scanned in **every** setting, because a
+   command, a script or an `argv` list can name the store instead of a plain path. Every other
+   action is scanned where a setting names a file or a program, so a static read of a copied
+   `logins.json` is refused the same way - while a search query that merely contains the word is
+   not, because a word is not a target. The sentence says which rule it serves and that nothing
+   was run: `CREDENTIAL_REFUSED`.
+2. **Nothing is written in place.** `cutter_command`, `rizin_debug_command`,
+   `execute_rizin_command`, `gdb_console`, `instrument_with_frida` and `load_frida_script` are
+   the write-capable surfaces. A command carrying a write form - rizin's `w` family (`w`, `wa`,
+   `wb`, `wt`, `wx`, `wo`, `wv`, `wop`, ...) and `oo+`/`ood`, GDB's `set write on`, `restore`,
+   `dump binary|ihex|srec|verilog|tekhex` and `set {type}addr`, Frida's `Memory.write*` /
+   `writeByteArray` / `writeUtf8String` / `writePointer` / `File.write` / `writeAll` - is refused
+   unless it names a NEW `<name>.patched<extension>` output inside a listed folder, or the
+   session's own file is already such a copy (remembered from `start_rizin_debug_session`).
+   `C:\Windows\`, `C:\Program Files\Windows Defender\`, and `python.exe` (and `pythonw.exe`),
+   `jarvis-desktop.exe`, `ollama.exe` are refused as patch targets outright. An allowed write
+   records a **before/after SHA-256 receipt** in the module (`write_receipts()`, and in the
+   result), so "the original is untouched" is a measurement: the original's hash before and
+   after, whether it changed, and the new file's hash.
+3. **Every live session has a deadline.** A live action takes `duration_limit_sec` - **60 by
+   default, 300 at most** - which is this module's own setting: it is never sent to REA, it is
+   named on the one card, and it caps the call's own timeout, so a live call cannot sit there
+   longer than the card said. A watch window setting (`duration_ms`, `observation_ms`,
+   `timeout_ms`) longer than the approved duration is refused before the card. The module keeps
+   a registry of live sessions with their deadlines; a session that outlives its deadline is
+   detached with REA's own `close_frida_session` / `close_gdb_session` /
+   `close_rizin_debug_session`, and when that cannot be done the REA helper itself is terminated
+   (which takes every hook and child with it). This happens in a `finally`, so a failed or
+   timed-out call detaches too.
+
+**Still not enforced, said plainly.** (a) Rizin's own `>file` redirection writes a text dump; it
+is not on the ruling's list and is not analysed as a write, because it cannot overwrite the file
+being analysed. (b) A Frida script given by path is read and scanned up to 200 KB; a longer
+script is only partly scanned, and an unreadable one is not scanned at all. (c) The write forms
+are the ruling's named list: a write reached through some other primitive (GDB's `call`, for one)
+is not detected, and a command that sources ANOTHER script by path (`rizin -i`, GDB's `source`)
+is not read - the card still shows the command itself, which is what the owner approves. (d) The
+deadline is enforced by the call's own timeout and by the registry sweep at the next live call;
+if the whole Jarvis process dies mid-call, the helper dies with it (a Windows Job Object) but no
+close tool is called. (e) The receipt proves the original's bytes did not change; it does not say
+what the `.patched` copy differs by.
 
 **Every call is ONE approval card.** `rea_investigate` is in `jarvis_agent.NEEDS_A_PERSON`, so a
-person's yes is required whatever the tier. `prepare()` validates the action, the target and the
-engine **before** the card, so a bad request never asks and never starts a program. The target
-must pass the existing `jarvis_documents.allowed_path()` folder rule **and** this module's own
-private-place refusal (`~/.openjarvis`, browser profiles, credential stores, `.ssh`/`.gnupg`,
-`Windows\System32\config`); a listed folder that contains those still cannot be inspected there.
+person's yes is required whatever the tier - including for `doctor` and `install`. `prepare()`
+validates the action, its settings, its engine and its target **before** the card, so a bad
+request never asks and never starts a program. The target must pass the existing
+`jarvis_documents.allowed_path()` folder rule **and** this module's own private-place refusal
+(`~/.openjarvis`, browser profiles, credential stores, `.ssh`/`.gnupg`, `Windows\System32\config`);
+a listed folder that contains those still cannot be inspected there. An output folder is the one
+case where the path need not exist yet.
 
-**Default-deny, not a denylist.** The model chooses an action, never a REA tool. The only REA
-operations this module can send are the eight above plus the read-only queries they use. ADB
-device mutators, runtime/browser/process capture, debugger sessions and evidence export are
-refused twice over (no action, and an explicit deny set in the module). The REA child receives
-`jarvis_child_env`'s allow-list plus only the provider paths the owner set - never `HUD_TOKEN`,
-`JARVIS_TOKEN` or any `*_KEY`.
+**Everything stays on this PC (rules 1 and 2).** Every string in `arguments`, and `target`,
+is checked: a URL, a `host:port`, a UNC network share or a bare remote address in a setting whose
+name says it is an address is refused unless it is loopback (`127.0.0.1`, `localhost`, `::1`).
+That is why `capture_browser_scenario` can drive a local page but not a website, and why Frida's
+`remote` and CDP's `cdp_endpoint` have to point at this machine.
+
+**Closed-world settings, not a denylist.** The model chooses an action, never a REA tool: an
+action not in the table is refused. Inside an action, a setting name that is not one of that
+tool's own top-level settings (read from the pinned catalogue) is refused with the list of the
+ones it does have, and a required setting that is missing is refused the same way - so nothing
+unexpected is ever sent, and no 724 KB of schemas has to be shipped to say so. One setting is
+this module's own and is never sent: `duration_limit_sec`, accepted on a live action only, taken
+out of the settings before the call and carried on the card instead. The runtime identity check
+(`binary_session`) confirms the running program is `rea-agents@6.7.0` with the 207-tool catalog
+and digest this build was written against; a mismatch closes the session.
+
+**What is refused, and the rule it serves.** ONE card per call (rule 4). Nothing leaves this PC
+(rules 1 and 2). The REA child receives `jarvis_child_env`'s allow-list plus only the provider
+paths and switches the owner set - never `HUD_TOKEN`, `JARVIS_TOKEN`, any `*_KEY`, or REA's own
+`REA_TOKEN` (rule 3). MIT stays MIT (rule 5). The only by-name refusal left is the six ADB device
+**mutators** (`install_adb_package`, `uninstall_adb_package`, `push_adb_file`, `start_adb_app`,
+`start_adb_activity`, `stop_adb_app`), and that one is cross-module ownership rather than a core
+rule: phone changes already belong to `control_phone` / `[phone_apps]`, with their own card and
+allow-list. Debuggers, Frida, live capture, process memory, export and ADB reads are all ordinary
+card-gated actions - and every one of them is now under the three Q1 guardrails above: a
+credential store is refused as a target, a write is refused unless it lands on a new `.patched`
+copy, and a live session carries a duration the owner saw on the card and is detached when it
+runs out.
+
+**It installs itself (the owner's decision).** The `install` action runs
+`npm install --prefix <config>/tools/rea rea-agents@6.7.0 --ignore-scripts --no-audit --no-fund`
+after its own card, then the static egress scan and `doctor`. It installs exactly the pinned
+version, writes only inside that folder, and refuses to call the result ready if the package's
+`package.json` carries an `install`/`preinstall`/`postinstall` script or if the scan finds a known
+analytics or telemetry host in the package's own `dist/`. **The owner's four-point audit's point 3
+did not exist in code before this** - the docstring named the scan and nothing performed it - so
+it is implemented (`egress_report`) rather than "kept intact". Points 1 and 2 were re-measured on
+this PC on 2026-11-04: the npm tarball's sha512 matches `PINNED_INTEGRITY` exactly, and
+`package.json` has no lifecycle scripts.
 
 **What comes back.** Chat-template markers are stripped, prompt-injection patterns are flagged,
 secrets are scrubbed by `jarvis_scrub`, the text is cut to 6000 characters, and the result is
 labelled `untrusted`; the conversation is latched local with
 `jarvis_gate.latch_taint(why="rea_analysis")`. The module reports Evidence ids only when REA's own
-answer carries them. A runtime identity check (`binary_session`) confirms the running program is
-`rea-agents@6.7.0` with the 207-tool catalog this build was written against; a mismatch closes the
-session and refuses.
-
-**What this does not do.** No HTTP route, no patch, no new gate action or tier. No runtime capture
-(that needs its own switch and a card naming the exact program/URL), no evidence-bundle export
-(needs `jarvis_file_guardian` and a folder rule), no ADB anything (Jarvis's app-control path owns
-phone actions), and no new route, patch, tier or switch.
-
-**The vetted skill (Slice 2).** `skills/reverse-engineer-anything/SKILL.md` adapts
-the upstream skill for this façade. It names only Jarvis's own tool `rea_investigate`
-(`requires_tools`), says every call is one approval card and that the skill grants
-nothing, pins `rea-agents@6.7.0` with the tarball's sha512, records the four-point
-pre-install audit as evidence for the owner, and carries no shell, npx or install
-instruction. The upstream `references/` files are deliberately not shipped: they teach
-direct REA CLI/MCP tools this façade never exposes. The MIT credit is in the
-hand-written half of `THIRD-PARTY-NOTICES.txt`.
+answer carries them. Since 2026-11-04 the tool is no longer in `jarvis_claims.READ_ONLY_TOOLS`:
+it can patch, export and install, so an "I did it" after it is a claim the checker must read.
 
 **Readiness (`doctor`, read-only, no network).** `jarvis_rea.doctor()` answers with
 `ready: true|false` and one plain `why` sentence, plus these signals:
@@ -26905,39 +26993,43 @@ hand-written half of `THIRD-PARTY-NOTICES.txt`.
 | package present | `installed` | a `rea-agents` package exists under `<user>\.openjarvis\tools\rea` |
 | pinned version | `version_pinned_ok` | exactly 6.7.0 (and MIT) |
 | recorded sha512 | `integrity.ok` | npm's local record compared with the pinned tarball: true, false, or null |
+| egress scan | `egress.ok`, `egress.hosts`, `egress.telemetry` | the static scan of the package's own `dist/`: which remote hosts it names, and whether one is a known analytics or telemetry service (false refuses readiness) |
+| the audit's four lifecycle names | `egress.lifecycle` | `preinstall`/`install`/`postinstall` found in the package (false refuses readiness) |
 | signatures | `signatures.checked` | always false here: npm signatures and SLSA provenance need the network |
-| Tier 1 static | `tier1_static_ready` | package + pin + supported Node |
+| Tier 1 static | `tier1_static_ready` | package + pin + supported Node + clean scans |
 | Tier 2 Ghidra | `tier2_ghidra_ready` | `GHIDRA_INSTALL_DIR` and `JAVA_HOME` both set |
 | Tier 2 JADX | `tier2_jadx_ready` | `REA_JADX_MCP_JAR` or a `jadx` on PATH |
+| can it install | `install_ready`, `install_why` | a supported Node and npm on PATH |
+| per action | `actions[name].available`, `.why` | whether this PC can do that action right now, and one plain reason when it cannot (JADX, Ghidra, adb, JEB, tshark, or GDB being Linux-only) |
 
-Verified on the development PC, 2026-10-20: Node **v22.23.2**; no package
-(`~/.openjarvis/tools/rea` absent); `npm ls -g rea-agents` empty; no `[rea]` section in
-the live framework file. `doctor()` therefore reports `ready: false`,
-`why: "no rea-agents package under ..."`, and `integrity.ok: null`. A recorded sha512
-that differs from the pin makes `ready: false` with a plain sentence; a missing local
-lockfile leaves `integrity.ok: null` (unknown, not a pass) while the version check still
-applies. Signatures are never guessed: `signatures.why` says why they are unchecked.
+**No route, no patch, no tier change.** There is still no `GET /api/rea/doctor` and no
+`jarvis_rea.install()` wiring into the HUD: the actions are reached through the model tool, which
+is what the owner asked for. `jarvis_gate`'s mapping is unchanged (`rea_investigate` ->
+`run_shell_on_host`, tier `ask`), so this is not a new gate action and no patch is added. Nothing
+here becomes a new switch: the two that already existed still decide everything.
 
-**No route in this slice.** There is no `GET /api/rea/doctor`. `jarvis_rea.py` has no
-`install()` and the HUD has no REA wiring, so adding a route would need a patch and a
-new place in the request gate - a later slice, not this one. When that wiring exists, a
-Settings readiness card reads the same payload directly from `doctor()`; the field names
-in the table above are its contract. Nothing here becomes a new gate action, tier,
-patch or switch.
-
-Nothing is measured by this change: the façade's refusals and wrapping are covered by
-`backend/test_rea.py`, while a real REA analysis is NOT-TESTABLE on CI (no engines, no
-pinned install) and is not claimed as tested.
-
-Tests: `backend/test_rea.py` - private targets refused before any start, the operation allowlist
-blocks every ADB/runtime/debug/export tool, the child environment carries no Jarvis secret, the
-taint latch is called, markers stripped and secrets scrubbed and injections flagged, the bounded
-output, the Node version range (22.19+/24.11+/26+, never 23/25), missing-engine refusals before
-the card, one compact tool in exactly one group selected by the tool diet, and off-by-default
-gating on both switches. Slice 2 adds the doctor readiness states (not installed, pinned,
-wrong version, sha512 match/mismatch/unknown, no subprocess and no network inside `doctor`)
-and the skill-text checks (no npx, no package-manager install, no shell fence, pinned version
-and sha512, one-card/read-only wording).
+Tests: `backend/test_rea.py` - private targets refused before any start, every one of the 200
+actions maps to exactly one tool in a fixture of the pinned catalogue's 207 names, every action's
+card action is `ask`, the retained refusals are exactly the six ADB mutators, an unknown action
+and an unknown setting are refused, a remote endpoint is refused, an output folder may be absent
+while a target may not, the install runs the pinned version only and refuses a package with an
+install script or a telemetry host, the egress scan reads a fixture package, timeouts per action
+class, the child environment carries no Jarvis secret, the taint latch is called, markers
+stripped and secrets scrubbed and injections flagged, the bounded output, the Node version range
+(22.19+/24.11+/26+, never 23/25), missing-engine refusals before the card, one compact tool in
+exactly one group selected by the tool diet, and off-by-default gating on both switches. The
+three Q1 guardrails have their own checks: each credential store (LSASS, `vaultcmd`, Credential
+Manager's folders, `Login Data`, `cookies.sqlite`, `logins.json`, `key4.db`) denied as a live
+target and a static one, an ordinary program and file still allowed, every rizin/GDB/Frida write
+form denied, a NEW `.patched` path allowed with its before/after SHA-256 receipt, Windows,
+Windows Defender and Jarvis's own programs denied as patch targets, the 60-second default and
+the 300-second ceiling on the card, a longer watch window refused, a fake clock proving a
+session under its deadline stays and over it is detached with the family's close tool, and the
+`finally` path detaching a call that timed out or failed (with the helper terminated when it
+cannot be detached by name). A real
+REA analysis is NOT-TESTABLE on CI (no engines, no pinned install) and is not claimed as tested;
+so is a real Frida attach, a real patch and a real deadline expiry on a live program - those are
+covered by fakes and a fake clock, and are not claimed as driven.
 
 ## 149. Searchable recordings and videos: readable words and a video's on-screen text kept on the PC, ON by the owner's decision (F5 S2+S3, added 2026-10-19/20)
 
@@ -30134,6 +30226,27 @@ nothing.
   makes the pane say a job started now would never run - and what makes the
   create route answer 503.
 
+**The attention fields are optional, and absence is normal (2026-11-04).**
+Each job row MAY carry:
+
+- **`waits_for_person`**: a real boolean, the PC's own answer to "does this job
+  wait for a person?". When a row carries it, both apps BELIEVE IT over
+  anything they could derive - the server can see a card that a client cannot.
+  `null`/absent is not `false`: it means "the PC did not decide", and both apps
+  then derive the answer from `state` as below.
+- **`dismissed_by_owner`**: a real boolean, meaningful on a `failed` row. A
+  failure the owner has already put aside is not still asking for him.
+
+**No backend in this repository sends either field yet.** That is why the
+derivation is part of the contract, not a temporary stub: both apps compute
+
+    state in ("waiting_approval", "blocked", "needs_input")
+    or (state == "failed" and not dismissed_by_owner)
+
+from the row the read already carries, so a payload without the two fields is
+the ordinary case and must keep working. A client must keep that fallback when
+a later backend starts sending `waits_for_person`.
+
 **Both keys are also how a client tells an older PC from a busy one.** A body
 with no `ticking` at all is a backend that predates this section, so neither
 POST exists on it: both apps keep the read-only list they always had and say
@@ -30166,6 +30279,26 @@ absence is load-bearing and is not the same fact as an empty list.
   `tools/check_parity.py` classifies `/api/jobs/answer` as **`ported`**.
   `BackgroundJobsTest.kt` holds the parse, the two bodies, both answers' words
   and the wiring.
+- **Attention first, BOTH apps (2026-11-04, pattern 4).** The job list under the
+  form is two sections, decided by ONE predicate per platform (desktop
+  `src/attention.js`; phone `net/JobAttention.kt`) and readable from either
+  app's `state` field:
+  - **"Needs you"** holds every job whose approval, answer, retry or failure a
+    person has to look at, drawn expanded with the job's own action. An EMPTY
+    "Needs you" is not created at all - no heading, no empty box, no reserved
+    gap - so it costs **zero pixels**.
+  - **"Quiet / healthy"** is ONE collapsed line, e.g. `Quiet / healthy · 3
+    background jobs — 1 still running, 2 finished · last finished 5m ago`, that
+    opens on a click (desktop) or tap (phone) to the same rows. Counts and the
+    finish time are printed only when the payload supports them.
+
+  The split is STABLE (the read's own order on both sides), so a row never
+  jumps between two reads of the same answer. It adds no polling (the existing
+  refresh path redraws it), no new action and no approval: the only controls in
+  the sections are the ones each row already had (a one-shot grant answer,
+  Cancel). Tests: `jarvis-desktop/tests/attention-first.mjs` (truth table and
+  the one-line summary, plus Playwright DOM checks for the zero-pixel empty
+  state and the folded bar) and `AttentionFirstTest.kt`.
 
 ### 169.5 What is proven, and what is not
 

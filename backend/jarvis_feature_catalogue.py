@@ -3,7 +3,7 @@
 The owner's feature list, as data: 175 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 120faa486a46db1b07f5b7477bf08683de2c64e8c5e3af1da521a03018f41ade); the apps' Features pages read their own
+`features/features.json` (sha256 b644fabdd6fd5bae3aeedba9877c39d9db215caade31ffe6caff652b4ec72ee2); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "120faa486a46db1b07f5b7477bf08683de2c64e8c5e3af1da521a03018f41ade"
+SOURCE_SHA256 = "b644fabdd6fd5bae3aeedba9877c39d9db215caade31ffe6caff652b4ec72ee2"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1811,10 +1811,10 @@ FEATURES = (
         "id": "reverse-engineering",
         "group": "The PC itself",
         "title": "Inspect a program or app statically",
-        "what": "Statically inspect a program, app or binary and report what it does - strings, imports, structure.",
+        "what": "Inspect, debug, patch or instrument a program or app on this PC with the REA helper, and read your own phone with the same helper.",
         "where": "Off by default; switch rea_investigate on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and set [rea] enabled = true in the settings file (jarvis-framework.toml) - the tool needs both, then ask.",
-        "asks": "Off until both are on; every investigation is one approved call.",
-        "limit": "Off by default; static inspection only - it does not run the program, and a packed or protected binary may tell it little.",
+        "asks": "Off until both are on; every step is one approved call, and so is installing the helper.",
+        "limit": "Off by default; everything it does stays on this PC, so a web address is refused as a target. A packed or protected program may tell it little, and attaching a debugger or instrumenting a running program needs those separate tools installed (the debugger it knows is Linux-only, so not on this PC).",
         "surface": "both",
         "aliases": ["reverse engineering"],
         "covers": ["reverse-engineering"],

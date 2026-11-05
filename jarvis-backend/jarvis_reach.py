@@ -155,11 +155,14 @@ TOOL_NAMES = {
     "goal_add": "Adding a goal, in your words",
     "goal_progress": "Recording one progress line on one of your goals",
     "goal_done": "Marking one of your goals done (kept, with its progress)",
-    # REA (2026-10-20): the reverse-engineering tool ships OFF and asks a person
-    # for every call; the page still needs plain words for it, like every tool
-    # (test_reach.py).
-    "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one "
-                       "card each; off unless you switch it on)",
+    # REA (2026-10-20; the full toolbox since 2026-11-04): the reverse-engineering
+    # tool ships OFF and asks a person for every call; the page still needs plain
+    # words for it, like every tool (test_reach.py). It is no longer read-only -
+    # it can patch a local copy, write an export, install its own helper and start
+    # a debugger - so the line says so.
+    "rea_investigate": "Reverse-engineering, debugging, patching and instrumenting a program "
+                       "or app on this PC with REA (one card every time; off unless you switch "
+                       "it on)",
     # CONNECT_TOOL (2026-10-28): raising the connect card changes nothing until
     # the owner types the details and presses Save on that card, so its own ask
     # words are the card rather than a second approval card. Listed here because
