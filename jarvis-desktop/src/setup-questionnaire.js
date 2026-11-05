@@ -516,7 +516,8 @@ export function progressWords(reading, draft) {
  * The "you have finished this pass" block, or "" when this pass is not done.
  *
  * It opens on `completed_version`, which the PC moves for TWO different
- * things: an apply, and "Keep current settings". Only the first leaves answers
+ * things: a COMPLETE apply (every question answered - a partial one does not
+ * move it, DEF-043), and "Keep current settings". Only the first leaves answers
  * behind. So the block says what is true of the draft on screen: every
  * question answered gets `DONE_WORDS`; a pass closed without answering some of
  * them gets `KEPT_WORDS`, which never claims an answer that does not exist

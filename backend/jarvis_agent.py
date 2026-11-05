@@ -12575,10 +12575,32 @@ def with_cloud_state_note(msgs: list) -> list:
     return list(msgs[:at]) + [msg] + list(msgs[at:])
 
 
+def _setup_reminder_on() -> bool:
+    """The owner's own "Personalize Jarvis" notification switch, ON or OFF.
+
+    It is one of the eight values `jarvis_notify_prefs` owns in
+    `jarvis-framework.toml` (`[notifications] setup`), read through that
+    module's own `read()` - the same reader the limits rows, both apps'
+    Notifications cards and the desktop's toasts use, so the every-turn chat
+    line and the launch toast cannot disagree about the switch. Missing key,
+    missing module or an unreadable file reads as the module's default, which
+    is ON: a switch nobody can read must never silently change what the owner
+    sees, and this is the same lenient answer the toast gives (DEF-044,
+    2026-11-04)."""
+    try:
+        import jarvis_notify_prefs as NP
+        return NP.read().get("setup") is not False
+    except Exception:                                       # noqa: BLE001
+        return True
+
+
 def setup_state_note() -> Optional[str]:
     """ONE honest line: is the Personalize Jarvis quiz unfinished, and where is
     the owner in it? None when it is complete, so a finished owner pays no
-    tokens (the same cost rule `cloud_state_note` follows).
+    tokens (the same cost rule `cloud_state_note` follows). None too when the
+    owner switched the "Personalize Jarvis" notification switch off: the switch
+    is the owner saying they do not want to be reminded, and a chat line is a
+    reminder (DEF-044, 2026-11-04).
 
     It reads `setup.json` through `jarvis_setup._read_saved()` - the same saved
     document `jarvis_setup.state()` wraps. It deliberately does NOT call
@@ -12586,6 +12608,8 @@ def setup_state_note() -> Optional[str]:
     covers (tens of module reads), which is far more than this one line needs on
     every single turn. No module, no line - never a guess.
     """
+    if not _setup_reminder_on():
+        return None
     try:
         import jarvis_setup as SU
         saved = SU._read_saved()
@@ -12610,7 +12634,8 @@ def with_setup_state_note(msgs: list) -> list:
     The same placement as `with_cloud_state_note`: just before the newest user
     message, never first, so the rules stay first. `msgs` is not changed; no
     line or no user message returns a plain copy. The line appears only while
-    the quiz is unfinished.
+    the quiz is unfinished AND the owner's "Personalize Jarvis" notification
+    switch is on.
     """
     note = setup_state_note()
     users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
@@ -12872,10 +12897,11 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # empty on every ordinary turn, so no tokens and the same bytes as before).
     out = with_grant_note(out, grant_note)
     # The Personalize Jarvis quiz (Wave B, 2026-11-03): ONE line only while the
-    # quiz is unfinished, so a finished owner pays no tokens and the warm-up
-    # (no user message) gets a plain copy. After the grant note and before the
-    # manner note: further from the question than the notes that say HOW to
-    # answer, nearer than anything stale.
+    # quiz is unfinished AND its notification switch is on, so a finished owner
+    # pays no tokens, an owner who turned the reminder off is not reminded in
+    # chat, and the warm-up (no user message) gets a plain copy. After the grant
+    # note and before the manner note: further from the question than the notes
+    # that say HOW to answer, nearer than anything stale.
     out = with_setup_state_note(out)
     # The owner's manner (warm or plain): wording only, never first, and
     # before the spoken note so that one is nearer the question.
