@@ -10742,6 +10742,14 @@ Who you are: Jarvis, the owner's own assistant, living on their PC. Calm, capabl
 #: by the time either is called - never at class- or def-time.
 _TEMPLATE_TOKENS = estimate_tokens(LANE_SYSTEM) + 100
 
+#: What the chat template costs that is NOT already a message in the list:
+#: the rendering overhead only. `run_local_turn`'s `budget()` holds back this,
+#: not `_TEMPLATE_TOKENS`, because the rules `_TEMPLATE_TOKENS` is sized for are
+#: ALREADY in `msgs` by then (`with_rules_first`) and `fit_messages` measures
+#: them there - reserving them a second time charged the window twice for one
+#: block. See `budget()`'s own comment (2026-11-05).
+_TEMPLATE_CHAT_OVERHEAD = 100
+
 
 class LaneChoice:
     """A turn moved to the second card: where, which model, how much context,
@@ -13599,7 +13607,20 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
     def budget() -> int:
         n_ctx = cur["ctx"] or _context_length(cur["url"], cur["model"])
-        return max(512, n_ctx - opts["max_tokens"] - _TEMPLATE_TOKENS
+        # THE RULES ARE COUNTED ONCE (2026-11-05). `_TEMPLATE_TOKENS` is
+        # LANE_SYSTEM's length plus 100, and it is the right reserve for the
+        # lane choice above (`_second_card_choice`), which measures the
+        # CALLER's messages - the rules are not in them yet. Here they are:
+        # `with_rules_first` has already put LANE_SYSTEM into `msgs`, and
+        # `fit_messages` measures that whole list, so subtracting the rules a
+        # second time charged the window for them twice (1,641 tokens,
+        # measured on the 2026-11-05 merge). What filled the window next is
+        # `offer["schemas"]`: the full REA toolbox's 200-name action enum grew
+        # it by 1,674 tokens, and at the 16,384-token window
+        # test_focus_brief.py and test_cut_off_note.py use, the twice-counted
+        # rules pushed the first follow-up's history out. Only what is NOT in
+        # `msgs` - the chat template's own ~100 tokens - is held back here.
+        return max(512, n_ctx - opts["max_tokens"] - _TEMPLATE_CHAT_OVERHEAD
                    - estimate_tokens(offer["schemas"]))
 
     def one_round(offer_tools: bool) -> _Round:

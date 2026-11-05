@@ -217,6 +217,16 @@ ACTING_TOOLS = frozenset({
     # failed. `plugin_list` is the read-only half and is in READ_ONLY_TOOLS: it
     # only lists the folder.
     "plugin_switch",
+    # "rea_investigate" (2026-11-04, the owner's decision to ship the full
+    # REA toolbox): it left READ_ONLY_TOOLS for the reason written there - the
+    # full toolbox patches a local file, writes an exported bundle or a pulled
+    # APK, installs the helper and starts debugger and Frida sessions, so an
+    # "I did it" after one of those IS a claim this checker must read. It is
+    # here, not in READ_ONLY_TOOLS, because this is the direction that cannot
+    # silence a real correction. It was left in NEITHER set at first, which
+    # backend/test_smarter_answers.py caught ("every tool jarvis_agent offers
+    # is read-only or an action") on 2026-11-05.
+    "rea_investigate",
     # Clearing a conversation is NOT a model tool: Gemini ruling 1 (2026-11-03)
     # keeps it route/app/fast-path only, behind its one card, so it is in
     # neither table here - the action still exists, the TOOL does not.
