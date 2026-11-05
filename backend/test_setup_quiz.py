@@ -766,10 +766,21 @@ def t_the_setup_note_obeys_the_personalize_switch():
     import jarvis_framework as FW  # noqa: E402 - the reader the switch lives in
     _fresh(_legacy({"talk_style": "warm"}))
     cfg = Path(_TMP) / "jarvis-framework.toml"
+    keep_explicit = os.environ.get("JARVIS_FRAMEWORK_TOML")
 
     def _write_switch(on: bool) -> None:
         cfg.write_text("[notifications]\nsetup = %s\n"
                        % ("true" if on else "false"), encoding="utf-8")
+        # SAY WHICH CONFIG IS THE ONE. `run_suites.py` gives every suite a
+        # `JARVIS_FRAMEWORK_TOML` pointing at the runner's own copy, and
+        # `jarvis_framework.config_path()` prefers that explicit override over
+        # `CONFIG_DIR/jarvis-framework.toml`. Without this line the switch is
+        # written to a file the reader never opens, so this check passed when
+        # the suite was run directly and failed under the runner (CI's
+        # `backend` job) - the same code, two answers. The documented way for a
+        # suite to choose its config is to set the variable itself
+        # (`test_rebuilt.py` does the same).
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(cfg)
         FW.reload_framework()
 
     try:
@@ -801,6 +812,10 @@ def t_the_setup_note_obeys_the_personalize_switch():
               and "Personalize Jarvis" in AG.setup_state_note(),
               AG.setup_state_note())
     finally:
+        if keep_explicit is None:
+            os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+        else:
+            os.environ["JARVIS_FRAMEWORK_TOML"] = keep_explicit
         try:
             cfg.unlink()
         except OSError:
