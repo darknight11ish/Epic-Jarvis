@@ -2857,6 +2857,14 @@ $SHIPPED = @(
     # Standard library only, no network. The same entry, in the same position,
     # is in backend/_where.py's SHIPPED list.
     'jarvis_storage_health.py'
+    # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
+    # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
+    # conversation about any of its tools). One entry per name in
+    # jarvis_agent.TOOLS plus one per capability family, with the pure functions
+    # that turn a question into a plain answer or a short context block. Pure
+    # data and stdlib only: it opens nothing, changes nothing, runs no tool. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_tool_profiles.py'
     # --- The attention budget for watchers (2026-11-04; the owner-forwarded
     # dsh-superagent spec, Part II patterns 1, 2, 3 and 5B). Three modules and
     # ONE drop-in folder, plugins\ready\watch-decisions, which calls
