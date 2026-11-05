@@ -2,6 +2,7 @@ package com.jarvis.client.net
 
 import android.os.SystemClock
 import android.util.Log
+import com.jarvis.client.call.CallRecordRules
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -444,6 +445,26 @@ class ChatSession(
         _faceTuningChange.value = null
     }
 
+    private val _callRecordDirective = MutableStateFlow<CallRecordRules.Event?>(null)
+
+    /**
+     * "Record call" (2026-11-04; the frozen contract of that day): the machine
+     * directive `"call_record": {"action": "arm"}` (or `"stop"`) in the
+     * answer's `X-Jarvis-Route` header, read by [CallRecordWire.directive] -
+     * the same channel `open_brain`, `file_under` and `menu_visibility` ride.
+     *
+     * It is a DIRECTIVE, not an offer: the PC has already answered the owner's
+     * words, and this is the phone's own microphone being armed for the next
+     * call. The runtime applies it once and calls [consumeCallRecordDirective],
+     * exactly like [menuChange]. A directive this app does not parse is
+     * silence - never a guess, and never an arming.
+     */
+    val callRecordDirective: StateFlow<CallRecordRules.Event?> = _callRecordDirective.asStateFlow()
+
+    fun consumeCallRecordDirective() {
+        _callRecordDirective.value = null
+    }
+
     /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
@@ -651,6 +672,7 @@ class ChatSession(
         _crisis.value = false
         _openSettings.value = null
         _menuChange.value = null
+        _callRecordDirective.value = null
         _fileUnder.value = null
         _topicPick.value = null
         _topicsLeftOut.value = 0
@@ -877,6 +899,10 @@ class ChatSession(
                         _faceTuningChange.value = AnimalOptions.fromRoute(routeHeader)
                         // "Hide the finance menu": this phone's own list (MenuRoute).
                         _menuChange.value = MenuRoute.fromRoute(routeHeader)
+                        // "Record call" (2026-11-04): arm or stop this phone's
+                        // call recorder. A machine directive, read from the
+                        // same header - nothing is said on screen by it.
+                        _callRecordDirective.value = CallRecordWire.directive(routeHeader)
                         // "A cloud model could give this one a second
                         // look." (jarvis_router.choose(), gate "offer"):
                         // read the same way as [crisis] and [usedIds]
@@ -1217,6 +1243,7 @@ class ChatSession(
         _crisis.value = false
         _openSettings.value = null
         _menuChange.value = null
+        _callRecordDirective.value = null
         _fileUnder.value = null
         _topicPick.value = null
         _topicsLeftOut.value = 0

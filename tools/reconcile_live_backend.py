@@ -458,6 +458,41 @@ JOBS_ROUTES_H3_NEW_FILE = "jobs-routes-h3-new.txt"
 #: the live file.
 GATE_GUARDS_CHECK_ANCHOR = "def check(action: str,"
 
+#: THE THREE 2026-11-03/04 ADDITIONS THE DEPLOY COULD NOT SEE, carried as three
+#: literal OLD -> NEW region pairs (measured on a copy of the live folder,
+#: 2026-11-04; the numbers are in `.dsh-scratch/PATCH-REPAIR-2026-11-04/REPORT.md`).
+#:
+#: `e7a461ba9` (2026-11-03 13:09) added new lines to three patches that the live
+#: install had already been deployed at 11:49 that morning - the 2026-11-03 field
+#: test's own fixes: `cloud_request_cap` for a DeepSeek reply that came back blank
+#: (`ollama-direct.patch`, 17 lines), the ordinary-turn cloud-lane decision and its
+#: comment (`cloud-say-yes.patch`), and `storage_cleanup` in the gate's
+#: `_NO_RULE_FROM_DENIAL` set (`update-in-chat.patch`, one line). A dry run of this
+#: tool afterwards reported `HUD DELTAS (221 patch/file delta(s) checked): already
+#: present: 221, to insert: none` and planned nothing - the SILENT SKIP DEF-018
+#: names, for the second time: two of the three have no table entry at all, so the
+#: fallback rule saw their older lines in the live file and called them present,
+#: and the third's probes were lines the OLD version also carried.
+#:
+#: Why a region pair and not the patch's own hunks. `ollama-direct.patch`'s hunk 4
+#: is already applied on this PC but a LATER patch rewrote four of its message
+#: lines, so "every added line present" is false and its pre-image is gone (0
+#: times): the hunk rule would refuse the file. `cloud-say-yes.patch`'s single hunk
+#: rewrites a block whose every line a later revision changed, and
+#: `update-in-chat.patch`'s hunk pre-image ends at the set's `})`, which the
+#: deployed `desktop_update` line now sits in front of. So each is carried as the
+#: one measured region that is still missing, taken BYTES FROM A REAL FILE: the
+#: NEW side is the patch's own post-image slice at the deployed ref, the OLD side
+#: is the same slice as the live file holds it. Each old block appears exactly once
+#: and its new block is absent, so a second deploy stages nothing and a
+#: half-applied edit refuses rather than duplicating anything.
+OLLAMA_DIRECT_CAP_OLD_FILE = "hud-ollama-direct-cap-old.txt"
+OLLAMA_DIRECT_CAP_NEW_FILE = "hud-ollama-direct-cap-new.txt"
+CLOUD_SAY_YES_LANES_OLD_FILE = "hud-cloud-say-yes-lanes-old.txt"
+CLOUD_SAY_YES_LANES_NEW_FILE = "hud-cloud-say-yes-lanes-new.txt"
+UPDATE_IN_CHAT_OLD_FILE = "gate-update-in-chat-old.txt"
+UPDATE_IN_CHAT_NEW_FILE = "gate-update-in-chat-new.txt"
+
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
 #:   or_probes: a second set that proves presence when a LATER patch in the stack
@@ -864,19 +899,67 @@ DELTA_TABLE = {
     },
     # update-in-chat.patch (2026-10-26): `desktop_update` is added to the gate's
     # `_NO_RULE_FROM_DENIAL` set, so a "no" on the update card answers that one card
-    # and never becomes a standing rule. ONE hunk, a pure one-line insertion before
-    # the set's closing `})` - and that closing line is far too common to anchor on,
-    # which is why this is carried as its hunk rather than `anchor`. The pre-image
-    # block must appear exactly once in the live gate; a gate older than the
-    # `uncensored-optins.patch` lines beside it refuses, which is the honest answer
-    # (apply-patches.ps1 is then the route, and the refusal says so).
+    # and never becomes a standing rule. It used to be carried as the patch's own
+    # hunk, and that is what silently skipped the 2026-11-03 addition: the hunk's
+    # pre-image ends at the set's closing `})`, and once `desktop_update` was in
+    # place on this PC that block was gone (0 times) while the OLD probe line -
+    # `"desktop_update",` - was still there, so every later deploy said ALREADY
+    # PRESENT and `storage_cleanup` never arrived (measured 2026-11-04: 1 of 2
+    # lines). It is carried as one region pair instead, and the probe is the NEW
+    # line, so only a gate that really holds both rows counts as present.
     "update-in-chat.patch": {
         "jarvis_gate.py": {
             "probes": (
-                '"desktop_update",  # jarvis_quick.py acts only on tier "ask": ONE '
-                "card per start of an update",
+                '"storage_cleanup",  # jarvis_storage_health.py',
+                '"desktop_update",  # jarvis_quick.py',
             ),
-            "hunks": True,
+            "regions": (
+                {"file": UPDATE_IN_CHAT_NEW_FILE,
+                 "replace_file": UPDATE_IN_CHAT_OLD_FILE,
+                 "probes": ('"storage_cleanup",  # jarvis_storage_health.py',)},
+            ),
+        },
+    },
+    # ollama-direct.patch (2026-11-03, `e7a461ba9`): the blank-cloud-answer fix -
+    # a lane measured as reasoning-inside is sent the cap `money_check()` priced,
+    # not the relay's 2048 default that the thinking alone could spend. ONE region
+    # inside `_completions_url`'s `if _state.get("url"):`; the rest of the patch is
+    # already on this PC and its hunk 4 has been rewritten since (see the block
+    # comment above the three file constants). 17 added lines, measured 38/52
+    # before and 52/52 after.
+    "ollama-direct.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                'body["max_tokens"] = _api.cloud_request_cap(',
+                '_state, int(body.get("max_tokens") or 0))',
+            ),
+            "regions": (
+                {"file": OLLAMA_DIRECT_CAP_NEW_FILE,
+                 "replace_file": OLLAMA_DIRECT_CAP_OLD_FILE,
+                 "probes": ('body["max_tokens"] = _api.cloud_request_cap(',)},
+            ),
+        },
+    },
+    # cloud-say-yes.patch (2026-11-03, `e7a461ba9`): an ORDINARY turn with no
+    # project active keeps its cloud lanes, and only an ACTIVE project that is not
+    # Shareable zeroes them - the 2026-11-03 field test found every ordinary turn
+    # answering gate "unavailable". The expression and the comment above it are the
+    # missing region; everything after it (the `owner_said_yes=` line) has been
+    # rewritten by `f01-manual-lane-gate.patch` on this PC, which is why the pair
+    # stops at `has_image=`. Measured 21/36 before and 36/36 after.
+    "cloud-say-yes.patch": {
+        "jarvis_hud.py": {
+            "probes": (
+                "# 2026-11-03 (the owner's decision, after the field test): an",
+                "lanes=[] if jarvis_side_memory else (lambda m: ([] if (not "
+                'hasattr(m, "active_project_id")',
+            ),
+            "regions": (
+                {"file": CLOUD_SAY_YES_LANES_NEW_FILE,
+                 "replace_file": CLOUD_SAY_YES_LANES_OLD_FILE,
+                 "probes": ("lanes=[] if jarvis_side_memory else (lambda m: ([] if "
+                            '(not hasattr(m, "active_project_id")',)},
+            ),
         },
     },
     # briefing.patch (2026-10-27): the morning briefing. FIVE HUD hunks in disjoint

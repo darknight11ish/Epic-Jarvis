@@ -4124,10 +4124,13 @@ class Scheduler:
             state["cursor"] = int(index)
         due = _routine_due(steps, state)
         if due is None and row["rule"]:
-            # Every part has fired and none is left on the clock, but a part is
-            # still waiting to be answered. The routine keeps its promise to
-            # repeat: the loop wakes at the next occurrence and re-seeds, and
-            # the unanswered part is said to be lost (JARVIS-API section 21.15).
+            # Nothing is left on the clock for this occurrence, but the row has a
+            # rule, so keep the loop waking at the next occurrence. If every part
+            # has fired, that tick re-seeds and the parts still unanswered are
+            # dropped WITHOUT a word - nothing announces them as lost. If an
+            # untimed part never fired (the part before it was never answered),
+            # nothing re-seeds: the row keeps waking at each next occurrence and
+            # stays silent until that part is answered (JARVIS-API 21.7, 21.15).
             try:
                 due = next_run(json.loads(row["rule"]), now)
             except Exception:

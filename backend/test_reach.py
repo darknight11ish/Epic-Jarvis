@@ -919,17 +919,27 @@ def t_read_web_page_row():
             "read_web_page")
     check("Read one web page: blocked when the settings say never",
           r["state"] == "blocked" and r["asks"] == R.ASK_NEVER, repr(r))
-    # The state the owner is actually in today: the tool is off until he adds
-    # its name to [tools].enabled, so the row must SAY that, with the exact
-    # line to add - an Off row with no sentence would be a dead end.
+    # The state the owner is actually in today: the tool is off until he
+    # switches it on. Since 2026-11-04 an app may switch it on, so the row
+    # names that switch - and never the old "add it to [tools].enabled by
+    # hand", which is no longer the door.
     r = row(R.view(ctx()), "read_web_page")
-    check("Read one web page: off, and the row says the one step the owner takes",
+    check("Read one web page: off, and the row names the app switch that turns it on",
           r["state"] == "off"
-          and 'add "read_web_page" to the [tools] enabled list' in r["line"].lower()
-          and "no app can" not in r["line"].lower(), repr(r))
+          and "What asks first" in r["line"] and "approval card" in r["line"]
+          and "add " not in r["line"].lower(), repr(r))
     row(R.view(ctx(enabled=("read_web_page",))), "read_web_page")
-    check("Read one web page: it is a named way out, so no app may switch it on",
-          not R._tool_switchable("read_web_page"))
+    check("Read one web page: since 2026-11-04 an app MAY switch it on",
+          R._tool_switchable("read_web_page"))
+    # The one Tier C tool whose own switch decides it still says so.
+    check("run_data_script: no switch in this page, and the row names its own switch",
+          not R._tool_switchable("run_data_script")
+          and "Data sandbox" in R._off_line("run_data_script"),
+          R._off_line("run_data_script"))
+    check("an unknown name has no switch and says adding it would offer nothing",
+          not R._tool_switchable("plugin_scan")
+          and "would not offer anything" in R._off_line("plugin_scan"),
+          R._off_line("plugin_scan"))
 
 
 def t_the_spoken_answer_names_the_tools_the_api_holds():
