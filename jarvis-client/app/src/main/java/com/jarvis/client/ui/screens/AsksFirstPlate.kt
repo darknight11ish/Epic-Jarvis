@@ -208,9 +208,9 @@ internal fun AsksFirstSection(canAct: Boolean) {
                             Text(AsksFirst.TOOLS_PC_ONLY, style = MaterialTheme.typography.labelSmall,
                                 color = chrome.textMid)
                         }
-                        t.notOffered?.let { no ->
+                        t.notSwitchable?.let { no ->
                             Gap(10)
-                            Text(AsksFirst.TOOLS_TOML_ONLY_TITLE,
+                            Text(AsksFirst.TOOLS_NOT_SWITCHABLE_TITLE,
                                 style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
                             Text(no.why, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
                             if (no.labels.isNotEmpty()) {
