@@ -2750,6 +2750,27 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **The self-benchmark has no screen on either app yet, and the measuring is
+  this PC's whichever app asks** (2026-11-04; `backend/jarvis_bench.py`,
+  `backend/bench.patch`; JARVIS-API §185). Phase 1 built and tested the engine
+  and its five routes (`GET /api/bench`, `GET /api/bench/run/{id}`, `GET
+  /api/bench/history`, `POST /api/bench/run`, `POST /api/bench/cancel`) and
+  nothing draws them: the desktop Benchmark panel is phase 2, the separate
+  History window phase 3 and the phone's `BenchScreen` phase 5, so **neither app
+  calls one on this tree** - a gap with a phase plan, not a decision, and said
+  here so it is not read as an oversight in either direction. Each route is
+  `BACKEND_ONLY` in `tools/check_parity.py` with its lane named, and that check
+  fails the day an app starts calling a route still listed there. **What is
+  one-sided when a screen does land:** the measurement itself, because a run
+  loads a model onto one of THIS machine's two cards, times it and unloads it,
+  and a phone has neither the cards nor the lane servers - so the screens that
+  start, watch and cancel a run are planned on BOTH apps over this same store,
+  and the numbers they draw are the PC's. **And one thing has no route at all,
+  deliberately:** `jarvis_bench.advice()`'s sentence is built and tested and
+  unreachable - there is no `/api/bench/advice` - so `tools/check_parity.py`
+  classifies nothing for it rather than naming a route the backend does not
+  serve, and its own docstring says so.
+
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
   open at once"*; JARVIS-API §184.5). The desktop opens extra copies of its own

@@ -33060,15 +33060,23 @@ anything.
 `worst_repeat_ok`, and `words` - the one sentence both apps display, built in
 the engine so the desktop and the phone cannot word the same result two
 different ways. **No prompt text is ever stored**: the prefill prompt is
-generated from a fixed, counted word list with a per-repeat tag and is thrown
-away, and what is stored is how many tokens Ollama said it really counted. The
+generated from a fixed, counted word list with a per-repeat tag **at the front**
+- Ollama serves the LONGEST COMMON PREFIX from its cache, so a tag at the tail
+would leave the whole word body cacheable and every repeat after the first
+would measure the tail instead of the depth - and it is thrown away; what is
+stored is how many tokens Ollama said it really counted. The
 allowlist is why `{"prompt": ...}` handed in by a caller that made a mistake is
 dropped rather than written.
 
-**THE ADVICE SENTENCE IS BUILT AND TESTED; ITS ROUTE IS PHASE 4.**
+**THE ADVICE SENTENCE IS BUILT AND TESTED, AND IT IS NOT REACHABLE YET.**
 `jarvis_bench.advice()` returns `{note, numbers, enough}` from `bench.jsonl` and
 nothing else - it cannot run a benchmark, delete a row, or reach the network.
-**Under three usable runs of a model it refuses to compare**, with "Only 2
+**There is no route for it on this tree**: `/api/bench/advice` does not exist in
+`backend/bench.patch`, there is no `benchmark_results` chat tool and no app
+draws an "Explain this result" button; the only caller in this repository is
+`backend/test_bench.py`, and `tools/check_parity.py`'s bench block says so
+beside the five routes that DO exist. **Under three usable runs of a model it
+refuses to compare**, with "Only 2
 runs of that model are on file; three are needed before I compare them" - the
 same floor `jarvis_speed.compare_latency()` refuses under, because two lists of
 two can differ by 40% from noise alone. At three it names the fastest and the
@@ -33081,17 +33089,19 @@ of DESIGN section 6 that phase 1 does **not** wire are `/api/bench/history/{id}`
 and its DELETE (the separate History window, phase 3), `/api/bench/presets`
 (two routes - benchmark presets are phase 4), `/api/bench/advice` (phase 4) and
 the read-only `benchmark_results` chat tool (phase 4). The desktop Benchmark
-panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5;
-until then `tools/check_parity.py` carries these five routes in `BACKEND_ONLY`
-with the lane named in each reason, because neither app calls any of them on
-this tree - a state that check FAILS the day an app starts calling one, which is
-the point of putting it there. **Nothing here has been measured on real
+panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5.
+**The five routes that DO exist are the ones `tools/check_parity.py` carries in
+`BACKEND_ONLY`**, with the lane named in each reason, because neither app calls
+any of them on this tree - a state that check FAILS the day an app starts
+calling one, which is the point of putting it there. **The routes above do not
+exist yet, so the checker classifies none of them**: an entry there would name a
+route the backend does not serve. **Nothing here has been measured on real
 hardware**: `backend/test_bench.py` drives every formula and every refusal from
 a fake Ollama reply and fake `nvidia-smi` text, and one real run is a field
 test, not a test (DESIGN section 12) - a CI runner has no cards and no models,
 so those rows are BLOCKED, never PASS.
 
-**PROVED BY** `backend/test_bench.py`: 236 checks, 0 failed - every refusal row
+**PROVED BY** `backend/test_bench.py`: 253 checks, 0 failed - every refusal row
 of DESIGN section 2 with its exact sentence, the 318x trap (a reply of 318/317/
 23 ms must yield 43.48 and must NOT yield 13,826), the fully-cached case, absent
 is not zero, generation rate against a literal, both time-to-first-token
@@ -33100,3 +33110,9 @@ on the card (its sentence leads with `PARTIAL:`), a failed run that writes
 `ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
 500-run cap keeping whole runs, the byte ceiling, the allowlist, the
 three-run comparison floor, and that no run can start without `confirm`.
+**Two guards were added on 2026-11-04, and each failed before its fix:** the
+prefill prompt's per-repeat tag now leads, so two repeats at one depth share no
+word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
+3,653 characters - a tail measurement), and `lane` is dropped when it is not one
+of the three, because it used to sit in both the text-field and the enum table
+and the text-field branch won ("everyday lane" was stored as "everyday lan").
