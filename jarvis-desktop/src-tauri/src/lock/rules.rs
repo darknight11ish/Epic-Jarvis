@@ -101,6 +101,19 @@ pub const WIDGET_NOTES_IN_BAR: &str = "App lock is on, so notes to Jarvis are ad
 pub fn widget_note_refused(from_widget: bool, app_lock: bool) -> bool {
     from_widget && app_lock
 }
+
+/// Whether the tray's "Update Jarvis to <version>" row must ask Windows Hello
+/// before it runs (DEF-045). That row is the one tray action that patches the
+/// **live backend**, so while App lock is on it is a sensitive action like the
+/// windows themselves: it waits for the lock whenever the owner is away.
+///
+/// `owner_here` is the same "would App lock ask for Windows Hello now" answer
+/// [`may_open`](super::may_open) uses - "Lock again after" has not run out, or
+/// a covered window has the keyboard focus. App lock off, or the owner still
+/// here: false, and the press runs exactly as it did before the gate existed.
+pub fn update_needs_unlock(app_lock: bool, owner_here: bool) -> bool {
+    app_lock && !owner_here
+}
 pub const PRIVATE_STILL_HIDDEN: &str = "What Jarvis remembers about you is hidden. Press Show \
      on the Brain's Memory tab and confirm it is you with Windows Hello first.";
 
@@ -805,6 +818,22 @@ mod tests {
             "the Jarvis bar is behind the lock itself"
         );
         assert!(WIDGET_NOTES_IN_BAR.starts_with("App lock is on"));
+    }
+
+    /// DEF-045: the tray's update row patches the live backend, so it is the
+    /// one tray action App lock must hold. The three cases the fix is about,
+    /// as the one pure function `lock::require_unlocked` asks.
+    #[test]
+    fn the_tray_update_is_held_only_while_the_lock_has_the_owner_away() {
+        // App lock on and the owner away: the press must ask Windows Hello
+        // and start nothing until it confirms.
+        assert!(update_needs_unlock(true, false));
+        // The same lock with the owner still here ("Lock again after" has not
+        // run out, or a covered window has focus): the row runs as before.
+        assert!(!update_needs_unlock(true, true));
+        // App lock off: behaviour is unchanged, locked or not.
+        assert!(!update_needs_unlock(false, false));
+        assert!(!update_needs_unlock(false, true));
     }
     use serde_json::json;
 

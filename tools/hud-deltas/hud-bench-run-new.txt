@@ -1,0 +1,39 @@
+        if route in ("/api/bench/run", "/api/bench/cancel"):
+            # bench.patch (2026-11-04): start ONE benchmark, or stop the one
+            # running.
+            #   run    {"model", "lane", "num_ctx", "num_gpu", "num_predict",
+            #           "prefill_tokens", "repeats", "warmup", "unload",
+            #           "confirm": {"model", "lane", "may_evict": true}}
+            #   cancel {"run_id"}
+            # NO APPROVAL CARD, and that is a RECORDED decision, not a shortcut:
+            # decisions.d/2026-11-04-self-benchmark-no-approval-card.md (rolled
+            # into docs/DECISIONS.md) records it and its reasoning. The precedent
+            # is POST /api/hardware/measure, cardless for the same reason - short
+            # prompts, no setting changed - and the owner pressing Measure is
+            # the actor. What a card would buy is bought explicitly: `confirm`
+            # is mandatory and a POST without it measures nothing. The run is
+            # ASYNCHRONOUS, so a two-minute run cannot hang a request thread.
+            # 200 {"ok": true, "run_id", ...}; 400 bad body or no confirm; 409
+            # refused with a sentence; 503 could not start.
+            if not _origin_ok(self):
+                return self._send(403, {"error": "cross-origin request refused"})
+            if not _token_ok(self):
+                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            try:
+                body = json.loads(_read_body(self) or b"{}")
+            except (ValueError, json.JSONDecodeError) as exc:
+                return self._send(400, {"error": str(exc)})
+            if not isinstance(body, dict):
+                return self._send(400, {"error": "body must be an object"})
+            try:
+                import jarvis_bench
+            except Exception as exc:
+                return self._send(503, {"available": False,
+                                        "error": f"{type(exc).__name__}: {exc}"})
+            if route == "/api/bench/cancel":
+                code, out = jarvis_bench.cancel(str(body.get("run_id") or ""))
+            else:
+                code, out = jarvis_bench.start(body)
+            return self._send(code, out)
+
+        if route in ("/api/search/settings", "/api/search/test"):

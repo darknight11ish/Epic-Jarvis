@@ -2511,7 +2511,11 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   10-minute timer and Play/pause open the Jarvis bar instead of acting,
   in `widget.js` and again in Rust (`brain/widgets.rs`). Stop everything
   (the hotkey, the tray row and the widget's tile) is never behind App
-  lock. **The floating face**
+  lock. **The tray's "Update Jarvis to <version>" row is behind it**
+  (DEF-045, 2026-11-04): that row patches the live backend, so with App
+  lock on the press asks Windows Hello first (`lock::require_unlocked`, the
+  same prompt the tray's window rows show) and starts nothing unless it
+  confirms. **The floating face**
   (2026-09-27) is not covered either, for a shorter reason than the
   widget's: it shows no approval card at all, ever - not even a title -
   only which of eight states Jarvis is in, the same information the tray
@@ -2749,6 +2753,68 @@ The two apps are meant to do the same things. These are the exceptions, each
 with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
+
+- **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
+  is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
+  setting he can turn OFF from chat, Jarvis Live, or Settings ... ANY approval
+  card ... automatically READ OUT, and he can answer 'confirm' or 'deny'
+  verbally ... he specifically wants Jarvis to WRITE TEXT MESSAGES to
+  contacts"*). The feature splits along the device line, and the split is the
+  point rather than an accident of time: **the PC keeps the authority and the
+  phone keeps the body.** The PC transcribes the recorded answer, checks it
+  against the owner's voice print and decides - the phone cannot, because a
+  client never does speech-to-text (CLAUDE.md), and because "is this the
+  owner?" must be answered where the print lives. The phone reads the card out
+  through its own speaker, records the PC's own ANSWER window (a minute at most,
+  or the card's shorter countdown, with the clip capped at the PC's 30 seconds),
+  and sends the text message, because a Windows PC has no phone's speaker, no
+  microphone in a pocket and no SMS service. So the four routes
+  (`GET /api/handsfree` and `POST /api/handsfree` - ONE path for the read and
+  the switch, as the frozen contract has it - `POST /api/handsfree/answer`,
+  `POST /api/phone/result`) are classified
+  `phone-only` in `tools/check_parity.py` for as long as the desktop does not
+  call them; the desktop's own half of the same frozen contract (its own
+  setting, its own read of the mode) is another lane's, and the day it calls the
+  first of those routes the checker's rule 6 fails by name and it
+  moves to `ported`, which is the right change then. **This phone half lands
+  AHEAD of its PC half, and says so plainly.** None of those routes exists
+  in `main` yet: no module serves one, no `handsfree_card` or `phone_command` is
+  ever sent, and `main`'s `docs/JARVIS-API.md` documents none of them - that
+  record
+  describes what exists, and a route written into it before its code would be
+  the one kind of fiction this project keeps out of that file. So the feature is
+  INERT until the PC half lands: every surface shows the contract's own 404
+  sentence ("Hands-free is not available on this PC yet."), no microphone is
+  opened, and nothing claims a mode that cannot be on. The phone was built
+  against the FROZEN contract, whose four shapes are written down in
+  `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
+  request owns `JARVIS-API.md` section 186 for them. Nothing else about the
+  feature is one-sided: a card raised for something the owner asked is answered
+  on the SAME card either way, `handsfree_card`, `phone_command` and
+  `phone_result` ride the
+  one existing event stream, and the spoken audio is the existing
+  `POST /api/voice/say` - no second speech path exists for this feature.
+
+- **The self-benchmark has no screen on either app yet, and the measuring is
+  this PC's whichever app asks** (2026-11-04; `backend/jarvis_bench.py`,
+  `backend/bench.patch`; JARVIS-API §185). Phase 1 built and tested the engine
+  and its five routes (`GET /api/bench`, `GET /api/bench/run/{id}`, `GET
+  /api/bench/history`, `POST /api/bench/run`, `POST /api/bench/cancel`) and
+  nothing draws them: the desktop Benchmark panel is phase 2, the separate
+  History window phase 3 and the phone's `BenchScreen` phase 5, so **neither app
+  calls one on this tree** - a gap with a phase plan, not a decision, and said
+  here so it is not read as an oversight in either direction. Each route is
+  `BACKEND_ONLY` in `tools/check_parity.py` with its lane named, and that check
+  fails the day an app starts calling a route still listed there. **What is
+  one-sided when a screen does land:** the measurement itself, because a run
+  loads a model onto one of THIS machine's two cards, times it and unloads it,
+  and a phone has neither the cards nor the lane servers - so the screens that
+  start, watch and cancel a run are planned on BOTH apps over this same store,
+  and the numbers they draw are the PC's. **And one thing has no route at all,
+  deliberately:** `jarvis_bench.advice()`'s sentence is built and tested and
+  unreachable - there is no `/api/bench/advice` - so `tools/check_parity.py`
+  classifies nothing for it rather than naming a route the backend does not
+  serve, and its own docstring says so.
 
 - **Recording a phone call happens on the PHONE alone, and that is one-sided on
   purpose** (2026-11-04; the owner's request *"add the ability to record a call
@@ -3920,7 +3986,7 @@ are deliberate and recorded rather than left to be discovered:
 | Which picture reader reads the words in a picture: Windows' own text recognition (the default) or RapidOCR (`jarvis_ocr.py`, 2026-10-13) | **The READ is on both apps; the CHOICE is the PC's alone.** `GET /api/second-card`'s `picture_text.engine` already names the reader in use and whether it works, and both apps read that route before a picture is sent - so the Hardware screen says which one answered, in words, on the phone too. What the phone does not have is the switch, and that is deliberate for the same reason as the speech-detector row above ("invisible upgrades get no switch"): the setting is a file on the PC, chosen by measurement, and **nobody can judge which picture reader is better by looking at a phone**. It is not a permission and not a loosening - both readers run locally and neither sends anything anywhere, so there is no card to approve and nothing an approval would decide (`jarvis_ocr.reader()`/`set_reader()`; `py -3 jarvis_ocr.py reader`). There is no new route, so `tools/check_parity.py` has nothing new to classify, and this row is here so the gap is not mistaken for an oversight. **The reader is OFF by default and is not measured as better** - `docs/MEASURED-2026-10-13-ocr-two-readers.md` has what the comparison actually said. |
 | Personality presets, the four tuning dials and "My personalities" (Settings -> How Jarvis talks, 2026-10-23, Personality Presets Slice 2a; a ninth preset, Patient Advocate, added 2026-10-24; a tenth, Reflective Coach, added 2026-10-27) | **The LIST and the CHOICE are on both apps; the EDITOR stays the desktop's (2026-10-28).** Until that day this row said "Desktop first, one-sided on purpose for now": the phone's Mind screen offered only the older Warm/Plain choice while the PC had ten presets, so it marked "Plain" as in use whenever the PC was on any preset but Warm Collaborator (`manner` is derived on the PC, `jarvis_manner.current()`) - a screen naming a preset Jarvis was not in, the same class of bug as the voice that disagreed with every screen showing it. The owner asked for consistency; now **both apps draw the PC's own `GET /api/manner` `personalities` array** - the same ids, titles, descriptions and order - mark the PC's `personality` and nothing else, and switch with the same one field (`{"personality": "<id>"}`). The desktop's local copy in `personalities.js` is only the older-PC fallback, held word-for-word to `contract/personalities.json` by `tests/personalities.mjs`. The PC rings one `manner` event, and the phone re-reads the same GET on it (`JarvisRuntime.mannerTick`), so neither screen keeps a stale copy. **What is still deliberately one-sided, and why:** the four tuning DIALS, the "My personalities" save/delete form and Hear Sample are the Windows Settings window's (`manner-settings.js`) - writing a personality by hand is deep configuration, the phone has no text-heavy editor for it, and the dials are where a preset's character is actually tuned rather than chosen. The phone says so in one line on the same card (`Manner.DIALS_ON_PC`) instead of drawing a second, weaker humour control that could disagree with the PC's own - the desktop hides its own legacy humour switch for the same reason (`paintPersona()`, `mn.humorTitle.hidden = pc`). The data still rides on the EXISTING `/api/manner` read and its one-field writes (`personality`, `dials`, `voice_sync`, `custom:{op}`); no route was added, so `tools/check_parity.py` has nothing to classify. **Hear Sample today plays the preset's base voice only** - the PC's `/api/voice/voices/sample` accepts `{"voice"}` and nothing else, so the blended-voice preview waits for the Kokoro/Live voice slice; the page says so under the grid. **The chat co-creation path added 2026-10-25 is on BOTH apps**, and that is not a reversal of any panel decision: `jarvis_personality_creator.py` is called from `jarvis_quick.py`'s fast path on the PC, so "make me a personality ..." is read out of the EXISTING chat request and answered on the PC - no route, no client change, and the phone gets it through the chat box it already has (JARVIS-API §27.7.1). |
 
-| **"Update both halves"** — one button that patches the Python backend and then installs the signed Jarvis Desktop release (`update.rs`'s `update_both`, `backend_update.rs`, `backend_update_status`/`set_update_folders`, and the repo tool `tools/update_backend.py`; the owner's own request, made directly, 2026-10-13; three paces and a real progress bar added 2026-10-17) | Written with the feature. **A phone cannot patch a PC's backend.** The patch program (`scripts/apply-patches.ps1`), the repository it lives in, and the Python folder it writes into are all on the PC, and the work is `git apply`, then `pip`, then the test suites - none of which a phone can run, and none of which should sit behind a pairing token that can be used from anywhere on the private network. So there is deliberately **no route**: the phone is not offered a control that cannot work, and `tools/check_parity.py` has nothing to classify because nothing was added to the API. What the phone already does about a version gap stays as it was and is truthful: every route a newer backend grew answers 404 to an older app, and each app says so in the PC's own words (`jarvis-client`'s "Update the backend by running apply-patches.ps1"). The desktop's own half of this - the signed release check - is the desktop's alone for the same reason `install_update` is: it replaces the executable on the PC, which is a thing only the PC has. **The three paces are the same one-sided decision** (2026-10-17): `max_speed`, `responsive` (the default and the recommended one) and `safe` choose how many of the SAME suites `backend/run_suites.py` runs at once while the backend half is updated - 22, 14 and 1 workers on this PC's 24 threads. They are worked out by `tools/update_backend.py --modes-json`, read by `backend_update_status` and shown as a choice when "Update everything" is pressed; an unknown pace is refused before anything runs. There is no phone equivalent because there is no phone half of this feature at all, and the progress bar is painted only from the tool's own `JARVIS-EVENT` rows (`update_progress.rs` -> `backend-update-progress`): its fraction is completed work, never a timer, and on a fallback the bar starts a labelled second (safe) pass rather than pretending the first one is still going. |
+| **"Update both halves"** — one button that patches the Python backend and then installs the signed Jarvis Desktop release (`update.rs`'s `update_both`, `backend_update.rs`, `backend_update_status`/`set_update_folders`, and the repo tool `tools/update_backend.py`; the owner's own request, made directly, 2026-10-13; three paces and a real progress bar added 2026-10-17) | Written with the feature. **On the PC it is behind App lock when that is on** (DEF-045, 2026-11-04): `update::install_from_tray` asks Windows Hello before either half starts, so a right-click at a locked PC starts nothing and says so. **A phone cannot patch a PC's backend.** The patch program (`scripts/apply-patches.ps1`), the repository it lives in, and the Python folder it writes into are all on the PC, and the work is `git apply`, then `pip`, then the test suites - none of which a phone can run, and none of which should sit behind a pairing token that can be used from anywhere on the private network. So there is deliberately **no route**: the phone is not offered a control that cannot work, and `tools/check_parity.py` has nothing to classify because nothing was added to the API. What the phone already does about a version gap stays as it was and is truthful: every route a newer backend grew answers 404 to an older app, and each app says so in the PC's own words (`jarvis-client`'s "Update the backend by running apply-patches.ps1"). The desktop's own half of this - the signed release check - is the desktop's alone for the same reason `install_update` is: it replaces the executable on the PC, which is a thing only the PC has. **The three paces are the same one-sided decision** (2026-10-17): `max_speed`, `responsive` (the default and the recommended one) and `safe` choose how many of the SAME suites `backend/run_suites.py` runs at once while the backend half is updated - 22, 14 and 1 workers on this PC's 24 threads. They are worked out by `tools/update_backend.py --modes-json`, read by `backend_update_status` and shown as a choice when "Update everything" is pressed; an unknown pace is refused before anything runs. There is no phone equivalent because there is no phone half of this feature at all, and the progress bar is painted only from the tool's own `JARVIS-EVENT` rows (`update_progress.rs` -> `backend-update-progress`): its fraction is completed work, never a timer, and on a fallback the bar starts a labelled second (safe) pass rather than pretending the first one is still going. |
 
 | **A browser as a Jarvis client** (PWA slice 2, 2026-10-23: `jarvis-desktop/src/hud-web-bridge.js`, served with the HUD page; `POST /api/devices/web-session` / `web-logout`) | **Desktop only, one-sided on purpose:** the browser is a THIRD kind of client, not the phone. A tablet or laptop browser opens the same HUD page from the PC (over Tailscale/NordVPN Meshnet or on the PC itself), pairs with a key the owner printed for it at the PC's own terminal, keeps the PC's HttpOnly cookie, reads the live event stream through a `fetch()` reader, and keeps its OWN HUD layout in that browser's `localStorage` - never the PC's. The phone does not need any of it: it is already a paired device with its own key, its own screens and no cookie session, so neither route is ported there (`tools/check_parity.py`: both `deliberate`). No Tauri command was added (`capabilities/hud.json` untouched), and the browser has no client-side speech-to-text: the browser's cloud recogniser is removed from the page, and web voice waits for the HTTPS/AudioWorklet slice. The real iPad/PWA device rows remain NOT-TESTABLE until driven on a device. |
 
