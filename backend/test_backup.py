@@ -673,11 +673,19 @@ def t_the_newly_covered_databases_and_named_files_really_go_in():
     # would otherwise read as the owner's data. It is named here rather than
     # left out of the scan, because "a module names a .db nobody wrote down" is
     # exactly the silent gap this pair of checks exists to close.
+    # 21 + 9 since 2026-11-05: `key4.db` joined the EXCLUSIONS with the full REA
+    # toolbox. It is NOT a Jarvis store and nothing opens it: it is Firefox's own
+    # key database, named in jarvis_rea.py's `_CREDENTIAL_NAMES` as a credential
+    # store REA refuses to read, attach to or patch. Like parking-cache.db it is
+    # written down rather than left out of the scan, because a `.db` name in a
+    # backend module that nobody accounted for is exactly the silence this pair
+    # of checks exists to close - and backing up somebody else's browser key
+    # store is the one thing this archive must never do.
     check("every covered database is in SOURCE_DBS or in NOT_BACKED_UP",
           not ({n for n in B.SOURCE_DBS} & {n for n in B.NOT_BACKED_UP}),
           "a database is in both lists")
-    check("the databases this program names, split 21 + 8, are all accounted for",
-          len(B.SOURCE_DBS) == 21 and len(B.NOT_BACKED_UP) == 8,
+    check("the databases this program names, split 21 + 9, are all accounted for",
+          len(B.SOURCE_DBS) == 21 and len(B.NOT_BACKED_UP) == 9,
           f"{len(B.SOURCE_DBS)} backed up, {len(B.NOT_BACKED_UP)} excluded")
 
 

@@ -56,6 +56,32 @@ export const WORDS = Object.freeze({
     "it - saying yes out loud does not.",
 });
 
+/**
+ * The words this page needs on top of the contract's `words`, and why they are
+ * not in that map: `words` is generated from the backend's own `WORDS`, key for
+ * key, and the phone checks it key for key - adding one there would mean
+ * changing the contract and the generator from the apps lane.
+ *
+ * Five of these are the PC's own sentences, word for word, from
+ * `backend/jarvis_forget_range.py`: the pinned chats it is keeping
+ * (`PINNED_ONE`, `PINNED_MANY`, `PINNED_WHY`) and the second yes
+ * (`CONFIRM_TEXT`, `CONFIRM_YES`). The sixth is the one line this page needs
+ * and the PC has no use for: how long the second yes has left, in the same
+ * shape as `undo_left`. The phone says all six word for word
+ * (`net/ForgetRange.kt` EXTRA), and tests/forget-range.mjs pins them to the
+ * backend's own constants.
+ *
+ * `{n}` is the count of pinned chats kept; `{minutes}` a whole number.
+ */
+export const EXTRA = Object.freeze({
+  confirm_text: "Say yes again to finish. Undo stays available for 10 minutes.",
+  confirm_yes: "Yes, forget them",
+  hold_left: "{minutes} min left to say yes",
+  pinned_one: "1 pinned chat is kept",
+  pinned_many: "{n} pinned chats are kept",
+  pinned_why: "Pinning a chat keeps it out of this list and away from this Forget.",
+});
+
 /** Where the quickbar leaves "open Brain at Forget a time frame" (main.js). */
 export const BRAIN_PLACE_KEY = "jarvis.brain.place";
 /** The one place it can name. */
@@ -91,6 +117,16 @@ export function isWhen(s) {
   return typeof s === "string" && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(s);
 }
 
+/**
+ * Whether `s` could be the id of the second yes the PC is holding - the same
+ * shape `is_hold_id` checks in `brain/forget_range.rs`. The id is never made
+ * here: the status carries it and this hands it straight back. Which hold it
+ * is, and whether it is still the right one, is the PC's to decide.
+ */
+export function isHoldId(s) {
+  return typeof s === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(s);
+}
+
 /** The date part, for an `<input type="date">`. */
 export function dayOf(s) {
   return isWhen(s) ? s.slice(0, 10) : "";
@@ -103,9 +139,18 @@ export function readStatus(v) {
   const u = v.undo && typeof v.undo === "object" ? v.undo : null;
   const a = v.asked && typeof v.asked === "object" ? v.asked : null;
   const l = v.last && typeof v.last === "object" ? v.last : null;
+  // The SECOND yes (owner, 2026-11-04): the card has been approved and the PC
+  // is holding the ticked items, waiting for one more yes. Null unless it is
+  // really holding one - an id this page cannot hand back is not a second yes.
+  const c = v.confirm && typeof v.confirm === "object" ? v.confirm : null;
+  const confirm = c && isHoldId(text(c.id))
+    ? { id: text(c.id), expiresIn: num(c.expires_in), text: text(c.text) || EXTRA.confirm_text }
+    : null;
   return {
     available: true,
     waiting: v.waiting === true,
+    confirm,
+    pinnedKeptCount: num(v.pinned_kept_count),
     undo: u ? {
       secondsLeft: num(u.seconds_left),
       minutesLeft: num(u.minutes_left),
@@ -150,6 +195,14 @@ export function readPreview(v) {
       ticked: x.ticked !== false && x.kind !== "support" && x.spills !== true,
     }));
   const counts = v.counts && typeof v.counts === "object" ? v.counts : {};
+  // The pinned chats the PC is KEEPING (owner, 2026-11-04): never on the
+  // tickable list, so they are read apart from `chats` and only ever drawn as
+  // kept. A hidden list carries none of them (the Rust redact() empties them
+  // with the other titles); the count stays.
+  const pinnedKept = (Array.isArray(v.pinned_kept) ? v.pinned_kept : [])
+    .filter((x) => x && typeof x.id === "string")
+    .map((x) => ({ id: x.id, title: text(x.title), messages: num(x.messages) }));
+  const est = v.estimate && typeof v.estimate === "object" ? v.estimate : {};
   return {
     available: true,
     hidden: v.hidden === true,
@@ -157,6 +210,14 @@ export function readPreview(v) {
     kinds: Array.isArray(v.kinds) ? v.kinds.slice() : ["facts", "chats"],
     facts,
     chats,
+    pinnedKept,
+    pinnedKeptCount: num(v.pinned_kept_count) || pinnedKept.length,
+    // The measured "how long would that take", from the counts the PC just
+    // read: `text` is its own sentence, shown before the owner is asked.
+    estimate: {
+      facts: num(est.facts), chats: num(est.chats), messages: num(est.messages),
+      seconds: num(est.seconds), text: text(est.text),
+    },
     counts: { facts: num(counts.facts), chats: num(counts.chats) },
     tooMany: v.too_many === true,
     empty: v.empty === true,
@@ -165,28 +226,65 @@ export function readPreview(v) {
   };
 }
 
+/** The kept chats' ids as tick keys - the ones nothing here may ever send. */
+function keptKeys(preview) {
+  return new Set((preview.pinnedKept || []).map((x) => `chat:${x.id}`));
+}
+
 /**
  * "Forget these": the ids still ticked, in the list's own order, and the
  * two dates exactly as the PC wrote them. `ticked` holds "fact:<id>" and
- * "chat:<id>".
+ * "chat:<id>". A pinned chat is dropped even if something ticked one: the PC
+ * would refuse the request (409), and this app never asks it to delete what
+ * the owner pinned.
  */
 export function forgetBody(preview, ticked) {
   const on = ticked instanceof Set ? ticked : new Set(ticked || []);
+  const kept = keptKeys(preview);
   return {
     from: preview.frame.from,
     to: preview.frame.to,
     facts: preview.facts.filter((x) => on.has(`fact:${x.id}`)).map((x) => x.id),
-    chats: preview.chats.filter((x) => on.has(`chat:${x.id}`)).map((x) => x.id),
+    chats: preview.chats
+      .filter((x) => on.has(`chat:${x.id}`) && !kept.has(`chat:${x.id}`))
+      .map((x) => x.id),
   };
 }
 
 /** Every item ticked - how a fresh list starts - except a customer-support
- *  chat's record, which goes only when the owner ticks it. */
+ *  chat's record, which goes only when the owner ticks it, and except any
+ *  pinned chat the PC is keeping. */
 export function allTicked(preview) {
+  const kept = keptKeys(preview);
   return new Set([
     ...preview.facts.map((x) => `fact:${x.id}`),
-    ...preview.chats.filter((x) => x.ticked !== false).map((x) => `chat:${x.id}`),
+    ...preview.chats
+      .filter((x) => x.ticked !== false && !kept.has(`chat:${x.id}`))
+      .map((x) => `chat:${x.id}`),
   ]);
+}
+
+/** The second yes: the id the PC is holding, and the literal `true` - never
+ *  a string, never a number (the PC answers 400 to anything else). */
+export function confirmBody(id) {
+  return { id, yes: true };
+}
+
+/** "1 pinned chat is kept" / "3 pinned chats are kept" - the PC's own words
+ *  for the chats this list leaves out. */
+export function pinnedKeptLine(n) {
+  return n === 1 ? EXTRA.pinned_one : fill(EXTRA.pinned_many, { n });
+}
+
+/** "2 min left to say yes", from the status's own `expires_in` seconds. */
+export function holdLeftLine(confirm) {
+  const seconds = confirm && Number.isFinite(confirm.expiresIn) ? confirm.expiresIn : 0;
+  return fill(EXTRA.hold_left, { minutes: Math.max(1, Math.ceil(seconds / 60)) });
+}
+
+/** One pinned chat's meta line: "12 messages", as the estimate says it. */
+export function messagesLine(n) {
+  return `${n} message${n === 1 ? "" : "s"}`;
 }
 
 /** The tag beside a chat of a kind that is not an ordinary chat. */

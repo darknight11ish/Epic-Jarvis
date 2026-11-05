@@ -44,16 +44,28 @@ import kotlinx.coroutines.launch
  * the same words (both apps are checked against the contract file).
  *
  * The days (a quick choice, or two typed dates), what to look for (what
- * Jarvis learned, chats, or both), then the list from the PC with every
- * item ticked. The owner unticks anything to keep and taps "Forget these";
- * the PC raises ONE approval card listing every item, answered on the
- * card like any other - never by voice, and never from here. Approved, an
- * Undo line shows for 10 minutes: one tap, no card.
+ * Jarvis learned, chats, or both), then the list from the PC with every item
+ * ticked - and the pinned chats it is KEEPING beside them (owner, 2026-11-04):
+ * drawn as kept, never tickable, never counted, never sent. The owner unticks
+ * anything to keep and taps "Forget these"; the PC raises ONE approval card
+ * listing every item, answered on the card like any other - never by voice,
+ * and never from here.
  *
- * "Forget these" is greyed on a stale link (rule 4; JarvisRuntime holds it
- * too); Undo never is. "Hide memory lists and chat history" (Settings)
- * hides the list until Show is confirmed, like Brain's other private
- * lists; an open Undo still shows (it carries only counts).
+ * The two yeses: the card is the FIRST and changes nothing. Approving it makes
+ * the PC hold the checked items for two minutes and the status carries
+ * `confirm` - this plate then shows the PC's own sentence, the minutes left
+ * and one more tap ("Yes, forget them"), which sends the held id and a literal
+ * `true`. Only that deletes. A refusal at either step is shown in the PC's own
+ * words, never swallowed.
+ *
+ * After it, an Undo line shows for 10 minutes: one tap, no card.
+ *
+ * "Forget these" and the second yes are greyed on a stale link (rule 4;
+ * JarvisRuntime holds them too); Undo never is. "Hide memory lists and chat
+ * history" (Settings) hides the list until Show is confirmed, like Brain's
+ * other private lists - and takes the words this plate already holds out of
+ * its state, pinned chats' titles included ([ForgetRange.redact]). An open
+ * Undo still shows (it carries only counts).
  *
  * "forget what you learned last week", said or typed, fills in the days
  * here (the PC's `asked`) and opens this item (OpenPlace, "forget-range").
@@ -122,10 +134,12 @@ internal fun ForgetRangeSection(
     }
 
     // A card this plate caused is answered elsewhere: read again when the
-    // queue changes while it waits.
+    // queue changes while it waits - and again when the private lists are
+    // shown, so Show always ends with a list read over the wire rather than
+    // the redacted one hiding left behind.
     val queueKey = if (status?.waiting == true) pending.size else -1
 
-    LaunchedEffect(reads, tick, queueKey) {
+    LaunchedEffect(reads, tick, queueKey, privateHidden) {
         when (val r = JarvisRuntime.forgetRangeRead(ForgetRange.PATH)) {
             is ApiResult.Ok -> {
                 val reply = r.value
@@ -168,6 +182,29 @@ internal fun ForgetRangeSection(
         }
     }
 
+    // While the PC holds the second yes: the same, so its minutes run down and
+    // an expired hold stops being offered. The PC owns the clock; this only
+    // asks it again, and the status says "the second yes timed out" itself.
+    val holdOpen = status?.confirm != null
+    LaunchedEffect(holdOpen) {
+        while (holdOpen) {
+            delay(20_000)
+            val r = JarvisRuntime.forgetRangeRead(ForgetRange.PATH)
+            val reply = (r as? ApiResult.Ok)?.value
+            if (reply != null && reply.code in 200..299) status = ForgetRange.parseStatus(reply.body)
+        }
+    }
+
+    // "Hide memory lists and chat history" takes the words this plate is
+    // already holding out of its state, not just off the screen: a pinned chat
+    // carries a TITLE, so it is hidden with the facts and the chats
+    // (ForgetRange.redact, the desktop's Rust redact() rule). Show reads a
+    // fresh list (the effect above is keyed on `privateHidden`).
+    LaunchedEffect(privateHidden) {
+        val p = preview
+        if (privateHidden && p != null && !p.hidden) preview = ForgetRange.redact(p)
+    }
+
     fun act(action: String, json: String) {
         busy = true
         said = null
@@ -186,6 +223,7 @@ internal fun ForgetRangeSection(
         Plate {
             val s = status
             val undo = s?.undo
+            val confirm = s?.confirm
             if (undo != null) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(ForgetRange.undoLine(undo), style = MaterialTheme.typography.bodySmall,
@@ -210,13 +248,32 @@ internal fun ForgetRangeSection(
                 }
                 else -> {
                     Text(ForgetRange.w("under"), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-                    if (s.waiting) {
-                        Gap(6)
-                        Text(ForgetRange.w("waiting"), style = MaterialTheme.typography.bodySmall,
-                            color = chrome.warnInk)
-                    } else if (undo == null && s.last != null && s.last.outcome != "done" && s.last.message.isNotEmpty()) {
-                        Gap(6)
-                        Text(s.last.message, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    when {
+                        s.waiting -> {
+                            Gap(6)
+                            Text(ForgetRange.w("waiting"), style = MaterialTheme.typography.bodySmall,
+                                color = chrome.warnInk)
+                        }
+                        confirm != null -> {
+                            // The SECOND yes (owner, 2026-11-04): the card is
+                            // approved and the PC is holding the ticked items.
+                            // Not a card - one more line and one more tap.
+                            Gap(6)
+                            Text(confirm.text, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+                            Text(ForgetRange.holdLeftLine(confirm),
+                                style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                            Gap(6)
+                            Primary(
+                                ForgetRange.x("confirm_yes"),
+                                color = chrome.badInk,
+                                enabled = canAct && !busy,
+                                onClick = { act("confirm", ForgetRange.confirmBody(confirm.id)) },
+                            )
+                        }
+                        undo == null && s.last != null && s.last.outcome != "done" && s.last.message.isNotEmpty() -> {
+                            Gap(6)
+                            Text(s.last.message, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                        }
                     }
                     if (askedSaid.isNotEmpty() && choice == "custom") {
                         Gap(6)
@@ -263,12 +320,17 @@ internal fun ForgetRangeSection(
                     Quiet(ForgetRange.w("show"), enabled = !busy, onClick = {
                         scope.launch { readList() }
                     })
-                    preview?.let { p ->
+                    // Not the redacted copy hiding left behind: after Show the
+                    // list appears when the fresh read lands, never as rows
+                    // with their words taken out.
+                    preview?.takeIf { !it.hidden }?.let { p ->
                         ListPart(
                             p = p,
                             ticked = ticked,
                             onTick = { key, on -> ticked = if (on) ticked + key else ticked - key },
-                            canForget = canAct && !busy && !s.waiting && undo == null,
+                            // A second yes already held means the PC would
+                            // refuse another card (409), so it is not offered.
+                            canForget = canAct && !busy && !s.waiting && confirm == null && undo == null,
                             canAct = canAct,
                             onForget = { act("forget", ForgetRange.forgetBody(p, ticked)) },
                         )
@@ -305,6 +367,16 @@ private fun ListPart(
         Gap(4)
         Text(p.chatsWhy, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
     }
+    // The chats this Forget is KEEPING (owner, 2026-11-04), above the tickable
+    // lists on purpose: the owner sees what stays before what goes. Nothing
+    // here has a box, and nothing here is ever sent.
+    if (p.pinnedKept.isNotEmpty()) {
+        Gap(10)
+        Text(ForgetRange.pinnedKeptLine(p.pinnedKeptCount).uppercase(),
+            style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Text(ForgetRange.x("pinned_why"), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        for (x in p.pinnedKept) KeptRow(x)
+    }
     if ("facts" in p.kinds && p.facts.isNotEmpty()) {
         Gap(10)
         Text("${ForgetRange.w("facts_head")} (${p.facts.size})".uppercase(),
@@ -339,6 +411,12 @@ private fun ListPart(
         }
     }
     val n = ForgetRange.tickedCount(p, ticked)
+    // How long it takes, measured by the PC from the counts just read, said
+    // BEFORE the owner is asked for the card (owner, 2026-11-04).
+    if (p.estimate.text.isNotEmpty()) {
+        Gap(8)
+        Text(p.estimate.text, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+    }
     Gap(10)
     Primary(ForgetRange.forgetLabel(n), color = chrome.badInk, enabled = canForget && n > 0, onClick = onForget)
     if (!canAct) {
@@ -347,6 +425,22 @@ private fun ListPart(
     } else if (n == 0) {
         Gap(4)
         Text(ForgetRange.w("none_ticked"), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
+}
+
+/**
+ * One pinned chat, drawn as KEPT: its title and how many messages stay. No
+ * check box and no tap - there is nothing here to tick or untick.
+ */
+@Composable
+private fun KeptRow(x: ForgetRange.PinnedChat) {
+    val chrome = LocalChrome.current
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(x.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            Text(ForgetRange.messagesLine(x.messages), style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo)
+        }
     }
 }
 

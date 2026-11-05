@@ -298,6 +298,16 @@ await check("undo rows and jobs in the phone's field names still read", async ()
     { id: "pj", label: "weekly digest", state: "running", capabilities: ["memory.read"],
       private: true, progress: 0.5 }] };
   const page = await tab("work", { undo, jobs });
+  // ATTENTION-FIRST (2026-11-04): a job nothing is waiting on is folded under
+  // the "Quiet / healthy" bar, so its row is hidden until the bar is opened.
+  // The phone's field names must still READ - so open the bar first; the fold
+  // is the new correct look, and this test is about what the row says.
+  const bar = page.locator("#jobs .quiet-bar");
+  assert.equal(await bar.getAttribute("aria-expanded"), "false",
+    "a quiet job starts folded, not expanded");
+  await bar.click();
+  assert.equal(await bar.getAttribute("aria-expanded"), "true",
+    "the quiet bar opens when clicked");
   const shelf = await page.locator("#undo").innerText();
   const work = await page.locator("#jobs").innerText();
   const putBack = await page.locator("#undo").getByRole("button", { name: "Put it back" }).count();

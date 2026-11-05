@@ -27,6 +27,16 @@ POST /api/protection/propose          the chat path - ONE card (protect_item)
 GET  /api/protection/propose?id=      how one proposal ended
 ```
 
+Chat reaches the SAME routes, not a copy of them (2026-11-04): the model tool
+`protect_from_jarvis` has three actions - `add`, `remove` and `list` (add and
+remove raise the ONE card above; `list` reads the store with no card) - and
+`jarvis_quick.py`'s fixed phrasings ("restrict the folder C:\X from Jarvis",
+"stop Jarvis reading C:\X", "unrestrict C:\X", "what folders are restricted?",
+"is Jarvis blocked from C:\X?") call `handle_propose`, `handle_remove` and
+`handle_get`/`status_for` directly. Both apps chat through the same
+`/api/chat`, so a folder-level restriction can be set by plain chat from the
+PC and the phone alike.
+
 ## Two modes
 
 - **Blocked - no access.** A folder or file: no read, no search hit, no

@@ -669,9 +669,10 @@ def t_state_round_trips_and_prefills_a_rerun():
     check("state carries every question in order and says how big a card wait is",
           [q["id"] for q in st["questions"]] == [q["id"] for q in S.QUESTIONS]
           and isinstance(st["card_wait_s"], float), st["questions"][:2])
-    check("state carries the question-set version and the completed one",
+    check("state carries the question-set version, and no completion for two "
+          "answers of 25 (DEF-043)",
           st["version"] == S.QUIZ_VERSION
-          and st["completed_version"] == S.QUIZ_VERSION
+          and st["completed_version"] == 0
           and st["runs"] == 1 and st["dismissed_at"] is None
           and st["in_progress"] == {},
           {k: st[k] for k in ("version", "completed_version", "runs",
@@ -694,7 +695,7 @@ def t_the_saved_answers_never_hold_private_data():
                          "in_progress", "answers", "completed_at", "outcomes"}
           and saved["answers"] == {"talk_style": "plain", "humour": "on"}
           and saved["version"] == S.SCHEMA_VERSION
-          and saved["completed_version"] == S.QUIZ_VERSION
+          and saved["completed_version"] == 0
           and saved["runs"] == 1 and saved["dismissed_at"] is None
           and saved["in_progress"] == {}
           and not any(word in raw.lower() for word in

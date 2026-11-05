@@ -19,11 +19,8 @@ WHAT THIS SUITE PROVES, AND WHY EACH HALF EXISTS
      that invents an ability is worse than no profile at all, so:
        * every `tier` is re-derived from the SHIPPED config path - the
          `[tools].enabled` list in backend/rebuilt/jarvis-framework.toml,
-         `jarvis_asks_first.TOOLS_SWITCHABLE` (the in-app switches, 48 of the
-         51 at 2026-11-04) and `jarvis_asks_first.NOT_A_SWITCH`'s three (their
-         own switch, or the tool they ride with, decides them) - and must equal
-         what the profile claims. There is no "no in-app switch / settings-file"
-         class any more, and the suite fails if one is claimed again;
+         `jarvis_asks_first.TIER_A/TIER_B` (the in-app switches) and each
+         module's own switch - and must equal what the profile claims;
        * every `off-by-default` tool must really be absent from the shipped
          tool list AND its own switch must really ship off (`[rea] enabled =
          false`, and the sandbox switch is OFF with no settings file);
@@ -101,16 +98,14 @@ def expected_tier(name: str, shipped: set) -> str:
 
     The order is the decision order: a tool that is already in the shipped list
     needs no action, a tool with its own module switch is governed by that
-    switch before anything else, and every other tool the model can be offered
-    has an in-app switch on Settings, What asks first ("Let the AI use this").
-    There is no fourth answer: the "no in-app switch" class was deleted on
-    2026-11-04, and every one of the 48 switches is listed by
-    `AF.TOOLS_SWITCHABLE`, which the checks below read."""
+    switch before anything else, then the in-app switches, then the rest."""
     if name in shipped or name in A.GRANT_ASK_TOOLS:
         return "always-available"
     if name in OWN_SWITCH_TOOLS:
         return "off-by-default"
-    return "switchable"
+    if name in AF.TOOLS_SWITCHABLE:
+        return "switchable"
+    return "settings-file"
 
 
 def tree_for(rel: str) -> ast.Module:
@@ -347,8 +342,16 @@ def t_tiers_agree_with_the_shipped_switch():
     check("every tier agrees with the shipped config path and the asks-first tiers",
           not wrong, "\n        ".join(wrong))
     claimed = {p["tier"] for p in T.PROFILES.values()}
-    check("all three tier values are actually used somewhere",
-          claimed == set(T.TIER_VALUES), f"{sorted(claimed)}")
+    # 2026-11-04, main's 71d4d6a01: every tool the model can be offered now has
+    # an in-app switch (jarvis_asks_first.TOOLS_SWITCHABLE, 48 of them, all but
+    # NOT_A_SWITCH's three), so no tool's only way in is a name typed into the
+    # settings file any more. `settings-file` is therefore a real state with
+    # nothing in it. It is named HERE, rather than the check being dropped, so
+    # that a tool which genuinely needs the file again fails this line and gets
+    # its own sentence, instead of coming back silently while a reader is still
+    # told the state exists.
+    check("every tier value is used except settings-file, which no tool needs now",
+          claimed == set(T.TIER_VALUES) - {"settings-file"}, f"{sorted(claimed)}")
 
 
 def t_always_available_really_is():
@@ -374,21 +377,47 @@ def t_always_available_really_is():
 def t_switchable_matches_the_in_app_switches():
     shipped = shipped_tools()
     switchable = {n for n, p in T.PROFILES.items() if p["tier"] == "switchable"}
-    check("every switchable profile is a real in-app switch (TOOLS_SWITCHABLE)",
+    check("every switchable profile is a real in-app switch (TIER_A or TIER_B)",
           switchable <= set(AF.TOOLS_SWITCHABLE),
           f"claimed but not switchable: {sorted(switchable - set(AF.TOOLS_SWITCHABLE))}")
-    want = {n for n in T.PROFILES if expected_tier(n, shipped) == "switchable"}
-    check("every tool that is only an in-app switch has a switchable profile",
-          want == switchable,
-          f"missing: {sorted(want - switchable)}; extra: {sorted(switchable - want)}")
+    # The equivalence this line used to assert - "every in-app switch is a
+    # `switchable` profile" - is the half main's 71d4d6a01 made FALSE, and it is
+    # false in the DATA, not merely awkward here: 13 of the 48 switchable tools
+    # are already ON in the shipped [tools].enabled list, so the decision order
+    # above (and the truth) gives them `always-available` - no action needed, and
+    # the page can still switch them OFF - and `rea_investigate` is
+    # `off-by-default` because its own `[rea] enabled` ships false and outranks
+    # the tool list. Holding the old shape would force 14 profiles to state
+    # something untrue, which is the one thing this suite exists to stop.
+    #
+    # What is a real bug - and was exactly the bug on this branch, 13 profiles
+    # claiming "no in-app switch" - is a switchable tool whose profile can only
+    # say "there is no switch". So the check now asserts the three answers are
+    # EXHAUSTIVE: every in-app switch is either off until you turn it on, or
+    # already on, or gated by its own module switch. Each of those is a true
+    # sentence for the tools that hold it, and a profile that says "no in-app
+    # switch" for a switchable tool falls out of all three. It reads the TIER,
+    # never the shipped list, so a wrong tier cannot hide behind the list.
+    already_on = {n for n, p in T.PROFILES.items() if p["tier"] == "always-available"}
+    own_switch = {n for n, p in T.PROFILES.items() if p["tier"] == "off-by-default"}
+    check("every in-app switch is off until switched, already on, or own-switch gated",
+          set(AF.TOOLS_SWITCHABLE) <= (switchable | already_on | own_switch),
+          f"neither, and so claimed to have no switch: "
+          f"{sorted(set(AF.TOOLS_SWITCHABLE) - (switchable | already_on | own_switch))}")
     check("no switchable tool is already on in the shipped list",
           not (switchable & shipped), str(sorted(switchable & shipped)))
-    check("the three tools with no switch of their own are explained and are "
-          "never claimed switchable",
-          set(AF.NOT_A_SWITCH) <= set(T.PROFILES)
-          and not (switchable & set(AF.NOT_A_SWITCH)),
-          f"unexplained: {sorted(set(AF.NOT_A_SWITCH) - set(T.PROFILES))}; "
-          f"claimed switchable: {sorted(switchable & set(AF.NOT_A_SWITCH))}")
+
+
+def t_settings_file_really_is():
+    shipped = shipped_tools()
+    bad = []
+    for name, p in T.PROFILES.items():
+        if p["tier"] != "settings-file":
+            continue
+        if name in shipped or name in AF.TOOLS_SWITCHABLE or name in OWN_SWITCH_TOOLS:
+            bad.append(name)
+    check("every settings-file tool is absent from the shipped list and has no "
+          "in-app switch", not bad, str(bad))
 
 
 def t_off_by_default_really_ships_off():
@@ -407,27 +436,36 @@ def t_off_by_default_really_ships_off():
           ok, str(settings))
 
 
-def t_rea_really_refuses_live_process_capture():
+def t_rea_matches_its_own_hard_deny():
     tree = tree_for("backend/jarvis_rea.py")
     hard_deny = string_set(tree, "HARD_DENY")
     allowed = string_set(tree, "ALLOWED_CALL_TOOLS")
     check("jarvis_rea.HARD_DENY is really readable as a set of tool names",
           bool(hard_deny), str(hard_deny))
-    wanted = {"capture_process_scenario", "capture_browser_scenario",
-              "capture_electron_scenario", "capture_native_ui_scenario"}
-    check("REA's hard deny really refuses all four live-capture tools",
-          wanted <= (hard_deny or set()),
-          f"missing: {sorted(wanted - (hard_deny or set()))}")
-    check("no live-capture tool is in the allow-list REA may send",
-          not (wanted & (allowed or set())),
-          f"allowed: {sorted(wanted & (allowed or set()))}")
+    mutators = {"install_adb_package", "uninstall_adb_package", "push_adb_file",
+                "start_adb_app", "start_adb_activity", "stop_adb_app"}
+    check("the hard deny is exactly the six phone-mutating commands - the owner's "
+          "full-toolbox decision keeps every read and every capture",
+          (hard_deny or set()) == mutators, str(sorted(hard_deny or set())))
+    check("no hard-denied tool can ever be sent",
+          not ((hard_deny or set()) & (allowed or set())),
+          f"also allowed: {sorted((hard_deny or set()) & (allowed or set()))}")
+    live = {"capture_process_scenario", "capture_browser_scenario",
+            "capture_electron_scenario", "capture_native_ui_scenario"}
+    literals = {node.value for node in ast.walk(tree)
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)}
+    check("the four live-capture tools are ordinary card-gated actions, not a "
+          "denied lane",
+          not (live & (hard_deny or set())) and live <= literals,
+          f"missing: {sorted(live - literals)}")
     rea = T.PROFILES["rea_investigate"]
-    check("the REA profile claims files, and does NOT claim to touch a process",
-          rea["touches"] == "files" and "process" not in rea["touches"],
+    check("the REA profile claims files AND processes, because live capture is "
+          "allowed behind its cards",
+          "files" in rea["touches"] and "process" in rea["touches"],
           rea["touches"])
-    check("... and says so in its limits",
-          any("never attaches" in line.lower() or "live capture" in line.lower()
-              for line in rea["limits"]), str(rea["limits"]))
+    check("... and says plainly what the module still refuses",
+          any("refuses by name" in line.lower() for line in rea["limits"]),
+          str(rea["limits"]))
 
 
 def t_touches_match_the_modules():
@@ -623,8 +661,9 @@ def main():
         ("truth", (t_tiers_agree_with_the_shipped_switch,
                    t_always_available_really_is,
                    t_switchable_matches_the_in_app_switches,
+                   t_settings_file_really_is,
                    t_off_by_default_really_ships_off,
-                   t_rea_really_refuses_live_process_capture,
+                   t_rea_matches_its_own_hard_deny,
                    t_touches_match_the_modules,
                    t_the_numbers_in_the_profiles_match_the_code,
                    t_no_profile_claims_an_ungated_way_out)),
