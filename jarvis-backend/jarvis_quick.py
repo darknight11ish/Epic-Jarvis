@@ -1307,6 +1307,17 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # the local-calendar read are owned here, before any honesty sentence.
     # (The note lane's capture path really files even when the note TOOL is
     # off; the honesty lane's old note_write off-answer is retired.)
+    # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
+    # Before everything that starts with "delete"/"remove": this one names
+    # what Jarvis learned or the chats, and a time frame. It only ever fills
+    # in the checked list in Brain - it removes nothing. It runs BEFORE the
+    # chat-history numbers below as well: the owner's own words for clearing
+    # chats ("clear old chats", "delete the conversations from last week") are
+    # this intent, which asks which days and names the pinned chats - never a
+    # capability blurb handed back to him in place of the question.
+    got = _forget_range(s, now)
+    if got is not None:
+        return got
     # the chat history's own numbers - where it is, how big, how many, and how
     # long a batch takes to clear (2026-11-04, the owner's own question). Read
     # from the measured file, before the model/preset lane, because that lane
@@ -1409,12 +1420,9 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
         return got
 
     # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
-    # Before everything that starts with "delete"/"remove": this one names
-    # what Jarvis learned or the chats, and a time frame. It only ever fills
-    # in the checked list in Brain - it removes nothing.
-    got = _forget_range(s, now)
-    if got is not None:
-        return got
+    # Run further up, before the chat-history numbers: see the note there. The
+    # section stays in place as a signpost so a reader following the old order
+    # finds where it went.
 
     # --- "make me a widget ..." (jarvis_widgets.py, 2026-09-28) ---------------
     # Before timers and reminders: "make me a widget with a 10-minute timer

@@ -694,8 +694,11 @@ def preview(body, *, now: Optional[float] = None, chats=None, mem=None,
         log = _log(chats)
         store = _store(mem)
     except Exception as exc:
-        return 503, {"ok": False, "error": "unavailable",
-                     "message": f"this PC could not read its own history ({type(exc).__name__})",
+        return 503, {"ok": False, "error": "unreadable",
+                     "message": ("this PC could not read its own history "
+                                 f"({type(exc).__name__}), so nothing was deleted. "
+                                 "Try again - and if it keeps happening, restart "
+                                 "Jarvis and ask it what went wrong."),
                      "irreversible": True}
 
     got = log.overlapping(start, end, limit=100000)

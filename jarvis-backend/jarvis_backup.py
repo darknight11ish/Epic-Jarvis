@@ -739,6 +739,14 @@ NOT_BACKED_UP = {
     # strong: the honest reason is that a restore would only put yesterday's
     # prices back in front of today's question.
     "parking-cache.db": "public parking prices and the place names looked up, kept a day; re-fetched on the next lookup",
+    # Clear old chats' own rehearsal (jarvis_history_purge.py, 2026-11-04): to
+    # answer "how long would this take on my history" it copies the chat
+    # database to `live-copy.db` and builds a small `synthetic.db` history, both
+    # inside a throwaway temp folder that is deleted when the measurement
+    # returns. Neither is ever a store in the settings folder, so neither is
+    # anything a backup could carry.
+    "live-copy.db": "a throwaway copy the purge rehearsal measures in a temp folder, deleted before it returns",
+    "synthetic.db": "a throwaway history the purge rehearsal builds in a temp folder, deleted before it returns",
 }
 
 #: Non-SQLite stores under the settings folder that are deliberately NOT
@@ -753,6 +761,12 @@ NOT_BACKED_UP_PATHS = {
     "guardian/blobs/": "saved file bytes, up to 250 MiB, device-local; must never bloat an archive",
     "energy.jsonl": "energy measurements: GPU power draw, machine data; writer off by default, 500-row cap",
     "ledger-anchors.jsonl": "tamper anchors the owner copies off the PC; stale ones would flag a restore",
+    # Clear old chats' own trail (jarvis_history_purge.py, 2026-11-04): one line
+    # per deletion - the window, the counts, the ids, never a word of content.
+    # Like audit.db above it is a security trail rather than memory: a stale one
+    # restored beside the chats from an earlier backup would claim deletions the
+    # restored history contradicts.
+    "purge-audit.jsonl": "a trail of deletions, never content; a stale one would claim deletions the restored history contradicts",
 }
 
 #: The settings files the `*.json` glob cannot reach, because their extension is

@@ -9,9 +9,9 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **49 drop-in modules**, in [`ready/`](ready/) -
+- **50 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
-  - **28** replace a patch, and are generated from it;
+  - **29** replace a patch, and are generated from it;
   - **21** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **143 core patches**, which still go on through
@@ -53,6 +53,7 @@ the catalogue cannot account for is refused, never silently left out.
 | 153 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
 | 155 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
 | 157 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
+| 170 | `history-purge` | clear old chats (and the facts they taught) for a date range, after a card, TWO separate yeses and a Windows Hello / fingerprint ticket. This is the one route pair in Jarvis that deletes in bulk and c | `history-purge.patch` |
 
 ## Drop-in modules with no patch of their own
 
