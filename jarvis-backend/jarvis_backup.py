@@ -765,7 +765,14 @@ NOT_BACKED_UP_PATHS = {
 #: speed.jsonl  one JSON object per line - the response-speed samples the
 #:              desktop graph is drawn from. Never renamed into the glob's
 #:              reach: the format is one line per sample by design.
-SETTINGS_NAMES = ("config.toml", "speed.jsonl")
+#: bench.jsonl  the SELF-BENCHMARK's own history (jarvis_bench.py, 2026-11-04):
+#:              one JSON object per line, two row kinds, and no text but a model
+#:              name, a lane name and a short machine reason - `_clean()` is an
+#:              allowlist, so a prompt or an answer cannot be written to it.
+#:              It is the owner's own measurements, exactly like speed.jsonl, so
+#:              it is carried rather than excused; `backend/test_backup.py`
+#:              fails if a `.jsonl` a backend module names is in neither list.
+SETTINGS_NAMES = ("config.toml", "speed.jsonl", "bench.jsonl")
 
 STUDY_DB = "study.db"
 

@@ -119,6 +119,20 @@ def cases() -> dict:
     out["phone_lockdown_on"] = AF.view(here=False)
     _with(SHIPPED, lockdown=True, lockdown_waiting=True)
     out["pc_lockdown_off_card_waiting"] = AF.view(here=True)
+    # D4, 2026-11-04: the Tools page may turn OFF anything that is on, and the
+    # same day's decision made every KNOWN tool switchable ON. So what is left
+    # in `tools.extra` is a name this PC does not know at all (plugin_scan, a
+    # drop-in program's own tool) - and, where the file happens to name them,
+    # the three whose own switch decides them. web_search is now one of the 48
+    # switch rows and no longer appears in `extra`.
+    _with(SHIPPED, tools_enabled=["web_search", "plugin_scan", "calendar_read"])
+    out["pc_unlisted_tools_on"] = AF.view(here=True)
+    # ... and the same page after the owner turned the unknown one OFF: the row
+    # STAYS and says Off, rather than vanishing on the next read.
+    _with(SHIPPED, tools_enabled=["web_search", "calendar_read"])
+    AF._T_STATE["off_rows"]["plugin_scan"] = {
+        "outcome": "disabled", "message": AF._tools_off_said("plugin_scan"), "at": 0}
+    out["pc_unlisted_tool_turned_off"] = AF.view(here=True)
     _with(SHIPPED)
     AF._reset_for_tests()
     return {
@@ -135,6 +149,8 @@ def cases() -> dict:
             "says_search": AF.SAYS_SEARCH,
             "tools_label": AF.TOOLS_LABEL, "tools_detail": AF.TOOLS_DETAIL,
             "tools_pc_only": AF.TOOLS_PC_ONLY, "tools_not_on_list": AF.TOOLS_NOT_ON_LIST,
+            "tools_not_switched_why": AF.TOOLS_NOT_SWITCHED_WHY,
+            "no_switch_note": dict(AF.NO_SWITCH_NOTE),
             "lockdown_label": AF.LOCKDOWN_LABEL, "lockdown_detail": AF.LOCKDOWN_DETAIL,
             "lockdown_on_says": AF.LOCKDOWN_ON_SAYS, "lockdown_off_says": AF.LOCKDOWN_OFF_SAYS,
             "lockdown_on_label": AF.LOCKDOWN_ON_LABEL,

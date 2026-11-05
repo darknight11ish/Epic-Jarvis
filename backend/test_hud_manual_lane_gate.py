@@ -179,7 +179,14 @@ def t_the_patch_and_the_base():
              # menu's card. It is a code patch and it sits before the loader; it
              # has no hunk in jarvis_hud.py at all.
              "skill-install-note.patch",
-             "phone-apps.patch"}
+             "phone-apps.patch",
+             # bench.patch (2026-11-04, the self-benchmark) is appended after
+             # this patch, immediately before plugin-loader.patch: TWO hunks,
+             # both in jarvis_hud.py (the GET /api/bench routes and the POST
+             # /api/bench routes), anchored inside hardware.patch's own added
+             # blocks. It touches no gate list, no tier row and no _RISK row, so
+             # it rewrites nothing this patch wrote.
+             "bench.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

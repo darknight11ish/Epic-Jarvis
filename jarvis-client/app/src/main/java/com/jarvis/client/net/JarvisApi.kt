@@ -1,6 +1,7 @@
 package com.jarvis.client.net
 
 import android.util.Log
+import com.jarvis.client.call.CallRecordRules
 import com.jarvis.client.data.AppControl
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
@@ -3767,6 +3768,35 @@ class JarvisApi(
                 ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it)))
             }
         }
+
+    // ------------------------------------------------ call recording ----
+    // The phone's half of the frozen contract of 2026-11-04 ([CallRecordWire]).
+    // A recording is cut into pieces on this phone and posted one at a time;
+    // the PC appends them in `seq` order, turns them into words, works out who
+    // was speaking and writes ONE note in its Obsidian vault. The phone sends
+    // no words and writes no note - it cannot even reach the vault.
+    //
+    // All three go through [postObject], so they carry the token,
+    // `X-Jarvis-Client: hud` and `X-Jarvis-Surface: phone` like every other
+    // request, and none of them logs it.
+
+    /** `POST /api/call/recording/start` - the date and the audio's shape; answers the PC's session id. */
+    suspend fun callRecordStart(startedAtMs: Long): ApiResult<JsonObject> =
+        postObject(CallRecordRules.START_PATH, CallRecordWire.startBody(startedAtMs))
+
+    /**
+     * `POST /api/call/recording/chunk` - one base64 piece, at `seq`, for `session`.
+     *
+     * The SAME `seq` is retried when this fails, never the next number: the
+     * PC's file is the order it receives them in, so skipping one would put a
+     * hole in the middle of the audio that nothing later repairs.
+     */
+    suspend fun callRecordChunk(session: String, seq: Int, pcm: ByteArray): ApiResult<JsonObject> =
+        postObject(CallRecordRules.CHUNK_PATH, CallRecordWire.chunkBody(session, seq, pcm))
+
+    /** `POST /api/call/recording/finish` - the full length, an optional title, and the consent flag. */
+    suspend fun callRecordFinish(session: String, durationSec: Long, title: String? = null): ApiResult<JsonObject> =
+        postObject(CallRecordRules.FINISH_PATH, CallRecordWire.finishBody(session, durationSec, title))
 
     // ------------------------------------------------------------ voice ----
 

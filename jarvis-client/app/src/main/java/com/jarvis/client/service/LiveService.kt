@@ -30,6 +30,8 @@ import com.jarvis.client.audio.Wav
 import com.jarvis.client.voice.LiveAudioRoute
 import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveRules
+import com.jarvis.client.voice.MicNow
+import com.jarvis.client.voice.MicOwner
 import com.jarvis.client.voice.OrtTurnModel
 import com.jarvis.client.voice.SmartTurn
 import com.jarvis.client.voice.SpeechRun
@@ -419,6 +421,7 @@ class LiveService : Service() {
             runCatching { rec?.stop() }
             runCatching { rec?.release() }
             rec = null
+            MicNow.closed(MicOwner.Use.LIVE)
             runCatching { canceller?.release() }
             canceller = null
             openOn = null
@@ -447,7 +450,12 @@ class LiveService : Service() {
                     interrupt = JarvisRuntime.settings.interrupt.value,
                 )
                 refreshNotification(status)
-                if (!may.mic) {
+                // The microphone is shared (voice/MicOwner.kt): call recording
+                // outranks Live, and while it is armed or recording Live keeps
+                // its recorder CLOSED - paused, not killed, because Android
+                // 14+ refuses to start a microphone service from the
+                // background and a stopped Live could not come back.
+                if (!may.mic || MicNow.callRecordingHolds()) {
                     // Closed, not ignored: Android's microphone sign goes off,
                     // and so does the car's call mode - Live must not leave a
                     // car showing a call while it is muted or a card waits.
@@ -492,6 +500,7 @@ class LiveService : Service() {
                         }.getOrNull()
                     }
                     opened.startRecording()
+                    MicNow.opened(MicOwner.Use.LIVE)
                     rec = opened
                     openOn = applied
                     JarvisRuntime.liveMicWords(applied.words)
@@ -660,7 +669,7 @@ class LiveService : Service() {
             answering = speaking,
             interrupt = JarvisRuntime.settings.interrupt.value,
         )
-        return may.mic && !LiveRules.onCall(
+        return may.mic && !MicNow.callRecordingHolds() && !LiveRules.onCall(
             audioMode(),
             voice.speaker.voiceCall,
             ownMicCall = route?.callMode == true,
