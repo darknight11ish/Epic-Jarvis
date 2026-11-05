@@ -6248,6 +6248,7 @@ PLUGIN_CATALOGUE = (
     ('antislop', "the Anti-Slop filter: miqdadbadjuber/anti-slop's rules, distilled, so Jarvis writes and builds without the AI tells - no em dashes in prose, no buz..."),
     ('auto-router', 'estimate what a turn will cost on this PC, and advise when a cloud lane would be quicker - advice only: jarvis_router.choose() still decides, and a...'),
     ('brain-reads', "the Brain's read-only routes (the Brain upgrades, and a chat's facts)."),
+    ('call-notes', 'record a phone call from the Android app: the phone uploads 16 kHz mono audio, this PC transcribes it, labels who spoke and creates ONE new Obsidian note named for the date and time.'),
     ('card-prefs', 'how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.'),
     ('chatbot-limits-hud', "the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app."),
     ('chatbot-routes', 'the routes both apps use to have Jarvis talk to an AI chatbot for the owner.'),
