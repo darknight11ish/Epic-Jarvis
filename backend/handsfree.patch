@@ -1,9 +1,9 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
 @@ -2594,3 +2594,47 @@
-            print(f"  {r['id']}  {r['tier']:6} {r['action']}")
-        sys.exit(0)
-    sys.exit(review(a.days))
+             print(f"  {r['id']}  {r['tier']:6} {r['action']}")
+         sys.exit(0)
+     sys.exit(review(a.days))
 +
 +
 +# --------------------------------------------------------------------------
