@@ -15941,8 +15941,9 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         out.set_status("approval")
         # The send-file card shows the filename, folder, size and cap in its
         # OWN words (prepare() built them), not the generic tool-call line.
-        prompt = (plan_text if name in (SEND_FILE_TOOL, SEND_TEXT_TOOL)
-                  else _gate_prompt(name, args))
+        prompt = plan_text if name == SEND_FILE_TOOL else _gate_prompt(name, args)
+        if name == SEND_TEXT_TOOL:
+            prompt = plan_text
         verdict = checker(action_name, {"text": plan_text}, prompt)
         out.card_answered(verdict)
         out.set_status("thinking")

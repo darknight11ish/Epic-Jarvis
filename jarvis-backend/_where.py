@@ -1521,18 +1521,6 @@ SHIPPED = (
     # before. It sits before the last entry on purpose: the zero-jargon
     # checker never scans an entry with no trailing comma.
     "jarvis_source_independence.py",
-    # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
-    # the owner's own request: measure Jarvis's own token speed across the
-    # local models, the layer placement and the context sizes, keep a separate
-    # history, and explain the results in plain words). Phase 1 is the engine
-    # and its store: one run = one model + one setup + N repeats on one lane,
-    # the prefill correction (`prompt_eval_count - prompt_eval_cached_count`,
-    # never the naive division that inflates by the cache-hit ratio), per-card
-    # VRAM and utilisation from nvidia-smi, and its own `bench.jsonl` - it
-    # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
-    # it. Standard library only, loopback only, no card and no model at import.
-    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
-    "jarvis_bench.py",
     # Hands-free mode (jarvis_handsfree.py, 2026-11-04; the owner's own
     # request): `[handsfree] enabled` OFF by default, one ask-tier card to turn
     # it on and an instant, cardless OFF; every waiting approval card read out
@@ -1549,7 +1537,19 @@ SHIPPED = (
     # Standard library only, no network, no audio device: the clip arrives in
     # the request body. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
-    "jarvis_handsfree.py"
+    "jarvis_handsfree.py",
+    # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
+    # the owner's own request: measure Jarvis's own token speed across the
+    # local models, the layer placement and the context sizes, keep a separate
+    # history, and explain the results in plain words). Phase 1 is the engine
+    # and its store: one run = one model + one setup + N repeats on one lane,
+    # the prefill correction (`prompt_eval_count - prompt_eval_cached_count`,
+    # never the naive division that inflates by the cache-hit ratio), per-card
+    # VRAM and utilisation from nvidia-smi, and its own `bench.jsonl` - it
+    # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
+    # it. Standard library only, loopback only, no card and no model at import.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_bench.py"
 )
 
 

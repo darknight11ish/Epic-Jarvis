@@ -283,21 +283,31 @@ CLASSIFICATION = {
     # jarvis_handsfree.py, plugins/ready/handsfree). GET reads the switch, the
     # answer window, the closed vocabulary and whether a phone can take a text;
     # POST is the switch itself: OFF at once and cardless, ON one ask-tier card
-    # (`handsfree_enable`) through the ordinary approval path. Desktop: Settings,
-    # Hands-free mode (src-tauri/src/handsfree.rs get_handsfree/set_handsfree,
-    # settings window only, drawn by src/handsfree-settings.js). The answer route
-    # and the phone's own result route are in BACKEND_ONLY below: the phone half
-    # (speaking a card out and recording the answer) is the Android lane's own
-    # change against this contract, and until it lands no window calls them.
-    "/api/handsfree": ("deliberate", "Hands-free mode's one switch (2026-11-04; "
-                        "JARVIS-API section 186; jarvis_handsfree.py, "
-                        "plugins/ready/handsfree). GET is a read; POST "
-                        "{\"enabled\": bool} turns it OFF at once and cardless, "
-                        "and ON through ONE ask-tier card (`handsfree_enable`, a "
-                        "risky approval) that a person answers - this route never "
-                        "decides that card. Desktop: Settings, Hands-free mode. "
-                        "The answer route and the phone's result route are in "
-                        "BACKEND_ONLY below until the phone lane lands."),
+    # (`handsfree_enable`) through the ordinary approval path. BOTH apps call
+    # this one route - the owner asked for the switch "from chat, Jarvis Live,
+    # or Settings" - so it is ported. Desktop: Settings, Hands-free mode
+    # (src-tauri/src/handsfree.rs get_handsfree/set_handsfree, settings window
+    # only, drawn by src/handsfree-settings.js). Phone: net/Handsfree.kt's
+    # lenient read, JarvisRuntime.refreshHandsfree/setHandsfree, drawn by
+    # ui/screens/HandsfreeSection.kt and Home's status line. The phone's answer
+    # clip (/api/handsfree/answer) and its own word on a text it sent
+    # (/api/phone/result) stay PHONE-ONLY below: the phone is the ears and the
+    # SMS hand, and a client never transcribes (CLAUDE.md).
+    "/api/handsfree": ("ported", "Hands-free mode's one switch (2026-11-04; "
+                       "JARVIS-API section 186; jarvis_handsfree.py, "
+                       "plugins/ready/handsfree). GET is a read of the switch, the "
+                       "60-second answer window, the closed yes/no vocabulary, "
+                       "whether a voice print is enrolled, whether a phone can take "
+                       "a text, and the newest read-out; POST {\"enabled\": bool} "
+                       "turns it OFF at once and cardless, and ON through ONE "
+                       "ask-tier card (`handsfree_enable`, a risky approval) that a "
+                       "person answers - this route never decides that card. Desktop: "
+                       "Settings, Hands-free mode (src-tauri/src/handsfree.rs "
+                       "get_handsfree/set_handsfree, settings window only, drawn by "
+                       "src/handsfree-settings.js). Phone: net/Handsfree.kt's "
+                       "lenient read, JarvisRuntime.refreshHandsfree/setHandsfree, "
+                       "drawn by ui/screens/HandsfreeSection.kt and Home's status "
+                       "line. The answer and result routes are PHONE-ONLY below."),
     "/api/antislop": ("ported", "The Anti-Slop filter (2026-10-28; JARVIS-API section 159; backend jarvis_antislop.py, vendoring the MIT-licensed miqdadbadjuber/anti-slop ruleset). GET reads the whole state (enabled, mode, scopes, dials, show_delivery_gate_on_ui_tasks); POST is ONE change at once, with no approval card either way and no model call - it filters the wording of an answer, opens no way out of the PC, reads no folder and takes no action. OFF costs 0 prompt tokens and rewrites nothing. Desktop: Settings, How Jarvis talks, Anti-Slop filter (src-tauri/src/antislop.rs get_antislop/set_antislop, settings window only; the card is src/antislop-settings.js + src/antislop.js). Phone: Settings, How Jarvis talks (net/Antislop.kt, ui/screens/AntislopPlate.kt, JarvisRuntime setAntislop/setAntislopMode), the master switch, the During/After mode and the em-dash box - the three scopes, the Delivery Gate switch and the dials are the desktop card on purpose (ARCHITECTURE section 8). The read-only POST /api/antislop/audit is in BACKEND_ONLY below."),
     # The Jarvis-owned local calendar's four routes are declared ONCE, at the END
     # of this table (search `/api/calendar`): `planned`, because the phone calls
@@ -967,22 +977,16 @@ PHONE_ONLY = {
     # can approve a file or extend its ten minutes.
     "/api/files/send": ("phone-only", "The files the owner already approved for this phone (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172): name, folder, size, MIME type and seconds left, never a path. A file appears only after the PC's own ONE send_file_to_phone card was approved, and only the phone has any use for it - the file's destination is the phone. Phone: net/SendFile.kt and ui/screens/SendFilePlate.kt (the Settings row, and a small block inside Coming up so a waiting file is noticed), JarvisRuntime.sendFiles. Desktop: nothing to draw, by design - the bytes leave the PC for the phone (docs/ARCHITECTURE.md section 8)."),
     "/api/files/download": ("phone-only", "ONE approved file's bytes, base64 in JSON, by opaque id only - never a path, and the answer carries none (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172). Ten minutes and one download; a second fetch is the PC's own 404 sentence. Phone: ui/screens/SendFilePlate.kt's View (FileProvider + ACTION_VIEW) and Save to Downloads (MediaStore.Downloads), JarvisRuntime.downloadFile. Desktop: nothing to draw - the phone is the destination (docs/ARCHITECTURE.md section 8)."),
-    # Hands-free (the owner's request of 2026-11-04; the phone lane of the PC's
-    # frozen contract, docs/JARVIS-API.md section 186; net/Handsfree.kt,
+    # Hands-free's two phone-facing routes (the owner's request of 2026-11-04;
+    # docs/JARVIS-API.md section 186; net/Handsfree.kt,
     # service/HandsfreeService.kt, voice/MicOwner.kt). PHONE-ONLY because the
-    # phone IS the mouth, the ears and the SMS hand: it plays the PC's own WAV
-    # out of its speaker, records the answer clip (the phone never transcribes -
-    # a client may not, CLAUDE.md), and sends the text message, because a
-    # Windows PC has no phone's microphone, speaker or SMS service. The PC keeps
-    # the authority: it transcribes, checks the owner's voice print and decides.
-    #
-    # The desktop calls the FIRST of these when its own lane lands (it has a
-    # hands-free setting too, per the owner's "from chat, Jarvis Live, or
-    # Settings"), and the frozen contract gives that single path BOTH the read
-    # and the switch. The moment the desktop calls it, rule 6 fails here and it
-    # moves to CLASSIFICATION as "ported" - the right change then, and this note
-    # says so rather than leaving it to be rediscovered.
-    "/api/handsfree": ("phone-only", "The hands-free state AND its switch (the owner's request of 2026-11-04; docs/JARVIS-API.md section 186): GET reads whether this PC has the mode armed, the 60-second answer window, the closed yes/no vocabulary, whether a voice print is enrolled, whether a phone can take a text, and the newest read-out; POST {\"enabled\": bool} turns it OFF at once and cardless, or ON through ONE ask-tier card. One path for both verbs - the contract has no separate /enabled route. Phone: net/Handsfree.kt's lenient read, JarvisRuntime.refreshHandsfree/setHandsfree, drawn by ui/screens/HandsfreeSection.kt and Home's status line. Desktop: none on this tree - the desktop lane of the same contract owns its own surface, and the day it calls this the entry becomes \"ported\" (ARCHITECTURE.md section 8)."),
+    # phone IS the ears and the SMS hand: it records the answer clip (the phone
+    # never transcribes - a client may not, CLAUDE.md), and it sends the text
+    # message, because a Windows PC has no phone's microphone or SMS service.
+    # The PC keeps the authority: it transcribes, checks the owner's voice print
+    # and decides. The THIRD route, /api/handsfree (the state AND its switch), is
+    # called by BOTH apps now that the desktop's own half landed, so it is in
+    # CLASSIFICATION above as `ported`.
     "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state, say} (the owner's request of 2026-11-04; docs/JARVIS-API.md section 186). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV inside the PC's own answer window (a minute at most), clip-capped at the PC's 30 seconds, and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
     "/api/phone/result": ("phone-only", "What happened to a `phone_command` this phone carried out: {id, ok, receipt, why}, where `receipt` is Android's own SMS RESULT_* and `why` is the refusal in plain words (the owner's request of 2026-11-04). Phone: service/HandsfreeService.kt posts it for EVERY command, including the ones it refused and the ones of a kind it does not know, so the PC can tell \"not sent\" from \"still working\". A PC has no phone to command, so the desktop never calls it (ARCHITECTURE.md section 8)."),
 
@@ -1018,31 +1022,6 @@ PHONE_STATUSES = {"phone-only", "desktop-todo"}
 # When an app starts calling one of these, the check FAILS and says to remove
 # the entry: a backend-only reason that has stopped being true is a lie.
 BACKEND_ONLY = {
-    # Hands-free mode's two phone-facing routes (2026-11-04; JARVIS-API section
-    # 186; jarvis_handsfree.py, plugins/ready/handsfree). Backend only on BOTH
-    # apps today, and deliberately: `/api/handsfree/answer` takes the owner's
-    # spoken clip and `/api/phone/result` is the phone's own word on a text it
-    # sent - the Android lane builds the phone half against the frozen contract
-    # in JARVIS-API section 186 (read the card out, record one answer, post the
-    # result) in its own PR, so neither app calls them on this tree. The PC's own
-    # Settings card calls `/api/handsfree`, which is on the table above as
-    # `ported`. Nothing else on this list approves anything: the answer route
-    # decides ONE card through the same `jarvis_gate.decide()` a tap uses, and the
-    # result route only records what the phone says and never invents a receipt.
-    "/api/handsfree/answer": "2026-11-04's hands-free mode (JARVIS-API section "
-                             "186): ONE spoken answer for ONE card that was read "
-                             "out - the clip is transcribed on the PC, the "
-                             "owner's voice print is checked first, and a closed "
-                             "yes/no list decides. Called by the phone half, which "
-                             "is the Android lane's own PR against the frozen "
-                             "contract; no app on this tree calls it yet.",
-    "/api/phone/result": "2026-11-04's hands-free mode (JARVIS-API section 186): "
-                         "the phone's own word on a text message it was asked to "
-                         "send (ok, a receipt, or why it did not). Until it "
-                         "arrives nothing on the PC says a text was sent, and an "
-                         "id this PC never handed out is refused rather than "
-                         "recorded. Called by the phone half, which is the Android "
-                         "lane's own PR; no app on this tree calls it yet.",
     # Habit check-ins and the owner's own mood log (2026-11-02, JARVIS-API
     # section 180). Backend only on BOTH apps today: this lane is the
     # backend half, and the Habits / Mood section on the Reminders screen is

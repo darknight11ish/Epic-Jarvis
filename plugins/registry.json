@@ -1304,43 +1304,43 @@
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "web-search-grant.patch",
+      "patch": "handsfree.patch",
       "bucket": "core",
       "order": 164,
-      "why": "edits lines the core already has; it cannot be applied out of order"
+      "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "unknown-risk-approvable.patch",
+      "patch": "web-search-grant.patch",
       "bucket": "core",
       "order": 165,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
-      "patch": "jobs-routes.patch",
+      "patch": "unknown-risk-approvable.patch",
       "bucket": "core",
       "order": 166,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
-      "patch": "skill-install-note.patch",
+      "patch": "jobs-routes.patch",
       "bucket": "core",
       "order": 167,
       "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
-      "patch": "phone-apps.patch",
+      "patch": "skill-install-note.patch",
       "bucket": "core",
       "order": 168,
-      "why": "adds lines to the core (routes, gate tables or a function) but removes none"
+      "why": "edits lines the core already has; it cannot be applied out of order"
     },
     {
-      "patch": "bench.patch",
+      "patch": "phone-apps.patch",
       "bucket": "core",
       "order": 169,
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "handsfree.patch",
+      "patch": "bench.patch",
       "bucket": "core",
       "order": 170,
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"

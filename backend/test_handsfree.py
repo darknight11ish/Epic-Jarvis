@@ -30,7 +30,7 @@ WHAT IS PROVED HERE, and what is not:
     through the SAME `jarvis_gate.decide()` a tap uses - with the stamp a
     Windows Hello approval leaves, which is the narrow branch the owner chose;
   * outside hands-free mode nothing at all happens, and nothing else in the
-    tree can take a voice yes (source checks);
+    tree can take a voice yes (structural `ast` checks - no source-text pins);
   * a text message is ONE card naming the contact and the exact words, handed
     to the phone as `phone_command`, and the PC never claims it was sent: only
     the phone's own result makes a receipt.
@@ -44,6 +44,7 @@ folder for the setting and the receipts; everything else is a stand-in.
 """
 from __future__ import annotations
 
+import ast
 import base64
 import json
 import shutil
@@ -550,11 +551,20 @@ def t_the_vocabulary_is_closed():
 def t_the_one_sentence_that_says_how_to_answer_matches_the_vocabulary():
     check("the ask sentence names both answers",
           "yes" in CW.HANDSFREE_ASK and "no" in CW.HANDSFREE_ASK, CW.HANDSFREE_ASK)
-    words = (HERE / "jarvis_card_words.py").read_text(encoding="utf-8")
-    eq("the sentence has ONE definition in the card words", words.count("HANDSFREE_ASK = "), 1)
-    check("and the read-out uses it rather than its own copy",
-          "jarvis_card_words.HANDSFREE_ASK" in (HERE / "jarvis_handsfree.py").read_text(
-              encoding="utf-8"))
+    # ONE definition, proved STRUCTURALLY rather than by pinning the text: a
+    # definition is an ast.Assign/AnnAssign to that name (a docstring or a
+    # comment can never be one), and the read-out is then asked to speak it.
+    tree = ast.parse((HERE / "jarvis_card_words.py").read_text(encoding="utf-8"))
+    defs = [node for node in ast.walk(tree)
+            if isinstance(node, (ast.Assign, ast.AnnAssign))
+            and any(isinstance(t, ast.Name) and t.id == "HANDSFREE_ASK"
+                    for t in (getattr(node, "targets", None)
+                              or [getattr(node, "target", None)]))]
+    eq("the sentence has ONE definition in the card words", len(defs), 1)
+    gate = _Gate([row("c1")])
+    said = HF.read_out(gate.pending()[0], gate=gate)
+    check("and the read-out speaks that sentence, not a copy of its own words",
+          CW.HANDSFREE_ASK in said["say"], said["say"])
 
 
 # --------------------------------------------------------------------------
@@ -578,23 +588,57 @@ def t_a_hello_card_is_approvable_by_voice_only_inside_hands_free():
 
 
 def t_nothing_outside_this_module_can_take_a_voice_yes():
-    src = (HERE / "jarvis_handsfree.py").read_text(encoding="utf-8")
-    eq("the stamp is left in exactly ONE place",
-       src.count("jarvis_owner_check.stamp("), 1)
-    eq("and approve_one is the ONE function that does it",
-       src.count("def approve_one("), 1)
+    # Structural, not textual: the stamp a Hello approval leaves is CALLED in
+    # exactly one place (an ast.Call, so a docstring or a comment can never
+    # satisfy it), approve_one is the ONE function that calls it, and the other
+    # modules cannot reach a voice yes because they never import this one.
+    tree = ast.parse((HERE / "jarvis_handsfree.py").read_text(encoding="utf-8"))
+    stamps = [node for node in ast.walk(tree)
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+              and node.func.attr == "stamp"
+              and isinstance(node.func.value, ast.Name)
+              and node.func.value.id == "jarvis_owner_check"]
+    eq("the stamp is left in exactly ONE place", len(stamps), 1)
+    approvers = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+                 and node.name == "approve_one"]
+    eq("and approve_one is the ONE function that does it", len(approvers), 1)
+    defaults = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
+                and node.name == "_stamp_default"]
+    inside = [s for s in stamps if defaults
+              and defaults[0].lineno <= s.lineno <= (defaults[0].end_lineno
+                                                     or defaults[0].lineno)]
+    eq("... the ONE stamp call is in the module's own default stamp helper",
+       len(inside), 1)
+    wired = [node for node in ast.walk(approvers[0])
+             if isinstance(node, ast.Name) and node.id == "_stamp_default"] if approvers else []
+    check("... and approve_one is the ONE function that uses that helper",
+          len(wired) == 1, len(wired))
     for name in ("jarvis_gate.py", "jarvis_owner_check.py", "jarvis_hud.py"):
         path = HERE / name
         if not path.is_file():
             path = REPO / "jarvis-backend" / name
-        text = path.read_text(encoding="utf-8")
+        mod = ast.parse(path.read_text(encoding="utf-8"))
+        imported = set()
+        for node in ast.walk(mod):
+            if isinstance(node, ast.Import):
+                imported.update(a.name.split(".")[0] for a in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module.split(".")[0])
         check(f"{name} never imports hands-free, so no other path can stamp by voice",
-              "jarvis_handsfree" not in text)
+              "jarvis_handsfree" not in imported, sorted(imported))
     # The test that proves the OTHER half: jarvis_owner_check's own risky path
-    # is untouched. Its Hello decision has no hands-free branch in it.
-    oc = (REPO / "jarvis-backend" / "jarvis_owner_check.py").read_text(encoding="utf-8")
-    check("jarvis_owner_check has no hands-free exception in it",
-          "handsfree" not in oc.lower())
+    # is untouched. Its Hello decision has no hands-free branch in it - no name,
+    # attribute or string anywhere in its own AST mentions the mode.
+    oc = ast.parse((REPO / "jarvis-backend" / "jarvis_owner_check.py").read_text(
+        encoding="utf-8"))
+    mentions = [node for node in ast.walk(oc)
+                if ((isinstance(node, ast.Constant) and isinstance(node.value, str)
+                     and "handsfree" in node.value.lower())
+                    or (isinstance(node, ast.Name) and "handsfree" in node.id.lower())
+                    or (isinstance(node, ast.Attribute)
+                        and "handsfree" in node.attr.lower()))]
+    check("jarvis_owner_check has no hands-free exception in it", not mentions,
+          mentions[:3])
 
 
 def t_the_voice_is_checked_before_the_words_exist():
@@ -786,10 +830,9 @@ def t_the_routes_answer_one_card_at_a_time():
 
 
 def t_the_module_adds_no_second_way_to_change_anything():
-    import ast
-    src = (HERE / "jarvis_handsfree.py").read_text(encoding="utf-8")
+    tree = ast.parse((HERE / "jarvis_handsfree.py").read_text(encoding="utf-8"))
     imported = set()
-    for node in ast.walk(ast.parse(src)):
+    for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             imported.update(a.name.split(".")[0] for a in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
@@ -798,10 +841,27 @@ def t_the_module_adds_no_second_way_to_change_anything():
                       "webbrowser"):
         check(f"jarvis_handsfree.py imports no {forbidden}", forbidden not in imported,
               sorted(imported))
-    check("jarvis_handsfree.py has no os.system or popen",
-          "os.system" not in src and "popen" not in src.lower())
+    # No second way to run anything or write the approvals table: a CALL to
+    # os.system/os.popen and any SQL string of its own, walked as nodes rather
+    # than matched as text; and the approval really goes through the gate's own
+    # decide() - an import of jarvis_gate and a call to `.decide`.
+    calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+             and isinstance(node.func, ast.Attribute)
+             and isinstance(node.func.value, ast.Name)
+             and node.func.value.id == "os" and node.func.attr in ("system", "popen")]
+    check("jarvis_handsfree.py has no os.system or popen", not calls, calls)
+    sql = [node for node in ast.walk(tree)
+           if isinstance(node, ast.Constant) and isinstance(node.value, str)
+           and "UPDATE approvals" in node.value]
+    gate_import = any(isinstance(node, ast.Import)
+                      and any(a.name == "jarvis_gate" for a in node.names)
+                      for node in ast.walk(tree))
+    decide_calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "decide"]
     check("the approval goes through jarvis_gate.decide, not a SQL write of its own",
-          "UPDATE approvals" not in src and "jarvis_gate" in src)
+          not sql and gate_import and bool(decide_calls),
+          (sql, gate_import, len(decide_calls)))
 
 
 if __name__ == "__main__":

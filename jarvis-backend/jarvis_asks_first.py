@@ -444,6 +444,7 @@ TIER_EXTRA = (
     "goals_list", "goal_add", "goal_progress", "goal_done",
     "conversation_find", "conversation_open",
     "phone_apps", "plugin_list", "plugin_switch",
+    "send_text_message",
     "refresh_abilities", "self_portrait", "setup_quiz",
 )
 

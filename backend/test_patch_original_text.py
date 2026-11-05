@@ -161,8 +161,8 @@ def t_the_late_patches_are_pinned_and_not_new():
     # jarvis_skills.py (install()'s signature, docstring and the `_gate(...)`
     # call), which is one of the five the patcher edits and is not in this
     # repository - so nothing earlier in the walk could have written them.
-    check("the twenty-four exceptions the tool's docstring names are the "
-          "twenty-four the walk finds", len(late) == 24,
+    check("the twenty-five exceptions the tool's docstring names are the "
+          "twenty-five the walk finds", len(late) == 25,
           f"the walk found {len(late)}: {late}")
 
 

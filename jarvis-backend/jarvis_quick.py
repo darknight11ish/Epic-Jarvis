@@ -6243,6 +6243,7 @@ PLUGIN_CATALOGUE = (
     ('goals', '"Goals with one card per step".'),
     ('google-calendar', 'Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time...'),
     ('habits', 'habit check-ins: a repeating thing the owner wants to do - walk, stretch, practise - with one tap recording that it happened that day, and no score...'),
+    ('handsfree', 'hands-free mode: approval cards read out to the phone, one card answered from one spoken yes or no inside 60 seconds after your voice print, and one approved text message handed to the phone - off by default.'),
     ('history-import', '"Bring in chats from ChatGPT, Claude, Gemini or DeepSeek".'),
     ('jarvis-calendar', "Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch tur..."),
     ('live', 'Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns.'),
