@@ -1542,15 +1542,36 @@ def _detect_cards() -> dict:
     for i, row in enumerate(rows if isinstance(rows, list) else []):
         if isinstance(row, dict):
             name = row.get("name") or row.get("model") or f"card {i}"
-            vram = row.get("vram_gib") or row.get("memory_gib") or row.get("vram")
+            # `total_gib` LAST, not first: it is what jarvis_hardware.detect()
+            # actually puts on a card row (jarvis_hardware.py's `rows.append`,
+            # "total_gib": s.total_mb / 1024), and it was missing from this
+            # tuple until 2026-11-04 - so every card's vram_gib came out None
+            # and the hardware screen showed the count with blank sizes. The
+            # other three keys are kept first so a caller that already speaks
+            # this block's own vocabulary still wins.
+            vram = (row.get("vram_gib") or row.get("memory_gib") or row.get("vram")
+                    or row.get("total_gib"))
             uuid = row.get("uuid") or row.get("id") or ""
+            # The two facts that tell two IDENTICAL cards apart (2026-11-04):
+            # `nvidia-smi` reports the PCI address of every card, and whether a
+            # monitor is plugged into it. Without them a plan can only say
+            # "card 1" and "card 2", which is an array position, not a card.
+            # Both stay None/"" when the caller does not know them, so nothing
+            # here ever invents a fact.
+            pci_id = str(row.get("pci_id") or "")
+            monitor = row.get("monitor")
+            monitor = monitor if isinstance(monitor, bool) else None
         else:
             name = str(getattr(row, "name", "") or f"card {i}")
-            vram = getattr(row, "vram_gib", None) or getattr(row, "memory_gib", None)
+            vram = (getattr(row, "vram_gib", None) or getattr(row, "memory_gib", None)
+                    or getattr(row, "total_gib", None))
             uuid = str(getattr(row, "uuid", "") or "")
+            pci_id = str(getattr(row, "pci_id", "") or "")
+            monitor = getattr(row, "monitor", None)
+            monitor = monitor if isinstance(monitor, bool) else None
         cards.append({"index": i, "name": str(name),
                       "vram_gib": (round(float(vram), 1) if isinstance(vram, (int, float)) else None),
-                      "uuid": uuid})
+                      "uuid": uuid, "pci_id": pci_id, "monitor": monitor})
     return {"count": len(cards), "cards": cards,
             "source": "jarvis_hardware.detect()"}
 
@@ -1649,12 +1670,98 @@ def hardware_block() -> dict:
                               "answers": None}}
 
 
+#: The port the pooled both-cards lane listens on. It is
+#: `jarvis_model_lanes.POOLED_PORT` (and `jarvis_big_coder.BIG_PORT`), and it is
+#: a literal here on purpose: this module is imported by the backend's start-up
+#: banner and by suites that run without the lane module beside them, so it must
+#: not pull `jarvis_model_lanes` in at import time. `backend/test_presets.py`
+#: pins the three to each other, so the number cannot drift in one place only.
+POOLED_PLAN_PORT = 11450
+
+
+def _card_roles(cards: list) -> dict:
+    """Which detected card plays which role in a three-card plan, from the
+    PC's own facts - never an array position.
+
+    `main` is the card with the MOST video memory, because the long-context
+    everyday model has to fit there (the 12 GB RTX 2060 on this PC). `display`
+    is the card `nvidia-smi` says a monitor is plugged into; `headless` is the
+    remaining card. Two identical RTX 2080 SUPERs cannot be told apart by
+    number, and the plan's own words used to call them "#1" and "#2" as if the
+    order in the list were a fact about the machine.
+
+    The three indexes are always integers so every row can be placed even on a
+    PC with fewer cards than the plan describes; `display_known` and
+    `headless_known` say whether a card was really FOUND for the role, and
+    `_role_words` uses them, so a card that is not installed is never described
+    as if it were.
+    """
+    n = len(cards)
+
+    def _vram(card):
+        value = card.get("vram_gib")
+        return float(value) if isinstance(value, (int, float)) else -1.0
+
+    main = min(range(n), key=lambda i: (-_vram(cards[i]), i)) if n else 0
+    rest = [i for i in range(n) if i != main]
+    display, display_known = None, False
+    for i in rest:
+        if cards[i].get("monitor") is True:
+            display, display_known = i, True
+            break
+    if display is None:
+        display = rest[0] if rest else main + 1
+    headless, headless_known = None, False
+    for i in rest:
+        if i != display:
+            headless, headless_known = i, True
+            break
+    if headless is None:
+        headless = max(main, display) + 1
+    return {"main": int(main), "display": int(display),
+            "headless": int(headless),
+            "display_known": bool(display_known),
+            "headless_known": bool(headless_known)}
+
+
+def _role_words(cards: list, roles: dict, role: str) -> str:
+    """One role as the owner reads it: the card's own detected name, its PCI
+    address when the PC reports one (the only proof of which twin is which),
+    and the fact that decided the role - or, when there is no such card, plain
+    words that say it is not installed yet."""
+    index = roles[role]
+    card = cards[index] if 0 <= index < len(cards) else None
+    if card is None:
+        return {"main": "a card this PC has not detected",
+                "display": "the second 2080 SUPER (not installed yet)",
+                "headless": "the headless 2080 SUPER (not installed yet)"}[role]
+    name = str(card.get("name") or f"card {index}")
+    word = f"{name} (PCI {card['pci_id']})" if card.get("pci_id") else name
+    vram = card.get("vram_gib")
+    if role == "main":
+        return f"{word}, {vram:g} GB" if isinstance(vram, (int, float)) else word
+    if role == "display":
+        # `monitor` is nvidia-smi's display_active: True when a monitor is
+        # plugged in, False when it is not, None when this PC could not say.
+        # A known flag needs no explanation; only the UNKNOWN case must be
+        # said out loud, so the owner is never told which twin has the monitor
+        # when nothing measured it.
+        if card.get("monitor") is True:
+            return f"{word}, the card with the monitor"
+        if card.get("monitor") is False:
+            return f"{word}, the card with no monitor"
+        return f"{word}; monitor not reported by this PC"
+    if card.get("monitor") is False:
+        return f"{word}, the card with no monitor"
+    return word
+
+
 def _row(p: Preset, index: int, cards: list, measured: bool,
-         best_effort: bool, note: str = "") -> dict:
+         best_effort: bool, note: str = "", card_text: str = "") -> dict:
     card = cards[index] if index < len(cards) else None
     return {"preset": p.id, "model": p.model,
             "card_index": index,
-            "card": (card or {}).get("name") or f"card {index}",
+            "card": card_text or (card or {}).get("name") or f"card {index}",
             "context": p.context,
             "tok_s": (p.measured or {}).get("tok_s") if measured else None,
             "measured": bool(measured),
@@ -1687,45 +1794,95 @@ def recommendations() -> dict:
                     rows[p.id] = _row(p, 1, cards, p.measured is not None,
                                       p.measured is None,
                                       "the agreed 2-GPU mapping: Fast on the fast card")
+                elif p.lane == "pooled":
+                    # The Coding preset became the 30B coding model on the
+                    # pooled lane on 2026-11-02. "main model on the 2060" is
+                    # its 2-GPU answer no more: it pauses both lanes and takes
+                    # both cards. The measured figures below are its own
+                    # (`p.measured`), so only the words were stale.
+                    rows[p.id] = _row(p, 0, cards, p.measured is not None,
+                                      p.measured is None,
+                                      "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on "
+                                      "the pooled lane (port 11450) across BOTH cards, "
+                                      "started on demand; it pauses the other lanes' "
+                                      "models while it runs",
+                                      card_text="both cards (pooled lane, port 11450)")
                 else:
                     rows[p.id] = _row(p, 0, cards, p.measured is not None,
                                       p.measured is None,
                                       "the agreed 2-GPU mapping: main model on the 2060")
             else:
                 # CONFIRMED PLAN (owner, 2026-10-18): three RTX cards, no GTX 1080
-                # for compute; lane-per-GPU, never one model split across three.
-                idx = {"general": 0, "general_uncensored": 0, "coding": 0,
-                       "fast": 1, "agentic_vision": 2, "reflect": 0,
-                       "pictures": 0, "documents": 0, "browser": 0}[p.id]
+                # for compute. THE RULE IS HYBRID (settled 2026-11-04): every
+                # everyday preset keeps ONE lane per GPU, and only the Coding
+                # preset's heavy mode pools the cards. The text here used to say
+                # "lane-per-GPU, never one model split across three cards", which
+                # stopped being true on 2026-11-02 when Coding became
+                # qwen3-coder-30b-a3b-ud-q3-k-xl on the pooled lane - a model
+                # physically too big for one card, by design.
+                roles = _card_roles(cards)
+                everyday = _role_words(cards, roles, "main")
+                display = _role_words(cards, roles, "display")
+                headless = _role_words(cards, roles, "headless")
+                pooled = (f"qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled lane (port "
+                          f"{POOLED_PLAN_PORT}) across ALL the cards: it is too big for "
+                          f"one card, so applying this preset pauses the other lanes' "
+                          f"models, starts that lane, and stops it again when another "
+                          f"preset is applied")
+                idx = {"general": roles["main"], "general_uncensored": roles["main"],
+                       "coding": roles["main"],
+                       "fast": roles["display"], "agentic_vision": roles["headless"],
+                       "reflect": roles["main"], "pictures": roles["main"],
+                       "documents": roles["main"], "browser": roles["main"]}[p.id]
                 note = {
-                    "general": "2060 12 GB: main chat/everyday, 196k",
-                    "general_uncensored": "2060 12 GB: main chat/everyday, 196k",
-                    "coding": "main model on the 2060; the Coding lane (qwen3.5:4b helper) "
-                              "starts on demand on 2080 SUPER #2 (card 2, PCIe 3.0 x4 M.2 adapter)",
-                    "fast": "2080 SUPER #1 (card 1): display + Fast/Live lane, qwen3.5:4b",
-                    "agentic_vision": "2080 SUPER #2 (card 2): Agentic+Vision, qwen3.5:9b with images",
-                    "reflect": "2060 12 GB (card 0): Reflective Coach, qwen3.5:9b, 196,608 window",
-                    "pictures": "2060 12 GB (card 0): Pictures & Screens, qwen3.5:9b with images, 32,768 window",
-                    "documents": "2060 12 GB (card 0): Documents & Notes, qwen3.5:9b, 196,608 window",
-                    "browser": "2060 12 GB (card 0): Browser & Forms, qwen3.5:9b, 196,608 window",
+                    "general": f"{everyday}: main chat/everyday, 196,608 window",
+                    "general_uncensored": f"{everyday}: main chat/everyday, 196,608 window",
+                    "coding": pooled,
+                    "fast": f"{display}: display + Fast/Live lane, qwen3.5:4b",
+                    "agentic_vision": f"{headless}: Agentic+Vision, qwen3.5:9b with images",
+                    "reflect": f"{everyday}: Reflective Coach, qwen3.5:9b, 196,608 window",
+                    "pictures": f"{everyday}: Pictures & Screens, qwen3.5:9b with images, "
+                                f"32,768 window",
+                    "documents": f"{everyday}: Documents & Notes, qwen3.5:9b, 196,608 window",
+                    "browser": f"{everyday}: Browser & Forms, qwen3.5:9b, 196,608 window",
                 }[p.id]
-                rows[p.id] = _row(p, idx, cards, False, True, note)
+                rows[p.id] = _row(p, idx, cards, False, True, note,
+                                  card_text=("all the cards (pooled lane, port "
+                                             f"{POOLED_PLAN_PORT})"
+                                             if p.id == "coding" else ""))
         by[str(n)] = rows
+    roles = _card_roles(cards)
     return {"by_gpu_count": by,
             "basis": ("the agreed 2-GPU mapping is measured; 1 and 3 GPUs are "
                       "best effort and labelled as not tested"),
             "three_gpu_plan": {
                 "confirmed": True,
-                "layout": "lane per GPU, never one model split across three cards",
+                # One line, two halves, in the order the owner meets them: the
+                # everyday shape first, then the on-demand heavy one that is the
+                # only exception. "lane per GPU" is kept deliberately - it is
+                # what the everyday half IS - so the pin in test_presets.py that
+                # has always guarded it still guards something true.
+                "layout": ("everyday presets keep one lane per GPU (the everyday "
+                           "lane, the monitor card's lane and the headless card's "
+                           "lane); only on-demand heavy Coding pools the cards on "
+                           f"port {POOLED_PLAN_PORT}"),
                 "cards": [
-                    {"role": "main chat / everyday", "card": "RTX 2060 12 GB", "context": 196608},
-                    {"role": "display + Fast/Live lane", "card": "RTX 2080 SUPER #1", "context": 16384},
-                    {"role": "Agentic+Vision and Coding lane (on demand)",
-                     "card": "RTX 2080 SUPER #2", "context": 16384},
+                    {"role": "everyday lane: main chat / everyday, 196,608 tokens",
+                     "card": _role_words(cards, roles, "main"), "context": 196608},
+                    {"role": "monitor card's lane: display + Fast/Live, 16,384 tokens",
+                     "card": _role_words(cards, roles, "display"), "context": 16384},
+                    {"role": "headless card's lane: Agentic+Vision, 16,384 tokens",
+                     "card": _role_words(cards, roles, "headless"), "context": 16384},
                 ],
-                "link_note": ("2080 SUPER #2 likely sits on the B550 chipset through an M.2 "
-                              "adapter: PCIe 3.0 x4, maybe x2. A slower link costs loading "
-                              "time, not a lane; each lane keeps its own model."),
+                "heavy_pooled": (f"on demand, the Coding preset pauses those three lanes "
+                                 f"and loads qwen3-coder-30b-a3b-ud-q3-k-xl on ONE pooled "
+                                 f"lane on port {POOLED_PLAN_PORT} across all the cards. "
+                                 f"It is too big for one card, so this is the ONE case "
+                                 f"where a model is split across cards; every other "
+                                 f"preset keeps one lane per GPU."),
+                "link_note": ("the third card likely sits on the B550 chipset through an "
+                              "M.2 adapter: PCIe 3.0 x4, maybe x2. A slower link costs "
+                              "loading time, not a lane; each lane keeps its own model."),
                 "future_not_a_preset": ("Qwen3.8-27B pooled to 28 GB across cards is a future "
                                         "'max quality' experiment only; it is not a preset and "
                                         "no figure is claimed until it is measured."),

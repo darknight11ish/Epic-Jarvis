@@ -1110,9 +1110,14 @@ flash_attention = "auto"
 # the second card's own lane above - one feature on each card at once - so
 # it needs its own port, never this file's `port` (which the second card's
 # lane and "One bigger model on both cards" already share safely, because
-# those two are never running at the same time). Not 11434 (the everyday
-# Ollama) or the `port` above.
-third_port = 11436
+# those two are never running at the same time). Nor any other lane's port, nor
+# 11439, the port the 2026-11-04 Q6 ruling reserves for the VoiceStudio
+# sidecar: 11434 is the everyday Ollama, 11435 is the `port` above, 11436 is
+# the everyday model's own lane (jarvis_model_lanes), 11437 is the
+# screen-picture reader's own Ollama copy and 11450 is the pooled both-cards
+# lane. `jarvis_second_card.LANE_PORTS` names that whole list, and
+# `DEFAULT_THIRD_PORT` (11438) is the first port above it that nothing claims.
+third_port = 11438
 
 # ------------------------------------------------------------------------
 # 9b1. PICTURE MODE FOR THE SCREEN (jarvis_screen_picture.py)
@@ -1126,7 +1131,12 @@ third_port = 11436
 # The Ollama model tag. A model whose name ends in -cloud or :cloud is
 # refused: it would send the screen off this PC.
 # model = "minicpm-v:4.6"
-# Not 11434 (the everyday Ollama), 11435 or 11436 (the second and third card).
+# Default 11437. Do NOT point it at another lane's port: 11434 is the everyday
+# Ollama, 11435 the second card's lane, 11436 the everyday lane, 11438 the
+# third card's default (jarvis_second_card.DEFAULT_THIRD_PORT), 11439 the
+# VoiceStudio sidecar's reserved port (2026-11-04 Q6 ruling) and 11450 the
+# pooled both-cards lane. Only 11434-11436 are refused by the module
+# (jarvis_screen_picture._TAKEN_PORTS); the others are the owner's to avoid.
 # port = 11437
 # Seconds one look may spend on the picture before it is given up, and how
 # long a question waits for it after the words are ready.
