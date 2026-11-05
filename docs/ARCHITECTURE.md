@@ -2861,7 +2861,7 @@ backend routes, in both directions; the rest are listed here only.
   a separate, PC-only route behind its own card).
 - **Your own GitHub is read and acted on by chat, and neither app has a screen
   for it - one-sided on purpose** (2026-11-03; the owner's decision: *"GitHub
-  tools = Read + actions"*; JARVIS-API §186). The ABILITY is on both apps'
+  tools = Read + actions"*; JARVIS-API §190). The ABILITY is on both apps'
   chats, because the six model tools (`github_list`, `github_read_file`,
   `github_ci_status`, `github_comment`, `github_open_issue`,
   `github_rerun_workflow`) run on this PC and either app's chat is the same
@@ -2874,7 +2874,7 @@ backend routes, in both directions; the rest are listed here only.
   reads - they ask too, because a read still sends the saved GitHub token out)
   and the three actions. They are NOT the existing `github_read`, which is the
   scheduled look a "tell me when" watch makes and must stay `auto`; the reason
-  is in JARVIS-API §186.2. Nothing can merge, push, commit, delete or close.
+  is in JARVIS-API §190.2. Nothing can merge, push, commit, delete or close.
   `backend/test_github_tools.py` holds the whole of it.
 
 - **More than one conversation window is the desktop's, and that is one-sided on
@@ -4576,7 +4576,7 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 
 
-**The watchers' decision log is read on the PC today, and neither app draws it - one-sided on purpose for now** (2026-11-04; the owner-forwarded dsh-superagent spec, Part II pattern 1; JARVIS-API §187.2; `backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`). `GET /api/watch/decisions?limit=50` is the read that makes `observe` mode worth having: what the GitHub watcher would have said, with a closed reason code and the exact preview line, so the owner can promote it to `active` on evidence rather than on hope. **Neither app has a screen for it yet**, and `tools/check_parity.py` classifies the route `BACKEND_ONLY` with that reason rather than leaving it undecided. This is a deliberate desk-first order, not a platform decision: the arithmetic ("is this watcher quiet enough to speak?") is done at the PC, and a notification about noise is not something to interrupt the phone with. When a screen is built it goes on BOTH apps on this same module and the same store - a Work-pane row in the desktop's Work plate and the phone's Work/journal screen - and at that point the route moves out of `BACKEND_ONLY`. Nothing on this route writes, approves, pushes or merges; it is a read of rows another module already wrote.
+**The watchers' decision log is read on the PC today, and neither app draws it - one-sided on purpose for now** (2026-11-04; the owner-forwarded dsh-superagent spec, Part II pattern 1; JARVIS-API §186.2; `backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`). `GET /api/watch/decisions?limit=50` is the read that makes `observe` mode worth having: what the GitHub watcher would have said, with a closed reason code and the exact preview line, so the owner can promote it to `active` on evidence rather than on hope. **Neither app has a screen for it yet**, and `tools/check_parity.py` classifies the route `BACKEND_ONLY` with that reason rather than leaving it undecided. This is a deliberate desk-first order, not a platform decision: the arithmetic ("is this watcher quiet enough to speak?") is done at the PC, and a notification about noise is not something to interrupt the phone with. When a screen is built it goes on BOTH apps on this same module and the same store - a Work-pane row in the desktop's Work plate and the phone's Work/journal screen - and at that point the route moves out of `BACKEND_ONLY`. Nothing on this route writes, approves, pushes or merges; it is a read of rows another module already wrote.
 
 - **The superseded work setups' one write stays on the phone, and there is no
   desktop half to build** (2026-11-05; the parity audit's F6;
@@ -5608,12 +5608,37 @@ route that writes from this module is the carded conversation clear (§13.4).
   both apps can make; the phone has no screen for it yet and one chat at a time.
   Both are recorded in §8 rather than left to be read as oversights.
 
+### 13.9 The tool layer of the same self-knowledge: one dossier per tool
+
+The portrait above is an inventory; the third thing the owner asked for on
+2026-11-04 is a *conversation* - "full detailed discussions about any of its
+tools/plug-ins and how they change its real-world capabilities" - and an
+inventory cannot hold one. `backend/jarvis_tool_profiles.py` (shipped whole,
+with its `jarvis-backend/` twin) is the tool layer of the same self-knowledge:
+one hand-written, code-checked page per name in the real `jarvis_agent.TOOLS`
+dict plus one per capability family, carrying what the thing is in beginner
+words, what it lets the owner do, what it refuses, what it pairs with, how to
+switch it on, and the repository files each claim was checked against. It obeys
+the same two rules as the portrait - **checked-in data only, and it decides
+nothing**: it calls no tool, reads no live state, raises no card, and its own
+suite re-derives the load-bearing claims from the modules rather than trusting
+the prose. It reaches chat two ways, and neither adds a route or a model tool:
+a deterministic fast path (`jarvis_quick._tool_profile`, in `READ_ONLY_INTENTS`,
+`lane: "no AI model"`) for a sentence that names a tool *as a tool*, and a
+bounded system note (`jarvis_agent.tool_profile_note`, at most 1,200 characters,
+held out of the room) so the model can discuss an opinion or a comparison with
+the facts in front of it. **Features stay `feature_guide`'s and drop-in plug-ins
+stay `plugin_list`'s** - the two vocabularies are kept apart by an explicit
+marker, because 42 of the catalogue's 175 feature titles open with a tool's own
+words. JARVIS-API §185 is the wire shape; the decision is
+`decisions.d/2026-11-04-capability-talk.md`.
+
 ## 14. Watchers, the attention budget, and what a restart owes (added 2026-11-04)
 
 The owner's decision of 2026-11-04 adopted four patterns from
 `deepseek-ai/dsh-superagent-prototype` (MIT), specified in the owner-forwarded
 "Part II" and built natively here. This section says where each one lives and
-what it is bounded by; `docs/JARVIS-API.md` §187 has the route and the row
+what it is bounded by; `docs/JARVIS-API.md` §186 has the route and the row
 shapes.
 
 - **`observe` before `active`.** A proactive watcher has three states, not two.

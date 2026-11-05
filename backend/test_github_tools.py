@@ -774,7 +774,7 @@ def t_a_file_read_shows_the_files_text_not_the_envelope():
 
     Read on 2026-11-04, the tool returned the envelope itself - up to 40,000
     characters of base64 where its card, `jarvis_agent`'s tool description and
-    `docs/JARVIS-API.md` section 186.1 promise ONE file's text - and this
+    `docs/JARVIS-API.md` section 190.1 promise ONE file's text - and this
     suite's fake returned plain text, so its checks could not catch that. The
     fake now returns what GitHub really sends, and the checks below fail if the
     decode is ever removed again.

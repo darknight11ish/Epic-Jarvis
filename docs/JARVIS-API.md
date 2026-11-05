@@ -33560,65 +33560,7 @@ word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
 of the three, because it used to sit in both the text-field and the enum table
 and the text-field branch won ("everyday lane" was stored as "everyday lan").
 
-## 186. Your own GitHub: read it, and three small actions on it - each one card, and it can never merge, push or close (backend, both apps' chat, added 2026-11-03)
-
-The owner's decision of 2026-11-03: *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card, never merge and never push**.
-
-### 186.1 What exists, and what each one does
-
-`backend/jarvis_github.py` is the whole of the network half. It talks to `api.github.com` and to nothing else: every address is built from the module's own `GITHUB_API` constant plus a path the module wrote, so there is **no arbitrary-URL code path at all** and a model cannot point it at another host. A redirect is REFUSED rather than followed (`_RefuseRedirect`), because following one would hand the owner's token to whoever answered. Every answer is capped (`MAX_BYTES` for a list, `MAX_FILE_CHARS` for a file) and every request has a timeout.
-
-Six tools in `backend/jarvis_agent.py`:
-
-| Tool | What it does | The request |
-|---|---|---|
-| `github_list` | lists ONE fixed thing: your repositories (`repos`), a repo's open pull requests (`pulls`), its open issues (`issues`), or its recent workflow runs (`runs`) | `GET /user/repos`, or `GET /repos/{owner}/{repo}/...` |
-| `github_read_file` | reads ONE file's text, at an optional branch or commit | `GET /repos/{owner}/{repo}/contents/{path}` |
-| `github_ci_status` | how CI went: the newest run for a branch, or for a pull request (whose head commit is read first) | `GET .../actions/runs`, or `GET .../pulls/{n}` then the runs for that commit |
-| `github_comment` | posts ONE comment on an issue or pull request | `POST .../issues/{n}/comments` |
-| `github_open_issue` | opens ONE issue, with a title and an optional body | `POST .../issues` |
-| `github_rerun_workflow` | asks GitHub to run an existing workflow run again | `POST .../actions/runs/{id}/rerun` |
-
-`github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
-
-### 186.2 The tiers: `ask`, on its own action, and never `auto`
-
-Four gate actions, every one `ask` in the shipped `[autonomy.tiers]`: `github_inspect` (the three reads), `github_comment`, `github_open_issue`, `github_rerun_workflow`. **`github_rerun_workflow`'s risk row is `reversible = "no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
-
-**The reads ask too, and the reason is not red tape.** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so it is egress with a credential attached: "it is only a read" is not a reason to spend a credential with nobody looking, and the same call was already made for `github_search` when it was found resolving to `web_research` at `auto`.
-
-**It is NOT the existing `github_read` action, and this is the part to read before changing anything.** `github_read` is the scheduled look a "tell me when" GitHub watch makes (`backend/jarvis_tellme.py`), its line ships as `auto`, and that module REFUSES to run a GitHub watch unless it stays `auto` - a look every ten minutes cannot raise a card every ten minutes. Reusing it would either run these on-demand reads at `auto`, or force that line to `ask` and break every GitHub watch. So the on-demand read is its own action, `github_inspect`. **Do not merge the two names.**
-
-All six tools are also in `jarvis_agent.NEEDS_A_PERSON`, so the setting says how much Jarvis asks and that set says a read like this is never done with nobody asked: an owner who loosens a tier line still gets a card. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
-
-### 186.3 No token, no card
-
-Without a saved token every one of the six answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
-
-### 186.4 What Jarvis will never do with GitHub
-
-**No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing.
-
-### 186.5 The wording, the token and the failures
-
-The card prints the **literal address** of every request and, for a comment or an issue, **the whole text that will be posted** - the honest version of "may I post this" is to show the thing. It says the GitHub token is sent to `api.github.com` and nowhere else, and that nothing is merged, pushed, committed, deleted or closed. **The token is never printed**: not on a card, not in a tool result, not in a log line, not in an exception, and a server that echoes it back is scrubbed (`_scrub`). Failures are sentences with **no HTTP code in them**, and each one says what to do: the token was refused (save a new one with "connect GitHub"), GitHub said no for now (too many requests in the hour), there is nothing there (or it is private and this token cannot see it).
-
-### 186.6 Switching it on
-
-All six ship **SWITCHED OFF** - they are not in `[tools].enabled`, exactly like `github_search`. Add `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` to that list, and save a token by saying "connect GitHub". The Reach page shows each one as off with the line that turns it on until then.
-
-`backend/github-tools.patch` gives `jarvis_gate.py` the four actions and the six `_TOOL_ACTIONS` entries - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
-
-### 186.7 What proves it
-
-`backend/test_github_tools.py` - 186 checks, **no network and no real token**: a socket opened anywhere in it fails the run. It proves the host is `api.github.com` and only that (a `url` argument is ignored, a redirect raises), the scopes are the closed four, every bad repository/path/number is refused, the token appears in no card, body, address or result while it IS sent in the `Authorization` header (the control that stops that check passing for the wrong reason), no token is a plain answer with no card, each action is exactly ONE card naming the repository, the number and the full text, a refused token and a rate limit are sentences with no code in them, nothing from email/files/memory/credentials is sent, the registered tool list has no merge/push/commit/delete/close tool, the four tiers ship as `ask` while `github_read` stays `auto`, every registration table has the six (card words, the Reach page, the claim checker, the "What asks first" page, the small-card list, the short tool list's diet hints), and **the patch reverses out of the published base and applies forward again
-byte for byte, and it sits between `web-search-grant.patch` and the last
-writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
-those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
-
-**One-sided on purpose:** there is no screen for this in either app, and `tools/check_parity.py` is unchanged because no route was added. The ability is in both apps' chats (the tools run on this PC, and either app's chat is the same turn); a GitHub screen would be deep configuration, and `docs/ARCHITECTURE.md` §8 carries the reason.
-
-## 187. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
+## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
 
 A watcher that speaks about everything gets muted. That is the whole of this
 section. Three patterns from `deepseek-ai/dsh-superagent-prototype` (MIT) were
@@ -33637,7 +33579,7 @@ Three modules and one drop-in folder carry it:
 | the record | `backend/jarvis_outbox.py` | what is still owed to the owner, written to `outbox.json` BEFORE it is said, re-announced on startup. |
 | the route | `plugins/ready/watch-decisions/` | calls `jarvis_watch_ci.install()` for the one GET below. No patch: `jarvis_hud.py` is not shipped, and a route there would need a hunk in its dispatch tuple. |
 
-### 187.1 The three modes, and why the middle one is the default
+### 186.1 The three modes, and why the middle one is the default
 
 `WATCH_MODES = ("off", "observe", "active")` (`backend/jarvis_watch.py`).
 
@@ -33661,7 +33603,7 @@ answers a route; it starts no thread, no timer and no polling of its own. The
 watcher looks at a pull request only when a `watch_pr_checks` job names one,
 created through the existing `POST /api/jobs`.
 
-### 187.2 `GET /api/watch/decisions?limit=50`
+### 186.2 `GET /api/watch/decisions?limit=50`
 
 The read that makes `observe` worth having: *"what would your GitHub watcher
 have told me today?"* Newest first, `limit` clamped to 1..200 (default 50,
@@ -33719,7 +33661,7 @@ Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
 The buffer holds the newest 500 rows in `watch-decisions.json`, written
 temp-file-then-rename, so a crash leaves the previous whole file.
 
-### 187.3 One batch per pull request, and the seven that matter
+### 186.3 One batch per pull request, and the seven that matter
 
 A pull request runs **seven** checks that gate a merge - `rust`, `frontend`,
 `backend`, `backend-windows`, `credential-manager`, `powershell-5`,
@@ -33754,7 +33696,7 @@ that is already finished - and every later poll of that commit answers
 purpose: a commit that fails `rust`, is re-run and settles green owes the owner
 two different sentences.
 
-### 187.4 The two-stage gate, and what may never reach stage two
+### 186.4 The two-stage gate, and what may never reach stage two
 
 1. **`gate(trigger, thread)`** - pure. Allowlists, required-vs-informational
    names, receipts, settle rules, bot filtering. No disk, no network, no model,
@@ -33772,7 +33714,7 @@ two different sentences.
 built by plain string work over the log. So this is 0 GPU today, and the seam is
 where a local-model summary would go if that is ever wanted.
 
-### 187.5 The durable outbox, and what a restart owes (pattern 5B)
+### 186.5 The durable outbox, and what a restart owes (pattern 5B)
 
 `backend/jarvis_outbox.py` holds what Jarvis still owes the owner, in
 `outbox.json` beside `jobs.db` (`JARVIS_OUTBOX_PATH` overrides it; the path is
@@ -33810,7 +33752,7 @@ approval card, this takes the repeat.
 Settled entries are pruned back to 500; a pending one is never dropped, however
 old, because dropping it is the defect this module exists to prevent.
 
-### 187.6 Tests
+### 186.6 Tests
 
 `backend/test_watch_ci.py` (139 checks) and `backend/test_outbox.py` (63), both
 plain Python with a fake clock, a fake `gh` runner and temp files - no network,
@@ -33822,7 +33764,7 @@ thread, a fixed failure then green owing two sentences, `gate` never calling
 delivered exactly once afterwards, a restart re-announcing an unanswered card
 once and not repeating a delivered notice, and the route's own wrapper.
 
-### 187.7 What is NOT built, and said plainly
+### 186.7 What is NOT built, and said plainly
 
 - **No app screen for this route yet.** It is read on the PC while the mode is
   being decided; `tools/check_parity.py` classifies it `BACKEND_ONLY` with that
@@ -33832,6 +33774,225 @@ once and not repeating a delivered notice, and the route's own wrapper.
   file.
 - **No push, merge, label or comment.** This watcher reads; the only writes it
   can make are its own three files and the notification it hands to the arbiter.
-- **The second stage never calls a model today** (§187.4).
+- **The second stage never calls a model today** (§186.4).
 - **Not measured on the owner's PC**: the route and the job body are tested
-  against the real modules and a fake `gh`, not against a live pull request.
+  against the real modules and a fake `gh`, not against a live pull request.---
+
+## 187. Talking to Jarvis about any of its own tools, in depth: a dossier answer and a bounded prompt block (added 2026-11-04)
+
+The owner's ask of 2026-11-04, in his own words: Jarvis should be able to hold
+*"FULL DETAILED discussions about any of its tools/plug-ins and how they change
+its real-world capabilities"*. Before this, "tell me about the github tool" fell
+through to the model, which invented an answer, and "what does browser_control
+do" was answered by `jarvis_feature_guide`'s prose for a *different* thing - the
+catalogue does not use the tool names.
+
+What was built is ONE hand-written, code-checked page per tool and per
+capability family (`backend/jarvis_tool_profiles.py`), plus a deterministic
+answer and a bounded system note that put it in front of the model. **No new
+route and no new model tool** - both are explained in 186.3.
+
+**Where the dossiers live.** `backend/jarvis_tool_profiles.py`, shipped whole
+(in `backend/` and `jarvis-backend/`, listed in `_where.py`'s `SHIPPED`):
+`PROFILES` (`jarvis_tool_profiles.py:82`, one entry per name in the REAL
+`jarvis_agent.TOOLS` dict - 51 on this tree) and `FAMILIES`
+(`jarvis_tool_profiles.py:1820`, 11 capability families). Its own suite,
+`backend/test_tool_profiles.py`, re-checks the load-bearing claims against the
+modules that would have to implement them, so a sentence that cannot be backed
+is written as a limit rather than as a promise. The wiring is
+`backend/test_tool_profiles_chat.py`.
+
+### 187.1 What it answers, and what it still leaves to the model
+
+The fast path answers a sentence that names a tool **as a tool** - the word
+"tool", or the tool's own code name typed with its underscore:
+
+| The owner says | Intent | The fact comes from |
+|---|---|---|
+| "what does `browser_control` do" | `tool_profile` | `PROFILES["browser_control"]` |
+| "tell me about the github tool" | `tool_profile` | `PROFILES["github_search"]` |
+| "what does the web search tool do" | `tool_profile` | `PROFILES["web_search"]` |
+| "tell me about the memory tool" | `tool_profile` | `FAMILIES` / `PROFILES` |
+
+The answer is `answer_about`'s own words (`jarvis_tool_profiles.py:2257`): what
+the thing is in beginner words, what it lets the owner do, what it refuses,
+what it pairs with, and how to switch it on. It is `quick: tool_profile`,
+`where: local`, `lane: "no AI model"` in `X-Jarvis-Route`, so **both apps show
+it with no client change** and it costs no model turn.
+
+Everything else naming a tool - an opinion, a comparison, "would it help me
+with X" - is the **model's**, now with the dossier block in 186.3. A question
+that names no tool returns `None` from the fast path, which is exactly the old
+behaviour.
+
+**Why the "as a tool" gate is not optional.** 42 of the catalogue's 175 feature
+titles open with words that also name a tool ("Web search", "Goals", "Read your
+own calendar", "Spending summaries", "Jarvis reads your email"), and one feature
+row's alias is the exact phrase "plugin list", which is also the tool id
+`plugin_list`. `backend/test_feature_answers.py` and
+`backend/test_feature_guide.py` require every one of those to keep the feature
+guide's answer, so the marker is `_TOOL_SAID`
+(`jarvis_quick.py:6538`) and NOT a bare shape match. The feature layer keeps its
+answers; the tool layer is addressed by its own vocabulary.
+
+**Why it sits where it sits.** In `_match`, the call is
+`jarvis_quick.py:1272`: after the plug-in block (`_plugins_question`,
+`jarvis_quick.py:6391`, called at `:1262`) so a plug-in question keeps its own
+answer, and before the Android block and every capability family
+(`:1273` onward) and well before `_feature_guide` (`jarvis_quick.py:1762`),
+because a tool's own dossier is deeper than a feature row's prose. The runner is
+`_run_tool_profile` (`jarvis_quick.py:6602`), dispatched at
+`jarvis_quick.py:19097`, and the intent is in `READ_ONLY_INTENTS`
+(`jarvis_quick.py:19977`): it reads a fixed module, calls nothing, raises no
+card - so a **private chat hands it to the model** like every other read-only
+intent, and it cannot take away what "cancel that" would undo.
+
+### 187.2 What the model is given, and what it costs
+
+`jarvis_agent.tool_profile_note` (`jarvis_agent.py:12614`) builds ONE bounded
+block from `context_for` (`jarvis_tool_profiles.py:2311`), which never returns
+more than `CONTEXT_LIMIT = 1200` characters
+(`jarvis_tool_profiles.py:77`). `TOOL_PROFILE_CHARS` (`jarvis_agent.py:12517`)
+re-states that cap on this side, so a changed module cannot silently spend more
+of the window, and the note is the block plus ONE fixed 142-character line
+(`TOOL_NOTE_PREFIX`, `jarvis_agent.py:12524`) saying where the facts came from
+and to answer only from them.
+
+- **The budget, in this repository's own arithmetic.** `estimate_tokens`
+  (`jarvis_agent.py:6793`) counts 3 characters a token plus 6 of framing, so the
+  worst case is `6 + (1200 + 142) // 3` = **453 tokens**, and the ordinary
+  `browser_control` turn is 1,285 characters = **434 tokens**. Both `context_for`
+  and the cap it is given are checked in `test_tool_profiles_chat.py`.
+- **No tool named -> no note -> the same bytes.** That is the rule that keeps
+  every ordinary prompt exactly as it was, and it is why the note is keyed on a
+  tool's own name and never on a nickname: "what is on my calendar tomorrow" is
+  a turn to READ the calendar, and `backend/test_warm_prefix.py` pins the warm-up
+  and a real first question to the same bytes before the question.
+- **A follow-up keeps it.** If the newest message carries on from the last one
+  ("would that let you fill in a form?"), the note looks back at most two earlier
+  user messages. That is what makes a *discussion* possible rather than one
+  answer - and it is still nothing when no earlier message named a tool.
+- **It is held out of the room** like every other note:
+  `room -= estimate_tokens({"role": "system", "content": tool_note})`
+  (`jarvis_agent.py:13769`), before `clear_old_tool_results` and
+  `compact_messages`, so a block can never push the window over.
+- **Placement** is `with_tool_profile_note` (`jarvis_agent.py:12652`), copied
+  from `with_pc_facts_note`: inserted just before the newest user message, after
+  the PC-facts line and before the grant note (`jarvis_agent.py:12874`), with the
+  `at == 0` case prepending `LANE_SYSTEM` so the rules stay first. It is fixed
+  dossier data - no path, no count, no chat word, nothing read live - so it is
+  safe in a private chat.
+
+### 187.3 No route and no new tool, deliberately
+
+- **No route.** A route adds a consumer that does not exist: `/api/reach`
+  (`backend/jarvis_reach.py`) already lists every tool in one sentence for both
+  apps, and `/api/self` already carries abilities and plug-ins. A third copy
+  would need a `tools/check_parity.py` classification, a phone decision and a
+  `HUD_GET_PATHS` entry in `hud_proxy.rs` for a screen that does not exist. The
+  one worth adding later, **named and not built**: `GET /api/self/tools` (the
+  list plus one profile each), the day a Tools page exists, served from
+  `jarvis_self_portrait` the way `/api/self/version` is and classified in
+  `check_parity.py` in the same PR.
+- **No new model tool.** A tool costs five mandatory registrations, each with
+  its own test: `TOOLS` plus offer/gate wiring; a description under 300 tokens
+  (`test_tool_text.py`); a `jarvis_claims` classification (`test_smarter_answers.py`
+  fails a tool in neither set); a `jarvis_reach.TOOL_NAMES` row (`test_reach.py`
+  demands one); and the tool contract/schema suites. It also ships **off**: it
+  would need its own switch row on Settings, What asks first ("Let the AI use
+  this") - one of the lists `jarvis_asks_first.TOOLS_SWITCHABLE` is built from -
+  and that switch's PC-only card before the owner could turn it on. And it buys
+  nothing: these are facts that fit in 400 prompt tokens, and every tool call
+  is a round trip on an 8B.
+
+### 187.4 What it does not cover
+
+- **Features** stay `feature_guide`'s, by chat and as a model tool. A feature is
+  a row with a title, a where, an asks-first and a limit; a tool's dossier is
+  deeper and answers different questions. The two vocabularies are kept apart by
+  `_TOOL_SAID` (186.1).
+- **Drop-in plug-ins** (`plugins/ready/`, 49 folders) stay
+  `plugin_list`/`plugin_about`'s, which already answers them; the plug-in block
+  runs first, so it is never hijacked.
+- **Development "plug-ins"** - the patch stack in `plugins/registry.json` - are
+  developer vocabulary and not a chat topic.
+- **Listing questions** ("which tools ask first") already have their own
+  answers (`tools_asking`); `answer_about` returns `None` for them and nothing
+  here changes that.
+- **It adds no permission, card or tier**, so the standing "every new feature
+  gets its own audit" pass finds: bugs (the probes in
+  `test_tool_profiles_chat.py`), both apps (free - chat is server-side, nothing
+  one-sided, so no `docs/ARCHITECTURE.md` section 8 row), and fit (this section,
+  the architecture paragraph and the two records).
+
+Two things this section states plainly rather than hides. First, the design
+report's probe expected `match("what does browser_control do")` to be `None`
+before this work; measured on the merged tree it was `feature_explain` - the
+feature guide answering a name it does not own - which is why the tool path must
+run before it. Second, two dossier sentences read as an action already taken to
+`jarvis_claims.unbacked_claim` (`set_reminder`'s title line and one `set_timer`
+"gives" line are imperative). That checker runs on the MODEL's text
+(`jarvis_agent._nothing_done_line`, `jarvis_agent.py:14629`), never on a
+deterministic `tool_profile` result, so no chat answer is affected; it is
+recorded in `test_tool_profiles_chat.py`, which fails if a third one appears, and
+the wording belongs to the module's own lane.
+
+The decision is `decisions.d/2026-11-04-capability-talk.md`.
+
+## 190. Your own GitHub: read it, and three small actions on it - each one card, and it can never merge, push or close (backend, both apps' chat, added 2026-11-03)
+
+The owner's decision of 2026-11-03: *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card, never merge and never push**.
+
+### 190.1 What exists, and what each one does
+
+`backend/jarvis_github.py` is the whole of the network half. It talks to `api.github.com` and to nothing else: every address is built from the module's own `GITHUB_API` constant plus a path the module wrote, so there is **no arbitrary-URL code path at all** and a model cannot point it at another host. A redirect is REFUSED rather than followed (`_RefuseRedirect`), because following one would hand the owner's token to whoever answered. Every answer is capped (`MAX_BYTES` for a list, `MAX_FILE_CHARS` for a file) and every request has a timeout.
+
+Six tools in `backend/jarvis_agent.py`:
+
+| Tool | What it does | The request |
+|---|---|---|
+| `github_list` | lists ONE fixed thing: your repositories (`repos`), a repo's open pull requests (`pulls`), its open issues (`issues`), or its recent workflow runs (`runs`) | `GET /user/repos`, or `GET /repos/{owner}/{repo}/...` |
+| `github_read_file` | reads ONE file's text, at an optional branch or commit | `GET /repos/{owner}/{repo}/contents/{path}` |
+| `github_ci_status` | how CI went: the newest run for a branch, or for a pull request (whose head commit is read first) | `GET .../actions/runs`, or `GET .../pulls/{n}` then the runs for that commit |
+| `github_comment` | posts ONE comment on an issue or pull request | `POST .../issues/{n}/comments` |
+| `github_open_issue` | opens ONE issue, with a title and an optional body | `POST .../issues` |
+| `github_rerun_workflow` | asks GitHub to run an existing workflow run again | `POST .../actions/runs/{id}/rerun` |
+
+`github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
+
+### 190.2 The tiers: `ask`, on its own action, and never `auto`
+
+Four gate actions, every one `ask` in the shipped `[autonomy.tiers]`: `github_inspect` (the three reads), `github_comment`, `github_open_issue`, `github_rerun_workflow`. **`github_rerun_workflow`'s risk row is `reversible = "no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
+
+**The reads ask too, and the reason is not red tape.** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so it is egress with a credential attached: "it is only a read" is not a reason to spend a credential with nobody looking, and the same call was already made for `github_search` when it was found resolving to `web_research` at `auto`.
+
+**It is NOT the existing `github_read` action, and this is the part to read before changing anything.** `github_read` is the scheduled look a "tell me when" GitHub watch makes (`backend/jarvis_tellme.py`), its line ships as `auto`, and that module REFUSES to run a GitHub watch unless it stays `auto` - a look every ten minutes cannot raise a card every ten minutes. Reusing it would either run these on-demand reads at `auto`, or force that line to `ask` and break every GitHub watch. So the on-demand read is its own action, `github_inspect`. **Do not merge the two names.**
+
+All six tools are also in `jarvis_agent.NEEDS_A_PERSON`, so the setting says how much Jarvis asks and that set says a read like this is never done with nobody asked: an owner who loosens a tier line still gets a card. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
+
+### 190.3 No token, no card
+
+Without a saved token every one of the six answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
+
+### 190.4 What Jarvis will never do with GitHub
+
+**No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing.
+
+### 190.5 The wording, the token and the failures
+
+The card prints the **literal address** of every request and, for a comment or an issue, **the whole text that will be posted** - the honest version of "may I post this" is to show the thing. It says the GitHub token is sent to `api.github.com` and nowhere else, and that nothing is merged, pushed, committed, deleted or closed. **The token is never printed**: not on a card, not in a tool result, not in a log line, not in an exception, and a server that echoes it back is scrubbed (`_scrub`). Failures are sentences with **no HTTP code in them**, and each one says what to do: the token was refused (save a new one with "connect GitHub"), GitHub said no for now (too many requests in the hour), there is nothing there (or it is private and this token cannot see it).
+
+### 190.6 Switching it on
+
+All six ship **SWITCHED OFF** - they are not in `[tools].enabled`, exactly like `github_search`. Add `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` to that list, and save a token by saying "connect GitHub". The Reach page shows each one as off with the line that turns it on until then.
+
+`backend/github-tools.patch` gives `jarvis_gate.py` the four actions and the six `_TOOL_ACTIONS` entries - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
+
+### 190.7 What proves it
+
+`backend/test_github_tools.py` - 186 checks, **no network and no real token**: a socket opened anywhere in it fails the run. It proves the host is `api.github.com` and only that (a `url` argument is ignored, a redirect raises), the scopes are the closed four, every bad repository/path/number is refused, the token appears in no card, body, address or result while it IS sent in the `Authorization` header (the control that stops that check passing for the wrong reason), no token is a plain answer with no card, each action is exactly ONE card naming the repository, the number and the full text, a refused token and a rate limit are sentences with no code in them, nothing from email/files/memory/credentials is sent, the registered tool list has no merge/push/commit/delete/close tool, the four tiers ship as `ask` while `github_read` stays `auto`, every registration table has the six (card words, the Reach page, the claim checker, the "What asks first" page, the small-card list, the short tool list's diet hints), and **the patch reverses out of the published base and applies forward again
+byte for byte, and it sits between `web-search-grant.patch` and the last
+writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
+those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
+
+**One-sided on purpose:** there is no screen for this in either app, and `tools/check_parity.py` is unchanged because no route was added. The ability is in both apps' chats (the tools run on this PC, and either app's chat is the same turn); a GitHub screen would be deep configuration, and `docs/ARCHITECTURE.md` §8 carries the reason.
