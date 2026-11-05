@@ -57,6 +57,17 @@
         lets it through if your phone allows alarms then.</string>
     <string name="channel_schedule_name">Reminders and timers</string>
     <string name="channel_schedule_desc">Timers, scheduled reminders, and morning briefings from your Jarvis.</string>
+    <!-- Hands-free (the owner's request, 2026-11-04): its own channel, because
+         whether it interrupts is a property of the channel and the owner may
+         want cards read out without every one of them also making a noise. -->
+    <string name="channel_handsfree_name">Hands-free</string>
+    <string name="channel_handsfree_desc">An approval card waiting to be read out,
+         and whether a text message was sent. Its own channel so you can silence
+         it without silencing approvals.</string>
+    <string name="handsfree_title">Hands-free</string>
+    <string name="handsfree_running">Waiting for a card to read out.</string>
+    <string name="handsfree_card_waiting">An approval card is waiting.</string>
+    <string name="handsfree_sms_title">Text message</string>
     <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
     <string name="approvals_waiting">%1$d approvals waiting</string>
     <string name="approval_deny_action">Deny</string>
