@@ -2163,6 +2163,15 @@ class Heard:
     #: SAME_WAKE_SECONDS) was already acted on. No words, `wake_heard`
     #: false: both apps drop it without a word.
     other_device: bool = False
+    #: Jarvis Live only (2026-11-05). While the session's latch is on, a clip
+    #: of `jarvis_live.RADIO_GUARD_S` of speech or more is still put to the
+    #: CAM++ embedding, and this is True when it did not sound like the owner:
+    #: a radio, a television, a call in the room. It was DROPPED - not
+    #: transcribed, not sent to the model - and it is not a failure, so an app
+    #: shows nothing at all. `reason` is
+    #: "background_media_rejected"; see `jarvis_live.IGNORED_BACKGROUND` for
+    #: the shape the route answers. Additive: an older client ignores it.
+    ignored_unmatched_speaker: bool = False
     #: The strictness the voice was checked at: "very_strict" or "balanced"
     #: ("" when no check ran).
     strictness: str = ""
@@ -2433,6 +2442,44 @@ def _live_fields(mic: str) -> dict:
                      ("ended" if st.get("state") == "ended" else "off")),
             "live_pause": str(st.get("paused") or "") if on else "",
             "live_hint": str(st.get("hint") or "") if on else ""}
+
+
+def _owner_cosine(samples, sample_rate, mic: str):
+    """How much this clip sounds like the enrolled owner (0.0-1.0), or None.
+
+    THE CHEAP HALF OF THE OWNER CHECK, and the one the Live latch may not
+    skip (2026-11-05): one CAM++ embedding and one `cosine` against the
+    enrolled print's own centroid - about 15 ms of work on a clip already in
+    RAM, no strict check, no cohort, no thresholds per condition, nothing
+    written and nothing kept. `jarvis_voice.find_profile` reads the print the
+    same way the real check does, so the guard compares against the print the
+    owner enrolled, per microphone.
+
+    None means "could not tell": no voice module, no print, no model, or a
+    clip the embedder cannot use. A guard that cannot measure must not
+    swallow the owner's words, so None is never a rejection - see `hear`.
+    """
+    if jarvis_voice is None:
+        return None
+    try:
+        prof = jarvis_voice.find_profile(mic)
+    except Exception:
+        return None
+    centroid = getattr(prof, "centroid", None) if prof is not None else None
+    if not centroid:
+        return None
+    try:
+        try:
+            emb = jarvis_voice.EcapaEmbedder()
+        except Exception:
+            emb = jarvis_voice.Embedder()
+        vec = jarvis_voice.embed_with(emb, samples, sample_rate)
+        if not vec:
+            return None
+        got = float(jarvis_voice.cosine(vec, centroid))
+    except Exception:
+        return None
+    return got if got == got else None          # NaN is "could not tell"
 
 
 def _live_refusal(mic: str, source: str) -> tuple:
@@ -3284,6 +3331,38 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                          live_say=words, **_live_fields(mic))
 
     if live_trust == "trusted":
+        # THE RADIO/TV IMPOSTOR GUARD (the owner's report of 2026-11-05; the
+        # regression of #1104 / DEF-028). The session's latch covers this clip
+        # - and until now that meant NO speaker model at all, which is how a
+        # radio, a television or a call in the room came to be transcribed and
+        # answered as the owner. The cheap half of the owner check is not a
+        # privilege the latch may skip: a clip with RADIO_GUARD_S of speech or
+        # more is put to the CAM++ embedding and compared with the enrolled
+        # print (~15 ms, one `_owner_cosine`), and a clip that is not the
+        # owner is DROPPED IN SILENCE - not transcribed, not sent to the
+        # model, and nothing said about it. An honest answer to a background
+        # voice is no answer.
+        #
+        # ONLY THIS ACTION NEEDS IT. A 1.2-1.5 s clip already runs the full
+        # short-clip check at step 3b below (`check_owner`), and a >= 2.0 s
+        # clip already gets the strict spot check (`trust_decision` answers
+        # "check"). This closes the 1.5-2.0 s band: the one place a latched
+        # clip reached the microphone's words with nothing measured at all.
+        # A short confirmation ("yes", "do it") is under the guard's floor
+        # and passes exactly as before - the owner is never asked to repeat
+        # himself to answer a card.
+        try:
+            _g = jarvis_live.ENGINE.radio_guard(
+                mic, spoken, had_wake=bool(wake or via_window))
+        except Exception:
+            _g = {"needed": False}
+        if isinstance(_g, dict) and _g.get("needed"):
+            _cos = _owner_cosine(samples, sample_rate, mic)
+            if _cos is not None and _cos < float(_g.get("min_cosine") or 0.0):
+                return Heard(False, source=source, seconds=seconds,
+                             ignored_unmatched_speaker=True,
+                             reason=str(jarvis_live.IGNORED_BACKGROUND["reason"]),
+                             **_live_fields(mic))
         # The session is verified: no "say a bit more" and no speaker model.
         short = False
     if jarvis_voice is None:

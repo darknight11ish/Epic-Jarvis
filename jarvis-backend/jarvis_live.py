@@ -287,6 +287,39 @@ TRUST_FIRST_S = 2.0
 TRUST_SESSION_S = 2 * 3600.0
 SAY_RECHECK = "Say a full sentence so I can re-check your voice."
 
+#: THE RADIO/TV IMPOSTOR GUARD (the owner's report of 2026-11-05, the
+#: regression of #1104 / DEF-028). A session latch is a convenience, not a
+#: claim that everything the microphone hears is the owner: with the latch on,
+#: a radio, a television or a video call in the room was transcribed and
+#: answered as if the owner had said it.
+#:
+#: What the latch may NOT skip is the cheap half of the owner check. Every
+#: clip of RADIO_GUARD_S of speech or more, in a latched session, is put to
+#: the in-RAM CAM++ embedding and compared with the enrolled owner print
+#: (~15 ms - one `embed_with` and one `cosine`, no strict check, no retraining,
+#: nothing written). Below the bar it is BACKGROUND AUDIO: dropped in silence,
+#: never transcribed, never sent to the model, and nothing is said about it.
+#:
+#: SHORT UTTERANCES ARE STILL WELCOME. "yes", "do it", "stop" are under 1.2 s
+#: and skip the guard entirely - a speaker model has almost nothing to go on
+#: in one second, and asking the owner to repeat himself to confirm a card is
+#: exactly the behaviour the 2026-11-01 ruling removed. The guard is about the
+#: room, not about the length of a sentence.
+#:
+#: TWO BARS, because a wake word is proof on its own. A clip that said "hey
+#: Jarvis" (or arrived inside the follow-up window) gets RADIO_MIN_COSINE;
+#: one with no wake-word prefix must clear RADIO_MIN_COSINE_NO_WAKE, since
+#: nothing else in the clip claims to be addressed to Jarvis.
+RADIO_GUARD_S = 1.2
+RADIO_MIN_COSINE = 0.25
+RADIO_MIN_COSINE_NO_WAKE = 0.32
+#: What a dropped clip answers, and the whole of what an app is told: `ok`
+#: True because nothing failed, `ignored_unmatched_speaker` True because that
+#: is what happened, and a reason a person can read. No words of the clip, no
+#: score, no name - a background voice gets nothing back.
+IGNORED_BACKGROUND = {"ok": True, "ignored_unmatched_speaker": True,
+                      "reason": "background_media_rejected"}
+
 
 def print_identity(device, label: str = "") -> str:
     """The enrolled voice print a Live clip from `device` is checked against,
@@ -1913,6 +1946,44 @@ class Live:
                             "strictness": self.trust_strictness}
                 return {"action": "refuse_stale", "words": SAY_RECHECK}
             return {"action": "too_short"}
+
+    def radio_guard(self, device, seconds, had_wake: bool = False) -> dict:
+        """Does this latched clip still have to prove it is the owner?
+
+        `{"needed": True, "min_cosine": ..., "seconds": ...}` when it does:
+        the caller puts the clip to the CAM++ embedding and compares the
+        cosine with the enrolled print, dropping it as background audio when
+        it comes in under `min_cosine`. `{"needed": False}` in every other
+        case, and that answer is not a pass - it only means the guard has no
+        opinion and the ordinary decision stands.
+
+        IT ONLY APPLIES TO A LATCHED SESSION (`trust_active`). Before the
+        session's first verified sentence the real strict check runs and this
+        guard has nothing to add; a session whose verification was voided asks
+        for a full sentence again, exactly as before. The one thing the guard
+        changes is the LATTER half of the latch: the 1.5-2.0 s band that runs
+        on session trust with no speaker model at all, and every latched clip
+        at or above RADIO_GUARD_S next to it.
+
+        Reads no audio and writes nothing: this is the rule, and
+        `jarvis_speech.hear` is what measures the cosine.
+        """
+        with self._lock:
+            if not self._on() or _norm_device(device) != self.device:
+                return {"needed": False}
+            if not self.trust_active:
+                return {"needed": False}
+            try:
+                spoken = float(seconds or 0.0)
+            except (TypeError, ValueError):
+                return {"needed": False}
+            if spoken < RADIO_GUARD_S:
+                # "yes", "do it", "stop": under the guard's own floor, and
+                # deliberately allowed while latched.
+                return {"needed": False}
+            return {"needed": True, "seconds": spoken,
+                    "min_cosine": (RADIO_MIN_COSINE if had_wake
+                                   else RADIO_MIN_COSINE_NO_WAKE)}
 
     def note_verified(self, device, strictness: str = "", label: str = "") -> dict:
         """A >= 2.0 s clip passed the full strict check: this session is verified.
