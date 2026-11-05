@@ -452,9 +452,26 @@ class PipTest {
         // Measured on main before this slice (2026-10-30): five services carry
         // a foregroundServiceType, each for its own already-shipped job. A PiP
         // window does not keep anything alive that is not already alive (§1),
-        // so this number must not move.
+        // so this number must not move FOR THIS FEATURE.
+        //
+        // SIX since 2026-11-04, and not by PiP: `service/CallRecordService.kt`
+        // is the call recorder's own microphone service - its own feature, its
+        // own pull request and its own notification. The pin stays an exact
+        // number precisely so the next slice has to come here and say which
+        // service it was and why.
         assertEquals("a service gained or lost a foregroundServiceType",
-            5, Regex("foregroundServiceType=").findAll(manifest).count())
+            6, Regex("foregroundServiceType=").findAll(manifest).count())
+        // And the sixth really is the recorder, not a second microphone for
+        // the window: it is declared with the microphone type and the window
+        // is not mentioned beside it.
+        assertTrue(
+            "the sixth type must be the call recorder's microphone",
+            manifest.contains(
+                "<service\n            android:name=\".service.CallRecordService\"\n" +
+                    "            android:exported=\"false\"\n" +
+                    "            android:foregroundServiceType=\"microphone\" />",
+            ),
+        )
     }
 
     // ------------------------------------------------------------------
