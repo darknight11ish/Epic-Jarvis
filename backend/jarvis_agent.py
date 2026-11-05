@@ -1086,6 +1086,17 @@ FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of docum
 SEND_FILE_TOOL = "send_file_to_phone"
 SEND_FILE_ACTION = "send_file_to_phone"
 
+#: "Text a contact for me" (2026-11-04, hands-free mode; jarvis_handsfree.py,
+#: docs/JARVIS-API.md section 191). ONE text, ONE card naming the contact and
+#: the EXACT message; the phone resolves the contact and sends it, so this PC
+#: never holds a number. Its gate row (`handsfree.patch`) is "no"/"outbound",
+#: a risky approval, and `[autonomy.tiers]` carries `send_text_message = "ask"`
+#: in both shipped copies. OFFERED ONLY WHILE HANDS-FREE MODE IS ON
+#: (`offered_tools`): with the mode off the tool would only ever refuse, and a
+#: tool the model can see but never use is a worse answer than not having it.
+SEND_TEXT_TOOL = "send_text_message"
+SEND_TEXT_ACTION = "send_text_message"
+
 
 def _prepare_my_files(args: dict):
     action = str(args.get("action") or "").strip().lower()
@@ -1728,6 +1739,36 @@ def _run_send_file(args: dict, state, **_) -> dict:
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
 
+
+
+def _prepare_send_text(args: dict):
+    """prepare() for `send_text_message` (jarvis_handsfree.py, 2026-11-04).
+
+    Refuses BEFORE any card, with one sentence, when hands-free mode is off,
+    when the contact or the message is unusable, or when no phone is paired -
+    a card would otherwise promise a send that cannot happen. The card's own
+    words name the contact and the exact message.
+    """
+    try:
+        import jarvis_handsfree as HF
+    except Exception as exc:                                # noqa: BLE001
+        return None, f"Text a contact (unavailable: {type(exc).__name__})"
+    return HF.prepare_sms(args or {})
+
+
+def _run_send_text(args: dict, state, **_) -> dict:
+    """execute() for `send_text_message`: the card said yes, so the command
+    goes to the phone. It reports "asked", never "sent" - the phone's own
+    result does that."""
+    try:
+        import jarvis_handsfree as HF
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": "the hands-free module is not available "
+                                      f"here ({type(exc).__name__})"}
+    try:
+        return HF.send(state or {})
+    except HF.Refused as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 class _ProtectionListed:
@@ -4545,6 +4586,23 @@ TOOLS: dict = {
             "path": {"type": "string", "description": "one file's full path, if known"}},
          "required": []},
         _prepare_send_file, _run_send_file),
+    # Text a contact (2026-11-04, hands-free mode; jarvis_handsfree.py).
+    # Offered only while the mode is on (see SEND_TEXT_TOOL), ONE card naming
+    # the contact and the exact message, and the phone does the sending.
+    SEND_TEXT_TOOL: Tool(
+        SEND_TEXT_TOOL,
+        "Send ONE text message from the owner's phone to one of their contacts. "
+        "Use only when they ask you to text someone. Give the contact's name "
+        "exactly as the owner said it and the message word for word. ONE card "
+        "naming the contact and the exact text; nothing is sent until they "
+        "approve it, and only while hands-free mode is on.",
+        {"type": "object", "properties": {
+            "contact": {"type": "string",
+                        "description": "the contact's name, as the owner said it"},
+            "text": {"type": "string",
+                     "description": "the message, word for word"}},
+         "required": ["contact", "text"]},
+        _prepare_send_text, _run_send_text),
     PROTECT_TOOL: Tool(
         PROTECT_TOOL,
         "The owner's Protected from Jarvis list: folders, files and programs "
@@ -5353,6 +5411,10 @@ NEEDS_A_PERSON = {
     # phone's storage and the phone can keep a copy after it downloads it.
     SEND_FILE_TOOL: "makes one of the owner's own files fetchable by the phone, which "
                     "can keep a copy after it downloads it",
+    # Text a contact (2026-11-04): the phone sends a real message in the owner's
+    # name from the owner's own number, and a sent text cannot be unsent.
+    SEND_TEXT_TOOL: "sends a real text message from the owner's phone, in their name, "
+                    "which cannot be taken back",
     # Protected from Jarvis: adding to the list changes what Jarvis may
     # touch, and removing is loosening; both need a person every time.
     PROTECT_TOOL: "changes what Jarvis may touch, so it needs your yes every time",
@@ -9019,6 +9081,19 @@ def _web_search_switched_off() -> bool:
         return False
 
 
+def _handsfree_on() -> bool:
+    """True when the owner turned hands-free mode on (jarvis_handsfree.enabled).
+
+    Missing, unreadable or broken means OFF - fail closed, and the same answer
+    jarvis_handsfree.read_out/answer give. Read every turn, so the switch works
+    without a restart."""
+    try:
+        import jarvis_handsfree as HF
+        return bool(HF.enabled())
+    except Exception:
+        return False
+
+
 def _sandbox_offered() -> bool:
     """Is the owner's own data-and-maths sandbox switch ON? (LM-1, 2026-10-18.)
 
@@ -9086,6 +9161,12 @@ def offered_tools(enabled_tools) -> list:
         # read from its file every turn, so off means the AI model is not even
         # offered the tool - not merely refused when it tries.
         wanted.discard("web_search")
+    if SEND_TEXT_TOOL in wanted and not _handsfree_on():
+        # Hands-free mode off: the tool would only ever refuse, so the model is
+        # not offered it at all. The switch is read from the settings file every
+        # turn, exactly as the web-search one above is, so turning the mode on
+        # works without a restart (jarvis_handsfree.enabled).
+        wanted.discard(SEND_TEXT_TOOL)
     if "web_search" in wanted:
         # The conversation web-search approval and its instant stop are part of
         # the same ability, not a capability of their own (2026-11-02): the ask
@@ -9307,6 +9388,15 @@ TOOL_GROUPS = (
     # web search is (GRANT_ASK_TOOLS, 2026-11-02) and are not a Settings switch.
     ("web_search_grant", "let web searches in this chat stop asking",
      (GRANT_TOOL, REVOKE_TOOL)),
+    # Texting a contact (2026-11-04, hands-free mode; SEND_TEXT_TOOL). Its own
+    # group, the "send_email" shape: ONE deliberate act with its own approval
+    # card, so the model must be able to ask for a text without an email also
+    # appearing. A group rather than the core for the reason the read_web_page
+    # note gives - a group's name and one line are about 20 tokens, paid only
+    # with `[tools] short_list = true` (OFF by default), where its own tool
+    # description would be paid on every turn. Ungrouped is not an option:
+    # tool_offer always shows an ungrouped tool in the short list.
+    ("send_text", "text a contact", (SEND_TEXT_TOOL,)),
 )
 PLUGINS = "plugins"
 
@@ -9465,6 +9555,13 @@ TOOL_HINTS = {
     "send_file_to_phone": (r"\bsend\b.*\bfiles?\b", r"\bfiles?\b.*\bphone\b",
                            r"\bdownload\b", r"\bview (it|the file)\b",
                            r"\bto my phone\b"),
+    # "text Alex that I'm late" (2026-11-04, hands-free mode). \btext\b is the
+    # verb the owner uses ("text mum"); a bare "message" is deliberately NOT
+    # matched here, because email_check and the notes tools already own that
+    # word and this tool SENDS.
+    "send_text_message": (r"\btext\b", r"\btexts?\b.*\b(her|him|them|mum|mom|dad|"
+                          r"wife|husband|friend|contact)\b", r"\bsms\b"),
+
     # Protected from Jarvis (2026-10-31; widened 2026-11-04 after a real chat
     # answer missed the tool). A question in these words hid the tool from the
     # model, which then answered generically about a capability the backend
@@ -16472,6 +16569,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # The send-file card shows the filename, folder, size and cap in its
         # OWN words (prepare() built them), not the generic tool-call line.
         prompt = plan_text if name == SEND_FILE_TOOL else _gate_prompt(name, args)
+        if name == SEND_TEXT_TOOL:
+            prompt = plan_text
         verdict = checker(action_name, {"text": plan_text}, prompt)
         out.card_answered(verdict)
         out.set_status("thinking")

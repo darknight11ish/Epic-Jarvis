@@ -337,6 +337,13 @@ TITLES = {
     # audio, transcript and receipt; its full words say the Obsidian note stays
     # and that it cannot be undone.
     "delete_call_recording": "delete a recorded call",
+    # --- hands-free mode (2026-11-04, the owner's own request; jarvis_handsfree.py)
+    # A text message, read out and approved like any other card. The contact and
+    # the exact message are on the card (its detail), never in these words: this
+    # title is also spoken aloud and shown on a lock screen.
+    "send_text_message": "send a text message from your phone",
+    # The one card that turns the mode on. Its body says what changes.
+    "handsfree_enable": "turn on hands-free mode",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -551,6 +558,9 @@ SUMMARY = {
     # audio, transcript and receipt; its full words say the Obsidian note stays
     # and that it cannot be undone.
     "delete_call_recording": "delete a recorded call",
+    # --- hands-free mode (2026-11-04): the same two actions as TITLES above.
+    "send_text_message": "send a text message from your phone",
+    "handsfree_enable": "turn on hands-free mode",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above
@@ -707,6 +717,14 @@ TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself."
 
 #: The phone's second sentence on the same card. Never shown on the PC.
 TIMED_OUT_NEXT = "Ask the desktop to raise this again."
+
+#: The one sentence a hands-free read-out ends with (2026-11-04,
+#: `jarvis_handsfree.read_out`): the card's own notice words, then this, so the
+#: owner knows what to say. Its two lists are `jarvis_handsfree.CONFIRM` and
+#: `DENY`, and `backend/test_handsfree.py` fails if these words and those lists
+#: disagree - the same "one source of words" rule as KICKER and TIMED_OUT.
+HANDSFREE_ASK = ('Say "yes" to approve it or "no" to refuse - one word, within '
+                 "a minute of hearing this.")
 
 _MAX_NAME = 60
 

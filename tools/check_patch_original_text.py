@@ -388,7 +388,13 @@ PIN = {
     # Checked the other way by backend/test_web_search_grant.py, which applies
     # this patch to jarvis-backend/jarvis_gate.py forwards and reverses it byte
     # for byte.
-    "web-search-grant.patch":                   (4, 21),    # position 164 - moved before unknown-risk-approvable.patch on 2026-11-02, so that patch stays the last writer of jarvis_gate.py (the same move main made for gate-tool-actions-gap.patch)
+    "web-search-grant.patch":                   (4, 24),    # position 164 - moved before unknown-risk-approvable.patch on 2026-11-02, so that patch stays the last writer of jarvis_gate.py (the same move main made for gate-tool-actions-gap.patch)
+    # 2026-11-04 (PR #1169): handsfree.patch is ONE hunk appending its gate rows at
+    # the END OF THE FILE, and its 3 context lines are the owner's own `if __name__`
+    # tail (the same text web-search-grant.patch's EOF hunk reads). It is applied
+    # before web-search-grant.patch, whose EOF hunk gained 3 trailing context lines
+    # (the head of this block) - hence its own 4/21 -> 4/24 above.
+    "handsfree.patch":                          (1, 3),
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under

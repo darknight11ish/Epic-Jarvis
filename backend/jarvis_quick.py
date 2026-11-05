@@ -6318,6 +6318,7 @@ PLUGIN_CATALOGUE = (
     ('goals', '"Goals with one card per step".'),
     ('google-calendar', 'Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time...'),
     ('habits', 'habit check-ins: a repeating thing the owner wants to do - walk, stretch, practise - with one tap recording that it happened that day, and no score...'),
+    ('handsfree', 'hands-free mode: approval cards read out to the phone, one card answered from one spoken yes or no inside 60 seconds after your voice print, and one approved text message handed to the phone - off by default.'),
     ('history-import', '"Bring in chats from ChatGPT, Claude, Gemini or DeepSeek".'),
     ('history-purge', 'clear old chats for the days you choose, and the facts they taught: a preview, TWO separate yeses and a Windows Hello or fingerprint ticket, pinned chats kept unless asked for.'),
     ('jarvis-calendar', "Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch tur..."),
@@ -9545,6 +9546,15 @@ CHANGE_BY_ASKING = frozenset({
     # (`_read_voice_check_locked`) answers a real True/False, so the receipt is
     # a read and not a claim.
     "voice_check_locked",
+    # Hands-free mode (2026-11-04, the owner's own request: "a handfree setting
+    # that i can turn off in chat, jarvis live, or through settings").
+    # `set_handsfree` calls jarvis_handsfree.request_enabled, the ONE writer its
+    # route and its Settings row use: OFF is immediate and cardless, ON is ONE
+    # ask-tier card (`handsfree_enable`, a risky approval), so this lane raises
+    # nothing of its own and reports "waiting" rather than done. Its reader
+    # (`_read_handsfree`) answers a real True/False, so the read-back below is a
+    # read and not a claim.
+    "handsfree",
     "web_search", "smartwatch_notifications", "phone_notifications",
     "screen_picture", "headless_browser", "sandbox_exec", "media_index",
     "briefing_senders", "big_coder", "better_voice", "chat_history",

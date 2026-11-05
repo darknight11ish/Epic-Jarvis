@@ -118,6 +118,12 @@ def t_the_patch_is_registered_last():
              # all - every rule is in the shipped jarvis_history_purge.py. It
              # rewrites nothing this patch wrote.
              "history-purge.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
              # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
              # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
              # ADDED after the rows this patch removes, and it rewrites neither.

@@ -128,7 +128,8 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 54] = [
     "propose_plan",
     "change_setting",
     "feature_guide",
-    // Jarvis's own tools, which had no switch row before 2026-11-04 (12)
+    // Jarvis's own tools, which had no switch row before 2026-11-04 (13; 12
+    // then, plus handsfree's send_text_message on 2026-11-05)
     "goals_list",
     "goal_add",
     "goal_progress",
@@ -138,6 +139,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 54] = [
     "phone_apps",
     "plugin_list",
     "plugin_switch",
+    "send_text_message",
     "refresh_abilities",
     "self_portrait",
     "setup_quiz",

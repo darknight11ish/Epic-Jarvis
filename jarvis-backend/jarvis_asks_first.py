@@ -458,6 +458,7 @@ TIER_EXTRA = (
     "goals_list", "goal_add", "goal_progress", "goal_done",
     "conversation_find", "conversation_open",
     "phone_apps", "plugin_list", "plugin_switch",
+    "send_text_message",
     "refresh_abilities", "self_portrait", "setup_quiz",
     # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
     # 2026-11-03: "Read + actions"). They joined this list when the GitHub
@@ -838,7 +839,15 @@ GROUPS = (
                                 # and the row go, behind ONE card of its own at
                                 # tier "ask" and PC-only. It cannot be undone, so
                                 # the page promises it by name.
-                                "delete_call_recording"]),
+                                "delete_call_recording",
+                                # Hands-free mode's text message (2026-11-04,
+                                # JARVIS-API section 191): the phone sends it from
+                                # its own contact list, so it is a phone action. Its
+                                # words are jarvis_card_words.TITLES, its tier is the
+                                # file's own "ask" line, and it is NOT in MUST_ASK
+                                # (the module calls jarvis_gate.check and does not
+                                # refuse a looser tier itself).
+                                "send_text_message"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,
@@ -857,7 +866,11 @@ GROUPS = (
     # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
     # page promises every action, and starting Live is one (the review of
     # 2026-09-28). Decided in the code: no card, ever.
-    ("Talking with Jarvis", ["fixed:live", "fixed:screen"]),
+    ("Talking with Jarvis", ["fixed:live", "fixed:screen",
+                            # The switch that lets a spoken yes answer a card
+                            # (2026-11-04, JARVIS-API section 191): ON is ONE
+                            # ask-tier card, OFF is instant and cardless.
+                            "handsfree_enable"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable",

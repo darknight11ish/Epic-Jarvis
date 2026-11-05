@@ -289,7 +289,7 @@ def tool_counts_are_the_real_tools():
     check("the registered count is jarvis_agent.TOOLS' own length",
           inv["registered"] == len(A.TOOLS) == 57, str(inv["registered"]))
     check("the enabled count is the settings file's own list",
-          inv["enabled"] == len(AF.tools_enabled_set()) == 13,
+          inv["enabled"] == len(AF.tools_enabled_set()) == 14,
           f"{inv['enabled']} vs {len(AF.tools_enabled_set())}")
     check("the names are the registries' own, not a label list",
           sorted(inv["enabled_names"]) == sorted(AF.tools_enabled_set())
@@ -343,7 +343,7 @@ def tool_counts_are_the_real_tools():
             own.write_bytes(had)
         SP._clear_caches()
     check("putting the settings file back puts the shipped list back",
-          SP.tool_inventory()["enabled"] == 13,
+          SP.tool_inventory()["enabled"] == 14,
           str(SP.tool_inventory()["enabled"]))
 
 

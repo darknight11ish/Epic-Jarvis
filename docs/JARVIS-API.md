@@ -11097,6 +11097,7 @@ Tools page, one approval card each. The only limits left are the five
 non-negotiable rules (`CLAUDE.md`) and the shape below.
 
 **The 54 switches**, in the page's own groups:
+**The 49 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
 
 - **Notes and reading:** `calendar_read`, `notes_search`,
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
@@ -11118,6 +11119,7 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
   the tools the earlier slice left out.
 - **Jarvis's own tools:** `goals_list`, `goal_add`, `goal_progress`,
   `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
+
   `plugin_list`, `plugin_switch`, `refresh_abilities`, `self_portrait`,
   `setup_quiz`, and - since the GitHub tools landed (2026-11-05) - the six
   on-demand GitHub tools `github_list`, `github_read_file`, `github_ci_status`,
@@ -11125,6 +11127,10 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
   reads share the `github_inspect` action, the other three their own; every
   use still raises its own card) - these shipped ON and had no switch row at
   all before 2026-11-04.
+  `plugin_list`, `plugin_switch`, `send_text_message`, `refresh_abilities`,
+  `self_portrait`, `setup_quiz` - these shipped ON and had no switch row at all
+  before
+  2026-11-04.
 
 **Three known tools are NOT switches of their own**, because the turn ignores
 their line in `[tools].enabled` - a switch whose state the turn ignored would
@@ -11156,7 +11162,9 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
+
 | `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the three `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (54), not just Tier A/B. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the three `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (49), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11179,6 +11187,7 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
 ```
 
 `items` lists all 54 switches (48 at 2026-11-04; six GitHub tools since 2026-11-05 - every tool the AI model can be
+`items` lists all 49 switches at 2026-11-05 (48 at 2026-11-04; every tool the AI model can be
 offered except the three below), grouped; `vault` is the vault organizer's
 separate switch; `not_switchable` names the three tools whose own switch decides
 them, with the PC's own sentence, so the page points at the real switch instead
@@ -33940,7 +33949,6 @@ the wording belongs to the module's own lane.
 
 The decision is `decisions.d/2026-11-04-capability-talk.md`.
 
-
 ## 188. Call recording: the phone records on the speaker path, the PC transcribes, labels who spoke and files a new note (backend, both apps, added 2026-11-04)
 
 The owner's request, in their own words: *"add the ability of jarvis to record a
@@ -34625,3 +34633,283 @@ writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
 those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
 
 **One-sided on purpose:** there is no screen for this in either app, and `tools/check_parity.py` is unchanged because no route was added. The ability is in both apps' chats (the tools run on this PC, and either app's chat is the same turn); a GitHub screen would be deep configuration, and `docs/ARCHITECTURE.md` §8 carries the reason.
+## 191. Hands-free mode: every card read out, one spoken answer, and a text message the phone sends (2026-11-04)
+
+The owner's own request of 2026-11-04:
+
+> "a handfree setting that i can turn off in chat, jarvis live, or through
+> settings. in this mode any approval card for a task i ask jarvis to do will
+> automatically be read out and i can answer confirm or deny (including
+> verbally) and it will approve the card. i want jarvis to be able to write text
+> messages to contacts for me in particular among the full fledged handsfree
+> mode"
+
+And their answer, on the clickable card that asked about the security conflict:
+**"A voice yes counts for every card."** That supersedes the sentence
+`docs/ARCHITECTURE.md` carried from the 2026-09 security review - "**Never
+approve-by-voice**: the voice check cannot tell a recording from the owner, so a
+spoken 'yes' answers nothing" - **for this mode only**, by the owner's
+precedence. The old sentence is still in that file, marked superseded;
+`decisions.d/2026-11-04-handsfree-voice-approval.md` is the record.
+
+**THIS SECTION IS THE FROZEN CONTRACT.** The Android lane builds the phone half
+against it and must not need to read `backend/jarvis_handsfree.py` to do so.
+Everything here is a name, a field or a window; nothing here is advice.
+
+### 191.0 The four routes, at a glance
+
+| Route | Method | Who calls it | What it does |
+|---|---|---|---|
+| `/api/handsfree` | GET | the PC's Settings card | reads the switch, the window, the vocabulary and whether a phone can take a text |
+| `/api/handsfree` | POST | the PC's Settings card | `{"enabled": bool}`: OFF at once and cardless, ON through ONE ask-tier card |
+| `/api/handsfree/answer` | POST | the phone half | one spoken clip, one card: the voice print, the words, the closed list, one decision |
+| `/api/phone/result` | POST | the phone half | the phone's own word on a text it was asked to send - the only thing that makes a receipt |
+
+### 191.1 The setting
+
+`[handsfree] enabled` in the owner's own settings file
+(`jarvis-framework.toml`), **`false` in both shipped copies**. OFF is the state
+of a PC that has never run it, and every read fails to OFF.
+
+Three doors, ONE writer (`jarvis_handsfree.request_enabled`):
+
+| Door | How | What happens |
+|---|---|---|
+| Chat | "turn on hands-free mode" / "turn off hands-free" (also "hands free", "handsfree", "enable hands-free") | the same `jarvis_settings_registry` BoolSetting the Settings row posts through (`jarvis_quick` → `set_handsfree`) |
+| Jarvis Live | the same words, because a spoken question takes the same `/api/chat` path | identical |
+| Settings | the PC's Settings row | `POST /api/handsfree` `{"enabled": true|false}` |
+
+**ON raises ONE ask-tier card** (`handsfree_enable`); it takes effect only when
+that card is approved. **OFF is immediate and raises nothing.** That asymmetry
+is the rule every loosening setting in this project follows: taking a power away
+is always safe.
+
+### 191.2 `GET /api/handsfree` - a read
+
+```json
+{"ok": true, "enabled": false, "window_sec": 60,
+ "vocabulary": {"confirm": ["yes", "yeah", "confirm", "approve", "do it",
+                            "go ahead", "okay", "ok"],
+                "deny":    ["no", "nope", "deny", "cancel", "stop", "don't",
+                            "do not"]},
+ "voice_print": "", "phone": {"ready": true, "why": ""},
+ "reading": null}
+```
+
+`voice_print` is the enrolled print's label, or `""` when none is enrolled.
+`phone.ready` is "a paired phone can receive a command"; `why` is the sentence
+to show when it is false, or the honest note when the phone has not checked in
+lately. `reading` is the newest read-out (`card_id`, `action`, `say`,
+`expires_in_sec`) or `null`. **This route decides nothing.**
+
+### 191.3 `POST /api/handsfree` - the switch
+
+Request `{"enabled": true|false}`. Answers `200 {"ok", "enabled", "changed",
+"message"}`; ON refused by its card answers `403 {"ok": false, "enabled": false,
+"error": "<the gate's own sentence>"}`; a settings file that cannot be written
+answers `409`. Idempotent: ON already on asks nobody, and says so.
+
+### 191.4 The read-out event: `handsfree_card`
+
+While the mode is on, every approval card that starts WAITING FOR A PERSON is
+announced once on `/api/events`:
+
+```json
+{"card_id": "<the pending row's id>", "action": "<the gate action>",
+ "say": "<the card's own words, then how to answer>",
+ "expires_in_sec": 60}
+```
+
+- **`say` is the card's own plain words** - `jarvis_gate.notice_for`'s
+  `title` + `body`, which are built from the gate's own tables and never read
+  the card's payload, plus `jarvis_card_words.HANDSFREE_ASK` ("Say \"yes\" to
+  approve it or \"no\" to refuse - one word, within a minute of hearing this.").
+  So the read-out is safe where a notice is safe: **the contact name and the
+  message text are on the CARD, never in the read-out.** A sentence about a
+  text message says "send a text message from your phone"; what it says and who
+  to is on the screen in front of the owner.
+- **`expires_in_sec`** is how long a spoken ANSWER is open - `WINDOW_SEC` (60),
+  or the card's own countdown from `/api/pending` when that is shorter, rounded
+  up, never negative. It is not the card's own deadline; that field is
+  `/api/pending`'s `expires_in` and is unchanged.
+- **A notification, never an approval.** The card is still in `/api/pending`,
+  unchanged, and still needs an answer. Reading a card out approves nothing,
+  denies nothing and touches no row.
+- One event per card, once. A decided or expired card's read-out is forgotten.
+  A phone that missed the event still has the card in `/api/pending`; a phone
+  that reconnects and asks `GET /api/handsfree` gets `reading` for the newest
+  one.
+
+### 191.5 `POST /api/handsfree/answer` - one card, one spoken answer
+
+```json
+{"card_id": "<the id from the read-out>",
+ "data_b64": "<base64 of a 16-bit PCM WAV, mono, 16 kHz>",
+ "sample_rate": 16000}
+```
+
+`sample_rate` must equal the WAV's own rate, in `8000..48000`. The clip is at
+most 30 seconds (`MAX_SECONDS`); a longer one is refused, never truncated.
+
+**The pipeline, in this order, and the order is the safety property:**
+
+1. **The mode must be on.** OFF refuses before anything else - `403` with
+   `say` = "Hands-free mode is off, so a spoken answer decides nothing." Nothing
+   is decoded, transcribed or decided.
+2. **The card must have been read out and its window must be open.** No
+   read-out for that id, or past its deadline, is `409`. A second answer for the
+   same read-out is `409` too: one read-out, one decision.
+3. **The card must still be waiting** (`/api/pending`). Gone is `409`
+   `card_state: "gone"`.
+4. **The voice print first, then the words.** `jarvis_voice.verify(samples,
+   sample_rate)` - the existing owner check, unchanged - runs BEFORE any
+   transcription. Its own docstring says why: "A voice that is not the owner's
+   is never turned into words - refusing after transcribing would leave a
+   stranger's speech in memory on the way to saying no." The brief for this
+   feature said "transcribe, then verify"; that order would break the rule, so
+   the code verifies first. A clip that is not the owner is `403` with
+   `say` = "That was not your voice, so nothing was decided.", `heard` = `""`.
+5. **No enrolled print means no spoken yes.** `verify` answers False with "no
+   enrolled voice profile - run enrolment first", and that becomes `403` with
+   `say` = "I can't tell your voice from anyone else's until you train my
+   voice, so I won't take a yes by voice. Say no, or answer the card on your
+   screen." This is deliberately STRICTER than "a voice yes counts for every
+   card": that decision assumes the check can run, and without a print a yes is
+   indistinguishable from a recording.
+6. **The words are made ON THIS PC** by `jarvis_speech._transcribe` (the
+   installed sherpa STT) - **a client never does speech-to-text**, and the clip
+   is never sent anywhere.
+7. **A CLOSED vocabulary decides.** The whole utterance, normalised (lowercase,
+   punctuation and spacing collapsed), must equal one entry of `confirm` or
+   `deny` in 191.2. A sentence that merely contains a yes - "yes but wait" - is
+   not a yes. Anything else is **unclear**: the first unclear answer asks once
+   more (`decision: "again"`, `say` = "Sorry - was that yes or no?", the card
+   still waiting); the second treats it as a DENY.
+8. **One decision, through the SAME approval function a tap uses.**
+   `jarvis_gate.decide(card_id, approved, by="handsfree_voice")` - no second
+   approval path, no bulk, one card one decision. A confirm additionally leaves
+   the in-memory stamp `jarvis_owner_check.stamp(card_id, action)` that a
+   Windows Hello approval leaves, which is the narrow branch the owner's
+   decision authorises; a deny leaves none (refusing needs no proof). **This
+   happens in exactly ONE function** (`jarvis_handsfree.approve_one`), reachable
+   only from this route after step 4 passed.
+
+Answers:
+
+| code | body | means |
+|---|---|---|
+| 200 | `{"ok": true, "heard", "decision": "approved"` or `"denied"`, `"card_state"`, `"say"`}` | decided |
+| 200 | `{"ok": false, "heard", "decision": "again", "card_state": "pending", "say"}` | unclear, asked once more |
+| 400 | `{"ok": false, "decision": "refused", "error"}` | no card id, no clip, an unreadable clip, a mismatched sample rate, or a clip over 30 s |
+| 403 | `{"ok": false, "decision": "refused", "say"}` | the mode is off, or the voice was not the owner's (or there is no print) |
+| 409 | `{"ok": false, "decision": "refused", "card_state"}` | no read-out, past the window, the card is gone, or it was already decided |
+| 503 | `{"ok": false, "decision": "refused", "error"}` | the voice check, the transcription or the decision could not run; nothing was decided |
+
+**`say` is what the phone speaks.** Every answer carries one, so a client never
+writes its own sentence for a refusal or a decision. `heard` is what the PC
+understood, so a wrong transcript is visible rather than guessed at.
+
+**The audit receipt** is one `handsfree.answer` line naming the card, the
+action, the heard words, the decision, who decided (`handsfree_voice`) and the
+**SHA-256 of the clip** - never the audio, never the clip itself.
+
+### 191.6 Text messages: `send_text_message`
+
+One model tool, offered **only while hands-free mode is on** (`jarvis_agent.
+offered_tools` withholds it otherwise, so with the mode off the model is not
+offered a tool that could only refuse). Arguments: `{"contact": "<a name>",
+"text": "<the message, word for word>"}`.
+
+- **ONE ask-tier card**, gate action `send_text_message`, tier `ask` in both
+  shipped settings copies, and a gate row that is `"no"`/`"outbound"` - a risky
+  approval, because a sent text cannot be unsent. Its words name the contact and
+  show the exact message word for word.
+- **Refused before any card**, with one sentence, when the mode is off, when the
+  contact or the message is unusable (empty, over 80 / 600 characters), or when
+  no phone is paired / the device list cannot be read. A card that promises a
+  send which cannot happen is worse than a refusal.
+- **After approval**, the PC publishes on `/api/events`:
+
+```json
+{"id": "<the command id>", "kind": "send_sms",
+ "contact": "<the name, exactly as the card showed it>",
+ "text": "<the message, exactly as the card showed it>"}
+```
+
+  and answers the owner "Asked your phone to send your text to <name>. It is
+  not sent until your phone reports back." It **never reports a text as sent**:
+  only the phone's own result does that. If no phone is paired between the card
+  and the dispatch, nothing is published and the answer says so.
+- **The phone resolves the contact and sends it.** Contacts never leave the
+  phone; **the PC never stores a phone number** and holds no contact list. The
+  PC's own dispatch record is in memory: the name, the text and the command id,
+  until the result arrives.
+- **The phone's own word** is `POST /api/phone/result`:
+
+```json
+{"id": "<the command id>", "ok": true,
+ "receipt": "<the phone's own short word, e.g. the SMS id or 'sent'>",
+ "why": "<the reason when ok is false>"}
+```
+
+  - `200 {"ok": true, "id", "sent", "say", "receipt", "why"}` - recorded.
+  - `400` - no id, or a body that is not an object.
+  - `409` - an id this PC never handed out, or one already reported. **A result
+    for an unknown id records no receipt** and is never read as one.
+
+  The PC writes ONE row into its own receipts store
+  (`handsfree-receipts.json`, the newest 200): the id, the contact, `ok`, the
+  phone's `receipt` and `why`, the message's length and its **SHA-256 - never
+  the message text**. It then publishes
+
+```json
+{"id": "<the command id>", "ok": true, "say": "<one spoken sentence>",
+ "receipt": "<the phone's word>", "why": "<the reason when it failed>"}
+```
+
+  as event kind `phone_result`, so the apps can say what happened. Until that
+  event, nothing anywhere says a text was sent.
+
+**Both event kinds are additions**: a client that does not know
+`handsfree_card`, `phone_command` or `phone_result` ignores them, exactly as it
+ignores every unknown kind. `tools/check_parity.py` records that these routes
+and events are called by the phone lane and not yet by the desktop.
+
+### 191.7 What is NOT changed
+
+- **The non-hands-free path is untouched.** `jarvis_owner_check.approve_check`
+  has no hands-free branch; `jarvis_gate`/`jarvis_owner_check` never import
+  `jarvis_handsfree`. With the mode off, a risky card still needs Windows Hello
+  on the PC or the phone's own lock and signature, exactly as before. The only
+  new writer of a stamp is `jarvis_handsfree.approve_one`, and it is reachable
+  only through the route above, only with the mode ON, and only after the voice
+  print passed. `backend/test_handsfree.py` pins both halves.
+- **No new setting, route or event changes the card, the queue or the gate.**
+  `/api/pending`, the card's shape, its words, `expires_in`, Windows Hello, the
+  deny rule and the two ceremonies of the 2026-10-23 ruling are all as they
+  were.
+- **Nothing here approves in bulk, clears a rush latch or touches a second
+  card.** One read-out is one card; one answer is one decision.
+
+### 191.8 What is PROVED, and what is not
+
+`backend/test_handsfree.py` - 175 checks, 0 failed, no model, no microphone, no
+network: the switch off in both templates, OFF instant and cardless, ON one card
+and refused leaves it off, the writer changing one line, the read-out's four
+fields and its card's own words, nothing approved by reading a card out, a
+spoken yes stamping then deciding, a spoken no stamping nothing, unclear asked
+once then denied, the 60-second window, a card never read out, a stranger's clip
+refused before any words, no print means no spoken yes, nothing decided with the
+mode off, a card already gone, a clip that cannot be read, the closed
+vocabulary, the Hello card approvable by voice only in hands-free (and the gate
+still refusing an unstamped approval), the voice checked before transcription,
+the text card's exact words, the three refusals, the `phone_command` payload,
+the receipt made only by the phone's result, an unknown id refused, a failed
+send recorded honestly, the audit receipt's clip hash, and the routes' shapes.
+
+**NOT VERIFIED on this tree, said plainly:** no real microphone clip, no real
+sherpa STT and no real voice print have been run against this route (the suite
+uses stand-ins for all three); no phone has ever received a `phone_command` or
+sent an SMS; and the desktop Settings row and the phone's screens are the two
+app lanes' own work. A desk test with a real clip and the owner's phone is the
+next step, and it is a field test, not a unit test.

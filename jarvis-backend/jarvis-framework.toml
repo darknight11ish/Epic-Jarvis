@@ -377,6 +377,21 @@ write_notes_after_outside_text = "ask"
 # FORCED to "ask", with its own outbound worst-case line (never looser). A
 # follow-up patch can classify it; keep this line at "ask".
 send_file_to_phone       = "ask"
+# "Text a contact for me" (2026-11-04, hands-free mode; jarvis_handsfree.py,
+# backend/handsfree.patch). ONE card per text, naming the contact and the EXACT
+# message word for word; nothing is sent until that card is answered. The phone
+# looks the contact up in its own contacts and sends it, so this PC never holds
+# a number. A sent text cannot be unsent, so its gate row is "no"/"outbound" - a
+# risky approval. It is offered to the model only while hands-free mode is on
+# (see [handsfree] at the end of this file), and it refuses before any card when
+# the mode is off or no phone is paired. Keep this line at "ask".
+send_text_message        = "ask"
+# The one card that turns hands-free mode on (jarvis_handsfree.py;
+# handsfree.patch). A loosening setting: while it is on a spoken yes may
+# answer a card, including one that would otherwise wait for Windows Hello,
+# so it is a risky approval and ON asks every time. OFF is instant and
+# cardless. Keep this line at "ask".
+handsfree_enable         = "ask"
 # "Protected from Jarvis" (jarvis_protection.py, 2026-10-31; the owner's
 # request: a list of folders, files and programs that blocks Jarvis, or makes
 # it read-only). ONE card for a chat add (the model proposes, the owner
@@ -2065,7 +2080,7 @@ star_floor = 25        # ...but never fewer than this many
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)
@@ -2388,4 +2403,26 @@ searxng_url = "http://127.0.0.1:8888"
 # 400-recording cap refuses a new start rather than deleting anything
 # (docs/CALL-RECORDING.md section 7 is the retention policy).
 [call_recording]
+enabled = false
+
+# ------------------------------------------------------------------------
+# HANDS-FREE MODE - cards are read out, and a spoken yes or no answers one
+# (2026-11-04; the owner's own request; jarvis_handsfree.py, docs/JARVIS-API.md
+# section 191). OFF is the default and the state of a PC that has never run it.
+#
+# ON changes what an approval needs from then on: every waiting card is read
+# out to the phone, and one word from a short list - yes, yeah, confirm,
+# approve, do it, go ahead, okay / no, nope, deny, cancel, stop, don't - inside
+# a minute of the read-out answers THAT one card, including the cards that would
+# otherwise wait for Windows Hello on this PC. It is the owner's decision of
+# 2026-11-04 ("A voice yes counts for every card"), which supersedes the earlier
+# "never approve-by-voice" rule for this mode only; outside it, nothing changes.
+#
+# The safeguards are not settings: the clip is turned into words ON THIS PC
+# (never by a client), the owner's voice print is checked BEFORE any words are
+# made, no enrolled print means no spoken yes, a closed vocabulary decides
+# (anything else is asked once more and then treated as a refusal), one card
+# gets one decision, and a refusal always works. Turning it on is ONE approval
+# card; turning it off is instant and raises nothing.
+[handsfree]
 enabled = false

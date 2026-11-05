@@ -80,7 +80,7 @@ import kotlin.coroutines.resume
  *     the ledger too (`audio/Recorder.kt`), so a button being pressed when the
  *     card arrives refuses this window in words rather than opening a second
  *     recorder over it ([MicOwner]). The clip is capped at the PC's 30 seconds
- *     (JARVIS-API section 186.5) and stops about a second after the owner
+ *     (JARVIS-API section 191.5) and stops about a second after the owner
  *     finishes speaking ([TurnEnd]), so a one-word answer does not wait out the
  *     whole minute.
  *  3. The window closes -> the clip (16 kHz mono WAV, [HandsfreeClip]) goes to
@@ -175,7 +175,7 @@ class HandsfreeService : Service() {
         if (card.cardId == lastCard) return
         // The card's own `expires_in_sec` is the answer window; a card that
         // carried none falls back to the window `GET /api/handsfree` reported
-        // (section 186.2). Never this app's own number.
+        // (section 191.2). Never this app's own number.
         val fallback = JarvisRuntime.handsfree.value?.windowSec ?: Handsfree.WINDOW_SEC
         when (val moved = flow.onCard(card, SystemClock.elapsedRealtime(), fallback)) {
             is HandsfreeFlow.Moved.No -> {
@@ -225,7 +225,7 @@ class HandsfreeService : Service() {
             var answer = answerOnce(card) ?: return
             if (isAgain(answer)) {
                 // The PC heard an unclear answer and asks ONCE more (section
-                // 186.5). Say its own question, then listen again inside the
+                // 191.5). Say its own question, then listen again inside the
                 // SAME deadline - and never a third time: the PC's second
                 // unclear answer is a deny, so a second `again` is answered
                 // with its sentence and the flow is freed rather than left
@@ -241,7 +241,7 @@ class HandsfreeService : Service() {
                 }
             }
             // The PC's own sentence, SPOKEN - "Approved. Carrying on.", the
-            // refusal's words, the "wrong voice" refusal (section 186.5: "say
+            // refusal's words, the "wrong voice" refusal (section 191.5: "say
             // is what the phone speaks"). It is shown either way; a PC whose
             // voice engine is unavailable leaves it shown only.
             answer.say?.trim()?.takeIf { it.isNotEmpty() && !inCall() }?.let { speak(it) }
@@ -330,7 +330,7 @@ class HandsfreeService : Service() {
     }
 
     /**
-     * The PC decided: one sentence, in the PC's own words (section 186.5: the
+     * The PC decided: one sentence, in the PC's own words (section 191.5: the
      * answer body's `say`), spoken by the caller and shown here.
      */
     private suspend fun upload(card: Handsfree.Card, wav: ByteArray): Handsfree.Answer? {
@@ -347,7 +347,7 @@ class HandsfreeService : Service() {
      *
      * The WINDOW is the PC's - [windowSec], a minute at most, ending at the
      * deadline the flow holds. The CLIP is capped at the PC's 30 seconds,
-     * because a longer one is refused rather than truncated (section 186.5),
+     * because a longer one is refused rather than truncated (section 191.5),
      * and it closes about a second after the owner stops speaking ([TurnEnd],
      * the same rule the talk button uses), so a one-word answer is not held
      * for a whole minute.
@@ -569,7 +569,7 @@ class HandsfreeService : Service() {
 
     /**
      * The PC's own receipt for the text this phone sent (`phone_result`,
-     * docs/JARVIS-API.md section 186.6).
+     * docs/JARVIS-API.md section 191.6).
      *
      * The phone has already posted its own notification, from Android's own
      * verdict - this REPLACES its line with the PC's sentence ("Your text to

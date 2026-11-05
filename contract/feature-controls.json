@@ -10207,6 +10207,25 @@
       "status": "planned",
       "owner": "setup-ui",
       "reason": "typed switch works; no SETTINGS_ROWS row or phone row draws it yet - the Calendar Settings card is the UI slice's"
+    },
+    {
+      "key": "handsfree",
+      "names": [
+        "hands-free mode",
+        "hands free mode",
+        "hands-free",
+        "hands free",
+        "handsfree",
+        "hands free setting"
+      ],
+      "section": "handsfree",
+      "desktop_row": "hf-enabled",
+      "turn_on": "turn on hands-free mode",
+      "turn_off": "turn off hands-free",
+      "resolved": true,
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
     }
   ],
   "setting_rows": [
@@ -10569,6 +10588,16 @@
       "in_settings_html": true,
       "in_desktop_catalog": true,
       "in_phone_catalog": true
+    },
+    {
+      "id": "hf-enabled",
+      "label": "Hands-free mode",
+      "section": "handsfree",
+      "owner": "desktop",
+      "phone_key": null,
+      "in_settings_html": true,
+      "in_desktop_catalog": true,
+      "in_phone_catalog": false
     }
   ],
   "sections": [
@@ -11326,6 +11355,19 @@
         "the to-do list's own day"
       ],
       "app": "both",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
+    },
+    {
+      "id": "handsfree",
+      "names": [
+        "hands-free mode",
+        "hands free mode",
+        "hands-free settings",
+        "the hands-free page"
+      ],
+      "app": "desktop",
       "where": "settings",
       "in_desktop_settings": true,
       "in_phone_settings": false

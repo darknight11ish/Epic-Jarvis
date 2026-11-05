@@ -154,6 +154,10 @@ TOOL_NAMES = {
     # reach page lists every tool the model can offer, so this one has plain
     # words too. It SENDS (outbound) - one file, one card, ten minutes.
     "send_file_to_phone": "Sending one file from your PC to your phone (one card each)",
+    # Text one contact (2026-11-04, hands-free mode). It SENDS a real message
+    # in the owner's name from the owner's own number - one card each, and a
+    # sent text cannot be unsent.
+    "send_text_message": "Sending one text message from your phone (one card each)",
     # The goals and their progress (2026-11-02). No card on any of them: a goal
     # and a progress line are the owner's own words in the owner's own store,
     # the same shape as the to-do list above. Nothing here deletes anything.

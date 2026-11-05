@@ -51,7 +51,7 @@ __all__ = [
 #:                      that is: the two web-search approval tools).
 #:   switchable       - a real in-app switch on Settings, What asks first,
 #:                      "Let the AI use this" (jarvis_asks_first.
-#:                      TOOLS_SWITCHABLE: 48 of the 51 tools at 2026-11-04).
+#:                      TOOLS_SWITCHABLE: 49 of the 52 tools at 2026-11-04).
 #:                      Off until the owner turns it on.
 #:   off-by-default   - jarvis_asks_first.NOT_A_SWITCH: its own module switch
 #:                      (or the tool it rides with) ships OFF and decides
@@ -61,7 +61,7 @@ __all__ = [
 #: `[tools].enabled` by hand" WAS a real class until 2026-11-04, and the owner
 #: reversed it: every tool the model can be offered now has a switch on the
 #: Tools page, so a profile claiming otherwise would be false. `switchable`
-#: therefore no longer means "the only switchable one": the 13 tools that are
+#: therefore no longer means "the only switchable one": the 14 tools that are
 #: already in the shipped list are `always-available` (no action needed, and
 #: they can be switched OFF from the page), and `rea_investigate` is
 #: `off-by-default` because its own `[rea] enabled` ships false and outranks the
@@ -89,6 +89,7 @@ AGENT             = "backend/jarvis_agent.py"
 GITHUB            = "backend/jarvis_github.py"
 REBUILT_FRAMEWORK = "backend/rebuilt/jarvis-framework.toml"
 ASKS_FIRST        = "backend/jarvis_asks_first.py"
+HANDSFREE         = "backend/jarvis_handsfree.py"
 REBUILT_MEMORY    = "backend/rebuilt/jarvis_memory.py"
 PAST              = "backend/jarvis_past.py"
 AUTO_LEARN        = "backend/jarvis_auto_learn.py"
@@ -1076,6 +1077,41 @@ PROFILES: dict = {
         "tier": "switchable",
         "enable_hint": "Turn on \"send a file to the phone\" in Settings.",
         "sources": [AGENT, SEND_FILE, ASKS_FIRST],
+    },
+
+    "send_text_message": {
+        "id": "send_text_message",
+        "title": "Text a contact for me",
+        "what": "Asks the owner's paired phone to send one text message to a "
+                "contact, after ONE approval card that prints the contact and the "
+                "whole message. The PC composes and asks; the phone looks the "
+                "contact up in its own contacts and does the sending.",
+        "gives": [
+            "Send a short message without picking the phone up",
+            "See the exact contact and the exact words on the card first",
+            "Have the phone report back whether its own send worked",
+        ],
+        "touches": "phone",
+        "limits": [
+            "Only while hands-free mode is on: with it off the model is not "
+            "offered the tool at all, and the card would promise a send that "
+            "cannot happen",
+            "One contact and one message per card; the PC never reports it as "
+            "sent - only the phone's own result does, and a reconnect is said "
+            "as a reconnect, not as a send",
+            "No number is ever typed, guessed or stored: the phone resolves the "
+            "name in its own contacts, and a name it cannot find is reported as "
+            "failed",
+        ],
+        "combines": {
+            "phone_apps": "Listing which apps Jarvis may open comes first; then "
+                          "one approved message is handed to the phone's own SMS "
+                          "app.",
+        },
+        "tier": "always-available",
+        "enable_hint": "It is in the shipped [tools].enabled list, and hands-free "
+                       "mode must be on for the model to be offered it.",
+        "sources": [AGENT, HANDSFREE, ASKS_FIRST],
     },
 
     "protect_from_jarvis": {
@@ -2092,9 +2128,11 @@ FAMILIES: dict = {
     "home-and-phone": {
         "title": "Your home and your phone",
         "what": "Reading and changing Home Assistant devices, driving the paired "
-                "Android phone with individual adb commands, and managing the list "
-                "of apps Jarvis may open there.",
-        "tools": ["home_read", "home_control", "control_phone", "phone_apps"],
+                "Android phone with individual adb commands, managing the list of "
+                "apps Jarvis may open there, and sending one text message from the "
+                "phone after the owner approves one card.",
+        "tools": ["home_read", "home_control", "control_phone", "phone_apps",
+                  "send_text_message"],
         "impact": "It extends Jarvis past the PC into the two places the owner "
                   "actually lives: the house and the phone in their pocket. Asking "
                   "whether the back door is locked, turning a light off, or opening "

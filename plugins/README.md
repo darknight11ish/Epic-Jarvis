@@ -9,12 +9,12 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **52 drop-in modules**, in [`ready/`](ready/) -
+- **53 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **29** replace a patch, and are generated from it;
-  - **23** replace no patch: they were born as folders, and
+  - **24** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **144 core patches**, which still go on through
+- **145 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -53,11 +53,11 @@ the catalogue cannot account for is refused, never silently left out.
 | 153 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
 | 155 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
 | 157 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
-| 171 | `history-purge` | clear old chats (and the facts they taught) for a date range, after a card, TWO separate yeses and a Windows Hello / fingerprint ticket. This is the one route pair in Jarvis that deletes in bulk and c | `history-purge.patch` |
+| 172 | `history-purge` | clear old chats (and the facts they taught) for a date range, after a card, TWO separate yeses and a Windows Hello / fingerprint ticket. This is the one route pair in Jarvis that deletes in bulk and c | `history-purge.patch` |
 
 ## Drop-in modules with no patch of their own
 
-These 23 were never patches. There is nothing in the core
+These 24 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -87,6 +87,7 @@ it is one `apply-patches.ps1` copies in.
 | 171 | `protected-items` | a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act. |
 | 172 | `send-file` | send ONE file from the owner's listed folders to the phone: one card showing the exact filename, folder and byte size, a ten-minute single-use opaque id the phone fetches, and a 10 MiB cap; the route never takes a path. |
 | 173 | `call-notes` | record a phone call from the Android app: POST /api/call/recording/start\|chunk\|finish and GET /api/call/recording, so the phone uploads 16 kHz mono PCM, the PC transcribes and labels who spoke, and ONE new Obsidian note is created named for the date and time. |
+| 173 | `handsfree` | hands-free mode: every waiting approval card is read out to the phone, and one word from a closed list answers it - only after the PC has checked that the voice is the owner's; plus one approved text message to a contact, sent by the phone. OFF by default, and turning it on is one approval card. |
 | 173 | `skill-menu` | the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\.hermes\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all. |
 | 174 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 
@@ -234,6 +235,7 @@ stack's order and cannot be moved into a folder.
 | `learning-extract-reason.patch` | edits lines the core already has; it cannot be applied out of order |
 | `attached-file.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `gate-tool-actions-gap.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
+| `handsfree.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `web-search-grant.patch` | edits lines the core already has; it cannot be applied out of order |
 | `github-tools.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `unknown-risk-approvable.patch` | edits lines the core already has; it cannot be applied out of order |

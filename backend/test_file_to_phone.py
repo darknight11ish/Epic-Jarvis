@@ -397,11 +397,38 @@ def t_the_agent_tool_is_registered_and_asks():
           AG.SEND_FILE_TOOL in AG.NEEDS_A_PERSON)
     check("a plan cannot name it (one card, one deliberate act)",
           "send_file_to_phone" in AG._PLAN_EXCLUDED_STEPS)
-    src = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
+    # The card prompt is the file's own words (prepare() built them), not the
+    # generic `tool <name> {...}` line. Proved by running ONE real _one_call
+    # with only the gate replaced: the prompt the checker receives IS the plan
+    # text it is also given, and it is NOT _gate_prompt's line. This used to pin
+    # the source text `prompt = plan_text if name == SEND_FILE_TOOL`, which the
+    # branch's own change to that line (it now covers handsfree's
+    # send_text_message too) turned red without any behaviour changing.
+    class _Verdict:
+        allowed, tier, action = False, "ask", AG.SEND_FILE_ACTION
+        outcome, reason, request_id = "denied", "", "req-1"
+
+    calls = []
+
+    def gate(action, detail, prompt):
+        calls.append({"action": action, "detail": detail, "prompt": prompt})
+        return _Verdict()
+
+    args = {"query": "invoice"}
+    AG._one_call({"id": "call-1",
+                  "function": {"name": AG.SEND_FILE_TOOL,
+                               "arguments": json.dumps(args)}},
+                 [AG.SEND_FILE_TOOL], [], [],
+                 gate, lambda text: None, AG._Out(lambda data: None, sse=False),
+                 lambda event, name, **kw: None, watch=AG._TurnWatch())
     check("the card prompt is the file's own words, not the generic tool line",
-          "prompt = plan_text if name == SEND_FILE_TOOL" in src)
+          len(calls) == 1
+          and calls[0]["prompt"] == calls[0]["detail"].get("text")
+          and calls[0]["prompt"] != AG._gate_prompt(AG.SEND_FILE_TOOL, args)
+          and "invoice.pdf" in calls[0]["prompt"], calls)
     check("the tool's prepare/execute are wired",
-          "_prepare_send_file" in src and "_run_send_file" in src)
+          tool.prepare is AG._prepare_send_file
+          and tool.execute is AG._run_send_file)
 
 
 def main() -> int:

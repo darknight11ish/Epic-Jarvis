@@ -223,6 +223,10 @@
       "title": "Jarvis wants to keep the phone's live view on offer for 15 minutes"
     },
     {
+      "action": "handsfree_enable",
+      "title": "Jarvis wants to turn on hands-free mode"
+    },
+    {
       "action": "history_enable",
       "title": "Jarvis wants to keep your chat history"
     },
@@ -445,6 +449,10 @@
     {
       "action": "send_file_to_phone",
       "title": "Jarvis wants to send a file from your PC to your phone"
+    },
+    {
+      "action": "send_text_message",
+      "title": "Jarvis wants to send a text message from your phone"
     },
     {
       "action": "spend_money",
@@ -1161,6 +1169,18 @@
       }
     },
     {
+      "action": "handsfree_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on hands-free mode",
+        "summary": "Jarvis wants to turn on hands-free mode.",
+        "full": "turns on hands-free mode, where a spoken yes answers an approval card - including the cards that would otherwise wait for Windows Hello or your phone's fingerprint; while it is on, a recording of your voice or a person in the room could answer one, and what it allowed may already have happened by the time you turn it off, which is instant. nothing has happened yet.",
+        "body": "turns on hands-free mode, where a spoken yes answers an approval card - including the cards that would otherwise wait for Windows Hello or your phone's fingerprint; while it is on, a recording of your voice or a person in the room could answer one, and what it allowed may already have happened by the time you turn it off, which is instant. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "history_enable",
       "notice": {
         "title": "Jarvis wants to keep your chat history",
@@ -1827,6 +1847,18 @@
         "summary": "Jarvis wants to send one file from your folders to your phone.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "send_text_message",
+      "notice": {
+        "title": "Jarvis wants to send a text message from your phone",
+        "summary": "Jarvis wants to send a text message from your phone.",
+        "full": "sends one text message from your phone to the contact named on the card, word for word as the card shows it; a sent text cannot be unsent or edited, and your phone's own contacts decide who that name is. nothing has happened yet.",
+        "body": "sends one text message from your phone to the contact named on the card, word for word as the card shows it; a sent text cannot be unsent or edited, and your phone's own contacts decide who that name is. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false

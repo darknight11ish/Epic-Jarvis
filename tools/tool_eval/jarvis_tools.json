@@ -806,6 +806,30 @@
  {
   "type": "function",
   "function": {
+   "name": "send_text_message",
+   "description": "Send ONE text message from the owner's phone to one of their contacts. Use only when they ask you to text someone. Give the contact's name exactly as the owner said it and the message word for word. ONE card naming the contact and the exact text; nothing is sent until they approve it, and only while hands-free mode is on.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "contact": {
+      "type": "string",
+      "description": "the contact's name, as the owner said it"
+     },
+     "text": {
+      "type": "string",
+      "description": "the message, word for word"
+     }
+    },
+    "required": [
+     "contact",
+     "text"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "protect_from_jarvis",
    "description": "The owner's Protected from Jarvis list: folders, files and programs Jarvis may not touch. add: one card, then blocked or readonly. remove: one card. list: the real list, or ONE target checked - no card. Use for protect, restrict, keep out, don't let Jarvis touch, unrestrict, or what is restricted.",
    "parameters": {

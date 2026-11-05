@@ -169,7 +169,7 @@ def tools_answer_is_the_registry_and_the_live_file():
     check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 57,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
-          inv["enabled"] == 13, str(inv["enabled"]))
+          inv["enabled"] == 14, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
@@ -367,7 +367,7 @@ def the_two_settings_numbers_reconcile():
     data = REG.changeable_settings()
     registry_rows = (len(REG.BOOL_SETTINGS) + len(REG.CHOICE_SETTINGS)
                      + len(REG.NUMBER_SETTINGS))
-    check("the registry's own row count is 48", registry_rows == 48,
+    check("the registry's own row count is 49", registry_rows == 49,
           str(registry_rows))
     check("the spoken answer names how many of its count are those rows",
           f"{registry_rows} of them are the switches, named choices and numbers" in

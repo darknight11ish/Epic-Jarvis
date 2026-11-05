@@ -493,6 +493,16 @@ MENUS: tuple = (
        "Let the AI model run small Python scripts for sums and averages.",
        names=("data sandbox", "the data sandbox", "python sandbox",
               "the python sandbox", "data and maths sandbox")),
+    # "Hands-free mode" (2026-11-04, the owner's own request; jarvis_handsfree.py,
+    # JARVIS-API section 191): the PC's Settings card holding the one switch,
+    # with its own GET/POST /api/handsfree. DESKTOP-only, and the registry says
+    # the same (`app="desktop"`): the phone lane's own Settings row is a
+    # separate change, so there is no phone row here to hide yet and the
+    # phone's MenuVisibilityTest must not be told about a menu it cannot reach.
+    _m("settings.handsfree", "Hands-free mode",
+       "Read your approval cards out and answer one with a spoken yes or no.",
+       (DESKTOP,), names=("hands-free mode", "hands free", "handsfree",
+                          "hands-free settings", "the hands-free page")),
     # "Searchable recordings and videos" (F5 S2, 2026-10-19; JARVIS-API
     # section 149): the desktop's Settings card holding the disclosure, the
     # switch, the stored counts and the one Delete. The phone has NO card yet

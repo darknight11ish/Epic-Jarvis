@@ -610,8 +610,10 @@ RATCHET = {
     #: position 164 to that patch's 163.
     #:
     #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 59 and
-    #: `by_patch` names `web-search-grant.patch: 4` (21 lines in all, pinned by
-    #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
+    #: `by_patch` names `handsfree.patch: 1` and `web-search-grant.patch: 3`
+    #: (18 lines; both pinned by tools/check_patch_original_text.py - see the
+    #: 2026-11-04 note below for why web-search fell from 4 hunks to 3).
+    #: backend/test_web_search_grant.py
     #: applies the patch to the published base and reverses it byte for byte. A
     #: ratchet: it may still only go down.
     #:

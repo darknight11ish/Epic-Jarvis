@@ -384,6 +384,16 @@ def _read_prompt_coach():
     return M.enabled() is True
 
 
+def _read_handsfree():
+    """Hands-free mode's one switch (2026-11-04, jarvis_handsfree.py).
+
+    Read from the module itself, never from a copy of the rule: `enabled()`
+    fails to OFF, so a settings file that cannot be read can never teach this
+    answer that the mode is on."""
+    import jarvis_handsfree as M
+    return M.enabled() is True
+
+
 def _read_antislop():
     """The Anti-Slop filter's master switch (2026-10-28).
 
@@ -586,6 +596,7 @@ STATE_READERS = {
     "learn_paraphrase": lambda: _read_auto_learn("auto_paraphrase"),
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
+    "handsfree": _read_handsfree,
     "antislop": _read_antislop,
     "jarvis_calendar": _read_jarvis_calendar,
     "ask_before_every_search": lambda: _read_search("ask_every_time"),

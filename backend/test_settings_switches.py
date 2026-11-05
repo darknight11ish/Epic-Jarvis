@@ -160,10 +160,11 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
         check(f"{action}: the file now lists {real} (and never the action's own name if that differs)",
               real in got and (action == real or action not in got), got)
         if real not in ("my_spending", "retirement_whatif", "browser_control",
-                        "rea_investigate", "my_files"):
-            # Those five are offered by their own setup rule as well as the
+                        "rea_investigate", "my_files", "send_text_message"):
+            # Those six are offered by their own setup rule as well as the
             # file (a listed folder, the second card's browser lane, [rea]
-            # enabled), so only the file line is asserted for them here.
+            # enabled, hands-free mode on), so only the file line is asserted
+            # for them here.
             check(f"{action}: the model is offered it (jarvis_agent.offered_tools)",
                   real in AG.offered_tools(got), AG.offered_tools(got))
         st = AF.tools_status(here=True)

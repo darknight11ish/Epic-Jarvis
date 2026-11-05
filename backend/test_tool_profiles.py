@@ -343,7 +343,7 @@ def t_tiers_agree_with_the_shipped_switch():
           not wrong, "\n        ".join(wrong))
     claimed = {p["tier"] for p in T.PROFILES.values()}
     # 2026-11-04, main's 71d4d6a01: every tool the model can be offered now has
-    # an in-app switch (jarvis_asks_first.TOOLS_SWITCHABLE, 48 of them, all but
+    # an in-app switch (jarvis_asks_first.TOOLS_SWITCHABLE, 49 of them, all but
     # NOT_A_SWITCH's three), so no tool's only way in is a name typed into the
     # settings file any more. `settings-file` is therefore a real state with
     # nothing in it. It is named HERE, rather than the check being dropped, so
@@ -382,7 +382,7 @@ def t_switchable_matches_the_in_app_switches():
           f"claimed but not switchable: {sorted(switchable - set(AF.TOOLS_SWITCHABLE))}")
     # The equivalence this line used to assert - "every in-app switch is a
     # `switchable` profile" - is the half main's 71d4d6a01 made FALSE, and it is
-    # false in the DATA, not merely awkward here: 13 of the 48 switchable tools
+    # false in the DATA, not merely awkward here: 14 of the 49 switchable tools
     # are already ON in the shipped [tools].enabled list, so the decision order
     # above (and the truth) gives them `always-available` - no action needed, and
     # the page can still switch them OFF - and `rea_investigate` is
