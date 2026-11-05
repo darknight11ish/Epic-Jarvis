@@ -137,11 +137,27 @@ def storage_absence_words() -> str:
 
 
 def storage_routes() -> tuple:
-    """The storage module's own routes, or () when it is not on this PC."""
+    """The storage module's own route paths, or () when it is not on this PC.
+
+    `jarvis_storage_health` ships its routes in BOTH shapes: `ROUTES` is a
+    tuple of row dicts (method/path/handler/what) and `GET_ROUTES`/`POST_ROUTES`
+    hold the bare paths. Accept either, so a module that changes shape cannot
+    take the scan down quietly: a dict row contributes its "path" when that is
+    a non-empty str, a string contributes itself, and anything else is skipped.
+    Never raises.
+    """
     if _STORAGE is None:
         return ()
     try:
-        return tuple(str(r) for r in getattr(_STORAGE, "ROUTES", ()) or ())
+        routes = []
+        for entry in getattr(_STORAGE, "ROUTES", ()) or ():
+            if isinstance(entry, dict):
+                path = entry.get("path")
+                if isinstance(path, str) and path:
+                    routes.append(path)
+            elif isinstance(entry, str):
+                routes.append(entry)
+        return tuple(routes)
     except Exception:                       # noqa: BLE001 - a route list that cannot be read
         return ()
 

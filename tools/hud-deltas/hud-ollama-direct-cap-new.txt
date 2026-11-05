@@ -1,0 +1,20 @@
+            if _state.get("url"):
+                body["model"] = _state["model"]
+                # 2026-11-03, the blank-cloud-answer fix. A service whose
+                # hidden reasoning is billed INSIDE max_tokens (DeepSeek today;
+                # `Preset.reasoning == "inside"` in jarvis_chatbot_api) must be
+                # given room for the thinking AND the answer. Measured twice on
+                # this PC - the 2026-10-14 field test and again on 2026-11-03 -
+                # `max_tokens: 2048` was spent entirely on `reasoning_tokens`
+                # and the visible answer came back empty (`finish_reason:
+                # "length"`, `content: ""`). The relay default was never the
+                # lane's own number: `lane_state()`'s `cap` is, and it is what
+                # money_check() priced the worst case with, so sending it can
+                # neither pass the month's limit nor spend money on a blank
+                # answer. `cloud_request_cap` holds the one rule.
+                try:
+                    body["max_tokens"] = _api.cloud_request_cap(
+                        _state, int(body.get("max_tokens") or 0))
+                except Exception:
+                    pass
+                return _state["url"]

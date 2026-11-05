@@ -599,11 +599,21 @@ def _free_other_engines(others=None) -> list:
     """Standby frees the SECOND graphics card and the big model too, not only
     the everyday model - "frees its graphics cards" has to be true with two.
     `others` is for tests: a list of modules with sleep(why). Each answers one
-    sentence (empty when there was nothing to say). Never raises."""
+    sentence (empty when there was nothing to say). Never raises.
+
+    `jarvis_model_lanes` is here for the POOLED lane (port 11450, the Coding
+    preset's 30B model) - the largest model this PC loads and, until
+    2026-11-04, the one thing standby left resident all night. Its `sleep()`
+    reads `/api/ps` first and stops the lane only when it is really holding
+    the model, and it leaves the two single-card lanes stopped rather than
+    putting them back, because standby is emptying the cards.
+    """
     if others is None:
         others = []
         # jarvis_voices: the better voice (F5-TTS) on the second card.
-        for name in ("jarvis_second_card", "jarvis_big_model", "jarvis_voices"):
+        # jarvis_model_lanes: the pooled both-cards lane on port 11450.
+        for name in ("jarvis_second_card", "jarvis_big_model", "jarvis_voices",
+                     "jarvis_model_lanes"):
             try:
                 others.append(__import__(name))
             except Exception:
