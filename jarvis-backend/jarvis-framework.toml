@@ -767,9 +767,12 @@ organize_obsidian_vault   = "ask"
 # nothing is recorded until it is answered. The owner-initiated note actions
 # (append_obsidian_daily, append_logseq_journal) ship "auto"; this one asks
 # until the owner deliberately loosens it, and docs/CALL-RECORDING.md records
-# that choice. NOTE: jarvis_gate.py has no _RISK row for this name yet, so the
-# gate also forces "ask" as its unclassified-action rule does; the row that
-# replaces the generic warning line is a patch, and this lane adds none.
+# that choice. The gate's _RISK table has a row for this name (added
+# 2026-11-05): ("yes", "local", ...) - a recording changes nothing here, can be
+# deleted again on this PC, and nothing leaves it. Before that row the card
+# carried the gate's generic unclassified warning, whose "able to leave this
+# PC" half was wrong for this action. Deleting a recording is its own card,
+# delete_call_recording, also "ask".
 record_call              = "ask"
 
 [self_modification]
@@ -2322,7 +2325,10 @@ searxng_url = "http://127.0.0.1:8888"
 # shown ("consent_notice": "on") before a recording can be finished; the audio
 # stays under <config dir>/call-recordings/<session>/ and the words go into ONE
 # new note through the notes editor's own create path (its own edit_vault_note
-# card, File Guardian copy and undo receipt). Nothing leaves this PC, and
-# nothing here deletes a recording.
+# card, File Guardian copy and undo receipt). Nothing leaves this PC. Deleting
+# ONE recording is POST /api/call/recording/delete, PC-only and behind its own
+# delete_call_recording card at tier "ask"; nothing expires on a timer and the
+# 400-recording cap refuses a new start rather than deleting anything
+# (docs/CALL-RECORDING.md section 7 is the retention policy).
 [call_recording]
 enabled = false

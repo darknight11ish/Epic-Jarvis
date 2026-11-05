@@ -119,6 +119,10 @@
       "title": "Jarvis wants to delete an event from your calendar"
     },
     {
+      "action": "delete_call_recording",
+      "title": "Jarvis wants to delete a recorded call"
+    },
+    {
       "action": "delete_file",
       "title": "Jarvis wants to delete a file"
     },
@@ -817,6 +821,18 @@
       "notice": {
         "title": "Jarvis wants to delete an event from your calendar",
         "summary": "Jarvis wants to delete a calendar event.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "delete_call_recording",
+      "notice": {
+        "title": "Jarvis wants to delete a recorded call",
+        "summary": "Jarvis wants to delete a recorded call.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",

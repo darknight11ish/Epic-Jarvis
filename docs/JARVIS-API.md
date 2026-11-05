@@ -33153,6 +33153,8 @@ POST /api/call/recording/chunk
      {"session": "call_...", "seq": 1, "data_b64": "<base64 PCM>"}
   -> 200 {"ok": true, "session": ..., "seq": 1, "bytes": 32000,
           "chunk_bytes": 32000}
+     200 {"ok": true, ..., "chunk_bytes": 0, "already": true}
+         (a seq BELOW the next one: already held, nothing written twice)
      404 {"ok": false, "error": "that recording is not on this PC..."}
      409 {"ok": false, "state": "waiting", "error": "..."}   the card is up
      409 {"ok": false, "expected": <n>, "error": "...in order..."}
@@ -33161,17 +33163,27 @@ POST /api/call/recording/chunk
 ```
 
 `seq` starts at **1** - the Android half's own first chunk is 1
-(`CallRecordStore.nextSeq`) - and goes up by one; a gap or a repeat is refused
-with the number the PC wanted in `expected`, and **nothing is written by a
-refused chunk**. `bytes` is the **running total** the PC holds for this
-recording, which is what the phone reads back to tell a PC that appends from one
-that answers 0 to every chunk; `chunk_bytes` is the piece that just landed. At
-most **512 KiB decoded per chunk** (16 s of 16 kHz mono; ~683 KiB once base64 is
-applied, well inside the PC's 4 MiB request ceiling) and **4 hours** in all. The
-phone cuts 64 KiB pieces; the cap is generous so a phone that cuts a little more
-is never refused mid-call. A chunk that arrives while the start card waits is
-refused with 409 `state: "waiting"` - **nothing is kept before the owner says
-yes**, and the phone retries the same number rather than skipping it.
+(`CallRecordStore.nextSeq`) - and goes up by one. **A repeated `seq` is not an
+error, and a gap is.** A chunk whose `seq` is BELOW the next one the recording
+needs is a retry of a chunk this PC already holds - the phone died between the
+PC's 200 and its own `sent.txt` append - so it answers 200 with `already: true`
+and `chunk_bytes: 0`, and **writes nothing twice**. Only a `seq` ABOVE the next
+one is a hole in the audio that nothing later repairs, and only a gap is a 409,
+carrying the number the PC wanted in `expected`; the phone marks everything
+below `expected` as sent and retries the real gap. (Refusing the repeat, which
+this route did until 2026-11-05, retried the same number for ever and made the
+recording permanently unsendable.) `bytes` is the **running total** the PC holds
+for this recording, which is what the phone reads back to tell a PC that appends
+from one that answers 0 to every chunk; `chunk_bytes` is the piece that just
+landed. At most **512 KiB decoded per chunk** (16 s of 16 kHz mono; ~683 KiB
+once base64 is applied, well inside the PC's 4 MiB request ceiling) and **4
+hours** in all. The phone cuts 64 KiB pieces; the cap is generous so a phone
+that cuts a little more is never refused mid-call. A chunk that arrives while
+the start card waits is refused with 409 `state: "waiting"` - **no audio is
+kept before the owner says yes** (the session's folder, its `receipt.json` and
+an empty `audio.pcm` are made before the card, so a crash cannot lose the first
+chunk; not one audio byte is written until it is approved), and the phone
+retries the same number rather than skipping it.
 
 ```
 POST /api/call/recording/finish
@@ -33207,6 +33219,16 @@ GET /api/call/recording             -> {"ok": true, "enabled": true,
                                         "recordings": [...], "where": "<folder>"}
 GET /api/call/recording?session=ID  -> {"ok": true, "recording": {...}}; 404 unknown
                                        403 from any device but this PC
+
+POST /api/call/recording/delete
+     {"session": "call_..."}
+  -> 200 {"ok": true, "session": ..., "state": "deleted",
+          "removed": ["audio.pcm", "audio.wav", "receipt.json", "transcript.md"],
+          "message": "<one plain sentence>"}
+     202 {"ok": true, "state": "waiting", "message": "..."}  its card is up
+     403 {"ok": false, "state": "refused", "error": "..."}; 403 "off" is never used
+     404 {"ok": false, "state": "unknown", "error": "..."}
+     409 {"ok": false, "state": "recording"|"transcribing", "error": "..."}
 ```
 
 Read-only: the date, duration, note path, status and speaker list. **Never the
@@ -33214,9 +33236,29 @@ transcript text** - the note holds the words and this route does not.
 **PC-only**, through `jarvis_owner_check.from_this_pc` exactly as
 `GET /api/guardian/snapshots` and the other PC surfaces do it: the list names
 the owner's recordings and the note paths they went to, which is a PC surface,
-and the phone has no use for it. The three POST routes are the phone's by
+and the phone has no use for it. The three audio POST routes are the phone's by
 necessity - it holds the microphone - and that is the one deliberate departure,
 written down in `docs/CALL-RECORDING.md` §8.
+
+**`POST .../delete` is the ONE way a recording is removed**, and it is PC-only
+for the same reason: the phone never deletes anything on this PC. It is a POST
+rather than a `DELETE` because this backend wraps `do_GET` and `do_POST` for
+every optional feature and has no `do_DELETE` anywhere (§112 records the same
+choice for the goals store). It removes that session's whole folder -
+`audio.pcm`, `audio.wav`, `transcript.md`, `receipt.json` and any
+`part-*.wav` - which is also its row in the list above, and it raises **ONE
+`delete_call_recording` card at tier `ask`**: deleting the audio and its
+transcript cannot be undone, so it never happens without the owner's yes. The
+delete itself runs on the card's worker, so a card still waiting answers 202
+(the shape `start` uses) and the recording is gone from the GET once it is
+approved; 200 means it is already gone. It refuses while the session is
+`recording` or `transcribing` (409, in words) and it does **not** need
+`[call_recording] enabled = true` - removing something is the safe direction.
+**The Obsidian note is not deleted here**: it is a document of its own, written
+through the notes editor's own card and undo receipt, and the answer names it so
+the owner knows what is left. `docs/CALL-RECORDING.md` §7 is the retention
+policy: nothing expires on a timer, and the 400-recording cap refuses a new
+start rather than deleting anything.
 
 ### 186.2 The session record
 
@@ -33266,14 +33308,14 @@ intent is `call_record`; a refusal is `call_record_refused`.
 - **The gate action is `record_call`**, tier `ask` in `[autonomy.tiers]`. The
   owner-initiated note actions (`append_obsidian_daily`,
   `append_logseq_journal`) ship `auto`; this one asks because it starts
-  capturing **other people's** speech. NOTE: `jarvis_gate.py` has no `_RISK`
-  row for the name yet, so the gate also forces `ask` as its
-  unclassified-action rule does, and its card carries the generic "unclassified
-  action - treated as permanent and able to leave this PC" warning. **The
-  second half of that sentence is wrong for this action** - nothing leaves this
-  PC - and the row that replaces it must be written in `jarvis_gate.py` by a
-  patch; this lane deliberately adds none. Recorded in
-  `docs/CALL-RECORDING.md` §9 rather than hidden.
+  capturing **other people's** speech. The gate's `_RISK` table has a row for
+  the name (added 2026-11-05): `("yes", "local", ...)` - a recording changes
+  nothing on this PC, can be deleted again, and nothing leaves it. Before that
+  row the gate treated the action as unclassified and its card carried the
+  generic "unclassified action - treated as permanent and able to leave this
+  PC" warning, whose **second half was wrong for this action**. The row does
+  not loosen the tier: it stays `ask`. Deleting a recording is a second card of
+  its own, `delete_call_recording`, also `ask`.
 
 ### 186.5 Transcription and speaker labels
 
@@ -33326,27 +33368,33 @@ problem or a refused card cannot lose a recording.
    recording and keep retrying the first unsent chunk: the PC refuses a chunk
    with 409 until the card is approved and then takes the queue in order. There
    is **no poll**: the read route is PC-only, so the phone has no read route at
-   all, and nothing is kept on the PC before the card is approved.
+   all, and **no audio is kept on the PC before the card is approved** (the
+   session's folder, its receipt and an empty `audio.pcm` are made first; the
+   audio bytes are not).
 4. Stop recording if the phone's link to this PC goes stale (the repo's rule 4
    applies on the client side: never act on a stale picture of the world).
 5. On stop: `finish` with the elapsed `duration_sec` and
    `consent_notice: "on"`. If it is refused, **keep the audio and the PC's
    session id and retry later** - never delete the only copy. `note` is the
    vault path, or `"pending"` while the transcription or its own
-   `edit_vault_note` card is still running.
+   `edit_vault_note` card is still running. A recording the PC never takes (a
+   denied card, a recording that cannot be sent) is deleted **on the phone** by
+   the owner's own "Delete" on the call-recording card, with a confirmation -
+   the phone never sends a delete to the PC, and the PC never deletes a
+   recording by itself.
 
 ### 186.8 What is not done
 
 The Android half is its own pull request against this contract; neither lane
 drove a real call on the owner's Pixel 9, so the speaker path and the quality of
-the words it yields are **NOT-TESTABLE** until his field test. There is no
-delete route and no retention policy (recordings stay until the owner removes
-them; only a 400-session cap refuses a new start). **A call can raise TWO
-cards**: `record_call` before anything is kept, and the notes editor's own
-`edit_vault_note` card before the note is written - a transcript is other
-people's words, so it is never a card-free write. The gate's warning line is
-generic (§186.4). English only, ten-second segments, and no import of the
-phone's own recorder. No real phone recording, transcription, speaker model,
-vault write or approval card was driven by this lane - those rows are
-**NOT-TESTABLE**, never passed. `backend/test_call_notes.py` drives fake
-readers, fake embedders, fake prints and a fake note creator.
+the words it yields are **NOT-TESTABLE** until his field test. **A call can
+raise TWO cards**: `record_call` before any audio is kept, and the notes
+editor's own `edit_vault_note` card before the note is written - a transcript is
+other people's words, so it is never a card-free write; deleting the recording
+is a third, `delete_call_recording` (§186.1). The audio is **not encrypted at
+rest** - an owner decision, not implemented here, and `docs/CALL-RECORDING.md`
+§9 says so. English only, ten-second segments, and no import of the phone's own
+recorder. No real phone recording, transcription, speaker model, vault write or
+approval card was driven by this lane - those rows are **NOT-TESTABLE**, never
+passed. `backend/test_call_notes.py` drives fake readers, fake embedders, fake
+prints and a fake note creator.

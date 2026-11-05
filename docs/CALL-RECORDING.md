@@ -252,7 +252,7 @@ sentence saying why there is no note. The transcript is in fact **always**
 written there first, so a vault problem or a refused card can never lose a
 recording.
 
-## 7. What is stored, and for how long
+## 7. What is stored, for how long, and what deletes it
 
 Everything stays on this PC:
 
@@ -265,9 +265,45 @@ Everything stays on this PC:
 
 The folder is `JARVIS_CALL_RECORDINGS` if set, else `<config dir>/call-recordings`
 (the config dir is `OPENJARVIS_CONFIG_DIR` / `JARVIS_CONFIG_DIR`, else
-`~/.openjarvis`). **Nothing here deletes a recording.** There is no delete route
-in this slice; the owner removes a folder by hand. Starting a new recording is
-refused once 400 recordings are in there, and the refusal names the folder.
+`~/.openjarvis`). The audio is **not encrypted at rest**; see §9.
+
+### 7.1 The retention policy
+
+**A recording and its transcript are kept until the owner deletes them.**
+Nothing expires on a timer, and nothing is pruned for age: a call the owner
+asked Jarvis to record is not something a background job may throw away, and a
+note in the vault would outlive a deleted recording either way, so an automatic
+expiry would produce a note with no audio behind it and no way to tell.
+
+Three things touch a recording, and only one of them deletes:
+
+1. **`POST /api/call/recording/delete` - the only route that deletes.** PC-only,
+   ONE `delete_call_recording` approval card at tier `ask`, one recording per
+   request, no bulk form, no undo. It removes the whole folder for that session
+   (`audio.pcm`, `audio.wav`, `transcript.md`, `receipt.json` and any
+   `part-*.wav`), which is also that recording's row in `GET
+   /api/call/recording`. It refuses (409, in words) while the session is still
+   `recording` or `transcribing`, because a folder must not vanish under a live
+   writer. It does **not** need the feature switch on: removing something is
+   the safe direction, and an owner who has switched the feature off must still
+   be able to delete what it kept.
+2. **The 400-recording cap - refuses, never deletes.** `start` answers 507 when
+   the folder already holds 400 recordings, and names the folder. Nothing is
+   removed to make room; the owner deletes with the route above (or by hand)
+   and asks again. A `waiting` session counts toward the cap, so a refused
+   start's own folder is one of the ones the owner may want to delete.
+3. **The owner, by hand.** `%USERPROFILE%\.openjarvis\call-recordings\` is a
+   dot-folder Explorer hides by default; typing the path into the address bar
+   opens it. Deleting a session's folder by hand is equivalent to the route.
+
+**The Obsidian note is not deleted by the route.** It is a document of its own,
+written through the notes editor (its own card, File Guardian copy and undo
+receipt), and it may since have been edited. The delete route's answer names
+the note path so the owner knows what is left; deleting the note is done in
+Obsidian, or through the notes editor's own delete.
+
+**`part-*.wav`** are temporary cuts made only while transcribing; each is
+deleted as soon as it has been read, so they do not accumulate.
 
 ## 8. Safety
 
@@ -284,15 +320,25 @@ refused once 400 recordings are in there, and the refusal names the folder.
   be finished.
 - **No network, no tunnel, no cloud.** The module imports no HTTP client and
   opens no socket. The audio and the words never leave this PC.
-- **The three POST routes are the phone's by necessity; the read route is
-  PC-only.** The device that holds the microphone is the phone, so a PC-only
-  start would make the feature impossible; their controls are the origin+token
-  checks on every request, the `record_call` card, and the feature being off
-  until the owner turns it on, with the note write keeping the editor's own
-  `edit_vault_note` card. `GET /api/call/recording` is a DIFFERENT matter: it
-  lists the owner's recordings and the note paths they went to, so it refuses
-  any device but this PC through `jarvis_owner_check.from_this_pc`, exactly as
-  `jarvis_media_index` refuses its own POST. The phone has no read route.
+- **The three POST routes for the audio are the phone's by necessity; the read
+  route and the delete route are PC-only.** The device that holds the
+  microphone is the phone, so a PC-only start would make the feature impossible;
+  their controls are the origin+token checks on every request, the `record_call`
+  card, and the feature being off until the owner turns it on, with the note
+  write keeping the editor's own `edit_vault_note` card. `GET
+  /api/call/recording` and `POST /api/call/recording/delete` are a DIFFERENT
+  matter: the first lists the owner's recordings and the note paths they went
+  to, the second deletes one, so both refuse any device but this PC through
+  `jarvis_owner_check.from_this_pc`, exactly as `jarvis_media_index` refuses its
+  own POST. The phone has no read route and deletes nothing on the PC. The
+  delete is its own card (`delete_call_recording`, tier `ask`) because deleting
+  the audio and its transcript cannot be undone.
+- **No audio before yes, and the empty folder is not audio.** The session's
+  folder, its `receipt.json` and an empty `audio.pcm` are created before the
+  start card (so a crash between the phone's first chunk and the approval cannot
+  lose it), and not one audio byte is written until the card is approved - a
+  chunk that arrives while it waits is refused with 409. A denied card leaves
+  that empty session behind; the delete route removes it.
 - **A call can raise two cards.** `record_call` before anything is kept, and the
   notes editor's own `edit_vault_note` card before the note is written: a
   transcript is other people's words, so it is never a card-free write.
@@ -305,17 +351,27 @@ refused once 400 recordings are in there, and the refusal names the folder.
   was driven on the owner's Pixel 9 by either lane**, so how the speaker path
   sounds and how good the words are afterwards are NOT-TESTABLE until his own
   field test. The feature is off by default until he turns it on.
-- **The card's warning line is the gate's generic one.** `jarvis_gate.py` has
-  no `_RISK` row for `record_call`, so the gate treats it as an unclassified
-  action: it forces the tier to `ask` (which is what we ship anyway) and prints
-  its generic "unclassified action - treated as permanent and able to leave this
-  PC" warning. **The second half of that sentence is wrong for this action** -
-  nothing leaves this PC. The row that replaces it must be written in
-  `jarvis_gate.py` by a patch, and this lane deliberately adds no patch to the
-  gate (it cannot verify the owner's live file). Recorded here rather than left
-  for the owner to discover on a card.
-- **No delete route and no retention policy.** Recordings stay until the owner
-  removes them; only the 400-session cap refuses a new start.
+- **The card's warning line is the action's own, not the generic one.** The
+  gate's `_RISK` table HAS a row for `record_call` (added 2026-11-05):
+  `("yes", "local", ...)` - a recording changes nothing on this PC, can be
+  deleted again, and never leaves the machine. Before that row the gate treated
+  the action as unclassified and its card printed the generic "unclassified
+  action - treated as permanent and able to leave this PC"; **the second half of
+  that sentence was wrong for this action**, and it is the sentence the row
+  replaced. The tier is still `ask` - the row does not loosen it.
+- **A repeated `seq` is accepted, not refused (2026-11-05).** A chunk whose `seq`
+  is below the next one the recording needs is a retry of a chunk the PC
+  already has - the phone died between the PC's 200 and its own `sent.txt`
+  append - so the route answers 200 with `already: true` and writes nothing.
+  Only a `seq` above the next one is a gap, and only a gap is a 409. The phone
+  half reads `expected` off the 409 and marks everything below it as sent.
+  Refusing the repeat retried the same number for ever and made a recording
+  permanently unsendable.
+- **The audio is not encrypted at rest.** `audio.pcm`, `audio.wav` and
+  `transcript.md` are plaintext under `<config dir>/call-recordings`, protected
+  by the PC's own account, the feature being off by default and the delete
+  route. Encrypting them is an OWNER decision and is **not implemented** here;
+  §7 lists what deletes them instead.
 - **No import of the phone's own call recorder.** Not built (§1).
 - **English only**, because the local reader is English only.
 - **A segment is the reader's 10-second window**, so overlapping speakers in one

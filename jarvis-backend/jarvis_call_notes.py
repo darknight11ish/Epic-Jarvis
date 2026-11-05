@@ -38,7 +38,7 @@ be contradicted in code or docs):
   * If the phone's built-in call recorder exists and produces a file, importing
     that file is a later addition. It is NOT built here and is not claimed.
 
-THE FOUR ROUTES (docs/JARVIS-API.md, "Call recording"; the Android lane is
+THE ROUTES (docs/JARVIS-API.md, "Call recording"; the Android lane is
 written against this contract):
 
     POST /api/call/recording/start
@@ -52,12 +52,20 @@ written against this contract):
          {"session": "call_...", "seq": 1, "data_b64": "<base64 PCM>"}
       -> 200 {"ok": true, "session": ..., "seq": 1,
               "bytes": <every byte held now>, "chunk_bytes": <this chunk>}
-         409 {"ok": false, "error": ..., "expected": <next seq>}  (out of order)
+         200 {"ok": true, ..., "chunk_bytes": 0, "already": true}
+             (a seq BELOW the next one: already held, nothing written twice)
+         409 {"ok": false, "error": ..., "expected": <next seq>}  (a GAP: seq above)
          413 {"ok": false, "error": ...}                          (too big)
       `seq` starts at **1** (the Android half's own first chunk is 1) and goes up
       by one; a failed send is retried with the SAME number. `bytes` is the
       running total the PC holds, which is what the phone reads back to tell a
       PC that is appending from one that answers 0 to every chunk.
+      **A REPEATED (LOWER) SEQ IS NOT AN ERROR.** It is the one thing a crash
+      leaves behind: the PC answered 200 and the phone died before it appended
+      the number to `sent.txt`, so the retry asks for a chunk we already have.
+      Answering 409 there (which this route did until 2026-11-05) retried the
+      same number for ever and made the recording permanently unsendable. Only
+      a seq ABOVE `expected` is a gap, and only a gap is a 409.
 
     POST /api/call/recording/finish
          {"session": "call_...", "duration_sec": 812.4,
@@ -80,8 +88,36 @@ written against this contract):
       **PC-only** - the repo's own rule for a route the phone has no use for,
       through `jarvis_owner_check.from_this_pc` exactly as `jarvis_media_index`
       does it: a request from another device is 403 in plain words. The three
-      POST routes are the phone's by necessity (it holds the microphone), which
-      is the one deliberate departure, written down in docs/CALL-RECORDING.md.
+      POST routes above are the phone's by necessity (it holds the microphone),
+      which is the one deliberate departure, written down in
+      docs/CALL-RECORDING.md.
+
+    POST /api/call/recording/delete
+         {"session": "call_..."}
+      -> 200 {"ok": true, "state": "deleted", "removed": [...], "message": "..."}
+         202 {"ok": true, "state": "waiting", "message": "..."}  (its card is up)
+         403 {"ok": false, "state": "refused" | "off", "error": "..."}
+         404 {"ok": false, "state": "unknown", "error": "..."}
+         409 {"ok": false, "state": ..., "error": "..."}  (still running / transcribing)
+      THE DELETE ROUTE, AND WHY IT IS A POST. This backend wraps `do_GET` and
+      `do_POST` for every optional feature and has no `do_DELETE` anywhere
+      (JARVIS-API section 112 says the same about the goals store): a second
+      mechanism for one route would be a second thing to get wrong. So remove
+      is a POST, exactly like `/api/goals/<id>/remove`.
+      **PC-only** (the same `from_this_pc` check the list route uses - the phone
+      never deletes anything on the PC), and behind ONE approval card of its
+      own, `delete_call_recording`, tier `ask`: deleting the audio and the
+      transcript cannot be undone. The delete runs on that card's worker, so a
+      card still waiting answers 202 (the shape `start` already uses) and the
+      recording is gone from the GET once it is approved. It removes the
+      session's whole folder - `audio.pcm`, `audio.wav`, `transcript.md`,
+      `receipt.json` and any `part-*.wav` - which is also the list's row. The
+      Obsidian note, if one was written, is a document of its own and is NOT
+      deleted here (that is the notes editor's own card and undo); the answer
+      names the note so the owner knows what is left. It does not need the
+      feature switch on: removing something is the safe direction, and an owner
+      who has switched the feature off must still be able to delete what it
+      already kept.
 
 WHAT IT REUSES, AND WHERE IT DELIBERATELY ADDS NOTHING
 
@@ -144,9 +180,13 @@ THE NOTE (a NEW file, named for the date and time)
   the time of day each line was said (the call's start plus the segment's
   offset).
 
-  A CALL CAN RAISE TWO CARDS: the `record_call` card before anything is kept,
-  and the notes editor's own `edit_vault_note` card before the note is written
-  (a transcript is other people's words, so it is never a card-free write).
+  A CALL CAN RAISE TWO CARDS: the `record_call` card before any AUDIO is kept
+  (the session's folder, its receipt and an empty `audio.pcm` are made before
+  the card, so a crash cannot lose the first chunk - see "NO AUDIO BEFORE YES"
+  below), and the notes editor's own `edit_vault_note` card before the note is
+  written (a transcript is other people's words, so it is never a card-free
+  write). Deleting a recording is a THIRD card, `delete_call_recording` - see
+  the route table above.
 
   IF THE VAULT IS MISSING OR INVALID the transcript is STILL written, as
   `transcript.md` beside the audio in the config folder, and that path is
@@ -170,28 +210,40 @@ SAFETY AND WHAT THIS MODULE WILL NOT DO
     the owner-initiated note actions (`append_obsidian_daily`,
     `append_logseq_journal`) ship `auto`, but this one starts capturing OTHER
     PEOPLE'S speech, so it asks until the owner deliberately loosens it.
-    HONESTLY: `jarvis_gate.py` has no `_RISK` row for this name, and its rule
-    for an unclassified action forces `ask` and prints the generic
-    "unclassified action" warning line; the row that would replace that
-    warning is written by a patch and this lane adds none (docs/CALL-RECORDING.md
-    says so in "What is not done").
+    `jarvis_gate.py` HAS a `_RISK` row for this name (added 2026-11-05, by this
+    fix): `("yes", "local", ...)` - a recording changes nothing and can be
+    deleted again, and nothing leaves this PC. Before that row the card carried
+    the gate's generic unclassified warning, whose second half ("able to leave
+    this PC") was wrong for this action.
+  * NO AUDIO BEFORE YES, AND THE FOLDER IS NOT AUDIO. The session's folder,
+    its `receipt.json` and an empty `audio.pcm` are created before the card, so
+    a crash between the phone's first chunk and the approval cannot lose it;
+    the card's refusal leaves that empty session behind (the delete route
+    removes it). No audio byte is written until the card is approved
+    (`chunk` answers 409 while the state is `waiting`).
   * The `consent_notice` field must be "on" or the recording is not finished -
     the phone says it showed the reminder, and the note carries the reminder
     too.
   * No network, no tunnel, no cloud, no model call to anywhere but the local
     STT: every byte stays on this PC. This module imports no socket and no
     HTTP client at all.
-  * It never deletes a recording. There is no delete route in this slice; the
-    audio and the transcript stay in the settings folder until the owner
-    removes them, and the receipt says where.
+  * DELETING IS A ROUTE AND A CARD, NOT A MANUAL JOB. `POST .../delete`
+    removes one recording's folder - the audio, the transcript and the receipt
+    that is the list's row - behind ONE `delete_call_recording` card at tier
+    `ask`, PC-only, with no bulk form. It is the ONLY thing that deletes a
+    recording besides the owner's own Explorer. There is no automatic expiry:
+    recordings and transcripts are kept until the owner deletes them, and the
+    400-recording cap REFUSES a new start rather than deleting anything
+    (docs/CALL-RECORDING.md section 7 is the retention policy).
   * THE THREE POST ROUTES ARE THE PHONE'S BY NECESSITY, and that is the one
     deliberate departure from `jarvis_media_index`'s POST-is-PC-only rule: the
     device that holds the microphone is the phone, so a PC-only start would make
     the feature impossible. Their controls are the origin+token checks on every
     request, the `record_call` card, and the feature being off by default; the
     note write then keeps the editor's own `edit_vault_note` card. The
-    READ-ONLY route is **PC-ONLY** (the repo's rule): the phone has no use for a
-    list of the owner's recordings and note paths.
+    READ-ONLY route AND THE DELETE ROUTE are **PC-ONLY** (the repo's rule): the
+    phone has no use for a list of the owner's recordings and note paths, and
+    it never deletes anything on this PC.
   * The stale-link rule (never act on a stale picture of the world) is a
     client-side rule here: the phone stops recording if its own link to the PC
     has gone stale. The PC has no event-stream state to be stale about.
@@ -213,6 +265,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import sys
 import threading
 import time
@@ -229,13 +282,21 @@ START_PATH = "/api/call/recording/start"
 CHUNK_PATH = "/api/call/recording/chunk"
 FINISH_PATH = "/api/call/recording/finish"
 LIST_PATH = "/api/call/recording"
-POST_PATHS = (START_PATH, CHUNK_PATH, FINISH_PATH)
+DELETE_PATH = "/api/call/recording/delete"
+POST_PATHS = (START_PATH, CHUNK_PATH, FINISH_PATH, DELETE_PATH)
 GET_PATHS = (LIST_PATH,)
 
 #: The approval gate's action for STARTING a recording. One name, used by the
 #: module, by the settings file's [autonomy.tiers] line, by
 #: jarvis_card_words.TITLES and by jarvis_asks_first's page.
 ACTION = "record_call"
+
+#: The approval gate's action for DELETING one. Its own name, so the card can
+#: say what it is and so a tier can be set for it alone; the row in
+#: jarvis_gate._RISK is `("yes", "local", ...)` - a recording changes nothing
+#: and can be deleted again, and nothing leaves this PC. Tier `ask`: deleting
+#: audio cannot be undone.
+DELETE_ACTION = "delete_call_recording"
 
 #: The feature switch's section in jarvis-framework.toml. No table = OFF.
 CONFIG_SECTION = "call_recording"
@@ -267,7 +328,10 @@ MAX_RECORDING_SECONDS = 4 * 60 * 60
 MAX_RECORDING_BYTES = MAX_RECORDING_SECONDS * SAMPLE_RATE * SAMPLE_WIDTH * CHANNELS
 MAX_CHUNKS = 200000
 #: How many recordings may sit in the folder before a new start is refused.
-#: Nothing is ever deleted by Jarvis; the refusal names the folder instead.
+#: This cap NEVER deletes anything (docs/CALL-RECORDING.md section 7): it
+#: refuses a new start and names the folder, and the owner deletes with
+#: `POST .../delete` or by hand. Nothing else expires either - a recording the
+#: owner asked for is not something a timer may throw away.
 MAX_SESSIONS = 400
 #: A start whose `started_at` is further from this PC's clock than this is
 #: refused, so a wrong phone clock cannot name a note in the past or the future.
@@ -328,7 +392,11 @@ START_CARD = "\n".join([
     "",
     "Nothing is sent anywhere. Tell the other person the call is being recorded.",
     "",
-    "If you say no: nothing is recorded.",
+    # EXACT, not "nothing is kept": the session's folder, its receipt.json and
+    # an empty audio.pcm are made BEFORE this card (so a crash between the
+    # phone's first chunk and the approval cannot lose it). No audio byte is
+    # written until it is approved, and that is what the words say.
+    "If you say no: no audio is kept.",
 ])
 
 REFUSED_WORDS = {
@@ -337,6 +405,51 @@ REFUSED_WORDS = {
     "refused": "Your PC refused the recording, so nothing is being recorded.",
     "never": "Recording a call is set to \"never\" in the settings file, so nothing is being "
              "recorded.",
+}
+
+#: What a refused DELETE card says. Its own words, not REFUSED_WORDS: "nothing
+#: is being recorded" is the wrong sentence for something that was not deleted.
+DELETE_REFUSED_WORDS = {
+    "denied": "You said no, so nothing was deleted.",
+    "timed_out": "Nobody answered the approval card in time, so nothing was deleted.",
+    "refused": "Your PC refused to delete that recording, so nothing was deleted.",
+    "never": "Deleting a recording is set to \"never\" in the settings file, so nothing "
+             "was deleted.",
+}
+
+#: The DELETE card's own words. It says what goes, what stays, and that there is
+#: no undo - the three things a deletion card has to say.
+DELETE_CARD = "\n".join([
+    "Delete one recorded call from this PC?",
+    "",
+    "This removes that recording's whole folder: audio.pcm, audio.wav, "
+    "transcript.md, receipt.json and any part files. It disappears from the list "
+    "of recordings.",
+    "",
+    "The Obsidian note, if one was already written, is a document of its own and "
+    "STAYS in your vault - delete it there if you want that gone too.",
+    "",
+    "This cannot be undone, and nothing here keeps a copy.",
+])
+
+#: What the PC-only routes answer to a device that is not this PC. Two
+#: sentences, because "reading the list" is not what a delete asked for:
+#: nothing was shown in one case and nothing was deleted in the other.
+PC_ONLY_REFUSAL = ("Reading the list of recorded calls can only be done on the "
+                   "PC itself, so nothing was shown.")
+PC_ONLY_DELETE_REFUSAL = ("Deleting a recorded call can only be done on the PC itself, so "
+                          "nothing was deleted.")
+
+#: The states the delete route refuses, in plain words, and why. A recording
+#: that is still being captured or transcribed is in use: deleting its folder
+#: under a live writer would leave a half-deleted recording and a phone that
+#: keeps posting chunks into nothing. Everything else (waiting, refused, empty,
+#: failed, done) can go.
+DELETE_REFUSED_STATE = {
+    "recording": "that call is still being recorded on your phone, so nothing was deleted - "
+                 "stop it on the phone first, and delete it when it has been sent",
+    "transcribing": "that recording is still being turned into words on this PC, so nothing "
+                    "was deleted - try again when its note has been written",
 }
 
 BODY_NOT_OBJECT = "the request was not a JSON object"
@@ -1409,7 +1522,7 @@ def start(body, *, gate: Optional[Callable] = None, spawn=None,
         return 403, {"ok": False, "session": session, "state": "refused",
                      "error": str(doc.get("message") or REFUSED_WORDS["refused"])}
     return 202, {"ok": True, "session": session, "state": "waiting",
-                 "message": "An approval card is waiting on this PC. Nothing is recorded "
+                 "message": "An approval card is waiting on this PC. No audio is written "
                             "until it is approved."}
 
 
@@ -1435,7 +1548,21 @@ def chunk(body) -> tuple:
     if seq < 1 or seq > MAX_CHUNKS:
         return _bad(f"seq must be between 1 and {MAX_CHUNKS}")
     expected = int(doc.get("chunks") or 0) + 1
-    if seq != expected:
+    # A SEQ BELOW `expected` IS A RETRY OF A CHUNK THIS PC ALREADY HAS, and it
+    # is the one thing a crash leaves behind: we answered 200 and the phone
+    # died before it appended the number to its `sent.txt`, so it asks again
+    # for a chunk that is already on disk. Answer 200 with the same shape and
+    # write NOTHING. This used to be a 409, which retried the same number for
+    # ever and made the recording permanently unsendable (the audit of
+    # 2026-11-05, D3). Only a seq ABOVE `expected` is a real gap - a hole in
+    # the audio nothing repairs - and only a gap is a 409.
+    # The check is repeated under the lock below: a retry can overlap the
+    # original request, and the first one may not have landed yet.
+    if seq < expected:
+        return 200, {"ok": True, "session": session, "seq": seq,
+                     "bytes": int(doc.get("bytes") or 0), "chunk_bytes": 0,
+                     "already": True}
+    if seq > expected:
         return 409, {"ok": False, "state": state, "expected": expected,
                      "error": f"chunks must arrive in order: this recording is waiting for "
                               f"seq {expected}, and {seq} arrived"}
@@ -1476,7 +1603,11 @@ def chunk(body) -> tuple:
                          "error": f"this recording is {state or 'not running'}, so this "
                                   f"chunk was not kept"}
         expected = int(doc.get("chunks") or 0) + 1
-        if seq != expected:
+        if seq < expected:                                  # the same retry, one lock later
+            return 200, {"ok": True, "session": session, "seq": seq,
+                         "bytes": int(doc.get("bytes") or 0), "chunk_bytes": 0,
+                         "already": True}
+        if seq > expected:
             return 409, {"ok": False, "state": state, "expected": expected,
                          "error": f"chunks must arrive in order: this recording is "
                                   f"waiting for seq {expected}, and {seq} arrived"}
@@ -1579,6 +1710,147 @@ def finish(body, *, spawn=None, reader: Optional[Callable] = None,
                  "recording": _public_receipt(doc)}
 
 
+def _remove_session(session) -> dict:
+    """Delete one recording's folder and every file in it.
+
+    Under the module lock, because the chunk route appends to `audio.pcm`
+    while holding it: a folder cannot be removed under a live writer, and a
+    delete that raced one would leave half a recording behind.
+
+    Returns `{"ok": True, "removed": [<file name>, ...]}` or a plain `error`.
+    """
+    folder = session_dir(session)
+    if folder is None:
+        return {"ok": False, "error": BAD_SESSION}
+    with _lock:
+        try:
+            names = sorted(p.name for p in folder.iterdir() if p.is_file())
+        except OSError:
+            names = []
+        try:
+            shutil.rmtree(str(folder))
+        except OSError as exc:                              # noqa: BLE001
+            return {"ok": False,
+                    "error": f"the recording could not be deleted "
+                             f"({type(exc).__name__}) - close anything that is reading it, "
+                             f"and try again"}
+    return {"ok": True, "removed": names}
+
+
+def _deleted_words(doc: dict, removed: list) -> str:
+    """One plain sentence for the owner: what went, and what did not."""
+    files = ", ".join(removed) if removed else "the folder"
+    words = f"Deleted from this PC: {files}."
+    note = str(doc.get("note") or "").strip()
+    if note and note != "pending":
+        words += (f" The note it was filed into stays in your vault ({note}) - delete it in "
+                  f"Obsidian if you want that gone too.")
+    elif note:
+        words += " No note had been written for it yet."
+    else:
+        words += " No note had been written for it."
+    return words
+
+
+def delete(body, *, gate: Optional[Callable] = None, spawn=None,
+           wait_s: float = 2.0) -> tuple:
+    """POST /api/call/recording/delete: remove ONE recording from this PC.
+
+    PC-ONLY at the route: `install()` refuses any device but this one before
+    this function runs (the caller's own peer address, through
+    `jarvis_owner_check.from_this_pc`, the same check the list route makes).
+    Behind ONE approval card of its own, `delete_call_recording` at tier
+    `ask`, because deleting the audio and its transcript cannot be undone.
+
+    THE DELETE RUNS ON THE CARD'S OWN WORKER, exactly as `start` does: a card
+    still waiting answers 202, and the folder goes when it is approved - so
+    there is no "approved but nothing happened" state for a caller to fall
+    into. 200 means it is already gone.
+
+    IT DOES NOT NEED THE FEATURE SWITCH ON. Removing something is the safe
+    direction; an owner who has switched the feature off must still be able to
+    delete what it already kept.
+
+    Refused while the recording is still being captured or transcribed
+    ([DELETE_REFUSED_STATE]): deleting a folder under a live writer would
+    leave half a recording and a phone posting chunks into nothing.
+    """
+    if not isinstance(body, dict):
+        return _bad(BODY_NOT_OBJECT)
+    session = str(body.get("session") or "").strip()
+    doc = read_receipt(session)
+    if doc is None:
+        return 404, {"ok": False, "state": "unknown",
+                     "error": BAD_SESSION + " - so nothing was deleted"}
+    state = str(doc.get("status") or "")
+    blocked = DELETE_REFUSED_STATE.get(state)
+    if blocked:
+        return 409, {"ok": False, "state": state, "error": blocked}
+
+    held: dict = {}
+
+    def worker() -> None:
+        detail = {"what": "delete one recorded call from this PC",
+                  "session": session,
+                  "state": state,
+                  "audio": str(doc.get("audio") or ""),
+                  "note": str(doc.get("note") or ""),
+                  "leaves_this_pc": False,
+                  "setting": ""}
+        verdict = (gate or _gate_check)(DELETE_ACTION, detail, DELETE_CARD)
+        # A DELETION IS NEVER CARD-FREE, whatever the tier table says. With a
+        # _RISK row but no [autonomy.tiers] line this action takes
+        # `unknown_action_tier` ("ask" as shipped), and an owner who loosens
+        # that to "auto" would otherwise let a delete run with nobody asked.
+        # The route promises a card, so it refuses an answer that was not one.
+        tier = str(getattr(verdict, "tier", "ask") or "ask").strip().lower()
+        if getattr(verdict, "allowed", False) and tier != "ask":
+            held["state"] = "refused"
+            held["message"] = ("Deleting a recording always asks first, and the approval gate "
+                               "answered without asking, so nothing was deleted.")
+            held["reason"] = f"the gate answered at tier {tier!r}"
+            _audit("delete_refused", {"session": session, "outcome": "card_free"})
+            return
+        if not getattr(verdict, "allowed", False):
+            outcome = str(getattr(verdict, "outcome", "refused") or "refused")
+            held["state"] = "refused"
+            held["reason"] = str(getattr(verdict, "reason", "") or "")[:200]
+            held["message"] = DELETE_REFUSED_WORDS.get(
+                outcome,
+                "Your PC refused to delete that recording, so nothing was deleted.")
+            _audit("delete_refused", {"session": session, "outcome": outcome})
+            return
+        gone = _remove_session(session)
+        held["removed"] = list(gone.get("removed") or [])
+        if gone.get("ok"):
+            held["state"] = "deleted"
+            _audit("deleted", {"session": session, "was": state,
+                               "files": len(held["removed"])})
+        else:
+            held["state"] = "failed"
+            held["error"] = str(gone.get("error") or "the recording could not be deleted")
+            _audit("delete_failed", {"session": session})
+
+    worker_thread = threading.Thread(target=worker, name="jarvis-call-notes-delete",
+                                     daemon=True)
+    (spawn or _start_thread)(worker_thread)
+    worker_thread.join(max(0.0, float(wait_s)))
+    got = held.get("state")
+    if got == "deleted":
+        return 200, {"ok": True, "session": session, "state": "deleted",
+                     "removed": held.get("removed") or [],
+                     "message": _deleted_words(doc, held.get("removed") or [])}
+    if got == "failed":
+        return 503, {"ok": False, "session": session, "state": "failed",
+                     "error": held.get("error") or "the recording could not be deleted"}
+    if got == "refused":
+        return 403, {"ok": False, "session": session, "state": "refused",
+                     "error": held.get("message") or REFUSED_WORDS["refused"]}
+    return 202, {"ok": True, "session": session, "state": "waiting",
+                 "message": "An approval card to delete this recording is waiting on this "
+                            "PC. Nothing is deleted until it is approved."}
+
+
 def listing(query: str = "") -> tuple:
     """GET /api/call/recording: the recent recordings, or ONE by `?session=`."""
     got = urllib.parse.parse_qs(str(query or "").lstrip("?"))
@@ -1611,6 +1883,8 @@ def handle_post(route: str, body) -> tuple:
             return chunk(body)
         if route == FINISH_PATH:
             return finish(body)
+        if route == DELETE_PATH:
+            return delete(body)
     except Exception as exc:                                # noqa: BLE001
         return 503, {"ok": False, "error": type(exc).__name__}
     return 404, {"ok": False, "error": "no such route"}
@@ -1679,8 +1953,9 @@ def quick_answer(action: str) -> tuple:
 #   install(): the loader's convention, exactly like jarvis_media_index
 # --------------------------------------------------------------------------
 
-PC_ONLY_REFUSAL = ("Reading the list of recorded calls can only be done on the "
-                   "PC itself, so nothing was shown.")
+#: `PC_ONLY_REFUSAL` and `PC_ONLY_DELETE_REFUSAL` live beside the other
+#: refusal sentences (see "Names, paths, caps" above), so a route and its
+#: sentence are never in two different parts of this file.
 
 
 def _from_this_pc(peer, local) -> bool:
@@ -1699,15 +1974,18 @@ def _from_this_pc(peer, local) -> bool:
 
 def install(handler_cls, *, origin_ok, token_ok, read_body,
             from_this_pc=None) -> str:
-    """Wrap the core's Handler with these four routes.
+    """Wrap the core's Handler with these five routes.
 
     GET /api/call/recording is read-only AND PC_ONLY: it lists the owner's
     recordings and the note paths they went to, which is a PC surface, and the
-    phone has no use for it. The three POST routes need origin+token, like every
-    other route, and are NOT PC-only ON PURPOSE - the phone holds the microphone
-    (module docstring, "SAFETY"). Every other request goes to the original
-    handler untouched. `from_this_pc` is injectable so the suite can drive both
-    sides without a network; the shipped default is the project's own check.
+    phone has no use for it. POST /api/call/recording/delete is PC_ONLY for the
+    same reason and with its own sentence: the phone never deletes anything on
+    this PC. The three POST routes for the audio need origin+token, like every
+    other route, and are NOT PC-only ON PURPOSE - the phone holds the
+    microphone (module docstring, "SAFETY"). Every other request goes to the
+    original handler untouched. `from_this_pc` is injectable so the suite can
+    drive both sides without a network; the shipped default is the project's
+    own check.
     """
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
     pc_here = from_this_pc or _from_this_pc
@@ -1728,6 +2006,23 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
             return False
         return True
 
+    def _pc_only(self, refusal: str) -> bool:
+        """Is this request from this PC? Sends `refusal` itself when it is not.
+
+        One helper for both PC-only routes, so the list and the delete cannot
+        drift apart: `jarvis_owner_check.from_this_pc` is the project's one
+        answer, and a peer we cannot read is nobody (it fails closed).
+        """
+        peer = (getattr(self, "client_address", None) or ("",))[0]
+        try:
+            local = self.connection.getsockname()[0]
+        except Exception:                                   # noqa: BLE001
+            local = None
+        if pc_here(peer, local):
+            return True
+        self._send(403, {"ok": False, "error": refusal})
+        return False
+
     def do_GET(self):
         parts = urllib.parse.urlsplit(str(getattr(self, "path", "") or ""))
         if parts.path.rstrip("/") != LIST_PATH:
@@ -1736,13 +2031,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
             return None
         # PC_ONLY, before the list is built: the owner's recordings and the
         # paths they were filed to are not a phone surface.
-        peer = (getattr(self, "client_address", None) or ("",))[0]
-        try:
-            local = self.connection.getsockname()[0]
-        except Exception:                                   # noqa: BLE001
-            local = None
-        if not pc_here(peer, local):
-            return self._send(403, {"ok": False, "error": PC_ONLY_REFUSAL})
+        if not _pc_only(self, PC_ONLY_REFUSAL):
+            return None
         code, out = handle_get(parts.query)
         return self._send(code, out)
 
@@ -1751,6 +2041,10 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
         if route not in POST_PATHS:
             return post0(self)
         if not _allowed(self):
+            return None
+        # PC_ONLY before the body is even parsed: deleting a recording is not
+        # something another device may ask for, whatever it holds.
+        if route == DELETE_PATH and not _pc_only(self, PC_ONLY_DELETE_REFUSAL):
             return None
         try:
             body = json.loads(read_body(self) or b"{}")

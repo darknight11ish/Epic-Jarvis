@@ -5522,7 +5522,10 @@ where one exists, is a later addition and is **not built**.
   shipped at tier `ask` in `[autonomy.tiers]`. The owner-initiated note actions
   (`append_obsidian_daily`, `append_logseq_journal`) ship `auto`, but this one
   starts capturing **other people's** speech, so it asks until the owner
-  deliberately loosens it. Nothing is kept while the card waits.
+  deliberately loosens it. **No audio is kept while the card waits**: the
+  session's folder, its `receipt.json` and an empty `audio.pcm` are made before
+  the card (so a crash between the phone's first chunk and the approval cannot
+  lose it), and not one audio byte is written until it is approved.
 - **The note keeps the editor's own card.** The note is created through
   `jarvis_notes_edit.handle_create()` with `after_outside_text` provenance, so
   the ONE `edit_vault_note` card, the File Guardian copy and the undo receipt
@@ -5540,9 +5543,16 @@ where one exists, is a later addition and is **not built**.
   the same rule `jarvis_media_index` applies to its own POST.
 - **Everything stays on this PC.** Under `<config dir>/call-recordings/<session>/`:
   `audio.pcm`, `audio.wav`, `receipt.json` and `transcript.md`. The module
-  imports no HTTP client and opens no socket. There is no delete route in this
-  slice and nothing here removes a recording; only a 400-session cap refuses a
-  new start.
+  imports no HTTP client and opens no socket.
+- **Deleting is its own card, and nothing expires by itself.**
+  `POST /api/call/recording/delete` removes ONE recording's folder (the audio,
+  the transcript and the receipt that is the list's row) behind ONE
+  `delete_call_recording` card at tier `ask`, PC-only, with no bulk form; the
+  Obsidian note is the notes editor's document and stays. Recordings and
+  transcripts are kept until the owner deletes them - there is no timer that
+  throws a recording away - and the 400-recording cap REFUSES a new start
+  rather than deleting anything. `docs/CALL-RECORDING.md` §7 is the retention
+  policy.
 
 ### 14.3 Reuse, never a second engine
 
@@ -5585,14 +5595,14 @@ one window get one label. That is the reader's granularity and it is in the docs
 - The **Android half** is its own pull request, written against JARVIS-API
   §186; neither lane drove a real call on the owner's Pixel 9, so the speaker
   path and the words it yields are NOT-TESTABLE until his field test.
-- The gate has no `_RISK` row for `record_call`, so its card prints the generic
-  "unclassified action - treated as permanent and able to leave this PC"
-  warning. **The second half of that sentence is wrong here** (nothing leaves
-  this PC). The row that fixes it must be written in `jarvis_gate.py` by a
-  patch, and this lane deliberately adds none. `docs/CALL-RECORDING.md` §9 says
-  so plainly.
-- No delete route, no retention policy, English only, ten-second segments, no
-  import of the phone's own recorder.
+- The gate's `_RISK` table **has** a row for `record_call` (added 2026-11-05,
+  `("yes", "local", ...)`), so its card says what the action really is: a
+  recording made on this PC that never leaves it and can be deleted again.
+  Before that row the card printed the generic "unclassified action - treated
+  as permanent and able to leave this PC", whose second half was wrong here.
+- English only, ten-second segments, no import of the phone's own recorder.
+  (The delete route and the retention policy this bullet used to call missing
+  are in §14.2 and `docs/CALL-RECORDING.md` §7.)
 - **NOT-TESTABLE, not passed:** no real phone recording, no real transcription
   run, no real speaker model run, no real vault write and no real approval card
   were driven here. `backend/test_call_notes.py` drives fake readers, fake

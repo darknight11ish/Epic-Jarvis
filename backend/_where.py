@@ -1518,7 +1518,8 @@ SHIPPED = (
     # from the owner's own voice print plus clustering, and creates ONE new
     # Obsidian note named for the date and time through the notes editor's own
     # create path. OFF BY DEFAULT ([call_recording] enabled = false); starting
-    # is ONE `record_call` card. Its four routes come from its own install(),
+    # is ONE `record_call` card. Its routes (start, chunk, finish, the PC-only
+    # list and the PC-only delete) come from its own install(),
     # called by plugins/ready/call-notes - no patch. Its suite is
     # backend/test_call_notes.py. The same entry, in the same position, is in
     # $SHIPPED in scripts/apply-patches.ps1. It sits BEFORE jarvis_bench.py

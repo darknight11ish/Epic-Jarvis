@@ -20961,17 +20961,32 @@ lost because a vault is unset.
 
 **Safety:** off by default (`[call_recording] enabled = false`; turning it on is
 a hand edit of that line, no in-app switch), ONE `record_call` card at tier
-`ask` before anything is recorded, the phone's `consent_notice` required to
+`ask` before any audio is kept, the phone's `consent_notice` required to
 finish, the card, the reply and the note all carrying the consent reminder,
-nothing ever leaving this PC, and no delete route at all. Two things are
-recorded rather than hidden: the gate has no `_RISK` row for `record_call` yet,
-so its card prints the generic "unclassified action ... able to leave this PC"
-warning whose second half is wrong here (the row needs a patch to
-`jarvis_gate.py`, and this module adds none); and the phone's recorder is its
-own pull request against the same frozen contract, with no real call driven on
-the owner's Pixel 9 by either lane.
+nothing ever leaving this PC, and **ONE PC-only
+`POST /api/call/recording/delete`** that removes one recording's folder (the
+audio, the transcript and the receipt that is the list's row) behind its own
+`delete_call_recording` card at tier `ask`, with no bulk form - the Obsidian
+note is a document of its own and stays. Recordings are kept until the owner
+deletes them: nothing expires on a timer, and the 400-recording cap refuses a
+new start rather than deleting anything (`docs/CALL-RECORDING.md` §7 is the
+retention policy). Two things are recorded rather than hidden: the gate **has**
+a `_RISK` row for `record_call` now (`("yes", "local", ...)`, added 2026-11-05),
+so its card no longer prints the generic "unclassified action ... able to leave
+this PC" warning - before that row it did, and the second half was wrong for
+this action; and the phone's recorder is its own pull request against the same
+frozen contract, with no real call driven on the owner's Pixel 9 by either lane.
 
-**Tests:** `backend/test_call_notes.py` - 164 checks: chunk assembly byte-exact
+**A repeated seq is not an error (2026-11-05).** A chunk whose `seq` is BELOW
+the next one the recording needs is a retry of a chunk this PC already has -
+the phone died between our 200 and its own `sent.txt` append - so the route
+answers 200 with `already: true` and writes nothing. Only a seq ABOVE the next
+one is a gap, and only a gap is a 409. Refusing the repeat (which the route did
+until this fix) retried the same number for ever and made a recording
+permanently unsendable; the phone half reads `expected` off the 409 and marks
+everything below it as sent.
+
+**Tests:** `backend/test_call_notes.py` - 211 checks: chunk assembly byte-exact
 into a canonical WAV, seq 1/out-of-order/oversized/consent refusals, the receipt
 string and the structured record, fake transcriber segments into the note body,
 fake embedders for the owner match, the clusters, the strong-vs-ecapa choice and

@@ -8,10 +8,14 @@ What it proves, with NO network, NO model and NO real audio:
      order, and the WAV `finish` builds holds exactly those bytes, behind a
      canonical 44-byte RIFF/WAVE header with 16 kHz, mono, 16-bit declared.
   2. OUT-OF-ORDER AND OVERSIZED CHUNKS ARE REFUSED, clearly: `seq` starts at
-     **1** (the Android half's own first chunk), so 0, a repeat and a skipped
-     number all answer 409 or 400 with the seq that was wanted; a chunk over the
-     512 KiB cap answers 413, bad base64 answers 400, and a chunk for a session
-     that is waiting for its card answers 409 - none of them writes a byte.
+     **1** (the Android half's own first chunk), so 0 and a skipped number all
+     answer 409 or 400 with the seq that was wanted; a chunk over the 512 KiB
+     cap answers 413, bad base64 answers 400, and a chunk for a session that is
+     waiting for its card answers 409 - none of them writes a byte. A REPEATED
+     (LOWER) seq is NOT refused: it is a retry after a crash between our 200 and
+     the phone's own bookkeeping, so it answers 200 with `already: true`,
+     `chunk_bytes: 0`, and writes nothing twice - and the recording still
+     finishes.
   3. FAKE TRANSCRIBER SEGMENTS BECOME THE NOTE'S LINES, at `[HH:MM:SS] You: ...`
      with the segment's own start/end carried through.
   4. SPEAKER LABELS: a fake embedder and a fake owner print label the owner's
@@ -35,6 +39,14 @@ What it proves, with NO network, NO model and NO real audio:
  11. THE EMBEDDER FOLLOWS THE PRINT: a print made with the strong model is
      compared with `StrongEmbedder`, everything else with `EcapaEmbedder`, and a
      model that will not load degrades to "Speaker" with the reason.
+ 12. DELETING ONE RECORDING: `POST .../delete` removes the whole folder (audio,
+     transcript and the receipt that is the list's row) and the row is gone from
+     `GET`, behind ONE `delete_call_recording` card; a refused card, an unknown
+     id and a path-shaped id are refused in plain words and remove nothing; a
+     session still recording or transcribing is refused; a card still waiting
+     answers 202 and the folder goes when it is approved; the route is PC-ONLY,
+     its refusal has its own sentence, and it works with the feature switched
+     off (removing something is the safe direction).
 """
 from __future__ import annotations
 
@@ -45,6 +57,7 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import traceback
 import types
 import wave
@@ -80,6 +93,18 @@ def check(name, cond, detail=""):
 class Yes:
     allowed = True
     outcome = "allowed"
+    # "ask": the card WAS raised and the owner approved it. The delete route
+    # refuses an allowed verdict that was not an answered "ask" card (a
+    # deletion is never card-free), so the honest fake is an approved card.
+    tier = "ask"
+    reason = ""
+
+
+class Auto:
+    """A gate that says yes WITHOUT asking - what a deletion must never accept."""
+
+    allowed = True
+    outcome = "auto"
     tier = "auto"
     reason = ""
 
@@ -279,22 +304,65 @@ def t_chunks_out_of_order_and_too_big_are_refused():
           folder is not None and (folder / "audio.pcm").stat().st_size == 0)
 
 
-def t_a_repeated_seq_is_refused_and_never_appended_twice():
+def t_a_repeated_seq_is_accepted_and_never_appended_twice():
+    """A crash between our 200 and the phone's own `sent.txt` line.
+
+    The phone retries the SAME seq; it already arrived. Refusing it (which this
+    route did until 2026-11-05) retried that number for ever and made the
+    recording permanently unsendable. So a LOWER seq is 200, `already: true`,
+    `chunk_bytes: 0`, nothing written; a HIGHER one is still the one 409.
+    """
     reset_root()
     session = make_session()
     data = base64.b64encode(pcm(0.1)).decode("ascii")
     code, out = C.chunk({"session": session, "seq": 1, "data_b64": data})
     check("the first chunk (seq 1) is accepted", code == 200 and out.get("ok"), out)
     code, out = C.chunk({"session": session, "seq": 1, "data_b64": data})
-    check("the SAME seq again is 409, not appended twice", code == 409, out)
-    check("... and names the number it wants next", out.get("expected") == 2, out)
+    check("the SAME seq again is accepted, because a crash retries it", code == 200, out)
+    check("... and says it was already held", out.get("already") is True, out)
+    check("... and adds no bytes", out.get("chunk_bytes") == 0, out)
+    check("... with the running total unchanged", out.get("bytes") == len(pcm(0.1)), out)
     code, out = C.chunk({"session": session, "seq": 3, "data_b64": data})
-    check("a skipped number is 409 too",
+    check("a skipped number is still 409 (a gap is real damage)",
           code == 409 and out.get("expected") == 2, out)
     folder = C.session_dir(session)
     check("exactly one chunk is on disk",
           folder is not None
           and (folder / "audio.pcm").stat().st_size == len(pcm(0.1)))
+    code, out = C.chunk({"session": session, "seq": 2, "data_b64": data})
+    check("the real next chunk still lands after the retry",
+          code == 200 and out.get("chunk_bytes") == len(pcm(0.1)), out)
+
+
+def t_a_retry_after_the_pc_answered_200_recovers_instead_of_bricking():
+    """The whole D3 scenario, on the PC's side: two 200s, then the phone dies.
+
+    The phone lost the numbers, so it retries 1 and then 2. Both are already
+    held, so both are 200 and write nothing; the audio stays exactly two
+    chunks, and `finish` still works - the recording is not bricked.
+    """
+    reset_root()
+    session = make_session()
+    first, second = pcm(0.2, seed=5), pcm(0.2, seed=6)
+    for seq, blob in ((1, first), (2, second)):
+        code, out = C.chunk({"session": session, "seq": seq,
+                             "data_b64": base64.b64encode(blob).decode("ascii")})
+        check(f"seq {seq} is accepted the first time", code == 200 and out.get("ok"), out)
+    # THE CRASH: the phone never appended the numbers to its own sent.txt.
+    for seq, blob in ((1, first), (2, second)):
+        code, out = C.chunk({"session": session, "seq": seq,
+                             "data_b64": base64.b64encode(blob).decode("ascii")})
+        check(f"the retried seq {seq} after the crash is 200, not 409",
+              code == 200, out)
+        check(f"... for seq {seq} it wrote nothing twice", out.get("already") is True, out)
+    folder = C.session_dir(session)
+    check("the audio is exactly the two chunks, in order, once",
+          folder is not None and (folder / "audio.pcm").read_bytes() == first + second)
+    code, out = C.finish({"session": session, "consent_notice": "on"},
+                         create=fake_create(), reader=fake_reader(READ_ONE),
+                         embedder=None, profile=None, wait_s=5.0)
+    check("the recording still finishes normally after the retries",
+          code == 200 and out.get("ok"), out)
 
 
 def t_a_chunk_during_the_card_is_refused():
@@ -825,6 +893,28 @@ def t_install_wraps_only_its_routes():
     check("... in plain words, not a silence",
           elsewhere._sent and C.PC_ONLY_REFUSAL in str(elsewhere._sent[0][1]),
           elsewhere._sent)
+    # The DELETE route is PC-only too, and BEFORE the body is read: another
+    # device may not even ask. Its refusal is its own sentence, because
+    # "reading the list" is not what it asked for.
+    unknown = json.dumps({"session": "call_" + "0" * 24}).encode("utf-8")
+    elsewhere = wrapped(pc=False)(C.DELETE_PATH, body=unknown)
+    elsewhere.do_POST()
+    check("the delete route from another device is 403",
+          elsewhere._sent and elsewhere._sent[0][0] == 403, elsewhere._sent)
+    check("... in the delete route's own words",
+          elsewhere._sent and C.PC_ONLY_DELETE_REFUSAL in str(elsewhere._sent[0][1]),
+          elsewhere._sent)
+    check("... and it is not the list route's sentence",
+          elsewhere._sent and C.PC_ONLY_REFUSAL not in str(elsewhere._sent[0][1]),
+          elsewhere._sent)
+    here = wrapped(pc=True)(C.DELETE_PATH, body=unknown)
+    here.do_POST()
+    check("from this PC the delete route answers (unknown id: 404), not 403",
+          here._sent and here._sent[0][0] == 404, here._sent)
+    denied = wrapped(token=False)(C.DELETE_PATH, body=unknown)
+    denied.do_POST()
+    check("a bad token is 401 before the delete route runs",
+          denied._sent and denied._sent[0][0] == 401, denied._sent)
     # The shipped default is the project's own check, and it fails CLOSED when
     # it cannot answer: jarvis_owner_check is not importable in this folder, and
     # a handler with no peer address is nobody. install() wraps the class and
@@ -949,6 +1039,153 @@ def t_the_shipped_default_is_off():
             os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
         else:
             os.environ["JARVIS_FRAMEWORK_TOML"] = old
+
+
+# --------------------------------------------------------------------------
+#   12. Deleting one recording: its files, its row, and its own card
+# --------------------------------------------------------------------------
+
+def a_finished_session() -> str:
+    """A real recording with audio, transcribed, through the real routes."""
+    session = make_session()
+    C.chunk({"session": session, "seq": 1,
+             "data_b64": base64.b64encode(pcm(0.5)).decode("ascii")})
+    C.finish({"session": session, "consent_notice": "on"}, create=fake_create(),
+             reader=fake_reader(READ_ONE), embedder=None, profile=None, wait_s=5.0)
+    return session
+
+
+def t_deleting_one_recording_removes_its_files_and_its_row():
+    reset_root()
+    session = a_finished_session()
+    folder = C.session_dir(session)
+    check("the recording is on disk before the delete",
+          folder is not None and folder.is_dir()
+          and (folder / "audio.wav").is_file() and (folder / "receipt.json").is_file(),
+          folder)
+    asked = []
+
+    def gate(action, detail, prompt):
+        asked.append((action, detail, prompt))
+        return Yes()
+
+    code, out = C.delete({"session": session}, gate=gate, wait_s=5.0)
+    check("deleting answers 200 with state deleted",
+          code == 200 and out.get("state") == "deleted", out)
+    check("... the whole folder is gone, audio and transcript and receipt",
+          folder is not None and not folder.exists(), folder)
+    check("... and every file it held is named in the answer",
+          "audio.pcm" in str(out.get("removed")) and "receipt.json" in str(out.get("removed")),
+          out)
+    code, listed = C.handle_get("")
+    check("... so its row is gone from the list too",
+          all(r.get("session") != session for r in listed.get("recordings") or []), listed)
+    check("... in plain words the owner can read",
+          "Deleted from this PC" in str(out.get("message")), out)
+    check("... asked ONE card, under its own action",
+          len(asked) == 1 and asked[0][0] == C.DELETE_ACTION, asked)
+    check("... whose sentence says what goes and what stays",
+          "Delete one recorded call" in asked[0][2]
+          and "STAYS in your vault" in asked[0][2], asked)
+    check("... and whose detail says nothing leaves this PC",
+          asked[0][1].get("leaves_this_pc") is False, asked)
+    code, again = C.delete({"session": session}, gate=lambda *a, **k: Yes(), wait_s=5.0)
+    check("deleting it a second time is 404, in words",
+          code == 404 and "not on this PC" in str(again.get("error")), again)
+
+
+def t_a_refused_delete_removes_nothing_and_says_so():
+    reset_root()
+    session = a_finished_session()
+    folder = C.session_dir(session)
+    code, out = C.delete({"session": session}, gate=lambda *a, **k: No(), wait_s=5.0)
+    check("a no on the card is 403", code == 403 and out.get("state") == "refused", out)
+    check("... in words, saying nothing was deleted",
+          "nothing was deleted" in str(out.get("error")), out)
+    check("... and the recording is still whole", folder is not None and folder.is_dir()
+          and (folder / "audio.wav").is_file(), folder)
+    code, out = C.delete({"session": "call_" + "0" * 24},
+                         gate=lambda *a, **k: Yes(), wait_s=0.0)
+    check("an unknown id is 404 in plain words, and asks no card",
+          code == 404 and "not on this PC" in str(out.get("error")), out)
+    code, out = C.delete({"session": "../../etc"}, gate=lambda *a, **k: Yes(), wait_s=0.0)
+    check("a path as a session id is 404 too (ids are never paths)", code == 404, out)
+    code, out = C.delete("not an object", gate=lambda *a, **k: Yes(), wait_s=0.0)
+    check("a body that is not an object is 400", code == 400, out)
+
+
+def t_a_delete_that_is_still_running_is_refused_in_words():
+    reset_root()
+    session = make_session()
+    for state, word in (("transcribing", "still being turned into words"),
+                        ("recording", "still being recorded on your phone")):
+        C._update(session, status=state)
+        code, out = C.delete({"session": session},
+                             gate=lambda *a, **k: Yes(), wait_s=5.0)
+        check(f"a {state} recording is refused with 409", code == 409, out)
+        check(f"... naming why it is not deleted ({state})",
+              word in str(out.get("error")), out)
+        check(f"... and the folder is still there ({state})",
+              C.session_dir(session).is_dir())
+
+
+def t_the_delete_waits_for_its_card_and_then_really_deletes():
+    reset_root()
+    session = a_finished_session()
+    folder = C.session_dir(session)
+    release = threading.Event()
+
+    def gate(*_a, **_k):
+        release.wait(10)
+        return Yes()
+
+    code, out = C.delete({"session": session}, gate=gate, wait_s=0.0)
+    check("a card still waiting answers 202, not a deletion",
+          code == 202 and out.get("state") == "waiting", out)
+    check("... saying nothing is deleted until it is approved",
+          "Nothing is deleted until" in str(out.get("message")), out)
+    check("... and the folder is untouched while it waits",
+          folder is not None and folder.is_dir())
+    release.set()
+    for _ in range(100):
+        if not folder.exists():
+            break
+        time.sleep(0.05)
+    check("... and it really goes once the card is approved",
+          folder is not None and not folder.exists(), folder)
+
+
+def t_a_delete_never_runs_without_its_card():
+    """A yes that was not an answered "ask" card deletes nothing.
+
+    `unknown_action_tier` is the owner's to edit; if it were "auto", an action
+    with a risk row and no tier line would run unasked. The route promises a
+    card, so it refuses that answer and says why.
+    """
+    reset_root()
+    session = a_finished_session()
+    folder = C.session_dir(session)
+    code, out = C.delete({"session": session}, gate=lambda *a, **k: Auto(), wait_s=5.0)
+    check("a gate that answered without asking is refused (403)", code == 403, out)
+    check("... in words, saying nothing was deleted",
+          "always asks first" in str(out.get("error"))
+          and "nothing was deleted" in str(out.get("error")), out)
+    check("... and the recording is still whole", folder is not None and folder.is_dir())
+
+
+def t_a_delete_does_not_need_the_feature_switch_on():
+    reset_root()
+    session = a_finished_session()
+    folder = C.session_dir(session)
+    off()
+    try:
+        code, out = C.delete({"session": session}, gate=lambda *a, **k: Yes(), wait_s=5.0)
+    finally:
+        on()
+    check("with [call_recording] off, the delete route still deletes",
+          code == 200 and out.get("state") == "deleted", out)
+    check("... because removing something is the safe direction",
+          folder is not None and not folder.exists())
 
 
 # --------------------------------------------------------------------------
