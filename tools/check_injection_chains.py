@@ -212,7 +212,18 @@ class Sandbox:
         home.mkdir()
         logs.mkdir()
         for key, value in (("OPENJARVIS_HOME", home), ("JARVIS_HOME", home),
-                           ("JARVIS_LOG_DIR", logs)):
+                           ("JARVIS_LOG_DIR", logs),
+                           # The settings folder TOO. Without this pin a probe
+                           # reads the real owner's settings: measured on the
+                           # owner's PC 2026-11-05, ~/.openjarvis/phone-notifications.json
+                           # exists, so jarvis_phone_notifications.settings()
+                           # returns from its LAST return and chain5b's mutation -
+                           # which lives in the "no file yet" branch - was never
+                           # reached, and the chain reported the mutated tree as
+                           # clean on Windows while CI (no such file) caught it.
+                           # DEF-048's root cause; a throwaway empty folder here
+                           # is the shape every CI run already has.
+                           ("OPENJARVIS_CONFIG_DIR", home)):
             self._saved_env[key] = os.environ.get(key)
             os.environ[key] = str(value)
         self._saved_path = list(sys.path)
