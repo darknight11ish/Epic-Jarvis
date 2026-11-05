@@ -503,12 +503,28 @@ def t_noted_does_not_exempt_a_note_write():
 
 def t_which_tools_can_back_a_claim():
     """H4: four read-only tools used to count as actions, so a claim after a
-    cheap read was never corrected."""
-    for name in ("read_web_page", "propose_plan", "feature_guide", "rea_investigate"):
+    cheap read was never corrected.
+
+    REA IS NOT ONE OF THE FOUR ANY MORE (2026-11-04, the owner's decision to
+    ship the full toolbox). The 2026-10-20 slice only read, so its result was
+    rightly read-only; the full toolbox patches a file, exports a bundle,
+    installs the helper and starts debugger and Frida sessions, so a
+    "nothing happened" after one of its writes must be corrected and it now
+    lives in ACTING_TOOLS. Keeping it here would be the direction that
+    silences a real correction, which is what this check exists to prevent -
+    so the three that still only read are pinned below, and REA is pinned as
+    the action tool it has become."""
+    for name in ("read_web_page", "propose_plan", "feature_guide"):
         check(f"{name} is read-only", name in CL.READ_ONLY_TOOLS)
         check(f"... so its result does not back a claim",
               CL.unbacked_claim("I've saved it to your vault.",
                                 [{"tool": name, "ran": True, "ok": True}]))
+    check("rea_investigate is an ACTION tool now (it patches and writes)",
+          "rea_investigate" in CL.ACTING_TOOLS)
+    check("... so its result can back a claim about what it wrote",
+          not CL.unbacked_claim("I've patched the copy.",
+                                [{"tool": "rea_investigate", "ran": True,
+                                  "ok": True}]))
     check("browser_control stays an action tool (it can click and submit)",
           "browser_control" not in CL.READ_ONLY_TOOLS)
     check("an action tool still backs a claim",

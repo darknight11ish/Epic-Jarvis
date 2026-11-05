@@ -160,14 +160,17 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
     check("Fast goes to the card nvidia-smi says has the MONITOR - index 2 here, "
           "which is not the index the old table used",
           three["fast"]["card_index"] == 2, three["fast"])
-    check("Agentic+Vision goes to the HEADLESS twin - index 1",
-          three["agentic_vision"]["card_index"] == 1, three["agentic_vision"])
-    check("the two 2080 SUPERS are named by their own PCI address and role, not "
-          "by '#' and an array position",
+    check("Agentic+Vision stays on the 12 GB everyday card - index 0 - because its "
+          "9B weights plus the vision projector need about 7.00 GiB and an 8 GB "
+          "headless twin has only 6.65 GiB free",
+          three["agentic_vision"]["card_index"] == 0, three["agentic_vision"])
+    check("the 2080 SUPER that has the monitor is named by its own PCI address and "
+          "role, not by '#' and an array position - and the Agentic+Vision row names "
+          "the everyday card it really runs on",
           "0000:0a:00.0" in three["fast"]["note"]
           and "card with the monitor" in three["fast"]["note"]
-          and "0000:07:00.0" in three["agentic_vision"]["note"]
-          and "card with no monitor" in three["agentic_vision"]["note"]
+          and "0000:04:00.0" in three["agentic_vision"]["note"]
+          and "12 GB" in three["agentic_vision"]["note"]
           and "2080 SUPER #" not in " ".join(r["note"] for r in three.values()),
           (three["fast"]["note"], three["agentic_vision"]["note"]))
     check("the Coding row names the REAL model on the POOLED lane, not the old "
@@ -196,6 +199,13 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
           and "0000:04:00.0" in plan["cards"][0]["card"]
           and "0000:0a:00.0" in plan["cards"][1]["card"]
           and "0000:07:00.0" in plan["cards"][2]["card"], plan["cards"])
+    check("... and the headless row states the arithmetic instead of claiming a lane "
+          "it cannot hold: Agentic+Vision needs about 7.00 GiB, the card has 6.65",
+          "Agentic+Vision" in plan["cards"][2]["role"]
+          and "7.00 GiB" in plan["cards"][2]["role"]
+          and "6.65 GiB" in plan["cards"][2]["role"]
+          and "Agentic + Vision stays on the everyday card" in plan["layout"],
+          (plan["cards"][2]["role"], plan["layout"]))
 
     # A PC that does not report the display flag must not guess: the role falls
     # back to the first non-everyday card and the words SAY nothing measured it.
@@ -220,9 +230,10 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
     finally:
         P._detected_cards = real
     check("two cards installed: the headless role says it is not installed yet, "
-          "instead of pretending a third card is there",
+          "instead of pretending a third card is there - and Agentic+Vision is not "
+          "placed on it",
           "not installed yet" in two["three_gpu_plan"]["cards"][2]["card"]
-          and two["by_gpu_count"]["3"]["agentic_vision"]["card_index"] == 2,
+          and two["by_gpu_count"]["3"]["agentic_vision"]["card_index"] == 0,
           two["three_gpu_plan"]["cards"][2])
     check("the pooled lane's port is ONE number, pinned to the two modules that "
           "own it rather than typed three times",
@@ -379,8 +390,9 @@ def main() -> int:
               for n in ("1", "3") for r in rec["by_gpu_count"][n].values()),
           "1/3 GPU rows")
     three = rec["by_gpu_count"]["3"]
-    check("3-GPU confirmed layout: Fast on card 1, Agentic+Vision on card 2",
-          three["fast"]["card_index"] == 1 and three["agentic_vision"]["card_index"] == 2,
+    check("3-GPU confirmed layout: Fast on the display card, Agentic+Vision on the "
+          "everyday card (it cannot fit an 8 GB card)",
+          three["fast"]["card_index"] == 1 and three["agentic_vision"]["card_index"] == 0,
           {k: v["card_index"] for k, v in three.items()})
     check("3-GPU plan is lane-per-GPU on three RTX cards, and says the x4 link",
           rec["three_gpu_plan"]["confirmed"] is True

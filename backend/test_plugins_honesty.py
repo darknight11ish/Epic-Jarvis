@@ -4,7 +4,7 @@
 The owner asked "what plug-ins do you have integrated into you?" and the model
 answered that it had no plug-ins, only built-in capabilities. False: the loader
 (backend/jarvis_plugins.py) imports every folder in jarvis_plugins\ beside
-jarvis_hud.py and calls its own install(); plugins/ready/ holds 49 drop-in
+jarvis_hud.py and calls its own install(); plugins/ready/ holds 50 drop-in
 modules (plugins/loader/README.md documents the mechanism, scripts/add-plugin.ps1
 is the door). This suite pins the catalogue to those folders and the answers to
 a fake installed state, so a plug-in cannot silently vanish from the reply.
@@ -48,7 +48,7 @@ def ask(text, surface="hud"):
 
 
 def test_catalogue_is_the_real_ready_list():
-    check("there are 49 ready plug-in folders", len(READY) == 49, str(len(READY)))
+    check("there are 50 ready plug-in folders", len(READY) == 50, str(len(READY)))
     check("the fast path's names are plugins/ready's folders",
           sorted(Q._plugin_names()) == READY, str(Q._plugin_names()[:5]) + " vs " + str(READY[:5]))
     check("every catalogue name is a real folder (no invented plug-in)",
@@ -99,7 +99,7 @@ def test_list_and_state_answers_from_a_fake_registry():
               r is not None and "add-plugin.ps1" in r.reply, r.reply[:250] if r else "model")
         r = ask("what plugins are available?")
         check("available state lists catalogue names",
-              r is not None and "android-builder" in r.reply and "49" in r.reply,
+              r is not None and "android-builder" in r.reply and "50" in r.reply,
               r.reply if r else "model")
         r = ask("is docker plugin installed?")
         check("a named installed plug-in says yes", r is not None and "Yes" in r.reply,
@@ -176,10 +176,10 @@ def test_system_prompt_line():
 
 def test_source_truth():
     readme = (ROOT / "plugins" / "README.md").read_text(encoding="utf-8")
-    check("plugins/README.md says 49 drop-in modules", "**49 drop-in modules**" in readme)
+    check("plugins/README.md says 50 drop-in modules", "**50 drop-in modules**" in readme)
     registry = json.loads((ROOT / "plugins" / "registry.json").read_text(encoding="utf-8"))
-    check("the generated registry agrees on 49 ready modules",
-          registry.get("ready_count") == 49, str(registry.get("ready_count")))
+    check("the generated registry agrees on 50 ready modules",
+          registry.get("ready_count") == 50, str(registry.get("ready_count")))
 
 
 def main():

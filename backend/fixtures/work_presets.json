@@ -671,13 +671,13 @@
         "agentic_vision": {
           "preset": "agentic_vision",
           "model": "qwen3.5:9b",
-          "card_index": 2,
-          "card": "card 2",
+          "card_index": 0,
+          "card": "NVIDIA GeForce RTX 2060",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "the headless 2080 SUPER (not installed yet): Agentic+Vision, qwen3.5:9b with images"
+          "note": "NVIDIA GeForce RTX 2060 (PCI 0000:04:00.0), 12 GB: Agentic+Vision, qwen3.5:9b with images"
         },
         "fast": {
           "preset": "fast",
@@ -739,7 +739,7 @@
     "basis": "the agreed 2-GPU mapping is measured; 1 and 3 GPUs are best effort and labelled as not tested",
     "three_gpu_plan": {
       "confirmed": true,
-      "layout": "everyday presets keep one lane per GPU (the everyday lane, the monitor card's lane and the headless card's lane); only on-demand heavy Coding pools the cards on port 11450",
+      "layout": "everyday presets keep one lane per GPU (the everyday lane, the monitor card's lane and the headless card's lane); only on-demand heavy Coding pools the cards on port 11450. Agentic + Vision stays on the everyday card, not the headless one: the 9B weights plus the vision projector need about 7.00 GiB and an 8 GB card with no monitor has 6.65 GiB free, so there is no window at which it fits a headless card",
       "cards": [
         {
           "role": "everyday lane: main chat / everyday, 196,608 tokens",
@@ -752,7 +752,7 @@
           "context": 16384
         },
         {
-          "role": "headless card's lane: Agentic+Vision, 16,384 tokens",
+          "role": "headless card's lane: no 9B lane fits - Agentic+Vision needs about 7.00 GiB against 6.65 GiB free, so it stays on the everyday card",
           "card": "the headless 2080 SUPER (not installed yet)",
           "context": 16384
         }
