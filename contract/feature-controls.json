@@ -5787,7 +5787,7 @@
       "name": "Open an app on your phone",
       "group": "Phone",
       "surface": "both",
-      "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+      "where": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone switched on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there); it is off by default. The allowed apps are one line each under [phone_apps] in the same settings file, and there is no Settings screen for the list yet.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -5798,7 +5798,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone switched on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there); it is off by default. The allowed apps are one line each under [phone_apps] in the same settings file, and there is no Settings screen for the list yet.",
         "search": [
           "Open an app on your phone"
         ],
@@ -5806,7 +5806,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone added by hand to the settings file (jarvis-framework.toml, [tools].enabled); there is no in-app switch. The allowed apps are one line each under [phone_apps] in the same file, and there is no Settings screen for the list yet.",
+        "location": "Ask in chat on the PC or the phone - \"which apps can you open on my phone?\" lists them, and asking to add or remove one raises a card. Opening one needs control_phone switched on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there); it is off by default. The allowed apps are one line each under [phone_apps] in the same settings file, and there is no Settings screen for the list yet.",
         "search": [
           "open an app on your phone"
         ],
@@ -8215,7 +8215,7 @@
       "name": "Find and grade a library on GitHub",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8226,7 +8226,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
         "search": [
           "Find and grade a library on GitHub"
         ],
@@ -8234,7 +8234,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add github_search by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
         "search": [
           "find and grade a library on github"
         ],
@@ -8266,7 +8266,7 @@
       "name": "Click and type in another program",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8277,7 +8277,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
         "search": [
           "Click and type in another program"
         ],
@@ -8285,7 +8285,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add control_computer by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
         "search": [
           "click and type in another program"
         ],
@@ -8317,7 +8317,7 @@
       "name": "Drive one browser tab",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and switch on Browser control there too - the second card's browser lane, or the headless browser - then ask.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8328,7 +8328,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and switch on Browser control there too - the second card's browser lane, or the headless browser - then ask.",
         "search": [
           "Drive one browser tab"
         ],
@@ -8336,7 +8336,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add browser_control by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and switch on Browser control there too - the second card's browser lane, or the headless browser - then ask.",
         "search": [
           "drive one browser tab"
         ],
@@ -8368,7 +8368,7 @@
       "name": "Run one shell command",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+      "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8379,7 +8379,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
         "search": [
           "Run one shell command"
         ],
@@ -8387,7 +8387,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Off by default; there is no in-app switch. Add shell_exec by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask.",
         "search": [
           "run one shell command"
         ],
@@ -8419,7 +8419,7 @@
       "name": "Read one web page out loud",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+      "where": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask about a page.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8430,7 +8430,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask about a page.",
         "search": [
           "Read one web page out loud"
         ],
@@ -8438,7 +8438,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Off by default; there is no in-app switch for it. Add read_web_page by hand to the settings file (jarvis-framework.toml, [tools].enabled), then ask about a page.",
+        "location": "Off by default; switch it on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), then ask about a page.",
         "search": [
           "read one web page out loud"
         ],
@@ -8470,7 +8470,7 @@
       "name": "Inspect a program or app statically",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
+      "where": "Off by default; switch rea_investigate on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and set [rea] enabled = true in the settings file (jarvis-framework.toml) - the tool needs both, then ask.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8481,7 +8481,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
+        "location": "Off by default; switch rea_investigate on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and set [rea] enabled = true in the settings file (jarvis-framework.toml) - the tool needs both, then ask.",
         "search": [
           "Inspect a program or app statically"
         ],
@@ -8489,7 +8489,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Off by default; set [rea] enabled and add rea_investigate by hand in the settings file (jarvis-framework.toml), then ask.",
+        "location": "Off by default; switch rea_investigate on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and set [rea] enabled = true in the settings file (jarvis-framework.toml) - the tool needs both, then ask.",
         "search": [
           "inspect a program or app statically"
         ],

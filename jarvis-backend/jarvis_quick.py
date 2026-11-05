@@ -4843,10 +4843,10 @@ _ASKS_FIRST_LOOSER = re.compile(
     r"stop\s+asking\s+(?:me\s+)?before\s+(?:jarvis\s+(?:reads?|accesses?|checks?|writes?)\s+)?"
     r"(.+)")
 
-#: Offering a reading tool to the AI model at all (jarvis_asks_first.
-#: TOOLS_SWITCHABLE) - a DIFFERENT thing from the above (see that module's
-#: own header): "let the AI model read my calendar" / "don't let the AI
-#: model read my email".
+#: Offering a tool to the AI model at all (jarvis_asks_first.
+#: TOOLS_SWITCHABLE - every tool the model can be offered since 2026-11-04) -
+#: a DIFFERENT thing from the above (see that module's own header): "let the
+#: AI model read my calendar" / "don't let the AI model read my email".
 _TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
 _TOOL_OFF = re.compile(
     r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
@@ -7337,10 +7337,13 @@ def _tool_off_words(subject: str, action: str) -> str:
         pc_only = str(getattr(AF, "TOOLS_PC_ONLY", "") or "").strip()
         if pc_only:
             return f"{subject} is switched off on this PC. {pc_only}"
-    if real in tuple(getattr(AF, "TOOLS_TOML_ONLY", ()) or ()):
-        why = str(getattr(AF, "TOOLS_TOML_ONLY_NOTE", "") or "").strip()
-        if why:
-            return f"{subject} is switched off on this PC. {why}"
+    # A tool whose own switch decides it (the data sandbox, the two web-search
+    # grant tools): the PC's own sentence names that switch. Everything else
+    # here is a name this PC does not know.
+    if hasattr(AF, "no_switch_note"):
+        note = AF.no_switch_note(real)
+        if note:
+            return f"{subject} is switched off on this PC. {note}"
     not_listed = str(getattr(AF, "TOOLS_NOT_ON_LIST", "") or "").strip()
     head = (f"{subject} is switched off on this PC because the tool behind it "
             f"is not offered to me.")
@@ -8607,11 +8610,15 @@ def _run_honest_chat_extra(f: dict) -> Optional[Result]:
             "What asks first is Settings, What asks first. There you decide what "
             "Jarvis may do without asking, and under \"" + label + "\" which "
             "abilities the AI is offered at all: " + str(count) + " one-tool "
-            "switches, grouped. Turning one on is ONE approval card plus Windows "
-            "Hello on this PC; turning it off is instant. Raw shell, computer and "
-            "browser control, reading one web page, connecting an account and REA "
-            "are not offered in-app by this slice - they stay a settings-file "
-            "choice, and REA also needs its own [rea] enabled = true.", "honest_chat")
+            "switches, grouped. Since 2026-11-04 that includes the raw ones - "
+            "running commands on this PC, computer and phone control, browser "
+            "control, reading one web page, connecting an account and REA - each "
+            "with ONE approval card plus Windows Hello on this PC, and every use "
+            "still decided by Ask me first. Turning one off is instant. A few are "
+            "not switches because their own switch decides them: the data and "
+            "maths sandbox, and the two conversation web-search tools that ride "
+            "with Web search. REA also needs its own [rea] enabled = true.",
+            "honest_chat")
     if shape == "quiet_hours":
         return Result(_quiet_hours_words(), "honest_chat")
     if shape == "general_off":
@@ -8623,10 +8630,10 @@ def _run_honest_chat_extra(f: dict) -> Optional[Result]:
             "On this PC these are switched off right now: " + "; ".join(items[:8])
             + ". The in-app switches are in Settings, What asks first under "
             "\"Let the AI use this\" - one approval card plus Windows Hello, one "
-            "tool at a time. Raw shell, computer and browser control, reading one "
-            "web page, connecting an account and REA are not offered in-app; they "
-            "stay a settings-file choice, and REA also needs its own [rea] enabled "
-            "= true.", "honest_chat")
+            "tool at a time; since 2026-11-04 that includes the raw tools (shell, "
+            "computer and phone control, browser control, reading one web page, "
+            "connecting an account, REA) and the everyday helpers. Turning one off "
+            "is instant. REA also needs its own [rea] enabled = true.", "honest_chat")
     return None
 
 

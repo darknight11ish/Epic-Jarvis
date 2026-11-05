@@ -296,6 +296,13 @@ NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits fo
 #: only about "no app switch". The organizer needs the other three promises
 #: said too - the vault it touches, ONE card, and Undo.
 NOTE_EXTRA = {
+    "delete_call_recording": (
+        "It removes ONE recording's own folder on this PC - the audio, the "
+        "transcript and the row you see in the list - and it cannot be undone. "
+        "The note it wrote in your vault is a document of its own and is NOT "
+        "deleted here; the answer names it so you know what is left. It works "
+        "with the feature switched off, because removing something only ever "
+        "narrows what Jarvis keeps."),
     "record_call": (
         "It records the phone's microphone with the call on speaker (Android does "
         "not let an app record the call's own audio), keeps the audio on this PC, "
@@ -385,18 +392,31 @@ SWITCHABLE = tuple(LOOSE)
 #: PC_ONLY_ACTIONS holds the same name.
 LOOSEN_ACTION = "loosen_what_asks_first"
 
-#: THE IN-APP SWITCH SURFACE, TIERED (Gemini's ruling, 2026-10-31, after the
-#: owner clicked for in-app switches: "not indiscriminate"). Only A and B are
-#: offered from inside the app; C and the unlisted tools stay settings-file
-#: choices:
-#:   TIER_A - added now: notes/search tools, the local-calendar list tools,
-#:            protection, GitHub research, send-one-file - plus calendar_read,
-#:            which already had an in-app switch (kept: no regression).
-#:   TIER_B - "Connected accounts & home", the owner's maximum-flexibility
-#:            section: email, home, spending and retirement tools.
-#:   TIER_C - NEVER offered in the app (raw/destructive/account tools).
-#:   TIER_UNLISTED - not offered in-app by this slice (named in the report and
-#:            the decisions fragment).
+#: THE IN-APP SWITCH SURFACE. Until 2026-11-04 only Tier A and Tier B were
+#: offered from inside the app: Gemini's 2026-10-31 ruling made it "tiered, not
+#: indiscriminate", and Tier C and the unlisted tools stayed settings-file
+#: choices. THE OWNER REVERSED THE ON HALF ON 2026-11-04: "few restrictions on
+#: its tools beyond the core values of jarvis that have already been
+#: established, particularly reverse engineer anything among other things".
+#: Every tool the AI model can be offered is now switchable ON from the Tools
+#: page, one approval card each. The one thing that did NOT change is the
+#: shape: PC only, ONE card per change, Windows Hello, nothing written until a
+#: person approves, and every use still decided by "Ask me first".
+#:
+#: THE TIER NAMES ARE KEPT. They no longer say what an app may switch - they
+#: say what KIND of tool each row is, and the reports and the decision record
+#: name them:
+#:   TIER_A - the everyday notes/search/calendar/timer/sharing tools.
+#:   TIER_B - "Connected accounts & home": email, home, spending, retirement.
+#:   TIER_C - the raw/destructive/account set: shell, data scripts, computer
+#:            and phone control, browser control, one web page, connecting an
+#:            account, REA.
+#:   TIER_UNLISTED - the everyday helpers the slice never offered before:
+#:            calculator, memory_search, file_read, web_search, my_files,
+#:            propose_plan, change_setting, feature_guide.
+#:   TIER_EXTRA - the rest of the model's own tools, which shipped ON and had
+#:            no switch row at all: goals, old conversations, phone apps,
+#:            plugins, the self portrait and the setup quiz.
 TIER_A = (
     "calendar_read", "notes_search", "append_obsidian_daily", "create_joplin_note",
     "append_logseq_journal", "set_timer", "set_reminder", "todo_add", "todo_done",
@@ -429,10 +449,33 @@ TIER_UNLISTED = (
     "calculator", "memory_search", "file_read", "web_search", "my_files",
     "propose_plan", "change_setting", "feature_guide",
 )
-#: Only these are offered in-app.
-TOOLS_SWITCHABLE = TIER_A + TIER_B
-#: Known tools that are NOT offered in-app by this slice (C + unlisted).
-TOOLS_TOML_ONLY = TIER_C + TIER_UNLISTED
+#: The tools that shipped ON and had no switch row at all before 2026-11-04.
+#: Each one really is decided by its line in [tools].enabled, so a switch here
+#: is real - unlike the three the next comment names. test_asks_first.py holds
+#: TIER_A + TIER_B + TIER_C + TIER_UNLISTED + TIER_EXTRA + NOT_A_SWITCH to
+#: jarvis_agent.TOOLS, so a new tool cannot land nowhere.
+TIER_EXTRA = (
+    "goals_list", "goal_add", "goal_progress", "goal_done",
+    "conversation_find", "conversation_open",
+    "phone_apps", "plugin_list", "plugin_switch",
+    "refresh_abilities", "self_portrait", "setup_quiz",
+)
+
+#: Known tools that are deliberately NOT switches of their own on this page.
+#: Each one is here for the same measured reason: the turn IGNORES the tool's
+#: line in [tools].enabled, so a switch whose state the turn ignored would be a
+#: lie - the rule that removed the web-search grant's two switches on
+#: 2026-11-02. `run_data_script` is offered from its OWN switch (Settings, Data
+#: sandbox): with that on the model is offered it whether or not the file names
+#: it, and with it off the file cannot offer it. The two grant tools ride with
+#: `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`).
+NOT_A_SWITCH = ("run_data_script",) + GRANT_ASK_TOOLS
+
+#: Every tool an app may switch ON - all of the model's own tools except the
+#: three above. 48 at 2026-11-04.
+TOOLS_SWITCHABLE = (TIER_A + TIER_B
+                    + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
+                    + TIER_UNLISTED + TIER_EXTRA)
 
 
 TOOL_NAME = {"email_read": "email_check"}
@@ -473,6 +516,12 @@ TOOL_GROUPS = (
     ("Connected accounts & home", TIER_B),
     ("Safety and sharing",
      ("protect_from_jarvis", "github_search", "send_file_to_phone")),
+    # 2026-11-04: the tools that used to have no switch. The group names say
+    # plainly what they are - the raw ones stay their own group so nobody turns
+    # one on by skimming, and a card still stands in front of every one.
+    ("Raw and powerful", tuple(t for t in TIER_C if t not in NOT_A_SWITCH)),
+    ("Everyday helpers", TIER_UNLISTED),
+    ("Jarvis's own tools", TIER_EXTRA),
 )
 #: The storage self-scan's own tools, appended ONLY when its module is really
 #: on this PC (it ships since PR #1117 merged: the module is in _where.py's
@@ -496,18 +545,18 @@ GROUP_FOR_TOOL = {tool: title for title, tools in TOOL_GROUPS for tool in tools}
 
 
 def _app_can_switch(tool: str) -> bool:
-    """True when POST /api/asks_first/tools accepts this row - the same three
-    tests request_tool_enable applies. A group row can be appended for a tool
+    """True when POST /api/asks_first/tools accepts this row for ON - the same
+    test request_tool_enable applies. A group row can be appended for a tool
     that raises a card but must never be switched from an app:
     jarvis_storage_health.py's scan and cleanup are one (a cleanup is a
-    deletion, so storage_cleanup is in MUST_ASK)."""
+    deletion, so storage_cleanup is in MUST_ASK) - and NOT_A_SWITCH's three are
+    the others (their own switch decides them)."""
     return (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
             or real_tool(tool) in SWITCHABLE_TOOL_NAMES)
 
 
 #: TOOL_GROUPS narrowed to what an app may really switch. `tools_status` is the
-#: SWITCH list and its own docstring promises "Only TIER_A + TIER_B tools are
-#: here"; without this, PR #1117's appended storage rows appeared as two
+#: SWITCH list; without this, PR #1117's appended storage rows appeared as two
 #: switches whose POST answers 403 TOOLS_NOT_ON_LIST. A group with nothing
 #: switchable in it is not shown at all.
 SWITCHABLE_GROUPS = tuple((title, tuple(t for t in tools if _app_can_switch(t)))
@@ -762,7 +811,13 @@ GROUPS = (
                                 # note below carries the two promises a card
                                 # cannot: nothing leaves this PC, and the feature
                                 # itself is off until the settings file says on.
-                                "record_call"]),
+                                "record_call",
+                                # Deleting ONE recording (2026-11-05, the
+                                # privacy audit's D4): the audio, the transcript
+                                # and the row go, behind ONE card of its own at
+                                # tier "ask" and PC-only. It cannot be undone, so
+                                # the page promises it by name.
+                                "delete_call_recording"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,
@@ -1591,22 +1646,63 @@ def _here(here: Optional[bool], peer, local) -> bool:
 
 TOOLS_LABEL = "Let the AI use this"
 TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separate thing "
-               "from whether it asks you first, above. Some tools have a switch here; "
-               "the raw ones and the ones this slice leaves alone stay a settings-file "
-               "choice, listed below. Turning one on shows ONE approval card and asks "
+               "from whether it asks you first, above. Since 2026-11-04 EVERY ability "
+               "the AI can be offered has a switch here, the raw and everyday ones "
+               "included; a few are not switches because their own switch decides them, "
+               "and the page names those. Turning one on shows ONE approval card and asks "
                "Windows Hello on this PC; turning it off is instant, from either app. "
                "Nothing here switches two tools at once.")
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
                  "What asks first). It takes one approval card and Windows Hello.")
 TOOLS_NOT_ON_LIST = ("This PC does not know a tool by that name, so nothing was changed.")
-TOOLS_TOML_ONLY_NOTE = ("That tool is not offered from inside the app by this slice. Raw shell, "
-                        "computer and browser control, reading one web page, connecting an "
-                        "account and REA (which also needs its own [rea] enabled = true) stay a "
-                        "deliberate choice in your settings file on this PC "
-                        "(jarvis-framework.toml, [tools].enabled); calculator, memory_search, "
-                        "file_read, web_search, my_files, propose_plan, change_setting and "
-                        "feature_guide are not offered in-app by this slice either. Nothing was "
-                        "changed.")
+#: The three known tools that have no switch of their own (NOT_A_SWITCH). The
+#: page lists them so nobody hunts for a switch that is not there, and the
+#: route answers ON for one of them with the same sentence - never "does not
+#: know that name", which would be false.
+TOOLS_NOT_SWITCHED_WHY = (
+    "A few tools are not switches here because the AI's own settings line does "
+    "not decide them: the data and maths sandbox has its own switch under "
+    "Settings, Data sandbox, and the two conversation web-search tools ride "
+    "with Web search. Each is named above; turning on its real switch offers it.")
+NO_SWITCH_NOTE = {
+    "run_data_script": (
+        "The data and maths sandbox has its own switch: Settings, Data sandbox "
+        "(or the sandbox row on the What asks first page). That switch is what "
+        "offers this tool, so a line in [tools].enabled would change nothing. "
+        "Nothing was changed here."),
+    "approve_web_search_for_conversation": (
+        "This one rides with Web search: with Web search offered, the AI is "
+        "offered this too, and without it this tool could not search anyway. It "
+        "has no switch of its own, so nothing was changed here."),
+    "stop_web_search_approval": (
+        "This one rides with Web search: with Web search offered, the AI is "
+        "offered this too. It has no switch of its own, so nothing was changed "
+        "here."),
+}
+
+
+def no_switch_note(tool: str) -> str:
+    """The plain sentence for a known tool that has no switch of its own."""
+    return NO_SWITCH_NOTE.get(real_tool(tool), "")
+#: D4 (the owner, 2026-11-04): the Tools page may turn OFF EVERY tool that is
+#: on, including one that is enabled in the settings file but is not one of the
+#: switches this page draws. ON was reversed on 2026-11-04 too (see the tier
+#: comment at the top), so `extra` is now only names this PC does not know - a
+#: drop-in program's own tool - which can be turned off but not on.
+TOOLS_EXTRA_GROUP = "Also on in your settings file"
+TOOLS_EXTRA_WHY_UNKNOWN = (
+    "Your settings file lists this one, but this PC has no row of its own for it - it may "
+    "come from a part added to Jarvis. It is on, so you can turn it off here; to offer it "
+    "again, add it back to [tools].enabled in jarvis-framework.toml by hand.")
+TOOLS_EXTRA_WHY_OFF = (
+    "Off now. This page has no switch to turn it back on: add it back to [tools].enabled in "
+    "jarvis-framework.toml on this PC by hand, then restart Jarvis.")
+TOOLS_OFF_A_TOOL_WITH_ITS_OWN_SWITCH = (
+    "Done - the line naming it is gone. It has its own switch, which this page does not "
+    "change: while Settings, Data sandbox is on, the AI is still offered this tool.")
+TOOLS_OFF_A_TOOL_THAT_RIDES_ALONG = (
+    "Done - the line naming it is gone. It rides with Web search, so while Web search is "
+    "offered the AI is still offered this too.")
 _TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
 _ENABLED_LINE = re.compile(
     r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
@@ -1682,13 +1778,26 @@ def tools_enabled_set() -> set:
         return set()
 
 
+#: For a tool whose own one-line label is a NAME rather than an action
+#: ("Computer control", "Browser control"), the card says what using it means -
+#: the owner is never asked to switch on a phrase they cannot picture.
+CARD_USES = {
+    "control_computer": "click and type in other programs on this PC, one approved plan at a time",
+    "control_phone": "tap and type on your phone over the cable, one approved plan at a time",
+    "browser_control": "open a web page and click or type in one browser tab",
+}
+
+
 def tool_enable_card(tool: str) -> str:
     """The ONE card's words for offering one tool to the AI model.
 
-    It says the tiered surface's honest facts: one tool, one card + Windows
-    Hello, each use is still decided by "Ask me first"; raw tools are not here;
-    send-one-file stays off by default because its chat request is the normal
-    door; REA keeps its own separate opt-in.
+    It says the surface's honest facts, whatever the tool: what is being
+    switched on, in the tool's own one-line description; one tool, one card +
+    Windows Hello; each use is still decided by "Ask me first"; and - where
+    ANOTHER switch must also be on for the tool to be offered at all - that
+    switch is named, because otherwise "offered" would be a promise this card
+    cannot keep. send-one-file keeps its own paragraph (its chat request is the
+    normal door), and REA its own separate opt-in.
     """
     real = real_tool(tool)
     label = tool_label(tool)
@@ -1699,6 +1808,10 @@ def tool_enable_card(tool: str) -> str:
         f"words: {label}. This changes one line in your settings file on this PC; "
         "nothing else changes.",
         "",
+    ]
+    if real in CARD_USES:
+        lines += [f"What that means in use: it can {CARD_USES[real]}.", ""]
+    lines += [
         "This is separate from whether it asks you first: that is set above, in "
         '"Ask me first", and is unchanged by this card.',
         "",
@@ -1714,6 +1827,16 @@ def tool_enable_card(tool: str) -> str:
     if real == "rea_investigate":
         lines += ["REA also needs its own separate opt-in: [rea] enabled = true in "
                   "your settings file. This card alone does not start it.",
+                  ""]
+    if real == "web_search":
+        lines += ["Web search also has its own switch, in Settings, Web search. While that "
+                  "one is off, the AI is not offered this even with this line in your "
+                  "settings file - this card alone does not turn it back on.",
+                  ""]
+    if real == "browser_control":
+        lines += ["Browser control also needs its own switch: Settings, Browser control (the "
+                  "second card's browser lane), or the headless browser. This card alone does "
+                  "not start either, and without one the AI is not offered it.",
                   ""]
     lines += [
         "Approving it needs Windows Hello on this PC. You can turn it off again at any time "
@@ -1882,7 +2005,12 @@ def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> di
 
 
 _T_LOCK = threading.Lock()
-_T_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+#: `off_rows`: the unlisted tools this page turned OFF, so their row can stay
+#: on the page and say OFF truthfully instead of vanishing on the next read
+#: (D4, 2026-11-04). Kept in memory only: the settings file is the truth, and
+#: a tool the file lists again is shown as ON from the file, not from here.
+_T_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {},
+                  "off_rows": {}}
 #: Held the same way _L_SWITCH is: from an approved card's "was it withdrawn?"
 #: check through writing [tools].enabled, and from an OFF's withdrawing
 #: through ITS write - so an OFF pressed in between is never overwritten by
@@ -1906,7 +2034,7 @@ def _tools_finish(pid: str, tool: str, outcome: str, why: str = "") -> None:
 def _tools_decide(pid: str, tool: str, gate: Callable, tier_of: Callable,
                   write: Callable) -> None:
     card = tool_enable_card(tool)
-    detail = {"text": card, "what": f"offer {_title(tool).lower()} to the AI model",
+    detail = {"text": card, "what": f"offer {tool_label(tool).lower()} to the AI model",
               "setting": tool, "to": True, "leaves_this_pc": False}
     try:
         v = gate(ENABLE_TOOL_ACTION, detail, card)
@@ -1937,6 +2065,33 @@ def _tools_decide(pid: str, tool: str, gate: Callable, tier_of: Callable,
     _tools_finish(pid, tool, "enabled")
 
 
+def _tools_off_said(tool: str) -> str:
+    """The OFF answer for a tool the page has no switch row for (D4).
+
+    Three truthful shapes, never one that overstates: a name this PC does not
+    know (OFF works, putting it back on is a hand edit - nothing else can offer
+    it); the data sandbox's tool, whose OWN switch still offers it; and the two
+    web-search tools that ride with Web search. Saying "not offered any more"
+    for either of those last two would be false.
+    """
+    real = real_tool(tool)
+    if real == "run_data_script":
+        return TOOLS_OFF_A_TOOL_WITH_ITS_OWN_SWITCH
+    if real in GRANT_ASK_TOOLS:
+        return TOOLS_OFF_A_TOOL_THAT_RIDES_ALONG
+    return ("Done - it is off now, so the AI model is not offered it. This page has no "
+            "switch to turn it back on: add \"" + real + "\" to the [tools] enabled list in "
+            "the settings file on this PC (jarvis-framework.toml) if you want the model "
+            "offered it again.")
+
+
+def _remember_tool_off(tool: str, said: str) -> None:
+    """Keep an unlisted tool's OFF row visible until Jarvis restarts."""
+    with _T_LOCK:
+        _T_STATE["off_rows"][tool] = {"outcome": "disabled", "message": said,
+                                      "at": time.time()}
+
+
 def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable] = None,
                         tier_of: Optional[Callable[[str], str]] = None,
                         spawn: Optional[Callable] = None, write: Optional[Callable] = None,
@@ -1945,7 +2100,18 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
     """POST /api/asks_first/tools {"tool": "<name>", "enabled": bool}.
     (code, body). ON is the PC only, one card plus Windows Hello - the same
     shape as request_tier's looser side, aimed at [tools].enabled instead of
-    [autonomy.tiers]. OFF is instant, never a card, from either app."""
+    [autonomy.tiers]. OFF is instant, never a card, from either app.
+
+    ON accepts EVERY tool the AI model can be offered (the owner's decision,
+    2026-11-04): Tier A and B, the raw Tier C set, the everyday helpers and
+    Jarvis's own tools. The three names in NOT_A_SWITCH are refused with the
+    sentence naming their real switch, never "does not know that name" - this
+    PC does know them. A name it really does not know gets the plain
+    "does not know" answer. Nothing is written until the person approves.
+
+    OFF is unchanged from D4: allowed for a tool that is ON but is NOT one of
+    the switches this page draws, because a tool enabled in [tools].enabled is
+    offered to the model whether or not this page knows it."""
     gate = gate or _gate
     tier_of = tier_of or _tier
     spawn = spawn or _spawn
@@ -1956,33 +2122,46 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
         return 400, {"ok": False, "error": 'need {"tool": "<name>", "enabled": true|false}'}
     tool, enabled = body["tool"], body["enabled"]
     real = real_tool(tool)
-    if not (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
-            or real in SWITCHABLE_TOOL_NAMES):
-        if real in TOOLS_TOML_ONLY or tool in TOOLS_TOML_ONLY:
-            return 403, {"ok": False, "error": TOOLS_TOML_ONLY_NOTE}
-        return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
-    now_on = real_tool(tool) in tools_enabled_set()
+    known = _app_can_switch(tool)
+    now_on = real in tools_enabled_set()
     if not enabled:
         # OFF: at once, never a card - it only narrows what the model may do.
+        if not known and not now_on:
+            # The old refusal still stands for a request that would change
+            # nothing: a tool with no switch of its own that is not on cannot
+            # be turned off here.
+            note = no_switch_note(tool)
+            if note:
+                return 403, {"ok": False, "error": note, "not_a_switch": True}
+            return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
         with _T_SWITCH:
             with _T_LOCK:
                 p = _T_STATE["pending"]
-                if p and p.get("tool") == tool:
+                if p and real_tool(str(p.get("tool") or "")) == real:
                     _T_STATE["withdrawn"].add(p["id"])
                     p.clear()
             if not now_on:
                 return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
                              "message": "The AI model is already not offered this tool."}
             try:
-                write(real_tool(tool), False)
+                write(real, False)
             except TierFileError as exc:
                 return 409, {"ok": False, "error": str(exc) + "."}
             except Exception as exc:
                 return 500, {"ok": False, "error": f"could not change it ({type(exc).__name__})"}
+        said = ("Done - the AI model is not offered this tool any more." if known
+                else _tools_off_said(tool))
+        if not known:
+            _remember_tool_off(real, said)
         _audit("asks_first.tools.disabled", {"tool": tool})
         return 200, {"ok": True, "changed": True, "tools": tools_status(here=True),
-                     "message": "Done - the AI model is not offered this tool any more."}
+                     "message": said}
     # ON: the PC only, one card plus Windows Hello.
+    if not known:
+        note = no_switch_note(tool)
+        if note:
+            return 403, {"ok": False, "error": note, "not_a_switch": True}
+        return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
     if not _here(here, peer, local):
         return 403, {"ok": False, "error": TOOLS_PC_ONLY, "pc_only": True}
     if now_on:
@@ -2036,13 +2215,63 @@ def _vault_switch_status(here: bool) -> dict:
                      "whole batch; one Undo puts it back.")}
 
 
+def _extra_tool_why(tool: str, on: bool) -> str:
+    """The plain reason under an ON/OFF row that has no switch of its own."""
+    if not on:
+        return TOOLS_EXTRA_WHY_OFF
+    note = no_switch_note(tool)
+    if note:
+        return note
+    return TOOLS_EXTRA_WHY_UNKNOWN
+
+
+def _extra_tool_rows(items: list, enabled: set) -> list:
+    """Every tool that is ON but has no switch row - and any this page just
+    turned OFF (D4, 2026-11-04).
+
+    Since 2026-11-04 every tool this PC knows has a switch row, so what lands
+    here is a name this PC does not know (a drop-in program's own tool) and the
+    three NOT_A_SWITCH tools when the settings file happens to name them. The
+    state is the settings file's own (`enabled`, from tools_enabled_set), never
+    a guess. `switchable: False` says plainly that this page offers no ON
+    switch for the row; the page draws it with an OFF switch only. A row turned
+    off here stays in `_T_STATE["off_rows"]` so it can say OFF instead of
+    vanishing; a tool the file lists again wins over that, because the file is
+    the truth.
+    """
+    known = {real_tool(str(i.get("id") or "")) for i in items}
+    with _T_LOCK:
+        off_rows = dict(_T_STATE["off_rows"])
+    # real_tool: an old "email_read" saved in the file is the email_check row,
+    # not a second row of its own.
+    on_now = {real_tool(str(n)) for n in enabled}
+    names = {n for n in on_now if n not in known}
+    names.update(n for n in off_rows if n not in known and n not in on_now)
+    rows = []
+    for name in sorted(names):
+        on = name in on_now
+        row = {"id": name, "title": tool_label(name), "group": TOOLS_EXTRA_GROUP,
+               "on": on, "waiting": False, "switchable": False,
+               "why": _extra_tool_why(name, on)}
+        if not on and isinstance(off_rows.get(name), dict):
+            row["last"] = dict(off_rows[name])
+        rows.append(row)
+    return rows
+
+
 def tools_status(*, here: bool = False) -> dict:
     """The switch list the desktop shows: every in-app switch, grouped.
 
-    Only TIER_A + TIER_B tools are here (the tiered ruling); the vault
-    organizer's own switch rides beside them as a different kind of row; and
-    the not-offered tools are named with the plain reason, so the page can say
-    what is deliberately not offered in-app.
+    EVERY tool the AI model can be offered has a switch here since 2026-11-04
+    (the owner's decision), in eight groups - the raw and everyday ones
+    included. The vault organizer's own switch rides beside them as a different
+    kind of row; the three tools whose own switch decides them are named in
+    `not_switchable` with the plain reason, so the page points at the real
+    switch instead of drawing one that would do nothing; and `extra` lists
+    every OTHER name in the settings file - a drop-in program's own tool, or
+    one of the three - with its real state and a plain reason (D4). `extra`
+    rows can be turned OFF from the page; an ON switch exists for every tool
+    this PC knows (`items`).
     """
     enabled = tools_enabled_set()
     with _T_LOCK:
@@ -2063,10 +2292,11 @@ def tools_status(*, here: bool = False) -> dict:
             "groups": [{"title": title, "ids": list(tools)}
                        for title, tools in SWITCHABLE_GROUPS],
             "vault": _vault_switch_status(here),
-            "not_offered": {
-                "tier_c": list(TIER_C), "not_this_slice": list(TIER_UNLISTED),
-                "labels": {tool: tool_label(tool) for tool in TOOLS_TOML_ONLY},
-                "why": TOOLS_TOML_ONLY_NOTE,
+            "extra": _extra_tool_rows(items, enabled),
+            "not_switchable": {
+                "ids": list(NOT_A_SWITCH),
+                "labels": {tool: tool_label(tool) for tool in NOT_A_SWITCH},
+                "why": TOOLS_NOT_SWITCHED_WHY,
             }}
 
 

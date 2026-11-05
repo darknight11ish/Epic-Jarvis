@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "7b69d43ef6e94abe3da67a5d49eaa5aea31fc8326a1ae0cd4c150e52f28d07e1",
+  "source_sha256": "8b4c0c48b2a9aad097071885f858006f560a269385f61a697ff51ca491ca27cc",
   "feature_count": 176,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
