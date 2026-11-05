@@ -5126,7 +5126,7 @@ private fun Composer(
     }
     // The talk button's own state while a hands-free answer window is open:
     // the words are the shared constant, so the button, the notification and
-    // the Settings row cannot describe the same ten seconds differently.
+    // the Settings row cannot describe the same window differently.
     if (handsfreeNow.listening) {
         Gap(6)
         Text(
