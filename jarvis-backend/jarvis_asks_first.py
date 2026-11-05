@@ -430,6 +430,10 @@ TIER_B = (
 TIER_C = (
     "shell_exec", "run_data_script", "control_computer", "control_phone",
     "browser_control", "read_web_page", "connect_account", "rea_investigate",
+    # The product check (2026-11-04) is PC-only with Windows Hello and its own
+    # [product_check] enabled line, so it is never offered as an in-app switch:
+    # TIER_C is the not-offered-in-app list, not a danger list.
+    "product_check",
 )
 TIER_UNLISTED = (
     "calculator", "memory_search", "file_read", "web_search", "my_files",
@@ -752,7 +756,14 @@ GROUPS = (
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",
                       "open_public_tunnel",
-                      "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
+                      "news_read", "page_read", "read_web_page",
+                      # The product check (jarvis_product_check.py, 2026-11-04):
+                      # ONE PC-only card per Amazon product page, read once in
+                      # the owner's own signed-in browser. A card can name it, so
+                      # the page names it (test_asks_first.py); there is no app
+                      # switch - the tool's own door is [product_check] enabled.
+                      "product_check",
+                      "github_read", "chatbot_session",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
