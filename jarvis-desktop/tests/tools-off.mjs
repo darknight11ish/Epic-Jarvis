@@ -131,7 +131,7 @@ check("Rust refuses ON only for a name the PC does not know, and sends every OFF
     "only the ON direction is refused before it is sent");
   assert.match(rust, /TOOLS_NO_SWITCH\.iter\(\)\.find/,
     "a known tool with no switch of its own gets its own sentence, not 'does not know'");
-  assert.match(rust, /pub\(crate\) const TOOLS_NO_SWITCH: \[\(&str, &str\); 3\]/);
+  assert.match(rust, /pub\(crate\) const TOOLS_NO_SWITCH: \[\(&str, &str\); 4\]/);
   assert.doesNotMatch(rust, /TOOLS_TOML_ONLY_NOTE/,
     "the old 'not offered in-app by this slice' refusal is gone");
   // The Rust test names the new rule so it cannot be silently dropped.

@@ -254,8 +254,9 @@ await check("the tool surface: groups, the vault row and the not-a-switch note",
   const note = notSwitchableView(pc.tools);
   const no = pc.tools.notSwitchable;
   assert.deepEqual(no.ids,
-    ["run_data_script", "approve_web_search_for_conversation", "stop_web_search_approval"],
-    "the three whose own switch decides them");
+    ["run_data_script", "product_check", "approve_web_search_for_conversation",
+      "stop_web_search_approval"],
+    "the four whose own switch decides them");
   for (const id of no.ids) {
     assert.ok(note.includes(no.labels[id] || id.replace(/_/g, " ")), "the note names " + id);
   }

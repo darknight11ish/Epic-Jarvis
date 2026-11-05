@@ -83,7 +83,7 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// 2026-11-04: the owner's decision that day made EVERY tool the AI model can
 /// be offered switchable, raw Tier C set and everyday helpers included (21
 /// before that; the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
-/// from [`SWITCHABLE`], and desktop only. The three tools that are NOT here
+/// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
 pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
     // Tier A (13)
@@ -141,20 +141,29 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
     "setup_quiz",
 ];
 
-/// The three known tools with no switch of their own, each with the PC's own
+/// The four known tools with no switch of their own, each with the PC's own
 /// sentence - `jarvis_asks_first.NO_SWITCH_NOTE`, word for word (checked
 /// against the contract file). They are here because the turn IGNORES their
 /// line in `[tools].enabled`: `run_data_script` is offered by its own switch
-/// (Settings, Data sandbox), and the two web-search tools ride with
-/// `web_search`. Refusing them with "this PC does not know that name" would be
-/// false, so the PC's own explanation is sent before the request is made.
-pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 3] = [
+/// (Settings, Data sandbox), `product_check` by the settings file's own
+/// `[product_check] enabled` line (2026-11-04), and the two web-search tools
+/// ride with `web_search`. Refusing them with "this PC does not know that name"
+/// would be false, so the PC's own explanation is sent before the request is
+/// made.
+pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 4] = [
     (
         "run_data_script",
         "The data and maths sandbox has its own switch: Settings, Data sandbox \
          (or the sandbox row on the What asks first page). That switch is what \
          offers this tool, so a line in [tools].enabled would change nothing. \
          Nothing was changed here.",
+    ),
+    (
+        "product_check",
+        "The product check has its own switch: the line [product_check] enabled \
+         = true in jarvis-framework.toml. That line is what offers this tool, \
+         so a line in [tools].enabled would change nothing. Nothing was changed \
+         here.",
     ),
     (
         "approve_web_search_for_conversation",
