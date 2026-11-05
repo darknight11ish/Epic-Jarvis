@@ -1239,6 +1239,38 @@ def t_phone_state_sentences_keep_their_own_owners():
           ("honest_state", "state"), got)
 
 
+def t_a_list_answer_in_live_carries_the_list_not_a_pointer():
+    """The owner's report of 2026-11-04, the fast-path half.
+
+    A list-producing fast path must carry the REAL items in its answer: Live
+    is the same answer as a typed chat, "just complete into speech". Nothing
+    in the quick path may replace the list with a sentence that points at the
+    screen. (Whether the app may SPEAK it is the app's own privacy rule, and
+    that is unchanged: this checks the pool of words it would speak is the
+    owner's real list, never a pointer.)"""
+    now = local(2026, 11, 5, 12, 0)
+    w = World(now, name="live-list")
+    w.s.add_todo("buy milk")
+    w.s.add_todo("call the plumber")
+    w.s.add_todo("post the form")
+    typed = Q.answer("what's on my to-do list?", sched=w.s, now=now,
+                     conversation="c-live-list")
+    live = Q.answer("what's on my to-do list?", sched=w.s, now=now,
+                    conversation="c-live-list", live=True)
+    check("the to-do list answer lists the owner's real items",
+          typed is not None and "buy milk" in typed.reply
+          and "call the plumber" in typed.reply and "post the form" in typed.reply,
+          None if typed is None else typed.reply)
+    check("Live gets the SAME answer, every item still in it",
+          live is not None and typed is not None and live.reply == typed.reply,
+          None if live is None else live.reply)
+    check("...and neither answer points at the screen instead of saying them",
+          live is not None and "on your screen" not in live.reply.lower()
+          and "see below" not in live.reply.lower()
+          and "see the list" not in live.reply.lower(),
+          None if live is None else live.reply)
+
+
 def main():
     orig_tz = os.environ.get("TZ")
     try:

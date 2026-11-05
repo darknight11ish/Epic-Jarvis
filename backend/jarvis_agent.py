@@ -11927,7 +11927,7 @@ def manner_message(manner: Optional[str], *, crisis: bool = False) -> Optional[d
 
 
 def with_manner_note(msgs: list, manner: Optional[str], *,
-                     crisis: bool = False) -> list:
+                     crisis: bool = False, spoken_live: bool = False) -> list:
     """A new list: `msgs` with the way-of-talking note(s) just before the
     newest user message - never first (see with_spoken_note, whose placing
     this is). `msgs` itself is not changed; no manner, or no user message,
@@ -11935,9 +11935,14 @@ def with_manner_note(msgs: list, manner: Optional[str], *,
 
     A chosen personality inserts its persona block AND, immediately after it
     (nearest the question), the one-line post_history_hint, so a long chat or
-    a long Live session cannot drift out of character. A crisis turn inserts
-    the calm support block instead of the persona (manner_message does that).
-    A PC with no chosen personality gets exactly the old single note."""
+    a long Live session cannot drift out of character. `spoken_live` is the
+    entry's own Live mark (`_TurnWatch.live`: a spoken message with
+    `live: true`), and it is passed on to the hint so a spoken Live turn is
+    also told to SAY the answer instead of pointing at the screen - the one
+    drift `jarvis_live.MODEL_NOTE` cannot keep for the whole of a long session.
+    A crisis turn inserts the calm support block instead of the persona
+    (manner_message does that). A PC with no chosen personality gets exactly
+    the old single note."""
     note = manner_message(manner, crisis=crisis)
     users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
     if note is None or not users:
@@ -11946,7 +11951,7 @@ def with_manner_note(msgs: list, manner: Optional[str], *,
     try:
         import jarvis_manner
         if jarvis_manner.personality_chosen() and not crisis:
-            hint = jarvis_manner.post_history_hint()
+            hint = jarvis_manner.post_history_hint(spoken_live=bool(spoken_live))
             if hint:
                 insert.append({"role": "system", "content": hint})
     except Exception:
@@ -13071,8 +13076,10 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # that say HOW to answer, nearer than anything stale.
     out = with_setup_state_note(out)
     # The owner's manner (warm or plain): wording only, never first, and
-    # before the spoken note so that one is nearer the question.
-    out = with_manner_note(out, manner, crisis=crisis)
+    # before the spoken note so that one is nearer the question. A Live turn
+    # passes its own mark on, so the final-step persona hint says the answer
+    # is said aloud rather than pointed at, exactly as `live` is read below.
+    out = with_manner_note(out, manner, crisis=crisis, spoken_live=live)
     if focus:
         # I144: additive on top of manner, never instead of it - nearer
         # the question than manner, further than spoken/cut-off/crisis.
