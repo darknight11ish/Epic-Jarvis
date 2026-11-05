@@ -787,6 +787,22 @@ data class JobRecord(
     val handler: String? = null,
     val caps: List<String> = emptyList(),
     val tainted: Boolean = false,
+    /*
+     * Attention-first sorting (2026-11-04, pattern 4). The PC may answer "does
+     * this wait for a person?" itself; when the field is absent - every backend
+     * before this slice - [com.jarvis.client.net.JobAttention.waitsForPerson]
+     * derives the same answer from [state]. `null` is therefore LOAD-BEARING
+     * and must stay nullable: `false` would mean the server said "no one is
+     * waiting" and would stop the fallback running.
+     *
+     * `finished` is REAL in jarvis_jobs' own database, so it arrives as a JSON
+     * number with a fraction; it feeds the quiet bar's "last finished" words
+     * and nothing else. `dismissed_by_owner` is only ever true for a failure
+     * the owner has already put aside.
+     */
+    @SerialName("waits_for_person") val waitsForPerson: Boolean? = null,
+    @SerialName("dismissed_by_owner") val dismissedByOwner: Boolean = false,
+    val finished: Double? = null,
 ) {
     /** A name to show, by either field, falling back to the id. */
     val title: String

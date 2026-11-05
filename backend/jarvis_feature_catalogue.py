@@ -3,7 +3,7 @@
 The owner's feature list, as data: 175 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 4cb8996957734448b75da281b606c6ff5626025c2a74a8f0815bc875edf923a2); the apps' Features pages read their own
+`features/features.json` (sha256 fdf606fa406e4106e180ba544d7c1e74ca74e5e1ef3a1ad54a6c5bc9d1198b3f); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "4cb8996957734448b75da281b606c6ff5626025c2a74a8f0815bc875edf923a2"
+SOURCE_SHA256 = "fdf606fa406e4106e180ba544d7c1e74ca74e5e1ef3a1ad54a6c5bc9d1198b3f"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -548,10 +548,10 @@ FEATURES = (
         "id": "forget-range",
         "group": "Memory",
         "title": "Forget a time frame",
-        "what": "Forget what Jarvis learned or said over a stretch of days.",
+        "what": "Forget what Jarvis learned or said over a stretch of days. It lists every fact and chat from then and says how long it should take, leaves pinned chats out (and keeps them), and asks a second yes before anything is removed.",
         "where": "Brain, History, Forget a time frame.",
-        "asks": "One card listing every item, decided by tapping only - never by voice. Then 10 minutes to Undo.",
-        "limit": "After the 10 minutes the chats are gone for good. Erasing a fact's words for good stays the separate per-fact action.",
+        "asks": "ONE card listing every item - never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
+        "limit": "At most 200 facts and chats in one go; more than that asks for fewer days, and repeating the request covers the rest. Facts are RETIRED, not erased - their words stay in the history. After the 10 minutes the chats are gone for good.",
         "surface": "both",
         "covers": ["brain.history.forget-range", "memory", "records"],
     },
@@ -1804,17 +1804,17 @@ FEATURES = (
         "asks": "Every read shows the exact address on its own card before anything is fetched. What comes back is outside text - never learned, never acted on.",
         "limit": "Off by default; one page, no links followed, and the page is read only as outside text.",
         "surface": "both",
-        "aliases": ["read a web page", "read a page"],
+        "aliases": ["read a web page", "read a page", "read a link", "reading a link"],
         "covers": ["read-web-page"],
     },
     {
         "id": "reverse-engineering",
         "group": "The PC itself",
         "title": "Inspect a program or app statically",
-        "what": "Statically inspect a program, app or binary and report what it does - strings, imports, structure.",
+        "what": "Inspect, debug, patch or instrument a program or app on this PC with the REA helper, and read your own phone with the same helper.",
         "where": "Off by default; switch rea_investigate on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and set [rea] enabled = true in the settings file (jarvis-framework.toml) - the tool needs both, then ask.",
-        "asks": "Off until both are on; every investigation is one approved call.",
-        "limit": "Off by default; static inspection only - it does not run the program, and a packed or protected binary may tell it little.",
+        "asks": "Off until both are on; every step is one approved call, and so is installing the helper.",
+        "limit": "Off by default; everything it does stays on this PC, so a web address is refused as a target. A packed or protected program may tell it little, and attaching a debugger or instrumenting a running program needs those separate tools installed (the debugger it knows is Linux-only, so not on this PC).",
         "surface": "both",
         "aliases": ["reverse engineering"],
         "covers": ["reverse-engineering"],

@@ -3367,17 +3367,20 @@ class ChatLog:
                   " answer_kept, voice_check, text")
 
     def overlapping(self, start: float, end: float, limit: int = 201,
-                    only=None) -> dict:
+                    only=None, pinned=None) -> dict:
         """The conversations that OVERLAP [start, end) - a message at or
         after `start` and before `end`, or one that started before and went
         on after. Oldest first, at most `limit`, with how many in all.
 
         {"items": [{"id", "title", "started", "updated", "turns", "in_frame",
-        "spills"}], "total": n, "why_not": ""}. `spills`: the conversation
-        also has messages outside the frame - deleting it deletes those too,
-        and the list says so. Titles need the key; without it `why_not` says
-        why and `items` is empty. `only`: these ids and no others (checking
-        that the ids on an approval card are still in the frame)."""
+        "spills", "pinned"}], "total": n, "why_not": ""}. `spills`: the
+        conversation also has messages outside the frame - deleting it deletes
+        those too, and the list says so. Titles need the key; without it
+        `why_not` says why and `items` is empty. `only`: these ids and no
+        others (checking that the ids on an approval card are still in the
+        frame). `pinned`: None (every conversation, as before), True (only
+        pinned ones) or False (only the ones "Forget a time frame" may delete
+        - a pinned chat is always kept, owner's decision 2026-11-04)."""
         out = {"items": [], "total": 0, "why_not": ""}
         if not self.db_path.exists():
             return out
@@ -3407,6 +3410,11 @@ class ChatLog:
                 where += f" AND c.id IN ({marks})"
                 args += ids
                 count_args += ids
+            if pinned is not None:
+                # False: the deletable ones (`pinned` is 1 or NULL, never 0).
+                flt = " AND c.pinned IS " + ("NOT NULL" if pinned else "NULL")
+                sql += flt
+                where += flt
             out["total"] = int(c.execute(where, count_args).fetchone()[0])
             rows = c.execute(sql + " ORDER BY COALESCE(c.started, c.updated), c.id LIMIT ?",
                              args + [max(0, int(limit))]).fetchall()
@@ -3433,6 +3441,7 @@ class ChatLog:
                 "started": float(started or first or 0), "updated": float(updated or last or 0),
                 "turns": int(n), "in_frame": int(inside),
                 "kind": kind if kind in KINDS else "chat", "tag_id": _tag_id(tid),
+                "pinned": bool(cv["pinned"]),
                 "spills": bool((first is not None and first < start)
                                or (last is not None and last >= end))})
         return out
@@ -3725,10 +3734,12 @@ def brief(conversation_id) -> Optional[dict]:
     return _log().brief(conversation_id)
 
 
-def overlapping(start: float, end: float, limit: int = 201, only=None) -> dict:
+def overlapping(start: float, end: float, limit: int = 201, only=None,
+                pinned=None) -> dict:
     """"Forget a time frame" (jarvis_forget_range.py): the conversations in
-    a time frame, with their titles. See ChatLog.overlapping."""
-    return _log().overlapping(start, end, limit, only)
+    a time frame, with their titles - optionally only the pinned ones (kept)
+    or only the deletable ones. See ChatLog.overlapping."""
+    return _log().overlapping(start, end, limit, only, pinned)
 
 
 def take_out(cids) -> dict:

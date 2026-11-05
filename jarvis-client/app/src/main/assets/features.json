@@ -901,10 +901,10 @@
     "id": "forget-range",
     "group": "Memory",
     "title": "Forget a time frame",
-    "what": "Forget what Jarvis learned or said over a stretch of days.",
+    "what": "Forget what Jarvis learned or said over a stretch of days. It lists every fact and chat from then and says how long it should take, leaves pinned chats out (and keeps them), and asks a second yes before anything is removed.",
     "where": "Brain, History, Forget a time frame.",
-    "asks": "One card listing every item, decided by tapping only - never by voice. Then 10 minutes to Undo.",
-    "limit": "After the 10 minutes the chats are gone for good. Erasing a fact's words for good stays the separate per-fact action.",
+    "asks": "ONE card listing every item - never decided by voice - then a second \"Yes, forget them\" before anything goes. Approving the card needs Windows Hello on the PC or the phone's screen lock. Then 10 minutes to Undo.",
+    "limit": "At most 200 facts and chats in one go; more than that asks for fewer days, and repeating the request covers the rest. Facts are RETIRED, not erased - their words stay in the history. After the 10 minutes the chats are gone for good.",
     "surface": "both",
     "covers": [
       "brain.history.forget-range",
@@ -3105,7 +3105,9 @@
     ],
     "aliases": [
       "read a web page",
-      "read a page"
+      "read a page",
+      "read a link",
+      "reading a link"
     ],
     "must_mention": [
       "page",
@@ -3118,10 +3120,10 @@
     "id": "reverse-engineering",
     "group": "The PC itself",
     "title": "Inspect a program or app statically",
-    "what": "Statically inspect a program, app or binary and report what it does - strings, imports, structure.",
+    "what": "Inspect, debug, patch or instrument a program or app on this PC with the REA helper, and read your own phone with the same helper.",
     "where": "Off by default; switch rea_investigate on in Settings, What asks first under \"Let the AI use this\" (it asks for one approval card and Windows Hello there), and set [rea] enabled = true in the settings file (jarvis-framework.toml) - the tool needs both, then ask.",
-    "asks": "Off until both are on; every investigation is one approved call.",
-    "limit": "Off by default; static inspection only - it does not run the program, and a packed or protected binary may tell it little.",
+    "asks": "Off until both are on; every step is one approved call, and so is installing the helper.",
+    "limit": "Off by default; everything it does stays on this PC, so a web address is refused as a target. A packed or protected program may tell it little, and attaching a debugger or instrumenting a running program needs those separate tools installed (the debugger it knows is Linux-only, so not on this PC).",
     "surface": "both",
     "covers": [
       "reverse-engineering"

@@ -274,6 +274,13 @@ if (!K) {
     await page.getByRole("button", { name: R.RUN_LABEL }).click();
     await page.waitForTimeout(500);
   };
+  // The Work tab's collapsed quiet-jobs bar is a real button whose accessible
+  // name ends in "Show" too (attention.js, 2026-11-04), so a page-wide name
+  // "Show" now matches two different controls. This card's own Show is the one
+  // that asks Windows Hello; scope the query to the card rather than narrowing
+  // either control's words.
+  const showButton = (page) => page.locator("#retirement-card")
+    .getByRole("button", { name: R.SHOW_LABEL, exact: true });
 
   await check("the card draws the form from the PC's answer, with made-up figures marked assumed", async () => {
     const page = await workTab(scenario([ok("mixed")]));
@@ -487,7 +494,7 @@ if (!K) {
 
   await check("Show asks Windows Hello, then brings back an EMPTY form", async () => {
     const page = await workTab({ ...scenario([ok("mixed")]), security: { hidden: true } });
-    await page.getByRole("button", { name: R.SHOW_LABEL }).click();
+    await showButton(page).click();
     await page.waitForTimeout(600);
     assert.equal(await page.evaluate(() => window.__security.reveals), 1);
     assert.equal(await page.locator("#ret-savings").inputValue(), "");
@@ -496,7 +503,7 @@ if (!K) {
     await page.close();
     // Windows Hello said no: the card stays hidden and says why in the PC's words.
     const no = await workTab({ ...scenario([ok("mixed")]), security: { hidden: true, revealFails: "Windows Hello did not confirm it." } });
-    await no.getByRole("button", { name: R.SHOW_LABEL }).click();
+    await showButton(no).click();
     await no.waitForTimeout(400);
     assert.equal(await no.locator(".ret-line").innerText(), "Windows Hello did not confirm it.");
     assert.equal(await no.locator("#ret-savings").count(), 0);
@@ -507,7 +514,7 @@ if (!K) {
     const page = await workTab({ ...scenario([ok("mixed")]), appLock: true });
     assert.equal(await page.locator("#retirement-body .ret-hidden").innerText(), "Retirement what-if hidden");
     assert.equal(await page.locator("#retirement-card input").count(), 0);
-    await page.getByRole("button", { name: R.SHOW_LABEL }).click();
+    await showButton(page).click();
     await page.waitForTimeout(500);
     assert.equal(await page.locator(".ret-line").innerText(), R.STILL_HIDDEN);
     assert.equal(await page.locator("#retirement-card input").count(), 0);

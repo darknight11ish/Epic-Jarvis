@@ -1,0 +1,7 @@
+{
+  "name": "watch-decisions",
+  "summary": "what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.",
+  "module": "jarvis_watch_ci",
+  "install": "handler",
+  "stack_order": 173
+}

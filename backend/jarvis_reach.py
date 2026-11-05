@@ -151,11 +151,14 @@ TOOL_NAMES = {
     "goal_add": "Adding a goal, in your words",
     "goal_progress": "Recording one progress line on one of your goals",
     "goal_done": "Marking one of your goals done (kept, with its progress)",
-    # REA (2026-10-20): the reverse-engineering tool ships OFF and asks a person
-    # for every call; the page still needs plain words for it, like every tool
-    # (test_reach.py).
-    "rea_investigate": "Inspecting a program, app or binary with REA (read-only, one "
-                       "card each; off unless you switch it on)",
+    # REA (2026-10-20; the full toolbox since 2026-11-04): the reverse-engineering
+    # tool ships OFF and asks a person for every call; the page still needs plain
+    # words for it, like every tool (test_reach.py). It is no longer read-only -
+    # it can patch a local copy, write an export, install its own helper and start
+    # a debugger - so the line says so.
+    "rea_investigate": "Reverse-engineering, debugging, patching and instrumenting a program "
+                       "or app on this PC with REA (one card every time; off unless you switch "
+                       "it on)",
     # CONNECT_TOOL (2026-10-28): raising the connect card changes nothing until
     # the owner types the details and presses Save on that card, so its own ask
     # words are the card rather than a second approval card. Listed here because
@@ -1586,7 +1589,15 @@ def handle_get() -> tuple:
 
 def sentence(v: Optional[dict] = None) -> str:
     """The same list, as a short answer for "what can you reach?"
-    (jarvis_quick.py). Host names only - no account names."""
+    (jarvis_quick.py). Host names only - no account names.
+
+    THE TOOL BLOCK IS PART OF THE ANSWER (2026-11-04). `view()` has always held
+    "Tools the AI model is offered"; the spoken answer dropped it, so the one
+    place that knows which tools are on could not be asked about them. The same
+    block is now said here, from the SAME `v["tools"]` rows `view()` built - so
+    the API and the spoken form cannot disagree, and both come from
+    `_tools_enabled()`, the read the turn itself makes.
+    """
     v = v or view()
     on, off = [], []
     for r in v["rows"]:
@@ -1608,6 +1619,12 @@ def sentence(v: Optional[dict] = None) -> str:
     head = ("Right now Jarvis can reach: " + "; ".join(on) + "." if on else
             "Right now Jarvis reaches nothing outside this PC.")
     tail = (" Off or not set up: " + ", ".join(off) + ".") if off else ""
-    return (head + tail + " " + EVERYTHING_ELSE + " This list is written by the PC from "
+    tools = [str(t.get("name") or t.get("id") or "")
+             for t in (v.get("tools") or ()) if isinstance(t, dict)]
+    if tools:
+        tool_bit = (" " + TOOLS_TITLE + f" ({len(tools)}): " + "; ".join(tools) + ".")
+    else:
+        tool_bit = " " + TOOLS_NONE
+    return (head + tail + tool_bit + " " + EVERYTHING_ELSE + " This list is written by the PC from "
             "its settings, not by the AI model - the full list is in Settings, "
             "\"What Jarvis can reach\" (Brain on the phone).")
