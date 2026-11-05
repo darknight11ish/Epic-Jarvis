@@ -1161,6 +1161,19 @@ BACKEND_ONLY = {
     # same module (ARCHITECTURE section 8, 'One-sided on purpose', has the row).
     "/api/watch/decisions": "the GitHub watcher's decision log (JARVIS-API section 186; jarvis_watch_ci.py: the observe-mode rows - what the watcher would have said, with a closed reason code and the exact preview line - so the owner can promote `observe` to `active` on evidence instead of on hope). Neither app draws it yet; it is read on the PC while the mode is being decided, and a screen goes on BOTH apps when one is built (ARCHITECTURE section 8). It raises no card, writes nothing and calls nothing.",
 
+    # The read-only repository map (2026-11-05; JARVIS-API section 188;
+    # backend/jarvis_repomap.py, shipped whole, answered by the project store's
+    # own route table). A map is a table of contents for the LOCAL MODEL - the
+    # owner reaches it through chat ("map this project") when my_files is
+    # offered - so neither app calls it yet, and BACKEND_ONLY is the exact case
+    # rule 7 exists for. It is deliberately NOT `deliberate`: that classification
+    # means "the PC calls it and the phone must not", and rule 4 fails a
+    # `deliberate` route the desktop does not call. It is not `planned` either -
+    # that is for a route a client is actively being built against. When a screen
+    # is built it goes on BOTH apps on this same route and store (ARCHITECTURE
+    # section 8, "One-sided on purpose", has the row), and this line moves out.
+    "/api/projects/{id}/map": "the read-only repository map of one project's folder (JARVIS-API section 188; jarvis_repomap.py): the files, classes, functions and imports inside \"Folders Jarvis may look in\", ranked for the question by a documented deterministic formula and packed to at most 2,000 tokens by the project's own 3-characters-a-token count. It writes nothing at all - no index, no cache, no temp file - runs no program, opens no socket and calls no model, and it lists names and signatures only, never a function's body. No app screen is added in this slice: a map is read by the local model, not drawn for a person, and the owner's path is chat (the existing my_files action `map`), which works from BOTH apps already because the chat turn and the tool run on the PC. Nothing here is pc_only: the route is a plain project read with no card of its own (it rides the existing read_files_readonly line) and adds no gate action.",
+
     # The self-benchmark's five phase-1 routes (2026-11-04; jarvis_bench.py,
     # bench.patch, JARVIS-API section 185). BACKEND-ONLY TODAY, and each reason
     # says which lane builds the caller: the project's own phase plan puts the

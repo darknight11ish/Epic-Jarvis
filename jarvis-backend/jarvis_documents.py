@@ -2134,7 +2134,20 @@ def run_tool(args: dict, *, roots: Optional[list] = None,
     if action == "read":
         return read(str(args.get("path") or ""), args.get("part"), str(args.get("words") or ""),
                     roots=roots, convert=convert)
-    return {"ok": False, "error": "action is find, search or read"}
+    if action == "map":
+        # A READ-ONLY repository map of ONE folder on this list (or of a
+        # project's folder, by id) - names and signatures ranked for a
+        # question, packed to a token budget. jarvis_repomap.py writes nothing
+        # and never leaves this folder boundary: it calls the SAME allowed_path
+        # this module does. It rides on this tool, so it needs no schema of its
+        # own and adds no gate action.
+        try:
+            import jarvis_repomap as RM
+        except Exception as exc:                      # noqa: BLE001
+            return {"ok": False, "error": f"the repository map is not available here "
+                                          f"({type(exc).__name__})"}
+        return RM.run_tool(args, roots=roots)
+    return {"ok": False, "error": "action is find, search, read or map"}
 
 
 def describe(args: dict) -> str:
@@ -2152,6 +2165,16 @@ def describe(args: dict) -> str:
         tail = ("Nothing of yours is changed, and nothing is sent anywhere. Jarvis keeps its "
                 "own word index of the notes and text files it searches, in its settings "
                 "folder.")
+    elif action == "map":
+        # A map is a read of NAMES, and it writes nothing at all - not even an
+        # index - so the card says so in those words.
+        try:
+            import jarvis_repomap as RM
+            return RM.describe(args)
+        except Exception:                             # noqa: BLE001
+            what = f"read the names of the files in {args.get('path', 'a folder')}"
+            tail = ("Nothing is changed, nothing is written, and nothing is sent anywhere. A "
+                    "map lists names and signatures only, never what a function does.")
     else:
         what = f"find files named: {args.get('words', '')}"
     return (f"Jarvis would like to {what} - only in the folders on your list, on this PC. "

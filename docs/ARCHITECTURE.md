@@ -4717,6 +4717,30 @@ what is missing is only the Settings screen agreeing about who turned it off.
   `tools/check_parity.py` has nothing new to classify: this adds no route, and
   both apps' existing page shows the new lines.
 
+- **The repository map is a read the MODEL uses, and no app screen is added yet -
+  one-sided on purpose for now** (2026-11-05; the owner's approved design and
+  Gemini's ruling: a read-only repo map FIRST, before project-scoped chat and
+  staged diffs; JARVIS-API §195; `backend/jarvis_repomap.py`, shipped whole;
+  `GET /api/projects/{id}/map` and the existing `my_files` action `map`).
+  `tools/check_parity.py` classifies the route **`BACKEND_ONLY`** with that
+  reason rather than leaving it undecided - and deliberately NOT `deliberate`,
+  which in that file means "the PC calls it and the phone must not": neither app
+  calls this yet, which is exactly the `BACKEND_ONLY` case (the watchers'
+  decision log is classified the same way). **Why neither app draws it:** a map
+  is a table of contents for the local model, not a picture for a person - the
+  owner's own reading path is chat ("map this project", "where is the route
+  registered"), and a person looking at a repository wants a tree they can
+  click, which is a different screen from a token budget. Drawing the model's
+  ranked block in an app would show a list sorted by a formula nobody on the
+  screen can audit, and the phone has no PC folder to walk anyway. **What is NOT
+  one-sided:** the read itself is allowed from either app by the backend - it is
+  a project route like `/api/projects/{id}/facts`, carries no `pc_only`
+  refusal, and the moment an app builds a screen it calls the same route and the
+  same store. The map writes nothing (no index, no cache), adds no gate action
+  and no card (a read, under the existing `read_files_readonly` line), runs no
+  model, opens no socket, and lists names and signatures only - never a
+  function's body. `project_edit` (a code-writing tool) remains unbuilt.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
