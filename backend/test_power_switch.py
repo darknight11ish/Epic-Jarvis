@@ -297,6 +297,49 @@ def t_standby_frees_the_other_cards_too():
     check("quiet frees nothing", calls == [])
 
 
+def t_standby_asks_the_pooled_lane_to_sleep_too():
+    """2026-11-04. Standby freed the second card's lane, the third's, the
+    combined lane, the big model and the voices' engine - and left
+    `jarvis_model_lanes` holding the Coding preset's 30B model on port 11450
+    all night. The REAL default list is driven here, not a hand-made one: the
+    only stand-in is `jarvis_model_lanes.sleep`, because the real one reads
+    /api/ps on a lane nothing in a suite is running."""
+    reset()
+    import jarvis_model_lanes as L
+    asked = []
+    real = L.sleep
+
+    def recorder(why="Jarvis is on standby"):
+        asked.append(why)
+        return {"stopped": True,
+                "sentence": "The pooled coding lane on port 11450 was stopped too."}
+
+    L.sleep = recorder
+    try:
+        code, out = S.set_mode("standby", gate_check=lambda *a: Verdict(True, "auto"),
+                               models=FakeModels(), ollama=FakeOllama())
+    finally:
+        L.sleep = real
+    check("standby asks every engine its real list names, and the pooled lane is "
+          "in that list", asked == ["Jarvis is on standby"], (asked, code, out))
+    check("... and it is asked BEFORE the answer is given, for the reason every "
+          "other engine is asked: standby", asked == ["Jarvis is on standby"], asked)
+    check("... and the owner is told the big coding model was freed too",
+          "The pooled coding lane on port 11450 was stopped too." in " ".join(out.get("also") or [])
+          and "11450" in out.get("message", ""), out)
+    check("quiet still frees nothing (the pooled lane is woken by the owner, "
+          "not by the mode)", P.current() == "standby", P.current())
+    reset()
+    asked.clear()
+    L.sleep = recorder
+    try:
+        S.set_mode("quiet", gate_check=lambda *a: Verdict(True, "auto"),
+                   models=FakeModels(), ollama=FakeOllama())
+    finally:
+        L.sleep = real
+    check("... and Quiet does not stop the pooled lane", asked == [], asked)
+
+
 def t_standby_refused_while_a_task_runs():
     reset()
     TC.begin("appr_busy", "control_computer")

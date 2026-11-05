@@ -37,6 +37,11 @@ setting area", "pull up any old conversation", "clear any conversation"):
     card named. A denied card deletes nothing. The memory store is never touched.
   - install() wraps the handler once, answers only its own routes, and leaves
     every other request to the original handler.
+  - THE STORAGE SELF-SCAN'S ROUTES ARE READ IN THE SHAPE THE REAL MODULE SHIPS.
+    `jarvis_storage_health.ROUTES` is row dicts, not bare strings; the fake
+    above is that shape and the real module is flattened by the same adapter,
+    so a stringifying adapter cannot pass here while the live server 404s
+    (found by the 2026-11-04 field test).
   - The two small owner-visible fixes folded in from the inventory audit: the
     duplicate TOOL_GROUPS definition is gone from jarvis_asks_first.py, and the
     ONE number setting (live_idle_seconds) can now be changed by the model tool,
@@ -938,8 +943,19 @@ def refresh_rereads_and_restarts_nothing():
 
 
 class _FakeStorage:
-    ROUTES = ("/api/self/storage", "/api/self/storage/plan",
-              "/api/self/storage/apply")
+    #: THE REAL MODULE'S SHAPE, deliberately. `jarvis_storage_health.ROUTES`
+    #: is a tuple of row dicts (method/path/handler/what), not a tuple of bare
+    #: paths. This fake used to ship bare strings, which is exactly why the
+    #: adapter could `str()` every row and still pass this suite while the
+    #: live server answered 404 (found by the 2026-11-04 field test).
+    ROUTES = (
+        {"method": "GET", "path": "/api/self/storage", "handler": "handle_get",
+         "what": "the fake's inventory"},
+        {"method": "GET", "path": "/api/self/storage/plan",
+         "handler": "handle_get", "what": "the fake's dry-run plan"},
+        {"method": "POST", "path": "/api/self/storage/apply",
+         "handler": "handle_post", "what": "the fake's apply"},
+    )
 
     def __init__(self, fail=False):
         self.fail = fail
@@ -979,7 +995,9 @@ def storage_wiring_is_optional_and_defensive():
               _install_banner())
         SP._STORAGE = _FakeStorage()
         check("with the storage module present, its routes are served",
-              set(SP.storage_routes()) == set(_FakeStorage.ROUTES))
+              SP.storage_routes() == tuple(r["path"]
+                                           for r in _FakeStorage.ROUTES),
+              str(SP.storage_routes()))
         check("with the storage module present, the absence sentence is empty",
               SP.storage_absence_words() == "" and SP.storage_available() is True)
         check("its start-up banner says the storage scan is beside it",
@@ -997,6 +1015,66 @@ def storage_wiring_is_optional_and_defensive():
         code, out = SP.handle_post("/api/self/storage/apply", {})
         check("a failing storage apply is answered 503, never raised",
               code == 503 and isinstance(out, dict))
+    finally:
+        SP._STORAGE = real
+
+
+class _MixedShapeStorage:
+    """BOTH shapes `ROUTES` may be, plus rows that are not a route at all."""
+
+    ROUTES = (
+        {"method": "GET", "path": "/api/fake/scan", "handler": "handle_get"},
+        "/api/fake/plan",                       # the older, bare-path shape
+        {"method": "POST", "path": "/api/fake/cleanup",
+         "handler": "handle_post"},
+        {"method": "GET", "handler": "handle_get"},     # no path: skipped
+        {"method": "GET", "path": 7},                   # not a str: skipped
+        None,                                            # junk: skipped
+    )
+
+
+class _UnreadableStorage:
+    ROUTES = 42                                 # not iterable: must not raise
+
+
+def storage_routes_accepts_the_shapes_the_real_module_ships():
+    """The adapter reads paths, whatever shape the storage module ships.
+
+    PINNED BECAUSE IT SHIPPED BROKEN (2026-11-04): `jarvis_storage_health.ROUTES`
+    is a tuple of row dicts, and `storage_routes()` used to `str()` each row -
+    so it answered `"{'method': 'GET', 'path': '/api/storage/scan', ...}"` and
+    every dispatcher's `route in storage_routes()` was False. The live server
+    answered `GET /api/storage/scan` with the HUD's own 404; this suite stayed
+    green because its fake held bare strings. The fake above is the real shape
+    now, and these checks hold the adapter to it.
+    """
+    real = SP._STORAGE
+    try:
+        SP._STORAGE = _MixedShapeStorage()
+        got = SP.storage_routes()
+        check("storage_routes() reads the path out of a dict row, not str(row)",
+              got == ("/api/fake/scan", "/api/fake/plan", "/api/fake/cleanup"),
+              str(got))
+        check("a row that is not a route is skipped, never stringified into one",
+              not any("method" in p or "{" in p for p in got), str(got))
+        SP._STORAGE = _UnreadableStorage()
+        check("an unreadable ROUTES is (), never an exception",
+              SP.storage_routes() == ())
+        # THE REAL MODULE, FLATTENED BY THIS SAME ADAPTER. Imported, not read as
+        # text: this repository ships the module (`_where.py`'s SHIPPED set) and
+        # `backend/test_storage_health.py` imports it the same way.
+        import jarvis_storage_health as HEALTH
+        SP._STORAGE = HEALTH
+        got = SP.storage_routes()
+        check("the real storage module's ROUTES flatten to exactly its three paths",
+              got == ("/api/storage/scan", "/api/storage/cleanup/plan",
+                      "/api/storage/cleanup"), str(got))
+        check("and they are its own GET_ROUTES + POST_ROUTES, none lost",
+              got == tuple(HEALTH.GET_ROUTES) + tuple(HEALTH.POST_ROUTES),
+              f"{got} != {HEALTH.GET_ROUTES} + {HEALTH.POST_ROUTES}")
+        check("so the dispatchers' membership test is True for the live paths",
+              all(p in got for p in (HEALTH.SCAN_PATH, HEALTH.PLAN_PATH,
+                                     HEALTH.APPLY_PATH)), str(got))
     finally:
         SP._STORAGE = real
 
@@ -1215,6 +1293,7 @@ def main() -> int:
         audit_fixes_are_in()
         refresh_rereads_and_restarts_nothing()
         storage_wiring_is_optional_and_defensive()
+        storage_routes_accepts_the_shapes_the_real_module_ships()
         refresh_abilities_tool_exists_and_reads()
         conversation_tools_by_chat()
     except Exception:
