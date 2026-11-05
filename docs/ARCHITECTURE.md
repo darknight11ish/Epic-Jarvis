@@ -2778,9 +2778,19 @@ backend routes, in both directions; the rest are listed here only.
   three as **phone-only**, with the reasoning above beside each line. A dropped
   connection loses nothing: the pieces are written to this app's own files
   directory BEFORE they are posted, and a recording the PC has not taken is kept
-  and offered again (its own notification says so). The desktop is deliberately
+  and offered again (its own notification says so). **Two things were missing
+  and are now there (the 2026-11-05 privacy audit, D3 and D7):** a crash between
+  the PC's 200 and the phone's own `sent.txt` line used to retry a seq the PC
+  already had, which answered 409 for ever - the phone now reads the `expected`
+  number off that 409, records every piece below it as sent and sends the real
+  next one, so the recording recovers; and the card that offers a waiting
+  recording again now ALSO offers **Delete**, behind a confirmation that says it
+  is deleted from this phone only, that anything the PC already received stays
+  there, and that it cannot be undone. Only what the PC has not acknowledged can
+  be deleted that way. The desktop is deliberately
   not given a "record the call" control: on the PC it could only record a room
-  and confuse that for the call.
+  and confuse that for the call (the PC's own delete of a recording it holds is
+  a separate, PC-only route behind its own card).
 
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
