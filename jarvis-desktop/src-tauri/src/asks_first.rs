@@ -84,11 +84,12 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// can be offered switchable, raw Tier C set and everyday helpers included (21
 /// before that; the 2026-10-31 tiered ruling is superseded), the six
 /// on-demand GitHub tools joined them when the GitHub tools branch landed (48
-/// at 2026-11-04), and handsfree's send_text_message is the 55th. A DIFFERENT
+/// at 2026-11-04), handsfree's send_text_message is the 55th and the
+/// approval-policy tool's approval_policy the 56th. A DIFFERENT
 /// list from [`SWITCHABLE`], and desktop only.
 /// The four tools that are NOT here are the ones whose own switch decides them
 /// ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 55] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -129,8 +130,9 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 55] = [
     "propose_plan",
     "change_setting",
     "feature_guide",
-    // Jarvis's own tools, which had no switch row before 2026-11-04 (13; 12
-    // then, plus handsfree's send_text_message on 2026-11-05)
+    // Jarvis's own tools, which had no switch row before 2026-11-04 (14; 12
+    // then, plus handsfree's send_text_message on 2026-11-05, plus the
+    // approval-policy tool's own row the same day)
     "goals_list",
     "goal_add",
     "goal_progress",
@@ -144,6 +146,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 55] = [
     "refresh_abilities",
     "self_portrait",
     "setup_quiz",
+    "approval_policy",
     // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
     "github_list",
     "github_read_file",

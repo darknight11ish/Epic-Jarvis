@@ -70,9 +70,10 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 55 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
+ * 56 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
  * that landed with the GitHub tools branch, plus hands-free's
- * send_text_message). A DIFFERENT thing from SWITCHABLE
+ * send_text_message, plus the approval-policy tool's own row). A DIFFERENT
+ * thing from SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -100,12 +101,13 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // The everyday helpers that used to be "not this slice" (8)
   "calculator", "memory_search", "file_read", "web_search", "my_files",
   "propose_plan", "change_setting", "feature_guide",
-  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (13;
-  // 12 then, plus handsfree's send_text_message on 2026-11-05)
+  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (14;
+  // 12 then, plus handsfree's send_text_message on 2026-11-05, plus the
+  // approval-policy tool's own row on the same day)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "send_text_message", "refresh_abilities", "self_portrait",
-  "setup_quiz",
+  "setup_quiz", "approval_policy",
   // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",

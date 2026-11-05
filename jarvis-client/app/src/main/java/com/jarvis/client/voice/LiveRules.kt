@@ -392,6 +392,16 @@ object LiveRules {
             paused.isNotEmpty() -> status.str("pause_words").orEmpty()
             cardShown -> CARD_WORDS
             status.flag("quiet_warn") -> SEEN.getValue("quiet_warn")
+            // Just started: the microphone is open but the PC is still warming
+            // the speech engines. "Starting microphone & voice..." is the PC's
+            // own fixed line (jarvis_live.START_WORDS); "Listening" is only
+            // claimed once it is gone, which is the same moment the ready line
+            // ("I'm listening.") is said. The desktop's live-rules.js carries
+            // the same branch, in the same place, and contract/live-cases.json
+            // (written by tools/gen_live_cases.py) is what proves the two apps
+            // agree case for case - so this is the table, not a second opinion.
+            status.flag("starting") && !status.str("starting_words").isNullOrEmpty() ->
+                status.str("starting_words").orEmpty()
             thinking -> SEEN.getValue("heard")
             short -> SEEN.getValue("short")
             !status.str("hint").isNullOrEmpty() -> status.str("hint_words").orEmpty()
