@@ -565,7 +565,7 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
     }
 
 
-def stop_pooled_lane(*, engine=None, by: str = "") -> tuple:
+def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True) -> tuple:
     """End the pooled lane: unload it, stop the server it started, put both
     lanes back exactly as they were. `(status, body)`; no card.
 
@@ -573,12 +573,23 @@ def stop_pooled_lane(*, engine=None, by: str = "") -> tuple:
     is the state the caller wants), and it never kills a process it did not
     start: an Ollama already answering on the port is left alone, and only its
     model is unloaded - which is what frees the cards.
+
+    `restore=False` skips putting the two lane models back, and that is for
+    STANDBY (`sleep()` below), not a shortcut: standby exists to empty the
+    cards, so reloading `qwen3.5:9b` and the Fast model as part of the stop
+    would undo the thing it was asked to do. Every other caller wants the
+    lanes back and keeps the default.
     """
     eng = _engine(engine)
     was_running = pooled_running(engine=eng)
     gone = eng.unload_coder(port=POOLED_PORT)
     eng.server_stop()
-    back = eng.restore_lanes()
+    if restore:
+        back = eng.restore_lanes()
+    else:
+        back = {"ok": True, "why": "", "wrong": [],
+                "proof": ["the two lane models were left stopped: the caller is "
+                          "freeing the cards"]}
     with _POOLED_LOCK:
         held = dict(_POOLED)
         _POOLED.clear()
@@ -588,14 +599,79 @@ def stop_pooled_lane(*, engine=None, by: str = "") -> tuple:
         return 503, {"ok": False, "changed": was_running, "running": False,
                      "lane": POOLED_KEY, "error": error,
                      "unloaded": gone["proof"], "restored": back["proof"]}
+    message = ("The coding model is stopped, the both-cards server this "
+               "app started is stopped, and both lane models are back: "
+               + "; ".join(eng.lane_lines())) if restore else (
+        "The coding model is stopped and the both-cards server this app "
+        "started is stopped; the two lane models were left stopped, because "
+        "the cards are being freed.")
     return 200, {
         "ok": True, "changed": was_running, "running": False, "lane": POOLED_KEY,
-        "message": ("The coding model is stopped, the both-cards server this "
-                    "app started is stopped, and both lane models are back: "
-                    + "; ".join(eng.lane_lines())),
+        "message": message,
         "unloaded": gone["proof"], "restored": back["proof"],
         "since": held.get("since"), "by": held.get("by"),
     }
+
+
+def sleep(why: str = "Jarvis is on standby", *, engine=None,
+          probe_fn=None) -> dict:
+    """Free the pooled lane for standby: unload the 30B and stop the server
+    this app started, and leave the two single-card lanes stopped.
+
+    THE GAP THIS CLOSES (2026-11-04). `jarvis_power_switch`'s standby stops the
+    second card's lane, the third card's lane, the combined lane and the
+    voices' engine, and it did not stop this one - so the Coding preset's 30B
+    model, the largest thing this PC ever loads, stayed resident on port 11450
+    through the whole night while every smaller model was freed.
+
+    WHY `restore=False` AND WHY THE READ COMES FIRST. `stop_pooled_lane()`
+    puts the two lane models back, which is right when a preset change asks
+    for it and wrong here: standby is emptying the cards, so reloading
+    `qwen3.5:9b` and the Fast model would undo it. And the lane is only
+    touched when `/api/ps` on port 11450 actually holds its model - a read,
+    never a remembered flag - so a lane that is already down costs nothing
+    and a backend that restarted since cannot claim a stop it did not do.
+
+    `{"stopped": bool, "sentence": str}` - the shape
+    `jarvis_power_switch._free_other_engines` reads from every engine, where
+    an empty sentence means "there was nothing to free, so say nothing".
+    `probe_fn` is the same kind of seam as `engine`, for a suite that must not
+    open a socket. Never raises.
+
+    THE PORT IS ASKED FIRST, AND IT IS NOT THE SAME QUESTION AS `/api/ps`. A
+    standby answer is given while the cards are still being freed, so anything
+    this call does is on the owner's clock: reading `/api/ps` on a port nothing
+    listens on costs ~2 s here (measured on the owner's PC, 2026-11-04), while
+    `probe(port, 0.25)` costs 0.28 s and is enough to say "this lane is not
+    there, nothing to free". `/api/ps` still decides what is LOADED - a port
+    that answers may hold nothing - so the cheap probe can only skip a lane
+    that is not listening at all.
+    """
+    ask = probe_fn or probe
+    try:
+        if not ask(POOLED_PORT, 0.25):
+            return {"stopped": False, "sentence": ""}
+        if not pooled_running(engine=engine):
+            return {"stopped": False, "sentence": ""}
+    except Exception:
+        return {"stopped": False, "sentence": ""}
+    try:
+        code, body = stop_pooled_lane(engine=engine, by="standby", restore=False)
+    except Exception as exc:
+        return {"stopped": False,
+                "sentence": (f"Could not stop the pooled coding lane on port "
+                             f"{POOLED_PORT} ({type(exc).__name__}).")}
+    if code in (200, 202) and isinstance(body, dict) and bool(body.get("ok")):
+        return {"stopped": True,
+                "sentence": (f"The pooled coding lane on port {POOLED_PORT} was "
+                             f"stopped too, so the big coding model is not holding "
+                             f"the cards.")}
+    said = ""
+    if isinstance(body, dict):
+        said = str(body.get("error") or body.get("message") or "")
+    return {"stopped": False,
+            "sentence": (f"Could not stop the pooled coding lane on port "
+                         f"{POOLED_PORT}" + (f": {said}" if said else "."))}
 
 
 def _port_of(url: Optional[str]) -> int:

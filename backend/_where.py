@@ -1507,7 +1507,32 @@ SHIPPED = (
     # deploy snapshots are quarantined, never deleted. Standard library only,
     # no network, no elevation. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
-    "jarvis_storage_health.py"
+    "jarvis_storage_health.py",
+    # Per-source independence evidence (jarvis_source_independence.py,
+    # 2026-11-04; the owner's clickable-card answer to "filter out products
+    # that have been sponsored"): ONE supplied page -> disclosure wording,
+    # affiliate and tracking links, urgency wording, a closed per-source
+    # verdict with its evidence, and a plain "what could not be checked"
+    # list. The link and urgency patterns are a Python port of
+    # dakidarts/dark-radar (MIT, credited in THIRD-PARTY-NOTICES.txt); no
+    # JavaScript is vendored. PURE - re and html.parser only; no network, no
+    # browser, no file, no subprocess, no route, no tool and no app surface.
+    # Nothing imports it yet, so a backend without it runs exactly as
+    # before. It sits before the last entry on purpose: the zero-jargon
+    # checker never scans an entry with no trailing comma.
+    "jarvis_source_independence.py",
+    # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
+    # the owner's own request: measure Jarvis's own token speed across the
+    # local models, the layer placement and the context sizes, keep a separate
+    # history, and explain the results in plain words). Phase 1 is the engine
+    # and its store: one run = one model + one setup + N repeats on one lane,
+    # the prefill correction (`prompt_eval_count - prompt_eval_cached_count`,
+    # never the naive division that inflates by the cache-hit ratio), per-card
+    # VRAM and utilisation from nvidia-smi, and its own `bench.jsonl` - it
+    # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
+    # it. Standard library only, loopback only, no card and no model at import.
+    # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    "jarvis_bench.py"
 )
 
 
