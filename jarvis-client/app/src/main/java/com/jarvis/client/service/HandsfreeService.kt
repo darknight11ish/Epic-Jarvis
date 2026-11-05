@@ -36,7 +36,7 @@ import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.platform.DeviceSecure
 import com.jarvis.client.voice.HeardSound
 import com.jarvis.client.voice.LiveRules
-import com.jarvis.client.voice.MicClaim
+import com.jarvis.client.voice.MicNow
 import com.jarvis.client.voice.MicOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -77,7 +77,7 @@ import kotlin.coroutines.resume
  *     talk button is the fourth part and it HOLDS the ledger too
  *     (`audio/Recorder.kt`), so a button being pressed when the card arrives
  *     refuses this window in words rather than opening a second recorder over
- *     it ([MicClaim]).
+ *     it ([MicOwner]).
  *  3. The window closes -> the clip (16 kHz mono WAV, [HandsfreeClip]) goes to
  *     `/api/handsfree/answer`, and what the PC heard and decided is shown in
  *     plain words ([Handsfree.answerWords]).
@@ -133,7 +133,7 @@ class HandsfreeService : Service() {
         // The microphone first, and unconditionally: a service torn down inside
         // the answer window must not leave Live and "hey Jarvis" paused for a
         // window that no longer exists.
-        MicClaim.free(MicOwner.HANDSFREE)
+        MicNow.closed(MicOwner.Use.HANDSFREE)
         flow.reset()
         JarvisRuntime.publishHandsfree(line = null, listening = false)
         scope.cancel()
@@ -168,7 +168,7 @@ class HandsfreeService : Service() {
             readOutAndListen(card)
         } finally {
             // Whatever happened, the microphone is not this service's any more.
-            MicClaim.free(MicOwner.HANDSFREE)
+            MicNow.closed(MicOwner.Use.HANDSFREE)
             JarvisRuntime.clearHandsfreeCard()
             // Cleared here rather than only on the success path: a card the PC
             // raises AGAIN later (its own retry, a re-raise after a timeout)
@@ -204,18 +204,17 @@ class HandsfreeService : Service() {
                 return
             }
             // The window's clock starts where the read-out ENDED, and the
-            // microphone is taken before it does: if the talk button has it,
+            // microphone is taken before it does: if the talk button holds it,
             // the window does not open at all rather than opening over a
-            // sentence the owner is already speaking. [MicClaim] owns both the
-            // claim and the sentence, so this refusal is never silent.
-            when (val claim = MicClaim.take(MicOwner.HANDSFREE)) {
-                MicClaim.Now.Open -> Unit
-                is MicClaim.Now.Busy -> {
-                    flow.fail(claim.why)
-                    JarvisRuntime.publishHandsfree(claim.why, listening = false)
-                    return
-                }
+            // sentence the owner is already speaking. [MicOwner] owns the
+            // sentence, so this refusal is never silent.
+            val may = MicNow.mayOpen(MicOwner.Use.HANDSFREE)
+            if (!may.allowed) {
+                flow.fail(may.why)
+                JarvisRuntime.publishHandsfree(may.why, listening = false)
+                return
             }
+            MicNow.opened(MicOwner.Use.HANDSFREE)
             flow.onSpoken(now)
             listening = true
             // A chime is the "now it is your turn" - the same two notes the
@@ -223,7 +222,7 @@ class HandsfreeService : Service() {
             speaker.playTone(HeardSound.samples(), HeardSound.RATE)
             JarvisRuntime.publishHandsfree(Handsfree.LISTENING, listening = true)
             val clip = recordWindow()
-            MicClaim.free(MicOwner.HANDSFREE)
+            MicNow.closed(MicOwner.Use.HANDSFREE)
             listening = false
             val closed = flow.onWindowClosed(clip, SystemClock.elapsedRealtime())
             if (closed is HandsfreeFlow.Moved.To && flow.state is HandsfreeFlow.State.Uploading) {
@@ -233,7 +232,7 @@ class HandsfreeService : Service() {
                 JarvisRuntime.publishHandsfree(flow.line(), listening = false)
             }
         } finally {
-            if (listening) MicClaim.free(MicOwner.HANDSFREE)
+            if (listening) MicNow.closed(MicOwner.Use.HANDSFREE)
         }
     }
 

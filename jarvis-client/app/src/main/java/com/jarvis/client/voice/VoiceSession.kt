@@ -80,6 +80,7 @@ class VoiceSession(
      * with words the desktop already transcribed and checked.
      */
     private val onOpenChatPhrase: () -> Unit = {},
+
     /**
      * "Turn on/off hands-free", asked in Jarvis Live (2026-11-04): the phone
      * answers this ONE sentence itself and returns the line to say, or null
@@ -1553,8 +1554,9 @@ class VoiceSession(
             "No microphone available right now."
         Recorder.Failure.TooShort ->
             "Too short to make out. Hold the button while you speak."
-        // Another part of this app holds it (voice/MicOwner.kt). Its own words,
-        // not a generic failure: "the microphone stopped" would be untrue.
+        // Call recording, the hands-free answer window or another part of
+        // this app holds it (voice/MicOwner.kt): its own sentence, because
+        // "no microphone" would be untrue.
         is Recorder.Failure.MicBusy -> why.why
         is Recorder.Failure.Failed -> "The microphone stopped (${why.detail})."
     }

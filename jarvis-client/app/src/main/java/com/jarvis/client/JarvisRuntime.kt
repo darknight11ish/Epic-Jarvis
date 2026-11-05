@@ -1160,6 +1160,21 @@ object JarvisRuntime {
         stream = EventStream(jarvisApi)
         started = true
 
+        // "Record call" (2026-11-04; the frozen contract of that day). The
+        // reply's `X-Jarvis-Route` may carry `"call_record": {"action": "arm"}`
+        // (or `"stop"`), which ChatSession reads into its own flow
+        // (net/CallRecordWire.kt). Applied ONCE, here, on the runtime's own
+        // scope - so a reply that arrives as the screen turns does not lose
+        // the owner's instruction, and so a second collector cannot arm twice.
+        // The recorder's own words are never touched: this starts a service.
+        scope.launch {
+            chatSession.callRecordDirective.collect { event ->
+                if (event == null) return@collect
+                chatSession.consumeCallRecordDirective()
+                com.jarvis.client.call.CallRecordNow.onDirective(event, app)
+            }
+        }
+
         // The sun, moon and weather behind the animals (SkySettings): this
         // phone's last copy first, so the sky shows at once and while the PC
         // cannot be reached; then the PC's, every POLL_MS while connected.

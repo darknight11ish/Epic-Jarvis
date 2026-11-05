@@ -9,7 +9,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.jarvis.client.voice.MicClaim
+import com.jarvis.client.voice.MicNow
 import com.jarvis.client.voice.MicOwner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -21,13 +21,6 @@ import kotlinx.coroutines.withContext
  * push-to-talk and the wake word are the same transport, so there is nothing to
  * stream and nothing to keep open. A capture that cannot be held open is also a
  * capture that cannot be left open by mistake.
- *
- * **It takes the app's one microphone ledger while it records** (voice/MicOwner.kt,
- * [MicClaim]): the hands-free answer window holds it for its own ten seconds, and
- * this recorder does not open a second `AudioRecord` over a card being answered —
- * it says so, in [Failure.MicBusy], and records nothing. That is the whole of
- * "one part of this app records at a time", and it is a claim rather than a hope
- * because both sides go through the same ledger.
  *
  * **Nothing here transcribes.** No `SpeechRecognizer`, no on-device model. The
  * owner voice-print gate can only check a voice if it is given the voice; send
@@ -45,9 +38,9 @@ class Recorder(private val context: Context) {
         data object TooShort : Failure
 
         /**
-         * Another part of this app holds the microphone. [why] is a whole
-         * sentence, never blank - the owner pressed the button, so a silent
-         * return would read as a broken button.
+         * The microphone is not this path's to take right now: call recording
+         * is armed or recording (voice/MicOwner.kt). Carries the one sentence
+         * to show, so every screen says the same thing about the same cause.
          */
         data class MicBusy(val why: String) : Failure
 
@@ -70,6 +63,7 @@ class Recorder(private val context: Context) {
      * @param onLevel per-buffer RMS, 0..1. Fed straight to the face's listening
      *   envelope — the shell smooths it, so this must stay raw.
      */
+    @SuppressLint("MissingPermission") // checked above; the lint cannot see through it
     suspend fun record(
         maxSeconds: Float = 30f,
         onLevel: (Float) -> Unit = {},
@@ -77,43 +71,17 @@ class Recorder(private val context: Context) {
         onBuffer: ((buffer: ShortArray, n: Int, captured: ShortArray, count: Int, rate: Int) -> Boolean)? = null,
     ): Result = withContext(Dispatchers.IO) {
         if (!hasPermission()) return@withContext Result.Refused(Failure.NoPermission)
-        // ONE microphone, four things that want it (voice/MicOwner.kt). The
-        // hands-free answer window holds it for the ten seconds it is hearing an
-        // answer; opening a second AudioRecord over that gets silence, or worse,
-        // and the ledger is the one place that decides. Taken BEFORE the
-        // AudioRecord exists and given back in a `finally`, so a capture that
-        // fails halfway cannot leave the microphone held by a button nobody is
-        // pressing any more.
-        when (val claim = MicClaim.take(MicOwner.TALK)) {
-            MicClaim.Now.Open -> Unit
-            is MicClaim.Now.Busy -> return@withContext Result.Refused(Failure.MicBusy(claim.why))
-        }
-        try {
-            capture(maxSeconds, onLevel, stopWhen, onBuffer)
-        } finally {
-            MicClaim.free(MicOwner.TALK)
-        }
-    }
+        // ONE microphone, four things that want it (voice/MicOwner.kt): call
+        // recording outranks the talk button, and it says why rather than
+        // opening a second recorder that would get silence.
+        val may = MicNow.mayOpen(MicOwner.Use.TALK)
+        if (!may.allowed) return@withContext Result.Refused(Failure.MicBusy(may.why))
 
-    /**
-     * The capture itself, with the microphone already this part's.
-     *
-     * Split out of [record] so the claim and its release are one visible pair
-     * that no early return can skip: every refusal below leaves the `finally`
-     * above to give the ledger back.
-     */
-    @SuppressLint("MissingPermission") // checked in record(); the lint cannot see through it
-    private fun capture(
-        maxSeconds: Float,
-        onLevel: (Float) -> Unit,
-        stopWhen: () -> Boolean,
-        onBuffer: ((buffer: ShortArray, n: Int, captured: ShortArray, count: Int, rate: Int) -> Boolean)?,
-    ): Result {
-        val rate = usableRate() ?: return Result.Refused(Failure.Unavailable)
+        val rate = usableRate() ?: return@withContext Result.Refused(Failure.Unavailable)
         val minBuf = AudioRecord.getMinBufferSize(
             rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
         )
-        if (minBuf <= 0) return Result.Refused(Failure.Unavailable)
+        if (minBuf <= 0) return@withContext Result.Refused(Failure.Unavailable)
 
         // VOICE_RECOGNITION, not MIC: it asks the platform for the un-beautified
         // path — no AGC ramp, no noise suppression tuned for telephony — which
@@ -127,11 +95,11 @@ class Recorder(private val context: Context) {
                 AudioFormat.ENCODING_PCM_16BIT,
                 minBuf * 4,
             )
-        }.getOrElse { return Result.Refused(Failure.Failed(it.javaClass.simpleName)) }
+        }.getOrElse { return@withContext Result.Refused(Failure.Failed(it.javaClass.simpleName)) }
 
         if (recorder.state != AudioRecord.STATE_INITIALIZED) {
             recorder.release()
-            return Result.Refused(Failure.Unavailable)
+            return@withContext Result.Refused(Failure.Unavailable)
         }
 
         // Clamped, because this comes from the desktop. `max_seconds: 0` — or
@@ -152,6 +120,7 @@ class Recorder(private val context: Context) {
 
         try {
             recorder.startRecording()
+            MicNow.opened(MicOwner.Use.TALK)
             while (!stopWhen() && count < maxSamples) {
                 val n = recorder.read(buffer, 0, buffer.size)
                 // read() returns a NEGATIVE error code rather than throwing.
@@ -173,10 +142,11 @@ class Recorder(private val context: Context) {
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "capture failed", e)
-            return Result.Refused(Failure.Failed(e.javaClass.simpleName))
+            return@withContext Result.Refused(Failure.Failed(e.javaClass.simpleName))
         } finally {
             runCatching { recorder.stop() }
             recorder.release()
+            MicNow.closed(MicOwner.Use.TALK)
             onLevel(0f)
         }
 
@@ -184,10 +154,10 @@ class Recorder(private val context: Context) {
         // The server refuses below 0.2s — a gate handed 50ms of hiss produces a
         // number, and that number means nothing. Refusing here saves a round
         // trip and says the same thing sooner.
-        if (seconds < MIN_SECONDS) return Result.Refused(Failure.TooShort)
+        if (seconds < MIN_SECONDS) return@withContext Result.Refused(Failure.TooShort)
 
         val resampled = Wav.resample(captured.copyOf(count), rate)
-        return Result.Captured(Wav.encode(resampled), resampled.size / Wav.SAMPLE_RATE.toFloat())
+        Result.Captured(Wav.encode(resampled), resampled.size / Wav.SAMPLE_RATE.toFloat())
     }
 
     /**

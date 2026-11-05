@@ -1,210 +1,170 @@
 package com.jarvis.client.voice
 
 /**
- * The one point that decides WHICH part of this app may have the microphone.
+ * ONE microphone, five things that want it: the arbitration point.
  *
- * THE PROBLEM IT SOLVES, measured. On this phone the microphone already has
- * three users, and each of them opens its own `AudioRecord`:
+ * The phone has one microphone and this app has five capture paths - Jarvis
+ * Live (`service/LiveService.kt`), "hey Jarvis" (`service/WakeWordService.kt`),
+ * the talk button (`audio/Recorder.kt`), call recording
+ * (`service/CallRecordService.kt`), and the hands-free answer window
+ * (`service/HandsfreeService.kt`, 2026-11-04). Android does not hand out two:
+ * the second `AudioRecord` opened on a phone generally gets silence, or the
+ * first one starts returning zeros. Until this file existed, nothing decided
+ * who owned it - each path opened the microphone when it felt like it, and the
+ * listening loop's own "may I listen" checks were written per service, so a
+ * fifth path could not be added without reading three others.
  *
- *  - the talk button (`VoiceSession`, `Recorder`), while a finger or a tap
- *    holds a turn;
- *  - Jarvis Live (`LiveService`), while Live is on on this phone;
- *  - "hey Jarvis" (`WakeWordService`), while listening is on.
+ * So there is ONE answer to "may this path open the microphone now?", and it
+ * is here, pure, with `MicOwnerTest` running it on the JVM.
  *
- * Two `AudioRecord`s open at once is not a crash: Android mixes them and both
- * hear the same room. It is worse than a crash in one specific way - both
- * believe they heard the owner, so a "confirm" said to a card would also be a
- * wake word, and the phone would answer the same ten seconds twice.
+ * THE RULE, IN ORDER. Call recording outranks everything, before and during a
+ * call, because it is the only path whose whole reason is a moment that will
+ * not come back:
+ *  - **armed** (the owner said "record call", no call yet): the other paths
+ *    keep the microphone CLOSED, so the moment a call starts nothing else is
+ *    holding it. They are asked to close, not killed: pausing is what can be
+ *    undone. Stopping Live's or the wake word's service would be worse than
+ *    useless, because Android 14+ refuses to START a microphone foreground
+ *    service from the background - so a service stopped while the owner is on
+ *    a call could not be started again until the app was in front, and "paused
+ *    and restored" would quietly become "off until the owner notices";
+ *  - **recording**: the same, plus call recording itself must not be asked to
+ *    give way by anything.
  *
- * Before hands-free, those three avoided each other by reading each other's
- * state (`voice.phase.value == CAPTURING`, `JarvisRuntime.liveOnHere()`, the
- * Live card). That works while every user is one of the three. The hands-free
- * answer window is a FOURTH user, it is not a "turn" anybody can see in
- * `VoiceSession`'s phase, and it opens by itself when a card arrives. Adding a
- * fourth pair of checks to a fourth file is how the fifth one is forgotten.
+ * Below call recording, the two paths that hold a recorder for a moment whose
+ * sound belongs to them alone - the talk button and the hands-free answer
+ * window - exclude each other. Neither may open a recorder over the other's
+ * sentence: the talk button is refused in [LISTENING], the answer window in
+ * [TALKING], and neither ever steals the microphone (a refused open changes
+ * nothing). Live and the wake word hold nothing and yield to both: they ask
+ * before opening and while reading, close their recorder when the answer is
+ * no, and open it again when it is free.
  *
- * So this is one small ledger instead. It says who holds the microphone RIGHT
- * NOW, and nothing else:
+ * WHAT A PATH DOES WITH IT. Each capture path asks before opening and after
+ * every read loop (Live already re-asks every window and every few steps;
+ * `WakeWordService` re-asks on its own loop), so a paused path closes its
+ * recorder - Android's microphone sign goes off - and opens it again when the
+ * owner disarms. Restoring is therefore free and needs no restart of anything.
  *
- *  - the hands-free window [HANDSFREE] ACQUIRES it while it records, and
- *    releases it the moment it closes;
- *  - the talk button [TALK] ACQUIRES it too (`audio/Recorder.kt`), before it
- *    opens its own `AudioRecord` and gives it back in a `finally`. It used to
- *    be a fourth part that only READ the other three - which is why the answer
- *    window's refusal could never fire: nothing but the window ever held it, so
- *    a second recorder over a held press was exactly what the ledger was built
- *    to stop and could not. Both sides now go through [MicClaim], which owns
- *    the sentences a refusal is shown in;
- *  - the two always-on listeners never hold it - they ask [freeFor] before they
- *    open their recorder and while they read, and when the answer is no they
- *    close the recorder and wait, which is what "pause and resume" means here.
- *    (`LiveService.listen` and `WakeWordService.listen` already have exactly
- *    that shape for each other; one condition each is all this adds.)
- *
- * WHY A CLASS AND AN OBJECT. The rules are worth a test, and a test needs a
- * fresh ledger; the app needs one shared one. [MicLedger] is the rules,
- * [MicOwner] is the instance every caller uses - the same split `VoicePress`
- * and the button use.
- *
- * It is NOT a mutex and it never blocks: a listener that is refused a
- * microphone goes round its loop and asks again a fifth of a second later,
- * which is what it already does for the two reasons it already pauses. Nothing
- * here reads or writes audio, and nothing here knows what the microphone is
- * for.
+ * Pure Kotlin: no Android types, no AudioRecord, no coroutines. The live
+ * holder of [State] is `MicNow`, and the only thing that mutates it is the
+ * service that owns the path.
  */
-open class MicLedger {
+object MicOwner {
 
-    @Volatile
-    private var heldBy: String? = null
+    /** The five capture paths. [CALL_RECORD] outranks the rest. */
+    enum class Use(val words: String) {
+        LIVE("Jarvis Live"),
+        WAKE("\"hey Jarvis\""),
+        TALK("the talk button, a voice check or a training clip"),
+        HANDSFREE("the hands-free answer window"),
+        CALL_RECORD("call recording"),
+    }
 
     /**
-     * Take the microphone for [owner].
-     *
-     * True when this owner now holds it - including when it already did, so a
-     * double acquire is harmless. False when someone else holds it, and then
-     * NOTHING changes: a refused acquire never steals the microphone, because
-     * the one case that matters is the answer window opening while the owner is
-     * mid-sentence to the talk button, and cutting that sentence off would lose
-     * what he said.
+     * Who wants the microphone. [armed] is call recording waiting for a call
+     * (it holds nothing yet); [capturing] is the path with a recorder open
+     * right now; [heldBy] is the path that has claimed it, armed or recording.
      */
-    @Synchronized
-    fun acquire(owner: String): Boolean {
-        val holder = heldBy
-        if (holder != null && holder != owner) return false
-        heldBy = owner
-        return true
-    }
+    data class State(
+        val armed: Boolean = false,
+        val capturing: Use? = null,
+        val heldBy: Use? = null,
+    )
 
     /**
-     * Give it back - only if this owner really has it.
+     * The answer to "may this path open the microphone?".
      *
-     * A release from a part that does not hold it is a no-op, NOT a free: the
-     * likely caller of this method is a `finally` block in a service that just
-     * shut down, and one of those freeing the microphone another part is
-     * holding would let a third part in. The bug that produces is two
-     * recorders, which is the whole thing this class exists to stop.
+     * [close] is true when a DIFFERENT path is recording and must be told to
+     * close now (only ever set for [Use.CALL_RECORD], which preempts); [why]
+     * is the one plain sentence shown when the answer is no, so every screen
+     * says the same thing about the same cause.
      */
-    @Synchronized
-    fun release(owner: String) {
-        if (heldBy == owner) heldBy = null
-    }
+    data class Decision(val allowed: Boolean, val why: String = "", val close: Boolean = false)
 
-    /** Who holds it, or null when nobody does. For words on a screen, never a decision. */
-    @Synchronized
-    fun holder(): String? = heldBy
+    /** The armed line, shown when a path is refused because a call is waiting to be recorded. */
+    const val ARMED_REFUSAL = "Call recording is armed, so this phone is not using the microphone until you disarm it."
+
+    /** The refusal while a call is actually being recorded. */
+    const val RECORDING_REFUSAL = "A call is being recorded, so the microphone is not available."
 
     /**
-     * May [owner] open its recorder now?
-     *
-     * True when nobody holds the microphone, or when this owner does. Every
-     * always-on listener asks this and nothing else; it is deliberately a
-     * question about this moment, because a listener that cached the answer
-     * would be exactly the stale copy this class replaces.
-     */
-    @Synchronized
-    fun freeFor(owner: String): Boolean {
-        val holder = heldBy
-        return holder == null || holder == owner
-    }
-}
-
-/**
- * The app's one microphone ledger. See [MicLedger].
- *
- * The four owners are named here rather than spelled as strings at each call
- * site, so two parts cannot disagree about their own name - and a test can walk
- * [ALL] and prove every one of them is distinct.
- */
-object MicOwner : MicLedger() {
-    /** The hands-free answer window: the only part that HOLDS the microphone. */
-    const val HANDSFREE = "handsfree"
-
-    /** Jarvis Live's recorder (`LiveService`). */
-    const val LIVE = "live"
-
-    /** The "hey Jarvis" spotter (`WakeWordService`). */
-    const val WAKE = "wake"
-
-    /** The talk button (`VoiceSession` / `Recorder`). */
-    const val TALK = "talk"
-
-    /** Every owner this app uses, for the test that they cannot collide. */
-    val ALL = listOf(HANDSFREE, LIVE, WAKE, TALK)
-}
-
-/**
- * One claim on the microphone, and the words a part says when it is refused.
- *
- * [MicLedger] decides who holds it; this is what the two parts that really take
- * it do with that decision, so both sides are written one way instead of each
- * file inventing its own:
- *
- *  - the talk button (`audio/Recorder.kt`) takes [MicOwner.TALK] before it
- *    opens its `AudioRecord`, and gives it back in a `finally`;
- *  - the hands-free answer window (`service/HandsfreeService.kt`) takes
- *    [MicOwner.HANDSFREE] before its ten seconds, and gives it back when the
- *    window closes.
- *
- * WHY IT IS A SEPARATE OBJECT RATHER THAN ONE LINE IN EACH FILE. Neither side
- * can be built in a JVM test - one needs an Android `Service`, the other an
- * `AudioRecord` - so "the second recorder never opens" would otherwise rest on
- * code no test reaches. [take] and [free] take the ledger as a parameter, so a
- * test can drive both directions with a fresh [MicLedger] and hold the two
- * sentences too.
- *
- * A REFUSAL IS ALWAYS IN WORDS. It is never a silent return: the owner pressed
- * the button, or a card arrived, and something must say why nothing was
- * recorded.
- */
-object MicClaim {
-
-    /** What a part may do now. */
-    sealed interface Now {
-        /** The microphone is this part's, and it may open its recorder. */
-        data object Open : Now
-
-        /** Someone else has it. [why] is a whole sentence the owner is shown. */
-        data class Busy(val why: String) : Now
-    }
-
-    /**
-     * The hands-free window's sentence when the talk button holds the
+     * The hands-free answer window's sentence when the talk button holds the
      * microphone: the card was read out, but no window was opened over a
      * sentence the owner is already speaking.
      */
     const val TALKING = "You were talking to Jarvis, so the card was not read out."
 
     /**
-     * The talk button's sentence while the answer window holds it. Short on
-     * purpose: the window is ten seconds at most, so "try again" is true.
+     * The talk button's sentence while the answer window holds it - and the
+     * one Live and the wake word are paused with. Short on purpose: the window
+     * is ten seconds at most, so "try again" is true.
      */
     const val LISTENING = "Jarvis is listening for your answer to a card, " +
         "so the microphone is busy. Try again in a moment."
 
-    /** Neither of the two above - a holder this app does not name today. */
-    const val BUSY = "The microphone is busy. Try again in a moment."
-
     /**
-     * Take the microphone for [owner], or say in words why not.
+     * May [use] open the microphone, given [state]?
      *
-     * Nothing is stolen: a refused claim leaves the holder exactly as it was,
-     * which is [MicLedger.acquire]'s own rule and the reason the sentence is a
-     * refusal rather than a takeover.
+     * Call recording is always allowed (it preempts, and [Decision.close] says
+     * whoever holds the microphone now must let go); everything else is
+     * refused while call recording is armed or recording. Below that, the talk
+     * button and the hands-free answer window exclude each other, and the two
+     * always-on listeners yield to both - see the file comment.
      */
-    fun take(owner: String, ledger: MicLedger = MicOwner): Now =
-        if (ledger.acquire(owner)) Now.Open else Now.Busy(busy(owner, ledger))
+    fun mayOpen(state: State, use: Use): Decision {
+        if (use == Use.CALL_RECORD) {
+            return Decision(allowed = true, close = state.capturing != null && state.capturing != Use.CALL_RECORD)
+        }
+        // Recording is the narrower, louder case: it is checked first so the
+        // sentence names what is actually happening rather than the arming
+        // that came before it.
+        if (state.capturing == Use.CALL_RECORD) return Decision(allowed = false, why = RECORDING_REFUSAL)
+        if (state.armed) return Decision(allowed = false, why = ARMED_REFUSAL)
+        if (state.heldBy == Use.CALL_RECORD) return Decision(allowed = false, why = ARMED_REFUSAL)
+
+        // The two paths that really hold a recorder for a moment of their own:
+        // neither may open one over the other's sentence.
+        if (use == Use.TALK && state.capturing == Use.HANDSFREE) {
+            return Decision(allowed = false, why = LISTENING)
+        }
+        if (use == Use.HANDSFREE && state.capturing == Use.TALK) {
+            return Decision(allowed = false, why = TALKING)
+        }
+        // Live and "hey Jarvis" hold nothing: they pause for either of the two
+        // above and open again when it is over. Asked of those two only - a
+        // holder asking again must never be refused by its own claim.
+        if ((use == Use.LIVE || use == Use.WAKE) &&
+            (state.capturing == Use.HANDSFREE || state.capturing == Use.TALK)
+        ) {
+            return Decision(allowed = false, why = LISTENING)
+        }
+        return Decision(allowed = true)
+    }
+
+    /** Call recording is armed: it holds the microphone from now on, and nothing else may open it. */
+    fun arm(state: State): State = state.copy(armed = true, heldBy = Use.CALL_RECORD)
+
+    /** Disarmed, and it is recording nothing: the other paths may open it again. */
+    fun disarm(state: State): State = State(armed = false, capturing = null, heldBy = null)
 
     /**
-     * Give it back - only if this owner really has it. A no-op otherwise, so a
-     * `finally` in a part that was never granted it cannot free another part's.
+     * [use] has opened the microphone. Call recording preempts: the other
+     * path's [capturing] is replaced rather than shared, because on a phone
+     * they cannot both be recording.
      */
-    fun free(owner: String, ledger: MicLedger = MicOwner) = ledger.release(owner)
+    fun opened(state: State, use: Use): State = state.copy(capturing = use, heldBy = if (use == Use.CALL_RECORD) use else state.heldBy)
 
-    /** The sentence for a refusal, named by the part that was asked. */
-    fun busy(owner: String, ledger: MicLedger = MicOwner): String =
-        when (ledger.holder()) {
-            MicOwner.TALK -> if (owner == MicOwner.HANDSFREE) TALKING else BUSY
-            MicOwner.HANDSFREE -> if (owner == MicOwner.TALK) LISTENING else BUSY
-            else -> BUSY
-        }
+    /** [use] has closed its recorder. Only the path that had it is cleared. */
+    fun closed(state: State, use: Use): State =
+        if (state.capturing == use) state.copy(capturing = null) else state
+
+    /**
+     * Is call recording in the way? The one predicate the other three paths
+     * need where they cannot act on a refusal (a loop that is already
+     * running): Live's `stillOpen` and the wake word's read loop ask this, and
+     * a true answer closes their recorder.
+     */
+    fun callRecordingHolds(state: State): Boolean =
+        state.armed || state.heldBy == Use.CALL_RECORD || state.capturing == Use.CALL_RECORD
 }

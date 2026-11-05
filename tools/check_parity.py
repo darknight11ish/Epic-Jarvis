@@ -965,6 +965,20 @@ PHONE_ONLY = {
     "/api/handsfree/enabled": ("phone-only", "Turning hands-free on or off (the owner's request of 2026-11-04): ON may answer 202 with a card waiting and is NOT on until that card is approved; OFF is 200 and immediate. Phone: JarvisRuntime.setHandsfree, reached from the Settings switch, a typed chat command and the same command said in Jarvis Live. Desktop: none in this PR; the desktop lane owns its own half and moves this to \"ported\" when it calls the route (ARCHITECTURE.md section 8)."),
     "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state} (the owner's request of 2026-11-04). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV in its ten-second window and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
     "/api/phone/result": ("phone-only", "What happened to a `phone_command` this phone carried out: {id, ok, receipt, why}, where `receipt` is Android's own SMS RESULT_* and `why` is the refusal in plain words (the owner's request of 2026-11-04). Phone: service/HandsfreeService.kt posts it for EVERY command, including the ones it refused and the ones of a kind it does not know, so the PC can tell \"not sent\" from \"still working\". A PC has no phone to command, so the desktop never calls it (ARCHITECTURE.md section 8)."),
+
+    # Recording a phone call (the owner's request of 2026-11-04). The audio
+    # exists on the PHONE and nowhere else: Android will not give a normal app
+    # the call's own stream, so the recording is the phone's microphone with
+    # the call on speaker, cut into 64 KiB pieces. The desktop has no caller
+    # and no use for one - it draws the NOTE the PC's own half writes, which is
+    # the existing notes surface, not these routes. Phone: call/CallRecordStore
+    # .kt (the durable queue), service/CallRecordService.kt (the microphone and
+    # the upload), net/CallRecordWire.kt (the three bodies),
+    # ui/screens/CallRecordPlate.kt (Arm / Stop / Send it now).
+    # docs/ARCHITECTURE.md section 8 has the one-sided reasoning.
+    "/api/call/recording/start": ("phone-only", "Opens one call recording on the PC and answers its session id, from the date the call began and the audio's shape (16 kHz, mono, s16le, device \"phone\") - the frozen contract of 2026-11-04. Only the phone can start one: the audio is the phone's microphone. docs/ARCHITECTURE.md section 8."),
+    "/api/call/recording/chunk": ("phone-only", "One base64 PCM piece at its sequence number; the PC appends in seq order, and a failed send is retried with the SAME number. Nothing on the desktop produces PCM, and a second copy of a recording is the last thing the PC needs. docs/ARCHITECTURE.md section 8."),
+    "/api/call/recording/finish": ("phone-only", "The recording's whole length, an optional title and the consent flag; the PC transcribes it, dates it, works out who was speaking and writes ONE note in the owner's vault. The phone cannot do any of that (no speech-to-text on a client, and no access to the vault), and the desktop already reads and opens notes through its own surface. docs/ARCHITECTURE.md section 8."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 

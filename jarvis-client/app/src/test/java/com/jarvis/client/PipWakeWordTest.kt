@@ -244,7 +244,21 @@ class PipWakeWordTest {
         assertTrue("and Live still pauses it",
             service.contains("JarvisRuntime.liveOnHere() ||"))
         assertTrue("and the hands-free window, through the one ledger",
-            service.contains("MicOwner.freeFor(com.jarvis.client.voice.MicOwner.WAKE)"))
+            service.contains("MicNow.mayOpen(MicOwner.Use.WAKE).allowed"))
+        // The pause conditions: the talk button owns the microphone, Live runs
+        // on this phone, or call recording is armed/recording (the one
+        // arbitration point, voice/MicOwner.kt, added 2026-11-04). A PiP
+        // window must never become a fourth one - that is the bug this test
+        // exists to prevent - so the pin reads the three that ARE allowed and
+        // then proves the window is not among them.
+        assertTrue("the talk-button / Live pause condition changed",
+            service.contains(
+                "if (voice.phase.value == VoiceSession.Phase.CAPTURING ||\n" +
+                    "                    JarvisRuntime.liveOnHere() ||\n" +
+                    "                    MicNow.callRecordingHolds()",
+            ))
+        assertTrue("the microphone arbitration must be asked, not assumed",
+            service.contains("MicNow.callRecordingHolds()"))
         assertFalse("the listener must not know about the PiP window",
             service.contains("PipPresence"))
         assertFalse("the listener must not pause for the PiP window",

@@ -110,6 +110,7 @@ import com.jarvis.client.ui.rememberNavState
 import com.jarvis.client.ui.screens.AppearanceScreen
 import com.jarvis.client.ui.screens.ApprovalsScreen
 import com.jarvis.client.ui.screens.BrainScreen
+import com.jarvis.client.ui.screens.CallRecordCard
 import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaceSpecimen
@@ -1206,6 +1207,11 @@ class MainActivity : FragmentActivity() {
             onVoiceCheck = { on -> lifecycleScope.launch { JarvisRuntime.setVoiceCheck(on) } },
             voiceCheckNotice = voiceCheckNotice,
         )
+        // Call recording (2026-11-04), beside the other voice settings: the one
+        // place to arm and disarm it, and the line that says what it is doing.
+        // It reads its own state from CallRecordNow, so nothing has to be
+        // threaded through Settings to reach it.
+        CallRecordCard()
     }
 
     @Composable

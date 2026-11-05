@@ -30,6 +30,8 @@ import com.jarvis.client.audio.Wav
 import com.jarvis.client.voice.LiveAudioRoute
 import com.jarvis.client.voice.LiveExtras
 import com.jarvis.client.voice.LiveRules
+import com.jarvis.client.voice.MicNow
+import com.jarvis.client.voice.MicOwner
 import com.jarvis.client.voice.OrtTurnModel
 import com.jarvis.client.voice.SmartTurn
 import com.jarvis.client.voice.SpeechRun
@@ -419,6 +421,7 @@ class LiveService : Service() {
             runCatching { rec?.stop() }
             runCatching { rec?.release() }
             rec = null
+            MicNow.closed(MicOwner.Use.LIVE)
             runCatching { canceller?.release() }
             canceller = null
             openOn = null
@@ -447,22 +450,20 @@ class LiveService : Service() {
                     interrupt = JarvisRuntime.settings.interrupt.value,
                 )
                 refreshNotification(status)
-                if (!may.mic) {
+                // The microphone is shared (voice/MicOwner.kt): call recording
+                // outranks Live, and while it is armed or recording Live keeps
+                // its recorder CLOSED - paused, not killed, because Android
+                // 14+ refuses to start a microphone service from the background
+                // and a stopped Live could not come back.
+                if (!may.mic || !MicNow.mayOpen(MicOwner.Use.LIVE).allowed) {
                     // Closed, not ignored: Android's microphone sign goes off,
                     // and so does the car's call mode - Live must not leave a
                     // car showing a call while it is muted or a card waits.
-                    close()
-                    stopRoute()
-                    delay(IDLE_MS)
-                    continue
-                }
-                if (!com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.LIVE)) {
-                    // The hands-free answer window has the microphone (2026-11-04):
-                    // closed here rather than merely skipped, for exactly the
-                    // reasons in the branch above, and reopened by the next pass
-                    // once the ten seconds are over. The ledger is what "pause
-                    // your recorder while the answer window is open and resume
-                    // after" means in code.
+                    //
+                    // The same question is what pauses Live while the hands-free
+                    // answer window (2026-11-04) or the talk button holds the
+                    // microphone: closed here rather than merely skipped, and
+                    // reopened by the next pass once the microphone is free.
                     close()
                     stopRoute()
                     delay(IDLE_MS)
@@ -504,6 +505,7 @@ class LiveService : Service() {
                         }.getOrNull()
                     }
                     opened.startRecording()
+                    MicNow.opened(MicOwner.Use.LIVE)
                     rec = opened
                     openOn = applied
                     JarvisRuntime.liveMicWords(applied.words)
@@ -672,7 +674,7 @@ class LiveService : Service() {
             answering = speaking,
             interrupt = JarvisRuntime.settings.interrupt.value,
         )
-        return may.mic && !LiveRules.onCall(
+        return may.mic && !MicNow.callRecordingHolds() && !LiveRules.onCall(
             audioMode(),
             voice.speaker.voiceCall,
             ownMicCall = route?.callMode == true,
@@ -683,7 +685,7 @@ class LiveService : Service() {
             // is asked of the ONE ledger (voice/MicOwner.kt) rather than of
             // another feature's state, so every part that records obeys one
             // rule. Live reopens on the next pass once the window is over.
-            com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.LIVE)
+            MicNow.mayOpen(MicOwner.Use.LIVE).allowed
     }
 
     private suspend fun send(clip: ShortArray) {

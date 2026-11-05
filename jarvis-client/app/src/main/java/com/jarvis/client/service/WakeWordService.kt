@@ -32,6 +32,8 @@ import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.net.Heard
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.LiveRules
+import com.jarvis.client.voice.MicNow
+import com.jarvis.client.voice.MicOwner
 import com.jarvis.client.voice.SpeechRun
 import com.jarvis.client.voice.VoiceFlow
 import com.jarvis.client.voice.OrtTurnModel
@@ -196,16 +198,18 @@ class WakeWordService : Service() {
             val ring = WakeClip.Ring((WakeClip.PREROLL_SECONDS * RATE).toInt())
             var lastCheck = SystemClock.elapsedRealtime()
             while (running) {
-                // The talk button owns the microphone while it records, and
-                // Jarvis Live while it is on on this phone (LiveService).
-                // And the hands-free answer window, which is neither a turn nor
-                // a Live session and opens by itself when a card arrives
-                // (2026-11-04) - asked of the one ledger, so a fourth user of
-                // the microphone did not have to be remembered in a fourth
-                // place.
+                // The talk button owns the microphone while it records,
+                // Jarvis Live while it is on on this phone (LiveService), call
+                // recording while it is armed or recording, and the hands-free
+                // answer window while it holds it (2026-11-04). Asked of the ONE
+                // arbitration point (voice/MicOwner.kt), so a fifth user of the
+                // microphone did not have to be remembered in a fifth place.
+                // Paused, not stopped: the service keeps its notification and
+                // starts listening again the moment the microphone is free.
                 if (voice.phase.value == VoiceSession.Phase.CAPTURING ||
                     JarvisRuntime.liveOnHere() ||
-                    !com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.WAKE)
+                    MicNow.callRecordingHolds() ||
+                    !MicNow.mayOpen(MicOwner.Use.WAKE).allowed
                 ) {
                     _state.value = WakeListen.Paused
                     delay(200)
@@ -214,6 +218,7 @@ class WakeWordService : Service() {
                 val rec = openRecorder() ?: return fail("No microphone available right now.")
                 try {
                     rec.startRecording()
+                    MicNow.opened(MicOwner.Use.WAKE)
                     spotter.reset()
                     ring.clear()
                     _state.value = WakeListen.Listening
@@ -221,9 +226,11 @@ class WakeWordService : Service() {
                     val buf = ShortArray(WakeSpotter.CHUNK)
                     while (running && voice.phase.value == VoiceSession.Phase.OFF &&
                         !JarvisRuntime.liveOnHere() &&
-                        // The hands-free answer window: the recorder is dropped
-                        // for it on the next step rather than read through it.
-                        com.jarvis.client.voice.MicOwner.freeFor(com.jarvis.client.voice.MicOwner.WAKE)
+                        // Call recording, the talk button or the hands-free
+                        // answer window: the recorder is dropped for them on the
+                        // next step rather than read through them.
+                        !MicNow.callRecordingHolds() &&
+                        MicNow.mayOpen(MicOwner.Use.WAKE).allowed
                     ) {
                         if (!readFully(rec, buf)) return fail("The microphone stopped.")
                         ring.push(buf)
@@ -315,6 +322,10 @@ class WakeWordService : Service() {
                 } finally {
                     runCatching { rec.stop() }
                     rec.release()
+                    // The microphone is free again (voice/MicOwner.kt): say so,
+                    // so the arbitration never believes this path holds a
+                    // recorder it has already released.
+                    MicNow.closed(MicOwner.Use.WAKE)
                 }
                 // A voice turn may still be finishing (the talk button's, say);
                 // wait for it before listening again - listening for "stop"

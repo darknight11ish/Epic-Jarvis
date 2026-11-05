@@ -496,6 +496,21 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- Recording a phone call (service/CallRecordService.kt; the owner's
+             request of 2026-11-04). A foreground service of type microphone:
+             Android does not let a normal app capture a call's own audio
+             (`VOICE_CALL` is privileged), so the recording is the MICROPHONE
+             with the call on speaker - both voices caught acoustically. It
+             starts only from the owner's own act (the "record call" chat
+             directive, or Arm on the Settings card), never at boot, and its
+             notification stays for the whole call with Stop and the reminder
+             to tell the other person. No phone-state permission is asked for:
+             the call is noticed from Android's audio mode, like Live. -->
+        <service
+            android:name=".service.CallRecordService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
         <!-- "Watch with me" on this phone (service/ScreenWatchService.kt;
              docs/SCREEN-DESIGN.md section 4): the screen shared while the
              owner has it on, and only then. Started from the app's own Home
