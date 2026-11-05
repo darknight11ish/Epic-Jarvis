@@ -159,10 +159,11 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        // 48 since the owner's decision of 2026-11-04: every tool the AI model
-        // can be offered is a switch, raw Tier C set and everyday helpers
-        // included (21 before that). The phone still shows them read-only.
-        assertEquals("48 one-tool switches", 48, rawIds.size)
+        // 49 since 2026-11-05: 48 after the owner's decision of 2026-11-04 made
+        // every tool the AI model can be offered a switch, raw Tier C set and
+        // everyday helpers included (21 before that); handsfree's send_text_message
+        // is the 49th. The phone still shows them read-only.
+        assertEquals("49 one-tool switches", 49, rawIds.size)
         for (id in listOf("shell_exec", "control_computer", "browser_control",
                 "read_web_page", "connect_account", "rea_investigate",
                 "calculator", "propose_plan", "web_search")) {

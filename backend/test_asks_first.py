@@ -866,7 +866,7 @@ def t_offering_a_tool_is_a_different_thing_from_loosening():
     # the core values of jarvis that have already been established,
     # particularly reverse engineer anything among other things". The ON half of
     # the 2026-10-31 tiered ruling is gone - EVERY tool the AI model can be
-    # offered is switchable from the Tools page now, 48 of them, and the only
+    # offered is switchable from the Tools page now, 49 of them, and the only
     # three that are not are the ones whose own switch decides them.
     check("every tool the model can be offered is switchable in-app, 49 at 2026-11-04",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B

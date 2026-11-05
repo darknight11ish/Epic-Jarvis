@@ -459,7 +459,7 @@ TIER_EXTRA = (
 NOT_A_SWITCH = ("run_data_script",) + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: three above. 48 at 2026-11-04.
+#: three above. 49 at 2026-11-05 (48 at 2026-11-04).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)

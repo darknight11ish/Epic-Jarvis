@@ -79,13 +79,13 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 48 at
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 49 at
 /// 2026-11-04: the owner's decision that day made EVERY tool the AI model can
 /// be offered switchable, raw Tier C set and everyday helpers included (21
 /// before that; the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The three tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 49] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -126,7 +126,8 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
     "propose_plan",
     "change_setting",
     "feature_guide",
-    // Jarvis's own tools, which had no switch row before 2026-11-04 (12)
+    // Jarvis's own tools, which had no switch row before 2026-11-04 (13; 12
+    // then, plus handsfree's send_text_message on 2026-11-05)
     "goals_list",
     "goal_add",
     "goal_progress",
@@ -136,6 +137,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
     "phone_apps",
     "plugin_list",
     "plugin_switch",
+    "send_text_message",
     "refresh_abilities",
     "self_portrait",
     "setup_quiz",

@@ -58,7 +58,7 @@ __all__ = [
 #:                      tool is offered at all, whatever the tool list says.
 #:
 #: 2026-11-04, main's 71d4d6a01 (the owner: "Switch any of them on in the app"):
-#: EVERY ability the model can be offered now has an in-app switch, 48 of them,
+#: EVERY ability the model can be offered now has an in-app switch, 49 of them,
 #: all but `jarvis_asks_first.NOT_A_SWITCH`'s three. So `settings-file` is a
 #: real state with NO tool in it today. It is kept for a future tool whose only
 #: way in really is the file, and this paragraph says plainly that it is empty
@@ -91,6 +91,7 @@ CONTEXT_LIMIT = 1200
 AGENT             = "backend/jarvis_agent.py"
 REBUILT_FRAMEWORK = "backend/rebuilt/jarvis-framework.toml"
 ASKS_FIRST        = "backend/jarvis_asks_first.py"
+HANDSFREE         = "backend/jarvis_handsfree.py"
 REBUILT_MEMORY    = "backend/rebuilt/jarvis_memory.py"
 PAST              = "backend/jarvis_past.py"
 AUTO_LEARN        = "backend/jarvis_auto_learn.py"
@@ -897,6 +898,41 @@ PROFILES: dict = {
         "tier": "switchable",
         "enable_hint": "Turn on \"send a file to the phone\" in Settings.",
         "sources": [AGENT, SEND_FILE, ASKS_FIRST],
+    },
+
+    "send_text_message": {
+        "id": "send_text_message",
+        "title": "Text a contact for me",
+        "what": "Asks the owner's paired phone to send one text message to a "
+                "contact, after ONE approval card that prints the contact and the "
+                "whole message. The PC composes and asks; the phone looks the "
+                "contact up in its own contacts and does the sending.",
+        "gives": [
+            "Send a short message without picking the phone up",
+            "See the exact contact and the exact words on the card first",
+            "Have the phone report back whether its own send worked",
+        ],
+        "touches": "phone",
+        "limits": [
+            "Only while hands-free mode is on: with it off the model is not "
+            "offered the tool at all, and the card would promise a send that "
+            "cannot happen",
+            "One contact and one message per card; the PC never reports it as "
+            "sent - only the phone's own result does, and a reconnect is said "
+            "as a reconnect, not as a send",
+            "No number is ever typed, guessed or stored: the phone resolves the "
+            "name in its own contacts, and a name it cannot find is reported as "
+            "failed",
+        ],
+        "combines": {
+            "phone_apps": "Listing which apps Jarvis may open comes first; then "
+                          "one approved message is handed to the phone's own SMS "
+                          "app.",
+        },
+        "tier": "always-available",
+        "enable_hint": "It is in the shipped [tools].enabled list, and hands-free "
+                       "mode must be on for the model to be offered it.",
+        "sources": [AGENT, HANDSFREE, ASKS_FIRST],
     },
 
     "protect_from_jarvis": {
@@ -1916,9 +1952,11 @@ FAMILIES: dict = {
     "home-and-phone": {
         "title": "Your home and your phone",
         "what": "Reading and changing Home Assistant devices, driving the paired "
-                "Android phone with individual adb commands, and managing the list "
-                "of apps Jarvis may open there.",
-        "tools": ["home_read", "home_control", "control_phone", "phone_apps"],
+                "Android phone with individual adb commands, managing the list of "
+                "apps Jarvis may open there, and sending one text message from the "
+                "phone after the owner approves one card.",
+        "tools": ["home_read", "home_control", "control_phone", "phone_apps",
+                  "send_text_message"],
         "impact": "It extends Jarvis past the PC into the two places the owner "
                   "actually lives: the house and the phone in their pocket. Asking "
                   "whether the back door is locked, turning a light off, or opening "
