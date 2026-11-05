@@ -620,6 +620,18 @@ conversation_clear        = "ask"
 # too (unknown_action_tier).
 storage_cleanup           = "ask"
 
+# "Clear old chats by date" (2026-11-04, the owner's own request: "how long does
+# it take for you to clear old chats if i batched a lot of them together?",
+# then "clear the ones i don't have pinned ... including facts ... a card ...
+# double confirmation ... windows pin or fingerprint"). It deletes the chats in
+# a date range from this PC and erases the words of the facts those chats
+# taught; pinned chats are kept unless the preview was asked for them. Must stay
+# "ask": jarvis_history_purge.py refuses any other tier outright (503) rather
+# than let this line become the owner's yes - and it needs a second yes and a
+# platform ticket on top of the tier, so "auto" here could never delete
+# anything anyway. A file without this line asks too (unknown_action_tier).
+history_purge             = "ask"
+
 # --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
 # Adding a voice (a recording of someone reading a sentence, kept on this
 # PC) is one approval card, and switching Jarvis to speak in one is

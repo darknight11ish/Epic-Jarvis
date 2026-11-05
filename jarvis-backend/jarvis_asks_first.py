@@ -560,6 +560,7 @@ HARD_LIMITS = frozenset({
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "conversation_clear",
+    "history_purge",
     "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
@@ -593,6 +594,7 @@ MUST_ASK = frozenset({
     "phone_notifications_read",
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "conversation_clear",
+    "history_purge",
     "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "app_build_android", "app_install_android",
@@ -769,6 +771,11 @@ GROUPS = (
         "learning_auto_enable", "learning_sensitive_enable",
         "learning_paraphrase_enable", "history_enable",
         "memory_manage", "memory_forget_range", "conversation_clear",
+        # Clearing old chats by date (jarvis_history_purge.py, 2026-11-04): it
+        # deletes the chats in a range from this PC and erases the words of the
+        # facts they taught, so it is a page row - and a hard limit, so the page
+        # offers no switch that could loosen it.
+        "history_purge",
         # The storage self-scan's ONE tidy (jarvis_storage_health.py, a separate
         # 2026-11-03 drop-in): it deletes temporary files and moves old deploy
         # backups, so its card is a page row the moment the tier line exists -
@@ -1017,6 +1024,12 @@ def _file_tiers() -> dict:
 #: side: it says what the action really is here (only these kinds still ask).
 ROW_TITLES = {
     "schedule_repeat": "set up the morning briefing or a \"tell me when\" alert",
+    # jarvis_history_purge.py (2026-11-04, the owner's own request). It raises no
+    # card of its own - its two yeses and its Windows Hello / fingerprint ticket
+    # are what approve it - so it has no jarvis_card_words.TITLES line and this
+    # is the phrase the page shows for it. Kept honest to what the module does:
+    # the chats from the days chosen, and the facts those chats taught.
+    "history_purge": "delete the chats from the days you chose, and the facts they taught",
 }
 
 

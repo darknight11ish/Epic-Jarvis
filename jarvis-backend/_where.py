@@ -1508,6 +1508,18 @@ SHIPPED = (
     # no network, no elevation. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
     "jarvis_storage_health.py",
+    # Clear old chats by date (jarvis_history_purge.py, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). A preview, two separate yeses and a platform
+    # ticket; pinned chats kept unless asked for; the facts those chats taught
+    # erased by their recorded provenance; every deletion in
+    # ~/.openjarvis/purge-audit.jsonl. `history-purge.patch` is the install
+    # block that reaches it. Standard library only, local only, no model.
+    # The same entry is just before `jarvis_bench.py` in
+    # scripts/apply-patches.ps1's $SHIPPED, which keeps `jarvis_bench.py` LAST.
+    "jarvis_history_purge.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

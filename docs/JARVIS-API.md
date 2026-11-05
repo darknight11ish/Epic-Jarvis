@@ -33100,3 +33100,328 @@ on the card (its sentence leads with `PARTIAL:`), a failed run that writes
 `ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
 500-run cap keeping whole runs, the byte ceiling, the allowlist, the
 three-run comparison floor, and that no run can start without `confirm`.
+
+## 186. Clearing old chats by date: a card, TWO yeses, a platform ticket, pinned chats kept, and the facts those chats taught erased with them (backend, routes for both apps, added 2026-11-04)
+
+The owner's ask, in his own words: *"how long does it take for you to clear old
+chats if i batched a lot of them together?"* - and the bug behind it. The live
+Jarvis answered that it had **no built-in "clear old chats" action** and that it
+**did not track how long it would take**. The first was false (§18.3 already
+pin, archives and deletes chats; §64 already forgets a time frame), the second
+was false the moment this section existed, and neither answer was what he
+wanted: *"it should be able to clear conversations it does NOT have pinned when
+asked to clear ones of a certain date, INCLUDING FACTS ... it must give a card
+with all the details, with a DOUBLE CONFIRMATION of yes, and require a Windows
+PIN or fingerprint (phone: fingerprint; Windows desktop: Windows Hello
+PIN/biometric) before deleting."*
+
+**Where it lives, and why there is no new list of screens.** `backend/
+jarvis_history_purge.py` (shipped whole, in `backend/` and `jarvis-backend/`)
+exports `install()`, and `history-purge.patch` is ONE added block in
+`jarvis_hud.py` right after `forget-range.patch`'s own, wrapping the running
+server's `do_GET`/`do_POST` for exactly its own three paths. Every rule is in
+the module. It adds **no tool**: an AI may never start a bulk delete (the same
+line §184 draws for `conversation_clear`).
+
+**What it is NOT, said first because the nearest neighbour exists.** §64
+"Forget a time frame" (`jarvis_forget_range.py`) already clears a date range,
+and this section does not replace it:
+
+| | §64 Forget a time frame | §186 Clear old chats by date |
+|---|---|---|
+| the facts it taught | **retired** - hidden, words kept | **erased** - the words are gone (`MemoryStore.erase`) |
+| pinned chats | not looked at | **kept**, unless the preview asked for them |
+| how it is approved | ONE approval card (`memory_forget_range`) | **two separate yeses**, the second needing a platform ticket |
+| Undo | ten minutes, one tap | **none**, and the card says so |
+
+### 186.1 The routes
+
+All three are POST, behind the token and the origin check like every other
+private route, and all three answer **423** while App lock or "Hide memory
+lists and chat history" is on - a card cannot show what it would delete while
+the lists are hidden, so nothing may be started.
+
+| Route | Body | Answers | Deletes? |
+|---|---|---|---|
+| `/api/history/purge/preview` | `{from, to, include_facts, include_pinned}` | the card (186.2) and a `preview_id` good for 10 minutes | **never** |
+| `/api/history/purge/confirm` | `{preview_id, step: 1}` | `{confirmed: true, next: "second_yes_required", confirm_id, restated: {...}}` | **never** |
+| `/api/history/purge/confirm` | `{preview_id, confirm_id, step: 2, auth_ticket}` | `{deleted: {conversations, messages, facts}, audit_id, elapsed_ms}` | **this is the only path that deletes** |
+| `/api/history/purge/cancel` | `{preview_id}` | `{ok, cancelled: true}` and the preview is dropped | **never** |
+
+`from` and `to` are `YYYY-MM-DD` (or `YYYY-MM-DDTHH:MM`), local time,
+**inclusive both ends** - the same grammar §64 uses, imported from that module
+rather than written twice. There is **ONE open preview at a time**: a new
+preview invalidates the one before it, so a card on screen can never be
+approved after it has been superseded. There is no bulk form, no preset list
+and no "always allow" anywhere in it.
+
+### 186.2 The card
+
+`preview` answers 200 with:
+
+```json
+{"ok": true, "schema": "jarvis-history-purge/1",
+ "preview_id": "<uuid>", "generated_at": 1790000000, "expires_at": 1790000600,
+ "expires_in_seconds": 600,
+ "window": {"from": "2026-10-01", "to": "2026-10-31",
+            "said": "1 to 31 October 2026", "start": 1790000000, "end": 1792670400},
+ "conversations": {"count": 41, "message_count": 612, "kept_pinned_count": 3,
+   "per_day": [{"day": "2026-10-02", "chats": 4, "messages": 58}]},
+ "facts": {"count": 7, "included": true, "names": ["..."],
+           "names_shown": 7, "names_truncated": 0, "kept_due_to_pinned": 2},
+ "storage": {"db_bytes": 466944, "estimated_bytes_freed": 81234, "estimate": true},
+ "irreversible": true,
+ "warnings": ["...", "..."],
+ "card": {"title": "Clear 41 chats from 1 to 31 October 2026?",
+          "details": ["Clear chats from 1 to 31 October 2026 on this PC.",
+                      "  2026-10-02: 4 chats, 58 messages",
+                      "And 7 facts these chats taught, erased for good:",
+                      "  - <the fact's own words>",
+                      "3 pinned chats in these days are kept.",
+                      "This cannot be undone. There is no Undo, and no copy is kept.",
+                      "This is asked twice: yes now, then your Windows Hello PIN or your phone's fingerprint."],
+          "irreversible": true, "undo_seconds": 0,
+          "counts": {"conversations": 41, "messages": 612, "facts": 7},
+          "kept": {"pinned": 3, "facts_from_pinned": 2}},
+ "next": "Read the card, then send confirm with step 1. ..."}
+```
+
+* `card.details` is EVERY line of the card, already in plain words, in reading
+  order: **an app may draw it however it likes and may not add a line of its
+  own** - the same rule §88 sets for a feature's own words. The counts, the days
+  and the fact names come from the backend because they were measured there; an
+  app that re-counted would be a second source of truth.
+* `facts.names` is the first **40** facts **by their own words**, truncated at
+  200 characters each. `names_truncated` is an **integer**: how many more names
+  exist beyond the ones shown, `0` when none. The card never hides how many it
+  is not showing.
+* `storage.estimated_bytes_freed` is an **estimate** and `estimate: true` says
+  so: SQLite zeroes a deleted row where it is (`secure_delete`) and the file
+  only gets smaller after a VACUUM. `db_bytes` is the real size of
+  `chat-history.db` plus its `-wal`.
+* `warnings` always carries the irreversible sentence, the sentence that this
+  is not an ordinary approval card, and the estimate caveat; then, each only
+  when it applies: FACTS ARE NOT INCLUDED (with how many there would have
+  been), INCLUDE_PINNED IS ON, pinned chats kept (with the count), facts kept
+  because their chat was pinned, and the count of chats that also hold messages
+  from outside the window and therefore go **in full**.
+
+### 186.3 Pinned chats are never deleted by accident
+
+The pin already exists (§18.3: `pinned`/`pinned_at` and `POST /api/history/pin`)
+and this module only **reads** it.
+
+* A pinned chat inside the window is left out of the count, out of the ids the
+  preview holds, and out of `fact_ids`; it is reported as
+  `conversations.kept_pinned_count` and named in the card.
+* The facts **it** taught are kept too (`facts.kept_due_to_pinned`), because
+  their recorded provenance is a chat that is still here.
+* `include_pinned: true` is the only way past it, is never the default, and the
+  card then says in words that pinned chats go too.
+* A chat **pinned between the preview and the second yes** is checked again at
+  execution time and **skipped**, and the skip is counted in the answer
+  (`kept.pinned`) and in the audit line. A pin set after the card is a pin the
+  owner meant.
+
+### 186.4 Facts: selected by provenance, never by a guess
+
+A fact records the conversation it was said in, in its own `meta`
+(`jarvis_memory.MemoryStore.add` writes `meta["conversation_id"]`, which is what
+§71's `/api/memory/conversation-facts` already reads). So:
+
+* the facts this purge clears are exactly the facts whose **recorded
+  conversation** is one of the chats being deleted - never "facts that look
+  like they came from there";
+* a fact that records **no** conversation, and a fact from **another** chat, are
+  untouched. If a chat was deleted long ago its facts no longer point at it, so
+  they are untouched too - this action never guesses at a link it cannot read;
+* **forgotten facts are included** (a forgotten fact still holds its words);
+  already-**erased** ones are not (there are no words left);
+* `include_facts: false` clears none of them, and the card says they are kept
+  and how many there would have been.
+
+The erase is `MemoryStore.erase(fact_id)` - the same call the per-fact **"Erase
+the words"** makes (§7), which replaces the text with the erased marker, strips
+`message_hash` and `conversation_id` from `meta`, deletes the word-search and
+vector rows, and VACUUMs `memory.db` so the words are gone from the file rather
+than merely unreachable. That is deliberately stronger than §64, which
+**forgets** (retires) the facts and keeps their words.
+
+### 186.5 The auth ticket - the contract both apps build to
+
+The second yes is signed by the app, and the backend checks the signature. The
+text that is signed is exactly
+
+```
+{preview_id}|{confirm_id}|{method}|{issued_at}
+```
+
+and the ticket the app sends as `auth_ticket` is
+
+```
+v1.{method}.{issued_at}.{hex HMAC-SHA256 of that text}
+```
+
+| | Desktop (`method: "windows_hello"`) | Phone (`method: "phone_biometric"`) |
+|---|---|---|
+| the key | the 32 random bytes in `~/.openjarvis/purge-auth.key`, created by the backend at start-up | **the existing pairing token** - nothing new is paired |
+| what the app does | reads that file, proves the owner through **Windows Hello** (`UserConsentVerifier`), HMACs the text | shows its **fingerprint prompt**, HMACs the text with the token it already holds |
+| the file | mode `0600`, owner only, created `O_CREAT|O_EXCL` so there is no window where it is world-readable; never logged, never returned by a route | - |
+
+The backend accepts a ticket only when **all** of these hold, and its refusal
+names which one failed:
+
+1. it parses and `method` is one of the two above;
+2. **`method` matches the app that sent it** - `X-Jarvis-Client` decides which
+   key is expected (a phone client needs `phone_biometric`, anything else needs
+   `windows_hello`);
+3. the HMAC matches, compared with `hmac.compare_digest`;
+4. `issued_at` is within **90 seconds** of this PC's clock and not in the future
+   (5 s of slack);
+5. it names **this** `preview_id` and **this** `confirm_id`;
+6. it has never been used before - a nonce store keyed by the ticket's own
+   digest refuses a replay even inside the 90 seconds;
+7. the first yes was recorded, and the preview is neither expired (10 minutes)
+   nor cancelled.
+
+Refusals are `401` (`bad_ticket`, `no_ticket`), `409` (`expired_ticket`,
+`ticket_reused`, `wrong_platform`) or `503` (`no_key` - this PC has no readable
+pairing token, so a phone ticket cannot be checked). Nothing is deleted by any
+refusal, and every one is audited as `history.purge.refused`.
+
+**Exactly what that proves, and what it does not.** It proves the caller was in
+possession of a secret only this owner's install holds, in a 90-second window,
+once. It does **not** prove a human was at the prompt: the backend cannot see
+Windows Hello or a fingerprint reader - the app asks and then signs. A local
+program running as this user that can read `purge-auth.key` (or the pairing
+token in Credential Manager) could mint a ticket without asking anybody, which
+is the same trust level the pairing token itself has. `X-Jarvis-Client` is
+asserted by the caller, so it chooses *which* key is expected, never *who* the
+caller is. This is written down rather than glossed over because it is the
+honest boundary of a local-only trust model.
+
+### 186.6 The audit line
+
+Every deletion appends ONE line to `~/.openjarvis/purge-audit.jsonl`:
+
+```json
+{"audit_id": "<uuid>", "at": 1790000123,
+ "window": {"from": "2026-10-01", "to": "2026-10-31"},
+ "preview_id": "...", "confirm_id": "...",
+ "auth_method": "windows_hello", "client": "hud",
+ "deleted": {"conversations": 41, "messages": 612, "facts": 7},
+ "kept": {"pinned": 0, "pinned_after_preview": 0, "facts_from_pinned": 2},
+ "estimated_bytes_freed": 81234, "elapsed_ms": 94,
+ "measured": "monotonic clock around the deletes on this PC"}
+```
+
+**No title, no message, no word of any fact** - counts, ids, the window, the
+auth method and the elapsed time, and that is the whole of it. A refusal writes
+the ordinary audit log (`history.purge.refused`, the reason only).
+`read_audit(limit)` returns the newest lines for an app that wants to show
+them.
+
+### 186.7 What it measures, and the answer to the owner's question
+
+`POST /api/history/purge/preview` is not the only measurement: the module also
+answers *"how long does that take?"* from this PC's own state, by running the
+same two calls a purge runs - one `take_out()` for the whole batch and one
+`purge_held_receipts()` - on a **copy** of `chat-history.db` in a temp folder.
+The live file is read once and never written; the copy is removed afterwards.
+The result is cached in `~/.openjarvis/purge-speed.json`, so a restart does not
+re-measure.
+
+Measured **on this PC, 2026-11-04** (a history built for the purpose in a temp
+folder, six messages a chat, three runs each, median):
+
+| chats | messages | time to delete |
+|---|---|---|
+| 120 | 720 | **47 ms** |
+| 500 | 3,000 | **94 ms** |
+| 1,000 | 6,000 | **141 ms** |
+| 2,000 | 12,000 | **265 ms** |
+| 500 | 10,000 | **172 ms** |
+
+So the answer to the owner's question is: batching does **not** make it slow.
+A thousand chats is about a fifth of a second; two thousand is about a quarter
+of a second. What takes real time is the card and the two yeses, and that is the
+owner's own time.
+
+The same measurement, said in words, is what the fast path answers when the
+owner asks (§186.8):
+
+> Your chats are kept on this PC, encrypted, in `<path>` (`<n>` bytes on disk).
+> There are `<n>` conversations with `<n>` messages in all, `<n>` of them pinned
+> and `<n>` archived, plus `<n>` facts in what I remember. Recording is on and
+> nothing expires automatically: the retention setting is 0, which means keep
+> until you delete. Clearing a batch: I measured it on this PC on a copy of a
+> history, not on yours - deleting 500 chats (3000 messages) took 94 ms, about
+> 0.188 ms a chat. A batch of 500 like that would be roughly 94 ms of deleting;
+> the card and the two yeses take as long as you take. Clearing by date exists:
+> it keeps your pinned chats unless you say otherwise, it can clear the facts
+> those chats taught, it shows you a card with every count and every fact by
+> name, it asks twice, and the second yes needs your Windows Hello PIN or your
+> phone's fingerprint. It cannot be undone.
+
+If any part of that could not be read, the sentence **says which part** and
+refuses to guess (`unknown`); it never says "I do not track".
+
+### 186.8 The self-knowledge half
+
+The measured answer is `jarvis_history_purge.capability()`:
+
+```json
+{"schema": "jarvis-history-purge/1", "measured_at": 1790000000,
+ "where": {"db": "<path>", "folder": "<config folder>",
+           "encrypted_at_rest": true, "key_store": "Windows Credential Manager"},
+ "size": {"db_bytes": 466944, "wal_bytes": 0, "total_bytes": 466944},
+ "conversations": {"conversations": 31, "pinned": 2, "archived": 0,
+                   "messages": 412, "facts": 57},
+ "facts_known": true,
+ "recording": {"enabled": true, "keep_days": 0, "expires": false, "why_not": ""},
+ "purge_speed": {"measured": true, "chats": 120, "messages": 720,
+                 "elapsed_ms": 47, "per_chat_ms": 0.392, "at": 1790000000},
+ "route": {"preview": "/api/history/purge/preview",
+           "confirm": "/api/history/purge/confirm",
+           "cancel": "/api/history/purge/cancel"},
+ "irreversible": true, "unknown": [], "words": "<the paragraph above>"}
+```
+
+It is wired into `jarvis_quick` as the `history_purge` intent, ahead of the
+model lane, for whole-sentence shapes only: *"how long does it take to clear
+old chats"*, *"can you clear 200 chats"*, *"clear old chats"*, *"is there a way
+to delete chats from last week"*, *"where are my chats stored"*, *"how big is my
+chat history"*, *"do my chats expire"*. `X-Jarvis-Route`'s `quick` field carries
+`history_purge`, so an app can tell it from the model's prose. **The retention
+half is not taken on trust**: `keep_days` is the measured switch (0, 30, 90 or
+365) and the sentence says "nothing expires automatically" only when it is 0.
+
+### 186.9 What this section does NOT claim
+
+* **A human was present.** See §186.5: the backend checks a signature, not a
+  face. The one thing it can promise is that no caller without an owner-held
+  secret, both yeses and a 90-second window can delete anything.
+* **The bytes freed.** `estimated_bytes_freed` is an estimate and says so.
+* **That a pinned chat is protected from everything else.** §18.3's single-chat
+  delete still deletes a pinned chat when the owner asks for that one chat.
+* **Anything about the apps.** Both apps need the screens: the preview card,
+  the two yes buttons, the Windows Hello call (desktop) and the fingerprint call
+  (phone), and the ticket signing above. The backend half is what this section
+  documents; a screen that asks once, or that signs a ticket without asking the
+  OS, would break the guarantee this section describes.
+
+**PROVED BY** `backend/test_history_purge.py`: 178 checks, 0 failed, 1 skipped
+(the POSIX `0600` mode, which Windows has no equivalent of - printed as SKIPPED,
+never as a pass). It drives the real `ChatLog` and the real `MemoryStore` in a
+temp folder: the counts and the per-day rows, the card's every line, pinned kept
+and never counted, a chat pinned after the preview skipped, `include_pinned` as
+the only way past it, provenance-only facts, `include_facts: false` clearing
+none, step 2 without step 1 refused, a second step 1 refused, every bad ticket
+refused in words with nothing deleted (missing, garbage, wrong key, 91 seconds
+old, 60 seconds ahead, another preview, another confirm_id, the other platform,
+and a replay), a good ticket deleting exactly what the preview listed, a new
+preview invalidating the old one, an expired preview refusing, cancel deleting
+nothing, `423` on all three routes while locked, the audit line written and
+holding no words, both keys being the HMAC contract, the benchmark measured on a
+copy, and the capability answer carrying every measured number and never
+deflecting.

@@ -2072,6 +2072,29 @@ $PATCHES = @(
     # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'bench.patch'
+    # Clearing old chats by date (history-purge.patch, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). FIVE hunks and NO route branches in jarvis_hud.py:
+    # ONE install block, right after forget-range.patch's own, that wraps
+    # Handler for the three routes (POST /api/history/purge/preview, /confirm
+    # and /cancel - every rule is in the shipped jarvis_history_purge.py); and
+    # FOUR rows in jarvis_gate.py that give the action its tier ("ask", only
+    # ever "ask"), its words, and the two-press guard's category - the action
+    # raises no card of its own (its two yeses and the platform ticket are
+    # stricter than one), so those rows are what keep it honest for anything
+    # that reads the gate's tables.
+    #
+    # It appends immediately before plugin-loader.patch (which must stay LAST
+    # of all) and its jarvis_hud.py hunk sits far above the loader's own
+    # anchor, so the loader's context is untouched. The block is inserted
+    # after forget-range.patch's install block, so the stack walk invents no
+    # line of the owner's original file. Every patch that enumerates "the
+    # patches written after me" has had its name added there (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'history-purge.patch'
     'plugin-loader.patch'
 )
 
@@ -2857,6 +2880,18 @@ $SHIPPED = @(
     # Standard library only, no network. The same entry, in the same position,
     # is in backend/_where.py's SHIPPED list.
     'jarvis_storage_health.py'
+    # Clear old chats by date (jarvis_history_purge.py, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). A preview, two separate yeses and a platform
+    # ticket; pinned chats kept unless asked for; the facts those chats taught
+    # erased by their recorded provenance; every deletion in
+    # ~/.openjarvis/purge-audit.jsonl. `history-purge.patch` is the install
+    # block that reaches it. Standard library only, local only, no model. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list,
+    # and `jarvis_bench.py` stays LAST in both.
+    'jarvis_history_purge.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate
