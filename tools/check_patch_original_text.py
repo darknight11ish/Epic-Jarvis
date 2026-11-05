@@ -92,11 +92,18 @@ one of them is `cloud-say-yes.patch`:
                                              `body` dict it posts and the record written beside them,
                                              in the owner's `jarvis_extract.py`)
 
-The newest exception, added 2026-11-04, is `product-check.patch` (position 165):
-its ONE hunk appends its gate rows at the very end of `jarvis_gate.py`, and its
-three context lines are the owner's own `if __name__` tail - the same text
-`web-search-grant.patch`'s end-of-file hunk already reads. It sits before that
-patch so `unknown-risk-approvable.patch` stays the last writer of the file.
+The two newest exceptions were added on 2026-11-04 and re-measured together on
+2026-11-05, when the combined tree put both in the stack: `product-check.patch`
+(position 164) and `handsfree.patch` (position 165). Each has ONE hunk that
+appends its gate rows at the very end of `jarvis_gate.py`, and each one's three
+context lines are the owner's own `if __name__` tail - the same text
+`web-search-grant.patch`'s end-of-file hunk already reads. Two patches cannot
+both be the end of the file, so whichever runs second materialises those three
+lines; both sit before `web-search-grant.patch` so
+`unknown-risk-approvable.patch` stays the last writer of the file, and
+`handsfree.patch` is pinned immediately before it by
+`backend/test_phone_app_allowlist.py`. Their cost is in `PIN` below and in
+`backend/_stack.py`'s RATCHET (60 -> 61 for `jarvis_gate.py`).
 
 A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
@@ -108,7 +115,7 @@ its hunks read the owner's own `jarvis_skills.py` - install()'s signature, its
 docstring and the `_gate(...)` call it already makes - and that file is one of
 the five the patcher edits, so `backend/_stack.py` has no stand-in for those
 lines and nothing earlier in the walk writes them. The pin below records
-all TWENTY-FIVE - those thirteen, plus `private-chat.patch` at position 152, added
+all TWENTY-SEVEN - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),

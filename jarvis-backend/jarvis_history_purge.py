@@ -435,7 +435,23 @@ def auth_key() -> bytes:
         try:
             raw = path.read_bytes()
         except FileNotFoundError:
-            path.parent.mkdir(parents=True, exist_ok=True)
+            path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            # THE FOLDER IS PART OF THE KEY'S PRIVACY (2026-11-05). The docstring
+            # above promises 0600 on the file, and backend/test_history_purge.py
+            # asserts the folder as well ("... and its folder": nothing but the
+            # owner may enter it). That assertion was RED on every POSIX runner
+            # until this line: `mkdir(mode=0o700)` is masked by the umask and
+            # does nothing when the folder is already there (the framework makes
+            # it, and the test's own fixture does too), so the folder stayed
+            # 0755. The chmod is what actually makes the promise true. On
+            # Windows `os.chmod` only touches the read-only bit, so it changes
+            # nothing there; on POSIX it takes the config folder - which holds
+            # this key, the pairing token and the history database - to the
+            # owner-only mode it should always have had.
+            try:
+                os.chmod(path.parent, 0o700)
+            except OSError:
+                pass
             try:
                 fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             except FileExistsError:         # another process won the race

@@ -669,9 +669,17 @@ LIVE_LEGACY_GATES = {
 }
 
 #: A live-lineage gate is ~175-185 KB. The published-base pre-image this
-#: repair also serves (backend/test_repair_live_backend_gaps.py) is ~149-157
-#: KB, so this threshold only chooses which refusal path an UNRECOGNISED
-#: hash takes; it never accepts anything.
+#: repair also serves (backend/test_repair_live_backend_gaps.py) was ~149-157
+#: KB when this threshold was chosen, so it used to be the only thing that
+#: separated the two. IT NO LONGER IS, and the comment is corrected rather than
+#: left flattering itself (2026-11-05): the base's pre-image now measures
+#: 170,615 bytes, ABOVE this floor, and the pre-#1008 accepted lineage measures
+#: 141,522 - below it - so no single size can separate them any more. The base's
+#: own bytes and its pre-image are now recognised EXACTLY by `_
+#: published_base_preimage()` before this size is consulted (see its docstring),
+#: so this threshold only chooses which refusal path a genuinely UNRECOGNISED
+#: hash takes; it still never accepts anything. That is the property that
+#: matters, and it is unchanged.
 LIVE_LINEAGE_MIN_BYTES = 170_000
 
 
@@ -1162,6 +1170,54 @@ def _reverse_unified_diff(text: str, patch: str) -> str:
     return _apply_unified_diff(text, patch, reverse=True)
 
 
+def _published_base(repair: Repair) -> Optional[str]:
+    """The published base's own bytes for this repair, from the copy that ships
+    beside this tool (None when this checkout does not carry it)."""
+    base = Path(__file__).resolve().parent.parent / "jarvis-backend" / repair.filename
+    try:
+        return base.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _published_base_preimage(repair: Repair) -> Optional[str]:
+    """The published base's own pre-image of `repair`, or None if this checkout
+    does not carry both halves.
+
+    WHY THIS EXISTS (2026-11-05). `backend/test_repair_live_backend_gaps.py`
+    reverses `unknown-risk-approvable.patch` out of `jarvis-backend/
+    jarvis_gate.py` and hands the result to `check_one` as an install that
+    predates the patch. That is a REAL input, not a fixture: a PC still running
+    the published base has exactly those bytes. Until 2026-11-05 it was 157,767
+    bytes, comfortably under `LIVE_LINEAGE_MIN_BYTES`; the six-PR wave grew the
+    published gate and its pre-image now measures 170,615, so the repository's
+    own reference input landed on the "unrecognised live-lineage gate" refusal
+    path. Moving the size threshold would only postpone that - the base grows
+    with every feature, and the pre-#1008 accepted lineage is SMALLER than the
+    base is now (141,522 bytes), so no single size can separate the two.
+
+    So the reference bytes are DERIVED instead of guessed: every `replace_with`
+    the repair would write is put back to its `anchor`, which is the same
+    reversal the test makes with the patch's own hunks, on the copy of the base
+    that ships beside this tool. An exact hash comparison follows (the caller
+    also compares the base ITSELF, so the "already repaired" state is
+    recognised the same way), so this can only ever recognise the published base
+    - never a live gate, and never a lineage the table does not list.
+
+    None when there is no `jarvis-backend/` beside this tool (a live install
+    that only has the repo's tools), which leaves every previous behaviour,
+    refusal included, exactly as it was.
+    """
+    text = _published_base(repair)
+    if text is None or not repair.pieces:
+        return None
+    for piece in repair.pieces:
+        if not piece.replace_with or text.count(piece.replace_with) != 1:
+            return None
+        text = text.replace(piece.replace_with, piece.anchor, 1)
+    return text
+
+
 def _live_lineage_state(repair: Repair, text: str) -> Optional[tuple]:
     """None when this is not a live-lineage repair/file; else ("already"|"missing", new).
 
@@ -1178,6 +1234,16 @@ def _live_lineage_state(repair: Repair, text: str) -> Optional[tuple]:
         return ("already", None)
     patch = _legacy_patch(digest)
     if patch is None:
+        # The published base's OWN bytes, and its own pre-image, are known
+        # inputs, recognised by their exact bytes rather than by size: the
+        # anchor/pieces path below is what serves them, exactly as it did while
+        # the base was smaller.
+        base = _published_base(repair)
+        if base is not None and _sha256_text(base) == digest:
+            return None
+        base_pre = _published_base_preimage(repair)
+        if base_pre is not None and _sha256_text(base_pre) == digest:
+            return None
         if len(text.encode("utf-8")) >= LIVE_LINEAGE_MIN_BYTES:
             raise Refused(
                 f"{repair.filename}: this is a live-lineage gate this repair does "

@@ -647,7 +647,22 @@ RATCHET = {
     #: patch's own end-of-file hunk already reads, and no earlier patch in the
     #: stack writes a line of it. The patch has to sit BEFORE that one so
     #: unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
-    "jarvis_gate.py": 60,
+    #:
+    #: 2026-11-05, RAISED from 60 to 61 for `handsfree.patch`, and it is the
+    #: same honest shape as the line above: handsfree appends its rows at the
+    #: END of the owner's file, at the SAME anchor product-check.patch uses, and
+    #: both have to sit before web-search-grant.patch so
+    #: unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
+    #: Two patches cannot both be the end of the file, so whichever is applied
+    #: second reads three lines only the owner's PC holds and materialises them
+    #: - `by_patch` names BOTH (`product-check.patch: 1`, `handsfree.patch: 1`),
+    #: which is 59 + 1 + 1 = 61. Measured, not argued: `stand_in(
+    #: "jarvis_gate.py", stats=...)` reads 61. Putting the two in the only other
+    #: order (handsfree first) measures the same 61 - the cost is the shared
+    #: anchor, not the order - and backend/test_phone_app_allowlist.py pins
+    #: handsfree immediately before web-search-grant.patch, so this is the one
+    #: order that satisfies both. A ratchet: it may still only go down.
+    "jarvis_gate.py": 61,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

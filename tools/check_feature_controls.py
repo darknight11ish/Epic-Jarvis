@@ -483,15 +483,25 @@ def main(argv=None):
     # no in-app switch (it is a hand edit of [call_recording] enabled), so
     # there is no setting row either. 102 + 1 -> 103 Command-Only, 175 + 1 ->
     # 176 features. Measured from the contract, not chosen.
+    # 2026-11-05 (the combined six-PR tree): TWO more Command-Only rows joined
+    # the merged matrix, and neither has a switch in either app, so neither
+    # could be a Switchable row: "Check a product's reviews" (product-check,
+    # 2026-11-04 - its switch is the settings file's own `[product_check]
+    # enabled` line and there is no in-app control for it yet) and "A second
+    # voice program (VoiceStudio)" (voicestudio, 2026-11-04 - `[voicestudio]
+    # enabled` in the settings file, no screen yet, and its own row says the
+    # speaking-voice wiring is the named next slice). 103 + 2 -> 105
+    # Command-Only, 176 + 2 -> 178 features. Measured from the contract, not
+    # chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 103, LAB_ALWAYS: 12,
+        LAB_COMMAND: 105, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/103/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/105/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/103/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/16/105/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

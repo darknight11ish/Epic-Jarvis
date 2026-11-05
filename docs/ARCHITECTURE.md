@@ -1205,6 +1205,12 @@ latch's reach is the card chip, the swipe-lock and the small `auto`/`notify`
 set, and `jarvis_gate.filter_tool_result` still has no caller in this repository
 - the agent calls the same underlying `vet_tool_result`.
 
+**Every tool the AI model can be offered has an in-app switch**
+(`jarvis_asks_first.TOOLS_SWITCHABLE`); the only exceptions are the four names
+in `jarvis_asks_first.NOT_A_SWITCH` - the data sandbox, the product check and
+the two web-search grant tools, each decided by its own switch. **No fourth
+"settings-file only" tool tier may be added.**
+
 ---
 
 ## 4. The egress boundary
@@ -2856,16 +2862,18 @@ backend routes, in both directions; the rest are listed here only.
   call them; the desktop's own half of the same frozen contract (its own
   setting, its own read of the mode) is another lane's, and the day it calls the
   first of those routes the checker's rule 6 fails by name and it
-  moves to `ported`, which is the right change then. **This phone half lands
-  AHEAD of its PC half, and says so plainly.** None of those routes exists
-  in `main` yet: no module serves one, no `handsfree_card` or `phone_command` is
-  ever sent, and `main`'s `docs/JARVIS-API.md` documents none of them - that
-  record
-  describes what exists, and a route written into it before its code would be
-  the one kind of fiction this project keeps out of that file. So the feature is
-  INERT until the PC half lands: every surface shows the contract's own 404
-  sentence ("Hands-free is not available on this PC yet."), no microphone is
-  opened, and nothing claims a mode that cannot be on. The phone was built
+  moves to `ported`, which is the right change then. **This phone half landed
+  AHEAD of its PC half, and said so plainly.** Those routes are in the tree now,
+  documented at `docs/JARVIS-API.md` §191 (hands-free): the PC half
+  (`jarvis_handsfree.py`) serves all four, sends `handsfree_card` and
+  `phone_command`, and records the phone's `phone_result` receipt - that
+  record describes what exists, and a route written into it before its code
+  would be the one kind of fiction this project keeps out of that file. So the
+  feature is no longer INERT: the switch is read and written on the PC, a
+  waiting card is read out and answered there, the contract's own 404 sentence
+  ("Hands-free is not available on this PC yet.") is no longer shown by any
+  surface, no microphone is opened until a card is read out, and nothing claims
+  a mode that cannot be on. The phone was built
   against the FROZEN contract, whose four shapes are written down in
   `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
   request owns `JARVIS-API.md` section 191 for them. Nothing else about the

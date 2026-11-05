@@ -1,8 +1,8 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -6672,5 +6672,20 @@
-         print(f"  purge      NOT ON ({type(exc).__name__}) - clearing old chats by date is off")
-         print("             until jarvis_history_purge.py is back: run apply-patches.ps1 again")
+@@ -6864,3 +6864,18 @@
+         print(f"  handoff    NOT ON ({type(exc).__name__}) - the owner-secret hand-off is off")
+         print("             until jarvis_secret_handoff_wiring.py is back: run apply-patches.ps1 again")
 +    # plugin-loader.patch (this branch). One call, once, and after it every
 +    # feature whose only wiring was a startup call becomes a folder: put it
 +    # in jarvis_plugins\ beside this file and restart, take it out and the
@@ -18,7 +18,5 @@
 +    except Exception as exc:
 +        print(f"  plugins    NOT ON ({type(exc).__name__}) - drop-in modules are off")
 +        print("             until jarvis_plugins.py is back: run apply-patches.ps1 again")
-     # sky.patch (the owner's decisions of 2026-09-28, "Sun and moon behind
-     # the animals" and "Weather in the animals' scene"): GET /api/sky and
-     # POST /api/sky - whether the sun and moon show, the town typed on this
+     # Before the main socket, so the banner lists every address together.
 
