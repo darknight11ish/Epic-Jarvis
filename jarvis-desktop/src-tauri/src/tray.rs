@@ -53,7 +53,11 @@
 //! are not set, or the patch program is missing) does it fall back to the
 //! desktop-only `install_update`, and then it says plainly that the BACKEND was
 //! NOT updated and where to finish it. It is never automatic and there is no
-//! second updater. On Windows a successful install ends this process (the
+//! second updater. **With App lock on it is behind the lock** (DEF-045): the row
+//! patches the live backend, so the press asks Windows Hello first
+//! (`lock::require_unlocked`, the same prompt the rows that open a window show)
+//! and starts nothing unless it confirms - declining says plainly that nothing
+//! was started. On Windows a successful install ends this process (the
 //! installer restarts the app), so the next launch starts with the row absent
 //! because the new version is the running one - the row cannot linger after an
 //! install.

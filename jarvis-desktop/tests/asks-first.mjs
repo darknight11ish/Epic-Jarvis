@@ -56,7 +56,7 @@ import {
   TOOLS_SWITCHABLE,
   toolGroupsView,
   toolSwitchView,
-  notOfferedView,
+  notSwitchableView,
   vaultSwitchView,
   WAITING,
 } from "../src/asks-first.js";
@@ -225,11 +225,10 @@ await check("the tool switch: ON held on a stale link and off the PC, OFF never,
   assert.ok(other.lines.includes(ONE_AT_A_TIME));
 });
 
-await check("the tiered tool surface: groups, the vault row and the not-offered note", async () => {
+await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {
   const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 21,
-    "the 21 Tier A + Tier B switches (23 while the web-search grant's two tools " +
-    "were rows here; removed 2026-11-02 - the ask rides with web search)");
+  assert.equal(pc.tools.items.length, 48,
+    "every tool the model can be offered is a switch (2026-11-04; 21 before it)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
   assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));
@@ -237,6 +236,11 @@ await check("the tiered tool surface: groups, the vault row and the not-offered 
     C.pc_shipped.tools.items.map((i) => i.id), "the groups draw every item once, in order");
   const one = groups.flatMap((g) => g.items).find((i) => i.id === "send_file_to_phone");
   assert.ok(one && one.group === "Safety and sharing", "send-file is its own group row");
+  const raw = groups.flatMap((g) => g.items).filter((i) => i.group === "Raw and powerful");
+  assert.deepEqual(raw.map((i) => i.id),
+    ["shell_exec", "control_computer", "control_phone", "browser_control",
+      "read_web_page", "connect_account", "rea_investigate"],
+    "the seven raw tools that were refused until 2026-11-04 are switches now");
   const vault = pc.tools.vault;
   assert.equal(vault.id, "vault_organizer");
   assert.equal(vault.kind, "switch", "the organizer is a separate switch, not a tool item");
@@ -247,12 +251,16 @@ await check("the tiered tool surface: groups, the vault row and the not-offered 
   const phone = readAsksFirst(C.phone_cards_waiting);
   assert.equal(vaultSwitchView(phone.tools.vault, true).disabled, true,
     "the phone is read-only for the organizer switch too");
-  const note = notOfferedView(pc.tools);
-  const no = pc.tools.notOffered;
-  for (const id of [...no.tierC, ...no.notThisSlice]) {
+  const note = notSwitchableView(pc.tools);
+  const no = pc.tools.notSwitchable;
+  assert.deepEqual(no.ids,
+    ["run_data_script", "approve_web_search_for_conversation", "stop_web_search_approval"],
+    "the three whose own switch decides them");
+  for (const id of no.ids) {
     assert.ok(note.includes(no.labels[id] || id.replace(/_/g, " ")), "the note names " + id);
   }
   assert.ok(note.includes(no.why), "the note carries the PC's plain reason");
+  assert.equal("notOffered" in pc.tools, false, "the old 'not offered in-app' block is gone");
   const html = read("src/settings.html");
   assert.ok(html.includes('id="af-tools"'), "the page has the tools container");
 });
@@ -457,7 +465,10 @@ await check("CONTROL: Settings only; Rust refuses an action off the list; no app
   }
   const rs = read("src-tauri/src/asks_first.rs");
   assert.match(rs, /if action != LOCKDOWN && !SWITCHABLE\.contains\(&action\)/);
-  assert.match(rs, /if !TOOLS_SWITCHABLE\.contains\(&tool\)/);
+  // D4 (2026-11-04): only the ON direction is refused before it is sent now.
+  // OFF goes to the PC for any real tool name, because the settings file may
+  // have a tool on that this app has no switch row for.
+  assert.match(rs, /if enabled && !TOOLS_SWITCHABLE\.contains\(&tool\)/);
   assert.match(rs, /held_on_stale\(!ask\) && stale\(&app\)/);
   assert.doesNotMatch(rs, /api\/approve/);
   const js = read("src/asks-first-settings.js");

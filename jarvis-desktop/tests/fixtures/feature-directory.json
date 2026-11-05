@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "e2e03d6fac16557220726efe4ca863c3c38b7ae936e46e62cf8985cf73a2aef0",
+  "source_sha256": "f0617226454fd28c945a7c5d97ac1370b420d336cf3afbef2ec1218ea1b45bb2",
   "feature_count": 175,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
