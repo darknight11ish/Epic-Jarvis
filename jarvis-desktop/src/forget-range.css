@@ -85,6 +85,45 @@
   flex: 1 1 auto;
 }
 
+/* The second yes (owner, 2026-11-04): the PC is holding the ticked items for
+   two minutes. Not a card - one more line and one more tap. Like the Undo
+   banner, no fill of its own: the warn-coloured edge is what marks it. */
+.fr-confirm {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: var(--stroke-hair) solid var(--warn);
+  border-radius: var(--radius-control);
+}
+
+.fr-confirm-text {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.fr-confirm-left {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+/* The chats this Forget is keeping: a title and its message count, never a
+   tick box, so nothing here looks like something that could go. */
+.fr-kept {
+  cursor: default;
+}
+
+.fr-kept .row-title {
+  overflow-wrap: anywhere;
+}
+
+.fr-pinned-why,
+.fr-estimate {
+  margin: 4px 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
 .fr-waiting,
 .fr-last {
   margin: 0 0 8px;

@@ -1831,7 +1831,7 @@ def recommendations() -> dict:
                           f"preset is applied")
                 idx = {"general": roles["main"], "general_uncensored": roles["main"],
                        "coding": roles["main"],
-                       "fast": roles["display"], "agentic_vision": roles["headless"],
+                       "fast": roles["display"], "agentic_vision": roles["main"],
                        "reflect": roles["main"], "pictures": roles["main"],
                        "documents": roles["main"], "browser": roles["main"]}[p.id]
                 note = {
@@ -1839,7 +1839,7 @@ def recommendations() -> dict:
                     "general_uncensored": f"{everyday}: main chat/everyday, 196,608 window",
                     "coding": pooled,
                     "fast": f"{display}: display + Fast/Live lane, qwen3.5:4b",
-                    "agentic_vision": f"{headless}: Agentic+Vision, qwen3.5:9b with images",
+                    "agentic_vision": f"{everyday}: Agentic+Vision, qwen3.5:9b with images",
                     "reflect": f"{everyday}: Reflective Coach, qwen3.5:9b, 196,608 window",
                     "pictures": f"{everyday}: Pictures & Screens, qwen3.5:9b with images, "
                                 f"32,768 window",
@@ -1864,14 +1864,20 @@ def recommendations() -> dict:
                 # has always guarded it still guards something true.
                 "layout": ("everyday presets keep one lane per GPU (the everyday "
                            "lane, the monitor card's lane and the headless card's "
-                           "lane); only on-demand heavy Coding pools the cards on "
-                           f"port {POOLED_PLAN_PORT}"),
+                           f"lane); only on-demand heavy Coding pools the cards on "
+                           f"port {POOLED_PLAN_PORT}. Agentic + Vision stays on the "
+                           "everyday card, not the headless one: the 9B weights plus "
+                           "the vision projector need about 7.00 GiB and an 8 GB card "
+                           "with no monitor has 6.65 GiB free, so there is no window "
+                           "at which it fits a headless card"),
                 "cards": [
                     {"role": "everyday lane: main chat / everyday, 196,608 tokens",
                      "card": _role_words(cards, roles, "main"), "context": 196608},
                     {"role": "monitor card's lane: display + Fast/Live, 16,384 tokens",
                      "card": _role_words(cards, roles, "display"), "context": 16384},
-                    {"role": "headless card's lane: Agentic+Vision, 16,384 tokens",
+                    {"role": "headless card's lane: no 9B lane fits - Agentic+Vision "
+                             "needs about 7.00 GiB against 6.65 GiB free, so it stays "
+                             "on the everyday card",
                      "card": _role_words(cards, roles, "headless"), "context": 16384},
                 ],
                 "heavy_pooled": (f"on demand, the Coding preset pauses those three lanes "

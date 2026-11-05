@@ -70,7 +70,16 @@ PER_TOOL = 300
 #: an app off the owner's list is refused), and the words for `app`/`query`.
 #: Measured at 506 with this module's own rule; its old 265 was the whole of
 #: PER_TOOL's room, so there was no way to add the actions inside 300.
-PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540}
+#: rea_investigate joins them on 2026-11-04, and this is the decision the note
+#: above asks for. The owner chose "install the full REA toolbox ... expose all
+#: of its actions through one Jarvis tool", and REA serves 207; the schema's
+#: `action` enum names 200 of them, which MEASURED here is 1,799 of the 1,953
+#: tokens (the description is 154). There is no smaller shape that still lets
+#: the model choose an action by name, and the tool costs nothing on any turn
+#: until the owner turns REA on ([rea] enabled AND [tools].enabled both say
+#: yes). 2000 leaves 47 tokens of room.
+PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
+                   "rea_investigate": 2000}
 
 #: The pairs the research found the model mixes up, each told apart both ways.
 CONFUSABLE = (("memory_search", "notes_search"), ("home_read", "home_control"),

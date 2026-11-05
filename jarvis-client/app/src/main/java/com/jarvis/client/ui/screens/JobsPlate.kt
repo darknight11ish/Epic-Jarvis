@@ -1,10 +1,12 @@
 package com.jarvis.client.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,8 +19,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.net.JobAttention
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.Jobs
 import com.jarvis.client.ui.parts.Affirm
@@ -70,6 +77,14 @@ import kotlinx.coroutines.launch
  * The list is read when the section first draws and again after every write;
  * it is not kept in [JarvisRuntime]. Both writes are held while the link is
  * down or stale ([JarvisRuntime.startJob], [JarvisRuntime.answerJob], rule 4).
+ *
+ * **Attention first (2026-11-04, pattern 4).** The list below the form is two
+ * sections decided by [JobAttention.partition]: "Needs you" - the jobs whose
+ * approval, answer, retry or failure a person has to look at - drawn expanded
+ * with each job's own action, and "Quiet / healthy" folded into ONE line until
+ * the owner taps it. When nothing needs the owner the top section is not
+ * created at all, so it takes zero pixels. The split only regroups rows the
+ * read already returned: it adds no action, no approval and no polling.
  */
 @Composable
 internal fun JobsSection(canAct: Boolean) {
@@ -83,6 +98,9 @@ internal fun JobsSection(canAct: Boolean) {
     // to the first, so a stale choice can never start the wrong thing.
     var chosen by remember { mutableStateOf("") }
     var words by remember { mutableStateOf("") }
+    // The "Quiet / healthy" bar's fold (2026-11-04, pattern 4). Closed on first
+    // draw, and only ever changed by the owner's tap - no timer touches it.
+    var quietOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (read is Jobs.Read.NotAsked) {
@@ -256,26 +274,112 @@ internal fun JobsSection(canAct: Boolean) {
             )
         }
 
-        // ---- The list, one card per job, below the form's card: the shape the
-        // phone has always drawn, so a job reads the same as it did before the
-        // controls arrived. ----
+        // ---- The list, attention first (2026-11-04, pattern 4): a job that
+        // waits for a person is drawn under "Needs you", expanded with its own
+        // action; everything else is ONE collapsed "Quiet / healthy" line that
+        // opens on a tap. An empty "Needs you" is not drawn at all, so it costs
+        // zero pixels - no heading, no empty box, no gap. ----
         val listed = Jobs.feedOf(read)
         val rows = listed?.jobs.orEmpty()
         if (listed != null && rows.isNotEmpty()) {
-            Gap(10)
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                rows.forEach { job ->
-                    JobPlate(
-                        job = job,
-                        grant = listed.grantFor(job.id),
-                        answered = listed.answered(job),
-                        enabled = canAct && !busy,
-                        onAnswer = { approved ->
-                            act { JarvisRuntime.answerJob(job.id, approved) }
-                        },
-                    )
+            val split = JobAttention.partition(rows)
+            val enabled = canAct && !busy
+            val answer: (String, Boolean) -> Unit = { id, approved ->
+                act { JarvisRuntime.answerJob(id, approved) }
+            }
+            if (split.needs.isNotEmpty()) {
+                Gap(10)
+                Kicker(JobAttention.NEEDS_HEAD)
+                Gap(6)
+                JobRows(split.needs, listed, enabled, answer)
+            }
+            if (split.quiet.isNotEmpty()) {
+                // With an empty Needs-you section the bar is the first thing
+                // drawn, so it takes the usual 10dp breath; below rows that
+                // need the owner it gets a little more air instead of a gap
+                // that would have belonged to a section that is not there.
+                Gap(if (split.needs.isEmpty()) 10 else 12)
+                QuietBar(
+                    summary = JobAttention.quietLine(
+                        split.quiet,
+                        System.currentTimeMillis() / 1000,
+                    ),
+                    open = quietOpen,
+                    onToggle = { quietOpen = !quietOpen },
+                )
+                if (quietOpen) {
+                    Gap(10)
+                    JobRows(split.quiet, listed, enabled, answer)
                 }
             }
+        }
+    }
+}
+
+/**
+ * One card per job, the same shape on both sides of the split - a quiet job
+ * keeps its tag, its frozen permissions and any Cancel it has. The answer
+ * callback names the job's own id, so two parked jobs can never have their
+ * buttons swapped.
+ */
+@Composable
+private fun JobRows(
+    rows: List<JobRecord>,
+    feed: Jobs.Feed,
+    enabled: Boolean,
+    onAnswer: (String, Boolean) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        rows.forEach { job ->
+            JobPlate(
+                job = job,
+                grant = feed.grantFor(job.id),
+                answered = feed.answered(job),
+                enabled = enabled,
+                onAnswer = { approved -> onAnswer(job.id, approved) },
+            )
+        }
+    }
+}
+
+/**
+ * The collapsed "Quiet / healthy" bar: ONE line, and the fold's state said to
+ * TalkBack as well as drawn. It is a bar rather than a [Quiet] link because it
+ * is a region of the screen that opens, not a word to press; the 48dp minimum
+ * touch height is kept anyway.
+ */
+@Composable
+private fun QuietBar(
+    summary: String,
+    open: Boolean,
+    onToggle: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Plate {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClick = onToggle)
+                .semantics {
+                    stateDescription = if (open) JobAttention.EXPANDED else JobAttention.COLLAPSED
+                },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                if (open) JobAttention.HIDE else JobAttention.SHOW,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
         }
     }
 }

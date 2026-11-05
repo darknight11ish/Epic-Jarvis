@@ -996,17 +996,20 @@ def _preferred_plan_model() -> dict:
 
 
 def _heavy_models() -> tuple:
-    """The heavy Coding preset's model - never used for one per-step plan.
+    """Every heavy-mode preset's model - never used for one per-step plan.
 
-    It is heavy mode: both cards, ~32 s cold load, and it evicts every other
-    lane. One strict-JSON step does not justify that cost, so it is excluded
-    even from the "another local model" fallback.
+    Heavy mode is the fact that decides this, not a preset's own name: it means
+    every card at once, ~32 s cold load, and it evicts every other lane. One
+    strict-JSON step does not justify that cost, so these are excluded even
+    from the "another local model" fallback. Reading the field keeps the rule
+    true when a new heavy preset lands: a deep-think or creative preset would
+    otherwise be offered to the planner and stall both everyday cards.
     """
     out = []
     try:
         import jarvis_presets
         for preset in getattr(jarvis_presets, "PRESETS", ()) or ():
-            if "coding" in str(getattr(preset, "id", "")):
+            if getattr(preset, "heavy_mode", False):
                 m = str(getattr(preset, "model", "") or "")
                 if m:
                     out.append(m)

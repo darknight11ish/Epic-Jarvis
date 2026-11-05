@@ -7,8 +7,8 @@
     "core": 144,
     "missing": 0
   },
-  "folder_count": 22,
-  "ready_count": 50,
+  "folder_count": 23,
+  "ready_count": 51,
   "folders": [
     {
       "name": "skill-hub",
@@ -184,6 +184,14 @@
       "install": "handler",
       "stack_order": 173,
       "summary": "check ONE Amazon product page for sponsored-review and incentive patterns: one PC-only card, a read-only read in the owner's own signed-in browser, and the offline engine's reasons report - sample caveat first, counts and examples, every set-aside review with its reasons, never a trust score and never a per-review fake/real verdict.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "watch-decisions",
+      "module": "jarvis_watch_ci",
+      "install": "handler",
+      "stack_order": 173,
+      "summary": "what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.",
       "why": "born as a folder: it replaces no patch"
     }
   ],
