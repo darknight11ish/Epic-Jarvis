@@ -947,6 +947,20 @@ PHONE_ONLY = {
     # can approve a file or extend its ten minutes.
     "/api/files/send": ("phone-only", "The files the owner already approved for this phone (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172): name, folder, size, MIME type and seconds left, never a path. A file appears only after the PC's own ONE send_file_to_phone card was approved, and only the phone has any use for it - the file's destination is the phone. Phone: net/SendFile.kt and ui/screens/SendFilePlate.kt (the Settings row, and a small block inside Coming up so a waiting file is noticed), JarvisRuntime.sendFiles. Desktop: nothing to draw, by design - the bytes leave the PC for the phone (docs/ARCHITECTURE.md section 8)."),
     "/api/files/download": ("phone-only", "ONE approved file's bytes, base64 in JSON, by opaque id only - never a path, and the answer carries none (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172). Ten minutes and one download; a second fetch is the PC's own 404 sentence. Phone: ui/screens/SendFilePlate.kt's View (FileProvider + ACTION_VIEW) and Save to Downloads (MediaStore.Downloads), JarvisRuntime.downloadFile. Desktop: nothing to draw - the phone is the destination (docs/ARCHITECTURE.md section 8)."),
+
+    # Recording a phone call (the owner's request of 2026-11-04). The audio
+    # exists on the PHONE and nowhere else: Android will not give a normal app
+    # the call's own stream, so the recording is the phone's microphone with
+    # the call on speaker, cut into 64 KiB pieces. The desktop has no caller
+    # and no use for one - it draws the NOTE the PC's own half writes, which is
+    # the existing notes surface, not these routes. Phone: call/CallRecordStore
+    # .kt (the durable queue), service/CallRecordService.kt (the microphone and
+    # the upload), net/CallRecordWire.kt (the three bodies),
+    # ui/screens/CallRecordPlate.kt (Arm / Stop / Send it now).
+    # docs/ARCHITECTURE.md section 8 has the one-sided reasoning.
+    "/api/call/recording/start": ("phone-only", "Opens one call recording on the PC and answers its session id, from the date the call began and the audio's shape (16 kHz, mono, s16le, device \"phone\") - the frozen contract of 2026-11-04. Only the phone can start one: the audio is the phone's microphone. docs/ARCHITECTURE.md section 8."),
+    "/api/call/recording/chunk": ("phone-only", "One base64 PCM piece at its sequence number; the PC appends in seq order, and a failed send is retried with the SAME number. Nothing on the desktop produces PCM, and a second copy of a recording is the last thing the PC needs. docs/ARCHITECTURE.md section 8."),
+    "/api/call/recording/finish": ("phone-only", "The recording's whole length, an optional title and the consent flag; the PC transcribes it, dates it, works out who was speaking and writes ONE note in the owner's vault. The phone cannot do any of that (no speech-to-text on a client, and no access to the vault), and the desktop already reads and opens notes through its own surface. docs/ARCHITECTURE.md section 8."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
