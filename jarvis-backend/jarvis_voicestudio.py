@@ -407,7 +407,7 @@ def health(timeout: float = 2.5, base: str = None) -> dict:
         return {"ok": False, "running": False, "ready": False, "why": "not_running",
                 "words": exc.words, "base": _base(base)}
     except VoiceStudioError as exc:
-        return {"ok": False, "running": None, "ready": False, "why": "refused",
+        return {"ok": False, "running": None, "ready": False, "why": "bad_answer",
                 "words": exc.words, "base": _base(base)}
     body = reply.json()
     status = str(body.get("status") or "").lower()
@@ -423,9 +423,9 @@ def health(timeout: float = 2.5, base: str = None) -> dict:
                 "words": _starting_words(step, label), "base": _base(base)}
     return {"ok": False, "running": True, "ready": False, "status": status or f"http {reply.status}",
             "status_code": reply.status, "seconds": round(reply.seconds, 3),
-            "words": (f"VoiceStudio answered HTTP {reply.status} to /health, which is not a "
-                      f"healthy answer. Run tools\\voicestudio_sidecar.ps1 -Status and read its "
-                      f"log. {_port_words()}"),
+            "words": (f"VoiceStudio is running but answered the health check with an error "
+                      f"(code {reply.status}), so it is not ready yet. Read its log in "
+                      f"VoiceStudio's own folder. {_port_words()}"),
             "base": _base(base)}
 
 
@@ -453,7 +453,7 @@ def startup_progress(timeout: float = 2.5, base: str = None) -> dict:
     except VoiceStudioUnavailable as exc:
         return {"ok": False, "running": False, "why": "not_running", "words": exc.words}
     except VoiceStudioError as exc:
-        return {"ok": False, "running": None, "why": "refused", "words": exc.words}
+        return {"ok": False, "running": None, "why": "bad_answer", "words": exc.words}
     body = reply.json()
     status = str(body.get("status") or "").lower()
     step, label = body.get("step") or "", body.get("label") or ""
@@ -543,8 +543,8 @@ def wait_for_model_loaded(timeout: float = STARTUP_TIMEOUT_SECONDS, base: str = 
             where = f" It last reported: {step}." if step else ""
             return {"ok": False, "why": "timeout", "waited": waited, "health": last,
                     "words": (f"VoiceStudio did not load a model within {timeout:g} s.{where} "
-                              f"Run tools\\voicestudio_sidecar.ps1 -Status, and start it if it "
-                              f"is not running: {START_COMMAND}")}
+                              f"Its log is in VoiceStudio's own folder; if it has stopped, "
+                              f"start it again with: {START_COMMAND}")}
         time.sleep(1.0)
 
 
@@ -578,8 +578,8 @@ def engines(timeout: float = 5.0, base: str = None) -> list:
     reply = _request("GET", "/engines/tts", timeout=timeout, base=base)
     if reply.status != 200:
         raise VoiceStudioError(
-            f"VoiceStudio answered HTTP {reply.status} to /engines/tts, so its engine list "
-            f"could not be read. {_port_words()}", status=reply.status, body=reply.words())
+            f"VoiceStudio answered with an error (code {reply.status}) when asked for its "
+            f"engines, so its engine list could not be read. {_port_words()}", status=reply.status, body=reply.words())
     body = reply.json()
     active = str(body.get("active") or "")
     rows = []
@@ -613,8 +613,8 @@ def voices(timeout: float = 5.0, base: str = None) -> list:
     reply = _request("GET", "/v1/audio/voices", timeout=timeout, base=base)
     if reply.status != 200:
         raise VoiceStudioError(
-            f"VoiceStudio answered HTTP {reply.status} to /v1/audio/voices, so its voice list "
-            f"could not be read. {_port_words()}", status=reply.status, body=reply.words())
+            f"VoiceStudio answered with an error (code {reply.status}) when asked for its "
+            f"voices, so its voice list could not be read. {_port_words()}", status=reply.status, body=reply.words())
     body = reply.json()
     active = ""
     for entry in body.get("engines") or []:
@@ -746,7 +746,7 @@ def synthesize(text: str, voice: str = "default", engine: str = None,
                 f"VoiceStudio is running but not ready to speak yet. {waited.get('words') or ''} "
                 f"Nothing was sent to any other machine.")
         raise VoiceStudioError(
-            f"VoiceStudio answered HTTP {reply.status} to the speech request. "
+            f"VoiceStudio answered with an error (code {reply.status}) to the speech request. "
             f"{reply.words() or 'No reason was given.'}".strip())
     raise VoiceStudioError(last_words or "VoiceStudio could not be asked to speak.")
 
