@@ -595,6 +595,19 @@ impl Asker {
             hwnd: hwnd_of(window),
         }
     }
+
+    /// Asked from the tray, which has no page of its own: the Jarvis bar is
+    /// created at startup, so it is always this app's window to show the
+    /// system prompt over (the same fallback [`owner_for`] makes). `label`
+    /// is `None` on purpose - the tray is not a covered window, so a
+    /// confirmed answer here must not count as the owner having been inside
+    /// one, and only a confirmation touches the lock ([`ask`]).
+    fn tray(app: &AppHandle) -> Self {
+        Self {
+            label: None,
+            hwnd: owner_for(app, Covered::Quickbar, None),
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -923,6 +936,28 @@ pub fn may_open_window(app: &AppHandle, label: &str) -> bool {
     }
     start_unlock(app, which, Some(label.to_string()));
     false
+}
+
+/// [`may_open`]'s gate for a sensitive action that opens NO window - the
+/// tray's "Update Jarvis to <version>" row, which patches the live backend
+/// (DEF-045). With App lock on and the owner away it asks Windows Hello with
+/// the same words and the same fail-closed verdict as every other gate here,
+/// and returns `Ok(())` only once the owner confirmed, so the caller does its
+/// work after this returns. App lock off, or the owner still here: `Ok(())`
+/// at once and no prompt, exactly as before the gate existed.
+///
+/// There is no window to open on success, which is why this cannot reuse
+/// [`may_open`] itself: that one starts the prompt and then shows a covered
+/// window, and the tray's row has nothing to show.
+pub async fn require_unlocked(app: &AppHandle) -> Result<(), String> {
+    let security = current(app);
+    let state = app.state::<LockState>();
+    let owner_here = state.fresh(app, &security, Instant::now());
+    if !update_needs_unlock(security.app_lock, owner_here) {
+        return Ok(());
+    }
+    let outcome = ask(app, &Asker::tray(app), UNLOCK_MESSAGE.to_string()).await;
+    strict_verdict(outcome)
 }
 
 /// Asks Windows Hello for a change that can redirect or persist something
