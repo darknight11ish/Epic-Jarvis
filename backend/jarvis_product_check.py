@@ -91,9 +91,12 @@ CARD_QUESTION = ("Read this product page in your own browser session? "
                  "Read-only; nothing is bought or added to a cart.")
 
 #: What the tool/route says when the switch is off. Read fresh every time.
-OFF_WORDS = ("The product check is switched off. Turn it on with the line "
-             "[product_check] enabled = true in jarvis-framework.toml, then try "
-             "again. Nothing was opened and nothing was read.")
+#: Plain words on purpose: the zero-jargon scanner counts a settings key named
+#: in a user-facing sentence as developer jargon (`tools/check_zero_jargon.py`,
+#: "config key"), and this sentence is shown to the owner.
+OFF_WORDS = ("The product check is switched off. Turn it on in Jarvis's settings "
+             "file on this PC, then try again. Nothing was opened and nothing "
+             "was read.")
 
 #: What the route says to a caller that is not this PC.
 PC_ONLY_WORDS = ("The product check reads this PC's own signed-in browser "
