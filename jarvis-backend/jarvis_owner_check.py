@@ -340,6 +340,12 @@ SMALL_ACTIONS = frozenset({
     "news_read",
     "page_read",
     "github_read",
+    # Your own GitHub, read on demand (2026-11-03): the same pair of facts as
+    # `github_read` above - nothing on GitHub changes, and the request leaves
+    # this PC - so it is a small card, not one that also demands a fingerprint.
+    # The three GitHub ACTIONS are deliberately NOT here: each one posts or
+    # starts something in the owner's name and cannot be taken back.
+    "github_inspect",
     "browse_model_catalog",
     # the local reads
     "calendar_read",

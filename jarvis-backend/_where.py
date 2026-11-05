@@ -1454,6 +1454,20 @@ SHIPPED = (
     # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
+    # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
+    # the owner's decision: "Read + actions"; JARVIS-API section 185). Fixed
+    # api.github.com addresses only - there is no arbitrary-URL path at all -
+    # the token in the request header and never in a result, and every read and
+    # every action asks a person first. No code write of any kind: it cannot
+    # merge, push, commit, delete or close anything.
+    # It sits above the ORDER MATTERS note on purpose: jarvis_phone_apps.py must
+    # stay last (and so never scanned), and this one must carry a trailing comma
+    # or tools/check_zero_jargon.py would not read it - a new user-facing module
+    # that the jargon ratchet never measured would be the worse deal. Placing it
+    # here also keeps the list clear of the entries other branches append at the
+    # bottom, so two PRs adding a module do not fight over the same lines. The
+    # same entry, in the same position, is in $SHIPPED in apply-patches.ps1.
+    "jarvis_github.py",
     # ORDER MATTERS TO ONE READER: tools/check_zero_jargon.py walks this tuple
     # and only matches an entry that ends with a comma, so the LAST entry is
     # never scanned. jarvis_phone_apps.py therefore stays last: appending

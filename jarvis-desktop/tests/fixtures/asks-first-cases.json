@@ -611,6 +611,42 @@
        "title": "Hold a conversation with an AI chatbot for you"
       },
       {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
+      },
+      {
        "action": "support_chat",
        "fixed": false,
        "id": "support_chat",
@@ -1472,7 +1508,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -1860,6 +1902,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -2500,6 +2590,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -3363,7 +3489,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -3751,6 +3883,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -4387,6 +4567,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -5249,7 +5465,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -5637,6 +5859,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -6268,6 +6538,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -7130,7 +7436,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -7518,6 +7830,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -8154,6 +8514,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -9031,7 +9427,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -9419,6 +9821,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -10055,6 +10505,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -10927,7 +11413,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -11315,6 +11807,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -11946,6 +12486,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -12808,7 +13384,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -13196,6 +13778,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -13840,6 +14470,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -14703,7 +15369,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -15091,6 +15763,54 @@
       "last": null,
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
       "waiting": false
      }
     ],
@@ -15727,6 +16447,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -16589,7 +17345,13 @@
        "plugin_switch",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -16978,6 +17740,54 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
@@ -17085,7 +17895,13 @@
   "plugin_switch",
   "refresh_abilities",
   "self_portrait",
-  "setup_quiz"
+  "setup_quiz",
+  "github_list",
+  "github_read_file",
+  "github_ci_status",
+  "github_comment",
+  "github_open_issue",
+  "github_rerun_workflow"
  ],
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",

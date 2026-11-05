@@ -227,8 +227,8 @@ await check("the tool switch: ON held on a stale link and off the PC, OFF never,
 
 await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {
   const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 48,
-    "every tool the model can be offered is a switch (2026-11-04; 21 before it)");
+  assert.equal(pc.tools.items.length, 54,
+    "every tool the model can be offered is a switch (54 at 2026-11-05: 48 at 2026-11-04 and 21 before it; the six GitHub tools joined the list)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
   assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));

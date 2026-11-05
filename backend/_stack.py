@@ -614,7 +614,26 @@ RATCHET = {
     #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
     #: applies the patch to the published base and reverses it byte for byte. A
     #: ratchet: it may still only go down.
-    "jarvis_gate.py": 59,
+    #:
+    #: 60, RAISED from 59 on 2026-11-03 for `github-tools.patch`, and this is the
+    #: honest case rather than drift. Its first version appended its two `.update`
+    #: blocks at the very END of `jarvis_gate.py` and also read 60 - but that
+    #: placement broke two other things: `unknown-risk-approvable.patch` runs
+    #: earlier and materialises its own hunks at EOF, so the later patch invented
+    #: the three lines it anchored on and re-added `revoke_web_search_grant` to
+    #: `_RISK` (its last row wins; backend/test_gate_risk_words.py caught the
+    #: duplicate), and appending after `web-search-grant.patch`'s block broke that
+    #: patch's own reversal out of the published base (`git apply -R` needs its
+    #: post-image to end at EOF; backend/test_web_search_grant.py caught it). The
+    #: patch now sits immediately after `web-search-grant.patch` and BEFORE the
+    #: `if __name__` block, anchoring on the end of `review()` and the `if
+    #: __name__` opening - the owner's own text, which no patch in this walk
+    #: writes. That costs this walk one hunk / 6 lines, which is why the pin moves
+    #: to 60; `tools/check_patch_original_text.py`'s PIN records the same patch at
+    #: (1, 6), and backend/test_github_tools.py reverses the patch out of the
+    #: published base and applies it forward again byte for byte. A ratchet: it
+    #: may still only go down.
+    "jarvis_gate.py": 60,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

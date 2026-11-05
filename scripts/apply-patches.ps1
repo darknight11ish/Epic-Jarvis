@@ -1968,6 +1968,44 @@ $PATCHES = @(
     # backend/test_web_search_grant.py rehearses it against
     # jarvis-backend/jarvis_gate.py: apply, reverse, byte for byte.
     'web-search-grant.patch'
+    # github-tools.patch (2026-11-03) - the four gate actions the six GitHub
+    # tools are decided under. The owner's decision: "Read + actions" - Jarvis
+    # may read his GitHub (repositories, open pull requests, issues, CI status,
+    # one file) and may comment, open an issue and re-run a workflow, each one
+    # behind its own card; it may never merge, push, commit, delete or close.
+    #
+    # ONE hunk, immediately AFTER web-search-grant.patch and ABOVE the
+    # `if __name__` block: `_TOOL_ACTIONS.update` with the six tool names (or
+    # `action_for_tool` answers "unclassified_tool"), and `_RISK.update` with
+    # the four actions.
+    #
+    # WHY THERE, AND NOT AT THE END OF THE FILE (moved there and back 2026-11-03,
+    # measured rather than chosen):
+    #   * web-search-grant.patch's last hunk ends at EOF, and `git apply -R`
+    #     needs its whole post-image to be contiguous and to end at the last
+    #     byte - anything inserted after its three context lines makes the
+    #     reversal fail (backend/test_web_search_grant.py said so), and the
+    #     published base could no longer be reversed and re-applied byte for
+    #     byte.
+    #   * unknown-risk-approvable.patch must stay the LAST writer of
+    #     jarvis_gate.py so its own reversal cannot be disturbed
+    #     (backend/test_gate_unknown_risk.py enforces it, with no whitelist), so
+    #     a new gate patch has to sit before it. This one sits between the two.
+    #
+    # It anchors on the owner's own text (the end of `review()` and the opening
+    # of the `if __name__` block), which no patch writes, so
+    # backend/_stack.py's walk materialises those six lines - recorded in that
+    # file's RATCHET (59 -> 60) and in tools/check_patch_original_text.py's PIN.
+    #
+    # WHY IT NEEDS A PATCH AT ALL: jarvis_gate.py is not in $SHIPPED, so a fresh
+    # base never reaches the owner's own gate - only a patch does (the gap
+    # backend/test_gate_tool_actions.py exists to catch). Every test that
+    # enumerates "the patches written after me" has had its name added there
+    # (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
+    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
+    # backend/test_github_tools.py rehearses it against
+    # jarvis-backend/jarvis_gate.py: reverse, apply, byte for byte.
+    'github-tools.patch'
     # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling:
     # .dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md). An action the gate has
     # no risk row for is no longer a dead end: it is given the worst case
@@ -2824,6 +2862,18 @@ $SHIPPED = @(
     # 2026-10-31): shipped whole, no patch; reads the model/preset and the
     # measured rows, and asks the EXISTING switch/apply cards.
     'jarvis_model_knowledge.py'
+    # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
+    # the owner's decision: "Read + actions"; JARVIS-API section 185). Fixed
+    # api.github.com addresses only, the token in the header and never in a
+    # result; every read and every action asks a person first, and it cannot
+    # merge, push, commit, delete or close. github-tools.patch gives the gate
+    # its four actions. It sits above the ORDER MATTERS note on purpose:
+    # jarvis_phone_apps.py must stay last (and so never scanned), and this one
+    # is read by the jargon ratchet as the new user-facing module it is. Placing
+    # it here also keeps the list clear of the bottom, where other branches
+    # append, so two PRs adding a module do not fight over the same lines. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_github.py'
     # ORDER MATTERS TO ONE READER: backend/_where.py's list is read by
     # tools/check_zero_jargon.py, which only matches a comma-terminated entry,
     # so jarvis_phone_apps.py stays LAST - appending after it would newly

@@ -161,15 +161,19 @@ def all_four_are_read_only():
 
 
 def tools_answer_is_the_registry_and_the_live_file():
+    # 57, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
+    # GitHub "Read + actions") are in jarvis_agent.TOOLS and ship switched OFF, so
+    # the registered count moves by six while the enabled count stays 13. The
+    # answer is still read from the registry and the settings file, never typed.
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 51,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 57,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
           inv["enabled"] == 13, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "51 tools" in reply, reply[:120])
+    check("it names the registered count", "57 tools" in reply, reply[:120])
     check("it names the switched-on count", "13 of them are switched on" in reply,
           reply[:160])
     check("it names a REAL tool in plain words",
@@ -201,8 +205,8 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 50 are not switched on",
-              bool(reply) and "other 50 are built in but not switched on" in reply,
+        check("... and says the other 56 are not switched on",
+              bool(reply) and "other 56 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:

@@ -144,9 +144,24 @@ def turn(messages, *, manner="warm", request=None, waking=None, out=None, opener
     real_get = AG._get_json
     AG._get_json = lambda *a, **k: (_ for _ in ()).throw(OSError("no network in this test"))
     try:
+        # NO TOOLS ARE OFFERED, and that is deliberate (2026-11-05).
+        # `enabled_tools=None` means "every tool this module has"
+        # (`offered_tools`' own docstring), and the whole catalogue now costs
+        # about 13,700 tokens of this 16,384-token turn - the six GitHub tools
+        # this branch adds were the 1,269 tokens that pushed the one exchange of
+        # history out, so compaction did exactly its job and folded it into an
+        # "[EARLIER IN THIS CONVERSATION]" digest where these checks pin the
+        # history as it came. A real turn is never offered the whole catalogue:
+        # jarvis_hud passes the owner's `[tools].enabled` list through the diet,
+        # and this suite is about the manner line and where it sits. With no
+        # tools the same window leaves 13,619 tokens and every check keeps its
+        # exact-byte assertion. The same fix, for the same reason and the same
+        # catalogue, is in test_cut_off_note.py's turn (2026-11-04); the suites
+        # that prove what a too-long prompt does are test_compaction.py and
+        # test_agent.py. Nothing is skipped and no assertion is relaxed.
         AG.run_local_turn(messages, "jarvis-primary", ollama_url=URL,
                           stream_out=(out.append if out is not None else lambda b: None),
-                          open_stream=opener or default_opener, enabled_tools=None,
+                          open_stream=opener or default_opener, enabled_tools=set(),
                           context_length=16384,
                           request=request or {"model": "jarvis-primary", "stream": True,
                                               "messages": messages},

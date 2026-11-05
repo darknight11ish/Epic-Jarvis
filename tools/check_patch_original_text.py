@@ -102,7 +102,7 @@ its hunks read the owner's own `jarvis_skills.py` - install()'s signature, its
 docstring and the `_gate(...)` call it already makes - and that file is one of
 the five the patcher edits, so `backend/_stack.py` has no stand-in for those
 lines and nothing earlier in the walk writes them. The pin below records
-all TWENTY-THREE - those thirteen, plus `private-chat.patch` at position 152, added
+all TWENTY-FIVE - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -154,6 +154,17 @@ Checked the other way by
 it byte for byte, and walks the applied AST for both route branches. With
 their positions, instead of pretending they are not there. The position-29
 rule is kept as a REPORTED fact, not a gate.
+
+The twenty-fifth, added 2026-11-03, is `github-tools.patch` at position 165:
+ONE hunk, and it reads SIX lines of the owner's own `jarvis_gate.py` - the end
+of `review()` and the opening of the `if __name__` block - because no patch in
+this walk writes them. It sits there rather than at the very end of the file for
+two measured reasons: the end is `web-search-grant.patch`'s own block, whose
+last hunk must stay the last bytes of the file (`git apply -R` needs that whole
+post-image contiguous and ending at EOF), and `unknown-risk-approvable.patch`
+must stay the LAST writer. Checked the other way by
+`backend/test_github_tools.py`, which reverses this patch out of the published
+base and applies it forward again, byte for byte.
 
 THE PIN
 
@@ -508,6 +519,18 @@ PIN = {
     # stack changed one later patch's invented-hunk count and
     # backend/test_app_control.py caught it.
     "jobs-routes.patch":                       (4, 27),     # position 164
+    # 2026-11-03, github-tools.patch (position 165). ONE hunk and it reads SIX
+    # lines of the owner's own `jarvis_gate.py`: the end of `review()` and the
+    # opening of the `if __name__` block. HONEST, not drift - no patch in this
+    # walk writes either place, and the block cannot go at the very END of the
+    # file: that is `web-search-grant.patch`'s own block, whose last hunk must
+    # stay the last bytes (`git apply -R` of it fails otherwise - measured, and
+    # backend/test_web_search_grant.py caught it when this patch first sat
+    # there). It must also stay BEFORE `unknown-risk-approvable.patch`, the last
+    # writer of this file. Checked the other way by
+    # backend/test_github_tools.py: reverse it out of the published base, then
+    # apply it forward again, byte for byte.
+    "github-tools.patch":                      (1, 6),      # position 165
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

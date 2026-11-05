@@ -225,6 +225,11 @@ object SecurityRules {
         "news_read",
         "page_read",
         "github_read",
+        // Your own GitHub, read on demand, 2026-11-03. A small read like the
+        // one above: it changes nothing on GitHub. The three GitHub ACTIONS are
+        // deliberately absent - each posts or starts something in the owner's
+        // name and cannot be taken back, so each still asks for the fingerprint.
+        "github_inspect",
         "browse_model_catalog",
         // the local reads
         "calendar_read",

@@ -689,7 +689,10 @@ def t_hygiene():
              # appended after this patch, immediately before
              # unknown-risk-approvable.patch - it has no hunk in jarvis_hud.py's
              # screen wrapper, so it rewrites nothing this patch wrote.
-             "gate-tool-actions-gap.patch"}
+             "gate-tool-actions-gap.patch",
+# github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+# everything these patches wrote, so it rewrites none of their lines.
+             "github-tools.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

@@ -86,6 +86,35 @@ Settings screen and no app change, which is why `tools/check_parity.py` is
 untouched. Proved by `backend/test_plugin_switch.py`; documented in
 `docs/JARVIS-API.md` section 181 and `docs/ARCHITECTURE.md` section 8.
 
+**The GitHub tools - "Read + actions" (2026-11-03; JARVIS-API §190).** The
+owner's decision that Jarvis may read his GitHub and take a few small actions on
+it, each behind its own card, never merging and never pushing. Six model tools
+in `backend/jarvis_agent.py`, all on the network half in
+`backend/jarvis_github.py` (a SHIPPED module, so no patch for the code): three
+READS - `github_list`, `github_read_file`, `github_ci_status` - and three
+ACTIONS - `github_comment`, `github_open_issue`, `github_rerun_workflow`. The
+module talks to `api.github.com` and nothing else, refuses a redirect, caps
+every answer, never prints the token, and says a failure in a sentence with no
+HTTP code in it. The reads ask a person too: a fixed-endpoint read still sends
+the owner's own GitHub token out, which is why they are NOT the existing
+`github_read` action (that one is the scheduled look a "tell me when" watch
+makes, and `jarvis_tellme.py` refuses to run a watch unless it stays `auto`).
+Their own action is `github_inspect`, at `"ask"`; all six are also in
+`NEEDS_A_PERSON`, so a loosened tier still asks. No merge, push, commit, delete
+or close exists anywhere, by construction. `backend/github-tools.patch` is the
+one gate change - `jarvis_gate.py` is not in `$SHIPPED`, so only a patch reaches
+the owner's own gate - and it is ONE hunk in the middle of that file,
+immediately AFTER `web-search-grant.patch` and BEFORE
+`unknown-risk-approvable.patch`, which has to stay its last writer. The very
+end of the file belongs to `web-search-grant.patch`'s own block, whose last
+hunk must stay the last bytes (`git apply -R` needs that post-image contiguous
+and ending at EOF), so a block put after it broke that reversal. It anchors on
+the owner's own text - the end of `review()` and the opening of the
+`if __name__` block. All six ship
+switched off, like `github_search`. Proved by `backend/test_github_tools.py`
+(no network, no real token); documented in `docs/JARVIS-API.md` section 190 and
+`docs/ARCHITECTURE.md` section 8.
+
 **Order.** This is a *stack*, not a set. The table order is the only order that
 works, and the script applies exactly it.
 

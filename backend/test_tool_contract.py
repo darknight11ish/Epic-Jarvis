@@ -136,7 +136,15 @@ CATALOGUE = [
     "conversation_find", "conversation_open",
     "create_joplin_note",
     "draft_email",
-    "email_check", "feature_guide", "file_read", "github_search",
+    "email_check", "feature_guide", "file_read",
+    # Your own GitHub, on demand (2026-11-03, the owner's "Read + actions").
+    # None of the six is in FULL_ENABLED or OFFERED_FRESH: like `github_search`
+    # they ship SWITCHED OFF, because each one sends the owner's GitHub token
+    # out and the tools are useless until a token is saved anyway. They are in
+    # the catalogue so the next tool added has to be looked at here too.
+    "github_ci_status", "github_comment", "github_list", "github_open_issue",
+    "github_read_file", "github_rerun_workflow",
+    "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
     "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",

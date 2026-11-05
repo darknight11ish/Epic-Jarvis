@@ -14,7 +14,7 @@ you drop in and take out.
   - **29** replace a patch, and are generated from it;
   - **23** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **143 core patches**, which still go on through
+- **144 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -53,7 +53,7 @@ the catalogue cannot account for is refused, never silently left out.
 | 153 | `setup` | the setup questionnaire: a guided path through settings that already exist. | `setup.patch` |
 | 155 | `secret-handoff` | the host half of the owner-secret hand-off. | `secret-handoff.patch` |
 | 157 | `model-recommendations` | suggest a better local model, measure it, and suggest which preset should use it. Nothing here downloads, switches or applies. | `model-recommendations.patch` |
-| 170 | `history-purge` | clear old chats (and the facts they taught) for a date range, after a card, TWO separate yeses and a Windows Hello / fingerprint ticket. This is the one route pair in Jarvis that deletes in bulk and c | `history-purge.patch` |
+| 171 | `history-purge` | clear old chats (and the facts they taught) for a date range, after a card, TWO separate yeses and a Windows Hello / fingerprint ticket. This is the one route pair in Jarvis that deletes in bulk and c | `history-purge.patch` |
 
 ## Drop-in modules with no patch of their own
 
@@ -235,6 +235,7 @@ stack's order and cannot be moved into a folder.
 | `attached-file.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `gate-tool-actions-gap.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `web-search-grant.patch` | edits lines the core already has; it cannot be applied out of order |
+| `github-tools.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `unknown-risk-approvable.patch` | edits lines the core already has; it cannot be applied out of order |
 | `jobs-routes.patch` | edits lines the core already has; it cannot be applied out of order |
 | `skill-install-note.patch` | edits lines the core already has; it cannot be applied out of order |

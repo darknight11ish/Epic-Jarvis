@@ -364,6 +364,171 @@
  {
   "type": "function",
   "function": {
+   "name": "github_list",
+   "description": "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the open pull requests on one repository (\"pulls\"), its open issues (\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing on GitHub changes. It asks you before every read. It cannot merge, push, commit, delete or close anything. For how CI went, use github_ci_status.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "scope": {
+      "type": "string",
+      "enum": [
+       "repos",
+       "pulls",
+       "issues",
+       "runs"
+      ],
+      "description": "which list to read"
+     },
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"darknight11ish/Epic-Jarvis\"; not needed for \"repos\""
+     }
+    },
+    "required": [
+     "scope"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_read_file",
+   "description": "Read ONE file's text from a repository the saved GitHub token can see, at an optional branch or commit. Read-only: nothing changes. It asks you before every read. It cannot write, edit or commit a file.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "path": {
+      "type": "string",
+      "description": "the path inside the repository, e.g. \"README.md\""
+     },
+     "ref": {
+      "type": "string",
+      "description": "a branch or commit; leave it out for the default"
+     }
+    },
+    "required": [
+     "repo",
+     "path"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_ci_status",
+   "description": "How CI went: the newest workflow run for a repository and branch, or for a pull request. Read-only: nothing changes. It asks you before every read.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "branch": {
+      "type": "string",
+      "description": "a branch name"
+     },
+     "pr": {
+      "type": "string",
+      "description": "a pull request number"
+     }
+    },
+    "required": [
+     "repo"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_comment",
+   "description": "Post ONE comment on a GitHub issue or pull request, exactly as written. You see the whole comment on an approval card first and nothing is posted without your yes. It never merges, pushes, commits, closes or deletes anything, and it cannot take a comment back.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "number": {
+      "type": "string",
+      "description": "the issue or pull request number"
+     },
+     "body": {
+      "type": "string",
+      "description": "the whole comment, as it will be posted"
+     }
+    },
+    "required": [
+     "repo",
+     "number",
+     "body"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_open_issue",
+   "description": "Open ONE new issue on a repository, with a title and an optional body. You see all of it on an approval card first and nothing is opened without your yes. It never merges, pushes, commits, closes or deletes anything, and it cannot close, edit or delete the issue afterwards.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "title": {
+      "type": "string",
+      "description": "the issue's title"
+     },
+     "body": {
+      "type": "string",
+      "description": "the issue's text; may be left out"
+     }
+    },
+    "required": [
+     "repo",
+     "title"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "github_rerun_workflow",
+   "description": "Ask GitHub to run an existing workflow run AGAIN, with the same code and settings it ran with before. You see which run on an approval card first and nothing re-runs without your yes. It changes no code and no setting, and it never merges, pushes, commits, closes or deletes anything.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "repo": {
+      "type": "string",
+      "description": "owner/name, e.g. \"owner/repo\""
+     },
+     "run_id": {
+      "type": "string",
+      "description": "the workflow run's number"
+     }
+    },
+    "required": [
+     "repo",
+     "run_id"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "web_search",
    "description": "Search the public web for current or outside information. Returns up to 5 results: title, link, snippet. Use a few plain search words; never put private details in them. For what Jarvis knows about the owner, use memory_search. For the owner's own notes, use notes_search. To grade GitHub libraries for a coding idea, use github_search.",
    "parameters": {

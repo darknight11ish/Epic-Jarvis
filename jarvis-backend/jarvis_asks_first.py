@@ -459,6 +459,15 @@ TIER_EXTRA = (
     "conversation_find", "conversation_open",
     "phone_apps", "plugin_list", "plugin_switch",
     "refresh_abilities", "self_portrait", "setup_quiz",
+    # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
+    # 2026-11-03: "Read + actions"). They joined this list when the GitHub
+    # tools branch met the owner's 2026-11-04 decision - EVERY tool the model
+    # can be offered is switchable from an app except the three NOT_A_SWITCH
+    # names - so leaving them nowhere would have been the one hole in that
+    # rule. Each one still raises its own card, and the ACTION they share
+    # (github_inspect for the three reads) stays the "ask" tier.
+    "github_list", "github_read_file", "github_ci_status",
+    "github_comment", "github_open_issue", "github_rerun_workflow",
 )
 
 #: Known tools that are deliberately NOT switches of their own on this page.
@@ -472,7 +481,8 @@ TIER_EXTRA = (
 NOT_A_SWITCH = ("run_data_script",) + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: three above. 48 at 2026-11-04.
+#: three above. 54 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
+#: GitHub tools the tool list had grown without a row of their own).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
@@ -769,6 +779,15 @@ GROUPS = (
                       "post_to_external_service",
                       "open_public_tunnel",
                       "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
+                      # Your own GitHub, on demand (jarvis_github.py, the owner's
+                      # decision of 2026-11-03: "Read + actions"). All four are
+                      # actions a card can be raised under, so all four are rows
+                      # on this page (test_asks_first.py requires it). The READ
+                      # is here too, not only the three writes: it sends the
+                      # owner's GitHub token out, which is why it asks, and the
+                      # page should say so instead of implying a read is free.
+                      "github_inspect", "github_comment", "github_open_issue",
+                      "github_rerun_workflow",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
@@ -2579,6 +2598,12 @@ LOCKDOWN_ACTIONS = frozenset({
     "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
     "news_read", "page_read", "read_web_page", "github_read", "youtube_captions_read", "quiz_cloud_grade",
+    # your own GitHub, on demand (2026-11-03): all four leave this PC through
+    # api.github.com with the owner's token. They ship as "ask", so Lockdown
+    # changes nothing today - they are here so that a line loosened to
+    # "notify" one day still asks while Lockdown is on, like every other way
+    # out of this PC on this list.
+    "github_inspect", "github_comment", "github_open_issue", "github_rerun_workflow",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

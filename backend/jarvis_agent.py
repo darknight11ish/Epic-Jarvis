@@ -740,6 +740,92 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
     return R.matrix(out)
 
 
+# --------------------------------------------------------------------------
+#   GitHub: read it, and take three small actions (jarvis_github.py)
+# --------------------------------------------------------------------------
+#: The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
+#: open pull requests, issues, CI status, one file) and take three small ACTIONS
+#: (comment, open an issue, re-run a workflow) - each action behind its own
+#: approval card - and it may never merge, push, commit, delete or close.
+#:
+#: ALL SIX ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
+#: a fixed-endpoint read still sends the owner's own GitHub token to
+#: api.github.com, so it is egress with a credential attached. `github_read` is
+#: the action a "tell me when" GitHub watch already uses, and it MUST stay
+#: `"auto"` in the shipped config (a look every 30 minutes cannot raise a card
+#: every 30 minutes), which is exactly why these tools do NOT reuse that name.
+#: Their own action is `github_inspect`, shipped as `"ask"`; being in
+#: NEEDS_A_PERSON as well means an owner who loosens that line still cannot make
+#: a GitHub read run with nobody asked.
+GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status")
+GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow")
+GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
+
+
+class _GitHubNoToken:
+    """What a GitHub planner returns when no token is saved yet.
+
+    NOT a card: there is nothing to approve, and a card nobody can act on is
+    noise. `_one_call` answers with the plain "connect GitHub" sentence instead,
+    which is the one thing that actually fixes it.
+    """
+
+    def __init__(self, words: str):
+        self.words = words
+
+
+def _github_plan(planner, args: dict):
+    """(request, card text) for one GitHub tool, or the no-token answer.
+
+    `planner` is one of `jarvis_github.plan_*`: it validates its own arguments and
+    opens no socket. A bad argument raises out of here and reaches the model as an
+    ordinary tool result; no token is a plain answer with no card.
+    """
+    import jarvis_github as GH
+    if not GH.connected():
+        return _GitHubNoToken(GH.NOT_CONNECTED), ""
+    r = planner(args)
+    return r, GH.describe(r)
+
+
+def _prepare_github_list(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_list, args)
+
+
+def _prepare_github_read_file(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_read_file, args)
+
+
+def _prepare_github_ci_status(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_ci, args)
+
+
+def _prepare_github_comment(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_comment, args)
+
+
+def _prepare_github_open_issue(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_open_issue, args)
+
+
+def _prepare_github_rerun_workflow(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_rerun, args)
+
+
+def _run_github(args: dict, plan_obj, **_) -> dict:
+    """Run the ONE request the card showed - `plan_obj`, the object the card was
+    built from, never a new object built from `args` a second time (the same
+    shape send_email uses, and the reason `Tool.prepare`'s docstring gives)."""
+    import jarvis_github as GH
+    return GH.run(plan_obj, approved=True)
+
+
 def _prepare_web_search(args: dict):
     """Only for the tool test and for a caller outside _one_call: the chat
     loop handles web_search itself (_web_search_call), because when it asks
@@ -4192,6 +4278,92 @@ TOOLS: dict = {
         # which action name (and therefore which tier) governs THIS call.
         gate_lookup_name=lambda args: _github_search_action_name(),
         instead={"web_search": "For a general web search, use web_search."}),
+    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03: "Read + actions"). Every one of the six
+    # asks a person: `github_inspect`'s tier is "ask" in the shipped config, and
+    # all six are in NEEDS_A_PERSON, so a loosened tier still cannot run one with
+    # nobody asked (the reason is on GITHUB_READ_TOOLS above).
+    #
+    # The lookup names are the TOOL names: github-tools.patch registers each one
+    # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
+    # `action_for_tool` answers with that action rather than falling through to
+    # `unclassified_tool`. With no gate importable they stay their own name and
+    # ask, which is the same fail-safe.
+    "github_list": Tool(
+        "github_list",
+        "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the "
+        "open pull requests on one repository (\"pulls\"), its open issues "
+        "(\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing "
+        "on GitHub changes. It asks you before every read. It cannot merge, push, "
+        "commit, delete or close anything.",
+        {"type": "object", "properties": {
+            "scope": {"type": "string", "enum": ["repos", "pulls", "issues", "runs"],
+                      "description": "which list to read"},
+            "repo": {"type": "string",
+                     "description": 'owner/name, e.g. "darknight11ish/Epic-Jarvis"; '
+                                    "not needed for \"repos\""}},
+         "required": ["scope"]},
+        _prepare_github_list, _run_github,
+        instead={"github_ci_status": "For how CI went, use github_ci_status."}),
+    "github_read_file": Tool(
+        "github_read_file",
+        "Read ONE file's text from a repository the saved GitHub token can see, "
+        "at an optional branch or commit. Read-only: nothing changes. It asks you "
+        "before every read. It cannot write, edit or commit a file.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "path": {"type": "string",
+                     "description": 'the path inside the repository, e.g. "README.md"'},
+            "ref": {"type": "string",
+                    "description": "a branch or commit; leave it out for the default"}},
+         "required": ["repo", "path"]},
+        _prepare_github_read_file, _run_github),
+    "github_ci_status": Tool(
+        "github_ci_status",
+        "How CI went: the newest workflow run for a repository and branch, or for "
+        "a pull request. Read-only: nothing changes. It asks you before every read.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "branch": {"type": "string", "description": "a branch name"},
+            "pr": {"type": "string", "description": "a pull request number"}},
+         "required": ["repo"]},
+        _prepare_github_ci_status, _run_github),
+    "github_comment": Tool(
+        "github_comment",
+        "Post ONE comment on a GitHub issue or pull request, exactly as written. "
+        "You see the whole comment on an approval card first and nothing is posted "
+        "without your yes. It never merges, pushes, commits, closes or deletes "
+        "anything, and it cannot take a comment back.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the issue or pull request number"},
+            "body": {"type": "string",
+                     "description": "the whole comment, as it will be posted"}},
+         "required": ["repo", "number", "body"]},
+        _prepare_github_comment, _run_github),
+    "github_open_issue": Tool(
+        "github_open_issue",
+        "Open ONE new issue on a repository, with a title and an optional body. You "
+        "see all of it on an approval card first and nothing is opened without your "
+        "yes. It never merges, pushes, commits, closes or deletes anything, and it "
+        "cannot close, edit or delete the issue afterwards.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "title": {"type": "string", "description": "the issue's title"},
+            "body": {"type": "string", "description": "the issue's text; may be left out"}},
+         "required": ["repo", "title"]},
+        _prepare_github_open_issue, _run_github),
+    "github_rerun_workflow": Tool(
+        "github_rerun_workflow",
+        "Ask GitHub to run an existing workflow run AGAIN, with the same code and "
+        "settings it ran with before. You see which run on an approval card first "
+        "and nothing re-runs without your yes. It changes no code and no setting, "
+        "and it never merges, pushes, commits, closes or deletes anything.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "run_id": {"type": "string", "description": "the workflow run's number"}},
+         "required": ["repo", "run_id"]},
+        _prepare_github_rerun_workflow, _run_github),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
     # provider the owner chose - SearXNG on this PC by default - and never
     # another one quietly. Handled by _web_search_call, not the generic path:
@@ -5145,6 +5317,23 @@ def _github_search_action_name() -> str:
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",
+    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03). The READS are here for the same reason
+    # `github_search` above is: a read sends the owner's own GitHub token to
+    # api.github.com on a fixed address, so it is egress with a credential
+    # attached, and "it is only a read" is not a reason to spend a credential
+    # with nobody looking. Each action's line says what changes.
+    "github_list": "sends the owner's GitHub token to api.github.com to read their "
+                   "repositories, pull requests, issues or workflow runs",
+    "github_read_file": "sends the owner's GitHub token to api.github.com to read one "
+                        "file in a repository",
+    "github_ci_status": "sends the owner's GitHub token to api.github.com to read how CI "
+                        "went",
+    "github_comment": "posts a comment on GitHub in the owner's name, which cannot be "
+                      "taken back",
+    "github_open_issue": "opens a new issue on GitHub in the owner's name",
+    "github_rerun_workflow": "starts a CI run on GitHub, which spends the work of running "
+                             "the checks again",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",
@@ -9030,7 +9219,15 @@ TOOL_GROUPS = (
     # because raising the card is a single deliberate act and nothing else in
     # this file may do it. `jarvis_quick.py` raises the same card with no model.
     ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
-    ("github", "search GitHub for a library", ("github_search",)),
+    # GitHub: searching it for a library, and (2026-11-03) reading the owner's
+    # own and taking the three small actions. The six joined this group rather
+    # than starting new ones for the reason the propose_plan note below gives: a
+    # NEW group name costs tokens in more_tools' own description on every turn,
+    # and a group's MEMBERS cost nothing extra there. They belong together
+    # anyway - every one of them is about GitHub, and all six ship switched off.
+    ("github", "search GitHub for a library, or read your own GitHub and act on it",
+     ("github_search", "github_list", "github_read_file", "github_ci_status",
+      "github_comment", "github_open_issue", "github_rerun_workflow")),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
     # group above: its own name, one member, because both are a single
@@ -9233,6 +9430,21 @@ TOOL_HINTS = {
                         r"\bfirefox\b", r"page element"),
     "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",
                       r"\bpackage\b", r"\bexisting\b"),
+    # Your own GitHub, on demand (2026-11-03). Each of the six has words of its
+    # own so `tool_diet` can tell them apart: `github` alone is on all six, and
+    # the six must not be sent to the model for every GitHub question - the
+    # other words are what actually narrow it.
+    "github_list": (r"\bgithub\b", r"\brepos?\b", r"\bpull requests?\b",
+                    r"\bissues?\b", r"\bworkflow runs?\b", r"\bmy repos\b"),
+    "github_read_file": (r"\bgithub\b", r"\bfile\b", r"\bsource\b", r"\breadme\b"),
+    "github_ci_status": (r"\bgithub\b", r"\bci\b", r"\bchecks?\b", r"\bworkflow\b",
+                         r"\bbuild\b", r"\bactions?\b", r"\bfailed\b"),
+    "github_comment": (r"\bgithub\b", r"\bcomment\b", r"\bpull request\b", r"\bissue\b",
+                       r"\breply\b"),
+    "github_open_issue": (r"\bgithub\b", r"\bopen\b[\s\S]{0,20}\bissue\b",
+                          r"\bfile\b[\s\S]{0,20}\bbug\b", r"\bnew issue\b"),
+    "github_rerun_workflow": (r"\bgithub\b", r"\bre-?run\b", r"\bworkflow\b",
+                              r"\bci\b", r"\bagain\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
                    r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),
@@ -15951,6 +16163,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                                     f"arguments: {type(exc).__name__}: {exc}"})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
+        return
+    if name in GITHUB_TOOLS and isinstance(state, _GitHubNoToken):
+        # NO TOKEN, so nothing to approve and NO CARD (2026-11-03). A card here
+        # would ask the owner to approve a read that cannot happen; the plain
+        # sentence names the one thing that fixes it ("connect GitHub").
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content({"ok": False, "connected": False,
+                                                "error": state.words})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
         return
     if name == PROTECT_TOOL and isinstance(state, (_ProtectionListed,
                                                   _ProtectionNoChange)):

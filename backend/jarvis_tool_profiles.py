@@ -86,6 +86,7 @@ CONTEXT_LIMIT = 1200
 #: plain table rather than prose repeated beside each profile's user-facing
 #: words. A profile's `sources` list holds these names, not the paths.
 AGENT             = "backend/jarvis_agent.py"
+GITHUB            = "backend/jarvis_github.py"
 REBUILT_FRAMEWORK = "backend/rebuilt/jarvis-framework.toml"
 ASKS_FIRST        = "backend/jarvis_asks_first.py"
 REBUILT_MEMORY    = "backend/rebuilt/jarvis_memory.py"
@@ -572,6 +573,187 @@ PROFILES: dict = {
         "enable_hint": "Turn on \"GitHub research\" in Settings (it is an in-app "
                        "switch).",
         "sources": [AGENT, RESEARCH, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    # The six on-demand GitHub tools (2026-11-03, the owner's "Read + actions"
+    # decision). They are ONE family of six, not six entries in other families,
+    # because together they are "your own GitHub": three reads that ask every
+    # time (a read still sends the owner's token to api.github.com) and three
+    # actions that each raise their own card. The tier is `switchable`: every
+    # one is in `jarvis_asks_first.TOOLS_SWITCHABLE` and none is in the
+    # shipped `[tools].enabled` list.
+    "github_list": {
+        "id": "github_list",
+        "title": "List your own GitHub: repositories, pull requests, issues or runs",
+        "what": "Lists ONE fixed thing on GitHub: your repositories, a "
+                "repository's open pull requests, its open issues, or its "
+                "recent workflow runs. Read-only and carded: every read asks "
+                "you first, and nothing on GitHub can change.",
+        "gives": [
+            "See your repositories, newest updated first",
+            "See the open pull requests on one repository you name",
+            "See its open issues, or its recent workflow runs",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Reads only - it cannot write, merge, push, close or delete "
+            "anything",
+            "A read sends your GitHub token to api.github.com, so it asks "
+            "every time",
+            "Not in the shipped [tools].enabled list: turn it on in Settings",
+        ],
+        "combines": {
+            "github_read_file": "github_list finds the path; github_read_file "
+                                "reads that one file.",
+            "github_ci_status": "github_list shows the runs; github_ci_status "
+                                "says how the newest one went.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_read_file": {
+        "id": "github_read_file",
+        "title": "Read one file from your own GitHub",
+        "what": "Reads ONE file's text from a repository the saved token can "
+                "see, at an optional branch or commit. GitHub sends the file "
+                "in base64 and Jarvis decodes it, so what comes back is the "
+                "file's text, capped at 40,000 characters.",
+        "gives": [
+            "Read one source file, README or config from a repository",
+            "Read it at a branch or a commit you name",
+            "See the file's own text, never GitHub's JSON envelope",
+        ],
+        "touches": "network service",
+        "limits": [
+            "One file per call, cut at 40,000 characters with a marker",
+            "A directory, or a file too big for this read, gets a sentence "
+            "instead of text",
+            "Reads only - it cannot edit, commit or write a file",
+        ],
+        "combines": {
+            "github_list": "github_list names the repository and path; "
+                           "github_read_file reads the file.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_ci_status": {
+        "id": "github_ci_status",
+        "title": "How CI went, from your own GitHub",
+        "what": "Reports the newest workflow run for a repository and branch, "
+                "or for a pull request whose head commit is read first: still "
+                "going, passed, failed or cancelled. It asks before every read "
+                "and starts nothing.",
+        "gives": [
+            "See the newest run's status and conclusion",
+            "Check the checks on one pull request",
+            "Know that GitHub keeps the failing log, not Jarvis",
+        ],
+        "touches": "network service",
+        "limits": [
+            "It never reads the failing log itself - GitHub keeps it",
+            "One read per call, and it asks every single time",
+            "Reads only - a re-run is the separate github_rerun_workflow "
+            "action",
+        ],
+        "combines": {
+            "github_rerun_workflow": "github_ci_status says a run failed; "
+                                     "github_rerun_workflow asks to run it "
+                                     "again.",
+            "github_list": "github_list shows the runs; github_ci_status says "
+                           "how the newest went.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_comment": {
+        "id": "github_comment",
+        "title": "Post one comment on your own GitHub",
+        "what": "Posts ONE comment on a GitHub issue or pull request, exactly "
+                "as written, in your name. The whole text is shown on one card "
+                "first and nothing is posted without your yes.",
+        "gives": [
+            "Reply on an issue or a pull request in your own words",
+            "See the whole comment on the card before it is posted",
+            "Know it was posted, or get a plain sentence saying why not",
+        ],
+        "touches": "network service",
+        "limits": [
+            "One comment per call, at most 2,000 characters",
+            "It cannot edit or take a comment back once posted",
+            "Never merges, pushes, commits, closes or deletes anything",
+        ],
+        "combines": {
+            "github_list": "github_list finds the issue or pull request "
+                           "number; github_comment posts the reply.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_open_issue": {
+        "id": "github_open_issue",
+        "title": "Open one issue on your own GitHub",
+        "what": "Opens ONE new issue on a repository, with a title and an "
+                "optional body, in your name. The title and body are shown on "
+                "one card first, and it cannot close or edit the issue later.",
+        "gives": [
+            "File a bug or a task as a GitHub issue",
+            "See the whole title and body on the card first",
+            "Know it was opened, or get a plain sentence saying why not",
+        ],
+        "touches": "network service",
+        "limits": [
+            "One issue per call, with a 2,000-character body cap",
+            "It cannot close, edit or delete the issue afterwards",
+            "Never merges, pushes, commits, closes or deletes anything",
+        ],
+        "combines": {
+            "github_ci_status": "github_ci_status shows a failing run; "
+                                "github_open_issue files what it found.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_rerun_workflow": {
+        "id": "github_rerun_workflow",
+        "title": "Ask GitHub to run one workflow again",
+        "what": "Asks GitHub to run an existing workflow run AGAIN, with the "
+                "same code and settings it ran with before. It shows which run "
+                "on a card first, changes no code and no setting.",
+        "gives": [
+            "Re-run a failed or flaky workflow without a push",
+            "See which run will start again on the card first",
+            "Know GitHub accepted it, or get a plain sentence saying why not",
+        ],
+        "touches": "network service",
+        "limits": [
+            "It re-runs a run GitHub already has - it cannot start a new one",
+            "A run that has started cannot be taken back",
+            "It never merges, pushes, commits, closes or deletes anything",
+        ],
+        "combines": {
+            "github_ci_status": "github_ci_status says a run failed; "
+                                "github_rerun_workflow asks to run it again.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
     "web_search": {
@@ -2003,18 +2185,26 @@ FAMILIES: dict = {
     "coding": {
         "title": "Coding, development and inspecting a program",
         "what": "Checking GitHub for an existing library before building one, "
-                "running a real command on this PC, planning several steps as one "
-                "card, and statically inspecting a program, APK, capture or database.",
-        "tools": ["github_search", "shell_exec", "propose_plan", "rea_investigate"],
+                "reading your own repositories, pull requests, issues, CI and "
+                "files, running a real command on this PC, planning several "
+                "steps as one card, and statically inspecting a program, APK, "
+                "capture or database.",
+        "tools": ["github_search", "shell_exec", "propose_plan", "rea_investigate",
+                  "github_list", "github_read_file", "github_ci_status",
+                  "github_comment", "github_open_issue", "github_rerun_workflow"],
         "impact": "This is the family the owner uses to actually build things with "
                   "Jarvis: it answers \"has someone already built this?\" with a "
                   "graded verdict, runs the installer or the build, and can inspect "
                   "a binary or an APK to see what it is made of. The plan card is "
                   "what makes a multi-step job approvable in one read instead of ten "
-                  "separate clicks.",
+                  "separate clicks. It also reads your own GitHub on demand - "
+                  "repositories, pull requests, issues, CI and one file - and can "
+                  "post one comment, open one issue or re-run one workflow, each "
+                  "behind its own card; it can never merge, push or delete.",
         "limits": ["Every way out of the PC here is carded: shell commands always "
-                   "ask, GitHub research needs an approved plan, and a plan's risky "
-                   "step asks again",
+                   "ask, GitHub research needs an approved plan, a look at your "
+                   "own GitHub asks every time, and each of its three actions has "
+                   "its own card",
                    "REA refuses live process capture, device changes and debugger "
                    "sessions by name, and the plan module ships off until a "
                    "measured evaluation passes",

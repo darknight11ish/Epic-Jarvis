@@ -107,6 +107,16 @@ TOOL_NAMES = {
     "control_phone": "Phone control",
     "browser_control": "Browser control",
     "github_search": "GitHub research",
+    # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
+    # 2026-11-03: "Read + actions"). Every one asks you first, and none of them
+    # can merge, push, commit, delete or close anything.
+    "github_list": "Listing your GitHub repositories, pull requests, issues or runs "
+                   "(one card each)",
+    "github_read_file": "Reading one file in a GitHub repository (one card each)",
+    "github_ci_status": "Checking how CI went on GitHub (one card each)",
+    "github_comment": "Posting a comment on GitHub (one card each)",
+    "github_open_issue": "Opening a GitHub issue (one card each)",
+    "github_rerun_workflow": "Running a GitHub workflow again (one card each)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",

@@ -180,6 +180,9 @@ def t_the_patch_and_the_base():
              # has no hunk in jarvis_hud.py at all.
              "skill-install-note.patch",
              "phone-apps.patch",
+             # github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+             # everything these patches wrote, so it rewrites none of their lines.
+             "github-tools.patch",
              # bench.patch (2026-11-04, the self-benchmark) is appended after
              # this patch, immediately before plugin-loader.patch: TWO hunks,
              # both in jarvis_hud.py (the GET /api/bench routes and the POST
