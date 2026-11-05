@@ -219,7 +219,12 @@ SKIP_MARKER = re.compile(r"^skip(ped)?(?=[ \t:]|$)", re.IGNORECASE)
 #:   fixture cannot be built without Windows' icacls and the account's own name,
 #:   and it is printed UNCONDITIONALLY - without this entry four green rows go
 #:   red on every platform; "is not nt": a Windows-only question asked on
-#:   another OS.
+#:   another OS; "this is not windows" and "does not enforce it": the two
+#:   Windows-only probes the 2026-11-04 long-path backup fix added - one can
+#:   only run on Windows at all, the other needs a filesystem that enforces the
+#:   Windows path limit. Both are machine limits, not missing guards, and the
+#:   Linux backend job prints them; the suite itself still counts them as skips,
+#:   never as passes.
 #: * test_settings_tool - "not importable in this environment": a setter's
 #:   module is not installed in this interpreter; the suite prints the count and
 #:   never counts it as a pass.
@@ -230,7 +235,8 @@ SKIP_MARKER = re.compile(r"^skip(ped)?(?=[ \t:]|$)", re.IGNORECASE)
 #: here; until it is, its row is red, which is the honest direction.
 ENVIRONMENT_SKIPS = {
     "backend/test_data_backup.py": (
-        "is not installed", "needs icacls", "is not nt"),
+        "is not installed", "needs icacls", "is not nt",
+        "this is not windows", "does not enforce it"),
     "backend/test_settings_tool.py": ("not importable in this environment",),
 }
 

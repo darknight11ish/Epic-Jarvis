@@ -42,6 +42,15 @@ made in a temp folder: **nothing in this file reads or writes the owner's real
   10. the weekly task runs `pythonw.exe` (no window), weekly, with no `/RU` and
       no `/RP` (no administrator, no stored password), and says in its own
       description that the snapshot it makes is NOT encrypted.
+  11. **a destination path longer than Windows allows is NOT fatal** - the
+      2026-11-01 failure, reproduced in a fixture and then shown to be fixed -
+      and one file that still will not copy leaves the snapshot `-INCOMPLETE`
+      and the run failing, never a silent week;
+  12. **a failed run can never look like a pass**: however a run ends, FAILED
+      reaches `last-run.txt` in BOTH the destination and the installed folder,
+      the run's own half-built `.partial` folder is cleaned up, and retention
+      can only ever touch this tool's own `jarvis-snap-*` and
+      `.partial-XXXXXXXX.partial` names.
 """
 import argparse
 import contextlib
@@ -52,6 +61,7 @@ import shutil
 import sqlite3
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -1236,10 +1246,295 @@ def t_a_sealed_run_warns_when_the_data_folder_is_readable_by_others():
           "WARNING" in out and "BUILTIN\\Users" in out and "permission" in out.lower(), out[-1200:])
 
 
+# ---------------------------------------------------------------------------
+#   11. deep paths, and a run that must never fail in silence (2026-11-04)
+# ---------------------------------------------------------------------------
+#
+# On 2026-11-01 the weekly task ran, failed with result 1, and left the backup
+# folder still saying OK from 2026-10-25. It did the same every week after. The
+# cause was one destination path too long for Windows: `~/.openjarvis/apps` was
+# created on 2026-10-30, and the 235-character `graph.bin` inside it became a
+# 274-character destination path once the snapshot's `.partial-XXXX.partial`
+# folder name was in front of it. `CopyFile2` answers that with `WinError 3`,
+# `cmd_backup` caught only `Refused`, and `pythonw.exe` has no console for the
+# traceback - so nothing was written anywhere and nobody was told.
+#
+# The checks below pin the cause fixed, and - more important - pin it so a run
+# can never again fail without saying so.
+
+
+def t_a_file_deeper_than_windows_allows_is_backed_up():
+    print("\n--- t_a_file_deeper_than_windows_allows_is_backed_up ---")
+    # The mechanism first, so it is readable even where the limit does not bite.
+    short = "C:\\Users\\pcadmin\\.openjarvis\\appearance.json"
+    check("a path that already fits is handed on untouched",
+          jdb._long_path(short) == short, jdb._long_path(short))
+    over = ("C:\\Users\\pcadmin\\Documents\\Jarvis Backups\\.partial-msiqbffm.partial\\"
+            "apps\\.tasks\\field-test-app-45744cbe8f9e\\app\\build\\intermediates\\"
+            "desugar_graph\\debug\\dexBuilderDebug\\out\\currentProject\\"
+            + "j" * 64 + "_bucket_0\\graph.bin")
+    if os.name == "nt":
+        got = jdb._long_path(over)
+        check("a path past the Windows limit gets the \\\\?\\ prefix",
+              got.startswith("\\\\?\\") and got.endswith("graph.bin"), got[:44])
+        check("...and asking for it twice does not double the prefix",
+              jdb._long_path(got) == got, jdb._long_path(got)[:24])
+    else:
+        skip("the \\\\?\\ prefix", "this is not Windows")
+
+    # Then the real shape: the DESTINATION is long enough that the build
+    # folder's own name is what pushes the copy over the line. No databases in
+    # this fixture on purpose - this is the file-copy path, and SQLite has its
+    # own long-path ceiling that a 200-character destination would trip
+    # instead, which would test the wrong thing.
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-deep-", dir=ROOT_TMP))
+    src = base / "source"
+    (src / "voice").mkdir(parents=True)
+    src.joinpath("config.toml").write_text("[server]\nport = 8765\n", encoding="utf-8")
+    rel = f"apps/field-test-app/{'d' * 24}/{'e' * 24}/graph.bin"
+    deep = src / rel
+    deep.parent.mkdir(parents=True)
+    deep.write_bytes(b"DEEP" * 64)
+    dest = base / ("p" * 40) / ("q" * 40) / ("r" * 40) / "snapshots"
+    dest.mkdir(parents=True)
+    worst = len(str(dest)) + 1 + len(".partial-abcdefgh.partial") + 1 + len(rel)
+    if os.name != "nt" or worst <= jdb.MAX_WINDOWS_PATH + 1:
+        skip("a snapshot whose destination is past the Windows path limit",
+             f"this machine does not enforce it, or the temp folder is too short "
+             f"({worst} characters)")
+        return
+
+    with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+        result = jdb.take_snapshot(src, dest)
+    check("a snapshot holding a path over the limit completes and verifies",
+          result["ok"] and not result["problems"], str(result["problems"])[:400])
+    check("...and the deep file is IN it, not quietly left out",
+          rel in result["manifest"]["files"],
+          str([k for k in result["manifest"]["files"] if "graph" in k]))
+    on_disk = Path(result["path"]) / rel
+    try:
+        with open(jdb._long_path(on_disk), "rb") as fh:
+            first = fh.read(8)
+    except OSError as exc:
+        first = f"UNREADABLE: {exc}"
+    check("...with its real bytes on disk", first == b"DEEPDEEP", str(first))
+    with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+        verified = jdb.verify_snapshot(result["path"])
+    check("...and the snapshot verifies with the deep file in place",
+          verified["problems"] == [], str(verified["problems"])[:300])
+
+
+def t_one_file_that_will_not_copy_is_reported_and_never_a_pass():
+    print("\n--- t_one_file_that_will_not_copy_is_reported_and_never_a_pass ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-poison-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest, state = base / "snapshots", base / "state"
+    dest.mkdir()
+    real = jdb.shutil.copy2
+
+    def poison(src_path, dst_path, *a, **k):
+        # The 2026-11-01 shape: ONE file refuses to copy, everything else is
+        # fine. It must not take the whole snapshot down with it.
+        if str(src_path).endswith("owner-phone.json"):
+            raise PermissionError(13, "the file is locked by another program")
+        return real(src_path, dst_path, *a, **k)
+
+    jdb.shutil.copy2 = poison
+    try:
+        with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(state)):
+            code, out = _run(jdb.cmd_backup, _backup_args(src, dest, plaintext=True))
+            note = dest / "last-run.txt"
+            installed = state / "last-run.txt"
+            note_text = note.read_text(encoding="utf-8") if note.is_file() else "ABSENT"
+            installed_text = (installed.read_text(encoding="utf-8")
+                              if installed.is_file() else "ABSENT")
+    finally:
+        jdb.shutil.copy2 = real
+
+    snapshots = jdb.list_snapshots(dest)
+    check("one file that will not copy does NOT take the snapshot down",
+          len(snapshots) == 1 and len(snapshots[0]["path"].parts) > 0, str(snapshots))
+    check("...the snapshot is kept as -INCOMPLETE, never as a verified one",
+          len(snapshots) == 1 and snapshots[0]["incomplete"], str([r["name"] for r in snapshots]))
+    check("...and last-run.txt says FAILED, naming the file",
+          "FAILED" in note_text and "owner-phone.json" in note_text, note_text)
+    check("...the installed folder's copy says the same, so neither can look like a pass",
+          "FAILED" in installed_text and "owner-phone.json" in installed_text, installed_text)
+    check("the run exits non-zero, so the task's own result is a failure",
+          code == 1, str(code))
+    check("...and the destination holds the rest of the data, not an empty folder",
+          len(jdb.verify_snapshot(snapshots[0]["path"])["counts"]) > 0
+          if snapshots else False, str(snapshots))
+
+
+def t_a_run_that_dies_still_writes_last_run_in_both_folders():
+    print("\n--- t_a_run_that_dies_still_writes_last_run_in_both_folders ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-dies-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest, state = base / "snapshots", base / "state"
+    dest.mkdir()
+    real = jdb._fill_snapshot
+
+    def boom(*a, **k):
+        raise RuntimeError("the disk went away")
+
+    jdb._fill_snapshot = boom
+    try:
+        with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(state)):
+            code, out = _run(jdb.cmd_backup, _backup_args(src, dest, plaintext=True))
+            note = dest / "last-run.txt"
+            installed = state / "last-run.txt"
+            note_text = note.read_text(encoding="utf-8") if note.is_file() else "ABSENT"
+            installed_text = (installed.read_text(encoding="utf-8")
+                              if installed.is_file() else "ABSENT")
+    finally:
+        jdb._fill_snapshot = real
+
+    check("a run that died unexpectedly exits non-zero", code != 0, str(code))
+    check("...writes last-run.txt in the DESTINATION saying FAILED",
+          "FAILED" in note_text, note_text)
+    check("...and says why, in words that name the real trouble",
+          "the disk went away" in note_text, note_text)
+    check("...and the same record in the INSTALLED folder",
+          "FAILED" in installed_text and "the disk went away" in installed_text,
+          installed_text)
+    left = [p.name for p in dest.iterdir() if jdb.PARTIAL_RE.match(p.name)]
+    check("...and it does not leave its own half-built folder behind", left == [], str(left))
+    check("...so nothing that looks like a snapshot was left",
+          jdb.list_snapshots(dest) == [], str(jdb.list_snapshots(dest)))
+
+
+def t_an_abandoned_partial_is_cleared_and_never_blocks_the_next_run():
+    print("\n--- t_an_abandoned_partial_is_cleared_and_never_blocks_the_next_run ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-partial-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "snapshots"
+    dest.mkdir()
+    old = time.time() - 3 * 3600
+
+    # The real one found on this PC on 2026-11-04, 0 bytes in the folder listing
+    # and 45 half-copied files inside it.
+    abandoned = dest / ".partial-msiqbffm.partial"
+    (abandoned / "apps").mkdir(parents=True)
+    (abandoned / "apps" / "half-copied.db").write_bytes(b"x" * 32)
+    os.utime(str(abandoned), (old, old))
+    # A run that may genuinely still be going.
+    fresh = dest / ".partial-stillgoing.partial"
+    fresh.mkdir()
+    # Two things that are NOT this tool's, and must never be touched.
+    strangers_file = dest / ".video.partial"
+    strangers_file.write_bytes(b"somebody else's half download")
+    strangers_dir = dest / ".partial-ABCDEFGH.partial"
+    strangers_dir.mkdir()
+    os.utime(str(strangers_dir), (old, old))
+
+    removed = jdb.clear_stale_partials(dest)
+    check("a crashed run's own build folder is cleared",
+          removed == [abandoned.name] and not abandoned.exists(), str(removed))
+    check("a young one is left alone, because a run may still be using it",
+          fresh.is_dir())
+    check("a .partial file belonging to another program is NOT touched",
+          strangers_file.is_file())
+    check("...nor a folder whose name is not this tool's own shape",
+          strangers_dir.is_dir())
+    check("the shape cleaned up is exactly this tool's own build folder",
+          bool(jdb.PARTIAL_RE.match(".partial-msiqbffm.partial"))
+          and not jdb.PARTIAL_RE.match(".video.partial")
+          and not jdb.PARTIAL_RE.match("jarvis-backup-20261010-163158.jbak")
+          and not jdb.PARTIAL_RE.match("jarvis-snap-20261025-030001.jba"))
+
+    # And a leftover from last week must not stop this week's snapshot.
+    stale = dest / ".partial-zzzzzzzz.partial"
+    stale.mkdir()
+    os.utime(str(stale), (old, old))
+    with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+        result = jdb.take_snapshot(src, dest)
+    check("last week's leftover does not stop this week's snapshot",
+          result["ok"] and not stale.exists(),
+          f"ok={result['ok']}, leftover still there={stale.exists()}")
+
+
+def t_a_sealing_failure_never_leaves_the_snapshot_readable():
+    print("\n--- t_a_sealing_failure_never_leaves_the_snapshot_readable ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-sealfail-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "snapshots"
+    dest.mkdir()
+    real = jdb._seal_folder
+
+    def nospace(folder, out_path, passphrase):
+        # NOT a Refused: a full disk, a locked file, a bug. The old code caught
+        # only Refused here, so the whole readable snapshot stayed on disk while
+        # the run reported a failure - a sealed backup that is not sealed.
+        raise OSError(28, "There is not enough space on the disk")
+
+    jdb._seal_folder = nospace
+    try:
+        with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+            why = _raised(lambda: jdb.take_snapshot(src, dest, passphrase="a phrase"))
+            left = [str(f) for f in _files_under(dest)]
+    finally:
+        jdb._seal_folder = real
+
+    check("a sealing failure that is NOT a clean refusal still stops the run",
+          isinstance(why, OSError), repr(why))
+    check("...and leaves NO readable copy of the data behind",
+          not any(name.endswith(".db") for name in left), str(left[:5]))
+    check("...and no snapshot of any kind is left to be mistaken for one",
+          jdb.list_snapshots(dest) == [], str(jdb.list_snapshots(dest)))
+
+
+def t_retention_can_only_touch_this_tools_own_files():
+    print("\n--- t_retention_can_only_touch_this_tools_own_files ---")
+    base = Path(tempfile.mkdtemp(prefix="jarvis-databak-own-", dir=ROOT_TMP))
+    src = build_source(base)
+    dest = base / "snapshots"
+    dest.mkdir()
+    jbak = dest / "jarvis-backup-20261010-163158.jbak"
+    jbak.write_bytes(b"JBAK1" + b"x" * 64)
+    stranger = dest / ".video.partial"
+    stranger.write_bytes(b"somebody else's half download")
+    note = dest / "notes.txt"
+    note.write_text("the owner's own note", encoding="utf-8")
+    plain_copy = dest / "jarvis-data-2026-10-13-223631"
+    plain_copy.mkdir()
+    (plain_copy / "memory.db").write_bytes(b"old plain copy")
+    stale_incomplete = dest / f"jarvis-snap-20200101-000000{jdb.INCOMPLETE}"
+    stale_incomplete.mkdir()
+    # Older than STALE_DAYS relative to the `now` the runs below are given, so
+    # this check does not depend on today's date.
+    long_ago = 1_700_010_000 - 30 * 86400
+    os.utime(str(stale_incomplete), (long_ago, long_ago))
+
+    with isolated_env(JARVIS_DATA_BACKUP_STATE_DIR=str(base / "state")):
+        made = [jdb.take_snapshot(src, dest, keep=2, now=1_700_010_000 + i)["name"]
+                for i in range(4)]
+    names = [r["name"] for r in jdb.list_snapshots(dest)]
+    complete = [n for n in names if not n.endswith(jdb.INCOMPLETE)]
+
+    check("the owner's encrypted .jbak file is untouched", jbak.is_file())
+    check("another program's .partial file is untouched", stranger.is_file())
+    check("a file of the owner's in the same folder is untouched", note.is_file())
+    check("the older plain copy is untouched",
+          plain_copy.is_dir() and (plain_copy / "memory.db").is_file())
+    check("only the newest 2 complete snapshots are kept",
+          len(complete) == 2 and made[-1] in complete, str(complete))
+    check("a failed snapshot older than the stale window is cleared",
+          not stale_incomplete.exists(), str(names))
+    check("nothing this tool did not make was ever in `removed`",
+          all(jdb.SNAP_RE.match(n) or jdb.PARTIAL_RE.match(n) for n in names),
+          str(names))
+
+
 def main() -> int:
     global ROOT_TMP
     ROOT_TMP = tempfile.mkdtemp(prefix="jarvis-databak-")
     jdb.KEY_STORE = lambda target: _FakeKeyStore(target)
+    # Every run now writes `last-run.txt` into the installed folder as well as
+    # the destination. Point "the installed folder" at this suite's own temp
+    # folder so the suite can never write into a real install - and so the
+    # checks that assert BOTH copies are testing a folder this file owns.
+    os.environ["JARVIS_DATA_BACKUP_STATE_DIR"] = str(Path(ROOT_TMP) / "installed")
     try:
         for fn in (t_no_network_call_anywhere_in_the_tool,
                    t_a_database_living_in_its_wal_is_snapshotted_whole,
@@ -1268,7 +1563,13 @@ def main() -> int:
                    t_a_folder_inside_the_live_data_folder_is_refused_and_nothing_is_written,
                    t_a_chosen_folder_that_is_gone_fails_loudly,
                    t_an_unwritable_folder_fails_loudly,
-                   t_the_other_drive_is_a_note_and_the_program_folder_is_a_refusal):
+                   t_the_other_drive_is_a_note_and_the_program_folder_is_a_refusal,
+                   t_a_file_deeper_than_windows_allows_is_backed_up,
+                   t_one_file_that_will_not_copy_is_reported_and_never_a_pass,
+                   t_a_run_that_dies_still_writes_last_run_in_both_folders,
+                   t_an_abandoned_partial_is_cleared_and_never_blocks_the_next_run,
+                   t_a_sealing_failure_never_leaves_the_snapshot_readable,
+                   t_retention_can_only_touch_this_tools_own_files):
             try:
                 fn()
             except Exception:
