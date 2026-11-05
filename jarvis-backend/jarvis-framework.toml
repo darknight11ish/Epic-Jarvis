@@ -327,6 +327,13 @@ loosen_what_asks_first    = "ask"
 # loosening whether a tool asks first - jarvis_asks_first.py refuses it unless
 # it comes from this PC, with Windows Hello, whatever this line says.
 enable_reading_tool       = "ask"
+# change_approval_policy - changing what needs a card, how many yeses it takes
+# or whether it needs Windows Hello, by talking to Jarvis (2026-11-05,
+# jarvis_approval_policy.py). This line is the ONE CARD a loosening raises: a
+# looser line would make "stop asking" cardless, so it must stay "ask", like
+# its two neighbours above. The two extra dimensions are kept beside this
+# table, in [autonomy.confirmations] and [autonomy.windows_hello] below.
+change_approval_policy    = "ask"
 # "Check for tool updates" (jarvis_tool_updates.py, the owner's own
 # request): the FIRST run ever asks PyPI, crates.io and GitHub over the
 # internet, so it needs a person's yes once. Must stay "ask": anything else
@@ -847,6 +854,22 @@ organize_obsidian_vault   = "ask"
 # PC" half was wrong for this action. Deleting a recording is its own card,
 # delete_call_recording, also "ask".
 record_call              = "ask"
+
+# Talking to Jarvis changes what needs a card, what needs a second yes, and
+# what needs Windows Hello, one action and one thing at a time (2026-11-05,
+# jarvis_approval_policy.py; the owner's ask). "What asks first" is still
+# [autonomy.tiers] above - the SAME table every part of Jarvis already reads,
+# so this feature has one writer, not a second place that could disagree.
+#
+# ONE YES is the default and is stored by having no line at all, so these two
+# tables start empty. Both are only ever written by the feature itself: more
+# asking is instant, and less raises ONE card plus Windows Hello on the PC.
+# A line that cannot be read as written here counts as the stricter answer.
+[autonomy.confirmations]
+# e.g.  send_email = 2      # two yeses before it runs (PC only to approve)
+
+[autonomy.windows_hello]
+# e.g.  send_email = true   # every yes must meet Windows Hello on this PC
 
 [self_modification]
 enabled = true
@@ -2091,7 +2114,7 @@ star_floor = 25        # ...but never fewer than this many
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)

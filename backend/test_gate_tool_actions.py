@@ -122,7 +122,15 @@ FIXED = {
 
 #: The tools whose lookup name is deliberately NOT a `_TOOL_ACTIONS` key - the
 #: same single exception test_agent.py skips, for the same reason.
-NOT_VIA_THE_TABLE = {"web_search"}
+#: `approval_policy` (2026-11-05) joins it: `_one_call` hands it to
+#: `_approval_policy_call` before the generic prepare/gate/execute path, exactly
+#: as it does for connect_account - but unlike connect_account there is no
+#: table entry to give it, because the card it can raise is its OWN action
+#: (`change_approval_policy`, a real gate action with a real tier line) and the
+#: tool itself never reaches the gate at all. A made-up mapping here would make
+#: the Reach page describe the wrong thing, which is worse than an exemption
+#: that says why.
+NOT_VIA_THE_TABLE = {"web_search", "approval_policy"}
 
 TIER_WORDS = frozenset({"auto", "notify", "ask", "never"})
 

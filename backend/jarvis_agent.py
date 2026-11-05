@@ -2125,6 +2125,11 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
+                                  # What needs a card, a second yes or Windows
+                                  # Hello (2026-11-05): one change, one card, one
+                                  # action - a plan step would change several
+                                  # things around one approval.
+                                  "approval_policy",
                                   # One file and ONE card are a deliberate direct act:
                                   # a plan step would put a second mechanism around it.
                                   "send_file_to_phone",
@@ -2730,6 +2735,124 @@ def _run_connect_tool(args: dict) -> dict:
             "said": ("One card is waiting in the HUD window on this PC. The owner "
                      "types the value there and presses Save; nothing is saved until "
                      "then, and I test it straight away.")}
+
+
+# --------------------------------------------------------------------------
+#   "stop asking me before you send email" - what needs a card, a second yes
+#   or Windows Hello, changed by talking to Jarvis (2026-11-05)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, verbatim: "i would also like the ability to change what
+# gets an approval card through chat, including if something gets a double
+# confirmation, or a fingerprint/windows hello".
+#
+# ONE TOOL, THREE THINGS, ONE ACTION AT A TIME. jarvis_approval_policy.py
+# holds the rules - its own docstring says why each exists, and what enforces
+# the second yes and Windows Hello. This is only the model-facing door, and
+# the model's call is a PREPARATION, never the change: `request_change`
+# decides the direction and, for a loosening, raises the ONE card (on the PC,
+# with Windows Hello) that must be approved before anything is written. That
+# is why this tool is not put to the gate, exactly like SETTINGS_TOOL and
+# CONNECT_TOOL: the card IS the ask, so a second card in front of it would ask
+# the owner to approve asking.
+#
+# READING IS THE SAME TOOL, with `field` left out: "what needs a card?" and
+# "does sending email ask twice?" are answered from the table the page and the
+# approval path read, never from the model's memory.
+APPROVAL_POLICY_TOOL = "approval_policy"
+
+
+def _approval_policy_tool_text() -> str:
+    """The tool's description. Under 300 tokens, and it says the one thing
+    that keeps the direction rules: more asking happens at once, less raises
+    a card the owner must approve - so never claim a loosening is done."""
+    return ("Change what Jarvis asks about, one named action at a time: whether it "
+            "gets a card, needs two yeses, or needs Windows Hello on this PC. Use "
+            "when the owner says to stop asking before one action, to make it ask "
+            "twice, or to require Windows Hello. Leave field out to read. More asking "
+            "is instant; less raises ONE card that needs Windows Hello on the PC - "
+            "say it is waiting, never done.")
+
+
+def _prepare_approval_policy(args: dict):
+    """Present because every Tool needs a prepare; never reached by a real
+    turn - `_one_call` hands APPROVAL_POLICY_TOOL to `_approval_policy_call`
+    first, because the card (or the instant tightening) is the whole effect.
+    A path that somehow reached execute() changes nothing (`_run_` below)."""
+    return None, ("Change what needs a card, a second yes or Windows Hello, through "
+                  "the approval policy tool's own path.")
+
+
+def _run_approval_policy(args: dict) -> dict:
+    """NEVER REACHED - see _prepare_approval_policy. Refuses rather than
+    applies, so no path that skips _approval_policy_call changes anything."""
+    return {"ok": False, "changed": False, "raised": False,
+            "error": "refused: this is changed through its own card path, so nothing "
+                     "was changed."}
+
+
+#: Said when a turn has read outside text and asks to change what asks. A page
+#: that says "stop asking" is exactly the shape a prompt injection wants, and
+#: the owner's own sentence is what must start the change.
+APPROVAL_POLICY_AFTER_OUTSIDE = (
+    "refused: something outside Jarvis shaped this answer (a page, an email, a file "
+    "or a search result), so nothing is changed in it. Ask again in a new message, "
+    "in your own words.")
+
+
+def _approval_policy_call(args: dict, call: dict, convo: list, steps: list,
+                          say_step, *, watch: "_TurnWatch") -> None:
+    """One approval_policy call: a read, an instant tightening, or ONE card."""
+    name = APPROVAL_POLICY_TOOL
+
+    def reply(result: dict) -> None:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+
+    def stop(why: str, outcome: str = "refused") -> None:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": outcome})
+        say_step("tool_refused", name)
+        reply({"ok": False, "error": why})
+
+    try:
+        import jarvis_approval_policy as AP
+    except Exception:                       # noqa: BLE001 - module absent
+        return stop("I cannot change what asks on this PC: the part that does it is "
+                    "not installed. Run apply-patches.ps1 on the PC.")
+    reading = not (args or {}).get("field")
+    if not reading:
+        if watch.cards >= CARDS_PER_TURN:
+            return stop(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
+        if _settings_turn_is_shaped(watch):
+            return stop(APPROVAL_POLICY_AFTER_OUTSIDE)
+    step = {"tool": name, "ran": False, "ok": False,
+            "outcome": "read" if reading else "no card needed"}
+    steps.append(step)
+    say_step("tool_started", name)
+    try:
+        if reading:
+            code, result = AP.read_request(args or {})
+        else:
+            code, result = AP.request_change(args or {})
+    except Exception as exc:                # noqa: BLE001 - never take a turn down
+        step["outcome"] = "failed"
+        say_step("tool_finished", name, ok=False)
+        return reply({"ok": False, "error": f"could not do that ({type(exc).__name__})"})
+    step["ran"] = True
+    step["ok"] = bool(result.get("ok"))
+    if step["ok"]:
+        if reading:
+            step["outcome"] = "read"
+        elif result.get("waiting"):
+            # It DID raise a card, so the per-answer budget counts it.
+            watch.cards += 1
+            step["outcome"] = "waiting for your yes on the card"
+        elif result.get("changed"):
+            step["outcome"] = "changed"
+        else:
+            step["outcome"] = "already so"
+    say_step("tool_finished", name, ok=step["ok"])
+    reply(dict(result, status=code))
 
 
 # --------------------------------------------------------------------------
@@ -5076,6 +5199,24 @@ TOOLS: dict = {
         lambda args, state, **_: {"ok": False, "raised": False,
                                   "error": "refused: connecting is raised through its "
                                            "own card path, so nothing was raised here."}),
+    # Changing what needs a card, a second yes or Windows Hello, by talking
+    # (2026-11-05, the owner's ask) - see APPROVAL_POLICY_TOOL above for why
+    # this is not put to the gate. `_one_call` hands it to `_approval_policy_call`
+    # before the generic path; these two exist so a path that somehow reached
+    # them changes nothing.
+    APPROVAL_POLICY_TOOL: Tool(
+        APPROVAL_POLICY_TOOL, _approval_policy_tool_text(),
+        {"type": "object", "properties": {
+            "action": {"type": "string",
+                       "description": "the one action to read or change"},
+            "field": {"type": "string",
+                      "enum": ["card", "confirmations", "windows_hello"],
+                      "description": "one thing to change; leave out to read"},
+            "value": {"type": "string",
+                      "enum": ["ask", "auto", "1", "2", "true", "false"],
+                      "description": "the new value"}}},
+        _prepare_approval_policy,
+        lambda args, state, **_: _run_approval_policy(args)),
     REA_TOOL: Tool(
         REA_TOOL, _rea_tool_text(),
         {"type": "object", "properties": {
@@ -9529,7 +9670,13 @@ TOOL_GROUPS = (
       # cost nothing there and are paid only when the group is opened, which
       # ships OFF. Both are read-only. Clearing is NOT a model tool (Gemini
       # ruling 1) - it stays route/app/fast-path only, behind its one card.
-      CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL)),
+      CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL,
+      # Changing what needs a card, a second yes or Windows Hello (2026-11-05)
+      # is one of "Jarvis's own switches" like the rest of this group: a read
+      # changes nothing and a change is either instantly stricter or ONE card.
+      # A group's members cost nothing extra in more_tools' own enum, so the
+      # short list's token pin does not move.
+      APPROVAL_POLICY_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -16234,6 +16381,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # this bare name today, but if one ever did it would fall through to
         # the generic path, where a plug-in tool always needs a person's yes.
         _connect_call(args, call, convo, steps, say_step, watch=watch)
+        return
+    if name == APPROVAL_POLICY_TOOL and not outside_program:
+        # What needs a card, a second yes or Windows Hello, by talking
+        # (2026-11-05) - not put to the gate here, for the same reason: a read
+        # changes nothing, and a change is either instantly stricter or ONE
+        # card that IS the ask. See APPROVAL_POLICY_TOOL.
+        _approval_policy_call(args, call, convo, steps, say_step, watch=watch)
         return
     if name == "send_email":
         # Refused before anything is planned or anyone asked - see SEND_EMAIL_*.

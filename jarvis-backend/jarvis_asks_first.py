@@ -469,6 +469,11 @@ TIER_EXTRA = (
     # (github_inspect for the three reads) stays the "ask" tier.
     "github_list", "github_read_file", "github_ci_status",
     "github_comment", "github_open_issue", "github_rerun_workflow",
+    # Changing what needs a card, a second yes or Windows Hello by talking to
+    # Jarvis (jarvis_approval_policy.py, the owner's ask of 2026-11-05). A
+    # switch here offers the ability to the model at all; it never changes a
+    # policy by itself, and every loosening still needs its own card.
+    "approval_policy",
 )
 
 #: Known tools that are deliberately NOT switches of their own on this page.
@@ -607,6 +612,11 @@ HARD_LIMITS = frozenset({
     "search_the_web", "web_research", "research_authenticated",
     "write_notes_after_outside_text", "change_own_config", "modify_own_code",
     LOOSEN_ACTION, "stop_asking_before_every_web_search", "web_search_enable", "learning_enable",
+    # What needs a card, a second yes, or Windows Hello, changed by talking to
+    # Jarvis (jarvis_approval_policy.py, the owner's ask of 2026-11-05). The
+    # card THAT changes a loosening must itself always ask: a looser line
+    # would make "stop asking" cardless, which is the whole rule inverted.
+    "change_approval_policy",
     "learning_auto_enable", "learning_sensitive_enable",
     "learning_paraphrase_enable", "history_enable",
     "second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
@@ -663,6 +673,11 @@ MUST_ASK = frozenset({
     "learning_paraphrase_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
+    # The card that loosens one of the three policy dimensions
+    # (jarvis_approval_policy.py, 2026-11-05). Its own module refuses a tier
+    # other than "ask" before raising it, and this line is the page's half of
+    # the same promise: it can never become a standing yes.
+    "change_approval_policy",
     "restore_backup", "check_tool_updates", "desktop_update", "run_plan",
     "phone_notifications_read",
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
@@ -952,6 +967,13 @@ GROUPS = (
         # own, exactly as raising any other row's number does not.
         "lower_the_voice_check_bar",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
+        # What needs a card, a second yes or Windows Hello, changed by talking
+        # to Jarvis (jarvis_approval_policy.py, 2026-11-05). This row is the
+        # ONE card a loosening raises - the three dimensions themselves are
+        # shown under the row they change, and every loosening is approved on
+        # this PC with Windows Hello. It sits with the other cards over
+        # Jarvis's own rules and has no switch: it can never become instant.
+        "change_approval_policy",
         "check_tool_updates",
         # "Update Jarvis" asked in chat (2026-10-26; jarvis_quick.py's
         # `desktop_update` card, run by the desktop's own update.rs): the one
@@ -1292,6 +1314,17 @@ def view(*, here: bool = False) -> dict:
     if extra:
         # A line in the owner's file that no group names: shown, never hidden.
         groups[-1]["rows"].extend(_row(a, here=here) for a in extra)
+    # What needs a second yes or Windows Hello, under the row it applies to
+    # (jarvis_approval_policy.py, the owner's ask of 2026-11-05). Read-only:
+    # both apps draw the row's own note field, so this reaches the desktop's
+    # page and the phone's page with no new control on either.
+    try:
+        import jarvis_approval_policy as AP
+        for group in groups:
+            for row in group["rows"]:
+                AP.decorate(row)
+    except Exception:                        # noqa: BLE001 - module absent
+        pass
     with _L_LOCK:
         pending = dict(_L_STATE["pending"])
         last = dict(_L_STATE["last"]) or None
