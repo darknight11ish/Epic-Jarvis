@@ -1069,56 +1069,64 @@ def _forget_one(mem, fid: int, frame: Frame) -> Optional[dict]:
         return None
 
 
+def _apply_locked(job: dict, *, mem=None, chats=None, now: Optional[float] = None,
+                  timer: Optional[Callable] = None) -> dict:
+    """`apply()` without taking `_SWITCH`: the caller already holds it, so the
+    check that the hold is still the right one and the deleting itself cannot
+    be interleaved with an Undo or a second confirm."""
+    timer = timer or _timer
+    frame = job["frame"]
+    token = job["token"]
+    held_facts, held_chats = [], {}
+    try:
+        if job["facts"]:
+            mem = mem if mem is not None else _memory()
+            for fid in job["facts"]:
+                got = _forget_one(mem, fid, frame)
+                if got is not None:
+                    held_facts.append(got)
+        if job["chats"]:
+            chats = chats if chats is not None else _chats()
+            # Only the ones still in the frame (none was deleted, moved or
+            # pinned while the card waited). A pinned chat is NEVER taken
+            # out, even if an old client ticked one.
+            got = chats.overlapping(frame.start, frame.end, len(job["chats"]) + 1,
+                                    only=job["chats"], pinned=False)
+            still = [c["id"] for c in got.get("items") or []]
+            if still:
+                held_chats = chats.take_out(still)
+    finally:
+        # Whatever was done is held for Undo, even when something failed
+        # part of the way: nothing done here is ever left without it.
+        now = _now() if now is None else now
+        with _LOCK:
+            _STATE["undo"] = {"token": token, "until": now + UNDO_SECONDS,
+                              "mono_until": time.monotonic() + UNDO_SECONDS,
+                              "facts": held_facts, "chats": held_chats,
+                              "frame": frame.said}
+            p = _STATE["pending"]
+            if p and p.get("token") == token:
+                _STATE["pending"] = None
+            h = _STATE["hold"]
+            if h and h.get("token") == token:
+                _STATE["hold"] = None
+            _STATE["last"] = {"outcome": "done", "why": "", "at": now,
+                              "message": LAST_WORDS["done"]}
+        try:
+            timer(UNDO_SECONDS, lambda: _purge(token))
+        except Exception:
+            pass
+    _audit("memory.forget_range.done", {"facts": len(held_facts), "chats": len(held_chats)})
+    return {"facts": len(held_facts), "chats": len(held_chats)}
+
+
 def apply(job: dict, *, mem=None, chats=None, now: Optional[float] = None,
           timer: Optional[Callable] = None) -> dict:
     """THE SECOND YES: forget each fact (retire, exactly as Forget), take
     each chat out into the Undo hold, and start the ten minutes. Only
     `confirm()` calls this with a person's second yes behind it."""
-    timer = timer or _timer
-    frame = job["frame"]
-    token = job["token"]
-    held_facts, held_chats = [], {}
     with _SWITCH:
-        try:
-            if job["facts"]:
-                mem = mem if mem is not None else _memory()
-                for fid in job["facts"]:
-                    got = _forget_one(mem, fid, frame)
-                    if got is not None:
-                        held_facts.append(got)
-            if job["chats"]:
-                chats = chats if chats is not None else _chats()
-                # Only the ones still in the frame (none was deleted, moved or
-                # pinned while the card waited). A pinned chat is NEVER taken
-                # out, even if an old client ticked one.
-                got = chats.overlapping(frame.start, frame.end, len(job["chats"]) + 1,
-                                        only=job["chats"], pinned=False)
-                still = [c["id"] for c in got.get("items") or []]
-                if still:
-                    held_chats = chats.take_out(still)
-        finally:
-            # Whatever was done is held for Undo, even when something failed
-            # part of the way: nothing done here is ever left without it.
-            now = _now() if now is None else now
-            with _LOCK:
-                _STATE["undo"] = {"token": token, "until": now + UNDO_SECONDS,
-                                  "mono_until": time.monotonic() + UNDO_SECONDS,
-                                  "facts": held_facts, "chats": held_chats,
-                                  "frame": frame.said}
-                p = _STATE["pending"]
-                if p and p.get("token") == token:
-                    _STATE["pending"] = None
-                h = _STATE["hold"]
-                if h and h.get("token") == token:
-                    _STATE["hold"] = None
-                _STATE["last"] = {"outcome": "done", "why": "", "at": now,
-                                  "message": LAST_WORDS["done"]}
-            try:
-                timer(UNDO_SECONDS, lambda: _purge(token))
-            except Exception:
-                pass
-    _audit("memory.forget_range.done", {"facts": len(held_facts), "chats": len(held_chats)})
-    return {"facts": len(held_facts), "chats": len(held_chats)}
+        return _apply_locked(job, mem=mem, chats=chats, now=now, timer=timer)
 
 
 # --------------------------------------------------------------------------
@@ -1183,7 +1191,18 @@ def confirm(body, *, now: Optional[float] = None, mem=None, chats=None,
     job = {"token": h["token"], "frame": frame, "facts": h["facts"], "chats": h["chats"],
            "counts": dict(h["counts"]), "pinned_kept": h["pinned_kept"]}
     try:
-        made = apply(job, mem=mem, chats=chats, now=now, timer=timer)
+        # `_SWITCH` makes "the hold is still this one" and "delete it" one
+        # step: two windows both tapping the second yes cannot double-apply,
+        # and the loser gets the 409 below instead of overwriting the winner's
+        # Undo with an empty one.
+        with _SWITCH:
+            with _LOCK:
+                live = _STATE["hold"]
+            if live is None or live.get("token") != got_id:
+                return 409, {"ok": False, "error": (
+                    "That second yes was already answered, or it expired. Nothing more was "
+                    "forgotten or deleted.")}
+            made = _apply_locked(job, mem=mem, chats=chats, now=now, timer=timer)
     except Exception as exc:
         with _LOCK:
             some = (_STATE["undo"] or {}).get("token") == h["token"]
