@@ -4743,6 +4743,19 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 **A spoken answer is not a screen, so the Live read-aloud fix adds nothing one-sided** (2026-11-05; the owner's report, `docs/LIVE-DESIGN.md` §3.6; `backend/jarvis_live.py`'s `MODEL_NOTE` and `backend/jarvis_manner.py`'s `post_history_hint`). Both apps already receive the same `/api/chat` reply and speak it with their own voice - the change is the model instruction for a Live turn, composed on the PC and never sent to either app as a field. No route, no card, no setting, no screen and no client code changed, so there is nothing for this section to declare one-sided: `tools/check_parity.py` has nothing new to classify.
 
+- **Live's "Starting microphone & voice..." is read by the desktop today, and
+  the phone shows the session it already has** (2026-11-05; `starting` and
+  `starting_words` on `GET /api/voice/live`, JARVIS-API §63.1; §15 above).
+  Neither app is missing a screen: the two keys describe a wait that exists
+  because the PC warms STT, the VAD, CAM++ and TTS behind an already-open
+  microphone. The desktop's microphone is that PC's, so its bar and badge show
+  the line and its watcher says "I'm listening." when the warm clears. The
+  phone's microphone is its own, its clips are checked by the PC's engines on
+  arrival, and a phone session has nothing to wait for - so `LiveRules.kt` and
+  the Live screen read neither key, and `tools/check_parity.py` has no route
+  to decide here (both keys ride the route both apps already call). An older
+  app of either kind simply ignores them, which the status shape allows.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -6118,3 +6131,54 @@ path it cannot drive.
 - **The seam is the model instruction, not a speech formatter.** A Live reply is the same `/api/chat` answer a typed turn gets, and both apps speak it from their own queue (one `speak_reply` clip per sentence). The fixed sentence "It's on your screen." is the APPS' - `private-speech.js`'s `PRIVATE_LINE` / the phone's `PrivateAloud.ON_SCREEN` - said when `mayReadAloud` decides the answer is private. There is no backend formatter that turns a list or a table into a screen pointer: the desktop's `stripMarkdownForSpeech` removes markup and drops code blocks, and otherwise speaks the answer as written. So a pointer the owner HEARS is either (a) the model's own words, or (b) the apps' fixed line for an answer the route gate, a sensitive fact or the screen rule keeps on screen.
 - **What permitted (a):** `jarvis_live.MODEL_NOTE`, the one note added to a spoken Live turn's request, said *"use a screen line only for what you truly cannot say aloud, such as a table of numbers, a picture or a long list."* A list is exactly what the owner was asking for. The note now says the answer must be complete as speech: the key answer in one to four clear sentences, the first five items or rows of a list read aloud as plain prose, then how many more there are - and a screen line is never the answer. The same rule is added to `jarvis_manner.post_history_hint(spoken_live=True)`, the one-line hint inserted just before the final generation step, and `jarvis_agent.with_manner_note` now receives the turn's own `live` mark and passes it on. Before this the spoken clause existed but the agent never asked for it, so in a long Live session the note nearest the question said nothing about the screen.
 - **What was checked and left alone.** The money answers' own spoken lines (`jarvis_spending.SPOKEN_LINE`, `jarvis_retirement.SPOKEN_LINE`) keep the figures on screen - the owner's rule ("Money stays on screen: never read aloud") and the sensitive-fact gate; changing them would be a permission change, not a wording fix. The fast paths in `jarvis_quick.py` emit no screen pointer for content they could say: the only literal ones are the honest "a card is waiting, approve it on your phone or PC" lines and `_run_watch`'s safety sign, and Live is otherwise held to the typed answer word for word (`test_live_parity.py`'s `typed.reply == live.reply`). No route, field, card, setting or permission changed. The harnesses are `backend/test_live.py`'s `t_a_live_answer_is_said_never_pointed_at` (the note as the agent composes it, and the final-step hint) and `backend/test_quick_wins.py`'s `t_a_list_answer_in_live_carries_the_list_not_a_pointer` (a real to-do list, Live and typed, with every item still in it).
+
+## 18. Live's first turn, and the state that cannot stick (added 2026-11-05)
+
+The owner reported three things about starting Jarvis Live: the first words
+spoken after pressing Live were missed, the first answer took a long time, and
+the app could sit on "Thinking..." as if it had not heard him. The first two
+are the same cold start; the third is a flag that outlived its turn.
+
+- **The turn lifecycle is the CLIENT's, not the PC's.** There is no
+  THINKING/SPEAKING/LISTENING state machine in the Python backend and no
+  `_tts_playing` anywhere in this repository (checked 2026-11-05 with
+  `git grep`). The session's own state is `off`/`on`/`paused`/`ended`
+  (`jarvis_live.Live.status`); everything the owner sees as "thinking",
+  "speaking" or "listening" is decided in the apps: the bar's `live.thinking`
+  and the card's status text (`jarvis-desktop/src/main.js`), the Rust
+  `SPEAKING` flag that `voice.rs` reads before dropping a sentence said over an
+  answer (`jarvis-desktop/src-tauri/src/live.rs`), and the phone's
+  `LiveFlash` (`JarvisRuntime.kt`). A fix belongs on that side.
+- **The first words are kept, not just heard.** The desktop's VAD has always
+  stepped its clip back in front of the tick that first hears a voice, but by
+  the wake word's 300 ms. In Live that is not enough: the sentence can begin in
+  the same instant Live is pressed, and the poll interval plus the device's
+  start-up sit inside it. Live now keeps 500 ms (`voice.rs` `LIVE_PREROLL`,
+  `capture_preroll`), still in memory only and still bounded per utterance.
+- **"Starting microphone & voice..." is a real state, and it ends.** A
+  session that just started warms STT, the VAD, CAM++ and TTS in the
+  background (`jarvis_speech.prewarm`, already there). Until that warm
+  reports, `GET /api/voice/live` carries `starting: true` with
+  `starting_words`, and the apps show those words instead of claiming to
+  listen. The ready line ("I'm listening.") is said once, when `starting`
+  clears - the desktop says it from its watcher, which is also the side that
+  knows the microphone is really open. `START_MAX_S` (8 s) ends the wait
+  whatever the warm says, so the sign cannot stick either. It is not a pause:
+  clips are accepted the whole time, and the status grows by two keys, not by a
+  new state (`docs/JARVIS-API.md` 63.1).
+- **A playing claim now expires.** `SPEAKING` held a bare boolean. If the
+  player never cleared it - a crashed audio element, a cancelled turn, an
+  error between "answer arrived" and "answer finished" - every later Live
+  sentence began "over an answer" and was dropped, which is Live gone deaf for
+  the rest of the session. It now stores WHEN it was set and is believed for
+  `SPEAKING_MAX_MS` (120 s) at most; the bar renews it every second it really
+  plays. The backend keeps its own watchdog for the other half: the warm and
+  the model-lane warm-up are fire-and-forget threads that fail silently and
+  never block the start.
+
+- **Both apps, or the reason written down.** The two new status keys are read
+  by the desktop's `live-rules.js`, held to the shared table
+  (`tools/gen_live_cases.py`, `backend/test_live.py`, `jarvis-live.mjs`). The
+  phone's own Live screen does not read them yet: its microphone is its own
+  and it has no PC-side warm to wait for, so the honest line there is the
+  session it already shows. §8 records this as one-sided on purpose.
