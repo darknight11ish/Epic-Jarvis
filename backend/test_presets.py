@@ -51,6 +51,189 @@ def t_the_live_route_matches_the_generated_contract():
           and isinstance(live["auto"], bool) and live["auto"] is False
           and live["apply_path"] == "/api/work/apply")
 
+def t_every_installed_card_reports_its_own_vram():
+    """Defect B, measured 2026-11-04 and fixed the same day: the hardware block
+    reported the card COUNT and every card's `vram_gib` was null, so the
+    owner's preset screen showed two cards with blank sizes.
+
+    The check above it only ever asserted field NAMES, so it passed happily on
+    a null: that is the gate this function closes. It runs the REAL producer
+    (`jarvis_presets._detect_cards()`) over the shape `jarvis_hardware.detect()`
+    really builds a card row in - `"total_gib": s.total_mb / 1024`, and NOT
+    `vram_gib` - which is why the reader used to find nothing: the producer
+    looked for three keys, none of them the one on the row.
+
+    A SYNTHETIC two-card fixture, never live data: the numbers are the audit's
+    saved nvidia-smi sample of 2026-11-04 (2060 = 12,288 MiB, 2080 SUPER =
+    8,192 MiB), so this runs the same on CI as on the owner's PC. Fails on the
+    base commit (`[None, None]`, total 0) and passes after the fix
+    (`[12.0, 8.0]`, total 20.0).
+    """
+    import jarvis_hardware
+
+    rows = {"cards": [
+        # Exactly detect()'s own row keys (jarvis_hardware.py's `rows.append`).
+        {"name": "NVIDIA GeForce RTX 2060", "total_gib": 12288 / 1024,
+         "vendor": "nvidia", "route": "CUDA", "compute": "7.5",
+         "uuid": "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee",
+         "pci_id": "00000000:04:00.0", "monitor": False,
+         "free_gib": (12288 - 11919) / 1024, "share_gib": None, "share_how": "",
+         "used": True, "why_unused": "", "sources": ["nvidia-smi"], "index": 0,
+         "key": "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee"},
+        {"name": "NVIDIA GeForce RTX 2080 SUPER", "total_gib": 8192 / 1024,
+         "vendor": "nvidia", "route": "CUDA", "compute": "7.5",
+         "uuid": "GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6",
+         "pci_id": "00000000:07:00.0", "monitor": True,
+         "free_gib": (8192 - 6037) / 1024, "share_gib": None, "share_how": "",
+         "used": True, "why_unused": "", "sources": ["nvidia-smi"], "index": 1,
+         "key": "GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6"},
+    ], "planned": [], "sources": {}, "found": "", "log": None}
+
+    real = jarvis_hardware.detect
+    jarvis_hardware.detect = lambda fresh=False: rows
+    try:
+        P._clear_detect_cache()
+        block = P.hardware_block()["detected"]
+    finally:
+        jarvis_hardware.detect = real
+        P._clear_detect_cache()
+
+    cards = block["cards"]
+    got = [c["vram_gib"] for c in cards]
+    check("two cards on this PC: the block reports a count of two",
+          block["count"] == 2 and len(cards) == 2, block)
+    check("DEFECT B: every installed card reports its MEASURED VRAM in GiB, not null",
+          got == [12.0, 8.0], got)
+    check("DEFECT B: the two cards' VRAM adds up to a real number (20.0 GiB)",
+          all(isinstance(v, (int, float)) for v in got)
+          and round(sum(got), 1) == 20.0, got)
+    check("... and each card keeps its own identity, so the sizes cannot swap",
+          [(c["index"], c["name"], c["uuid"]) for c in cards]
+          == [(0, "NVIDIA GeForce RTX 2060", "GPU-1ba04124-85de-3b44-bacc-7b7d9f0d8bee"),
+              (1, "NVIDIA GeForce RTX 2080 SUPER", "GPU-e4283ff2-b412-4e8c-9bae-7e433139e7d6")],
+          cards)
+    check("... and the two facts that tell two identical cards apart are carried "
+          "through: the PCI address and nvidia-smi's display flag",
+          [(c["pci_id"], c["monitor"]) for c in cards]
+          == [("00000000:04:00.0", False), ("00000000:07:00.0", True)], cards)
+
+
+def _three_card_block(*monitors):
+    """A synthetic THREE-card detection in `_detected_cards()`'s own shape: the
+    12 GB 2060 plus two identical 8 GB 2080 SUPERs, which is the only way to
+    test that a role is picked from a FACT rather than from the array order."""
+    names = ["NVIDIA GeForce RTX 2060", "NVIDIA GeForce RTX 2080 SUPER",
+             "NVIDIA GeForce RTX 2080 SUPER"]
+    pcis = ["0000:04:00.0", "0000:07:00.0", "0000:0a:00.0"]
+    vrms = [12.0, 8.0, 8.0]
+    return {"count": 3, "source": "jarvis_hardware.detect()",
+            "cards": [{"index": i, "name": names[i], "vram_gib": vrms[i],
+                       "uuid": f"GPU-{i}", "pci_id": pcis[i],
+                       "monitor": monitors[i]} for i in range(3)]}
+
+
+def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
+    """2026-11-04. The 3-GPU rows were placed by BLIND array index and the words
+    said "2080 SUPER #1 (card 1)" and "#2 (card 2)" - a number the owner cannot
+    see anywhere - while the Coding row still described the 30B coding model as
+    "the Coding lane (qwen3.5:4b helper)", wrong since 2026-11-02.
+
+    The fix is the hybrid topology rule: everyday presets keep one lane per GPU
+    (the everyday card, the monitor card, the headless card), and only the
+    on-demand Coding preset pools the cards. Which card is which must come from
+    a measured fact, so this drives a THREE-card answer where the monitor is on
+    the THIRD card in the array - the case a blind index cannot get right.
+    """
+    real = P._detected_cards
+    P._detected_cards = lambda: _three_card_block(None, False, True)
+    try:
+        rec = P.recommendations()
+    finally:
+        P._detected_cards = real
+    three = rec["by_gpu_count"]["3"]
+    check("the everyday rows are placed on the card with the most VRAM (the 2060), "
+          "not on index 0 by luck",
+          three["general"]["card_index"] == 0
+          and three["reflect"]["card_index"] == 0
+          and three["documents"]["card_index"] == 0,
+          {k: v["card_index"] for k, v in three.items()})
+    check("Fast goes to the card nvidia-smi says has the MONITOR - index 2 here, "
+          "which is not the index the old table used",
+          three["fast"]["card_index"] == 2, three["fast"])
+    check("Agentic+Vision goes to the HEADLESS twin - index 1",
+          three["agentic_vision"]["card_index"] == 1, three["agentic_vision"])
+    check("the two 2080 SUPERS are named by their own PCI address and role, not "
+          "by '#' and an array position",
+          "0000:0a:00.0" in three["fast"]["note"]
+          and "card with the monitor" in three["fast"]["note"]
+          and "0000:07:00.0" in three["agentic_vision"]["note"]
+          and "card with no monitor" in three["agentic_vision"]["note"]
+          and "2080 SUPER #" not in " ".join(r["note"] for r in three.values()),
+          (three["fast"]["note"], three["agentic_vision"]["note"]))
+    check("the Coding row names the REAL model on the POOLED lane, not the old "
+          "'qwen3.5:4b helper' that stopped being true on 2026-11-02",
+          "qwen3-coder-30b-a3b-ud-q3-k-xl" in three["coding"]["note"]
+          and "11450" in three["coding"]["note"]
+          and "qwen3.5:4b" not in three["coding"]["note"]
+          and three["coding"]["card"] == "all the cards (pooled lane, port 11450)",
+          three["coding"])
+    plan = rec["three_gpu_plan"]
+    check("the layout states BOTH halves of the hybrid rule: everyday is one lane "
+          "per GPU, and only heavy Coding pools the cards on port 11450",
+          "one lane per GPU" in plan["layout"]
+          and "pooled" not in plan["layout"].split("only", 1)[0]
+          and "port 11450" in plan["layout"]
+          and "never one model split across three cards" not in plan["layout"],
+          plan["layout"])
+    check("... and the pooled exception is spelled out beside it, because a rule "
+          "that leaves it unsaid is the one that went stale",
+          "qwen3-coder-30b-a3b-ud-q3-k-xl" in plan["heavy_pooled"]
+          and "11450" in plan["heavy_pooled"]
+          and "too big for one" in plan["heavy_pooled"], plan["heavy_pooled"])
+    check("the three plan cards are the three real cards, in role order",
+          [c["role"].split(":")[0] for c in plan["cards"]]
+          == ["everyday lane", "monitor card's lane", "headless card's lane"]
+          and "0000:04:00.0" in plan["cards"][0]["card"]
+          and "0000:0a:00.0" in plan["cards"][1]["card"]
+          and "0000:07:00.0" in plan["cards"][2]["card"], plan["cards"])
+
+    # A PC that does not report the display flag must not guess: the role falls
+    # back to the first non-everyday card and the words SAY nothing measured it.
+    P._detected_cards = lambda: _three_card_block(None, None, None)
+    try:
+        unknown = P.recommendations()
+    finally:
+        P._detected_cards = real
+    three_unknown = unknown["by_gpu_count"]["3"]
+    check("no display flag anywhere: nothing is claimed about which twin has the "
+          "monitor, and the words say so",
+          "monitor not reported by this PC" in three_unknown["fast"]["note"]
+          and "card with the monitor" not in three_unknown["fast"]["note"],
+          three_unknown["fast"]["note"])
+
+    # With only the two cards this PC really has, the third role must not be
+    # described as an installed card.
+    P._detected_cards = lambda: {"count": 2, "source": "jarvis_hardware.detect()",
+                                 "cards": _three_card_block(None, False, True)["cards"][:2]}
+    try:
+        two = P.recommendations()
+    finally:
+        P._detected_cards = real
+    check("two cards installed: the headless role says it is not installed yet, "
+          "instead of pretending a third card is there",
+          "not installed yet" in two["three_gpu_plan"]["cards"][2]["card"]
+          and two["by_gpu_count"]["3"]["agentic_vision"]["card_index"] == 2,
+          two["three_gpu_plan"]["cards"][2])
+    check("the pooled lane's port is ONE number, pinned to the two modules that "
+          "own it rather than typed three times",
+          P.POOLED_PLAN_PORT == 11450, P.POOLED_PLAN_PORT)
+    import jarvis_big_coder as BC
+    import jarvis_model_lanes as L
+    check("... and it is the lane module's POOLED_PORT and the big-coder's BIG_PORT",
+          P.POOLED_PLAN_PORT == L.POOLED_PORT == BC.BIG_PORT,
+          (P.POOLED_PLAN_PORT, L.POOLED_PORT, BC.BIG_PORT))
+
+
 def main() -> int:
     fixture = json.loads((HERE / "fixtures" / "work_presets.json").read_text(encoding="utf-8"))
     check("exactly nine presets, in the owner's order",
@@ -153,11 +336,22 @@ def main() -> int:
           set(rec3) == set(P.PRESET_IDS), sorted(rec3))
 
     hw = fixture["hardware"]
-    check("hardware: detected cards come from detect() and carry name/VRAM/index",
+    # The exact key set is pinned, not "at least these": the two facts added on
+    # 2026-11-04 (`pci_id`, `monitor`) are what let a plan name a card instead of
+    # numbering it, and a block that quietly stopped carrying them would make
+    # every role choice a guess again. The pin is the whole set, so a removal
+    # fails here as loudly as an addition.
+    check("hardware: detected cards come from detect() and carry name/VRAM/index, "
+          "plus the PCI address and display flag that tell two identical cards apart",
           hw["detected"]["source"] == "jarvis_hardware.detect()"
           and isinstance(hw["detected"]["count"], int)
-          and all(set(c) == {"index", "name", "vram_gib", "uuid"} for c in hw["detected"]["cards"]),
+          and all(set(c) == {"index", "name", "vram_gib", "uuid", "pci_id", "monitor"}
+                  for c in hw["detected"]["cards"])
+          and all(isinstance(c["pci_id"], str)
+                  and (c["monitor"] is None or isinstance(c["monitor"], bool))
+                  for c in hw["detected"]["cards"]),
           hw["detected"])
+    t_every_installed_card_reports_its_own_vram()
     check("questionnaire: the nine focus ids and the four priorities",
           hw["questionnaire"]["focus_choices"] == [p["id"] for p in fixture["presets"]]
           and hw["questionnaire"]["priority_choices"] == ["speed", "quality", "long_context", "vision"]
@@ -193,6 +387,22 @@ def main() -> int:
           and "lane per GPU" in rec["three_gpu_plan"]["layout"]
           and "PCIe 3.0 x4" in rec["three_gpu_plan"]["link_note"]
           and len(rec["three_gpu_plan"]["cards"]) == 3, rec.get("three_gpu_plan"))
+    check("3-GPU layout states the HYBRID rule this repo really runs: everyday is "
+          "one lane per GPU, heavy Coding is the pooled lane",
+          "one lane per GPU" in rec["three_gpu_plan"]["layout"]
+          and "pools the cards" in rec["three_gpu_plan"]["layout"]
+          and str(P.POOLED_PLAN_PORT) in rec["three_gpu_plan"]["layout"],
+          rec["three_gpu_plan"]["layout"])
+    check("the stale 'never one model split across three cards' claim is gone, and "
+          "so is the 'qwen3.5:4b helper' Coding was never since 2026-11-02",
+          "never one model split" not in json.dumps(rec)
+          and "qwen3.5:4b helper" not in json.dumps(rec), rec["three_gpu_plan"]["layout"])
+    check("the Coding preset is described as the 30B pooled model in BOTH the 2- and "
+          "3-GPU rows, because it is one preset with one behaviour",
+          "qwen3-coder-30b-a3b-ud-q3-k-xl" in rec["by_gpu_count"]["3"]["coding"]["note"]
+          and str(P.POOLED_PLAN_PORT) in rec["by_gpu_count"]["2"]["coding"]["note"]
+          and "main model on the 2060" not in rec["by_gpu_count"]["2"]["coding"]["note"],
+          rec["by_gpu_count"]["2"]["coding"]["note"])
     check("the pooled Qwen3.8-27B 28 GB is named as future-only, not a preset",
           "not a preset" in rec["three_gpu_plan"]["future_not_a_preset"]
           and "28 GB" in rec["three_gpu_plan"]["future_not_a_preset"])
@@ -200,6 +410,7 @@ def main() -> int:
           rec["by_gpu_count"]["2"]["general_uncensored"]["tok_s"] == 45.6
           and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True)
 
+    t_three_gpu_rows_name_the_cards_by_role_not_by_index()
     t_the_live_route_matches_the_generated_contract()
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

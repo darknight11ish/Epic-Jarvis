@@ -2752,6 +2752,38 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Recording a phone call happens on the PHONE alone, and that is one-sided on
+  purpose** (2026-11-04; the owner's request *"add the ability to record a call
+  when he says the keyword 'record call'"*). The owner says "record call" (or
+  presses Arm in Settings, Voice), the phone records the call, and the PC turns
+  the audio into words, dates it, works out who was speaking and writes ONE note
+  in his Obsidian vault named with the date and time. Three things make each
+  side the only place its half can happen, and none of them is a preference:
+  1. **The recording cannot exist on the PC.** The call rings on the phone, and
+     Android does not let a normal app capture the call's own audio stream
+     (`VOICE_CALL` is privileged; a sideloaded app never holds it). So the phone
+     records its **microphone** with the call on speaker - both voices caught
+     acoustically - at 16 kHz, mono, PCM16LE, in 64 KiB pieces. The desktop has
+     no microphone in that call and, if it had, would be recording a room.
+  2. **The words and the note cannot happen on the phone.** A client must not do
+     speech-to-text (the standing rule), and the vault is a folder on this PC
+     that the phone cannot see. So the phone sends PCM and a date, and the PC
+     transcribes, dates, diarises and writes the note.
+  3. **The surface follows from both.** The phone draws the one control (Arm /
+     Stop, the armed line, the "N waiting to send" line) and owns the recording
+     notification with its consent reminder; the desktop reads and opens the note
+     through the notes surface it already has. It does not start, stop or watch a
+     recording, and it never holds one.
+  The three routes are `POST /api/call/recording/start`, `/chunk` and `/finish`
+  (the frozen contract of 2026-11-04; the PC half's own section in
+  docs/JARVIS-API.md is its copy) and `tools/check_parity.py` classifies all
+  three as **phone-only**, with the reasoning above beside each line. A dropped
+  connection loses nothing: the pieces are written to this app's own files
+  directory BEFORE they are posted, and a recording the PC has not taken is kept
+  and offered again (its own notification says so). The desktop is deliberately
+  not given a "record the call" control: on the PC it could only record a room
+  and confuse that for the call.
+
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
   open at once"*; JARVIS-API §184.5). The desktop opens extra copies of its own
@@ -3840,7 +3872,7 @@ are deliberate and recorded rather than left to be discovered:
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | The voice upgrades' bake-off (`backend/jarvis_bakeoff.py`, 2026-09-26) | Written with it. It is a program the owner runs on the PC, not an app screen: it measures the PC's own voice engines, the PC's graphics-card memory and the room through the PC's microphone. Its verdict decides a later change that reaches both apps (the phone's wake-word file, the engine name both apps show). |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
-| Offering a reading tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello; other tools stay in the settings file") | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page is unaffected - it reads the same route, but simply does not show the new "tools" key GET /api/asks_first now carries (`jarvis_reach.py`'s "What Jarvis can reach" already told the owner a tool was "off" for this reason; its wording now also says which four can be switched on, and that every other tool is file-only). `deliberate` in `tools/check_parity.py`. |
+| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 48 switches, the vault organizer and the three tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
 | "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
 | A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
 | "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |
