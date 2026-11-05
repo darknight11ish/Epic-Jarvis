@@ -342,8 +342,16 @@ def t_tiers_agree_with_the_shipped_switch():
     check("every tier agrees with the shipped config path and the asks-first tiers",
           not wrong, "\n        ".join(wrong))
     claimed = {p["tier"] for p in T.PROFILES.values()}
-    check("all four tier values are actually used somewhere",
-          claimed == set(T.TIER_VALUES), f"{sorted(claimed)}")
+    # 2026-11-04, main's 71d4d6a01: every tool the model can be offered now has
+    # an in-app switch (jarvis_asks_first.TOOLS_SWITCHABLE, 48 of them, all but
+    # NOT_A_SWITCH's three), so no tool's only way in is a name typed into the
+    # settings file any more. `settings-file` is therefore a real state with
+    # nothing in it. It is named HERE, rather than the check being dropped, so
+    # that a tool which genuinely needs the file again fails this line and gets
+    # its own sentence, instead of coming back silently while a reader is still
+    # told the state exists.
+    check("every tier value is used except settings-file, which no tool needs now",
+          claimed == set(T.TIER_VALUES) - {"settings-file"}, f"{sorted(claimed)}")
 
 
 def t_always_available_really_is():
@@ -372,9 +380,30 @@ def t_switchable_matches_the_in_app_switches():
     check("every switchable profile is a real in-app switch (TIER_A or TIER_B)",
           switchable <= set(AF.TOOLS_SWITCHABLE),
           f"claimed but not switchable: {sorted(switchable - set(AF.TOOLS_SWITCHABLE))}")
-    check("every in-app switch has a switchable profile",
-          set(AF.TOOLS_SWITCHABLE) <= switchable,
-          f"switchable but not claimed: {sorted(set(AF.TOOLS_SWITCHABLE) - switchable)}")
+    # The equivalence this line used to assert - "every in-app switch is a
+    # `switchable` profile" - is the half main's 71d4d6a01 made FALSE, and it is
+    # false in the DATA, not merely awkward here: 13 of the 48 switchable tools
+    # are already ON in the shipped [tools].enabled list, so the decision order
+    # above (and the truth) gives them `always-available` - no action needed, and
+    # the page can still switch them OFF - and `rea_investigate` is
+    # `off-by-default` because its own `[rea] enabled` ships false and outranks
+    # the tool list. Holding the old shape would force 14 profiles to state
+    # something untrue, which is the one thing this suite exists to stop.
+    #
+    # What is a real bug - and was exactly the bug on this branch, 13 profiles
+    # claiming "no in-app switch" - is a switchable tool whose profile can only
+    # say "there is no switch". So the check now asserts the three answers are
+    # EXHAUSTIVE: every in-app switch is either off until you turn it on, or
+    # already on, or gated by its own module switch. Each of those is a true
+    # sentence for the tools that hold it, and a profile that says "no in-app
+    # switch" for a switchable tool falls out of all three. It reads the TIER,
+    # never the shipped list, so a wrong tier cannot hide behind the list.
+    already_on = {n for n, p in T.PROFILES.items() if p["tier"] == "always-available"}
+    own_switch = {n for n, p in T.PROFILES.items() if p["tier"] == "off-by-default"}
+    check("every in-app switch is off until switched, already on, or own-switch gated",
+          set(AF.TOOLS_SWITCHABLE) <= (switchable | already_on | own_switch),
+          f"neither, and so claimed to have no switch: "
+          f"{sorted(set(AF.TOOLS_SWITCHABLE) - (switchable | already_on | own_switch))}")
     check("no switchable tool is already on in the shipped list",
           not (switchable & shipped), str(sorted(switchable & shipped)))
 

@@ -50,12 +50,24 @@ __all__ = [
 #:   always-available - offered with no owner action, because it is in the
 #:                      shipped `[tools].enabled` list (or rides with a tool
 #:                      that is: the two web-search approval tools).
-#:   switchable       - a real in-app Settings switch (jarvis_asks_first
-#:                      TIER_A / TIER_B). Off until the owner turns it on.
-#:   settings-file    - no in-app switch: the owner adds its name to
-#:                      `[tools].enabled` by hand in jarvis-framework.toml.
+#:   switchable       - a real in-app Settings -> Tools switch. Off until the
+#:                      owner turns it on.
+#:   settings-file    - no in-app switch at all: the only way in is a name
+#:                      typed into `[tools].enabled` in jarvis-framework.toml.
 #:   off-by-default   - its own module switch ships OFF and decides whether the
 #:                      tool is offered at all, whatever the tool list says.
+#:
+#: 2026-11-04, main's 71d4d6a01 (the owner: "Switch any of them on in the app"):
+#: EVERY ability the model can be offered now has an in-app switch, 48 of them,
+#: all but `jarvis_asks_first.NOT_A_SWITCH`'s three. So `settings-file` is a
+#: real state with NO tool in it today. It is kept for a future tool whose only
+#: way in really is the file, and this paragraph says plainly that it is empty
+#: now, so a reader is never told a state is in use when it is not.
+#: `switchable` therefore no longer
+#: means "the only switchable one": the 13 tools that are already in the shipped
+#: list are `always-available` (no action needed, and they can be switched OFF
+#: from the page), and `rea_investigate` is `off-by-default` because its own
+#: `[rea] enabled` ships false and outranks the tool list.
 TIER_VALUES = ("switchable", "settings-file", "always-available", "off-by-default")
 
 #: What a profile may say it TOUCHES. A small closed vocabulary, so the test can
@@ -172,8 +184,8 @@ PROFILES: dict = {
             "Plain text only - a PDF, Word, Excel or PowerPoint file is refused "
             "here and needs my_files instead",
             "Reading only: it never writes, moves or deletes anything",
-            "Not in the shipped `[tools].enabled` list, so it is offered only "
-            "after the owner adds it",
+            "Not in the shipped `[tools].enabled` list, so it is off until the "
+            "owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "my_files": "my_files finds a file in the folders the owner listed "
@@ -182,9 +194,11 @@ PROFILES: dict = {
             "send_file_to_phone": "Read a text file on the PC, then send that same "
                                   "file to the phone app after one card.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"file_read\" to the [tools].enabled list in "
-                       "jarvis-framework.toml. There is no in-app switch for it.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Reading files on this PC\" in Settings -> Tools "
+                       "under \"Everyday helpers\" (it is an in-app switch), or add "
+                       "\"file_read\" to [tools].enabled. Switching it on is one "
+                       "approval card plus Windows Hello.",
         "sources": ["backend/jarvis_agent.py",
                     "backend/jarvis_asks_first.py",
                     "backend/rebuilt/jarvis-framework.toml"],
@@ -253,7 +267,8 @@ PROFILES: dict = {
             "so service passwords and the pairing token are not passed to it",
             "One command per call, with a timeout clamped between 1 and 120 "
             "seconds; only the tail of the output comes back",
-            "Not in the shipped `[tools].enabled` list - the owner has to add it",
+            "Not in the shipped `[tools].enabled` list, so it is off until the "
+            "owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "run_data_script": "shell_exec runs a real installed program; "
@@ -262,10 +277,11 @@ PROFILES: dict = {
             "github_search": "github_search says which library to use; an "
                              "approved shell command clones or installs it.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"shell_exec\" to [tools].enabled in "
-                       "jarvis-framework.toml. Each command still asks on its own "
-                       "card at the \"ask\" tier.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Running commands on this PC\" in Settings -> "
+                       "Tools under \"Raw and powerful\" (it is an in-app switch), "
+                       "or add \"shell_exec\" to [tools].enabled. Each command "
+                       "still asks on its own card at the \"ask\" tier.",
         "sources": ["backend/jarvis_agent.py",
                     "backend/jarvis_child_env.py",
                     "backend/rebuilt/jarvis-framework.toml",
@@ -295,7 +311,7 @@ PROFILES: dict = {
             "It runs the steps a person approved; it does not loop and decide "
             "what to click next on its own",
             "A program on the \"Protected from Jarvis\" list is refused, and it "
-            "needs its name in `[tools].enabled` (tier \"ask\")",
+            "must be switched on in Settings -> Tools first (tier \"ask\")",
         ],
         "combines": {
             "browser_control": "Same one-card, named-element shape, but aimed at a "
@@ -306,8 +322,10 @@ PROFILES: dict = {
             "propose_plan": "A multi-step job can put one window's steps in a "
                             "plan card, with a risky step asking again.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"control_computer\" to [tools].enabled; its tier is "
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Computer control\" in Settings -> Tools under "
+                       "\"Raw and powerful\" (it is an in-app switch), or add "
+                       "\"control_computer\" to [tools].enabled; its tier is "
                        "\"ask\", so every plan still needs a person's yes.",
         "sources": ["backend/jarvis_agent.py",
                     "backend/jarvis_ui_control.py",
@@ -338,8 +356,8 @@ PROFILES: dict = {
             "asked to search",
             "Exactly one phone must be connected over adb; zero or several "
             "connected phones is a plain refusal, never a guess",
-            "One card per plan, printed as the exact adb commands, and not in "
-            "the shipped `[tools].enabled` list",
+            "One card per plan, printed as the exact adb commands, and off until "
+            "the owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "phone_apps": "phone_apps writes the allow-list control_phone obeys - "
@@ -348,14 +366,17 @@ PROFILES: dict = {
                                   "send_file_to_phone puts a file from the PC onto "
                                   "the Jarvis phone app.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"control_phone\" to [tools].enabled and add the apps "
-                       "you allow to the [phone_apps] table (or ask Jarvis to add "
-                       "them). Its tier is \"ask\".",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Phone control\" in Settings -> Tools under \"Raw "
+                       "and powerful\" (it is an in-app switch), add \"control_phone\" "
+                       "to [tools].enabled, and add the apps you allow to the "
+                       "[phone_apps] table (or ask Jarvis to add them). Its tier is "
+                       "\"ask\".",
         "sources": ["backend/jarvis_agent.py",
                     "backend/jarvis_android_control.py",
                     "backend/jarvis_phone_apps.py",
-                    "backend/rebuilt/jarvis-framework.toml"],
+                    "backend/rebuilt/jarvis-framework.toml",
+                    "backend/jarvis_asks_first.py"],
     },
 
     "phone_apps": {
@@ -467,8 +488,8 @@ PROFILES: dict = {
         ],
         "touches": "network service, screen",
         "limits": [
-            "It ships NOT offered, for two reasons: its name must be in "
-            "`[tools].enabled`, AND either the second card's \"Browser control\" "
+            "It ships NOT offered, for two reasons: it must be switched on in "
+            "Settings -> Tools, AND either the second card's \"Browser control\" "
             "lane or the headless browser engine must be on",
             "One tab only: it stops if the page leaves the allowed sites or opens "
             "another tab",
@@ -483,10 +504,12 @@ PROFILES: dict = {
             "control_computer": "The same named-element shape, for a native "
                                 "Windows program instead of a tab.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"browser_control\" to [tools].enabled, then turn on "
-                       "the second card's Browser control lane or the headless "
-                       "browser engine. It is not an in-app switch.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Browser control\" in Settings -> Tools under "
+                       "\"Raw and powerful\" (it is an in-app switch), or add "
+                       "\"browser_control\" to [tools].enabled, then turn on the "
+                       "second card's Browser control lane or the headless browser "
+                       "engine. It needs both.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_browser_control.py",
                     "backend/jarvis_browser_engine.py",
                     "backend/jarvis_second_card.py",
@@ -590,7 +613,8 @@ PROFILES: dict = {
             "It never follows a link on the page and never fetches a second page",
             "What comes back is outside text: never treated as instructions, "
             "never learned as a fact",
-            "Not in the shipped `[tools].enabled` list",
+            "Not in the shipped `[tools].enabled` list, so it is off until the "
+            "owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "web_search": "Search first to find the address, then read that one "
@@ -598,8 +622,10 @@ PROFILES: dict = {
             "browser_control": "A page you only need to read uses this; a page you "
                                "must click and type on needs browser_control.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"read_web_page\" to [tools].enabled. Every fetch still "
+        "tier": "switchable",
+        "enable_hint": "Turn on reading one web page in Settings -> Tools under "
+                       "\"Raw and powerful\" (it is an in-app switch), or add "
+                       "\"read_web_page\" to [tools].enabled. Every fetch still "
                        "raises its own card (tier \"ask\").",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_readpage.py",
                     "backend/jarvis_asks_first.py",
@@ -1167,10 +1193,12 @@ PROFILES: dict = {
                                 "risky click asking again mid-run.",
             "my_files": "A plan can find the file in one step and read it in the next.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"propose_plan\" to [tools].enabled, and the plan "
-                       "module's own measured gate must have passed on the model "
-                       "you use now.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Running a short plan of its own tools\" in "
+                       "Settings -> Tools under \"Everyday helpers\" (it is an in-app "
+                       "switch), or add \"propose_plan\" to [tools].enabled, and the "
+                       "plan module's own measured gate must have passed on the "
+                       "model you use now.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_plan.py",
                     "backend/jarvis_asks_first.py",
                     "tools/tool_eval/ollama_tool_eval.py"],
@@ -1346,15 +1374,18 @@ PROFILES: dict = {
             "It shows the goals Jarvis holds on this PC, not anything from a "
             "calendar or a project tool",
             "Done and stopped goals are left out unless they are asked for",
-            "Not in the shipped `[tools].enabled` list",
+            "Not in the shipped `[tools].enabled` list, so it is off until the "
+            "owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "goal_progress": "See the goal, then record today's progress on it.",
             "goal_add": "Read what is already there, then add a new goal.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"goals_list\" to [tools].enabled. The goals tools have "
-                       "no in-app switch.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Reading your goals and what you have recorded on "
+                       "them\" in Settings -> Tools under \"Jarvis's own tools\" (it "
+                       "is an in-app switch), or add \"goals_list\" to "
+                       "[tools].enabled.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_goals.py",
                     "backend/jarvis_asks_first.py"],
     },
@@ -1377,15 +1408,17 @@ PROFILES: dict = {
             "There is deliberately no tool that deletes a goal: the owner's own "
             "screen has Remove",
             "It changes nothing in a turn shaped by outside text",
-            "Not in the shipped `[tools].enabled` list",
+            "Not in the shipped `[tools].enabled` list, so it is off until the "
+            "owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "goal_progress": "Add the goal, then record the first progress line.",
             "goals_list": "Add it, then read the list back.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"goal_add\" to [tools].enabled. The goals tools have "
-                       "no in-app switch.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Adding a goal, in your words\" in Settings -> Tools "
+                       "under \"Jarvis's own tools\" (it is an in-app switch), or add "
+                       "\"goal_add\" to [tools].enabled.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_goals.py",
                     "backend/jarvis_asks_first.py"],
     },
@@ -1414,9 +1447,10 @@ PROFILES: dict = {
             "goal_done": "Record the last progress, then close the goal - which "
                          "keeps the log.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"goal_progress\" to [tools].enabled. The goals tools "
-                       "have no in-app switch.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Recording one progress line on one of your goals\" "
+                       "in Settings -> Tools under \"Jarvis's own tools\" (it is an "
+                       "in-app switch), or add \"goal_progress\" to [tools].enabled.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_goals.py",
                     "backend/jarvis_asks_first.py"],
     },
@@ -1437,15 +1471,18 @@ PROFILES: dict = {
             "It closes, it never deletes: the goal and its progress stay",
             "The goal has to be matched by its own words",
             "It changes nothing in a turn shaped by outside text",
-            "Not in the shipped `[tools].enabled` list",
+            "Not in the shipped `[tools].enabled` list, so it is off until the "
+            "owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "goal_progress": "Record the final progress, then close the goal.",
             "goals_list": "See the open goals, then close the finished one.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"goal_done\" to [tools].enabled. The goals tools have "
-                       "no in-app switch.",
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Marking one of your goals done (kept, with its "
+                       "progress)\" in Settings -> Tools under \"Jarvis's own tools\" "
+                       "(it is an in-app switch), or add \"goal_done\" to "
+                       "[tools].enabled.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_goals.py",
                     "backend/jarvis_asks_first.py"],
     },
@@ -1546,9 +1583,11 @@ PROFILES: dict = {
                               "setting directly - both end in the same setter.",
             "feature_guide": "Understand a feature, then answer the question about it.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"setup_quiz\" to [tools].enabled. The quiz's own card "
-                       "in the apps is the normal way in.",
+        "tier": "switchable",
+        "enable_hint": "Turn on the quiz row in Settings -> Tools under \"Jarvis's "
+                       "own tools\" (it is an in-app switch), or add \"setup_quiz\" "
+                       "to [tools].enabled. The quiz's own card in the apps is still "
+                       "the normal way in.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_setup.py",
                     "backend/jarvis_asks_first.py"],
     },
@@ -1695,15 +1734,18 @@ PROFILES: dict = {
             "tool raises the card and never reads the value",
             "Three services only: calendar, caldav, github",
             "A failed test changes nothing and says why",
-            "Not in the shipped `[tools].enabled` list",
+            "Not in the shipped `[tools].enabled` list, so it is off until the "
+            "owner turns it on in Settings -> Tools",
         ],
         "combines": {
             "calendar_read": "Connect the calendar, then read it.",
             "github_search": "Connect GitHub, then run the authenticated, separately "
                              "tiered research action.",
         },
-        "tier": "settings-file",
-        "enable_hint": "Add \"connect_account\" to [tools].enabled. Its card is the "
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Connecting a calendar or GitHub\" in Settings -> "
+                       "Tools under \"Raw and powerful\" (it is an in-app switch), or "
+                       "add \"connect_account\" to [tools].enabled. Its card is the "
                        "only way a secret is entered.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_connect_account.py",
                     "backend/jarvis_asks_first.py"],
@@ -1726,10 +1768,13 @@ PROFILES: dict = {
         ],
         "touches": "files",
         "limits": [
-            "Its own switch ships OFF (`[rea] enabled = false`), its name must "
-            "also be in `[tools].enabled`, and every call is ONE approved card "
-            "(its action resolves to `run_shell_on_host`, tier \"ask\") - nothing "
-            "is inspected before a person's yes",
+            "Its own switch ships OFF (`[rea] enabled = false`) and outranks "
+            "everything else; its name must also be in `[tools].enabled`, which the "
+            "\"Inspecting a program, app or binary with REA\" row in Settings -> "
+            "Tools writes (before 2026-11-04 that line had to be typed into the "
+            "file by hand); and every call is ONE approved card (its action "
+            "resolves to `run_shell_on_host`, tier \"ask\") - nothing is inspected "
+            "before a person's yes",
             "It NEVER attaches to a running program: the four live capture tools "
             "are refused by name before a session can start, and so are the six "
             "adb device mutators, every debugger session and script export",
@@ -1746,8 +1791,10 @@ PROFILES: dict = {
         },
         "tier": "off-by-default",
         "enable_hint": "Turn on the REA switch in Settings (it is `[rea] enabled = "
-                       "true` in jarvis-framework.toml) AND add \"rea_investigate\" "
-                       "to [tools].enabled. Installing REA itself is a separate, "
+                       "true` in jarvis-framework.toml) AND turn on the "
+                       "\"Inspecting a program, app or binary with REA\" row in "
+                       "Settings -> Tools, which writes \"rea_investigate\" into "
+                       "[tools].enabled. Installing REA itself is a separate, "
                        "one-time hand install of the pinned package.",
         "sources": ["backend/jarvis_agent.py", "backend/jarvis_rea.py",
                     "backend/rebuilt/jarvis-framework.toml",
