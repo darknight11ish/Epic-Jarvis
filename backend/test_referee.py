@@ -696,6 +696,12 @@ def t_the_patch_and_the_lists():
              # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
              # rewrites nothing this patch wrote.
              "bench.patch",
+             # history-purge.patch (2026-11-04, clearing old chats by date):
+             # ONE added install block in jarvis_hud.py, right after
+             # forget-range.patch's own block, and no hunk in jarvis_gate.py at
+             # all - every rule is in the shipped jarvis_history_purge.py. It
+             # rewrites nothing this patch wrote.
+             "history-purge.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.

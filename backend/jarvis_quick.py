@@ -1366,6 +1366,24 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # the local-calendar read are owned here, before any honesty sentence.
     # (The note lane's capture path really files even when the note TOOL is
     # off; the honesty lane's old note_write off-answer is retired.)
+    # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
+    # Before everything that starts with "delete"/"remove": this one names
+    # what Jarvis learned or the chats, and a time frame. It only ever fills
+    # in the checked list in Brain - it removes nothing. It runs BEFORE the
+    # chat-history numbers below as well: the owner's own words for clearing
+    # chats ("clear old chats", "delete the conversations from last week") are
+    # this intent, which asks which days and names the pinned chats - never a
+    # capability blurb handed back to him in place of the question.
+    got = _forget_range(s, now)
+    if got is not None:
+        return got
+    # the chat history's own numbers - where it is, how big, how many, and how
+    # long a batch takes to clear (2026-11-04, the owner's own question). Read
+    # from the measured file, before the model/preset lane, because that lane
+    # owns "where do you keep X" shapes too.
+    got = _history_chat(s, text)
+    if got is not None:
+        return got
     # model/preset self-knowledge (2026-10-31), before the notes and features.
     got = _model_chat(s)
     if got is not None:
@@ -1461,12 +1479,9 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
         return got
 
     # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
-    # Before everything that starts with "delete"/"remove": this one names
-    # what Jarvis learned or the chats, and a time frame. It only ever fills
-    # in the checked list in Brain - it removes nothing.
-    got = _forget_range(s, now)
-    if got is not None:
-        return got
+    # Run further up, before the chat-history numbers: see the note there. The
+    # section stays in place as a signpost so a reader following the old order
+    # finds where it went.
 
     # --- "make me a widget ..." (jarvis_widgets.py, 2026-09-28) ---------------
     # Before timers and reminders: "make me a widget with a 10-minute timer
@@ -6304,6 +6319,7 @@ PLUGIN_CATALOGUE = (
     ('google-calendar', 'Google Calendar, both ways: the private iCal link (read-only) or a real Google sign-in over a loopback redirect (read/write), one active at a time...'),
     ('habits', 'habit check-ins: a repeating thing the owner wants to do - walk, stretch, practise - with one tap recording that it happened that day, and no score...'),
     ('history-import', '"Bring in chats from ChatGPT, Claude, Gemini or DeepSeek".'),
+    ('history-purge', 'clear old chats for the days you choose, and the facts they taught: a preview, TWO separate yeses and a Windows Hello or fingerprint ticket, pinned chats kept unless asked for.'),
     ('jarvis-calendar', "Jarvis's own local calendar: events kept on this PC, shown beside Google Calendar and iCal and never synced out - ON by default, and one switch tur..."),
     ('live', 'Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no "hey Jarvis" between turns.'),
     ('media-index', 'searchable recordings and videos: GET/POST /api/media-index, so both apps can read the switch, the disclosure and the counts, turn it off at once (...'),
@@ -13520,6 +13536,117 @@ def _preset_model_ask(s: str) -> Optional[str]:
     return None
 
 
+#: THE OWNER'S OWN BUG (2026-11-04). He asked the live Jarvis "how long does it
+#: take for you to clear old chats if i batched a lot of them together?" and it
+#: answered that it had no built-in "clear old chats" action and did not track
+#: how long it would take. Both halves were false: the chat history has a file,
+#: a size, a pinned column, a retention switch and - since the same day - a
+#: purge that measures its own speed. So these shapes answer from
+#: `jarvis_history_purge.capability()`, which reads THIS PC's own numbers and
+#: times a purge on a copy of the history. No model, and never "I don't track".
+HISTORY_PURGE_UNKNOWN = (
+    "I could not read my own history file just now, so I will not guess at its "
+    "size, its counts or how long clearing it takes. The clearing routes are "
+    "there (a preview, two yeses and your Windows Hello PIN or your phone's "
+    "fingerprint); they answer 503 with the reason while the file cannot be read.")
+
+#: A verb that means "remove", and the thing removed. Kept apart so the two
+#: families below read as sentences rather than as one wall of regex.
+_HIST_VERB = r"(?:clear|clearing|delete|deleting|purge|purging|remove|removing|wipe|wiping|erase|erasing)"
+_HIST_THING = r"(?:chats?|conversations?|chat history|history|messages?)"
+#: The owner's own question, and the other ways to ask it: a question about how
+#: long a BATCH takes. "batch" and "in one go" are what makes it a question
+#: rather than a request, so an ordinary "delete this conversation" keeps its
+#: own path.
+_K_HIST_TIME = re.compile(
+    r"(?:how long|how much time|how many seconds|how many minutes)\s+"
+    r"(?:does it take|would it take|will it take|do you need|would that take)\s+"
+    r"(?:for you\s+)?to\s+" + _HIST_VERB + r"\s+(?:all\s+|old\s+|many\s+|"
+    r"a lot of\s+|a batch of\s+|lots of\s+|thousands of\s+|hundreds of\s+|"
+    r"some\s+)?(?:\d+\s+)?(?:" + _HIST_THING + r"|them)\b.*")
+#: "could you clear 200 chats" / "can you clear old chats" - a capability
+#: question, never an action: nothing in the fast path can delete anything.
+_K_HIST_CAN = re.compile(
+    r"(?:can|could|would|will|do)\s+you\s+" + _HIST_VERB + r"\s+"
+    r"(?:all\s+|old\s+|many\s+|a lot of\s+|a batch of\s+|lots of\s+)?"
+    r"(?:\d+\s+)?" + _HIST_THING + r"\s*(?:for me|by date|from a date|"
+    r"from some days|in one go|in a batch|all at once|older than.*)?\??")
+#: "is there a way to clear old chats" / "how do i delete chats from last week"
+_K_HIST_HOW = re.compile(
+    r"(?:is there (?:a way|any way|a button|an option)|how (?:do|can|would) i|"
+    r"how do you|what is the way)\s+(?:for me\s+)?to\s+" + _HIST_VERB + r"\s+"
+    r"(?:all\s+|old\s+|my\s+|the\s+)?(?:\d+\s+)?" + _HIST_THING + r"\b.*")
+#: "where are my chats stored", "where is the chat history kept", "how big is
+#: my chat history", "how much space do my chats take", "do my chats expire".
+_K_HIST_WHERE = re.compile(
+    r"where\s+(?:are|is|do|does)\s+(?:my|the|your)\s+" + _HIST_THING +
+    r"\s*(?:stored|kept|saved|live|go|sit|held)?\??")
+_K_HIST_SIZE = re.compile(
+    r"(?:how big|how large|how much space|how many (?:bytes|megabytes|mb|gb))\s+"
+    r"(?:is|are|does|do)\s+(?:my|the|your)\s+" + _HIST_THING +
+    r"\s*(?:take|use|on disk|stored|weigh)?\??")
+_K_HIST_EXPIRE = re.compile(
+    r"(?:do|does|will|are)\s+(?:my|the|your)\s+" + _HIST_THING +
+    r"\s*(?:ever\s+)?(?:expire|expired|get deleted|be deleted|auto[- ]?delete|"
+    r"delete themselves|disappear|age out)\b.*")
+
+
+#: The plural ask on its own - "clear old chats", "delete all my conversations".
+#: PLURAL on purpose: "delete this conversation" is the existing carded action
+#: for ONE chat (`conversation_clear`), and it must keep its own path. This one
+#: answers with the capability sentence, which explains the card, the two yeses
+#: and the platform check - the fast path cannot delete anything.
+_K_HIST_BARE = re.compile(
+    _HIST_VERB + r"\s+(?:(?:all|old|my|the|these|every)\s+){0,2}"
+    r"(?:chats|conversations|chat history)\b"
+    r"(?:\s+(?:from|before|older than|in a batch|by date|all at once|"
+    r"in one go).*)?\??")
+
+
+def _history_chat(s: str, text: str = "") -> Optional[Intent]:
+    """The chat-storage / clearing questions, answered from measured state.
+
+    Read BEFORE `_model_chat` and before the feature lane, and only for a
+    whole-sentence match, so an ordinary request that happens to say "chat"
+    keeps its own path. Every one of these is a READ: the purge itself is three
+    POST routes in jarvis_history_purge.py, and no phrase here can approve
+    anything.
+
+    `text` is the sentence as the owner typed it, because
+    `normalize_spoken_command` drops a leading "can you" - and "can you clear
+    old chats" is the capability question, not a request.
+    """
+    for rx in (_K_HIST_TIME, _K_HIST_HOW, _K_HIST_WHERE, _K_HIST_SIZE,
+               _K_HIST_EXPIRE):
+        if rx.fullmatch(s):
+            return Intent("history_purge")
+    if _K_HIST_BARE.fullmatch(s):
+        return Intent("history_purge")
+    raw = " ".join(str(text or "").lower().split()).rstrip(" ?.!,")
+    if raw and raw != s and _K_HIST_CAN.fullmatch(raw):
+        return Intent("history_purge")
+    return None
+
+
+def _run_history_purge() -> Result:
+    """`jarvis_history_purge.capability()`'s own sentence, or an honest refusal.
+
+    It is the module's words, not a second copy written here: the file, its
+    size, the counts, the retention switch and the MEASURED clearing speed all
+    come from that one place, so this answer and the routes cannot disagree. If
+    the module is not on this PC (or cannot read the file) the refusal says so
+    and names the routes - it never claims the feature is missing.
+    """
+    try:
+        import jarvis_history_purge as P
+        said = str(P.capability().get("words") or "").strip()
+    except Exception:
+        said = ""
+    if not said:
+        return Result(HISTORY_PURGE_UNKNOWN, "history_purge")
+    return Result(said, "history_purge")
+
+
 def _model_known_refs() -> dict:
     try:
         import jarvis_model_knowledge as K
@@ -19724,6 +19851,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # 2026-11-01 field test: "where am I talking from?" - answered from
         # jarvis_surface's own header fact, never the model's guess at a place.
         return _run_surface_origin()
+    if n == "history_purge":
+        # "how long does it take to clear old chats if i batched a lot of them
+        # together?" - answered from this PC's measured state, never the model.
+        return _run_history_purge()
     if n == "model_current":
         return _run_model_current()
     if n == "model_answerer":

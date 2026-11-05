@@ -186,7 +186,13 @@ def t_the_patch_and_the_base():
              # /api/bench routes), anchored inside hardware.patch's own added
              # blocks. It touches no gate list, no tier row and no _RISK row, so
              # it rewrites nothing this patch wrote.
-             "bench.patch"}
+             "bench.patch",
+             # history-purge.patch (2026-11-04, clearing old chats by date):
+             # ONE added install block in jarvis_hud.py, right after
+             # forget-range.patch's own block, and no hunk in jarvis_gate.py at
+             # all - every rule is in the shipped jarvis_history_purge.py. It
+             # rewrites nothing this patch wrote.
+             "history-purge.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

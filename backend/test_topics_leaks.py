@@ -81,6 +81,15 @@ READERS = {
                                        "learn_only or off topic is never a style sample"),
     "jarvis_feedback.py": ("owner", "reads one fact by id to see if it is still current"),
     "jarvis_forget_range.py": ("owner", "the owner's Forget a time frame sees every fact"),
+    # Clear old chats (2026-11-04) is that same owner action one window further:
+    # the owner names the days, reads a preview and types two yeses, and the
+    # module then deletes the facts in that window - so it sees every fact in it
+    # on purpose (an Off or learn-only fact inside the window is still the
+    # owner's, and a card that silently kept some would be the dishonest half).
+    # It calls no store.search(); its own SQL is the window, and the route
+    # requires the platform ticket first.
+    "jarvis_history_purge.py": ("owner", "the owner's Clear old chats sees every fact in the "
+                                         "window it deletes, like Forget a time frame"),
     "jarvis_brain_reads.py": ("owner", "one fact's history, by id"),
     "jarvis_sources.py": ("owner", "'Where this came from': ids of an answer's facts"),
     "jarvis_backup.py": ("mentions", "copies memory.db whole; modes ride along in the file"),

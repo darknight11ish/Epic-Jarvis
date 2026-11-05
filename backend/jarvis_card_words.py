@@ -226,6 +226,13 @@ TITLES = {
     # relative - ONE kept conversation from this PC, after ONE card that names it
     # (title and message count) and says the facts it taught are kept.
     "conversation_clear": "delete one conversation from this PC",
+    # jarvis_history_purge.py (2026-11-04, the owner's own request): a whole date
+    # range after TWO yeses and a Windows Hello / phone fingerprint ticket. It
+    # raises no card of its own; this phrase is the card's own line, and the
+    # "What asks first" page uses ROW_TITLES in jarvis_asks_first.py for the
+    # longer version. Kept under 80 characters, which is what title_for may
+    # produce (t_each_title_is_a_phrase_somebody_wrote).
+    "history_purge": "delete the chats from the days you chose",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",
@@ -509,6 +516,8 @@ SUMMARY = {
     # jarvis_self_portrait.py (2026-11-03): ONE kept conversation from this PC,
     # after ONE card; the learned facts are kept.
     "conversation_clear": "delete one conversation",
+    # jarvis_history_purge.py (2026-11-04): the same act for a whole range.
+    "history_purge": "delete old chats by date",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

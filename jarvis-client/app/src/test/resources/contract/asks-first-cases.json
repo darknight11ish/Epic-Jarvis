@@ -1095,6 +1095,15 @@
        "title": "Delete one conversation from this PC"
       },
       {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
+      },
+      {
        "action": "storage_cleanup",
        "fixed": false,
        "id": "storage_cleanup",
@@ -2977,6 +2986,15 @@
        "title": "Delete one conversation from this PC"
       },
       {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
+      },
+      {
        "action": "storage_cleanup",
        "fixed": false,
        "id": "storage_cleanup",
@@ -4854,6 +4872,15 @@
        "title": "Delete one conversation from this PC"
       },
       {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
+      },
+      {
        "action": "storage_cleanup",
        "fixed": false,
        "id": "storage_cleanup",
@@ -6724,6 +6751,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -8601,6 +8637,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -10495,6 +10540,15 @@
        "title": "Delete one conversation from this PC"
       },
       {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
+      },
+      {
        "action": "storage_cleanup",
        "fixed": false,
        "id": "storage_cleanup",
@@ -12375,6 +12429,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -14263,6 +14326,15 @@
        "title": "Delete one conversation from this PC"
       },
       {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
+      },
+      {
        "action": "storage_cleanup",
        "fixed": false,
        "id": "storage_cleanup",
@@ -16138,6 +16210,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",

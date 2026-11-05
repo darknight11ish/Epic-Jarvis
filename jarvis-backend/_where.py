@@ -1526,6 +1526,18 @@ SHIPPED = (
     # $SHIPPED in scripts/apply-patches.ps1. It sits BEFORE jarvis_bench.py
     # because backend/test_bench.py pins that entry as the last one.
     "jarvis_call_notes.py",
+    # Clear old chats by date (jarvis_history_purge.py, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). A preview, two separate yeses and a platform
+    # ticket; pinned chats kept unless asked for; the facts those chats taught
+    # erased by their recorded provenance; every deletion in
+    # ~/.openjarvis/purge-audit.jsonl. `history-purge.patch` is the install
+    # block that reaches it. Standard library only, local only, no model.
+    # The same entry is just after `jarvis_storage_health.py` in
+    # scripts/apply-patches.ps1's $SHIPPED, which keeps `jarvis_bench.py` LAST.
+    "jarvis_history_purge.py",
     # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
     # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
     # conversation about any of its tools). ONE entry per name in

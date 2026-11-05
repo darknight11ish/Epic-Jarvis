@@ -241,7 +241,7 @@ def t_the_module_is_shipped_twinned_and_catalogued():
     # 22nd no-patch drop-in and the 50th ready module, so this pin moves with
     # it - the same one-line change every new drop-in makes here.
     check("the registry is not stale (the folder count rose, and one more ready module)",
-          registry.get("folder_count") == 22 and registry.get("ready_count") == 50,
+          registry.get("folder_count") == 22 and registry.get("ready_count") == 51,
           {registry.get("folder_count"), registry.get("ready_count")})
     docs = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs have the section", "## 170. The Obsidian notes editor" in docs)

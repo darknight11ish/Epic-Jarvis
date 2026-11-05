@@ -64,6 +64,18 @@ decision the old record was waiting for.
 WHAT IT CANNOT SEE. Only four of the 28 folders' READMEs state a position at
 all, so (5) covers those four. The others say nothing, which is not a pass and
 not a failure - it is printed as a coverage line so the number is never assumed.
+
+THE SAME SHAPE RECURRED ON 2026-11-05, and was resolved the same way.
+`history-purge.patch` (PR #1170) sits at index 170 - between `bench.patch` and
+`plugin-loader.patch`, which must stay last - so `history-purge`'s number was
+fixed at 170 the moment the patch existed, and `protected-items` held the
+hand-numbered 170 as well. Again the patch side cannot move, so the
+hand-numbered side did: `protected-items` 170 -> 171, `send-file` 171 -> 172,
+`skill-menu` 172 -> 173, `watch-decisions` 173 -> 174, each README that states
+a position renumbered with it. The loader's real sequence before this was the
+tie at 170 broken by folder name - `history-purge` then `protected-items` - and
+it is the same sequence now with the tie gone, so, as in 2026-10-16, no shipped
+feature's load order changed: only the labels did.
 """
 from __future__ import annotations
 

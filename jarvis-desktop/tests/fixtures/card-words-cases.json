@@ -211,6 +211,10 @@
       "title": "Jarvis wants to keep your chat history"
     },
     {
+      "action": "history_purge",
+      "title": "Jarvis wants to delete the chats from the days you chose"
+    },
+    {
       "action": "home_control",
       "title": "Jarvis wants to change something in your home"
     },
@@ -1100,6 +1104,18 @@
         "full": "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted. nothing has happened yet.",
         "body": "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted. nothing has happened yet.",
         "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "history_purge",
+      "notice": {
+        "title": "Jarvis wants to delete the chats from the days you chose",
+        "summary": "Jarvis wants to delete old chats by date.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }
