@@ -397,9 +397,11 @@ def t_off_tools_name_the_real_switch_and_gate():
           and AF.TOOLS_PC_ONLY in ereply, ereply)
     phone = ask("tap my phone")
     preply = phone.reply if phone is not None else ""
-    check("phone control is not an app-switchable tool, said plainly",
+    check("phone control is switchable in the app since 2026-11-04, and the reply "
+          "names that switch rather than a settings file",
           "switched off on this PC" in preply
-          and AF.TOOLS_TOML_ONLY_NOTE in preply, preply)
+          and AF.TOOLS_PC_ONLY in preply
+          and "settings file" not in preply.lower(), preply)
     old = Q._enabled_tools_turn
     Q._enabled_tools_turn = lambda: {"email_check", "home_read", "control_phone"}
     try:
