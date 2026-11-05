@@ -35,8 +35,11 @@ import {
   SWITCH_LABEL,
   switchView,
   TOOLS_DETAIL,
+  TOOLS_ELSEWHERE_LABEL,
   TOOLS_LABEL,
-  notOfferedView,
+  extraToolView,
+  extraToolsView,
+  notSwitchableView,
   toolGroupsView,
   toolSwitchView,
   vaultSwitchView,
@@ -146,10 +149,10 @@ function paint() {
 }
 
 /**
- * "Let the AI use this": the tiered one-tool switches (Tier A and Tier B),
- * grouped, plus the vault organizer's own separate row, plus the plain note
- * naming every tool this slice does NOT offer in-app. One switch per row;
- * phone read-only because can_enable is false there.
+ * "Let the AI use this": every one-tool switch the PC offers (all of them
+ * since 2026-11-04), grouped, plus the vault organizer's own separate row,
+ * plus the plain note naming the few tools whose own switch decides them. One
+ * switch per row; phone read-only because can_enable is false there.
  */
 function paintTools() {
   if (!el.tools) return;
@@ -193,7 +196,30 @@ function paintTools() {
     ul.append(li);
     parts.push(node("h4", "subhead", "Its own switch"), ul);
   }
-  const note = notOfferedView(tools);
+  // D4 (2026-11-04): every tool that is ON, including ones the settings file
+  // switched on that this page has no switch row for. Each is an OFF switch
+  // only; the PC's own "why" says so under the row.
+  const elsewhere = extraToolsView(tools);
+  if (elsewhere.length) {
+    const box = node("div", "af-group");
+    box.append(node("h4", "subhead", TOOLS_ELSEWHERE_LABEL));
+    const ul = node("ul", "sc-cards");
+    for (const item of elsewhere) {
+      const li = node("li", "sc-gpu");
+      li.dataset.tool = item.id;
+      li.append(node("span", "sc-gpu-name", item.title));
+      const tv = extraToolView(item);
+      if (tv) {
+        li.append(toggle(`af-tool-${item.id}`, TOOLS_LABEL, "", tv.checked,
+          busy || tv.disabled, (want, box2) => changeTool(item.id, want, box2)));
+        for (const line of tv.lines) li.append(node("span", "sc-gpu-role", line));
+      }
+      ul.append(li);
+    }
+    box.append(ul);
+    parts.push(box);
+  }
+  const note = notSwitchableView(tools);
   if (note) parts.push(node("p", "note", note));
   el.tools.replaceChildren(...parts);
 }

@@ -23,12 +23,18 @@
 //!   stale link - the shape of every setting that trusts more.
 //! * [`set_tool_enabled`] - `POST /api/asks_first/tools {"tool", "enabled"}`
 //!   (the owner's answer of 2026-09-27): whether the AI model is offered
-//!   ONE of the Tier A/Tier B tools ([`TOOLS_SWITCHABLE`]) AT ALL - a
-//!   DIFFERENT thing from [`set_asks_first`], which is whether an offered
-//!   tool asks first. `enabled: true` is the PC only, one approval card
-//!   that needs Windows Hello, so it is held on a stale link; `enabled:
-//!   false` is at once, never held, from either app. A tool off the list is
-//!   refused HERE too, before anything is sent; the PC refuses it as well.
+//!   ONE tool ([`TOOLS_SWITCHABLE`]) AT ALL - a DIFFERENT thing from
+//!   [`set_asks_first`], which is whether an offered tool asks first.
+//!   `enabled: true` is the PC only, one approval card that needs Windows
+//!   Hello, so it is held on a stale link; `enabled: false` is at once,
+//!   never held, from either app. Since the owner's decision of 2026-11-04
+//!   EVERY tool the AI model can be offered may be turned on here, the raw
+//!   Tier C set included; ON for one of the three whose own switch decides it
+//!   is refused HERE with the PC's own sentence, and the PC refuses it as
+//!   well. OFF is the D4 rule (2026-11-04): the Tools page may turn OFF
+//!   anything that is on, including a tool enabled in the settings file that
+//!   this app has no row for, so any real tool name is sent and the PC
+//!   decides.
 //!   Desktop only (CLAUDE.md: no deep config editing on the phone).
 
 use std::time::Duration;
@@ -73,15 +79,14 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word (the
-/// 2026-10-31 tiered ruling, 21 tools since 2026-11-02; the conversation
-/// web-search grant's two tools were removed from this list and ride with
-/// `web_search` instead - the field test of 2026-11-02 found the switch was
-/// never on, so the model was never offered the tool and no grant card could be
-/// raised). A DIFFERENT
-/// list from [`SWITCHABLE`],
-/// and desktop only; Tier C and the unlisted tools stay settings-file choices.
-pub(crate) const TOOLS_SWITCHABLE: [&str; 21] = [
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 48 at
+/// 2026-11-04: the owner's decision that day made EVERY tool the AI model can
+/// be offered switchable, raw Tier C set and everyday helpers included (21
+/// before that; the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
+/// from [`SWITCHABLE`], and desktop only. The three tools that are NOT here
+/// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
+pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
+    // Tier A (13)
     "calendar_read",
     "notes_search",
     "append_obsidian_daily",
@@ -95,6 +100,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 21] = [
     "protect_from_jarvis",
     "github_search",
     "send_file_to_phone",
+    // Tier B (8)
     "email_check",
     "send_email",
     "draft_email",
@@ -103,6 +109,65 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 21] = [
     "home_control",
     "my_spending",
     "retirement_whatif",
+    // Tier C, the raw and powerful ones (7; run_data_script is below)
+    "shell_exec",
+    "control_computer",
+    "control_phone",
+    "browser_control",
+    "read_web_page",
+    "connect_account",
+    "rea_investigate",
+    // The everyday helpers that used to be "not this slice" (8)
+    "calculator",
+    "memory_search",
+    "file_read",
+    "web_search",
+    "my_files",
+    "propose_plan",
+    "change_setting",
+    "feature_guide",
+    // Jarvis's own tools, which had no switch row before 2026-11-04 (12)
+    "goals_list",
+    "goal_add",
+    "goal_progress",
+    "goal_done",
+    "conversation_find",
+    "conversation_open",
+    "phone_apps",
+    "plugin_list",
+    "plugin_switch",
+    "refresh_abilities",
+    "self_portrait",
+    "setup_quiz",
+];
+
+/// The three known tools with no switch of their own, each with the PC's own
+/// sentence - `jarvis_asks_first.NO_SWITCH_NOTE`, word for word (checked
+/// against the contract file). They are here because the turn IGNORES their
+/// line in `[tools].enabled`: `run_data_script` is offered by its own switch
+/// (Settings, Data sandbox), and the two web-search tools ride with
+/// `web_search`. Refusing them with "this PC does not know that name" would be
+/// false, so the PC's own explanation is sent before the request is made.
+pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 3] = [
+    (
+        "run_data_script",
+        "The data and maths sandbox has its own switch: Settings, Data sandbox \
+         (or the sandbox row on the What asks first page). That switch is what \
+         offers this tool, so a line in [tools].enabled would change nothing. \
+         Nothing was changed here.",
+    ),
+    (
+        "approve_web_search_for_conversation",
+        "This one rides with Web search: with Web search offered, the AI is \
+         offered this too, and without it this tool could not search anyway. It \
+         has no switch of its own, so nothing was changed here.",
+    ),
+    (
+        "stop_web_search_approval",
+        "This one rides with Web search: with Web search offered, the AI is \
+         offered this too. It has no switch of its own, so nothing was changed \
+         here.",
+    ),
 ];
 
 /// What a backend without `jarvis_asks_first.py` is told. The phone says
@@ -116,23 +181,12 @@ pub(crate) const NOT_ON_LIST: &str = "Only reading your calendar, email, notes, 
      Everything else changes only in your settings file (jarvis-framework.toml), and some \
      things always ask.";
 
-/// A tool off [`TOOLS_SWITCHABLE`] - `jarvis_asks_first.TOOLS_NOT_ON_LIST`,
-/// word for word.
+/// A name this PC does not know at all - `jarvis_asks_first.TOOLS_NOT_ON_LIST`,
+/// word for word. NOT the old "not offered in-app by this slice" note: no tool
+/// is refused for being raw any more (2026-11-04), so this answer is only for a
+/// name the PC has never heard of.
 pub(crate) const TOOLS_NOT_ON_LIST: &str =
     "This PC does not know a tool by that name, so nothing was changed.";
-
-/// A tool that is deliberately NOT offered in-app by this slice - Tier C (raw
-/// shell/computer/browser, web-page reading, account connections, REA) and the
-/// nine unlisted tools - `jarvis_asks_first.TOOLS_TOML_ONLY_NOTE`, word for
-/// word. A DIFFERENT answer from [`TOOLS_NOT_ON_LIST`], which is for a name the
-/// PC does not know at all.
-pub(crate) const TOOLS_TOML_ONLY_NOTE: &str =
-    "That tool is not offered from inside the app by this slice. Raw shell, computer and \
-     browser control, reading one web page, connecting an account and REA (which also needs \
-     its own [rea] enabled = true) stay a deliberate choice in your settings file on this PC \
-     (jarvis-framework.toml, [tools].enabled); calculator, memory_search, file_read, web_search, \
-     my_files, propose_plan, change_setting and feature_guide are not offered in-app by this \
-     slice either. Nothing was changed.";
 
 const STALE: &str =
     "The connection to Jarvis is catching up, so nothing can be sent until it does.";
@@ -176,16 +230,39 @@ pub(crate) fn tier_body(action: &str, ask: bool) -> Result<serde_json::Value, St
     Ok(serde_json::json!({ "action": action, "ask": ask }))
 }
 
-/// The body of one "offer this to the AI model" switch, or why not: only a
-/// tool on [`TOOLS_SWITCHABLE`].
+/// The body of one "offer this to the AI model" switch, or why not.
+///
+/// ON is for any tool on [`TOOLS_SWITCHABLE`] - every tool the AI model can be
+/// offered since the owner's decision of 2026-11-04. A name off that list gets
+/// the PC's own sentence when it is one of [`TOOLS_NO_SWITCH`] (its own switch
+/// decides it), and "does not know that name" otherwise. OFF is unchanged from
+/// D4 (2026-11-04): the Tools page may turn OFF anything that is on, including
+/// a tool enabled in `[tools].enabled` that this app has no switch row for - so
+/// every real tool name is sent, and the PC itself decides (200 and the line is
+/// removed, or its own 403 when nothing is on by that name).
 pub(crate) fn tool_body(tool: &str, enabled: bool) -> Result<serde_json::Value, String> {
-    if !TOOLS_SWITCHABLE.contains(&tool) {
-        if tool.is_empty() || tool == "nonsense" {
-            return Err(TOOLS_NOT_ON_LIST.to_string());
+    if !plausible_tool_name(tool) {
+        return Err(TOOLS_NOT_ON_LIST.to_string());
+    }
+    if enabled && !TOOLS_SWITCHABLE.contains(&tool) {
+        if let Some((_, note)) = TOOLS_NO_SWITCH.iter().find(|(name, _)| *name == tool) {
+            return Err((*note).to_string());
         }
-        return Err(TOOLS_TOML_ONLY_NOTE.to_string());
+        return Err(TOOLS_NOT_ON_LIST.to_string());
     }
     Ok(serde_json::json!({ "tool": tool, "enabled": enabled }))
+}
+
+/// A name the backend's own `[tools].enabled` writer accepts: a lowercase
+/// letter, then lowercase letters, digits or `_` (`rewrite_tools`'s own rule).
+/// A malformed name is refused here so no pointless request is sent.
+fn plausible_tool_name(tool: &str) -> bool {
+    let bytes = tool.as_bytes();
+    (2..=61).contains(&bytes.len())
+        && bytes[0].is_ascii_lowercase()
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || *b == b'_')
 }
 
 /// Whether a change is held while the event stream is stale: loosening
@@ -310,8 +387,7 @@ pub async fn set_vault_organizer_enabled(
 mod tests {
     use super::{
         asks_first_answer, change_answer, held_on_stale, tier_body, tool_body, ASKS_FIRST_MISSING,
-        LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_SWITCHABLE,
-        TOOLS_TOML_ONLY_NOTE,
+        LOCKDOWN, NOT_ON_LIST, SWITCHABLE, TOOLS_NOT_ON_LIST, TOOLS_NO_SWITCH, TOOLS_SWITCHABLE,
     };
 
     /// The real answers, made by `tools/gen_asks_first_cases.py`.
@@ -349,6 +425,13 @@ mod tests {
             TOOLS_NOT_ON_LIST
         );
         assert_eq!(doc["words"]["lockdown_action"].as_str().unwrap(), LOCKDOWN);
+        // 2026-11-04: the three no-switch sentences are the PC's own words, so
+        // the app can never refuse a name it DOES know with "does not know it".
+        let notes = doc["words"]["no_switch_note"].as_object().unwrap();
+        for (name, note) in TOOLS_NO_SWITCH {
+            assert_eq!(notes[name].as_str().unwrap(), note, "{name}");
+        }
+        assert_eq!(notes.len(), TOOLS_NO_SWITCH.len());
     }
 
     #[test]
@@ -363,21 +446,41 @@ mod tests {
     }
 
     #[test]
-    fn only_the_tiered_tools_can_be_offered_and_only_on_is_held() {
+    fn every_known_tool_can_be_turned_on_but_anything_on_can_be_turned_off() {
         for t in TOOLS_SWITCHABLE {
             assert!(tool_body(t, false).is_ok());
-            assert!(tool_body(t, true).is_ok());
+            assert!(tool_body(t, true).is_ok(), "ON must be sent: {t}");
         }
+        // 2026-11-04: the seven raw Tier C tools and the everyday helpers are
+        // on the switchable list now - the exact tools that used to be refused.
         for t in [
             "browser_control",
             "shell_exec",
             "read_web_page",
             "connect_account",
+            "control_computer",
+            "control_phone",
+            "rea_investigate",
+            "calculator",
+            "propose_plan",
+            "web_search",
+            "plugin_switch",
         ] {
-            assert_eq!(tool_body(t, false).unwrap_err(), TOOLS_TOML_ONLY_NOTE);
+            assert!(tool_body(t, true).is_ok(), "formerly refused: {t}");
+            assert!(tool_body(t, false).is_ok(), "OFF must be sent: {t}");
         }
-        for t in ["", "nonsense"] {
+        // The three whose own switch decides it get the PC's own sentence.
+        for (name, note) in TOOLS_NO_SWITCH {
+            assert_eq!(tool_body(name, true).unwrap_err(), note, "{name}");
+            assert!(tool_body(name, false).is_ok(), "OFF is still sent: {name}");
+        }
+        // A name this PC does not know still says so, in both directions.
+        for t in ["plugin_scan", "nonsense"] {
+            assert_eq!(tool_body(t, true).unwrap_err(), TOOLS_NOT_ON_LIST, "{t}");
+        }
+        for t in ["", "Not A Tool", "_tool", "9tool"] {
             assert_eq!(tool_body(t, false).unwrap_err(), TOOLS_NOT_ON_LIST);
+            assert_eq!(tool_body(t, true).unwrap_err(), TOOLS_NOT_ON_LIST);
         }
         assert!(held_on_stale(true));
         assert!(!held_on_stale(false));

@@ -233,6 +233,44 @@ https://github.com/morluto/rea/tree/main/skills/reverse-engineer-anything
   The package carries the MIT licence text (read from the extracted
   rea-agents@6.7.0 tarball on 2026-10-20); its full text is in the MIT section below.
 
+dakidarts/dark-radar - https://github.com/dakidarts/dark-radar
+Adapted: the browser extension's link and urgency patterns, re-expressed as
+plain Python in backend/jarvis_source_independence.py (and its byte-identical
+twin jarvis-backend/jarvis_source_independence.py). Ported from
+content.js: the shortener address list (bit.ly, tinyurl.com, goo.gl, t.co,
+ow.ly, buff.ly, adf.ly, rebrand.ly, short.link), the tracking markers (UTM
+tags, fbclid, gclid, and the ref/source/campaign names), the affiliate
+parameter names (affiliate, aff, tag, associate, partner), the forced-urgency
+phrase list, and its two-part countdown rule (a timer is only a pressure
+tactic when urgency wording is also present). Added here on top of that list,
+and NOT from dark-radar: the affiliate-network address list, the
+redirect-wrapper check, the shop associate-tag shape, and the handling of
+negated wording ("not sponsored" is the page's claim, not a disclosure). No
+dark-radar file is shipped and no JavaScript is vendored; the extension is not
+a dependency.
+
+MIT License
+
+Copyright (c) 2026 Dakidarts Web Services
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
 "HEY JARVIS" - MODEL FILES AND LIBRARIES (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 openWakeWord pre-trained models, release v0.5.1 -

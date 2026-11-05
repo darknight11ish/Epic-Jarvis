@@ -2846,8 +2846,10 @@ Considered and explained in `jarvis_second_card.py`'s own module docstring
 about which lane it is, so one more literal instance costs the same as a
 dict entry would, without touching either existing singleton's own
 call sites in a module this safety-critical. It has its own port
-(`[second_card] third_port` in `jarvis-framework.toml`, default 11436)
-and its own log file (`second-card-third-ollama.log`), because - unlike
+(`[second_card] third_port` in `jarvis-framework.toml`, default 11438, and
+never `11434`, `11435`, `11436`, `11437`, `11450` or `11439` - the last
+reserved for the VoiceStudio sidecar by the 2026-11-04 Q6 ruling) and its own
+log file (`second-card-third-ollama.log`), because - unlike
 `_LANE`/`_COMBINED_LANE`, which are mutually exclusive and safely share
 one port - the third lane runs at the SAME TIME as the second card's own
 lane. `jarvis_agent.choose_lane()` and every other existing caller of
@@ -6416,8 +6418,9 @@ the times stay, so a timer still counts down.
 - **A routine (21.15) has its own gaps, all of them small and all of them
   stated there**: the Windows toast names the part only in words (it has no
   per-part buttons), the phone shows a part only while connected, and a part
-  whose question is never answered keeps its routine waiting instead of
-  silently moving on.
+  whose question is never answered is never announced as lost — once every
+  part has fired, the next occurrence starts without it, and an untimed part
+  that never fired keeps the routine silent until it is answered.
 
 ### 21.10 "Also on my phone" (added 2026-09-26, the phone only)
 
@@ -7451,10 +7454,13 @@ later. The Windows toast names the part in words and carries no per-part buttons
 this build — the HUD's row and the phone's notification are where a part is
 answered. A part with three buttons leaves no Stop on the Android notification,
 which is already true of an `ask` reminder (21.14). A part whose question is never
-answered keeps its routine waiting rather than guessing that it was done: the
-routine's own Done on the last part is what ends it. And a routine whose parts
-never get answered does not roll on to the next occurrence — say Done on it, or
-delete it.
+answered is not guessed to have been done: the routine's own Done on the last part
+is what ends it. A part left unanswered is never announced as lost, though. Once
+every part has fired, the next occurrence arrives and re-seeds, announcing its part
+1, and the parts left unanswered are dropped without a word. If an untimed part
+never fired because the part before it was never answered, nothing re-seeds: the
+routine keeps the next occurrence as its wake time, announces nothing, and waits
+until that part is answered or the routine is deleted.
 
 **Back-compat and rollback.** A job with no parts carries **no new key at all**, in
 the payload or in the event, and `status()` gains the additive marker `"steps":
@@ -8227,7 +8233,7 @@ routed); phone control; commands on this PC; plug-in programs (MCP, id
 big model.
 `tools` is the list the chat's tool loop offers the model
 (`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
-For a tool with an in-app switch (Tier A/B, §43), an Off row's own line says it switches on in Settings, What asks first; Tier C and the tools this slice leaves alone say it stays a settings-file choice (and why).
+For a tool with an in-app switch (§43 - every tool the model can be offered since 2026-11-04), an Off row's own line says it switches on in Settings, What asks first, with one approval card and Windows Hello. The three tools that have no switch of their own say where their real switch is instead: the data and maths sandbox for `run_data_script`, and Web search for the two conversation grant tools.
 
 Both apps show a row as "`name` - `state_words`", then, only when it is on,
 "Goes to: `where`" and "Asks you first: `asks`" (not when `asks` is "-"),
@@ -11072,38 +11078,64 @@ read `decodePendingRows` already uses for `pending`.
   queue's own skipped-row count.
 - **No paging.** The list shows whatever `history` sends in one read; there
   is no "load older" here, unlike Chat history's (§18) `before=`.
-## 43. In-app switches for tools the AI may use (tiered, 2026-10-31)
+## 43. In-app switches for tools the AI may use (unlocked, 2026-11-04)
 
-The owner asked for in-app switches instead of hand-editing `[tools].enabled`
-for the tools that can be switched safely. Gemini's 2026-10-31 ruling made it
-**tiered, not indiscriminate**:
+The owner asked for in-app switches instead of hand-editing `[tools].enabled`.
+Gemini's 2026-10-31 ruling made it **tiered, not indiscriminate** - only Tier A
+and Tier B were offered in the app, and Tier C and the unlisted tools stayed
+settings-file choices. **The owner reversed the ON half on 2026-11-04:** "few
+restrictions on its tools beyond the core values of jarvis that have already
+been established, particularly reverse engineer anything among other things",
+and, asked what the app should allow, they chose **"Switch any of them on in
+the app"**. So every tool the AI model can be offered is switchable ON from the
+Tools page, one approval card each. The only limits left are the five
+non-negotiable rules (`CLAUDE.md`) and the shape below.
 
-- **Tier A** (in-app now): `calendar_read`, `notes_search`,
-  `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`,
-  `set_timer`, `set_reminder`, `todo_add`, `todo_done`, `coming_up`,
-  `protect_from_jarvis`, `github_search`, `send_file_to_phone`.
-- **Tier B** ("Connected accounts & home", included because the owner clicked
-  for maximum flexibility): `email_check`, `send_email`, `draft_email`,
+**The 48 switches**, in the page's own groups:
+
+- **Notes and reading:** `calendar_read`, `notes_search`,
+  `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
+- **Timers, lists and plans:** `set_timer`, `set_reminder`, `todo_add`,
+  `todo_done`, `coming_up`.
+- **Connected accounts & home:** `email_check`, `send_email`, `draft_email`,
   `tidy_inbox`, `home_read`, `home_control`, `my_spending`,
   `retirement_whatif`.
-- **Tier C stays TOML-only and is NEVER exposed in-app:** `shell_exec`,
-  `run_data_script`, `control_computer`, `control_phone`, `browser_control`,
-  `read_web_page`, `connect_account`, `rea_investigate` - raw shell, computer
-  and browser control stay a deliberate settings-file choice, and REA also
-  needs its own `[rea] enabled = true`.
-- **Not offered in-app by this slice:** `calculator`, `memory_search`,
-  `file_read`, `web_search`, `my_files`, `propose_plan`, `change_setting`,
-  `feature_guide`.
-- The vault organizer's **own** switch (`POST /api/vault/organizer/enabled`)
-  rides in the same UI section as its own row; it is not a `[tools].enabled`
-  toggle.
+- **Safety and sharing:** `protect_from_jarvis`, `github_search`,
+  `send_file_to_phone`.
+- **Raw and powerful:** `shell_exec`, `control_computer`, `control_phone`,
+  `browser_control`, `read_web_page`, `connect_account`, `rea_investigate` -
+  the raw Tier C set, switchable since 2026-11-04. REA also needs its own
+  `[rea] enabled = true`; browser control also needs its own switch (the
+  second card's browser lane, or the headless browser); `web_search` also needs
+  Settings, Web search on. Each card says which.
+- **Everyday helpers:** `calculator`, `memory_search`, `file_read`,
+  `web_search`, `my_files`, `propose_plan`, `change_setting`, `feature_guide` -
+  the tools the earlier slice left out.
+- **Jarvis's own tools:** `goals_list`, `goal_add`, `goal_progress`,
+  `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
+  `plugin_list`, `plugin_switch`, `refresh_abilities`, `self_portrait`,
+  `setup_quiz` - these shipped ON and had no switch row at all before
+  2026-11-04.
 
-Every switch keeps the ruling's shape: ONE card plus Windows Hello, PC only,
-one tool at a time; OFF is instant from either app; the phone is read-only.
-Per-use action cards are unchanged - the card says each use still asks, the
-send-file card says it stays off by default because the deterministic chat
-request is the normal door, and the raw tools' own row in "What Jarvis can
-reach" says why they are not in the app.
+**Three known tools are NOT switches of their own**, because the turn ignores
+their line in `[tools].enabled` - a switch whose state the turn ignored would
+be a lie (the rule that removed the web-search grant's two switches on
+2026-11-02). They are named in `tools.not_switchable`, with the PC's own
+sentence, and the route refuses ON for them with that sentence rather than
+"does not know that name":
+
+- `run_data_script` - the data and maths sandbox has its OWN switch (Settings,
+  Data sandbox; `POST /api/sandbox/enabled`). With it on the model is offered
+  the tool whether or not the file names it; with it off the file cannot offer
+  it.
+- `approve_web_search_for_conversation` and `stop_web_search_approval` - they
+  ride with `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`).
+
+Every switch keeps the shape: ONE card plus Windows Hello, PC only, one tool at
+a time; OFF is instant from either app; the phone is read-only. Per-use action
+cards are unchanged - the card says each use still asks, the send-file card says
+it stays off by default because the deterministic chat request is the normal
+door, and the card names any other switch that must also be on.
 
 Built into `backend/jarvis_asks_first.py` (shipped whole, no new module), the
 same PC-only, Windows-Hello shape as §32.3's loosening card:
@@ -11115,9 +11147,9 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the plain "not offered in-app by this slice" note for a Tier C or unlisted tool, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the three `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (48), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
-| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
 Its state rides on `GET /api/asks_first` (§32.2), which now carries:
 
@@ -11130,33 +11162,45 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
           "groups": [{"title", "ids"}],          # the page's order
           "vault": {"id": "vault_organizer", "kind": "switch", "title",
                     "group", "on", "waiting", "can_enable", "action", "what"},
-          "not_offered": {"tier_c": [...], "not_this_slice": [...],
-                          "labels": {...}, "why": <the plain note>}}
+          "extra": [{"id", "title", "group", "on", "waiting",
+                     "switchable": false, "why",
+                     "last": {"outcome", "message", "at"}|null}, ...],
+          "not_switchable": {"ids": [...], "labels": {...},
+                             "why": <the plain note>}}
 ```
 
-`items` lists exactly Tier A + Tier B (21 tools at 2026-10-31), grouped; `vault`
-is the vault organizer's separate switch; `not_offered` names every tool that is
-deliberately NOT in the app, so the page can say so. The phone reads the same
-`GET /api/asks_first` and simply does not toggle anything (`can_enable` false).
+`items` lists all 48 switches at 2026-11-04 (every tool the AI model can be
+offered except the three below), grouped; `vault` is the vault organizer's
+separate switch; `not_switchable` names the three tools whose own switch decides
+them, with the PC's own sentence, so the page points at the real switch instead
+of drawing one that would do nothing. `extra` is D4 (the owner, 2026-11-04):
+every name in `[tools].enabled` that has no row in `items` - a name this PC does
+not know, or one of the three when the file happens to name it - with its state
+read from the file (`on`) and the PC's own plain `why`; `switchable: false` says
+plainly that the page offers it no ON switch. A tool turned OFF through this
+route stays in `extra` with `on: false` and the line the owner just saw (until
+Jarvis restarts), so the page can say OFF truthfully instead of the row
+vanishing; a tool the settings file lists again is shown as ON from the file.
+The phone reads the same `GET /api/asks_first` and simply does not toggle
+anything (`can_enable` false); it reads `extra` not at all, so the phone's page
+is unchanged.
 
 ### 43.2 The card
 
+One example, the raw one the owner named - `shell_exec`:
+
 ```
-Offer this ability to the AI model: "Reading your calendar"?
+Offer this ability to the AI model: "Running commands on this PC"?
 
 From now on the AI model may use this ability when it decides to. In plain
-words: Reading your calendar. This changes one line in your settings file on
-this PC; nothing else changes.
+words: Running commands on this PC. This changes one line in your settings file
+on this PC; nothing else changes.
 
 This is separate from whether it asks you first: that is set above, in "Ask me
 first", and is unchanged by this card.
 
 It does not approve any use of the ability: each time the AI uses it, "Ask me
 first" still decides whether you are asked.
-
-[for send_file_to_phone:] Sending a file stays off by default on purpose:
-asking in chat ("send me the file ...") is the normal door and works without
-this switch. This switch only lets the AI model pick it on its own.
 
 Approving it needs Windows Hello on this PC. You can turn it off again at any
 time from either app, and that is instant.
@@ -11166,6 +11210,20 @@ If you did not just do this, say no.
 If you say no: nothing changes - the AI model is still not offered this
 ability.
 ```
+
+The first line and "in plain words" are the tool's own one-line description
+(`jarvis_reach.TOOL_NAMES`), so the person is told what they are switching on,
+never just a name. Where that description is a NAME rather than an action -
+`control_computer`, `control_phone`, `browser_control` - the card adds one line
+saying what using it means ("it can tap and type on your phone over the cable,
+one approved plan at a time"), so nobody is asked to switch on a phrase they
+cannot picture (`jarvis_asks_first.CARD_USES`). Where another switch must also
+be on, the card adds a paragraph naming it - `rea_investigate` its
+`[rea] enabled = true`, `web_search` its Settings, Web search switch,
+`browser_control` its second-card browser lane or the headless browser - because
+otherwise "offered" would be a promise the card cannot keep.
+`send_file_to_phone` keeps its own paragraph: off by default on purpose, asking
+in chat is the normal door.
 
 Its title: "Jarvis wants to offer a tool to the AI model"
 (`jarvis_card_words.TITLES["enable_reading_tool"]`). Tier `ask` in the shipped
@@ -11186,11 +11244,12 @@ hand - the same discipline as `set_tier` (§32.4).
 ### 43.4 What every other tool's row says
 
 `backend/jarvis_reach.py`'s "What Jarvis can reach" (§24) already told the
-owner when a tool was off because it was not in `[tools].enabled`; its
-wording (`_enable_line`, `_off_line`) now also says which tools can be
-switched on from Settings, "What asks first", and says plainly - "This one
-is file-only - it cannot be switched on from either app." - for every tool
-that is not one of the four.
+owner when a tool was off because it was not in `[tools].enabled`. Since
+2026-11-04 its wording (`_enable_line`, `_off_line`) names Settings, "What asks
+first" for every tool that has a switch there - which is every tool the model
+can be offered except the three: `run_data_script`'s row says the Data sandbox
+switch decides it, the two grant tools' rows say they ride with Web search, and
+a name this PC does not know says adding it to the file would offer nothing.
 
 ### 43.5 Known gaps, said plainly
 
@@ -11200,6 +11259,10 @@ that is not one of the four.
   (harmless) and can raise the ON card; approving it still needs Windows
   Hello at the backend. Step 1's known limits (`docs/ARCHITECTURE.md`
   section 3) apply.
+- **`run_data_script`'s file line is inert.** `[tools].enabled` naming it
+  changes nothing either way - the data sandbox's switch decides it. That is
+  why it has no switch here; the page says so rather than drawing one that
+  would do nothing.
 
 ## 44. Accounts: email, calendar and Home Assistant secrets into Credential Manager (added 2026-09-27)
 
@@ -21363,7 +21426,7 @@ the gate as `page_read`. One name for this feature, and it is neither.
 | **Never-loosened** | `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`; on the "What asks first" page under **The internet**; on `LOCKDOWN_ACTIONS`, so Lockdown covers it |
 | **Only a person's yes runs it** | `jarvis_agent.NEEDS_A_PERSON` - at any tier, a run nobody was asked about is refused |
 | **Read aloud** | `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`, beside `web_search` |
-| **Off until switched on** | add `"read_web_page"` to `[tools].enabled` in `jarvis-framework.toml` - it is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
+| **Off until switched on** | a one-tool switch in Settings, What asks first, under "Let the AI use this" - ONE PC-only `enable_reading_tool` card plus Windows Hello (§43; switchable since 2026-11-04), or the same line by hand in the owner's `jarvis-framework.toml` `[tools].enabled`. It is not one of the shipped defaults (that file is the owner's; `apply-patches.ps1` never overwrites it) |
 
 ### 115.2 One card, then one plain GET
 
@@ -25773,10 +25836,15 @@ and no automatic per-feature model switching exists.
 origin and token checks as the old route; the answer is:
 
     {"found", "presets": [nine], "old_ids_replaced": [...],
-     "hardware": {"detected": {"count", "cards": [{"index","name","vram_gib","uuid"}],
-                                "source": "jarvis_hardware.detect()"},
+     "hardware": {"detected": {"count",
+                               "cards": [{"index","name","vram_gib","uuid",
+                                          "pci_id","monitor"}],
+                               "source": "jarvis_hardware.detect()"},
                   "questionnaire": {"focus_choices", "priority_choices", "answers"}},
-     "recommendations": {"by_gpu_count": {"1","2","3": {...}}, "three_gpu_plan"},
+     "recommendations": {"basis", "by_gpu_count": {"1","2","3": {...}},
+                         "three_gpu_plan": {"confirmed", "layout", "cards",
+                                            "heavy_pooled", "link_note",
+                                            "future_not_a_preset"}},
      "chosen": "<preset id or null>", "chosen_preset", "chosen_model",
      "lane": {"key", "base_url", "card", "words", "label", "ready", "why"},
      "lane_status": <same object>, "active_lane": {"key", "base_url"},
@@ -32399,20 +32467,23 @@ is no app screen and no route to poll, because the answer is an ordinary chat
 answer in both apps - the phone posts `/api/chat`, the PC answers, and a card is a
 card either way.
 
-**THE PAGE READER IS NOT MADE SWITCHABLE, ON PURPOSE.** `read_web_page` is a model
-tool (§115) and it stays exactly where it was: off by default (not in
-`[tools].enabled`), in `jarvis_asks_first.TIER_C` and out of `TOOLS_SWITCHABLE`,
-still in `HARD_LIMITS` and `MUST_ASK`, so `request_tool_enable` keeps answering
-`403` with `TOOLS_TOML_ONLY_NOTE` for it and no app may turn it on. Hand-editing
-`[tools].enabled` on this PC remains the only way to offer it to the model, and
-that is the decision of 2026-11-03
-(`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`), not an omission.
-The chat path above does not need that switch: it calls `jarvis_readpage`'s own
-prepare/run behind the same `ask` card, so reading a link works today with the
-model tool still off. `backend/test_reach.py`'s "no app may switch it on"
-assertion is unchanged and still passes.
+**THE PAGE READER IS SWITCHABLE SINCE 2026-11-04.** `read_web_page` is a model
+tool (§115). It is still off by default (not in `[tools].enabled`) and still in
+`jarvis_asks_first.TIER_C`, but the owner's decision of 2026-11-04 put it in
+`TOOLS_SWITCHABLE` with every other tool the model can be offered, so
+`request_tool_enable` accepts ON for it with ONE PC-only `enable_reading_tool`
+card and Windows Hello (§43) - superseding the 2026-11-03 decision
+(`decisions.d/2026-11-03-page-reader-stays-unswitchable.md`) that had kept it
+out. Its tier stays `ask`, and it stays in `HARD_LIMITS` and `MUST_ASK`, so
+nothing in an app can loosen it: offering it and making each read ask are two
+different things. The chat path above does not depend on that switch - it calls
+`jarvis_readpage`'s own prepare/run behind the same `ask` card, so reading a
+link works today with the model tool still off - and that is why turning the
+switch on is not needed for it. `backend/test_reach.py` now asserts the
+opposite of its old "no app may switch it on" line: the row names Settings,
+What asks first.
 
-**WHAT IT DOES NOT DO.** No in-app switch for the page reader, no `read_youtube`
+**WHAT IT DOES NOT DO.** No `read_youtube`
 tool, no quiz from chat, no playlists or channels, no several links in one card,
 no following a link on a page, no download of video or audio, no new route, no
 new tier, and no change to either reader's own module beyond being called. The
@@ -33176,15 +33247,23 @@ anything.
 `worst_repeat_ok`, and `words` - the one sentence both apps display, built in
 the engine so the desktop and the phone cannot word the same result two
 different ways. **No prompt text is ever stored**: the prefill prompt is
-generated from a fixed, counted word list with a per-repeat tag and is thrown
-away, and what is stored is how many tokens Ollama said it really counted. The
+generated from a fixed, counted word list with a per-repeat tag **at the front**
+- Ollama serves the LONGEST COMMON PREFIX from its cache, so a tag at the tail
+would leave the whole word body cacheable and every repeat after the first
+would measure the tail instead of the depth - and it is thrown away; what is
+stored is how many tokens Ollama said it really counted. The
 allowlist is why `{"prompt": ...}` handed in by a caller that made a mistake is
 dropped rather than written.
 
-**THE ADVICE SENTENCE IS BUILT AND TESTED; ITS ROUTE IS PHASE 4.**
+**THE ADVICE SENTENCE IS BUILT AND TESTED, AND IT IS NOT REACHABLE YET.**
 `jarvis_bench.advice()` returns `{note, numbers, enough}` from `bench.jsonl` and
 nothing else - it cannot run a benchmark, delete a row, or reach the network.
-**Under three usable runs of a model it refuses to compare**, with "Only 2
+**There is no route for it on this tree**: `/api/bench/advice` does not exist in
+`backend/bench.patch`, there is no `benchmark_results` chat tool and no app
+draws an "Explain this result" button; the only caller in this repository is
+`backend/test_bench.py`, and `tools/check_parity.py`'s bench block says so
+beside the five routes that DO exist. **Under three usable runs of a model it
+refuses to compare**, with "Only 2
 runs of that model are on file; three are needed before I compare them" - the
 same floor `jarvis_speed.compare_latency()` refuses under, because two lists of
 two can differ by 40% from noise alone. At three it names the fastest and the
@@ -33197,17 +33276,19 @@ of DESIGN section 6 that phase 1 does **not** wire are `/api/bench/history/{id}`
 and its DELETE (the separate History window, phase 3), `/api/bench/presets`
 (two routes - benchmark presets are phase 4), `/api/bench/advice` (phase 4) and
 the read-only `benchmark_results` chat tool (phase 4). The desktop Benchmark
-panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5;
-until then `tools/check_parity.py` carries these five routes in `BACKEND_ONLY`
-with the lane named in each reason, because neither app calls any of them on
-this tree - a state that check FAILS the day an app starts calling one, which is
-the point of putting it there. **Nothing here has been measured on real
+panel is phase 2 and the phone's `BenchScreen`/`BenchHistoryScreen` are phase 5.
+**The five routes that DO exist are the ones `tools/check_parity.py` carries in
+`BACKEND_ONLY`**, with the lane named in each reason, because neither app calls
+any of them on this tree - a state that check FAILS the day an app starts
+calling one, which is the point of putting it there. **The routes above do not
+exist yet, so the checker classifies none of them**: an entry there would name a
+route the backend does not serve. **Nothing here has been measured on real
 hardware**: `backend/test_bench.py` drives every formula and every refusal from
 a fake Ollama reply and fake `nvidia-smi` text, and one real run is a field
 test, not a test (DESIGN section 12) - a CI runner has no cards and no models,
 so those rows are BLOCKED, never PASS.
 
-**PROVED BY** `backend/test_bench.py`: 236 checks, 0 failed - every refusal row
+**PROVED BY** `backend/test_bench.py`: 253 checks, 0 failed - every refusal row
 of DESIGN section 2 with its exact sentence, the 318x trap (a reply of 318/317/
 23 ms must yield 43.48 and must NOT yield 13,826), the fully-cached case, absent
 is not zero, generation rate against a literal, both time-to-first-token
@@ -33216,3 +33297,9 @@ on the card (its sentence leads with `PARTIAL:`), a failed run that writes
 `ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
 500-run cap keeping whole runs, the byte ceiling, the allowlist, the
 three-run comparison floor, and that no run can start without `confirm`.
+**Two guards were added on 2026-11-04, and each failed before its fix:** the
+prefill prompt's per-repeat tag now leads, so two repeats at one depth share no
+word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
+3,653 characters - a tail measurement), and `lane` is dropped when it is not one
+of the three, because it used to sit in both the text-field and the enum table
+and the text-field branch won ("everyday lane" was stored as "everyday lan").
