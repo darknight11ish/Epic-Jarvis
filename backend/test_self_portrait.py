@@ -282,29 +282,29 @@ def tool_counts_are_the_real_tools():
     import jarvis_asks_first as AF
     inv = SP.tool_inventory()
     check("the registered count is jarvis_agent.TOOLS' own length",
-          inv["registered"] == len(A.TOOLS) == 51, str(inv["registered"]))
+          inv["registered"] == len(A.TOOLS) == 52, str(inv["registered"]))
     check("the enabled count is the settings file's own list",
-          inv["enabled"] == len(AF.tools_enabled_set()) == 13,
+          inv["enabled"] == len(AF.tools_enabled_set()) == 14,
           f"{inv['enabled']} vs {len(AF.tools_enabled_set())}")
     check("the names are the registries' own, not a label list",
           sorted(inv["enabled_names"]) == sorted(AF.tools_enabled_set())
           and sorted(inv["registered_names"]) == sorted(A.TOOLS))
     c = SP.counts(SP.build(refresh=True))
     check("counts()['tools'] is the enabled tool count, not the asks-first rows",
-          c["tools"] == 13 and c["tools"] == c["tools_enabled"]
-          and c["tools_registered"] == 51 and c["asks_first_rows"] > 100, str(c))
+          c["tools"] == 14 and c["tools"] == c["tools_enabled"]
+          and c["tools_registered"] == 52 and c["asks_first_rows"] > 100, str(c))
     check("the old number kept its true name and its true size",
           c["asks_first_rows"]
           == sum(len(g["rows"]) for g in SP.asks_first()["groups"]))
     counted = A._run_self_portrait({})
     check("the model tool's dict carries both true counts, never 136",
-          counted["counts"]["tools"] == 13
-          and counted["counts"]["tools_registered"] == 51
+          counted["counts"]["tools"] == 14
+          and counted["counts"]["tools_registered"] == 52
           and counted["counts"]["asks_first_rows"] > 100, str(counted["counts"]))
     said = SP.refresh_sentence({}, c)
     check("the refresh sentence names tools as tools, not as ask-first actions",
-          "51 tools (13 switched on in your settings)" in said
-          and "136 ask-first actions" in said, said)
+          "52 tools (14 switched on in your settings)" in said
+          and "137 ask-first actions" in said, said)
     # THE SETTINGS FILE IS THE SOURCE. Write a one-tool [tools].enabled into
     # the file the reader really opens, clear the caches, and watch both
     # numbers move.
@@ -338,7 +338,7 @@ def tool_counts_are_the_real_tools():
             own.write_bytes(had)
         SP._clear_caches()
     check("putting the settings file back puts the shipped list back",
-          SP.tool_inventory()["enabled"] == 13,
+          SP.tool_inventory()["enabled"] == 14,
           str(SP.tool_inventory()["enabled"]))
 
 

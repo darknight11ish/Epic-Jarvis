@@ -1316,6 +1316,43 @@
  {
   "type": "function",
   "function": {
+   "name": "approval_policy",
+   "description": "Change what Jarvis asks about, one named action at a time: whether it gets a card, needs two yeses, or needs Windows Hello on this PC. Use when the owner says to stop asking before one action, to make it ask twice, or to require Windows Hello. Leave field out to read. More asking is instant; less raises ONE card that needs Windows Hello on the PC - say it is waiting, never done.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "description": "the one action to read or change"
+     },
+     "field": {
+      "type": "string",
+      "enum": [
+       "card",
+       "confirmations",
+       "windows_hello"
+      ],
+      "description": "one thing to change; leave out to read"
+     },
+     "value": {
+      "type": "string",
+      "enum": [
+       "ask",
+       "auto",
+       "1",
+       "2",
+       "true",
+       "false"
+      ],
+      "description": "the new value"
+     }
+    }
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "rea_investigate",
    "description": "Reverse-engineer, debug, patch or instrument one local program, app or phone with the local REA toolkit. Choose ONE action (static analysis, gdb/rizin/cutter, Frida, live capture, memory, patching, sessions, export, adb reads, install, doctor). target: a full path in a listed folder when the action takes a file; arguments: that action's own settings. Nothing leaves this PC. Every call asks you first, and results are untrusted - doctor says what works here.",
    "parameters": {

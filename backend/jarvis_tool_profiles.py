@@ -133,9 +133,11 @@ MENUS             = "backend/jarvis_menus.py"
 CHAT_LOG          = "backend/jarvis_chat_log.py"
 CONNECT_ACCOUNT   = "backend/jarvis_connect_account.py"
 REA               = "backend/jarvis_rea.py"
+APPROVAL_POLICY   = "backend/jarvis_approval_policy.py"
+OWNER_CHECK       = "backend/jarvis_owner_check.py"
 BASE_GATE         = "jarvis-backend/jarvis_gate.py"
 
-#: One entry per name in `jarvis_agent.TOOLS` (51 tools on this branch), in the
+#: One entry per name in `jarvis_agent.TOOLS` (52 tools on this branch), in the
 #: same order that dict declares them. Every field is prose for a beginner
 #: developer; `sources` cites the files above that the claim was checked against.
 PROFILES: dict = {
@@ -1607,6 +1609,38 @@ PROFILES: dict = {
         "sources": [AGENT, SELF_PORTRAIT, SETTINGS_REGISTRY, MENUS],
     },
 
+    "approval_policy": {
+        "id": "approval_policy",
+        "title": "What needs a card, a second yes, or Windows Hello",
+        "what": "Changes what Jarvis asks you about, one named action and one thing "
+                "at a time: whether that action raises an approval card at all, "
+                "whether it takes one yes or two, and whether a yes must also meet "
+                "Windows Hello on this PC. It can also read the current answers back, "
+                "so \"what needs a card?\" and \"does sending email ask twice?\" are "
+                "answered from the settings file rather than from memory.",
+        "gives": [
+            "Stop a card for one action without hand-editing the settings file",
+            "Make one action ask twice, so a single tap is not enough",
+            "Require Windows Hello for one action, even one that is not otherwise risky",
+            "Hear the real current answer when you ask what needs a card",
+        ],
+        "touches": "settings",
+        "limits": [
+            "One action and one thing per call - it never changes several at once",
+            "More asking is instant; less raises ONE card that needs Windows Hello "
+            "on this PC, and the app refuses to approve it from anywhere else",
+            "An action whose own module only ever runs on your yes can never lose "
+            "its card, and an unknown action is refused before any card",
+        ],
+        "combines": {
+            "change_setting": "Change what asks, then change one of its own settings.",
+            "feature_guide": "Change what asks, then explain the page it is drawn on.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Always available - it is in the shipped `[tools].enabled` list.",
+        "sources": [AGENT, APPROVAL_POLICY, OWNER_CHECK, ASKS_FIRST, BASE_GATE],
+    },
+
     "conversation_find": {
         "id": "conversation_find",
         "title": "Find an old conversation",
@@ -2029,7 +2063,8 @@ FAMILIES: dict = {
                 "\"Protected from Jarvis\" list.",
         "tools": ["plugin_list", "plugin_switch", "change_setting", "feature_guide",
                   "setup_quiz", "refresh_abilities", "self_portrait",
-                  "conversation_find", "conversation_open", "protect_from_jarvis"],
+                  "conversation_find", "conversation_open", "protect_from_jarvis",
+                  "approval_policy"],
         "impact": "It is what lets the owner change Jarvis by talking to Jarvis: to "
                   "understand a feature, find the setting, switch it, and see the "
                   "difference - and to look back at what was said last month. The "

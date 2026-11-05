@@ -33934,3 +33934,129 @@ recorded in `test_tool_profiles_chat.py`, which fails if a third one appears, an
 the wording belongs to the module's own lane.
 
 The decision is `decisions.d/2026-11-04-capability-talk.md`.
+
+## 188. What needs a card, how many yeses, and whether it needs Windows Hello - changed through chat (added 2026-11-05)
+
+The owner's ask, verbatim: *"i would also like the ability to change what gets
+an approval card through chat, including if something gets a double
+confirmation, or a fingerprint/windows hello"*.
+
+One model tool, `approval_policy` (`backend/jarvis_agent.py`), backed by
+`backend/jarvis_approval_policy.py`. It changes **one named action and one
+thing at a time**, in three independent dimensions:
+
+| dimension | what it means | where it is kept |
+|---|---|---|
+| `card` | whether the action raises an approval card at all | `[autonomy.tiers]` - the same table every part of Jarvis already reads |
+| `confirmations` | one yes, or two | `[autonomy.confirmations]`, `<action> = 2`; no line means one yes |
+| `windows_hello` | a yes must also meet Windows Hello on the PC | `[autonomy.windows_hello]`, `<action> = true`; no line means no extra check |
+
+All three live in the owner's existing settings file
+(`jarvis-framework.toml`), in the same table's neighbourhood, so there is one
+place to look and no second file to disagree with it. The writer follows the
+same discipline as `jarvis_asks_first.set_tier`: read the bytes, change exactly
+one line, parse the result again and compare it with the old settings plus
+that one change, then write a temporary file and move it into place. A file
+this cannot read safely is refused with a sentence saying to edit it by hand;
+nothing is written.
+
+### 188.1 The tool
+
+`approval_policy` takes `action`, `field` and `value`, all optional:
+
+- **No `field`** - a read. With `action`, it answers that action's current
+  policy. Without one, it answers the short list: what is set to ask twice,
+  what needs Windows Hello, what runs without a card, and that everything else
+  asks first.
+- **`field: "card"`, `value: "ask" | "auto"`** - whether the action raises a
+  card. Delegates to the existing "What asks first" path
+  (`jarvis_asks_first.request_tier`), so the list of actions an app may loosen
+  at all, the card's words and the PC-only + Windows Hello rule are the same
+  ones the Settings page already uses.
+- **`field: "confirmations"`, `value: "1" | "2"`** - one yes or two.
+- **`field: "windows_hello"`, `value: "true" | "false"`** - whether every yes
+  must also meet Windows Hello on this PC.
+
+The model's call is only a **preparation**. More asking is applied immediately
+and raises no card; less asks for ONE card, which must be approved before
+anything is written. The tool is handed to its own call path before the
+generic prepare/gate/execute loop (like `change_setting` and
+`connect_account`), because the card - not the tool call - is the permission.
+It is in `_PLAN_EXCLUDED_STEPS`, so it can never be a step of a plan.
+
+### 188.2 The direction rules - the safety core
+
+- **Tightening is instant and cardless**: adding a card where there was none,
+  adding a second yes, adding Windows Hello. It only makes Jarvis ask more. It
+  also withdraws a waiting card that would loosen the same thing, so an
+  approval arriving afterwards changes nothing.
+- **Loosening raises ONE card, on the PC, that needs Windows Hello to
+  approve**: removing a card, removing the second yes, removing Windows Hello.
+  The request is refused from any other device (`403 pc_only`) before any card
+  exists; `jarvis_owner_check.PC_ONLY_ACTIONS` holds `change_approval_policy`,
+  so the approval is refused from any other device too, and the card is
+  approved with Windows Hello. The card's words say exactly what stops being
+  asked, in the owner's words for the action, and never name a file the gate
+  protects.
+- **No bulk form**: one action, one dimension, one call. A body naming two
+  dimensions is refused before anything is read or raised.
+- **Unknown actions are refused before any card**, in one plain sentence that
+  names the nearest real actions in the owner's own words; the tool's result
+  also carries their real names as data, so the model can retry exactly.
+- **Nothing is auto-approved.** The policy decides only whether a card is
+  raised. A card that is raised still needs the owner's yes, the
+  event-stream-stale rule is untouched, and actions whose module refuses
+  anything but a yes keep their card whatever the settings file says.
+
+### 188.3 Where the second yes and Windows Hello are really enforced
+
+Not in the gate, and not by a new patch on the owner's file:
+`jarvis_owner_check.approve_check` - a shipped module that `owner-check.patch`
+already installs around `POST /api/approve` - reads the owner's policy for the
+action being approved and applies it:
+
+- **Windows Hello**: that action is refused from any other device and asks
+  Windows Hello on the PC on every yes, even when the card would otherwise be
+  a "small" one that skips the prompt - unless the owner's approvals mode asks
+  for small cards too.
+- **Two confirmations**: the first yes runs every check (including Windows
+  Hello when it applies) and then approves **nothing** - no stamp is taken, so
+  the gate keeps waiting - and answers `202` with "That is your first yes.
+  Approve the card once more to confirm". The second yes runs the same checks
+  and only then stamps the approval, which is the only thing the gate
+  believes. The counter is in the running process's memory, never on disk, so
+  a restart makes the owner confirm twice again.
+- A card that needs two yeses is approved on the PC only, said plainly: the
+  phone's one-tap approval (one fingerprint, one one-use signed challenge)
+  cannot carry a second yes, so the phone is refused with the same "answer it
+  on the PC" words every PC-only card already gets.
+
+### 188.4 What the owner sees and says
+
+- *"stop asking me before you send email"* -> `card = auto` for `send_email`:
+  ONE card on the PC, Windows Hello, naming "Send an email"; approving it
+  writes the one line.
+- *"make that ask twice"* -> `confirmations = 2`: instant, no card. From then
+  on that action's card needs two Approve presses on the PC, and the first one
+  says nothing was approved yet.
+- *"require Windows Hello for sending email"* -> `windows_hello = true`:
+  instant, no card. From then on every yes for that action is asked on the PC
+  with Windows Hello.
+- *"what needs a card?"* / *"does sending email ask twice?"* -> the real
+  current answers, read from the same settings file the approval path reads.
+- The **Settings "What asks first" page** and the **phone's page** get no write
+  control: the row for an action now carries `confirmations` and
+  `windows_hello` as data and one extra sentence in its existing note field
+  ("It asks you twice..."; "It also needs Windows Hello on this PC for every
+  yes."). `docs/ARCHITECTURE.md` section 8 records why this is one-sided.
+
+### 188.5 What it does not do
+
+It does not change the event-stream-stale rule, clear a rush latch, approve
+anything in bulk, or make any action run without its card when that action's
+own module refuses anything but a yes. It has no route of its own, so
+`tools/check_parity.py` has nothing new to classify; the two apps' existing
+read-only pages show the new lines. It has no model-free fast-path grammar on
+purpose (ARCHITECTURE section 8 says why). The decision is
+`decisions.d/2026-11-05-approval-policy-chat.md`; the change note is
+`changelog.d/2026-11-05-approval-policy-chat.md`.

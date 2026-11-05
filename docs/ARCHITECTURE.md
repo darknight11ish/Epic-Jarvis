@@ -384,6 +384,51 @@ permission model rather than a hole in it:
   link chats together. A backend whose gate is too old to write those lines
   refuses to create a grant at all.
 
+**THE OWNER CAN CHANGE WHAT ASKS, BY TALKING - ONE ACTION AND ONE THING AT A
+TIME** (the owner's ask of 2026-11-05: *"i would also like the ability to
+change what gets an approval card through chat, including if something gets a
+double confirmation, or a fingerprint/windows hello"*; `backend/
+jarvis_approval_policy.py`, the `approval_policy` tool, JARVIS-API §188). It
+adds no permission mechanism: it changes the policy the EXISTING card path
+reads, in three independent dimensions per action - whether the action raises
+a card at all (`[autonomy.tiers]`, the one table `jarvis_framework.
+action_tier` and the gate already read), how many yeses it takes
+(`[autonomy.confirmations]`), and whether a yes must also meet Windows Hello
+on the PC (`[autonomy.windows_hello]`). The direction rules are the whole
+safety core:
+
+- **More asking is instant and raises no card** (a card where there was none,
+  a second yes, Windows Hello) - it only makes Jarvis ask more, like every
+  "turn it off" switch in both apps.
+- **Less asking raises ONE card, on the PC, that needs Windows Hello to
+  approve.** The request is refused from any other device before the card
+  exists, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses its approval from
+  any other device too. The card's words say exactly what stops being asked,
+  and name the action in the owner's own words; nothing is written until a
+  person approves.
+- **No bulk form.** One action, one dimension, one call. A second dimension in
+  one body is refused before anything is read or raised, and it is never a
+  plan step.
+- **A cardless action is still not an auto-approval.** The policy only decides
+  whether a card is RAISED; a card that is raised still needs the owner's yes,
+  and the event-stream-stale rule is untouched. Actions whose own module
+  refuses anything but a yes (`jarvis_asks_first.MUST_ASK`, the gate's hard
+  limits) keep their card whatever the settings file says, and the module
+  that changes the card dimension delegates to `jarvis_asks_first.
+  request_tier`, so it inherits that list rather than restating it.
+- **Unknown actions are refused before any card**, in one sentence naming the
+  nearest real actions in the owner's words (and the real names in the tool's
+  own data, so the model can retry exactly).
+- **A second yes is a real second yes**: `jarvis_owner_check.approve_check`
+  runs every check (including Windows Hello) on the first yes and then approves
+  NOTHING - no stamp is taken, so the gate keeps waiting - and only the second
+  yes stamps the approval the gate believes. **Windows Hello is a real check
+  too**: that action is refused from the phone and prompted on the PC on every
+  yes, even when the card would otherwise be a "small" one that skips the
+  prompt. The one-yes/second-yes counter lives in the running process's memory
+  and is lost on restart, which makes the owner confirm twice again - more
+  asking, never less.
+
 **What changed on 2026-09-26** (the approvals audit,
 `docs/APPROVALS-AUDIT-2026-09-26.md`; the owner's four decisions): a plain
 repeating alarm, reminder or standby schedule has no card (the briefing and
@@ -4577,6 +4622,35 @@ what is missing is only the Settings screen agreeing about who turned it off.
   place (2026-10-19) - so it is the superseded contract's compatibility path,
   not a live screen on either side. Written here rather than left as a parity
   warning, because a warning is not a reason.
+
+- **Changing what asks is chat-only, and there is no new patch on the owner's
+  file** (2026-11-05; the owner's ask; `backend/jarvis_approval_policy.py`,
+  `approval_policy` in `backend/jarvis_agent.py`; JARVIS-API §188). Neither app
+  gets a write control for the three dimensions: both apps draw the read-only
+  note under an existing "What asks first" row (the row's own `note` field, so
+  no client changed), and the change itself is a spoken or typed sentence in
+  chat. That is one-sided on purpose, and in the safe direction: a control on
+  the phone for "stop asking" would put a loosening one tap away on the device
+  that cannot meet the PC's Windows Hello check. **Why there is no
+  `backend/*.patch` for it:** the one place every real approval already passes
+  through is `jarvis_owner_check.approve_check`, a SHIPPED module that
+  `owner-check.patch` already installs around `POST /api/approve`; the gate
+  believes no "approved" that module did not stamp. Adding the second yes and
+  the Windows Hello requirement THERE (the module reads the same settings file
+  the page reads) enforces both without touching the owner's `jarvis_gate.py`
+  at all - so this feature needs no patch, no `build_patch_history` run and no
+  patch-stack round trip, and it cannot be half-applied: the module that reads
+  the policy and the module that enforces it ship together.
+  **Why a two-yes card is approved on the PC only:** the phone's approval is
+  one tap plus a one-use signed challenge, so a second yes cannot be carried
+  without a client change; refusing it there with the existing "answer it on
+  the PC" words is the honest limit, recorded rather than implied. **And there
+  is no model-free fast-path grammar** for these sentences (unlike "connect my
+  calendar"): a regex over "stop asking" is exactly how a sentence gets
+  misread into a loosening, and every loosening already needs the owner's own
+  card plus Windows Hello on the PC - so the gap is convenience, not safety.
+  `tools/check_parity.py` has nothing new to classify: this adds no route, and
+  both apps' existing page shows the new lines.
 
 ## 9. Where the backend lives
 

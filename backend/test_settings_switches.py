@@ -115,18 +115,18 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    # 48 since 2026-11-04: the owner's decision made EVERY tool the AI model
+    # 49 since 2026-11-05: the owner's decision made EVERY tool the AI model
     # can be offered switchable - the raw Tier C set and the everyday helpers
     # included. The only three that are not are the ones whose own switch
     # decides them (the data sandbox and the two web-search grant tools, which
     # ride with web search); a switch the turn ignored would be a lie.
-    # test_asks_first.py carries the same 48 and the same reason.
-    check("the in-app rows: 48, every tool the model can be offered",
+    # test_asks_first.py carries the same 49 and the same reason.
+    check("the in-app rows: 49, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 48)
+          and len(AF.TOOLS_SWITCHABLE) == 49)
     for action in AF.TOOLS_SWITCHABLE:
         real = AF.real_tool(action)
         check(f"{action}: the tool it switches ({real}) is a real tool in jarvis_agent.TOOLS",

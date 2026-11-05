@@ -2203,6 +2203,7 @@ $SHIPPED = @(
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
     # --- what asks first (asks-first.patch) ---
     'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
+    'jarvis_approval_policy.py'  # 2026-11-05: what needs a card, a second yes or Windows Hello, changed by talking to Jarvis, one action and one thing at a time; no patch (jarvis_owner_check.py enforces the extra dimensions)
     # --- folders Jarvis may look in (documents.patch) ---
     'jarvis_documents.py'        # "Folders Jarvis may look in": the list, the my_files tool (find, search, read PDFs and Word files in parts), the Notion import
     # --- the words in a picture (2026-09-26) ---

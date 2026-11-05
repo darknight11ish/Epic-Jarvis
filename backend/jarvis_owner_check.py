@@ -166,7 +166,14 @@ PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "r
                              # so only the PC it runs on can say yes - with
                              # Windows Hello. A phone approving it would promise an
                              # install nothing on the phone can perform.
-                             "desktop_update"})
+                             "desktop_update",
+                             # 2026-11-05: the one card that makes Jarvis ask
+                             # LESS about one thing (jarvis_approval_policy.py).
+                             # It removes a card, a second yes or the Windows
+                             # Hello check, so only this PC can approve it, and
+                             # always with Windows Hello - the same shape as
+                             # loosening "What asks first" above.
+                             "change_approval_policy"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 
@@ -1793,6 +1800,54 @@ def _signed_check(body, row, device) -> Optional[tuple]:
                                "just now, so nothing was approved.")}
 
 
+def _approval_extras(action) -> dict:
+    """The owner's own extra policy for ONE action (jarvis_approval_policy.py,
+    2026-11-05): {"confirmations": 1|2, "windows_hello": bool}.
+
+    Read from the same settings file the "What asks first" page reads, on
+    every approval, so a change made by talking to Jarvis is enforced at the
+    next card without a restart. A missing or unreadable module answers the
+    shipped default (one yes, no extra check): then no line that module wrote
+    can be read at all, and the page says so when the file has one. Every
+    value that IS readable is read by that module, which fails closed."""
+    try:
+        import jarvis_approval_policy as AP
+        got = AP.approval_needs(str(action or ""))
+        return {"confirmations": int(got.get("confirmations", 1)),
+                "windows_hello": bool(got.get("windows_hello", False))}
+    except Exception:
+        return {"confirmations": 1, "windows_hello": False}
+
+
+#: The first of two yeses. The card stays waiting; nothing is approved yet.
+SECOND_YES = ("That is your first yes. Approve the card once more to confirm - "
+              "nothing has been approved yet.")
+#: A card that needs two yeses is answered on this PC, for the phone too: its
+#: one-tap approval cannot carry a second yes.
+SECOND_YES_PC_ONLY = ("This card needs two yeses, so it is approved on the PC only, "
+                      "so nothing was approved here")
+
+_SECOND_LOCK = threading.Lock()
+#: request id -> the moment its first yes arrived. Memory only; a restart
+#: makes the owner say yes twice again, which is the safe direction.
+_SECOND_YESES: dict = {}
+_SECOND_TTL = 3600.0
+
+
+def _second_yes(request_id) -> bool:
+    """True on the SECOND approval of `request_id` inside the hour (burning
+    the first), False on the first. Never stored on disk."""
+    now = time.time()
+    with _SECOND_LOCK:
+        for key, at in list(_SECOND_YESES.items()):
+            if now - at > _SECOND_TTL:
+                _SECOND_YESES.pop(key, None)
+        if _SECOND_YESES.pop(request_id, None) is not None:
+            return True
+        _SECOND_YESES[request_id] = now
+        return False
+
+
 def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
                   own=None, device=None) -> Optional[tuple]:
     """What must happen before the owner's own /api/approve handler records
@@ -1837,6 +1892,12 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
     if row is None:
         return None
     action = row.get("action")
+    # The owner's own per-action policy (jarvis_approval_policy.py, 2026-11-05):
+    # a second yes, and Windows Hello for an action that is not otherwise
+    # risky. Decided once, on the row that is waiting now, before any check.
+    extras = _approval_extras(action)
+    need_hello = extras["windows_hello"]
+    need_twice = extras["confirmations"] >= 2
     # DECISION-TIME REVALIDATION (2026-10-28). A card has no deadline now, so
     # it can still be on screen long after the request that raised it stopped
     # waiting. Approving it then would record a yes that nothing runs - the
@@ -1851,20 +1912,29 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         _take_off(request_id, "the request that asked had stopped waiting")
         return 409, {"ok": False, "error": LATE_APPROVAL, "owner_check": "gone"}
     here = from_this_pc(peer, local, own)
-    if action in PC_ONLY_ACTIONS and not here:
-        # Approved on the PC only, with Windows Hello (PC_ONLY_ACTIONS).
+    if (action in PC_ONLY_ACTIONS or need_hello or need_twice) and not here:
+        # Approved on the PC only, with Windows Hello (PC_ONLY_ACTIONS), or
+        # because the owner made this action stricter (2026-11-05): Windows
+        # Hello for it is a PC check, and a second yes cannot ride on the
+        # phone's one-tap approval.
+        if need_twice and action not in PC_ONLY_ACTIONS and not need_hello:
+            return 403, {"ok": False, "error": SECOND_YES_PC_ONLY,
+                         "owner_check": "pc_only", "pc_only": True}
         return 403, {"ok": False, "error": PC_ONLY, "owner_check": "pc_only"}
     # THE SMALL-CARD EXEMPTION (2026-11-01) is decided once, on the row that is
     # waiting now, and read by both rules below: the phone's signature and this
     # PC's Windows Hello prompt. One answer, so the two cannot disagree about
     # what "small" means - a card the phone may approve without its fingerprint
-    # is the same card this PC will not ask Windows Hello for.
-    small_skips = is_small(row) and not asks_for_small()
+    # is the same card this PC will not ask Windows Hello for. The owner's own
+    # `windows_hello` for this action (2026-11-05) overrides it: a check the
+    # owner asked for is never skipped as "small".
+    small_skips = is_small(row) and not asks_for_small() and not need_hello
     if not here and is_risky(row) and not small_skips:
         refused = _signed_check(body, row, device)
         if refused is not None:
             return refused
-    if (is_risky(row) or action in PC_ONLY_ACTIONS) and here and not small_skips:
+    if ((is_risky(row) or action in PC_ONLY_ACTIONS) and not small_skips
+            or need_hello) and here:
         # A prompt may only ask about something Jarvis can NAME. An action with
         # no written words gets a title made up from its own name
         # (`jarvis_card_words.FALLBACK`), which reads fine but describes
@@ -2004,6 +2074,16 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
         if not waiting:
             _take_off(request_id, "the request that asked had stopped waiting")
             return 409, {"ok": False, "error": LATE_APPROVAL, "owner_check": "gone"}
+    # THE SECOND YES (the owner's ask of 2026-11-05). Every check above has
+    # passed - including Windows Hello, when this action needs it - and this
+    # first yes still approves NOTHING: the stamp below is the only thing the
+    # gate believes, and it is not taken yet. The card stays waiting, so the
+    # person presses Approve once more; that second yes runs all of this again
+    # and only then stamps. Memory only (see _second_yes), so a restart makes
+    # the owner confirm twice again - more asking, never less.
+    if need_twice and not _second_yes(request_id):
+        return 202, {"ok": False, "error": SECOND_YES,
+                     "owner_check": "second_confirmation", "first_yes": True}
     stamp(request_id, action)
     return None
 

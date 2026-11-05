@@ -476,6 +476,12 @@ SHIPPED = (
     "jarvis_focus.py",
     # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
     "jarvis_asks_first.py",
+    # What needs a card, a second yes or Windows Hello, changed by talking to
+    # Jarvis, one action and one thing at a time (2026-11-05, the owner's ask;
+    # no patch of its own - the enforcement lives in jarvis_owner_check.py,
+    # which owner-check.patch already installs). Kept beside the page it is
+    # read on, so the table and the row cannot disagree.
+    "jarvis_approval_policy.py",
     # "Folders Jarvis may look in" and the my_files tool (documents.patch)
     "jarvis_documents.py",
     # the words in a picture, read on this PC and marked as outside text (no patch)
