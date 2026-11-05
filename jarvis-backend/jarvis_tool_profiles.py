@@ -1710,17 +1710,22 @@ PROFILES: dict = {
         "title": "Inspect a program, app or binary (reverse engineering)",
         "what": "REA stands for \"Reverse Engineer Anything\", a real tool server "
                 "(pinned at npm rea-agents 6.7.0, MIT) with 207 tools of its own. "
-                "Jarvis exposes ONE tool with eight actions over it, so the owner "
-                "can statically inspect a program, an Android app, a captured "
-                "session or a database - what it is built from, without running it.",
+                "Jarvis exposes ONE tool whose named actions each map to exactly one "
+                "of those tools, so the owner can statically inspect a program, an "
+                "Android app, a captured session or a database - what it is built "
+                "from, without running it - and can also run ONE bounded live "
+                "capture of a process, a browser, an Electron app or a native "
+                "window when reading the files is not enough.",
         "gives": [
             "See what a JavaScript or Electron program is made of",
             "Inspect an APK, or open a native binary and read its overview",
             "Read a stored web capture (HAR or SAZ) or a SQLite database",
             "List a binary's strings, cross-references or one function",
+            "Run one bounded live capture of a process, a browser, an Electron "
+            "app or a native window when reading the files is not enough",
             "Ask the doctor action what this PC is actually able to inspect",
         ],
-        "touches": "files",
+        "touches": "files, process",
         "limits": [
             "Its own switch ships OFF (`[rea] enabled = false`) and outranks "
             "everything else; its name must also be in `[tools].enabled`, which the "
@@ -1729,9 +1734,12 @@ PROFILES: dict = {
             "file by hand); and every call is ONE approved card (its action "
             "resolves to `run_shell_on_host`, tier \"ask\") - nothing is inspected "
             "before a person's yes",
-            "It NEVER attaches to a running program: the four live capture tools "
-            "are refused by name before a session can start, and so are the six "
-            "adb device mutators, every debugger session and script export",
+            "Live capture is allowed, and bounded: the four capture actions run "
+            "only through a card and only against local targets inside \"Folders "
+            "Jarvis may look in\"; the module refuses by name only the six phone "
+            "commands that would install, remove, push a file to, start or stop "
+            "something on the phone, because the owner already has a separate "
+            "approved path for those",
             "Targets must be inside \"Folders Jarvis may look in\" and must not be "
             "a private place - a credentials store, a browser profile or Jarvis's "
             "own data folder is refused",

@@ -436,27 +436,36 @@ def t_off_by_default_really_ships_off():
           ok, str(settings))
 
 
-def t_rea_really_refuses_live_process_capture():
+def t_rea_matches_its_own_hard_deny():
     tree = tree_for("backend/jarvis_rea.py")
     hard_deny = string_set(tree, "HARD_DENY")
     allowed = string_set(tree, "ALLOWED_CALL_TOOLS")
     check("jarvis_rea.HARD_DENY is really readable as a set of tool names",
           bool(hard_deny), str(hard_deny))
-    wanted = {"capture_process_scenario", "capture_browser_scenario",
-              "capture_electron_scenario", "capture_native_ui_scenario"}
-    check("REA's hard deny really refuses all four live-capture tools",
-          wanted <= (hard_deny or set()),
-          f"missing: {sorted(wanted - (hard_deny or set()))}")
-    check("no live-capture tool is in the allow-list REA may send",
-          not (wanted & (allowed or set())),
-          f"allowed: {sorted(wanted & (allowed or set()))}")
+    mutators = {"install_adb_package", "uninstall_adb_package", "push_adb_file",
+                "start_adb_app", "start_adb_activity", "stop_adb_app"}
+    check("the hard deny is exactly the six phone-mutating commands - the owner's "
+          "full-toolbox decision keeps every read and every capture",
+          (hard_deny or set()) == mutators, str(sorted(hard_deny or set())))
+    check("no hard-denied tool can ever be sent",
+          not ((hard_deny or set()) & (allowed or set())),
+          f"also allowed: {sorted((hard_deny or set()) & (allowed or set()))}")
+    live = {"capture_process_scenario", "capture_browser_scenario",
+            "capture_electron_scenario", "capture_native_ui_scenario"}
+    literals = {node.value for node in ast.walk(tree)
+                if isinstance(node, ast.Constant) and isinstance(node.value, str)}
+    check("the four live-capture tools are ordinary card-gated actions, not a "
+          "denied lane",
+          not (live & (hard_deny or set())) and live <= literals,
+          f"missing: {sorted(live - literals)}")
     rea = T.PROFILES["rea_investigate"]
-    check("the REA profile claims files, and does NOT claim to touch a process",
-          rea["touches"] == "files" and "process" not in rea["touches"],
+    check("the REA profile claims files AND processes, because live capture is "
+          "allowed behind its cards",
+          "files" in rea["touches"] and "process" in rea["touches"],
           rea["touches"])
-    check("... and says so in its limits",
-          any("never attaches" in line.lower() or "live capture" in line.lower()
-              for line in rea["limits"]), str(rea["limits"]))
+    check("... and says plainly what the module still refuses",
+          any("refuses by name" in line.lower() for line in rea["limits"]),
+          str(rea["limits"]))
 
 
 def t_touches_match_the_modules():
@@ -654,7 +663,7 @@ def main():
                    t_switchable_matches_the_in_app_switches,
                    t_settings_file_really_is,
                    t_off_by_default_really_ships_off,
-                   t_rea_really_refuses_live_process_capture,
+                   t_rea_matches_its_own_hard_deny,
                    t_touches_match_the_modules,
                    t_the_numbers_in_the_profiles_match_the_code,
                    t_no_profile_claims_an_ungated_way_out)),
