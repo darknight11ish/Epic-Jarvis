@@ -2770,7 +2770,18 @@ backend routes, in both directions; the rest are listed here only.
   call them; the desktop's own half of the same frozen contract (its own
   setting, its own read of the mode) is another lane's, and the day it calls
   the first two of those routes the checker's rule 6 fails by name and the two
-  move to `ported`, which is the right change then. Nothing else about the
+  move to `ported`, which is the right change then. **This phone half lands
+  AHEAD of its PC half, and says so plainly.** None of those four routes exists
+  in `main` yet: no module serves one, no `handsfree_card` or `phone_command` is
+  ever sent, and `docs/JARVIS-API.md` documents none of them - that record
+  describes what exists, and a route written into it before its code would be
+  the one kind of fiction this project keeps out of that file. So the feature is
+  INERT until the PC half lands: every surface shows the contract's own 404
+  sentence ("Hands-free is not available on this PC yet."), no microphone is
+  opened, and nothing claims a mode that cannot be on. The phone was built
+  against the FROZEN contract, whose four shapes are written down in
+  `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
+  request will own the `JARVIS-API.md` section for them. Nothing else about the
   feature is one-sided: a card raised for something the owner asked is answered
   on the SAME card either way, `handsfree_card` and `phone_command` ride the
   one existing event stream, and the spoken audio is the existing

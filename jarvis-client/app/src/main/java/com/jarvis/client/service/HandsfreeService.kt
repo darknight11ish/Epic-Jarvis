@@ -25,6 +25,7 @@ import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.audio.Speaker
 import com.jarvis.client.data.ContactsLookup
+import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.handsfree.HandsfreeClip
 import com.jarvis.client.handsfree.HandsfreeFlow
 import com.jarvis.client.net.ApiResult
@@ -32,8 +33,10 @@ import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.Handsfree
 import com.jarvis.client.net.SmsSend
 import com.jarvis.client.net.SaidAloud
+import com.jarvis.client.platform.DeviceSecure
 import com.jarvis.client.voice.HeardSound
 import com.jarvis.client.voice.LiveRules
+import com.jarvis.client.voice.MicClaim
 import com.jarvis.client.voice.MicOwner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,7 +73,11 @@ import kotlin.coroutines.resume
  *     call, and never in the phone's own voice if the PC's is unavailable.
  *  2. The read-out ends -> a chime, and a ten-second answer window
  *     ([HandsfreeFlow.LISTEN_MS]) with [MicOwner] held, so Live and "hey
- *     Jarvis" close their recorders for those ten seconds and reopen after.
+ *     Jarvis" close their recorders for those ten seconds and reopen after. The
+ *     talk button is the fourth part and it HOLDS the ledger too
+ *     (`audio/Recorder.kt`), so a button being pressed when the card arrives
+ *     refuses this window in words rather than opening a second recorder over
+ *     it ([MicClaim]).
  *  3. The window closes -> the clip (16 kHz mono WAV, [HandsfreeClip]) goes to
  *     `/api/handsfree/answer`, and what the PC heard and decided is shown in
  *     plain words ([Handsfree.answerWords]).
@@ -82,7 +89,10 @@ import kotlin.coroutines.resume
  * this file); it never sends a text it could not confirm the platform accepted;
  * it never answers a card whose read-out failed; it never opens the microphone
  * while no card is waiting (the only path to [HandsfreeFlow.State.Listening] is
- * a card); and it never claims a decision the PC did not give it.
+ * a card); it never puts a card's words or a text message where a locked
+ * phone's screen would show them - [HandsfreeNotice] is the one rule for that,
+ * the same [SecurityRules.notificationsLocked] every other notifier uses; and it
+ * never claims a decision the PC did not give it.
  */
 class HandsfreeService : Service() {
 
@@ -123,7 +133,7 @@ class HandsfreeService : Service() {
         // The microphone first, and unconditionally: a service torn down inside
         // the answer window must not leave Live and "hey Jarvis" paused for a
         // window that no longer exists.
-        MicOwner.release(MicOwner.HANDSFREE)
+        MicClaim.free(MicOwner.HANDSFREE)
         flow.reset()
         JarvisRuntime.publishHandsfree(line = null, listening = false)
         scope.cancel()
@@ -158,7 +168,7 @@ class HandsfreeService : Service() {
             readOutAndListen(card)
         } finally {
             // Whatever happened, the microphone is not this service's any more.
-            MicOwner.release(MicOwner.HANDSFREE)
+            MicClaim.free(MicOwner.HANDSFREE)
             JarvisRuntime.clearHandsfreeCard()
             // Cleared here rather than only on the success path: a card the PC
             // raises AGAIN later (its own retry, a re-raise after a timeout)
@@ -196,11 +206,15 @@ class HandsfreeService : Service() {
             // The window's clock starts where the read-out ENDED, and the
             // microphone is taken before it does: if the talk button has it,
             // the window does not open at all rather than opening over a
-            // sentence the owner is already speaking.
-            if (!MicOwner.acquire(MicOwner.HANDSFREE)) {
-                flow.fail(TALKING)
-                JarvisRuntime.publishHandsfree(TALKING, listening = false)
-                return
+            // sentence the owner is already speaking. [MicClaim] owns both the
+            // claim and the sentence, so this refusal is never silent.
+            when (val claim = MicClaim.take(MicOwner.HANDSFREE)) {
+                MicClaim.Now.Open -> Unit
+                is MicClaim.Now.Busy -> {
+                    flow.fail(claim.why)
+                    JarvisRuntime.publishHandsfree(claim.why, listening = false)
+                    return
+                }
             }
             flow.onSpoken(now)
             listening = true
@@ -209,7 +223,7 @@ class HandsfreeService : Service() {
             speaker.playTone(HeardSound.samples(), HeardSound.RATE)
             JarvisRuntime.publishHandsfree(Handsfree.LISTENING, listening = true)
             val clip = recordWindow()
-            MicOwner.release(MicOwner.HANDSFREE)
+            MicClaim.free(MicOwner.HANDSFREE)
             listening = false
             val closed = flow.onWindowClosed(clip, SystemClock.elapsedRealtime())
             if (closed is HandsfreeFlow.Moved.To && flow.state is HandsfreeFlow.State.Uploading) {
@@ -219,7 +233,7 @@ class HandsfreeService : Service() {
                 JarvisRuntime.publishHandsfree(flow.line(), listening = false)
             }
         } finally {
-            if (listening) MicOwner.release(MicOwner.HANDSFREE)
+            if (listening) MicClaim.free(MicOwner.HANDSFREE)
         }
     }
 
@@ -469,49 +483,65 @@ class HandsfreeService : Service() {
      * The waiting card's notification: its SHORT title, what it has left, and
      * the ordinary card one tap away.
      *
-     * The title comes from the card's own `action` through [CardWords], the same
-     * words every other card surface uses, so the notification never invents a
-     * name for what is being asked. The body is the PC's `say` - the sentence
-     * the owner is about to hear - so a phone in a pocket still shows what was
-     * asked.
+     * The words are [HandsfreeNotice]'s, not this file's: that object applies
+     * the app's one redaction rule before any of the card's words are read, so
+     * a locked or private phone gets the generic line instead of the PC's `say`
+     * (an audit finding, 2026-11-05 - this notification used to put the whole
+     * sentence on the lock screen).
      */
     private fun notifyCard(card: Handsfree.Card, line: String? = null, done: Boolean = false) {
-        val title = CardWords.fallbackTitle(card.action.ifBlank { card.say })
-            .ifBlank { CardWords.NO_ACTION }
-        val left = if (card.expiresInSec > 0) {
-            " · ${card.expiresInSec}s left"
-        } else {
-            ""
-        }
-        val body = line ?: listOfNotNull(
-            card.say.trim().takeIf { it.isNotEmpty() }?.let { SmsSend.shortText(it, 90) },
-            if (card.expiresInSec > 0) "${card.expiresInSec}s to answer" else null,
-        ).joinToString(" · ").ifEmpty { getString(R.string.handsfree_card_waiting) }
-        post(NotificationIds.HANDSFREE_CARD, title + left, body, ongoing = !done)
-    }
-
-    private fun notifySms(line: String) {
-        post(
-            NotificationIds.HANDSFREE_SMS,
-            getString(R.string.handsfree_sms_title),
-            line,
-            ongoing = false,
+        val words = HandsfreeNotice.card(
+            locked = lockedWords(),
+            card = card,
+            line = line,
+            waiting = getString(R.string.handsfree_card_waiting),
         )
+        post(NotificationIds.HANDSFREE_CARD, words, ongoing = !done)
     }
 
-    private fun post(id: Int, title: String, body: String, ongoing: Boolean) {
+    /** A text message's receipt - [HandsfreeNotice.sms] redacts it the same way. */
+    private fun notifySms(line: String) {
+        val words = HandsfreeNotice.sms(
+            locked = lockedWords(),
+            title = getString(R.string.handsfree_sms_title),
+            line = line,
+        )
+        post(NotificationIds.HANDSFREE_SMS, words, ongoing = false)
+    }
+
+    /**
+     * The app's ONE rule for whether notification content may be drawn, read
+     * exactly as `ApprovalNotifier` reads it: App lock, private lists, or a
+     * phone whose own lock screen is not secure (`data/Security.kt`).
+     *
+     * `isSecure` is asked here rather than cached: the owner can change the
+     * phone's lock while the app runs, and a cached answer is exactly the stale
+     * copy this rule must not have.
+     */
+    private fun lockedWords(): Boolean = SecurityRules.notificationsLocked(
+        JarvisRuntime.settings.security.value,
+        DeviceSecure.isSecure(this),
+    )
+
+    private fun post(id: Int, words: HandsfreeNotice.Words, ongoing: Boolean) {
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
             // Never bridged to a watch unless the owner asked for that
             // elsewhere, exactly as every other notification here.
             .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentTitle(words.title)
+            .setContentText(words.body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(words.body))
             .setOngoing(ongoing)
             .setShowWhen(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(cardIntent(id))
+            // The lock screen never gets the words themselves. `PRIVATE` keeps
+            // the real notification off it and [publicVersion] is the only
+            // thing Android may draw there - the same pair every approval
+            // notification already carries (`ApprovalNotifier.build`).
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(publicVersion(id))
             // The card's own way through to the ordinary approval card. It is
             // an ACTION, not a second copy of the card: nothing can be approved
             // from a notification, which is the standing rule everywhere else.
@@ -520,6 +550,21 @@ class HandsfreeService : Service() {
         runCatching { NotificationManagerCompat.from(this).notify(id, n) }
             .onFailure { Log.w(TAG, "could not post the hands-free notification", it) }
     }
+
+    /**
+     * Android's own lock-screen copy: [HandsfreeNotice.PUBLIC] and nothing
+     * else. No card title, no `say`, no time left, no recipient and no text -
+     * the same redacted line the approval notifier's own public version shows,
+     * because a waiting hands-free card is an approval waiting.
+     */
+    private fun publicVersion(id: Int): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setLocalOnly(!JarvisRuntime.watchNotificationsAllowed())
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(HandsfreeNotice.PUBLIC)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setContentIntent(cardIntent(id))
+            .build()
 
     /** Opens the app where the card is: the Home screen's approval list. */
     private fun cardIntent(request: Int): PendingIntent = PendingIntent.getActivity(
@@ -591,9 +636,6 @@ class HandsfreeService : Service() {
 
         /** The send could not even be attempted. */
         private const val RESULT_UNKNOWN = -1
-
-        /** "You were talking to Jarvis when the card arrived." */
-        const val TALKING = "You were talking to Jarvis, so the card was not read out."
 
         private var startSeq = 1000
 

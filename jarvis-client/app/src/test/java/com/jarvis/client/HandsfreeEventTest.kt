@@ -5,6 +5,7 @@ import com.jarvis.client.net.JarvisJson
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -187,9 +188,36 @@ class HandsfreeEventTest {
         assertEquals(Handsfree.NOTHING_HEARD, words("""{"ok":true}"""))
         // A refusal keeps the PC's own sentence.
         assertEquals("Not your voice.", words("""{"ok":false,"why":"Not your voice."}"""))
-        // A refusal with no sentence is the card having gone, which is the
-        // common cause - and it never claims an approval.
-        assertEquals(Handsfree.CARD_GONE, words("""{"ok":false}"""))
+        // ...including one read leniently from a field the contract does not
+        // have. The answer body is {ok, heard, decision, card_state}, so a PC
+        // that refuses in words may put them under `refusal`.
+        assertEquals(
+            "You already answered this card.",
+            words("""{"ok":false,"refusal":"You already answered this card."}"""),
+        )
+        assertEquals(
+            "The card was decided on the PC.",
+            words("""{"ok":false,"reason":"The card was decided on the PC."}"""),
+        )
+        // A refusal with NO sentence is the general refusal, never a guess that
+        // the card expired (an audit finding, 2026-11-05: every refusal used to
+        // be reported as an expiry).
+        assertEquals(Handsfree.REFUSED, words("""{"ok":false}"""))
+        assertFalse(
+            "a refusal with no words still claims an expiry",
+            Handsfree.REFUSED.contains("expired"),
+        )
+        // "The card had gone" is said only when the card's OWN state says it.
+        assertEquals(Handsfree.CARD_GONE, words("""{"ok":false,"card_state":"expired"}"""))
+        assertEquals(Handsfree.CARD_GONE, words("""{"ok":false,"card_state":"answered"}"""))
+        // A voice check that did not pass is a refusal of its own kind, and it
+        // used to be unreachable behind the ok:false fallback.
+        assertEquals(Handsfree.NOT_YOUR_VOICE, words("""{"ok":false,"decision":"not_you"}"""))
+        assertNotEquals(
+            "a refused voice check was reported as an expiry",
+            Handsfree.CARD_GONE,
+            words("""{"ok":false,"decision":"not_you"}"""),
+        )
         // An unclassified decision is quoted, not interpreted.
         assertEquals(
             "Heard: \"maybe\" - the PC said \"unclear\".",

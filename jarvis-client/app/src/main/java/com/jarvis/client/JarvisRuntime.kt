@@ -470,6 +470,21 @@ object JarvisRuntime {
      */
     private var handsfreeServiceOn = false
 
+    /**
+     * True while an ON that answered 202 is waiting for the owner to decide the
+     * card the PC raised for it.
+     *
+     * WHY IT IS NEEDED. The contract's asymmetry (202 = a card waiting, never
+     * "on") means the mode is NOT armed when the owner flips the switch, so
+     * there is nothing to start yet. Nothing else re-read the mode when that
+     * card was decided, so the switch did nothing at all until the app was
+     * reopened: `_handsfree.enabled` stayed false, `followHandsfree` never ran,
+     * and the FIRST `handsfree_card` was dropped by the event gate as "not
+     * armed" (audit finding, 2026-11-05). The one read in [onEvent]'s
+     * `"approval"` branch is what makes the switch do something on the spot.
+     */
+    private var handsfreeWaitForCard = false
+
     private fun followHandsfree(armed: Boolean) {
         val app = appContext ?: return
         if (armed == handsfreeServiceOn) return
@@ -496,6 +511,11 @@ object JarvisRuntime {
         if (on) actionBlocker()?.let { return it }
         return when (val r = api.setHandsfree(on)) {
             is ApiResult.Ok -> {
+                // A 202 is a card WAITING, so the mode is not on yet and the
+                // service must not start on a mode the PC has not granted.
+                // Remember that one decision is what turns it on, so the card's
+                // own event can finish the job ([handsfreeWaitForCard]).
+                handsfreeWaitForCard = on && r.value.waiting
                 refreshHandsfree()
                 when {
                     on && r.value.waiting -> com.jarvis.client.net.Handsfree.ON_WAITING
@@ -1841,6 +1861,16 @@ object JarvisRuntime {
                 val phoneCardBefore = com.jarvis.client.net.PhoneNotifications
                     .cardWaiting(_pending.value.map { it.action })
                 refreshPending()
+                // Hands-free has no event of its own either. Its first ON
+                // answers 202 - a card waiting, NOT the mode being on - so the
+                // decided card is the moment the mode is really armed, and the
+                // service has to be started then and not at the next app open
+                // (audit finding, 2026-11-05). One read, only while an ON is
+                // waiting for exactly this.
+                if (handsfreeWaitForCard) {
+                    handsfreeWaitForCard = false
+                    scope.launch { runCatching { refreshHandsfree() } }
+                }
                 // A second-card switch waiting on a card has no event of its
                 // own (docs/JARVIS-API.md section 12: "re-read it after a
                 // card is decided"). A decided card changes the queue, and
@@ -2089,6 +2119,17 @@ object JarvisRuntime {
             com.jarvis.client.net.Handsfree.EVENT_CARD,
             com.jarvis.client.net.Handsfree.EVENT_COMMAND,
             -> {
+                // The last read can be minutes old - the mode may have been
+                // turned on from the PC, or the card this phone's own ON left
+                // waiting may have just been approved - so the card is not
+                // dropped on a stale answer: ask the PC once, then decide. A
+                // PC that answered 404 for the feature is NOT asked again
+                // (nothing there would send these events), and a read that
+                // fails keeps what was known, so an unarmed mode still drops
+                // the card exactly as before.
+                if (_handsfree.value?.enabled != true && !_handsfreeMissing.value) {
+                    runCatching { refreshHandsfree() }
+                }
                 if (_handsfree.value?.enabled != true) {
                     Log.i(TAG, "ignored ${event.kind}: hands-free is not armed on this phone")
                 } else {

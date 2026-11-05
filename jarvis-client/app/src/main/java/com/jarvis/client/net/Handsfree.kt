@@ -31,6 +31,13 @@ import kotlinx.serialization.json.intOrNull
  *                                      "waiting" with a card, OFF 200 at once
  *      `POST /api/handsfree/answer`    {"card_id", "data_b64", "sample_rate"}
  *                                      -> {"ok", "heard", "decision", "card_state"}
+ *                                      a refusal SENTENCE is not in the
+ *                                      contract; one is read leniently from
+ *                                      `why`/`refusal`/`reason`/... when the PC
+ *                                      sends it, and otherwise the phone says
+ *                                      the general refusal ([REFUSED]) - never
+ *                                      "the card had expired" without the card's
+ *                                      own state saying so.
  *      `POST /api/phone/result`        {"id", "ok", "receipt", "why"}
  *  - the spoken audio for a card comes from the existing `POST /api/voice/say`
  *    (a WAV). The phone NEVER makes up its own words for card text.
@@ -143,6 +150,20 @@ object Handsfree {
     /** The card expired before the answer arrived. */
     const val CARD_GONE = "That card had already been answered or expired - nothing changed."
 
+    /**
+     * The general refusal: the PC would not take the answer and did not say
+     * why in words.
+     *
+     * WHY IT EXISTS RATHER THAN [CARD_GONE]. The frozen contract's answer body
+     * is `{ok, heard, decision, card_state}` and carries no refusal SENTENCE, so
+     * an `ok:false` with nothing else used to be reported as "the card had
+     * already expired" - a guess, and the wrong one for the common refusal (a
+     * voice check that did not pass, a card the PC would not decide). The
+     * expired sentence now needs the card's own state to say so; everything
+     * else gets this one (audit finding, 2026-11-05).
+     */
+    const val REFUSED = "Your PC did not accept that answer - nothing changed."
+
     /** The mode was turned off while a card was being handled. */
     const val STOPPED = "Hands-free is off, so nothing was said."
 
@@ -237,9 +258,15 @@ object Handsfree {
      * @param heard what the PC's speech model heard, or null/blank when it
      *   heard no words.
      * @param decision `approved`/`denied` and the spellings [APPROVE] and
-     *   [DENY] list; anything else is shown as the PC's own word.
+     *   [DENY] list; anything else is shown as the PC's own word - including a
+     *   refusal ([NOT_OUR_VOICE]), which is read even when `ok` is false.
      * @param cardState the card's state after the answer (`waiting`,
-     *   `approved`, `denied`, `expired`), or null when the PC did not say.
+     *   `approved`, `denied`, `expired`), or null when the PC did not say. It
+     *   is what makes [CARD_GONE] true; without it, a refusal with no words is
+     *   [REFUSED].
+     * @param why the PC's own sentence about a refusal, when it wrote one. It
+     *   is read from `why`, `refusal`, `detail`, `reason`, `message` or `note`,
+     *   because the frozen contract has no refusal field ([plain]).
      */
     data class Answer(
         val ok: Boolean,
@@ -425,14 +452,25 @@ object Handsfree {
     )
 
     /**
+     * Card states that make [CARD_GONE] the true sentence: the answer arrived
+     * after the card had been decided elsewhere or had timed out.
+     */
+    val GONE = setOf("expired", "answered", "decided", "gone", "missing", "not_waiting")
+
+    /**
      * What the owner is shown after an answer, in plain words - one of four
      * sentences, never a raw decision token.
      *
      * The order of the branches is the whole of the rule and is written down
      * here rather than discovered from the tests:
      *
-     *  1. the PC said `ok: false` - its own sentence if it gave one, else "the
-     *     card had already gone", because a refusal is nearly always that;
+     *  1. the PC said `ok: false` - its own sentence if it gave one ([why],
+     *     which also reads a `refusal`/`reason`/`detail` field when the PC
+     *     sends one), then a voice check that did not pass ([NOT_YOUR_VOICE] -
+     *     checked HERE, inside the refusal, because `{"ok":false,
+     *     "decision":"not_you"}` used to short-circuit to "the card had
+     *     expired"), then [CARD_GONE] only when the card's own state says it is
+     *     gone, and otherwise [REFUSED];
      *  2. the PC named a voice check that did not pass - [NOT_YOUR_VOICE];
      *  3. a yes or a no - "Heard: \"...\" - approved/denied";
      *  4. no words at all - [NOTHING_HEARD], with no claim about the card;
@@ -440,11 +478,18 @@ object Handsfree {
      *     and nothing was approved, which is exactly what the owner must know.
      */
     fun answerWords(a: Answer): String {
+        val decision = a.decision?.trim()?.lowercase().orEmpty()
         if (!a.ok) {
             val why = a.why?.trim().orEmpty()
-            return if (why.isNotEmpty()) why else CARD_GONE
+            if (why.isNotEmpty()) return why
+            if (decision in NOT_OUR_VOICE) return NOT_YOUR_VOICE
+            // The refusal sentence is the PC's to give and the contract has no
+            // field for it, so "the card had expired" may only be said when the
+            // card's own state says so. Anything else is the general refusal -
+            // never a guess about expiry.
+            val state = a.cardState?.trim()?.lowercase().orEmpty()
+            return if (state in GONE) CARD_GONE else REFUSED
         }
-        val decision = a.decision?.trim()?.lowercase().orEmpty()
         if (decision in NOT_OUR_VOICE) return NOT_YOUR_VOICE
         val heard = a.heard?.trim().orEmpty()
         val said = if (heard.isEmpty()) "yes" else heard
@@ -537,7 +582,17 @@ object Handsfree {
     private fun int(o: JsonObject, vararg names: String): Int? = names
         .firstNotNullOfOrNull { n -> (o[n] as? JsonPrimitive)?.intOrNull }
 
-    /** The PC's own sentence about a state, when it wrote one. */
+    /**
+     * The PC's own sentence, when it wrote one.
+     *
+     * READ LENIENTLY ON PURPOSE. The frozen contract's answer body has no
+     * field for a refusal SENTENCE, so a PC that refuses in words may put them
+     * anywhere: the keys below are every name this project already uses for
+     * "why", plus `refusal` for an answer. Reading them all is how a PC's own
+     * sentence reaches the owner instead of this app inventing one - and when
+     * none is present, [answerWords] says the general refusal rather than
+     * blaming the card's expiry.
+     */
     private fun plain(o: JsonObject): String? =
-        string(o, "why", "detail", "reason", "message", "note")
+        string(o, "why", "refusal", "detail", "reason", "message", "note")
 }

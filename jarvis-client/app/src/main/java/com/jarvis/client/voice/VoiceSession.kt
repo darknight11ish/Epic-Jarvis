@@ -1553,6 +1553,9 @@ class VoiceSession(
             "No microphone available right now."
         Recorder.Failure.TooShort ->
             "Too short to make out. Hold the button while you speak."
+        // Another part of this app holds it (voice/MicOwner.kt). Its own words,
+        // not a generic failure: "the microphone stopped" would be untrue.
+        is Recorder.Failure.MicBusy -> why.why
         is Recorder.Failure.Failed -> "The microphone stopped (${why.detail})."
     }
 
