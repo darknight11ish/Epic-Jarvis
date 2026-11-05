@@ -51,8 +51,14 @@ object HandsfreeNotice {
 
     /**
      * The waiting card's words: its SHORT title (the same [CardWords] every
-     * other card surface uses) with the time it has left, and the PC's own
-     * sentence - or, once the PC has answered, the one line it decided with.
+     * other card surface uses) and the PC's own sentence, or, once the PC has
+     * answered, the one line it decided with.
+     *
+     * The number beside the card is the ANSWER WINDOW, not the card's own
+     * deadline (docs/JARVIS-API.md section 186.4: `expires_in_sec` is how long
+     * a spoken answer is open, and the card's own `expires_in` is a different
+     * field the phone does not get from this event). It used to read "60s
+     * left", which claimed the card would expire - so it now says "to answer".
      *
      * @param locked true when [com.jarvis.client.data.SecurityRules.notificationsLocked]
      *   says the words may not be drawn; then nothing below is even built.
@@ -67,12 +73,12 @@ object HandsfreeNotice {
         if (locked) return LOCKED
         val title = CardWords.fallbackTitle(card.action.ifBlank { card.say })
             .ifBlank { CardWords.NO_ACTION }
-        val left = if (card.expiresInSec > 0) " · ${card.expiresInSec}s left" else ""
+        val answerBy = if (card.expiresInSec > 0) "${card.expiresInSec}s to answer" else null
         val body = line ?: listOfNotNull(
             card.say.trim().takeIf { it.isNotEmpty() }?.let { SmsSend.shortText(it, 90) },
-            if (card.expiresInSec > 0) "${card.expiresInSec}s to answer" else null,
+            answerBy,
         ).joinToString(" · ").ifEmpty { waiting }
-        return Words(title + left, body)
+        return Words(title, body)
     }
 
     /**

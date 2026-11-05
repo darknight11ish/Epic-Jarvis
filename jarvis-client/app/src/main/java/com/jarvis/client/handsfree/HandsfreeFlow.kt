@@ -7,10 +7,10 @@ import com.jarvis.client.net.Handsfree
  *
  * ```
  *   Idle --card--> Reading --the sound ended--> Listening --the window ended--> Uploading
- *                     |                             |                              |
+ *                     ^                             |                              |
  *                     |                             +-- nothing heard ------------> Failed
- *                     +-- not allowed / no voice ---> Failed                         |
- *                                                                             Settled / Failed
+ *                     +-- the PC asked again --------+                              |
+ *                     +-- not allowed / no voice ---> Failed                  Settled / Failed
  * ```
  *
  * WHAT IT IS FOR. Every other moving part of this feature is Android - a
@@ -19,8 +19,17 @@ import com.jarvis.client.net.Handsfree
  * no Android in it at all, so the SEQUENCE is what `HandsfreeFlowTest` holds:
  * that a card starts a read-out, that the listening window opens only after the
  * read-out finished, that nothing is uploaded unless a window was open, that a
- * second card cannot interrupt one being handled, and that a card whose own
- * `expires_in_sec` has passed is never answered.
+ * second card cannot interrupt one being handled, and that a card whose ANSWER
+ * WINDOW has passed is never answered.
+ *
+ * THE WINDOW IS THE PC'S, NOT THIS APP'S. `handsfree_card`'s `expires_in_sec`
+ * is how long a spoken answer is open - the PC's 60 seconds, or the card's own
+ * countdown when that is shorter (docs/JARVIS-API.md section 186.4) - so
+ * [Listening.until] is that deadline, measured from the card's arrival. The old
+ * shape treated the value as the CARD's deadline and opened a fixed ten-second
+ * window of its own; the contract says it is the answer window, and a phone
+ * that listened for less than the PC offered would silently break the sentence
+ * the owner just heard ("within a minute").
  *
  * THE ONE INVARIANT THE OWNER ASKED FOR, and it lives here: **nothing records
  * while no card is waiting.** [State.Listening] is the only state in which the
@@ -28,7 +37,7 @@ import com.jarvis.client.net.Handsfree
  * arrived, was read out, and has not expired. There is no path to it from Idle.
  *
  * PURE: the clock is a parameter on every call rather than `System.currentTimeMillis`,
- * so an expiry and a ten-second window are tested in microseconds. Nothing here
+ * so an expiry and a minute-long window are tested in microseconds. Nothing here
  * touches the network, the file system or the hardware.
  *
  * NOT THREAD-SAFE, and deliberately so: the service drives it from one
@@ -36,7 +45,7 @@ import com.jarvis.client.net.Handsfree
  * on every move is the alternative, and it would make the sequence untestable
  * at the moment it matters.
  */
-class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
+class HandsfreeFlow(private val defaultWindowMs: Long = WINDOW_MS) {
 
     /** Where the flow is. Each state names the card it is about, except Idle. */
     sealed interface State {
@@ -101,10 +110,20 @@ class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
         private set
 
     /**
-     * When this card's own window runs out, or 0 when the PC did not say.
-     * Absolute milliseconds on the clock the caller passes in.
+     * When this card's ANSWER WINDOW runs out, or 0 when nothing has opened
+     * one. Absolute milliseconds on the clock the caller passes in. It is the
+     * PC's window (a minute at most), not the card's own deadline.
      */
     var deadline: Long = 0L
+        private set
+
+    /**
+     * How long this card's answer window is, in seconds - the value
+     * `expires_in_sec` carried, or the fallback the card was accepted with.
+     * The service records at most this long (capped again by the PC's 30-second
+     * clip limit).
+     */
+    var windowSec: Int = Handsfree.WINDOW_SEC
         private set
 
     /** True only while the answer window is open - the one "may record" flag. */
@@ -118,8 +137,15 @@ class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
      * answered would cut the owner's answer in half. A DIFFERENT card while one
      * is being handled is [Refusal.BUSY] - two read-outs at once are two voices
      * over each other, and the PC's own contract raises one card at a time.
+     *
+     * @param fallbackSec the answer window to use when the card itself carried
+     *   no `expires_in_sec` (the read's `window_sec`, section 186.2).
      */
-    fun onCard(card: Handsfree.Card, now: Long): Moved {
+    fun onCard(
+        card: Handsfree.Card,
+        now: Long,
+        fallbackSec: Int = Handsfree.WINDOW_SEC,
+    ): Moved {
         if (!card.answerable) return Moved.No(Refusal.ALREADY)
         return when (val s = state) {
             // A card that is being handled - read out, listened for, or on its
@@ -128,7 +154,8 @@ class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
             is State.Listening -> Moved.No(sameOrBusy(s.card, card))
             is State.Uploading -> Moved.No(sameOrBusy(s.card, card))
             is State.Idle, is State.Settled, is State.Failed -> {
-                deadline = if (card.expiresInSec > 0) now + card.expiresInSec * 1000L else 0L
+                windowSec = Handsfree.windowSec(card, fallbackSec)
+                deadline = now + windowSec * 1000L
                 move(State.Reading(card))
             }
         }
@@ -139,23 +166,20 @@ class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
 
     /**
      * The card has been read out (or could not be, which the caller reports as
-     * a failure itself). Opens the window.
+     * a failure itself). Opens the answer window - the SAME window the PC
+     * opened for it, ending at [deadline], because that is when the PC stops
+     * taking an answer.
      *
-     * A card whose own time is up does not open one: the PC would refuse the
-     * answer anyway, and a microphone opened for a card nobody can answer is
-     * exactly the thing this state machine exists to prevent.
+     * A card whose window is already over does not open one: the PC would
+     * refuse the answer anyway, and a microphone opened for a card nobody can
+     * answer is exactly the thing this state machine exists to prevent.
      */
     fun onSpoken(now: Long): Moved {
         val reading = state as? State.Reading ?: return Moved.No(Refusal.NOT_READING)
         if (expired(now)) {
-            return move(
-                State.Failed(
-                    reading.card,
-                    "That card had expired before Jarvis could read it out, so nothing was asked.",
-                ),
-            )
+            return move(State.Failed(reading.card, Handsfree.WINDOW_OVER))
         }
-        return move(State.Listening(reading.card, until = now + listenMs))
+        return move(State.Listening(reading.card, until = deadline))
     }
 
     /**
@@ -174,6 +198,17 @@ class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
     /**
      * The PC answered the clip.
      *
+     * THREE SHAPES, and only three (docs/JARVIS-API.md section 186.5):
+     *
+     *  - `approved` / `denied` - the card is decided;
+     *  - `again` - the PC heard words it could not place in its closed
+     *    vocabulary, and asks ONCE more while the card is still waiting. The
+     *    flow goes back to [State.Reading]: the service speaks the PC's own
+     *    question and opens a second window, if any of [deadline] is left. The
+     *    PC itself treats the second unclear answer as a deny, so this cannot
+     *    loop;
+     *  - a refusal (`ok = false`, any other decision) - the card is untouched.
+     *
      * [why] is set when the answer never arrived - no link, a refused token, a
      * 404 from a PC that does not have the route - and is shown as it is: the
      * app never invents an outcome for an upload that failed.
@@ -189,6 +224,12 @@ class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
             )
         }
         val decision = answer.decision?.trim()?.lowercase().orEmpty()
+        if (decision == Handsfree.AGAIN && !expired(now)) {
+            // The card is still waiting and the PC is still taking an answer:
+            // say its question, then listen again. The window is not reopened
+            // past the PC's own deadline.
+            return move(State.Reading(uploading.card))
+        }
         val approved = when {
             decision in Handsfree.APPROVE -> true
             decision in Handsfree.DENY -> false
@@ -258,7 +299,12 @@ class HandsfreeFlow(private val listenMs: Long = LISTEN_MS) {
     }
 
     companion object {
-        /** The answer window: the owner's own "ten seconds", in milliseconds. */
-        const val LISTEN_MS = 10_000L
+        /**
+         * The answer window used when a card carries no `expires_in_sec`: the
+         * PC's own 60 seconds (docs/JARVIS-API.md section 186.4). Not this
+         * app's number - the contract's - which is why it is a minute and not
+         * the ten seconds the first draft listened for.
+         */
+        const val WINDOW_MS = 60_000L
     }
 }

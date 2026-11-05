@@ -154,6 +154,19 @@ internal fun HandsfreeSection(canAct: Boolean = false) {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (now.listening) chrome.warnInk else chrome.textMid,
                 )
+                if (armed && read?.voicePrint.isNullOrBlank()) {
+                    // Section 186.5 step 5: with no enrolled print the PC
+                    // refuses a spoken YES outright, because it cannot tell the
+                    // owner from a recording. Saying so here is the difference
+                    // between a mode that looks broken and one that tells the
+                    // owner what to do first.
+                    Gap(4)
+                    Text(
+                        Handsfree.NO_PRINT,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                    )
+                }
                 if (armed && !canRecord) {
                     Gap(4)
                     Text(

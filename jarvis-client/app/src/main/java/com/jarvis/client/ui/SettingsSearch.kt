@@ -637,7 +637,7 @@ object SettingsSearch {
             // draws them prints those strings rather than writing its own - so
             // the words a search answers to are the words the screen shows.
             quotes = listOf(
-                "Jarvis reads each approval card out loud on this phone, then listens for ten seconds",
+                "Jarvis reads each approval card out loud on this phone, then listens for your answer",
                 "The microphone opens only while a card is being answered",
             ),
             // No `titles`: the one switch's title is `Handsfree.ON`/`OFF`, which

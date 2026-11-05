@@ -17,12 +17,16 @@ import org.junit.Test
  * the owner asked for - "nothing records while no card is waiting" - is
  * `the_microphone_is_open_only_inside_a_handled_card` below.
  *
- * The clock is a parameter everywhere, so ten seconds and an expiry cost no
+ * The window is the PC's, not this app's: `handsfree_card`'s `expires_in_sec`
+ * is how long a spoken ANSWER is open (docs/JARVIS-API.md section 186.4), so a
+ * card that says 60 gets 60 seconds and one that says 30 gets 30 - and a card
+ * that says nothing falls back to the read's `window_sec`, then to the
+ * contract's minute. The clock is a parameter everywhere, so a minute costs no
  * time at all.
  */
 class HandsfreeFlowTest {
 
-    private fun card(id: String = "c1", expires: Int = 0) = Handsfree.Card(
+    private fun card(id: String = "c1", expires: Int = 60) = Handsfree.Card(
         cardId = id,
         action = "models_switch",
         say = "Jarvis wants to switch the model to llama3.",
@@ -50,21 +54,57 @@ class HandsfreeFlowTest {
     }
 
     @Test
-    fun `the window opens only after the read-out, and for exactly the ten seconds`() {
+    fun `the window opens only after the read-out, and is the PC's own answer window`() {
         val flow = started(HandsfreeFlow())
         val moved = flow.onSpoken(2_000L)
         assertTrue(moved is HandsfreeFlow.Moved.To)
+        // The card said 60 seconds and arrived at 1_000 ms: the PC stops taking
+        // an answer at 61_000 ms, and that is where this phone's window ends.
         assertEquals(
-            HandsfreeFlow.State.Listening(card(), until = 2_000L + HandsfreeFlow.LISTEN_MS),
+            HandsfreeFlow.State.Listening(card(), until = 61_000L),
             flow.state,
         )
         assertTrue(flow.listening)
         assertEquals(Handsfree.LISTENING, flow.line())
-        // Ten seconds: the owner's own number.
-        assertEquals(10_000L, HandsfreeFlow.LISTEN_MS)
+        assertFalse("not yet over", flow.windowOver(60_999L))
+        assertTrue("over at the PC's deadline", flow.windowOver(61_000L))
+    }
 
-        assertFalse("not yet over", flow.windowOver(11_999L))
-        assertTrue("over at the boundary", flow.windowOver(12_000L))
+    @Test
+    fun `a card's own shorter countdown is the whole window`() {
+        val flow = HandsfreeFlow()
+        flow.onCard(card(expires = 5), 1_000L)
+        flow.onSpoken(2_000L)
+        assertEquals(
+            HandsfreeFlow.State.Listening(card(expires = 5), until = 6_000L),
+            flow.state,
+        )
+    }
+
+    @Test
+    fun `a card with no window of its own takes the PC's read, never this app's old ten seconds`() {
+        // The read said 45; the card said nothing.
+        val flow = HandsfreeFlow()
+        flow.onCard(card(expires = 0), 1_000L, fallbackSec = 45)
+        assertEquals(45, flow.windowSec)
+        flow.onSpoken(2_000L)
+        assertEquals(
+            HandsfreeFlow.State.Listening(card(expires = 0), until = 46_000L),
+            flow.state,
+        )
+        // ...and with nothing said anywhere, the contract's minute.
+        val bare = HandsfreeFlow()
+        bare.onCard(card(expires = 0), 1_000L)
+        assertEquals(Handsfree.WINDOW_SEC, bare.windowSec)
+        assertEquals(1_000L + HandsfreeFlow.WINDOW_MS, bare.deadline)
+    }
+
+    @Test
+    fun `a window longer than the contract's minute is clamped to it`() {
+        val flow = HandsfreeFlow()
+        flow.onCard(card(expires = 3_600), 1_000L)
+        assertEquals(60, flow.windowSec)
+        assertEquals(61_000L, flow.deadline)
     }
 
     @Test
@@ -140,6 +180,81 @@ class HandsfreeFlowTest {
     }
 
     @Test
+    fun `the PC's own sentence is what the owner sees when it sent one`() {
+        val flow = started(HandsfreeFlow())
+        flow.onSpoken(2_000L)
+        flow.onWindowClosed(clip(), 12_000L)
+        flow.onAnswer(
+            Handsfree.Answer(
+                ok = true,
+                heard = "yes",
+                decision = "approved",
+                cardState = "approved",
+                say = "Approved. Carrying on.",
+            ),
+            null,
+            13_000L,
+        )
+        assertEquals("Approved. Carrying on.", flow.line())
+        assertEquals(
+            true,
+            (flow.state as HandsfreeFlow.State.Settled).approved,
+        )
+    }
+
+    @Test
+    fun `an unclear answer asks once more, in a second window inside the same deadline`() {
+        val flow = started(HandsfreeFlow())
+        flow.onSpoken(2_000L)
+        flow.onWindowClosed(clip(), 3_000L)
+        // The PC heard something it could not place: `again`, the card is still
+        // waiting, and the phone goes back to reading out its question.
+        val moved = flow.onAnswer(
+            Handsfree.Answer(ok = false, heard = "mmm", decision = "again", cardState = "pending"),
+            null,
+            3_100L,
+        )
+        assertTrue(moved is HandsfreeFlow.Moved.To)
+        assertEquals(HandsfreeFlow.State.Reading(card()), flow.state)
+        assertFalse("the microphone shuts between windows", flow.listening)
+        // Back to Reading because the service now speaks the PC's own question
+        // ("Sorry - was that yes or no?") before opening the second window.
+        assertEquals(Handsfree.READING, flow.line())
+        // ...and the second window ends at the SAME PC deadline, not a new one.
+        flow.onSpoken(3_200L)
+        assertEquals(HandsfreeFlow.State.Listening(card(), until = 61_000L), flow.state)
+        // The second answer decides, because the PC treats a second unclear
+        // answer as a deny.
+        flow.onWindowClosed(clip(), 4_000L)
+        flow.onAnswer(
+            Handsfree.Answer(ok = true, heard = "no", decision = "denied", say = "OK, I won't do that."),
+            null,
+            4_100L,
+        )
+        assertEquals("OK, I won't do that.", flow.line())
+        assertFalse(flow.listening)
+    }
+
+    @Test
+    fun `an unclear answer with no window left is shown, not re-asked`() {
+        val flow = HandsfreeFlow()
+        flow.onCard(card(expires = 2), 1_000L)
+        flow.onSpoken(1_100L)
+        flow.onWindowClosed(clip(), 2_900L)
+        // The PC's deadline (3_000 ms) has passed: a second window would be one
+        // the PC refuses, so its question is shown and the card is left waiting.
+        flow.onAnswer(
+            Handsfree.Answer(ok = false, decision = "again", cardState = "pending", say = "Sorry - was that yes or no?"),
+            null,
+            3_100L,
+        )
+        val settled = flow.state as HandsfreeFlow.State.Settled
+        assertEquals("Sorry - was that yes or no?", settled.line)
+        assertNull("nothing was decided", settled.approved)
+        assertFalse(flow.listening)
+    }
+
+    @Test
     fun `a failed upload fails with the reason, and invents no decision`() {
         val flow = started(HandsfreeFlow())
         flow.onSpoken(2_000L)
@@ -147,11 +262,11 @@ class HandsfreeFlowTest {
         flow.onAnswer(null, "Your PC isn't answering.", 13_000L)
         val failed = flow.state as HandsfreeFlow.State.Failed
         assertEquals("Your PC isn't answering.", failed.why)
-        assertNull("no decision is claimed", (failed as? HandsfreeFlow.State.Settled)?.approved)
+        assertEquals("the card is still named", card(), failed.card)
     }
 
     @Test
-    fun `a card past its own time never opens a microphone`() {
+    fun `a card past its answer window never opens a microphone`() {
         val flow = HandsfreeFlow()
         flow.onCard(card(id = "c9", expires = 30), now = 1_000L)
         assertFalse("not yet", flow.expired(30_999L))
@@ -161,16 +276,7 @@ class HandsfreeFlowTest {
         assertTrue(moved is HandsfreeFlow.Moved.To)
         assertFalse("the window did not open", flow.listening)
         val failed = flow.state as HandsfreeFlow.State.Failed
-        assertTrue(failed.why.contains("expired"))
-    }
-
-    @Test
-    fun `a card the PC gave no time for never expires on the phone`() {
-        val flow = HandsfreeFlow()
-        flow.onCard(card(expires = 0), 1_000L)
-        assertFalse("no deadline, no expiry", flow.expired(Long.MAX_VALUE / 2))
-        flow.onSpoken(2_000L)
-        assertTrue(flow.listening)
+        assertEquals(Handsfree.WINDOW_OVER, failed.why)
     }
 
     @Test
@@ -256,7 +362,7 @@ class HandsfreeFlowTest {
         flow.onSpoken(2_000L)
         flow.onWindowClosed(clip(), 12_000L)
         flow.onAnswer(
-            Handsfree.Answer(ok = false, why = "That card was already decided."),
+            Handsfree.Answer(ok = false, say = "That card was already decided."),
             null,
             13_000L,
         )

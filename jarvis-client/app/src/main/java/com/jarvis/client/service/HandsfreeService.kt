@@ -24,6 +24,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.audio.Speaker
+import com.jarvis.client.audio.Wav
 import com.jarvis.client.data.ContactsLookup
 import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.handsfree.HandsfreeClip
@@ -38,6 +39,7 @@ import com.jarvis.client.voice.HeardSound
 import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.MicNow
 import com.jarvis.client.voice.MicOwner
+import com.jarvis.client.voice.TurnEnd
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,23 +69,30 @@ import kotlin.coroutines.resume
  * WHAT IT DOES, in the order the owner asked for it:
  *
  *  1. `handsfree_card` arrives -> an ongoing notification with the card's short
- *     title and the time it has left, and its own "Open the card" action, so a
- *     tap goes to the ordinary approval card. Then the card's `say` is fetched
- *     from `/api/voice/say` and played through [Speaker] - never in a phone
- *     call, and never in the phone's own voice if the PC's is unavailable.
- *  2. The read-out ends -> a chime, and a ten-second answer window
- *     ([HandsfreeFlow.LISTEN_MS]) with [MicOwner] held, so Live and "hey
- *     Jarvis" close their recorders for those ten seconds and reopen after. The
- *     talk button is the fourth part and it HOLDS the ledger too
- *     (`audio/Recorder.kt`), so a button being pressed when the card arrives
- *     refuses this window in words rather than opening a second recorder over
- *     it ([MicOwner]).
+ *     title and the time it has to answer, and its own "Open the card" action,
+ *     so a tap goes to the ordinary approval card. Then the card's `say` is
+ *     fetched from `/api/voice/say` and played through [Speaker] - never in a
+ *     phone call, and never in the phone's own voice if the PC's is unavailable.
+ *  2. The read-out ends -> a chime, and the ANSWER WINDOW opens - the PC's own
+ *     `expires_in_sec` (a minute, or the card's shorter countdown), with
+ *     [MicOwner] held, so Live and "hey Jarvis" close their recorders for that
+ *     window and reopen after. The talk button is the fourth part and it HOLDS
+ *     the ledger too (`audio/Recorder.kt`), so a button being pressed when the
+ *     card arrives refuses this window in words rather than opening a second
+ *     recorder over it ([MicOwner]). The clip is capped at the PC's 30 seconds
+ *     (JARVIS-API section 186.5) and stops about a second after the owner
+ *     finishes speaking ([TurnEnd]), so a one-word answer does not wait out the
+ *     whole minute.
  *  3. The window closes -> the clip (16 kHz mono WAV, [HandsfreeClip]) goes to
- *     `/api/handsfree/answer`, and what the PC heard and decided is shown in
- *     plain words ([Handsfree.answerWords]).
+ *     `/api/handsfree/answer`, and the PC's own `say` is SPOKEN and shown
+ *     ([Handsfree.answerWords]). An unclear answer that the PC asks once more
+ *     is answered again, in a second window inside the same deadline - never a
+ *     third.
  *  4. Separately, `phone_command kind=send_sms` -> the contact is resolved on
  *     THIS phone ([SmsSend.resolve], exact unique match only), the text is
  *     sent, and the platform's own result is posted to `/api/phone/result`.
+ *     The PC's `phone_result` then replaces that notification's line with the
+ *     PC's own sentence, so the app says exactly what the PC says.
  *
  * WHAT IT NEVER DOES. It never transcribes (no `SpeechRecognizer` anywhere in
  * this file); it never sends a text it could not confirm the platform accepted;
@@ -92,17 +101,22 @@ import kotlin.coroutines.resume
  * a card); it never puts a card's words or a text message where a locked
  * phone's screen would show them - [HandsfreeNotice] is the one rule for that,
  * the same [SecurityRules.notificationsLocked] every other notifier uses; and it
- * never claims a decision the PC did not give it.
+ * never claims a decision the PC did not give it, nor a send the platform did
+ * not accept.
  */
 class HandsfreeService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var cards: Job? = null
     private var commands: Job? = null
+    private var results: Job? = null
 
     /** Ids already handled, so a re-delivered card or command is not done twice. */
     private var lastCard: String? = null
     private var lastCommand: String? = null
+
+    /** The last `phone_result` id shown, so a re-delivery does not replace it twice. */
+    private var lastResultId: String? = null
 
     private val flow = HandsfreeFlow()
     private val speaker: Speaker
@@ -117,6 +131,9 @@ class HandsfreeService : Service() {
         commands = scope.launch {
             JarvisRuntime.handsfreeCommand.filterNotNull().collect { cmd -> onCommand(cmd) }
         }
+        results = scope.launch {
+            JarvisRuntime.handsfreeResult.filterNotNull().collect { result -> onResult(result) }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -130,6 +147,7 @@ class HandsfreeService : Service() {
     override fun onDestroy() {
         cards?.cancel()
         commands?.cancel()
+        results?.cancel()
         // The microphone first, and unconditionally: a service torn down inside
         // the answer window must not leave Live and "hey Jarvis" paused for a
         // window that no longer exists.
@@ -155,7 +173,11 @@ class HandsfreeService : Service() {
      */
     private suspend fun onCard(card: Handsfree.Card) {
         if (card.cardId == lastCard) return
-        when (val moved = flow.onCard(card, SystemClock.elapsedRealtime())) {
+        // The card's own `expires_in_sec` is the answer window; a card that
+        // carried none falls back to the window `GET /api/handsfree` reported
+        // (section 186.2). Never this app's own number.
+        val fallback = JarvisRuntime.handsfree.value?.windowSec ?: Handsfree.WINDOW_SEC
+        when (val moved = flow.onCard(card, SystemClock.elapsedRealtime(), fallback)) {
             is HandsfreeFlow.Moved.No -> {
                 Log.i(TAG, "a hands-free card was not started: ${moved.why}")
                 return
@@ -181,7 +203,6 @@ class HandsfreeService : Service() {
     }
 
     private suspend fun readOutAndListen(card: Handsfree.Card) {
-        var listening = false
         try {
             if (inCall()) {
                 // Never spoken over a phone call: the other person would hear
@@ -192,9 +213,7 @@ class HandsfreeService : Service() {
                 return
             }
             JarvisRuntime.publishHandsfree(Handsfree.READING, listening = false)
-            val spoken = speak(card)
-            val now = SystemClock.elapsedRealtime()
-            if (!spoken) {
+            if (!speak(card.say)) {
                 // The card could not be said, so the window is NOT opened: a
                 // microphone opened for a card the owner never heard is the one
                 // thing the mode must not do. The notification stays, and the
@@ -203,51 +222,101 @@ class HandsfreeService : Service() {
                 JarvisRuntime.publishHandsfree(Handsfree.NO_VOICE, listening = false)
                 return
             }
-            // The window's clock starts where the read-out ENDED, and the
-            // microphone is taken before it does: if the talk button holds it,
-            // the window does not open at all rather than opening over a
-            // sentence the owner is already speaking. [MicOwner] owns the
-            // sentence, so this refusal is never silent.
-            val may = MicNow.mayOpen(MicOwner.Use.HANDSFREE)
-            if (!may.allowed) {
-                flow.fail(may.why)
-                JarvisRuntime.publishHandsfree(may.why, listening = false)
-                return
+            var answer = answerOnce(card) ?: return
+            if (isAgain(answer)) {
+                // The PC heard an unclear answer and asks ONCE more (section
+                // 186.5). Say its own question, then listen again inside the
+                // SAME deadline - and never a third time: the PC's second
+                // unclear answer is a deny, so a second `again` is answered
+                // with its sentence and the flow is freed rather than left
+                // stuck in Reading (the 2026-11-05 audit's own bug class).
+                val asked = Handsfree.answerWords(answer)
+                if (!speak(asked)) {
+                    JarvisRuntime.publishHandsfree(asked, listening = false)
+                    return
+                }
+                answer = answerOnce(card) ?: return
+                if (isAgain(answer)) {
+                    flow.fail(Handsfree.answerWords(answer))
+                }
             }
-            MicNow.opened(MicOwner.Use.HANDSFREE)
-            flow.onSpoken(now)
-            listening = true
-            // A chime is the "now it is your turn" - the same two notes the
-            // talk button plays, made from numbers (no file, no new asset).
-            speaker.playTone(HeardSound.samples(), HeardSound.RATE)
-            JarvisRuntime.publishHandsfree(Handsfree.LISTENING, listening = true)
-            val clip = recordWindow()
-            MicNow.closed(MicOwner.Use.HANDSFREE)
-            listening = false
-            val closed = flow.onWindowClosed(clip, SystemClock.elapsedRealtime())
-            if (closed is HandsfreeFlow.Moved.To && flow.state is HandsfreeFlow.State.Uploading) {
-                JarvisRuntime.publishHandsfree(Handsfree.SENDING, listening = false)
-                upload(card, requireNotNull(clip))
-            } else {
-                JarvisRuntime.publishHandsfree(flow.line(), listening = false)
-            }
+            // The PC's own sentence, SPOKEN - "Approved. Carrying on.", the
+            // refusal's words, the "wrong voice" refusal (section 186.5: "say
+            // is what the phone speaks"). It is shown either way; a PC whose
+            // voice engine is unavailable leaves it shown only.
+            answer.say?.trim()?.takeIf { it.isNotEmpty() && !inCall() }?.let { speak(it) }
+            val line = flow.line()
+            JarvisRuntime.publishHandsfree(line, listening = false)
+            notifyCard(card, line ?: Handsfree.SENDING, done = true)
         } finally {
-            if (listening) MicNow.closed(MicOwner.Use.HANDSFREE)
+            // Unconditional: a service torn down inside a window must not leave
+            // Live and "hey Jarvis" paused for a window that no longer exists.
+            MicNow.closed(MicOwner.Use.HANDSFREE)
         }
     }
 
+    /** True when the PC's answer was "unclear - ask once more" and not a decision. */
+    private fun isAgain(answer: Handsfree.Answer): Boolean =
+        answer.decision?.trim()?.lowercase() == Handsfree.AGAIN
+
     /**
-     * Plays the PC's own WAV for the card's `say`. False when there is nothing
-     * to play - no engine on the PC, an empty `say`, or a failed fetch.
+     * One answer window: take the microphone, chime, record, upload, and let
+     * the flow read the PC's answer.
      *
-     * The phone never synthesises a card's words (`Speaker.speakOnDevice` is
-     * deliberately NOT used here): a card read out in the phone's voice would
-     * be words about the owner's approval, said by something other than the
-     * Jarvis he trusts.
+     * Returns the PC's answer, or null when nothing was recorded or the upload
+     * failed - the flow then already holds the sentence to show. The microphone
+     * is always given back, on every path.
      */
-    private suspend fun speak(card: Handsfree.Card): Boolean {
-        if (card.say.isBlank()) return false
-        val said = JarvisRuntime.api.say(card.say)
+    private suspend fun answerOnce(card: Handsfree.Card): Handsfree.Answer? {
+        // The window's clock starts where the read-out ENDED, and the
+        // microphone is taken before it does: if the talk button holds it, the
+        // window does not open at all rather than opening over a sentence the
+        // owner is already speaking. [MicOwner] owns the sentence, so this
+        // refusal is never silent.
+        val may = MicNow.mayOpen(MicOwner.Use.HANDSFREE)
+        if (!may.allowed) {
+            flow.fail(may.why)
+            JarvisRuntime.publishHandsfree(may.why, listening = false)
+            return null
+        }
+        MicNow.opened(MicOwner.Use.HANDSFREE)
+        val spoken = flow.onSpoken(SystemClock.elapsedRealtime())
+        if (spoken !is HandsfreeFlow.Moved.To ||
+            flow.state !is HandsfreeFlow.State.Listening
+        ) {
+            MicNow.closed(MicOwner.Use.HANDSFREE)
+            JarvisRuntime.publishHandsfree(flow.line(), listening = false)
+            return null
+        }
+        // A chime is the "now it is your turn" - the same two notes the talk
+        // button plays, made from numbers (no file, no new asset).
+        speaker.playTone(HeardSound.samples(), HeardSound.RATE)
+        JarvisRuntime.publishHandsfree(Handsfree.LISTENING, listening = true)
+        val clip = recordWindow(flow.windowSec)
+        MicNow.closed(MicOwner.Use.HANDSFREE)
+        val closed = flow.onWindowClosed(clip, SystemClock.elapsedRealtime())
+        if (closed !is HandsfreeFlow.Moved.To ||
+            flow.state !is HandsfreeFlow.State.Uploading
+        ) {
+            JarvisRuntime.publishHandsfree(flow.line(), listening = false)
+            return null
+        }
+        JarvisRuntime.publishHandsfree(Handsfree.SENDING, listening = false)
+        return upload(card, requireNotNull(clip))
+    }
+
+    /**
+     * Plays the PC's own WAV for one sentence. False when there is nothing to
+     * play - no engine on the PC, an empty sentence, or a failed fetch.
+     *
+     * The phone never synthesises a card's words or the PC's decision
+     * (`Speaker.speakOnDevice` is deliberately NOT used here): words about the
+     * owner's approval said in the phone's voice would be words from something
+     * other than the Jarvis he trusts.
+     */
+    private suspend fun speak(text: String): Boolean {
+        if (text.isBlank()) return false
+        val said = JarvisRuntime.api.say(text)
         val wav = when (said) {
             is ApiResult.Ok -> (said.value as? SaidAloud.Audio)?.wav
             is ApiResult.Failed -> null
@@ -260,34 +329,36 @@ class HandsfreeService : Service() {
         return true
     }
 
-    /** The PC decided: one sentence on the notification and in the app. */
-    private suspend fun upload(card: Handsfree.Card, wav: ByteArray) {
+    /**
+     * The PC decided: one sentence, in the PC's own words (section 186.5: the
+     * answer body's `say`), spoken by the caller and shown here.
+     */
+    private suspend fun upload(card: Handsfree.Card, wav: ByteArray): Handsfree.Answer? {
         val result = JarvisRuntime.api.answerHandsfree(card.cardId, wav)
-        val moved = when (result) {
-            is ApiResult.Ok -> flow.onAnswer(result.value, null, SystemClock.elapsedRealtime())
-            is ApiResult.Failed -> flow.onAnswer(
-                null,
-                JarvisRuntime.noticeFor(result.error),
-                SystemClock.elapsedRealtime(),
-            )
-        }
-        val line = if (moved is HandsfreeFlow.Moved.To) flow.line() else null
-        JarvisRuntime.publishHandsfree(line, listening = false)
-        notifyCard(card, line ?: Handsfree.SENDING, done = true)
+        val answer = (result as? ApiResult.Ok)?.value
+        val why = (result as? ApiResult.Failed)?.let { JarvisRuntime.noticeFor(it.error) }
+        val moved = flow.onAnswer(answer, why, SystemClock.elapsedRealtime())
+        return if (moved is HandsfreeFlow.Moved.To) answer else null
     }
 
     /**
      * Records the answer window and returns the WAV, or null when it was too
      * short to be a word.
      *
-     * The window is closed by the CLOCK, not by a pause: the loop stops at
-     * [HandsfreeFlow.Listening.until] whatever the microphone holds, so a
-     * mumble or a room's hiss cannot keep it open. On this phone the capture
-     * rate is 16 kHz because that is what is asked for first; a device that
-     * refuses it gives another rate and [HandsfreeClip] resamples, so the
-     * upload is 16 kHz either way.
+     * The WINDOW is the PC's - [windowSec], a minute at most, ending at the
+     * deadline the flow holds. The CLIP is capped at the PC's 30 seconds,
+     * because a longer one is refused rather than truncated (section 186.5),
+     * and it closes about a second after the owner stops speaking ([TurnEnd],
+     * the same rule the talk button uses), so a one-word answer is not held
+     * for a whole minute.
+     *
+     * Closed by the clock whatever the microphone holds: a mumble or a room's
+     * hiss cannot keep it open. On this phone the capture rate is 16 kHz
+     * because that is what is asked for first; a device that refuses it gives
+     * another rate and [HandsfreeClip] resamples, so the upload is 16 kHz
+     * either way.
      */
-    private fun recordWindow(): ByteArray? {
+    private fun recordWindow(windowSec: Int): ByteArray? {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
         ) {
@@ -317,8 +388,24 @@ class HandsfreeService : Service() {
             runCatching { recorder.release() }
             return null
         }
-        val clip = HandsfreeClip(rate, HandsfreeFlow.LISTEN_MS / 1000f)
+        val keep = minOf(windowSec, Handsfree.MAX_CLIP_SEC).coerceAtLeast(1)
+        val clip = HandsfreeClip(rate, keep.toFloat())
+        val turn = TurnEnd(
+            // No "you were too slow" before the cap: the owner has the whole
+            // window to START speaking; the cap closes a window he never used.
+            graceSeconds = keep.toFloat(),
+            maxPauseSeconds = TurnEnd.PAUSE_WITHOUT_MODEL,
+            maxSeconds = keep.toFloat(),
+            useModel = false,
+        )
         val buffer = ShortArray(minBuf.coerceAtLeast(1_024))
+        // The chime is played into this same microphone (it is the phone's own
+        // speaker), so it must not count as the owner's speech: it would look
+        // like speech followed by a pause and close the window before he
+        // answers. Its length is measured from the sound itself, so the two
+        // cannot drift; the audio is still KEPT, only its level is ignored.
+        val chimeSec = HeardSound.samples().size / HeardSound.RATE.toFloat()
+        var heard = 0f
         try {
             recorder.startRecording()
             while (!clip.full && SystemClock.elapsedRealtime() < until && !flow.windowOver(
@@ -330,6 +417,10 @@ class HandsfreeService : Service() {
                 // permission revoked mid-window lands here.
                 if (n <= 0) break
                 clip.append(buffer, n)
+                val seconds = n / rate.toFloat()
+                heard += seconds
+                val level = if (heard <= chimeSec + 0.05f) 0f else Wav.rms(buffer, n)
+                if (turn.push(level, seconds) == TurnEnd.Step.END) break
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "the answer window's microphone failed", e)
@@ -476,11 +567,29 @@ class HandsfreeService : Service() {
         }
     }
 
+    /**
+     * The PC's own receipt for the text this phone sent (`phone_result`,
+     * docs/JARVIS-API.md section 186.6).
+     *
+     * The phone has already posted its own notification, from Android's own
+     * verdict - this REPLACES its line with the PC's sentence ("Your text to
+     * Alex went through."), quietly, so the two halves say the same thing and
+     * the owner is not buzzed twice. A PC that sent no sentence leaves the
+     * phone's line where it is; nothing here writes words the PC did not.
+     */
+    private fun onResult(result: Handsfree.PhoneResult) {
+        if (result.id == lastResultId) return
+        lastResultId = result.id
+        val line = result.say.trim()
+        if (line.isNotEmpty()) notifySms(line, quiet = true)
+        JarvisRuntime.clearHandsfreeResult()
+    }
+
     // ------------------------------------------------------- notifications ----
 
     /**
-     * The waiting card's notification: its SHORT title, what it has left, and
-     * the ordinary card one tap away.
+     * The waiting card's notification: its SHORT title, how long it has to
+     * answer, and the ordinary card one tap away.
      *
      * The words are [HandsfreeNotice]'s, not this file's: that object applies
      * the app's one redaction rule before any of the card's words are read, so
@@ -498,14 +607,20 @@ class HandsfreeService : Service() {
         post(NotificationIds.HANDSFREE_CARD, words, ongoing = !done)
     }
 
-    /** A text message's receipt - [HandsfreeNotice.sms] redacts it the same way. */
-    private fun notifySms(line: String) {
+    /**
+     * A text message's receipt - [HandsfreeNotice.sms] redacts it the same way.
+     *
+     * @param quiet true when this REPLACES a notification the owner has already
+     *   been alerted for (the PC's own `phone_result`), so it updates in place
+     *   without a second sound or buzz.
+     */
+    private fun notifySms(line: String, quiet: Boolean = false) {
         val words = HandsfreeNotice.sms(
             locked = lockedWords(),
             title = getString(R.string.handsfree_sms_title),
             line = line,
         )
-        post(NotificationIds.HANDSFREE_SMS, words, ongoing = false)
+        post(NotificationIds.HANDSFREE_SMS, words, ongoing = false, onlyAlertOnce = quiet)
     }
 
     /**
@@ -522,7 +637,12 @@ class HandsfreeService : Service() {
         DeviceSecure.isSecure(this),
     )
 
-    private fun post(id: Int, words: HandsfreeNotice.Words, ongoing: Boolean) {
+    private fun post(
+        id: Int,
+        words: HandsfreeNotice.Words,
+        ongoing: Boolean,
+        onlyAlertOnce: Boolean = false,
+    ) {
         val n = NotificationCompat.Builder(this, CHANNEL_ID)
             // Never bridged to a watch unless the owner asked for that
             // elsewhere, exactly as every other notification here.
@@ -532,6 +652,7 @@ class HandsfreeService : Service() {
             .setContentText(words.body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(words.body))
             .setOngoing(ongoing)
+            .setOnlyAlertOnce(onlyAlertOnce)
             .setShowWhen(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(cardIntent(id))

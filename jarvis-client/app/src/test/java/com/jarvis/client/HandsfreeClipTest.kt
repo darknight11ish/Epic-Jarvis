@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.audio.Wav
 import com.jarvis.client.handsfree.HandsfreeClip
+import com.jarvis.client.net.Handsfree
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -16,9 +17,10 @@ import org.junit.Test
  * The encoder itself is [Wav]'s and `WavHeaderTest` already holds it. What is
  * new here - and what would be silently wrong in a way that only surfaces as
  * "I didn't catch that" on a real phone - is the COLLECTION: that a partial
- * read lands in the right place, that the ten-second cap truncates at the
- * boundary rather than overshooting, and that a clip too short to be a word is
- * refused BEFORE it costs a round trip.
+ * read lands in the right place, that the 30-second cap truncates at the
+ * boundary rather than overshooting (the PC refuses a longer clip rather than
+ * truncating it, JARVIS-API section 186.5), and that a clip too short to be a
+ * word is refused BEFORE it costs a round trip.
  */
 class HandsfreeClipTest {
 
@@ -58,6 +60,21 @@ class HandsfreeClipTest {
         assertTrue(clip.append(ShortArray(10) { 6 }))
         assertEquals(16_000, clip.captured.size)
         assertEquals(1f, clip.seconds, 0.0001f)
+    }
+
+    @Test
+    fun `the clamp is the PC's 30 seconds, whatever window the caller asks for`() {
+        // Section 186.5: a clip over 30 s is REFUSED, never truncated - so the
+        // collector must never hold more, even if the answer window is a minute.
+        assertEquals(30f, HandsfreeClip.MAX_WINDOW_SECONDS, 0.0001f)
+        assertEquals(Handsfree.MAX_CLIP_SEC, HandsfreeClip.MAX_WINDOW_SECONDS.toInt())
+        val asked = HandsfreeClip(rate = 16_000, windowSeconds = 60f)
+        // 30 s at 16 kHz is the most it will take; one more buffer is refused.
+        assertTrue(asked.append(ShortArray(16_000 * 30) { 3 }))
+        assertTrue(asked.full)
+        assertEquals(16_000 * 30, asked.captured.size)
+        assertTrue(asked.append(ShortArray(10) { 4 }))
+        assertEquals("nothing past the PC's line", 16_000 * 30, asked.captured.size)
     }
 
     @Test

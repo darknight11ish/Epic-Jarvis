@@ -3931,6 +3931,43 @@ class JarvisApi(
         }
 
     /**
+     * A hands-free POST whose REFUSALS are ordinary answers (docs/JARVIS-API.md
+     * section 186.3 and 186.5): 403 is "the mode is off / the voice was not the
+     * owner's / the enable card was declined", 409 is "no read-out, past the
+     * window, the card is gone", and 503 is "a check could not run". Every one
+     * of them carries the PC's own sentence in `say` (or `error`), written for
+     * the owner, so the body is kept and the status is passed on.
+     *
+     * The two that stay failures are the two that are NOT about hands-free:
+     * 401 is a bad token, and 404 is a PC that has never heard of the route -
+     * neither is the desktop's sentence about an answer or a switch. A 2xx with
+     * no JSON body is still an answer, with null.
+     *
+     * Uses the general [client]: the enable request waits for a person to
+     * decide its card, and the answer route runs a voice check and a
+     * transcription before it replies, so neither is a short call.
+     */
+    private suspend fun postTold(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                client.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * One complete utterance in, one verdict out.
      *
      * The only route on this server whose body is not JSON. The audio is
@@ -4096,10 +4133,11 @@ class JarvisApi(
     //
     // All four routes are the phone's half of one feature: the PC decides
     // (it is the one with the voice print and the transcription), the phone
-    // reads out, listens and sends the text. `probe` and `postVoice` are used
-    // rather than new plumbing because both already have the shape these
-    // answers need - the PC's own sentence on a refusal, and the raw status
-    // where 202 means "a card is waiting" rather than "done".
+    // reads out, listens and sends the text. `probe` is used for the read, and
+    // [postTold] for the two POSTs because the frozen contract answers a
+    // REFUSAL with 403 (the mode is off, the voice was not the owner's, the
+    // enable card was declined) and puts the sentence in the body - which
+    // `postVoice` would have turned into "bad token" and thrown away.
 
     /**
      * `GET /api/handsfree` - the state.
@@ -4112,28 +4150,29 @@ class JarvisApi(
     suspend fun handsfree(): ApiResult<kotlinx.serialization.json.JsonObject> = probe(Handsfree.PATH)
 
     /**
-     * `POST /api/handsfree/enabled {"enabled": bool}`.
+     * `POST /api/handsfree {"enabled": bool}` - the switch (section 186.3).
      *
-     * The contract's asymmetry is kept exactly: ON may answer 202 with a card
-     * waiting ([Handsfree.Enabled.waiting] - the mode is NOT on yet), OFF is
-     * 200 and immediate. A PC without the route answers 404, which stays a
-     * failure and is shown as [Handsfree.NOT_HERE].
+     * The contract's shape: 200 {ok, enabled, changed, message} once the mode
+     * is on (or already on), 403 when its own enable card was refused, 409 when
+     * the settings file cannot be written, 503 when the gate cannot run. All of
+     * those sentences are the PC's ([postTold]); a 404 is the honest "this PC
+     * does not have hands-free yet" and is shown as [Handsfree.NOT_HERE].
      */
     suspend fun setHandsfree(enabled: Boolean): ApiResult<Handsfree.Enabled> =
-        postVoice(Handsfree.ENABLED_PATH, Handsfree.enabledBody(enabled))
-            .map { (status, body) -> Handsfree.Enabled.of(status, body) }
+        postTold(Handsfree.PATH, Handsfree.enabledBody(enabled))
+            .map { (_, body) -> Handsfree.Enabled.of(body) }
 
     /**
      * `POST /api/handsfree/answer` - one recorded clip, base64 in JSON.
      *
      * The body is the owner's voice and is never logged. A refusal the PC
-     * explains comes back as [Handsfree.Answer] with `ok = false` and its own
-     * sentence, because those words are written for the owner and are the most
-     * useful thing to show; 401/403/404 stay failures, because a bad token and
-     * "this PC has no hands-free" are not the desktop's words to relay.
+     * explains - and every documented refusal does, in `say` - comes back as
+     * [Handsfree.Answer] with `ok = false` and the PC's own sentence, because
+     * those words are written for the owner and are the most useful thing to
+     * show. Only 401 (a bad token) and 404 (no such route) stay failures.
      */
     suspend fun answerHandsfree(cardId: String, wav: ByteArray): ApiResult<Handsfree.Answer> =
-        postVoice(Handsfree.ANSWER_PATH, Handsfree.answerBody(cardId, wav))
+        postTold(Handsfree.ANSWER_PATH, Handsfree.answerBody(cardId, wav))
             .map { (_, body) -> Handsfree.answerOf(body) }
 
     /**

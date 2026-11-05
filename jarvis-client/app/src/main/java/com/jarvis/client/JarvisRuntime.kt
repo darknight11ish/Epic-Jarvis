@@ -413,6 +413,19 @@ object JarvisRuntime {
     val handsfreeCommand: StateFlow<com.jarvis.client.net.Handsfree.Command?> =
         _handsfreeCommand.asStateFlow()
 
+    /**
+     * The PC's own receipt for the last text this phone sent (`phone_result`,
+     * section 186.6), on the same one-shot terms as [handsfreeCard].
+     *
+     * The phone has already posted its own result and shown the platform's
+     * verdict; this is the PC's sentence beside it, so the app can say the same
+     * thing the PC will. Null once handled.
+     */
+    private val _handsfreeResult =
+        MutableStateFlow<com.jarvis.client.net.Handsfree.PhoneResult?>(null)
+    val handsfreeResult: StateFlow<com.jarvis.client.net.Handsfree.PhoneResult?> =
+        _handsfreeResult.asStateFlow()
+
     /** One line plus the "is the microphone open" flag, published by the service. */
     data class HandsfreeNow(val line: String? = null, val listening: Boolean = false)
 
@@ -432,6 +445,11 @@ object JarvisRuntime {
     /** ...and once a command has been reported. */
     fun clearHandsfreeCommand() {
         _handsfreeCommand.value = null
+    }
+
+    /** Called by the service once a `phone_result` has been shown. */
+    fun clearHandsfreeResult() {
+        _handsfreeResult.value = null
     }
 
     /**
@@ -470,21 +488,6 @@ object JarvisRuntime {
      */
     private var handsfreeServiceOn = false
 
-    /**
-     * True while an ON that answered 202 is waiting for the owner to decide the
-     * card the PC raised for it.
-     *
-     * WHY IT IS NEEDED. The contract's asymmetry (202 = a card waiting, never
-     * "on") means the mode is NOT armed when the owner flips the switch, so
-     * there is nothing to start yet. Nothing else re-read the mode when that
-     * card was decided, so the switch did nothing at all until the app was
-     * reopened: `_handsfree.enabled` stayed false, `followHandsfree` never ran,
-     * and the FIRST `handsfree_card` was dropped by the event gate as "not
-     * armed" (audit finding, 2026-11-05). The one read in [onEvent]'s
-     * `"approval"` branch is what makes the switch do something on the spot.
-     */
-    private var handsfreeWaitForCard = false
-
     private fun followHandsfree(armed: Boolean) {
         val app = appContext ?: return
         if (armed == handsfreeServiceOn) return
@@ -500,9 +503,13 @@ object JarvisRuntime {
     /**
      * The switch, from Settings, chat or Live - ONE entry point.
      *
-     * The contract's asymmetry is kept in what the owner is told as well as in
-     * what is sent: ON that answers 202 is a card WAITING and never "on"; OFF is
-     * immediate. The PC's own sentence is shown when it refused.
+     * The frozen contract's shape is kept in what the owner is told as well as
+     * in what is sent (section 186.3): the PC's own route answers AFTER its
+     * enable card has been decided - 200 with `enabled`/`message`, 403 with
+     * `error` when the card was declined - so there is no "waiting" state to
+     * model here and the switch is never called on before the PC says it is.
+     * The state is read back after every answer rather than assumed from the
+     * sentence, and that read is what starts or stops the service.
      *
      * ON is held on a stale link ([actionBlocker]) because it decides what
      * Jarvis does from now on; OFF is never held, because it only ever narrows.
@@ -511,16 +518,16 @@ object JarvisRuntime {
         if (on) actionBlocker()?.let { return it }
         return when (val r = api.setHandsfree(on)) {
             is ApiResult.Ok -> {
-                // A 202 is a card WAITING, so the mode is not on yet and the
-                // service must not start on a mode the PC has not granted.
-                // Remember that one decision is what turns it on, so the card's
-                // own event can finish the job ([handsfreeWaitForCard]).
-                handsfreeWaitForCard = on && r.value.waiting
+                // Read the PC's own state before saying anything about it: the
+                // body's `enabled` and the sentence beside it are the PC's
+                // claim, and [refreshHandsfree] is the check.
                 refreshHandsfree()
+                val armed = _handsfree.value?.enabled == true
                 when {
-                    on && r.value.waiting -> com.jarvis.client.net.Handsfree.ON_WAITING
-                    on -> r.value.why ?: com.jarvis.client.net.Handsfree.ON_DONE
-                    else -> com.jarvis.client.net.Handsfree.OFF_DONE
+                    !on -> r.value.message ?: com.jarvis.client.net.Handsfree.OFF_DONE
+                    armed -> r.value.message ?: com.jarvis.client.net.Handsfree.ON_DONE
+                    else -> r.value.error ?: r.value.message
+                        ?: com.jarvis.client.net.Handsfree.ON_REFUSED
                 }
             }
             is ApiResult.Failed -> if (r.error is ApiError.NotFound) {
@@ -1876,16 +1883,6 @@ object JarvisRuntime {
                 val phoneCardBefore = com.jarvis.client.net.PhoneNotifications
                     .cardWaiting(_pending.value.map { it.action })
                 refreshPending()
-                // Hands-free has no event of its own either. Its first ON
-                // answers 202 - a card waiting, NOT the mode being on - so the
-                // decided card is the moment the mode is really armed, and the
-                // service has to be started then and not at the next app open
-                // (audit finding, 2026-11-05). One read, only while an ON is
-                // waiting for exactly this.
-                if (handsfreeWaitForCard) {
-                    handsfreeWaitForCard = false
-                    scope.launch { runCatching { refreshHandsfree() } }
-                }
                 // A second-card switch waiting on a card has no event of its
                 // own (docs/JARVIS-API.md section 12: "re-read it after a
                 // card is decided"). A decided card changes the queue, and
@@ -2123,16 +2120,18 @@ object JarvisRuntime {
                     ?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
                 if (serious != null) onSerious(serious)
             }
-            // A card the PC wants read out, or something it wants this phone to
-            // do (net/Handsfree.kt, the owner's request of 2026-11-04). Both are
-            // accepted ONLY while the PC itself says the mode is armed: an
-            // event that arrives with the mode off would otherwise sit in the
-            // flow until the owner turned it on, and be read out minutes later
-            // as if the card had just been raised. An unknown `kind` inside a
-            // `phone_command` is NOT dropped - the service owes the PC a result
-            // saying this phone cannot do it.
+            // A card the PC wants read out, something it wants this phone to do,
+            // or its own receipt for a text this phone sent (net/Handsfree.kt,
+            // docs/JARVIS-API.md section 186; the owner's request of
+            // 2026-11-04). All three are accepted only while the PC itself says
+            // the mode is armed: an event that arrives with the mode off would
+            // otherwise sit in the flow until the owner turned it on, and be
+            // read out minutes later as if the card had just been raised. An
+            // unknown `kind` inside a `phone_command` is NOT dropped - the
+            // service owes the PC a result saying this phone cannot do it.
             com.jarvis.client.net.Handsfree.EVENT_CARD,
             com.jarvis.client.net.Handsfree.EVENT_COMMAND,
+            com.jarvis.client.net.Handsfree.EVENT_RESULT,
             -> {
                 // The last read can be minutes old - the mode may have been
                 // turned on from the PC, or the card this phone's own ON left
@@ -2154,6 +2153,8 @@ object JarvisRuntime {
                             _handsfreeCard.value = arrived.card
                         is com.jarvis.client.net.Handsfree.Arrival.CommandArrived ->
                             _handsfreeCommand.value = arrived.command
+                        is com.jarvis.client.net.Handsfree.Arrival.ResultArrived ->
+                            _handsfreeResult.value = arrived.result
                         null -> Log.d(TAG, "a malformed ${event.kind}")
                     }
                 }

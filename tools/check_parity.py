@@ -947,8 +947,8 @@ PHONE_ONLY = {
     # can approve a file or extend its ten minutes.
     "/api/files/send": ("phone-only", "The files the owner already approved for this phone (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172): name, folder, size, MIME type and seconds left, never a path. A file appears only after the PC's own ONE send_file_to_phone card was approved, and only the phone has any use for it - the file's destination is the phone. Phone: net/SendFile.kt and ui/screens/SendFilePlate.kt (the Settings row, and a small block inside Coming up so a waiting file is noticed), JarvisRuntime.sendFiles. Desktop: nothing to draw, by design - the bytes leave the PC for the phone (docs/ARCHITECTURE.md section 8)."),
     "/api/files/download": ("phone-only", "ONE approved file's bytes, base64 in JSON, by opaque id only - never a path, and the answer carries none (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172). Ten minutes and one download; a second fetch is the PC's own 404 sentence. Phone: ui/screens/SendFilePlate.kt's View (FileProvider + ACTION_VIEW) and Save to Downloads (MediaStore.Downloads), JarvisRuntime.downloadFile. Desktop: nothing to draw - the phone is the destination (docs/ARCHITECTURE.md section 8)."),
-    # Hands-free (the owner's request of 2026-11-04; the phone lane of a frozen
-    # contract both halves land against; net/Handsfree.kt,
+    # Hands-free (the owner's request of 2026-11-04; the phone lane of the PC's
+    # frozen contract, docs/JARVIS-API.md section 186; net/Handsfree.kt,
     # service/HandsfreeService.kt, voice/MicOwner.kt). PHONE-ONLY because the
     # phone IS the mouth, the ears and the SMS hand: it plays the PC's own WAV
     # out of its speaker, records the answer clip (the phone never transcribes -
@@ -956,14 +956,14 @@ PHONE_ONLY = {
     # Windows PC has no phone's microphone, speaker or SMS service. The PC keeps
     # the authority: it transcribes, checks the owner's voice print and decides.
     #
-    # The desktop may well call the first two of these when its own lane lands
-    # (it has a hands-free setting too, per the owner's "from chat, Jarvis Live,
-    # or Settings"). The moment it does, rule 6 fails here and the two move to
-    # CLASSIFICATION as "ported" - the right change then, and this note says so
-    # rather than leaving it to be rediscovered.
-    "/api/handsfree": ("phone-only", "The hands-free state (the owner's request of 2026-11-04): whether this PC has the mode armed, any card already waiting, and the PC's own sentence about it. Phone: net/Handsfree.kt's lenient read, JarvisRuntime.refreshHandsfree, drawn by ui/screens/HandsfreeSection.kt and Home's status line. Desktop: none in this PR - the desktop lane of the same contract owns its own surface, and the day it reads this the entry becomes \"ported\" (ARCHITECTURE.md section 8)."),
-    "/api/handsfree/enabled": ("phone-only", "Turning hands-free on or off (the owner's request of 2026-11-04): ON may answer 202 with a card waiting and is NOT on until that card is approved; OFF is 200 and immediate. Phone: JarvisRuntime.setHandsfree, reached from the Settings switch, a typed chat command and the same command said in Jarvis Live. Desktop: none in this PR; the desktop lane owns its own half and moves this to \"ported\" when it calls the route (ARCHITECTURE.md section 8)."),
-    "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state} (the owner's request of 2026-11-04). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV in its ten-second window and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
+    # The desktop calls the FIRST of these when its own lane lands (it has a
+    # hands-free setting too, per the owner's "from chat, Jarvis Live, or
+    # Settings"), and the frozen contract gives that single path BOTH the read
+    # and the switch. The moment the desktop calls it, rule 6 fails here and it
+    # moves to CLASSIFICATION as "ported" - the right change then, and this note
+    # says so rather than leaving it to be rediscovered.
+    "/api/handsfree": ("phone-only", "The hands-free state AND its switch (the owner's request of 2026-11-04; docs/JARVIS-API.md section 186): GET reads whether this PC has the mode armed, the 60-second answer window, the closed yes/no vocabulary, whether a voice print is enrolled, whether a phone can take a text, and the newest read-out; POST {\"enabled\": bool} turns it OFF at once and cardless, or ON through ONE ask-tier card. One path for both verbs - the contract has no separate /enabled route. Phone: net/Handsfree.kt's lenient read, JarvisRuntime.refreshHandsfree/setHandsfree, drawn by ui/screens/HandsfreeSection.kt and Home's status line. Desktop: none on this tree - the desktop lane of the same contract owns its own surface, and the day it calls this the entry becomes \"ported\" (ARCHITECTURE.md section 8)."),
+    "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state, say} (the owner's request of 2026-11-04; docs/JARVIS-API.md section 186). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV inside the PC's own answer window (a minute at most), clip-capped at the PC's 30 seconds, and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
     "/api/phone/result": ("phone-only", "What happened to a `phone_command` this phone carried out: {id, ok, receipt, why}, where `receipt` is Android's own SMS RESULT_* and `why` is the refusal in plain words (the owner's request of 2026-11-04). Phone: service/HandsfreeService.kt posts it for EVERY command, including the ones it refused and the ones of a kind it does not know, so the PC can tell \"not sent\" from \"still working\". A PC has no phone to command, so the desktop never calls it (ARCHITECTURE.md section 8)."),
 
     # Recording a phone call (the owner's request of 2026-11-04). The audio

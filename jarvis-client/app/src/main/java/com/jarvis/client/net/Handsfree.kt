@@ -1,6 +1,7 @@
 package com.jarvis.client.net
 
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -19,36 +20,55 @@ import kotlinx.serialization.json.intOrNull
  * so the phone records one clip and uploads it (`/api/handsfree/answer`), and
  * the PC transcribes it, checks it against the owner's voice print and decides.
  *
- * THE FROZEN CONTRACT (both halves land together; the PC lane owns the backend
- * section of docs/JARVIS-API.md):
+ * THE FROZEN CONTRACT is `docs/JARVIS-API.md` section 186, written by the PC
+ * half (PR #1169) and not phone-owned: this file follows it, and where this
+ * file's older shape disagreed with it the contract won (2026-11-05). It is:
  *
+ *  - the setting `[handsfree] enabled`, false by default. ON is ONE ask-tier
+ *    card, OFF is instant and raises nothing.
+ *  - `GET  /api/handsfree` -> {ok, enabled, window_sec: 60,
+ *    vocabulary: {confirm[8], deny[7]}, voice_print, phone: {ready, why},
+ *    reading}. `reading` is the newest read-out the PC sent, or null - the
+ *    fallback for a card this phone missed while the stream was down.
+ *  - `POST /api/handsfree {"enabled": bool}` -> 200 {ok, enabled, changed,
+ *    message}. ON refused by its own card is 403 {ok:false, enabled:false,
+ *    error}; a settings file that cannot be written is 409. There is no 202
+ *    and no "waiting" state in this contract: the PC's route answers after the
+ *    card has been decided.
  *  - events, over the one existing stream (`/api/events`):
  *      `handsfree_card` {`card_id`, `action`, `say`, `expires_in_sec`}
  *      `phone_command`  {`id`, `kind:"send_sms"`, `contact`, `text`}
- *  - routes:
- *      `GET  /api/handsfree`           the state, as [Read]
- *      `POST /api/handsfree/enabled`   {"enabled": bool} - ON may answer 202
- *                                      "waiting" with a card, OFF 200 at once
- *      `POST /api/handsfree/answer`    {"card_id", "data_b64", "sample_rate"}
- *                                      -> {"ok", "heard", "decision", "card_state"}
- *                                      a refusal SENTENCE is not in the
- *                                      contract; one is read leniently from
- *                                      `why`/`refusal`/`reason`/... when the PC
- *                                      sends it, and otherwise the phone says
- *                                      the general refusal ([REFUSED]) - never
- *                                      "the card had expired" without the card's
- *                                      own state saying so.
- *      `POST /api/phone/result`        {"id", "ok", "receipt", "why"}
- *  - the spoken audio for a card comes from the existing `POST /api/voice/say`
- *    (a WAV). The phone NEVER makes up its own words for card text.
+ *      `phone_result`   {`id`, `ok`, `say`, `receipt`, `why`}
+ *  - `POST /api/handsfree/answer` {`card_id`, `data_b64` (16-bit PCM WAV, mono,
+ *    16 kHz), `sample_rate`} -> 200 {ok, heard, decision, card_state, say}.
+ *    `say` is the sentence the phone SPEAKS - every answer carries one, so the
+ *    phone never writes its own refusal. Documented refusals: 400 (no clip / an
+ *    unreadable clip / a mismatched rate / over 30 s), 403 (the mode is off, or
+ *    the voice was not the owner's, or no print is enrolled), 409 (no read-out,
+ *    past the window, the card is gone, already decided), 503 (a check could
+ *    not run). A 403 is the ORDINARY refusal here, not a bad token, and its
+ *    body carries the words.
+ *  - `POST /api/phone/result` {`id`, `ok`, `receipt`, `why`} -> the PC's own
+ *    receipt, then the `phone_result` event.
  *
- * HONEST DEGRADATION, which is the half this file exists to make checkable: a
- * PC that has never heard of hands-free answers 404 on all four routes, and
- * sends neither event. Then [NOT_HERE] is what the owner is told, the Settings
- * switch says so, and nothing is invented: no mode is claimed, no card is read
- * out, and no microphone is opened. That is a state with its own words rather
- * than a feature that looks broken ([readOf] and [Enabled.of] are where the
- * 404 becomes those words).
+ * TWO THINGS THAT LOOK SMALL AND ARE NOT:
+ *
+ *  1. `expires_in_sec` is the ANSWER window, not the card's own deadline
+ *     (section 186.4 says so in as many words). The phone listens for that
+ *     window - a minute at most, or the card's own shorter countdown - and the
+ *     clip it uploads is capped at the PC's 30 seconds, because a longer one is
+ *     refused rather than truncated (section 186.5).
+ *  2. `say` is the PC's own sentence and is what the phone speaks and shows. An
+ *     answer read with no `say` falls back to this file's words, but a PC that
+ *     sends `say` is never paraphrased - the refusal sentences are the PC's,
+ *     not this app's.
+ *
+ * HONEST DEGRADATION: a PC that has never heard of hands-free answers 404 on
+ * these routes, and sends none of the three events. Then [NOT_HERE] is what the
+ * owner is told, the Settings switch says so, and nothing is invented: no mode
+ * is claimed, no card is read out, and no microphone is opened. That is a state
+ * with its own words rather than a feature that looks broken ([readOf] and
+ * [Enabled.of] are where the 404 becomes those words).
  *
  * Everything here is PURE - no Android, no socket - so `HandsfreeEventTest`
  * holds every parse, every line of plain words and the degradation to the
@@ -58,11 +78,12 @@ object Handsfree {
 
     // ------------------------------------------------------------ routes ----
 
-    /** `GET` the state; `POST` nothing (the switch has its own route). */
+    /**
+     * `GET` the state; `POST {"enabled": bool}` the switch. ONE path in the
+     * frozen contract (section 186.0/186.3) - the older
+     * `/api/handsfree/enabled` does not exist on the PC and is gone.
+     */
     const val PATH = "/api/handsfree"
-
-    /** `POST {"enabled": bool}`. ON may answer 202 with a card waiting. */
-    const val ENABLED_PATH = "/api/handsfree/enabled"
 
     /** `POST` one recorded clip of the owner saying confirm or deny. */
     const val ANSWER_PATH = "/api/handsfree/answer"
@@ -78,15 +99,32 @@ object Handsfree {
     /** Something the PC wants this phone to DO. Only `send_sms` today. */
     const val EVENT_COMMAND = "phone_command"
 
+    /** The PC's own word on a text this phone was asked to send. */
+    const val EVENT_RESULT = "phone_result"
+
     /** The one `phone_command` kind this app carries out. */
     const val KIND_SEND_SMS = "send_sms"
 
+    // ------------------------------------------------------------- audio ----
+
     /**
-     * The sample rate the answer clip is sent at: the SAME format the PC asks
-     * every other upload for (`audio_in` in `/api/voice/status`), and the rate
-     * `Recorder` already records at, so nothing here invents a second format.
+     * The rate the answer clip is sent at: the SAME format the PC asks every
+     * other upload for (`audio_in` in `/api/voice/status`), and the rate
+     * [com.jarvis.client.handsfree.HandsfreeClip] resamples to, so the body's
+     * `sample_rate` can never disagree with the WAV it carries (section 186.5).
      */
     const val SAMPLE_RATE = 16_000
+
+    /** The answer window the PC opens for a read-out, in seconds (section 186.4). */
+    const val WINDOW_SEC = 60
+
+    /**
+     * The longest clip the PC will accept, in seconds (section 186.5).
+     *
+     * A longer one is REFUSED, never truncated, so the phone records at most
+     * this much however long the answer window is.
+     */
+    const val MAX_CLIP_SEC = 30
 
     // ------------------------------------------------------------- words ----
 
@@ -101,19 +139,21 @@ object Handsfree {
      *
      * One string, because it is shown in three places (the Settings row, the
      * confirmation line, the docs) and three copies of a sentence about what
-     * the microphone does is three chances to describe it differently.
+     * the microphone does is three chances to describe it differently. The
+     * window is the PC's - a minute at most - so this says a minute, not the
+     * ten seconds this app used to open (section 186.4).
      */
     const val ABOUT = "Jarvis reads each approval card out loud on this phone, " +
-        "then listens for ten seconds so you can say \"confirm\" or \"deny\". " +
+        "then listens for your answer - one word, within the minute your PC allows. " +
         "It can also write a text message to a contact you ask for."
 
     /**
      * The second Settings line, and the one that matters most for trust: the
-     * microphone is open only inside that ten seconds, never while no card is
+     * microphone is open only inside that answer window, never while no card is
      * waiting.
      */
     const val WHEN_LISTENING = "The microphone opens only while a card is being answered - " +
-        "ten seconds, after the card has been read out - and it says so on screen while it does."
+        "for your PC's answer window, a minute at most - and it says so on screen while it does."
 
     /** The switch's own two states. */
     const val ON = "Hands-free is on"
@@ -141,26 +181,32 @@ object Handsfree {
     /** After the clip has gone: the PC is deciding. */
     const val SENDING = "Sending your answer to the PC…"
 
+    /** The card's answer window ran out before an answer was recorded. */
+    const val WINDOW_OVER = "That card's minute for an answer is over - nothing was decided."
+
     /** Nothing at all was heard, so nothing was sent. */
     const val NOTHING_HEARD = "I didn't catch that - say confirm or deny."
+
+    /**
+     * The PC asked once more and this phone has no `say` from it to repeat (a
+     * PC older than the frozen contract): the same question, in this app's
+     * words. A PC that sends `say` is always preferred ([answerWords]).
+     */
+    const val ASK_AGAIN = "Sorry - I didn't catch a clear yes or no. Say \"confirm\" or \"deny\"."
 
     /** Words came back but the PC's voice check did not pass. */
     const val NOT_YOUR_VOICE = "That was not your voice - nothing was approved."
 
-    /** The card expired before the answer arrived. */
+    /**
+     * The card was already answered or had expired when the answer arrived.
+     * Only said when the PC's own `card_state` says so and it sent no `say`.
+     */
     const val CARD_GONE = "That card had already been answered or expired - nothing changed."
 
     /**
-     * The general refusal: the PC would not take the answer and did not say
-     * why in words.
-     *
-     * WHY IT EXISTS RATHER THAN [CARD_GONE]. The frozen contract's answer body
-     * is `{ok, heard, decision, card_state}` and carries no refusal SENTENCE, so
-     * an `ok:false` with nothing else used to be reported as "the card had
-     * already expired" - a guess, and the wrong one for the common refusal (a
-     * voice check that did not pass, a card the PC would not decide). The
-     * expired sentence now needs the card's own state to say so; everything
-     * else gets this one (audit finding, 2026-11-05).
+     * The general refusal, for a PC that refused and sent no words at all: the
+     * frozen contract's answer body always carries `say`, so this is only the
+     * fallback for a PC older than it.
      */
     const val REFUSED = "Your PC did not accept that answer - nothing changed."
 
@@ -174,15 +220,22 @@ object Handsfree {
     /** OFF is immediate - the PC's own contract says so, and so does this. */
     const val OFF_DONE = "Hands-free is off. Jarvis will not read cards out or listen for an answer."
 
-    /** ON while the PC is already armed and nothing has to be approved. */
+    /** ON landed, and the PC says so. */
     const val ON_DONE = "Hands-free is on. Cards for what you ask Jarvis to do will be read out."
 
     /**
-     * ON going through the PC's own card. The contract says a 202 means
-     * waiting, and a waiting card is answered where cards always are - it is
-     * never assumed to have been accepted by the fact that it was asked for.
+     * The PC answered 200 but its own state did not come back armed, and it
+     * sent no sentence. Nothing is claimed: the switch follows the read-back.
      */
-    const val ON_WAITING = "Hands-free will be on once you approve the card your PC just raised."
+    const val ON_REFUSED = "Your PC did not turn hands-free on."
+
+    /**
+     * Shown when the PC has no enrolled voice print: a spoken yes is refused by
+     * the PC until one exists (section 186.5 step 5), and this is the one place
+     * the owner can be told before he tries.
+     */
+    const val NO_PRINT = "No voice is trained on your PC yet, so a spoken yes will be refused. " +
+        "Train your voice on the PC, or answer cards on screen."
 
     /** The chat/Live command's own words, so the two surfaces cannot drift. */
     const val COMMAND_ON = "turn on hands-free"
@@ -207,10 +260,13 @@ object Handsfree {
      * @param action the card's kind (`change_own_config`, `models_switch`, ...).
      *   Never shown to the owner on its own - `CardWords` has the plain words -
      *   but it is what the notification's short title falls back to.
-     * @param say the whole sentence to read out, in the PC's words. It is sent
-     *   to `/api/voice/say` exactly as it arrives.
-     * @param expiresInSec how long the card itself has left. 0 or less means
-     *   the PC did not say, and nothing is claimed about it.
+     * @param say the card's own notice words, then how to answer it. It is sent
+     *   to `/api/voice/say` exactly as it arrives. It is a NOTIFICATION: reading
+     *   a card out approves nothing, and the card is still in `/api/pending`.
+     * @param expiresInSec how long a spoken ANSWER is open - the PC's 60
+     *   seconds, or the card's own countdown when that is shorter - never the
+     *   card's own deadline (that is `/api/pending`'s `expires_in`). 0 means the
+     *   PC did not say, and the read's `window_sec` is used instead.
      */
     data class Card(
         val cardId: String,
@@ -244,88 +300,129 @@ object Handsfree {
         val answerable: Boolean get() = id.isNotBlank()
     }
 
+    /**
+     * The PC's own receipt for a text this phone was asked to send - the
+     * `phone_result` event (section 186.6).
+     *
+     * The phone has already posted its own result; this is the PC's sentence,
+     * so the app can show the same words the PC will show. [ok] is the PC's
+     * record of the phone's answer, never a second claim about the send.
+     */
+    data class PhoneResult(
+        val id: String,
+        val ok: Boolean,
+        val say: String = "",
+        val receipt: String = "",
+        val why: String = "",
+    )
+
     /** The reason a `phone_command` this app cannot carry out posts back. */
     const val UNKNOWN_KIND = "This phone does not know how to do that."
 
     /**
      * What the PC decided about one recorded answer.
      *
-     * The four fields are the frozen contract's, and `heard` is the PC's own
-     * transcription - the phone shows it, which is how the owner can tell "it
-     * misheard me" from "it did not hear me".
+     * The frozen contract's fields are `ok`, `heard`, `decision`, `card_state`
+     * and `say`; `heard` is the PC's own transcription - the phone shows it,
+     * which is how the owner can tell "it misheard me" from "it did not hear me".
      *
-     * @param ok false when the PC refused the clip or failed to check it.
+     * @param ok false when the PC refused the clip, or when the answer was
+     *   unclear and the PC asked once more ([decision] `again`). `ok = false`
+     *   is NOT by itself a refusal.
      * @param heard what the PC's speech model heard, or null/blank when it
      *   heard no words.
-     * @param decision `approved`/`denied` and the spellings [APPROVE] and
-     *   [DENY] list; anything else is shown as the PC's own word - including a
-     *   refusal ([NOT_OUR_VOICE]), which is read even when `ok` is false.
-     * @param cardState the card's state after the answer (`waiting`,
-     *   `approved`, `denied`, `expired`), or null when the PC did not say. It
-     *   is what makes [CARD_GONE] true; without it, a refusal with no words is
-     *   [REFUSED].
-     * @param why the PC's own sentence about a refusal, when it wrote one. It
-     *   is read from `why`, `refusal`, `detail`, `reason`, `message` or `note`,
-     *   because the frozen contract has no refusal field ([plain]).
+     * @param decision `approved`, `denied`, `again` (unclear, asked once more),
+     *   or `refused`. The spellings in [APPROVE] and [DENY] are accepted too;
+     *   anything else is shown as the PC's own word - although with [say] the
+     *   PC's sentence is what the owner sees.
+     * @param cardState the card's state after the answer (`pending`,
+     *   `approved`, `denied`, `expired`, `gone`, `unknown`, `unchanged`), or
+     *   null when the PC did not say.
+     * @param say the PC's own sentence for the owner: what the phone SPEAKS and
+     *   shows, for a decision and for a refusal alike. Read from `say`, then
+     *   from the older spellings ([plain]) for a PC that predates the contract.
      */
     data class Answer(
         val ok: Boolean,
         val heard: String? = null,
         val decision: String? = null,
         val cardState: String? = null,
-        val why: String? = null,
+        val say: String? = null,
     )
 
+    /** The closed yes/no vocabulary `GET /api/handsfree` reports (section 186.2). */
+    data class Vocabulary(
+        val confirm: List<String> = emptyList(),
+        val deny: List<String> = emptyList(),
+    )
+
+    /** Whether a paired phone can receive a command, and why not (section 186.2). */
+    data class Phone(val ready: Boolean = true, val why: String = "")
+
     /**
-     * The state `GET /api/handsfree` answers, read leniently.
-     *
-     * READ LENIENTLY ON PURPOSE. This half of the feature ships against a
-     * backend another lane is writing at the same time, and the one shape that
-     * is pinned by the frozen contract is the EVENTS and the four ROUTES - the
-     * state object's own keys are the PC's to choose. So every key below is
-     * read by its most likely name, an alias is accepted where the project
-     * already uses one (`on` for `enabled`, exactly as `/api/model-lanes/auto`
-     * does), and anything absent falls to a value that claims nothing.
+     * The state `GET /api/handsfree` answers (section 186.2).
      *
      * @param available false only when the PC says so in words. A 404 from the
      *   route is a separate, stronger "this PC does not have it" and never
-     *   reaches here at all ([readOf]).
+     *   reaches here at all ([com.jarvis.client.JarvisRuntime.refreshHandsfree]).
      * @param enabled whether the PC has the mode armed.
-     * @param card a card already waiting, when the PC names one.
+     * @param card the newest read-out (`reading`), or a card already waiting
+     *   when the PC names one - the fallback for an event this phone missed.
+     * @param windowSec the PC's answer window, in seconds; 60 in the contract.
+     * @param vocabulary the words the PC will accept, for the Settings row and
+     *   the tests that keep the two halves saying the same words.
+     * @param voicePrint the enrolled print's label, or "" when none is enrolled
+     *   - and with no print the PC refuses a spoken yes ([NO_PRINT]).
+     * @param phone whether a paired phone can receive a command.
      * @param why the PC's own sentence about the state, shown as it is.
      */
     data class Read(
         val available: Boolean,
         val enabled: Boolean,
         val card: Card? = null,
+        val windowSec: Int = WINDOW_SEC,
+        val vocabulary: Vocabulary? = null,
+        val voicePrint: String = "",
+        val phone: Phone = Phone(),
         val why: String? = null,
     )
 
     /**
-     * What `POST /api/handsfree/enabled` answered.
+     * What `POST /api/handsfree {"enabled": bool}` answered (section 186.3).
      *
-     * @param waiting true for the contract's 202: a card has been raised and
-     *   the mode is NOT on yet. Nothing may say "on" while this is true.
-     * @param cardId the card's id, when the PC named one.
-     * @param why the PC's own sentence, when it gave one.
+     * There is no 202 and no waiting state: the PC decides its own enable card
+     * inside the request, and answers 200 once the mode is on (or already on),
+     * 403 when that card was refused, 409 when its settings file cannot be
+     * written, 503 when the gate itself cannot run.
+     *
+     * @param on the PC's own `enabled` after the request, or null when the body
+     *   carried none. The caller reads the state back rather than assuming.
+     * @param changed true when this request is what changed the setting; false
+     *   when it was already in the asked-for state.
+     * @param message the PC's own sentence about what happened.
+     * @param error the PC's own sentence when it refused.
      */
     data class Enabled(
-        val waiting: Boolean,
-        val cardId: String? = null,
-        val why: String? = null,
+        val on: Boolean? = null,
+        val changed: Boolean? = null,
+        val message: String? = null,
+        val error: String? = null,
     ) {
         companion object {
             /**
-             * The answer, from the HTTP status and body - the one place the
-             * contract's 202/200 split is turned into words.
-             *
-             * A `waiting` card is never reported as on: the owner has not
-             * approved anything yet, and the PC said so.
+             * The answer, from the body. The status is not needed to read it:
+             * a 200 carries `enabled`/`message`, a 403/409/503 carries `error`,
+             * and [com.jarvis.client.net.JarvisApi.setHandsfree] has already
+             * turned a 401 or a 404 into a failure before this is called.
              */
-            fun of(status: Int, body: JsonObject?): Enabled {
-                val why = body?.let { plain(it) }
-                val cardId = body?.let { string(it, "card_id", "cardId", "id") }
-                return Enabled(waiting = status == 202, cardId = cardId, why = why)
+            fun of(body: JsonObject?): Enabled {
+                if (body == null) return Enabled()
+                return Enabled(
+                    on = bool(body, "enabled", "on"),
+                    changed = bool(body, "changed"),
+                    message = string(body, "message"),
+                    error = string(body, "error"),
+                )
             }
         }
     }
@@ -336,6 +433,7 @@ object Handsfree {
     sealed interface Arrival {
         data class CardArrived(val card: Card) : Arrival
         data class CommandArrived(val command: Command) : Arrival
+        data class ResultArrived(val result: PhoneResult) : Arrival
     }
 
     /**
@@ -352,18 +450,7 @@ object Handsfree {
     fun arrival(kind: String, data: JsonElement?): Arrival? {
         val obj = data as? JsonObject ?: return null
         return when (kind) {
-            EVENT_CARD -> {
-                val id = string(obj, "card_id", "cardId", "id") ?: return null
-                if (id.isBlank()) return null
-                Arrival.CardArrived(
-                    Card(
-                        cardId = id,
-                        action = string(obj, "action").orEmpty(),
-                        say = string(obj, "say", "text").orEmpty(),
-                        expiresInSec = int(obj, "expires_in_sec", "expiresInSec") ?: 0,
-                    ),
-                )
-            }
+            EVENT_CARD -> cardOf(obj)?.let { Arrival.CardArrived(it) }
             EVENT_COMMAND -> {
                 val id = string(obj, "id", "command_id", "commandId") ?: return null
                 if (id.isBlank()) return null
@@ -376,6 +463,19 @@ object Handsfree {
                     ),
                 )
             }
+            EVENT_RESULT -> {
+                val id = string(obj, "id", "command_id", "commandId") ?: return null
+                if (id.isBlank()) return null
+                Arrival.ResultArrived(
+                    PhoneResult(
+                        id = id,
+                        ok = bool(obj, "ok") ?: false,
+                        say = string(obj, "say").orEmpty(),
+                        receipt = string(obj, "receipt").orEmpty(),
+                        why = string(obj, "why").orEmpty(),
+                    ),
+                )
+            }
             else -> null
         }
     }
@@ -383,31 +483,62 @@ object Handsfree {
     /** `GET /api/handsfree`'s body, or the honest "nothing said" read. */
     fun readOf(body: JsonObject?): Read {
         if (body == null) return Read(available = false, enabled = false)
-        val available = bool(body, "available") ?: true
-        val enabled = bool(body, "enabled", "on") ?: false
-        val card = (body["card"] as? JsonObject)?.let { arrival(EVENT_CARD, it) }
-            as? Arrival.CardArrived
-        val inline = arrival(EVENT_CARD, body) as? Arrival.CardArrived
+        // `reading` is the contract's key. The two older spellings stay as a
+        // lenient fallback for a PC built before it: a nested `card` object,
+        // and a card flattened into the read itself.
+        val reading = (body["reading"] as? JsonObject)?.let { cardOf(it) }
+        val nested = (body["card"] as? JsonObject)?.let { cardOf(it) }
+        val inline = if (reading == null && nested == null) cardOf(body) else null
+        val vocabulary = (body["vocabulary"] as? JsonObject)?.let { v ->
+            Vocabulary(confirm = strings(v, "confirm"), deny = strings(v, "deny"))
+        }
+        val phone = body["phone"] as? JsonObject
         return Read(
-            available = available,
-            enabled = enabled,
-            card = card?.card ?: inline?.card,
-            why = plain(body),
+            available = bool(body, "available") ?: true,
+            enabled = bool(body, "enabled", "on") ?: false,
+            card = reading ?: nested ?: inline,
+            windowSec = (int(body, "window_sec", "windowSec") ?: WINDOW_SEC)
+                .coerceIn(1, WINDOW_SEC),
+            vocabulary = vocabulary,
+            voicePrint = string(body, "voice_print", "voicePrint").orEmpty(),
+            phone = Phone(
+                ready = phone?.let { bool(it, "ready") } ?: true,
+                why = phone?.let { string(it, "why") }.orEmpty(),
+            ),
+            // Only a key that IS the PC's own sentence about the state. Not
+            // [plain]: the contract's `detail` there is the whole Settings
+            // paragraph, and drawing it under the switch would be a wall of
+            // text on a row that shows one line.
+            why = string(body, "why", "note"),
         )
     }
 
-    /** `POST /api/handsfree/answer`'s body, read leniently; null when it is not an object. */
+    /**
+     * The answer window for one card, in seconds: the card's own
+     * `expires_in_sec` when the PC sent one, else [fallback] (the read's
+     * `window_sec`, section 186.2), else the contract's [WINDOW_SEC]. Never
+     * shorter than a second and never longer than the minute the contract
+     * allows - `expires_in_sec` is the ANSWER window, not the card's own
+     * deadline, and the phone listens for exactly what the PC offered.
+     */
+    fun windowSec(card: Card, fallback: Int = WINDOW_SEC): Int {
+        val asked = if (card.expiresInSec > 0) card.expiresInSec else fallback
+        return asked.coerceIn(1, WINDOW_SEC)
+    }
+
+    /** `POST /api/handsfree/answer`'s body, read leniently; null is a refusal with no words. */
     fun answerOf(body: JsonObject?): Answer {
         if (body == null) return Answer(ok = false)
         return Answer(
-            // `ok` absent is NOT a refusal: a PC that answers with the four
-            // contract fields and no `ok` still heard something. Only an
-            // explicit false refuses.
+            // `ok` absent is NOT a refusal: a PC that answers with the contract
+            // fields and no `ok` still heard something. Only an explicit false
+            // refuses (and `again` arrives as ok:false, which [answerWords]
+            // reads as a question rather than a refusal).
             ok = bool(body, "ok") ?: true,
             heard = string(body, "heard"),
             decision = string(body, "decision"),
             cardState = string(body, "card_state", "cardState", "state"),
-            why = plain(body),
+            say = plain(body),
         )
     }
 
@@ -420,13 +551,16 @@ object Handsfree {
      * The answer upload: `{"card_id", "data_b64", "sample_rate"}`.
      *
      * [wav] is the 16 kHz mono clip [com.jarvis.client.handsfree.HandsfreeClip]
-     * built. It is base64 in JSON because the contract says so, and the clip is
-     * the owner's voice: nothing here logs it, and no caller may.
+     * built, and `sample_rate` is [SAMPLE_RATE] because that is the rate the
+     * WAV's own header carries: the contract refuses a clip whose header and
+     * `sample_rate` disagree, so there is deliberately no way to pass another
+     * number here. It is base64 in JSON because the contract says so, and the
+     * clip is the owner's voice: nothing here logs it, and no caller may.
      */
-    fun answerBody(cardId: String, wav: ByteArray, rate: Int = SAMPLE_RATE): String {
+    fun answerBody(cardId: String, wav: ByteArray): String {
         val b64 = com.jarvis.client.handsfree.HandsfreeClip.base64(wav)
         return "{\"card_id\":${quote(cardId)},\"data_b64\":${quote(b64)}," +
-            "\"sample_rate\":${rate.coerceIn(8_000, 48_000)}}"
+            "\"sample_rate\":$SAMPLE_RATE}"
     }
 
     /** `{"id", "ok", "receipt", "why"}` - what happened to a [Command]. */
@@ -442,9 +576,13 @@ object Handsfree {
     /** ...and for a no. */
     val DENY = setOf("denied", "deny", "no", "declined", "decline", "refused", "refuse")
 
+    /** The PC's "I did not catch a clear yes or no - ask once more" decision. */
+    const val AGAIN = "again"
+
     /**
      * Decisions that mean "the clip was heard and was not the owner's" - the
-     * PC's voice check did not pass, so nothing was approved.
+     * PC's voice check did not pass, so nothing was approved. A fallback only:
+     * a contract-shaped PC sends its own `say` for this.
      */
     val NOT_OUR_VOICE = setOf(
         "not_you", "not-you", "not_owner", "not-owner", "other_voice", "other-voice",
@@ -452,46 +590,47 @@ object Handsfree {
     )
 
     /**
-     * Card states that make [CARD_GONE] the true sentence: the answer arrived
-     * after the card had been decided elsewhere or had timed out.
+     * Card states that make [CARD_GONE] the true sentence when the PC sent no
+     * `say`: the answer arrived after the card had been decided elsewhere or
+     * had timed out.
      */
-    val GONE = setOf("expired", "answered", "decided", "gone", "missing", "not_waiting")
+    val GONE = setOf("expired", "answered", "decided", "gone", "missing")
 
     /**
-     * What the owner is shown after an answer, in plain words - one of four
-     * sentences, never a raw decision token.
+     * What the owner is shown after an answer, in plain words - and it is the
+     * PC's own sentence whenever the PC sent one, because `say` is the contract
+     * field written FOR the owner (section 186.5).
      *
-     * The order of the branches is the whole of the rule and is written down
-     * here rather than discovered from the tests:
+     * The order of the fallback branches is the whole of the rule and is
+     * written down here rather than discovered from the tests:
      *
-     *  1. the PC said `ok: false` - its own sentence if it gave one ([why],
-     *     which also reads a `refusal`/`reason`/`detail` field when the PC
-     *     sends one), then a voice check that did not pass ([NOT_YOUR_VOICE] -
-     *     checked HERE, inside the refusal, because `{"ok":false,
-     *     "decision":"not_you"}` used to short-circuit to "the card had
-     *     expired"), then [CARD_GONE] only when the card's own state says it is
-     *     gone, and otherwise [REFUSED];
-     *  2. the PC named a voice check that did not pass - [NOT_YOUR_VOICE];
-     *  3. a yes or a no - "Heard: \"...\" - approved/denied";
-     *  4. no words at all - [NOTHING_HEARD], with no claim about the card;
-     *  5. words but no decision - [NOT_YOUR_VOICE], because something was heard
+     *  1. the PC's `say`, in its own words ([Answer.say]) - a decision, a
+     *     refusal, or the question it asks when an answer was unclear;
+     *  2. `decision: "again"` with no `say` - [ASK_AGAIN], and the card is
+     *     still waiting, so this is never reported as a refusal;
+     *  3. `ok: false` with no `say` - a voice check that did not pass
+     *     ([NOT_YOUR_VOICE]), then [CARD_GONE] only when the card's own state
+     *     says it is gone, and otherwise [REFUSED];
+     *  4. a yes or a no - "Heard: \"...\" - approved/denied";
+     *  5. no words at all - [NOTHING_HEARD], with no claim about the card;
+     *  6. words but no decision - [NOT_YOUR_VOICE], because something was heard
      *     and nothing was approved, which is exactly what the owner must know.
      */
     fun answerWords(a: Answer): String {
+        val sentence = a.say?.trim().orEmpty()
+        if (sentence.isNotEmpty()) return sentence
         val decision = a.decision?.trim()?.lowercase().orEmpty()
+        if (decision == AGAIN) return ASK_AGAIN
+        val heard = a.heard?.trim().orEmpty()
+        val stated = a.cardState?.trim()?.lowercase().orEmpty()
         if (!a.ok) {
-            val why = a.why?.trim().orEmpty()
-            if (why.isNotEmpty()) return why
             if (decision in NOT_OUR_VOICE) return NOT_YOUR_VOICE
-            // The refusal sentence is the PC's to give and the contract has no
-            // field for it, so "the card had expired" may only be said when the
-            // card's own state says so. Anything else is the general refusal -
-            // never a guess about expiry.
-            val state = a.cardState?.trim()?.lowercase().orEmpty()
-            return if (state in GONE) CARD_GONE else REFUSED
+            // "The card had expired" may only be said when the card's own
+            // state says so. Anything else is the general refusal - never a
+            // guess about expiry.
+            return if (stated in GONE) CARD_GONE else REFUSED
         }
         if (decision in NOT_OUR_VOICE) return NOT_YOUR_VOICE
-        val heard = a.heard?.trim().orEmpty()
         val said = if (heard.isEmpty()) "yes" else heard
         if (decision in APPROVE) return "Heard: \"$said\" - approved."
         if (decision in DENY) return "Heard: \"$said\" - denied."
@@ -570,6 +709,17 @@ object Handsfree {
     /** A JSON string literal, the same encoding `JarvisApi.quote` uses. */
     private fun quote(s: String): String = JarvisJson.encodeToString(String.serializer(), s)
 
+    private fun cardOf(o: JsonObject): Card? {
+        val id = string(o, "card_id", "cardId", "id") ?: return null
+        if (id.isBlank()) return null
+        return Card(
+            cardId = id,
+            action = string(o, "action").orEmpty(),
+            say = string(o, "say", "text").orEmpty(),
+            expiresInSec = int(o, "expires_in_sec", "expiresInSec") ?: 0,
+        )
+    }
+
     private fun string(o: JsonObject, vararg names: String): String? = names
         .firstNotNullOfOrNull { n ->
             (o[n] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
@@ -582,17 +732,18 @@ object Handsfree {
     private fun int(o: JsonObject, vararg names: String): Int? = names
         .firstNotNullOfOrNull { n -> (o[n] as? JsonPrimitive)?.intOrNull }
 
+    /** A JSON array of strings, or an empty list - never a parse failure. */
+    private fun strings(o: JsonObject, name: String): List<String> =
+        (o[name] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
+
     /**
      * The PC's own sentence, when it wrote one.
      *
-     * READ LENIENTLY ON PURPOSE. The frozen contract's answer body has no
-     * field for a refusal SENTENCE, so a PC that refuses in words may put them
-     * anywhere: the keys below are every name this project already uses for
-     * "why", plus `refusal` for an answer. Reading them all is how a PC's own
-     * sentence reaches the owner instead of this app inventing one - and when
-     * none is present, [answerWords] says the general refusal rather than
-     * blaming the card's expiry.
+     * `say` is the frozen contract's field and comes first. The rest are the
+     * names this project already uses for "why", kept so a PC built before the
+     * contract still reaches the owner in its own words rather than this app's
+     * - and so a refusal whose body is `error` only is not paraphrased.
      */
     private fun plain(o: JsonObject): String? =
-        string(o, "why", "refusal", "detail", "reason", "message", "note")
+        string(o, "say", "why", "refusal", "detail", "reason", "message", "note", "error")
 }

@@ -127,7 +127,10 @@ class HandsfreeNoticeTest {
         )
         assertNotEquals(HandsfreeNotice.LOCKED, words)
         assertTrue("the PC's own sentence is shown", words.body.contains("Priya"))
-        assertTrue("and the time it has left", words.title.contains("90s left"))
+        // The number is the ANSWER WINDOW, not the card's own deadline
+        // (JARVIS-API section 186.4): it says "to answer", never "left".
+        assertTrue("and how long it has to answer", words.body.contains("90s to answer"))
+        assertFalse("the title claims the card expires", words.title.contains("left"))
         assertTrue("and the action's plain words", words.title.isNotBlank())
     }
 

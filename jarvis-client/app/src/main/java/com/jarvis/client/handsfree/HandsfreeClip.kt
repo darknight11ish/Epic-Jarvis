@@ -9,12 +9,18 @@ import java.util.Base64
  *
  * WHY IT IS NOT [`Recorder`][com.jarvis.client.audio.Recorder]. The recorder
  * captures ONE complete utterance and stops on its own terms (a pause, a
- * button, a cap). The hands-free window is a different shape: it is open for a
- * fixed [windowSeconds] whether or not anything is said, it is CLOSED BY THE
- * CLOCK rather than by a pause - a mumbled "confirm" must not keep the
- * microphone open - and whatever it holds when the clock runs out is the clip
- * that goes, or nothing if nothing was heard. It is also started and stopped
- * from a service rather than from a press.
+ * button, a cap). The hands-free window is a different shape: it is open for
+ * the CARD's answer window - the PC's minute, or the card's own shorter
+ * countdown - whether or not anything is said, and it is CLOSED BY THE CLOCK
+ * rather than by a pause - a mumbled "confirm" must not keep the microphone
+ * open - and whatever it holds when the clock runs out is the clip that goes,
+ * or nothing if nothing was heard. It is also started and stopped from a
+ * service rather than from a press.
+ *
+ * THE CAP IS THE PC's, NOT THIS APP'S. docs/JARVIS-API.md section 186.5 refuses
+ * a clip longer than 30 seconds rather than truncating it, so however long the
+ * answer window is, at most [MAX_WINDOW_SECONDS] of audio is ever collected:
+ * a longer clip would be a refusal for a reason the owner did nothing wrong in.
  *
  * WHAT `Wav` STILL DOES: the encoding and the resampling, unchanged. This class
  * only collects. That matters for the tests here: a wrong header or an
@@ -31,12 +37,15 @@ import java.util.Base64
  *   phone because [Recorder][com.jarvis.client.audio.Recorder] asks for it
  *   first, but a device that refuses 16 kHz gives another rate and the
  *   resampler is what makes the upload 16 kHz anyway.
+ * @param windowSeconds how much of the answer to keep at most. The service
+ *   passes the card's answer window; anything over the PC's 30-second refusal
+ *   line is clamped, never uploaded.
  */
 class HandsfreeClip(
     private val rate: Int = Wav.SAMPLE_RATE,
-    private val windowSeconds: Float = DEFAULT_WINDOW_SECONDS,
+    private val windowSeconds: Float = MAX_WINDOW_SECONDS,
 ) {
-    private val maxSamples: Int = (windowSeconds.coerceIn(1f, 30f) * rate).toInt()
+    private val maxSamples: Int = (windowSeconds.coerceIn(1f, MAX_WINDOW_SECONDS) * rate).toInt()
     private var samples: ShortArray = ShortArray(minOf(maxSamples, rate).coerceAtLeast(1_600))
     private var count = 0
 
@@ -92,11 +101,13 @@ class HandsfreeClip(
 
     companion object {
         /**
-         * Ten seconds: long enough to hear the card finish, think, and say
-         * "yes, do it" - the owner's own example - and short enough that the
-         * microphone is not left open while he walks away.
+         * The longest clip the PC will take, in seconds: docs/JARVIS-API.md
+         * section 186.5's `MAX_SECONDS`. A longer one is refused, never
+         * truncated, so the collector stops here whatever the answer window is.
+         * `HandsfreeClipTest` pins it to [com.jarvis.client.net.Handsfree.MAX_CLIP_SEC],
+         * so the two copies of the PC's number cannot drift.
          */
-        const val DEFAULT_WINDOW_SECONDS = 10f
+        const val MAX_WINDOW_SECONDS = 30f
 
         /** Below this, nothing is sent (see [wav]). */
         const val MIN_SECONDS = 0.2f

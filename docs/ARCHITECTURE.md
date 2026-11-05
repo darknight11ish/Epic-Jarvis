@@ -2761,19 +2761,22 @@ backend routes, in both directions; the rest are listed here only.
   against the owner's voice print and decides - the phone cannot, because a
   client never does speech-to-text (CLAUDE.md), and because "is this the
   owner?" must be answered where the print lives. The phone reads the card out
-  through its own speaker, records the ten-second answer window, and sends the
-  text message, because a Windows PC has no phone's speaker, no microphone in
-  a pocket and no SMS service. So the four routes
-  (`GET /api/handsfree`, `POST /api/handsfree/enabled`,
-  `POST /api/handsfree/answer`, `POST /api/phone/result`) are classified
+  through its own speaker, records the PC's own ANSWER window (a minute at most,
+  or the card's shorter countdown, with the clip capped at the PC's 30 seconds),
+  and sends the text message, because a Windows PC has no phone's speaker, no
+  microphone in a pocket and no SMS service. So the four routes
+  (`GET /api/handsfree` and `POST /api/handsfree` - ONE path for the read and
+  the switch, as the frozen contract has it - `POST /api/handsfree/answer`,
+  `POST /api/phone/result`) are classified
   `phone-only` in `tools/check_parity.py` for as long as the desktop does not
   call them; the desktop's own half of the same frozen contract (its own
-  setting, its own read of the mode) is another lane's, and the day it calls
-  the first two of those routes the checker's rule 6 fails by name and the two
-  move to `ported`, which is the right change then. **This phone half lands
-  AHEAD of its PC half, and says so plainly.** None of those four routes exists
+  setting, its own read of the mode) is another lane's, and the day it calls the
+  first of those routes the checker's rule 6 fails by name and it
+  moves to `ported`, which is the right change then. **This phone half lands
+  AHEAD of its PC half, and says so plainly.** None of those routes exists
   in `main` yet: no module serves one, no `handsfree_card` or `phone_command` is
-  ever sent, and `docs/JARVIS-API.md` documents none of them - that record
+  ever sent, and `main`'s `docs/JARVIS-API.md` documents none of them - that
+  record
   describes what exists, and a route written into it before its code would be
   the one kind of fiction this project keeps out of that file. So the feature is
   INERT until the PC half lands: every surface shows the contract's own 404
@@ -2781,9 +2784,10 @@ backend routes, in both directions; the rest are listed here only.
   opened, and nothing claims a mode that cannot be on. The phone was built
   against the FROZEN contract, whose four shapes are written down in
   `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
-  request will own the `JARVIS-API.md` section for them. Nothing else about the
+  request owns `JARVIS-API.md` section 186 for them. Nothing else about the
   feature is one-sided: a card raised for something the owner asked is answered
-  on the SAME card either way, `handsfree_card` and `phone_command` ride the
+  on the SAME card either way, `handsfree_card`, `phone_command` and
+  `phone_result` ride the
   one existing event stream, and the spoken audio is the existing
   `POST /api/voice/say` - no second speech path exists for this feature.
 - **Recording a phone call happens on the PHONE alone, and that is one-sided on
