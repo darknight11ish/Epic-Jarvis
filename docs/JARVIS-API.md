@@ -2457,7 +2457,7 @@ shows the waiting line and does not follow the id yet (ARCHITECTURE §8).
 
 | Route | Body | Answers | What it does |
 |---|---|---|---|
-| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
+| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run, and (2026-11-05) the pooled both-cards coding lane on port 11450 too: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
 
 The mode clients show still comes from `/api/status` and the `power` event.
 Desktop: tray → Change power mode (`commands::set_power_mode`). Phone: Brain
@@ -2486,6 +2486,21 @@ link and let going quieter through.
   machine's Ollama - the chat path's two checks (ARCHITECTURE §4). If
   Jarvis is back on standby when the load finishes, the model is unloaded
   again.
+- **The chosen Coding lane comes back too (2026-11-05).** Standby also stops
+  the pooled both-cards coding lane on port 11450 (`jarvis_model_lanes.sleep`,
+  added 2026-11-04), and until 2026-11-05 nothing started it again: a
+  still-chosen Coding preset pointed at a stopped port until the owner
+  re-applied it. Waking now starts that lane again in the background through
+  `start_pooled_lane(by="waking from standby")`, and `message` says it is
+  happening. Only Active; only when standby's own `stopped` flag says it
+  really stopped the lane (one that was already down is never auto-loaded);
+  only when the preset in the choice file is the pooled one. **No new card is
+  raised**: the owner already chose the preset, its `switch_model` card was
+  answered when it was applied, and standby is what stopped the lane. The two
+  single-card lane models are not restored by the wake - the pooled start
+  pauses what it needs, exactly as a preset apply does. If Jarvis goes back
+  to standby while the lane is still loading, the lane is stopped again, so
+  standby's promise (the cards are free) still holds.
 - **The answer comes when the mode has changed.** Freeing the cards can
   take seconds; an answer that waited for it past `wait_s` (1.5 s) used to
   be the 202 "Waiting for your approval" with no card up. Now, once the
