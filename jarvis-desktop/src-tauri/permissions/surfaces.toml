@@ -968,18 +968,24 @@ permissions = [
   # The skills menu's one command (2026-11-02, JARVIS-API section 178): read
   # the list, pick a folder or a .zip, scan it, install it behind ONE card,
   # scan the Hermes folder read-only, turn a skill off at once or back on
-  # behind one card, and edit a SKILL.md behind the same card. The PC decides
-  # every one of them; this window only passes the answer on. Nothing is
-  # downloaded, nothing inside a skill is ever run, and nothing installs
-  # before a person answers.
+  # behind one card, edit a SKILL.md behind the same card, and delete ONE skill
+  # that is already turned off (2026-11-05: the copy in skills-off\ that
+  # `brain_remove_skill` cannot see - see the note below). The PC decides every
+  # one of them; this window only passes the answer on. Nothing is downloaded,
+  # nothing inside a skill is ever run, and nothing installs before a person
+  # answers.
   "allow-skills-menu",
-  # The Skills card's Remove, and the reason it is THIS command: removing a
-  # skill already exists as `brain_remove_skill` (POST /api/skills/decide with
-  # {"remove": true}, the "are you sure?" before it, and the Brain's own list).
-  # Granting the same command here means one removal path rather than a second
-  # one that could drift from it - the Settings card and the Brain ask the PC
-  # the same question and get the same answer. It removes one skill, at once,
-  # with no card, exactly as it always has; nothing else is reachable with it.
+  # The Skills card's Remove on an INSTALLED skill, and the reason it is THIS
+  # command: removing an installed skill already exists as `brain_remove_skill`
+  # (POST /api/skills/decide with {"remove": true}, the "are you sure?" before
+  # it, and the Brain's own list). Granting the same command here means one
+  # removal path for an installed skill rather than a second one that could
+  # drift from it - the Settings card and the Brain ask the PC the same
+  # question and get the same answer. It removes one skill, at once, with no
+  # card, exactly as it always has; nothing else is reachable with it. A skill
+  # that is already turned OFF is not reachable with it at all (the PC resolves
+  # an uninstall name only under the skills folder), which is why that one runs
+  # through `allow-skills-menu`'s own state route instead.
   "allow-brain-remove-skill",
 ]
 
