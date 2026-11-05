@@ -33937,7 +33937,7 @@ the wording belongs to the module's own lane.
 The decision is `decisions.d/2026-11-04-capability-talk.md`.
 
 
-## 188. The product check: one tool, one route, and why there is no score
+## 192. The product check: one tool, one route, and why there is no score
 
 **Status: wired on 2026-11-04, OFF by default, Amazon only.** The owner's
 choice that day was *"Wire the existing product check into Jarvis"*. The
@@ -33959,7 +33959,7 @@ tool at all, and the route answers `503` with the module's own sentence.
 Turning it on is one hand edit; there is no in-app switch and no card for the
 switch (the same shape as `[price_radar]`).
 
-### 188.1 The model tool: `product_check`
+### 192.1 The model tool: `product_check`
 
 | | |
 |---|---|
@@ -34041,7 +34041,7 @@ AI-written reviews from real ones, so a number or a label would be false
 precision. The report is counts, examples, reasons and a small named-rule
 verdict; `backend/test_product_check_wiring.py` pins the absence structurally.
 
-### 188.2 The route: `POST /api/product/check`
+### 192.2 The route: `POST /api/product/check`
 
 | | |
 |---|---|

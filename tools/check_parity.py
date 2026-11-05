@@ -1167,7 +1167,7 @@ BACKEND_ONLY = {
     # before the body is read - this is the one route that must NOT go on both
     # apps, and the report screen it feeds is the named follow-up lane. The
     # chat tool is the door that works today, on the PC.
-    "/api/product/check": "The product check's report endpoint (JARVIS-API section 188; jarvis_product_check.py, installed by plugins/ready/product-check). POST one Amazon product address -> ONE PC-only approval card -> the engine's reasons report. It reads the page in the owner's own signed-in browser window on THIS PC, so it is refused from any other device (403 pc_only) by design, not ported: ARCHITECTURE section 8's one-sided table records why. No app screen calls it yet - the report is delivered in the chat answer today, and the desktop/phone report screen is the named follow-up - so when one lands it is DESKTOP-ONLY and must NOT be treated as a parity miss.",
+    "/api/product/check": "The product check's report endpoint (JARVIS-API section 192; jarvis_product_check.py, installed by plugins/ready/product-check). POST one Amazon product address -> ONE PC-only approval card -> the engine's reasons report. It reads the page in the owner's own signed-in browser window on THIS PC, so it is refused from any other device (403 pc_only) by design, not ported: ARCHITECTURE section 8's one-sided table records why. No app screen calls it yet - the report is delivered in the chat answer today, and the desktop/phone report screen is the named follow-up - so when one lands it is DESKTOP-ONLY and must NOT be treated as a parity miss.",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)
