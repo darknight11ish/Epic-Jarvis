@@ -855,6 +855,25 @@
               replaces what is there now. Press Approve again to confirm.</span>
           </div>
 
+          <!-- ── Hidden bytes in the card's own text (2026-11-06) ─────────
+               The PC scans the text this card shows and sends `hidden_bytes`:
+               zero-width characters, bidirectional controls and other control
+               bytes, each with its own label ("[hidden byte: U+202E]"), plus
+               `[whitespace padding: 20 spaces]` for a long run of spaces. A
+               warning pill only - what the card SAYS is never changed, because
+               the reader has to see the exact request. Empty and hidden on a
+               clean card, which is almost every card. -->
+          <div class="approval-warnings" id="approval-warnings" hidden></div>
+
+          <!-- ── What this card costs (2026-11-06) ────────────────────────
+               Drawn only on a card that can spend money (the standing cloud
+               switch, a cloud-graded quiz, a monthly limit raise). One line:
+               one answer's estimate, then the running monthly cloud ledger
+               against the cap the owner set. When the ledger or the price
+               cannot be read the PC sends the reason instead of a number, and
+               this line shows the reason - never an invented figure. -->
+          <div class="approval-cost" id="approval-cost" hidden></div>
+
           <div class="approval-preview markdown" id="approval-preview"></div>
 
           <!-- The picture of a filled-in web form, only on a "submit this
@@ -886,7 +905,7 @@
               type="text"
               spellcheck="true"
               autocomplete="off"
-              placeholder="Add something before deciding…"
+              placeholder="Add a note, or say what to do instead before denying…"
             />
             <button
               class="icon-button"

@@ -358,7 +358,27 @@ fun ApprovalCard(
     val deny: () -> Unit = {
         decided = true
         haptics.performHapticFeedback(HapticFeedbackType.Reject)
-        onDeny { decided = false }
+        // "No, and tell Jarvis what to do instead" (2026-11-06, the owner's
+        // ruling, Hermes borrow #1). A DENY with text in the note field sends
+        // that text FIRST, through the note route this card already uses
+        // (POST /api/pending/<id>/amend via `onAmend`), so the turn waiting on
+        // this card reads it WITH the denial (jarvis_task_control.take_amend ->
+        // the tool result's `owner_note`) and the next attempt can change
+        // course without the owner retyping the request. The denial itself is
+        // unchanged: one card, no standing permission, and an empty note sends
+        // exactly what it always did. A note that fails to send never blocks
+        // the denial - refusing is the safe direction.
+        val redirect = amendText.trim()
+        if (redirect.isEmpty()) {
+            onDeny { decided = false }
+        } else {
+            scope.launch {
+                runCatching { onAmend(redirect) }
+                amendText = ""
+                showAmend = false
+                onDeny { decided = false }
+            }
+        }
     }
 
     // Review ruling 8.2 (2026-10-20): a state-REPLACING card takes TWO presses
@@ -534,6 +554,38 @@ fun ApprovalCard(
         }
         Spacer(Modifier.height(6.dp))
         ReachBadge(item)
+
+        // HIDDEN BYTES (2026-11-06, the owner's ruling, Hermes borrow #1). One
+        // warning pill per entry the PC found in this card's own text: a
+        // zero-width character, a bidi control, another control byte, or a
+        // long run of padding. The text below is drawn UNCHANGED - a bad
+        // character is reported, never deleted, so the owner still sees the
+        // exact request. `hiddenBytesMore` is what the PC's cap left out.
+        if (item.hiddenBytes.isNotEmpty() || item.hiddenBytesMore > 0) {
+            Spacer(Modifier.height(8.dp))
+            for (hidden in item.hiddenBytes) {
+                Pill(hidden.label, color = chrome.badInk)
+                Spacer(Modifier.height(4.dp))
+            }
+            if (item.hiddenBytesMore > 0) {
+                Pill("and ${item.hiddenBytesMore} more", color = chrome.badInk)
+            }
+        }
+
+        // WHAT THIS CARD COSTS (2026-11-06, the owner's ruling, Hermes borrow
+        // #7). One quiet line, on a card that can spend money only:
+        //   Est. $0.003 · Monthly cloud ledger: $1.14 / $10.00
+        // The numbers are the PC's own. When it could not read the ledger or
+        // the price it sends the reason, and this shows the reason - never an
+        // invented figure on a spending decision.
+        item.cost?.let { cost ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = cost.line,
+                style = MaterialTheme.typography.labelMedium,
+                color = chrome.textMid,
+            )
+        }
 
         // Review ruling 8.2: the cards that REPLACE what is already there say
         // so in plain words before anything else on the card. Never colour
@@ -765,7 +817,7 @@ fun ApprovalCard(
         if (canDecide) {
             Spacer(Modifier.height(4.dp))
             Quiet(
-                text = if (showAmend) "Hide note" else "Add a note before deciding",
+                text = if (showAmend) "Hide note" else "Add a note, or say what to do instead before denying",
                 modifier = Modifier.offset(x = (-10).dp),
                 onClick = { showAmend = !showAmend },
             )

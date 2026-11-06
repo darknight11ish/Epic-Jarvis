@@ -266,6 +266,38 @@ export function normaliseApproval(row) {
           countToday: Number(raised.count_today || 1),
         }
       : null,
+    // Hidden bytes and padding in the card's own text (jarvis_gate.pending()'s
+    // `hidden_bytes`, 2026-11-06). A deterministic list of {codepoint,
+    // position, label, kind, count}; clean text is []. The card ITSELF is not
+    // changed - a bad character is reported, never deleted, so the owner still
+    // sees exactly what was asked.
+    hiddenBytes: Array.isArray(row.hidden_bytes)
+      ? row.hidden_bytes
+          .filter((h) => h && typeof h === "object")
+          .map((h) => ({
+            codepoint: String(h.codepoint || ""),
+            position: Number(h.position || 0),
+            label: String(h.label || ""),
+            kind: String(h.kind || ""),
+            count: Number(h.count || 1),
+          }))
+          .filter((h) => h.label)
+      : [],
+    hiddenBytesMore: Number(row.hidden_bytes_more || 0) || 0,
+    // What this card costs, on a card that can spend money (`cost`, a card
+    // payload field from 2026-11-06). Either the three numbers, or {why} when
+    // the ledger/price could not be read - never a number nobody measured.
+    cost: row.cost && typeof row.cost === "object"
+      ? (Number.isFinite(Number(row.cost.estimate_usd))
+          && Number.isFinite(Number(row.cost.monthly_usd))
+          && Number.isFinite(Number(row.cost.cap_usd))
+          ? {
+              estimate: Number(row.cost.estimate_usd),
+              monthly: Number(row.cost.monthly_usd),
+              cap: Number(row.cost.cap_usd),
+            }
+          : { why: String(row.cost.why || "") })
+      : null,
   };
 }
 

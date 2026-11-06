@@ -272,7 +272,21 @@ function readTools(t) {
     labels: Object.fromEntries(Object.entries(labels).map(([k, v]) => [k, text(v)])),
     why: text(n.why),
   } : null;
-  return { canEnable: t.can_enable === true, items, groups, vault, extra, notSwitchable };
+  // Q7 (2026-11-06): the tools this build offers that the owner's own
+  // [tools].enabled does not name, with the pill's own words. A PC older than
+  // this sends no `new_off`, so the page simply has none. Read-only: the pill
+  // is a signpost, and turning one on is still its own card.
+  const no = t.new_off && typeof t.new_off === "object" ? t.new_off : null;
+  const newOff = no ? {
+    label: text(no.label) || "New — currently off",
+    why: text(no.why),
+    items: Array.isArray(no.items)
+      ? no.items.filter((i) => i && typeof i === "object")
+        .map((i) => ({ id: text(i.id), title: text(i.title) }))
+      : [],
+  } : null;
+  return { canEnable: t.can_enable === true, items, groups, vault, extra, notSwitchable,
+    newOff };
 }
 
 /**

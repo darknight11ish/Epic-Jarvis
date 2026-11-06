@@ -844,6 +844,262 @@ def notice_for(item: dict) -> dict:
     }
 
 
+# --------------------------------------------------------------------------
+#   What a card shows: hidden bytes, and what it costs
+# --------------------------------------------------------------------------
+#
+# Two fields added to every row `pending()` serves, for the 2026-11-06 ruling
+# (PR 2, Hermes borrows #1 and #7). Both are built HERE, in the one function
+# that turns a database row into the row both apps draw, for the same reason
+# `notice` is: the desktop and the phone cannot then word the same warning two
+# different ways, and there is one place to audit how much of the payload a
+# client is told.
+#
+# HIDDEN BYTES. A card's text can quote a name from a file, an email, a web
+# page or a `.zip` - text the owner did not write. Unicode's zero-width and
+# bidirectional controls are invisible on screen and can make a sentence read
+# one way while a search or a model reads another (the "Trojan Source" class:
+# `U+202E` reverses the run after it). The detector below is DETERMINISTIC: it
+# names the code point and where it is, and it never rewrites the card. What
+# the card SAYS is unchanged - a bad character is reported, not deleted, so the
+# owner can still see the exact request. The apps draw one warning pill.
+HIDDEN_RANGES = (
+    # (first, last, kind) - the ranges Unicode says a plain sentence has no use
+    # for. Zero-width: a character with no width at all (a word-joiner is the
+    # only one people write on purpose, and not in a command or a filename).
+    (0x200B, 0x200F, "zero-width"),
+    # Bidirectional controls: these reorder what is around them. The classic
+    # attack is `U+202E` (right-to-left override) hiding a file's real suffix.
+    (0x202A, 0x202E, "bidi"),
+    (0x2066, 0x2069, "bidi"),
+)
+#: A run of at least this many plain spaces is padding: no sentence needs 20,
+#: and a run that long is how a `ls`-style listing is made to hide one entry.
+PADDING_MIN = 20
+#: At most this many entries go on one card. A hostile line can hold thousands;
+#: the count of the rest travels as `hidden_bytes_more`, so nothing is hidden
+#: by the cap - it is counted.
+MAX_HIDDEN_ROWS = 12
+#: What each kind is called in the pill. "hidden byte" is the owner's own
+#: phrase (the 2026-11-06 ruling); padding gets its own, plainer one.
+HIDDEN_LABEL = "hidden byte"
+
+
+def _hidden_kind(cp: int) -> str:
+    """The kind of hidden character `cp` is ("" for an ordinary one)."""
+    for first, last, kind in HIDDEN_RANGES:
+        if first <= cp <= last:
+            return kind
+    # C0 and C1 controls, except the three whitespace controls a real file can
+    # carry: a card's text with a literal NUL, BEL or ESC in it is not text a
+    # person wrote, and an ESC can start a terminal escape sequence.
+    if cp in (0x09, 0x0A, 0x0D):
+        return ""
+    if cp < 0x20 or 0x7F <= cp <= 0x9F:
+        return "control"
+    return ""
+
+
+def hidden_bytes(text: Any) -> list:
+    """Every hidden byte and every padding run in `text`, in order.
+
+    Each entry is `{"codepoint", "position", "label", "kind", "count"}`:
+      codepoint  "U+202E" ("" for a padding run, which has no code point)
+      position   the index of the FIRST character of the run, in `text`
+      label      exactly what the pill says: "[hidden byte: U+202E]" or
+                 "[whitespace padding: 20 spaces]"
+      kind       "zero-width" | "bidi" | "control" | "padding"
+      count      how many characters the run is (1 for a lone one)
+
+    A clean sentence returns []. An em dash, a curly quote and a newline are
+    ordinary text and are never reported. Pure: it reads its argument only.
+    """
+    s = str(text or "")
+    out: list = []
+    i, n = 0, len(s)
+    while i < n:
+        cp = ord(s[i])
+        kind = _hidden_kind(cp)
+        if kind:
+            j = i + 1
+            while j < n and _hidden_kind(ord(s[j])) == kind:
+                j += 1
+            out.append({"codepoint": f"U+{cp:04X}", "position": i,
+                        "label": f"[{HIDDEN_LABEL}: U+{cp:04X}]",
+                        "kind": kind, "count": j - i})
+            i = j
+            continue
+        if s[i] == " ":
+            j = i + 1
+            while j < n and s[j] == " ":
+                j += 1
+            run = j - i
+            if run >= PADDING_MIN:
+                out.append({"codepoint": "", "position": i,
+                            "label": f"[whitespace padding: {run} spaces]",
+                            "kind": "padding", "count": run})
+            i = j
+            continue
+        i += 1
+    return out
+
+
+def _detail_dict(value: Any) -> dict:
+    """A row's `detail` as a dict. It is stored as JSON text; anything else is
+    an empty dict rather than an exception on the read path."""
+    if isinstance(value, dict):
+        return value
+    try:
+        got = json.loads(value or "{}")
+    except (TypeError, ValueError):
+        return {}
+    return got if isinstance(got, dict) else {}
+
+
+def card_text(detail: Any, prompt: Any) -> str:
+    """The text a card SHOWS: `detail.text` when the raiser put one there -
+    the same choice the desktop's `apprDescribe` makes - else the `prompt`."""
+    text = _detail_dict(detail).get("text")
+    if isinstance(text, str) and text.strip():
+        return text
+    return str(prompt or "")
+
+
+def pending_text(request_id: str) -> str:
+    """The text the waiting card `request_id` shows, or "".
+
+    Read-only and raised by nothing: it is here so a deny that carries a note
+    can tell "the owner typed something of their own" from "the note is just
+    the card echoed back", which must never be stored as if it were words the
+    owner wrote.
+    """
+    _init()
+    with closing(_connect()) as c:
+        row = c.execute("SELECT detail,prompt FROM approvals WHERE id=? AND"
+                        " state='pending'", (str(request_id or "")[:64],)).fetchone()
+    if row is None:
+        return ""
+    return card_text(row["detail"], row["prompt"])
+
+
+#: The gate actions whose card can spend money on a paid cloud service, so its
+#: payload carries what it costs. `change_own_config` is deliberately NOT here:
+#: it is every settings card in the program, and one of them (the standing
+#: cloud-escalation switch) spends money while the rest do not. A raiser that
+#: knows its card can spend marks it, with `detail["costs_money"] = "cloud"`
+#: (jarvis_presets.cloud_escalate), and this reads that mark.
+CLOUD_MONEY_ACTIONS = frozenset({"raise_a_limit", "quiz_cloud_grade"})
+COSTS_MONEY_KEY = "costs_money"
+#: What one cloud answer is assumed to be when this month's own ledger has no
+#: measured average yet. NOT a guess at a price: the price comes from the model
+#: price table (jarvis_chatbot_api.DEFAULT_PRICES, or the owner's correction).
+#: 2048 is what the repo has actually measured a cloud answer spending - the
+#: 2026-10-14 field test ran four escalated turns and every one came back
+#: `finish_reason: "length"` having spent 2048 of 2048 completion tokens
+#: (jarvis_chatbot_api.py:707-731, and $0.0099 for the four). So this is the
+#: measured answer length of the one lane that has been measured, priced by the
+#: table - never a headline number invented here.
+TYPICAL_ANSWER_TOKENS = 2048
+
+
+def _money_rows(action: str, detail: dict) -> bool:
+    """True only for a card that can spend money on a paid cloud service."""
+    if str(detail.get(COSTS_MONEY_KEY) or "").strip().lower() == "cloud":
+        return True
+    return str(action or "") in CLOUD_MONEY_ACTIONS
+
+
+def cloud_cost(action: str, detail: Any) -> Optional[dict]:
+    """{"estimate_usd", "monthly_usd", "cap_usd"} for a card that can spend
+    money, or {"why": <plain words>} when the honest answer is "cannot say".
+
+    The three numbers are all real, and all read from where they already live:
+      monthly_usd  this month's own count from the money file the limit is
+                   enforced against (jarvis_chatbot_api.spent_of)
+      cap_usd      the monthly limit the owner set for that service
+      estimate_usd one answer, from this month's OWN average (spent / requests)
+                   when there is one - a measurement - and otherwise the model
+                   price table applied to TYPICAL_ANSWER_TOKENS, which the
+                   comment above says where it comes from.
+    None for every card that cannot spend money, so an ordinary card never
+    carries a field it has no use for. Never raises: a card whose money file is
+    unreadable still reaches the owner, saying why the line is missing. That is
+    the fail-honest direction - an estimate from a ledger nobody can read would
+    be a made-up number on a spending decision.
+    """
+    d = _detail_dict(detail)
+    if not _money_rows(action, d):
+        return None
+    try:
+        import jarvis_chatbot_api as api
+    except Exception:
+        return {"why": "the cloud price list is not beside this file, so the cost "
+                        "of this card cannot be worked out"}
+    # Which service. The card that raises a cloud money card names it in its
+    # own detail (`service`); a card that does not is asking about the cloud
+    # service this PC has chosen.
+    pid = ""
+    try:
+        short = str(d.get("service") or "").strip().lower()
+        pid = (api.BY_SHORT.get(short) or "") if short else ""
+        if not pid:
+            chosen = str(d.get("pid") or "").strip()
+            if chosen in api.PRESETS:
+                pid = chosen
+            else:
+                import jarvis_presets
+                named = str(jarvis_presets.cloud_chosen() or "").strip()
+                pid = (named if named in api.PRESETS
+                       else api.BY_SHORT.get(named.lower(), ""))
+    except Exception:
+        pid = ""
+    if not pid:
+        return {"why": "no cloud service has been chosen on this PC, so there is no "
+                        "price or ledger to show"}
+    try:
+        data = api._load()
+    except Exception as exc:
+        # _load() raises MoneyFileError with a plain sentence of its own; the
+        # class name is what is safe to add here (never a path with a name in
+        # it, never the words in the file).
+        return {"why": f"the record of API spending cannot be read "
+                        f"({type(exc).__name__}), so no cost is shown. No API "
+                        f"chatbot is used until it is fixed"}
+    try:
+        p = api.PRESETS[pid]
+        spent = float(api.spent_of(pid, data) or 0.0)
+        limit = api.limit_of(pid, data)
+        model = ""
+        try:
+            model = str(api.model_for(pid)[0] or "")
+        except Exception:
+            model = str(getattr(p, "model", "") or "")
+        if limit is None:
+            return {"why": f"No monthly money limit is set for {p.company}, so Jarvis "
+                            f"will not use {p.name}: there is no cap to show a "
+                            f"ledger against"}
+        row = ((data.get("months") or {}).get(api.month_key()) or {}).get(pid) or {}
+        requests = 0
+        try:
+            requests = int(row.get("requests") or 0)
+        except (TypeError, ValueError):
+            requests = 0
+        if requests > 0 and spent > 0:
+            estimate = spent / requests
+        else:
+            estimate = api.cost_of(pid, model, 0, TYPICAL_ANSWER_TOKENS, data)
+            if estimate is None:
+                return {"why": (f"Jarvis has no price for the model \"{model}\" on "
+                                f"{p.company}, so one answer cannot be priced. Set it "
+                                f"on the PC and this line appears")}
+        return {"estimate_usd": round(float(estimate), 6),
+                "monthly_usd": round(spent, 4),
+                "cap_usd": round(float(limit), 2)}
+    except Exception:
+        return {"why": "the cloud price list and ledger could not be read together, "
+                        "so no cost is shown"}
+
+
 # Strictness order. A prompt that matches several patterns is judged by the
 # strongest one, never the weakest.
 _RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}
@@ -2487,6 +2743,20 @@ def pending() -> list[dict]:
                                          - time.time()))
         except (TypeError, ValueError):
             pass
+        # Hidden bytes and padding in the text this card SHOWS (2026-11-06,
+        # ruling PR 2, Hermes borrow #1). Deterministic, over the card's own
+        # text only - what the card says is NOT changed. Clean text gives [].
+        # `hidden_bytes_more` is the number the cap left out, so a hostile line
+        # with thousands is counted rather than quietly truncated.
+        _rows = hidden_bytes(card_text(d.get("detail"), d.get("prompt")))
+        d["hidden_bytes"] = _rows[:MAX_HIDDEN_ROWS]
+        if len(_rows) > MAX_HIDDEN_ROWS:
+            d["hidden_bytes_more"] = len(_rows) - MAX_HIDDEN_ROWS
+        # What this card costs, on a card that can spend money (2026-11-06,
+        # ruling PR 2, Hermes borrow #7). Absent for every other card.
+        _cost = cloud_cost(d.get("action", ""), d.get("detail"))
+        if _cost is not None:
+            d["cost"] = _cost
         # Why this is being asked about at all, when the table said otherwise.
         # A card shows this instead of a coloured dot: the reason is the thing
         # that changes the decision.

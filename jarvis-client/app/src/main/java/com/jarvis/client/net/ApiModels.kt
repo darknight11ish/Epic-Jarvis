@@ -468,6 +468,63 @@ object PcOnlyActions {
     )
 }
 
+/**
+ * One hidden character, or one run of padding, in an approval card's own text
+ * (2026-11-06, the owner's ruling, Hermes borrow #1).
+ *
+ * The PC's `jarvis_gate.pending()` scans the text the card shows and sends a
+ * list of these: zero-width characters (`U+200B..U+200F`), bidirectional
+ * controls (`U+202A..U+202E`, `U+2066..U+2069`), other control bytes, and a run
+ * of 20 or more spaces. [label] is the PC's own words for the pill
+ * ("[hidden byte: U+202E]", "[whitespace padding: 20 spaces]"), so both apps
+ * say the same thing. It is a WARNING: the card's text is drawn unchanged,
+ * because the owner has to see the exact request.
+ */
+@Serializable
+data class HiddenByte(
+    val codepoint: String = "",
+    val position: Int = 0,
+    val label: String = "",
+    val kind: String = "",
+    val count: Int = 1,
+)
+
+/**
+ * What a card that can spend money costs (2026-11-06, the owner's ruling,
+ * Hermes borrow #7).
+ *
+ * All three numbers come from the PC's own money file and model price table.
+ * When either cannot be read the PC sends [why] instead of a figure, and the
+ * card shows the reason - never a number nobody measured.
+ */
+@Serializable
+data class CardCost(
+    @SerialName("estimate_usd") val estimateUsd: Double? = null,
+    @SerialName("monthly_usd") val monthlyUsd: Double? = null,
+    @SerialName("cap_usd") val capUsd: Double? = null,
+    val why: String = "",
+) {
+    /** True when the PC sent all three real numbers. */
+    val measured: Boolean
+        get() = estimateUsd != null && monthlyUsd != null && capUsd != null
+
+    /**
+     * The one line the card draws, in the ruling's own shape:
+     * `Est. $0.003 · Monthly cloud ledger: $1.14 / $10.00`
+     * Locale.US on purpose: this is money, and a comma decimal separator would
+     * read as a different number against the PC's own words.
+     */
+    val line: String
+        get() = if (measured) {
+            "Est. \$" + "%.3f".format(java.util.Locale.US, estimateUsd) +
+                " · Monthly cloud ledger: \$" +
+                "%.2f".format(java.util.Locale.US, monthlyUsd) +
+                " / \$" + "%.2f".format(java.util.Locale.US, capUsd)
+        } else {
+            "No cost shown: " + why.ifBlank { "the ledger could not be read" }
+        }
+}
+
 @Serializable
 data class PendingItem(
     val id: String,
@@ -535,6 +592,19 @@ data class PendingItem(
      */
     @SerialName("replaces") val replaces: Boolean = false,
     val task: String? = null,
+    /**
+     * Hidden characters and padding in this card's own text, from the PC's
+     * `hidden_bytes` (2026-11-06, Hermes borrow #1). Empty on a clean card,
+     * which is almost every card; [hiddenBytesMore] is the count the PC's cap
+     * left out.
+     */
+    @SerialName("hidden_bytes") val hiddenBytes: List<HiddenByte> = emptyList(),
+    @SerialName("hidden_bytes_more") val hiddenBytesMore: Int = 0,
+    /**
+     * What this card costs, on a card that can spend money (2026-11-06, Hermes
+     * borrow #7). Null on every other card.
+     */
+    val cost: CardCost? = null,
 ) {
     /**
      * The text under the card's title. A tag-suggestion card carries a chat's

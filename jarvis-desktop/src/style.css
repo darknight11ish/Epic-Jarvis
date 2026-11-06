@@ -2368,6 +2368,58 @@ html[data-state="approval"] .pulse {
   letter-spacing: 0.02em;
 }
 
+/* Hidden bytes and padding in the card's own text (2026-11-06, the owner's
+   ruling, Hermes borrow #1). A warning PILL, never a rewrite: the card's words
+   are drawn unchanged, because the reader has to see the exact request. The
+   label is the PC's own string, so a screen reader hears
+   "[hidden byte: U+202E]" rather than "some invisible character". */
+.approval-warnings {
+  margin: 0 14px 8px 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.approval-warning {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 9px;
+  border: 1px solid rgb(var(--bad-rgb) / 0.4);
+  border-radius: 999px;
+  background: rgb(var(--bad-rgb) / 0.08);
+  color: var(--bad);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.approval-warning-detail {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+/* What this card costs (2026-11-06, Hermes borrow #7). One quiet line: an
+   estimate for one answer, then the running monthly cloud ledger against the
+   cap the owner set. Never a colour of its own - it is information, not a
+   warning - and hidden entirely on a card that cannot spend money. */
+.approval-cost {
+  margin: 0 14px 8px 16px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-card);
+  background: rgb(255 255 255 / 0.03);
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.approval-cost-unknown {
+  color: var(--text-faint);
+}
+
+
 .raised-quote {
   margin: 0;
   padding: 0 0 0 8px;

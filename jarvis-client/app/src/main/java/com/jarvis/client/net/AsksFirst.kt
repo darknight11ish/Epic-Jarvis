@@ -186,6 +186,14 @@ object AsksFirst {
     /** The tools that have no switch of their own (their own switch decides them). */
     data class ToolsNotSwitchable(val labels: List<Pair<String, String>>, val why: String)
 
+    /**
+     * The tools this build offers that the owner's own `[tools].enabled` does
+     * not name yet (2026-11-06, the owner's ruling Q7). One subtle
+     * "New — currently off" pill at the top of the tools card; the phone can
+     * only read it, because turning one on is a PC-only card.
+     */
+    data class NewOff(val label: String, val why: String, val titles: List<String>)
+
     data class Tools(
         val label: String,
         val detail: String,
@@ -193,6 +201,7 @@ object AsksFirst {
         val groups: List<ToolGroup>,
         val vault: VaultSwitch?,
         val notSwitchable: ToolsNotSwitchable?,
+        val newOff: NewOff? = null,
     )
 
     /** One tool's state in words - the phone shows it, never changes it. */
@@ -341,6 +350,19 @@ object AsksFirst {
             } ?: emptyList()
             ToolsNotSwitchable(labels = labels, why = it.text("why") ?: "")
         }
+        // "New — currently off" (2026-11-06, Q7). Absent from an older PC, and
+        // then the card simply draws no pill.
+        val newOff = (o["new_off"] as? JsonObject)?.let { n ->
+            val titles = (n["items"] as? JsonArray)?.mapNotNull { el ->
+                val item = el as? JsonObject ?: return@mapNotNull null
+                item.text("title") ?: item.text("id")
+            } ?: emptyList()
+            NewOff(
+                label = n.text("label") ?: "New — currently off",
+                why = n.text("why") ?: "",
+                titles = titles,
+            )
+        }
         return Tools(
             label = label,
             detail = o.text("detail") ?: "",
@@ -348,6 +370,7 @@ object AsksFirst {
             groups = groups.ifEmpty { listOf(ToolGroup("", items)) },
             vault = vault,
             notSwitchable = notSwitchable,
+            newOff = newOff,
         )
     }
 
