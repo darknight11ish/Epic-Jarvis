@@ -4571,13 +4571,18 @@ def t_release_markers_carry_the_version_and_the_beside_files():
         check("release: ... and creates no beside-file",
               not (live / "requirements.lock").exists()
               and not (live / "quiz_grader_cases.json").exists())
-        # The runbook's own formula: to add + to update + the DISTINCT files among
-        # the inserts. The release copies must stay outside it.
+        # The runbook's formula: to add + to update + the DISTINCT files among
+        # the inserts + the release markers (each differing beside file plus the
+        # VERSION when it differs) - `wrote N` covers all of them since 2026-11-06.
+        # Here VERSION differs (0.2.421 -> 9.9.9) and BOTH beside files are
+        # missing, so the release term is 3.
         def summ(label):
             found = re.search(rf"^  {re.escape(label)}: (\d+)$", text, re.M)
             return int(found.group(1)) if found else 0
+        expected_release = 3
         expected_wrote = (summ("to add") + summ("to update")
-                          + len(set(re.findall(r"^ {6}\S.*? -> (\S+) \(", text, re.M))))
+                          + len(set(re.findall(r"^ {6}\S.*? -> (\S+) \(", text, re.M)))
+                          + expected_release)
 
         lines2 = []
         code2 = run_fixture(repo, live, apply=True, out_lines=lines2,
@@ -4600,9 +4605,13 @@ def t_release_markers_carry_the_version_and_the_beside_files():
               and "BESIDE: wrote quiz_grader_cases.json" in text2,
               release_report(text2))
         wrote = re.search(r"wrote (\d+) file\(s\)", text2)
-        check("release: `wrote N` stays the runbook formula, so it is still true",
+        check("release: `wrote N` is add + update + insert + beside + version",
               wrote is not None and int(wrote.group(1)) == expected_wrote,
               (wrote.group(1) if wrote else None, expected_wrote))
+        check("release: ... and the report says how many were release markers",
+              "wrote %d file(s) (3 of them release markers: VERSION, "
+              "requirements.lock, quiz_grader_cases.json)" % expected_wrote in text2,
+              (text2[-4:], expected_wrote))
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -4690,6 +4699,90 @@ def t_a_missing_installed_desktop_is_skipped_not_guessed():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
+    """Q1.1 (owner ruling 2026-11-06 11:35 PT): the formula counts them.
+
+    One beside file differs and the VERSION differs -> the release term is 2, and
+    `PLANNED CHANGES` and `wrote N` must both include it. The arithmetic is pinned
+    from the run's OWN printed bucket counts, never from a hard-coded plan size."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        write(live / "VERSION", "0.2.421")            # differs -> counts
+        lock = write(live / "requirements.lock", "")  # same bytes as the ref -> does NOT count
+        lock.write_bytes(fake_show(repo, "origin/main", "requirements.lock"))
+        # quiz_grader_cases.json is absent -> differs -> counts.
+        expected_release = 2
+
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("formula: the dry run succeeds", code == 0, (code, lines[-5:]))
+        check("formula: the release header states the count in the formula",
+              "RELEASE MARKERS (2 in the formula: VERSION and beside-files):" in text,
+              release_report(text))
+        check("formula: ... and its lines name exactly the two writes",
+              "VERSION: would write 9.9.9 (now 0.2.421)" in text
+              and "BESIDE: would write quiz_grader_cases.json" in text
+              and "BESIDE: unchanged requirements.lock" in text,
+              release_report(text))
+        planned = re.search(
+            r"^PLANNED CHANGES: (\d+) file-level change\(s\) = add (\d+) \+ "
+            r"update (\d+) \+ insert (\d+) \+ beside\+version (\d+) \+ "
+            r"pycache (\d+)",
+            text, re.M)
+        check("formula: PLANNED CHANGES prints its own buckets", planned is not None,
+              [l for l in lines if l.startswith("PLANNED CHANGES")])
+        if planned:
+            total, add_n, upd_n, ins_n, rel_n, pyc_n = (int(g) for g in planned.groups())
+            check("formula: ... with beside+version = 2 (one beside file + VERSION)",
+                  rel_n == expected_release, rel_n)
+            check("formula: ... and the total is add + update + insert + "
+                  "beside+version + pycache",
+                  total == add_n + upd_n + ins_n + rel_n + pyc_n,
+                  (total, add_n, upd_n, ins_n, rel_n, pyc_n))
+
+        lines2 = []
+        code2 = run_fixture(repo, live, apply=True, out_lines=lines2,
+                            desktop_exe=exe, version_reader=reader)
+        text2 = "\n".join(lines2)
+        check("formula: the apply succeeds", code2 == 0, (code2, lines2[-8:]))
+
+        def summ(label):
+            found = re.search(rf"^  {re.escape(label)}: (\d+)$", text2, re.M)
+            return int(found.group(1)) if found else 0
+        distinct_inserts = len(set(re.findall(
+            r"^ {6}\S.*? -> (\S+) \(", text2, re.M)))
+        wrote = re.search(r"wrote (\d+) file\(s\)", text2)
+        wrote_n = int(wrote.group(1)) if wrote else -1
+        check("formula: wrote N is add + update + distinct insert files + "
+              "beside + version",
+              wrote_n == (summ("to add") + summ("to update") + distinct_inserts
+                          + expected_release),
+              (wrote_n, summ("to add"), summ("to update"), distinct_inserts,
+               expected_release))
+        check("formula: ... and the report names the release markers it counted",
+              wrote_n > 0 and ("wrote %d file(s) (2 of them release markers: "
+                               "VERSION, quiz_grader_cases.json)" % wrote_n) in text2,
+              (text2[-4:], wrote_n))
+
+        lines3 = []
+        code3 = run_fixture(repo, live, apply=True, out_lines=lines3,
+                            desktop_exe=exe, version_reader=reader)
+        text3 = "\n".join(lines3)
+        check("formula: a second apply is idempotent", code3 == 0, (code3, lines3[-8:]))
+        check("formula: ... it plans 0 release markers, because nothing differs",
+              "RELEASE MARKERS (0 in the formula: VERSION and beside-files):" in text3,
+              release_report(text3))
+        check("formula: ... and says no file changed",
+              "no file changed (already current)" in text3, text3[-4:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def t_release_markers_leave_unchanged_files_alone():
     root = tmpdir()
     try:
@@ -4730,6 +4823,7 @@ def t_release_markers_leave_unchanged_files_alone():
 
 def main():
     for fn in (t_release_markers_carry_the_version_and_the_beside_files,
+               t_release_marker_writes_are_in_the_planned_and_wrote_counts,
                t_release_markers_never_touch_the_owners_toml_or_the_excluded_files,
                t_a_missing_installed_desktop_is_skipped_not_guessed,
                t_release_markers_leave_unchanged_files_alone,

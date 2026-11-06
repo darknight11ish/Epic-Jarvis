@@ -117,10 +117,15 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
         `FileVersion` (read-only, overridable with `JARVIS_DESKTOP_EXE`), NEVER
         this repository's root `VERSION` (that one says 0.2.0 and is not the
         release). A missing exe is reported as `VERSION: skipped (no installed
-        desktop)` and guessed at nowhere. These copies are deliberately kept OUT
-        of the `wrote N` count and out of `PLANNED CHANGES`, so the runbook's
-        formula (to add + to update + the distinct files among the inserts) stays
-        true; their own lines carry what changed. A dry run prints
+        desktop)` and guessed at nowhere. These copies ARE counted: `PLANNED
+        CHANGES` and `wrote N` both include every release-marker write the run
+        performs - each beside file whose bytes differ, plus the VERSION when it
+        differs from the installed desktop's FileVersion, and 0 when they are all
+        unchanged - so the runbook's formula is
+        `add + update + insert + beside + version` (plus the stale `.pyc`
+        purges). Their own `VERSION:` / `BESIDE:` lines say what changed, and the
+        `RELEASE MARKERS (N in the formula: ...)` header states N. A second run
+        on an already-current folder plans none of them. A dry run prints
         `VERSION: would write ...` / `BESIDE: would write ...` and writes nothing.
 
     3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
@@ -2889,6 +2894,17 @@ def release_lines(actions: Iterable[ReleaseAction], *, done: bool = False) -> li
     return lines
 
 
+def release_write_count(actions: Iterable[ReleaseAction]) -> int:
+    """How many release-marker files this run would write, for the formula.
+
+    One per beside file whose bytes differ from the ref's, plus the VERSION when
+    it differs from the installed desktop's FileVersion - and 0 when they are all
+    unchanged. These are the `beside + version` terms of the runbook's
+    `add + update + insert + beside + version` count: a skipped VERSION (no
+    installed desktop) writes nothing and counts 0, never 1."""
+    return sum(1 for action in actions if action.status == "write")
+
+
 def apply_release_files(actions: Iterable[ReleaseAction], live: Path,
                         backup: Backup, *, write: bool = True) -> list:
     """Write the planned release markers, backing up every overwritten byte."""
@@ -3024,20 +3040,22 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
             out(f"  {line}")
 
     # 2b. Plan the release markers (the shared VERSION and the non-$SHIPPED
-    #     beside-files). Reported apart from `wrote N` and PLANNED CHANGES so the
-    #     runbook's formula (to add + to update + the distinct files among the
-    #     inserts) stays true. The dry run says "would write" and writes nothing;
-    #     an apply reports after the writes.
+    #     beside-files). Their writes ARE part of the run's formula - `PLANNED
+    #     CHANGES` and `wrote N` both count them (`add + update + insert + beside
+    #     + version`, plus the pycache purge) - because a "2 file(s) changed" run
+    #     that also fixed the version banner is not 2 changes. The dry run says
+    #     "would write" and writes nothing; an apply reports after the writes.
     try:
         plan.release = plan_release_files(repo, ref, live, desktop_exe=desktop_exe,
                                           version_reader=version_reader, show=show)
     except Refused as exc:
         out(f"REFUSED: {exc}")
         return 2
-    release_writes = [a for a in plan.release if a.status == "write"]
+    release_count = release_write_count(plan.release)
     if not apply:
         out("")
-        out("RELEASE MARKERS (VERSION and beside-files; NOT counted in `wrote N`):")
+        out(f"RELEASE MARKERS ({release_count} in the formula: VERSION and "
+            f"beside-files):")
         for line in release_lines(plan.release):
             out(line)
 
@@ -3066,9 +3084,12 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     else:
         out("READY PLUG-INS: skipped (--skip-plugins)")
 
-    changes = len(adds) + len(updates) + len(inserts) + len(plan.pycache)
+    changes = (len(adds) + len(updates) + len(inserts) + release_count
+               + len(plan.pycache))
     out("")
-    out(f"PLANNED CHANGES: {changes} file-level change(s)"
+    out(f"PLANNED CHANGES: {changes} file-level change(s) = "
+        f"add {len(adds)} + update {len(updates)} + insert {len(inserts)} + "
+        f"beside+version {release_count} + pycache {len(plan.pycache)}"
         + ("" if apply else " - DRY RUN, nothing written"))
     if not apply:
         out("Probes are not run in a dry run; use --apply after reviewing this plan.")
@@ -3077,7 +3098,7 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     # 5. Write: shipped bytes, then the staged HUD files. The backup folder and
     # its journal are created and PRINTED before the first live write, so a
     # failure half-way through always has a named recovery point.
-    has_writes = bool(adds or updates or inserts or plan.pycache or release_writes
+    has_writes = bool(adds or updates or inserts or plan.pycache or release_count
                       or (not skip_plugins and plan.plugins_missing))
     backup = Backup(live, stamp=stamp)
     written = []
@@ -3091,6 +3112,7 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         written += apply_shipped(plan.shipped, live, backup, write=True)
         written += apply_deltas(staged, live, backup, write=True)
         released = apply_release_files(plan.release, live, backup, write=True)
+        written += released
     except OSError as exc:
         out(f"FAIL  writing the backend: {exc}")
         if has_writes:
@@ -3104,7 +3126,8 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
 
     # 6. Purge stale bytecode (backed up first when this is a real apply).
     out("")
-    out("RELEASE MARKERS (VERSION and beside-files; NOT counted in `wrote N`):")
+    out(f"RELEASE MARKERS ({release_count} in the formula: VERSION and "
+        f"beside-files):")
     for line in release_lines(plan.release, done=True):
         out(line)
     purged = purge_pycache(live, backup if has_writes else None)
@@ -3155,7 +3178,8 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
                 out(f"        wrote {len(written)} file(s); full write, partial deploy "
                     f"verification")
             if released:
-                out(f"        release markers: {len(released)} written (not in `wrote N`)")
+                out(f"        release markers: {len(released)} written (included in "
+                    f"`wrote N`)")
             out("        Restart Jarvis, re-check, or run --rollback <the backup folder> "
                 "to put the files back.")
         else:
@@ -3164,10 +3188,10 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         return 1
     out("RESULT: PASS - backend reconciled; restart Jarvis and read the start-up banner.")
     if written:
-        out(f"        wrote {len(written)} file(s); backup in {backup.root}")
-    elif released:
-        out("        no backend file changed (already current); the release markers "
-            "above were written")
+        out(f"        wrote {len(written)} file(s)"
+            + (f" ({len(released)} of them release markers: {', '.join(released)})"
+               if released else "")
+            + f"; backup in {backup.root}")
     else:
         out("        no file changed (already current)")
     return 0
