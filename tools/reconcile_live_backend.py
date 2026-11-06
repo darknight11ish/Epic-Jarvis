@@ -105,6 +105,22 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        review ruling 8.2's guard change does it for `jarvis_gate.py` in four
        entries, because `gate-touches.patch` is already in the live patch list and
        its new hunks would otherwise be reported ALREADY_PRESENT and never deploy).
+       The 2026-11-06 approval-card work (PR 2) is the same class again, and this
+       one was a SILENT miss rather than a refusal: its four pieces landed in the
+       published base files and in no patch of their own, so without a literal
+       entry the owner's live HUD would simply never get them - the deploy would
+       print "already present" for every patch and finish looking clean. They are
+       four literal entries: the `/api/deny` owner-note hand-off (two regions of
+       `jarvis_hud.py`, OLD -> NEW pairs) and the card's hidden-byte/cost fields
+       (the module-level detectors inserted in front of the `# Strictness order`
+       comment, and the two fields `pending()` attaches, inserted in front of its
+       own `out.append(d)` - the position the PR's final revision puts them in,
+       BELOW the `raised` block, because three later stacked patches rewrite the
+       lines above it). The last core patch, `activity-turn-guard.patch` (PR #1198),
+       needs no anchor: it is carried by its own six hunks (`"hunks": True`) with
+       one probe each, at its stack position immediately before
+       `plugin-loader.patch`; four of those hunks read lines only the owner's own
+       `jarvis_hud.py` holds, so a single anchor insert cannot express it.
 
     2b. RELEASE MARKERS (VERSION and the backend's beside-files). The live backend
         reads two files beside itself without importing them - `requirements.lock`
@@ -652,6 +668,96 @@ PACKS_TAMPER_PROBES = (
 RECORD_CALL_FILE = "gate-record-call.txt"
 RECORD_CALL_ANCHOR = (
     '    # The instant stop, under its own action and tier line "auto": no card, and')
+
+#: PR 2 (2026-11-06, the owner's next-sprint approval-card work): four pieces
+#: landed in the PUBLISHED BASE files and in NO `.patch` of their own, so the
+#: deploy's stack walk cannot see them at all - every patch is reported already
+#: present and the run finishes clean while the owner's live HUD lacks the whole
+#: change. They are literal deltas, extracted from the real files before and after
+#: the merge (never retyped):
+#:
+#:   * `jarvis_hud.py`, the `/api/deny` route: a DENY may carry the owner's own
+#:     note saying what to do instead, and it is kept against THAT card before the
+#:     gate is told, so the waiting turn reads it with the answer; the reply body
+#:     gains `note_kept`/`note_why`. TWO disjoint regions, each an OLD -> NEW
+#:     replace pair.
+#:   * `jarvis_gate.py`, the card's extra fields: the hidden-byte/padding detector
+#:     and the cloud-cost helpers at module level (inserted in front of the
+#:     `# Strictness order` comment, where the base has them) and the
+#:     `hidden_bytes`/`cost` fields `pending()` attaches to every row (inserted in
+#:     front of its own `out.append(d)`). The position is the PR's FINAL one: the
+#:     block sits BELOW the `raised` block, because three later stacked patches
+#:     (no-expiry-cards, no-deadline-cards and show-card-timer) rewrite the lines
+#:     directly above it and each of their hunks ENDS on the "# Why this is being
+#:     asked" comment - a block inserted between that comment and the
+#:     `expires_in` lines breaks all three when their suites apply them with
+#:     `git apply`.
+#:
+#: Measured read-only on the owner's live folder, 2026-11-06: every old block
+#: appears EXACTLY ONCE in the live `jarvis_hud.py` / `jarvis_gate.py` and every
+#: post-image probe 0 times. The new block bytes are the published base's own
+#: text (PR 2's final revision), so an applied live file matches the base in
+#: these regions byte for byte; `backend/test_reconcile_live_backend.py` proves
+#: the four entries reproduce PR 2's base files from the pre-PR-2 base, and that
+#: a live file which already carries the cards plans nothing.
+HUD_DENY_NOTE_OLD_FILE = "hud-deny-note-old.txt"
+HUD_DENY_NOTE_NEW_FILE = "hud-deny-note-new.txt"
+HUD_DENY_REPLY_OLD_FILE = "hud-deny-reply-old.txt"
+HUD_DENY_REPLY_NEW_FILE = "hud-deny-reply-new.txt"
+GATE_CARD_HELPERS_FILE = "gate-card-helpers.txt"
+GATE_CARD_PENDING_FILE = "gate-card-pending.txt"
+#: The exact line the helpers go in front of: the base puts them after
+#: `notice_for` and before the strictness-order comment, and the owner's live gate
+#: holds that comment line exactly once.
+GATE_CARD_HELPERS_ANCHOR = (
+    "# Strictness order. A prompt that matches several patterns is judged by the")
+#: The line the two `pending()` fields go in front of: the live `pending()` ends
+#: with this one append (measured 2026-11-06: exactly once in the live gate).
+GATE_CARD_PENDING_ANCHOR = "        out.append(d)"
+DENY_NOTE_PROBES = (
+    'note_kept, note_why = False, ""',
+    'note, note_why = _tc.deny_note(',
+)
+DENY_REPLY_PROBES = (
+    '"note_kept": bool(note_kept),',
+    '"note_why": str(note_why or ""),',
+)
+CARD_HELPERS_PROBES = (
+    "def hidden_bytes(text: Any) -> list:",
+    "def cloud_cost(action: str, detail: Any) -> Optional[dict]:",
+    "PADDING_MIN = 20",
+)
+CARD_PENDING_PROBES = (
+    '_rows = hidden_bytes(card_text(d.get("detail"), d.get("prompt")))',
+    'd["hidden_bytes"] = _rows[:MAX_HIDDEN_ROWS]',
+    '_cost = cloud_cost(d.get("action", ""), d.get("detail"))',
+)
+
+#: activity-turn-guard.patch (2026-11-06, PR #1198) - the last core patch,
+#: immediately before `plugin-loader.patch` in `$PATCHES`. A finished chat turn
+#: could leave the event bus saying Jarvis is still "thinking": the answer path's
+#: own `finally` is never reached when a quick answer returns early or a raise
+#: happens while the lane is being chosen, so the benchmark refused with "Jarvis
+#: is answering" for over four hours until the backend was restarted. SIX hunks,
+#: all in `jarvis_hud.py`: the `_activity_*` helpers, the /api/status payload
+#: fields, the one `do_POST` wrapper every /api/chat request passes through, the
+#: local stream lambda, the cloud relay's chunk loop and the boot reset. FOUR of
+#: the hunks read lines only the owner's own file holds (no earlier patch writes
+#: them), so a single anchor insert cannot express it - `"hunks": True` replays
+#: the patch's own six hunks in file order. The probes are one post-image line
+#: from EACH hunk, so only a file carrying the whole patch counts as present and
+#: a partly applied file is finished hunk by hunk, never replaced twice; none of
+#: them exists in the patch's pre-image and none was in the owner's live HUD
+#: (measured read-only, 2026-11-06: all six pre-image blocks exactly once, all
+#: six probes 0 times).
+ACTIVITY_TURN_GUARD_PROBES = (
+    "def _activity_status() -> dict:",
+    '"activity": str(_activity_status().get("state") or ""),',
+    '"""Run one POST. A /api/chat turn cannot leave "thinking" behind.',
+    "_activity_touch(),",
+    "activity-turn-guard.patch (2026-11-06): bytes are",
+    "_ev.reset_activity()",
+)
 
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
@@ -1402,6 +1508,60 @@ DELTA_TABLE = {
         "jarvis_skills.py": {
             "probes": PACKS_TAMPER_PROBES,
             "hunks": True,
+        },
+    },
+    # activity-turn-guard.patch (2026-11-06, PR #1198): the last core patch,
+    # immediately before `plugin-loader.patch` in the stack. SIX hunks in
+    # DISJOINT regions of `jarvis_hud.py`, so `"hunks": True` carries the patch's
+    # own bytes in file order; see ACTIVITY_TURN_GUARD_PROBES above for the
+    # measurement and why no single anchor can express it.
+    "activity-turn-guard.patch": {
+        "jarvis_hud.py": {
+            "probes": ACTIVITY_TURN_GUARD_PROBES,
+            "hunks": True,
+        },
+    },
+    # ==========================================================================
+    # 2026-11-06, PR 2's approval-card work: FOUR LITERAL DELTAS for code that
+    # landed in the published base files and in NO `.patch`, so the stack walk
+    # can never carry it. Every OLD block is the owner's live text (measured
+    # exactly once) and every NEW block is the published base's own text, so an
+    # applied live file matches the base in these regions byte for byte. The
+    # probes are post-image lines only, so a second deploy is a no-op; a file
+    # holding only half a pair is finished region by region, never duplicated.
+    # See the block comment above HUD_DENY_NOTE_OLD_FILE for why these are here.
+    # ==========================================================================
+    # The /api/deny owner note: kept against the card before the gate is told,
+    # and the two reply fields that say whether it was kept.
+    "hud-deny-note.patch": {
+        "jarvis_hud.py": {
+            "probes": DENY_NOTE_PROBES,
+            "file": HUD_DENY_NOTE_NEW_FILE,
+            "replace_file": HUD_DENY_NOTE_OLD_FILE,
+        },
+    },
+    "hud-deny-note-reply.patch": {
+        "jarvis_hud.py": {
+            "probes": DENY_REPLY_PROBES,
+            "file": HUD_DENY_REPLY_NEW_FILE,
+            "replace_file": HUD_DENY_REPLY_OLD_FILE,
+        },
+    },
+    # The gate's card fields: the hidden-byte/padding and cloud-cost helpers, and
+    # the two fields `pending()` attaches (below the `raised` block - the PR's
+    # final position, so the three later stacked patches still apply).
+    "gate-card-fields-helpers.patch": {
+        "jarvis_gate.py": {
+            "probes": CARD_HELPERS_PROBES,
+            "anchor": GATE_CARD_HELPERS_ANCHOR,
+            "file": GATE_CARD_HELPERS_FILE,
+        },
+    },
+    "gate-card-fields-pending.patch": {
+        "jarvis_gate.py": {
+            "probes": CARD_PENDING_PROBES,
+            "anchor": GATE_CARD_PENDING_ANCHOR,
+            "file": GATE_CARD_PENDING_FILE,
         },
     },
 }

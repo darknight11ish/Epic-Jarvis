@@ -1,0 +1,6 @@
+                "id": rid,
+                "state": "approved" if route == "/api/approve" else "denied",
+                "error": None if ok else "already decided, expired, or unknown id",
+            })
+
+        if route != "/api/chat":

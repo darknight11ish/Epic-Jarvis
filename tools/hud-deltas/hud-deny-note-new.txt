@@ -1,0 +1,30 @@
+            rid = str(body.get("id") or "").strip()[:64]
+            if not rid:
+                return self._send(400, {"error": "no id"})
+            # 2026-11-06 (owner's ruling, next-sprint PR 2, Hermes borrow #1):
+            # a DENY may carry the owner's own note saying what to do instead.
+            # It is kept against THIS card before the gate is told, so the turn
+            # that is waiting on it reads the note WITH the answer through the
+            # mechanism that already exists - jarvis_task_control.amend() ->
+            # take_amend() -> the tool result's `owner_note` (jarvis_agent.py's
+            # card_note, "A note the owner attached to THIS card"). Nothing is
+            # approved, no standing permission is created, and a deny with no
+            # note is exactly what it always was. A note that is the card's own
+            # text, or that looks like a secret, is refused by deny_note() and
+            # the deny still goes through.
+            note_kept, note_why = False, ""
+            if route == "/api/deny" and body.get("note") not in (None, ""):
+                try:
+                    import jarvis_task_control as _tc
+                    waiting = {str(r.get("id")) for r in (jarvis_gate.pending() or [])}
+                    if rid in waiting:
+                        note, note_why = _tc.deny_note(
+                            body.get("note"), jarvis_gate.pending_text(rid))
+                        if note:
+                            _tc.amend(rid, note)
+                            note_kept = True
+                except Exception:
+                    note_kept, note_why = False, ""
+            try:
+                ok = jarvis_gate.decide(rid, route == "/api/approve",
+                                        by=str(body.get("by") or "hud")[:64])
