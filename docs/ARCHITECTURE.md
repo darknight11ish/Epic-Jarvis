@@ -4117,7 +4117,7 @@ are deliberate and recorded rather than left to be discovered:
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | The voice upgrades' bake-off (`backend/jarvis_bakeoff.py`, 2026-09-26) | Written with it. It is a program the owner runs on the PC, not an app screen: it measures the PC's own voice engines, the PC's graphics-card memory and the room through the PC's microphone. Its verdict decides a later change that reaches both apps (the phone's wake-word file, the engine name both apps show). |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
-| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 56 switches, the vault organizer and the four tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
+| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 60 switches, the vault organizer and the four tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
 | "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
 | A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
 | "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |
@@ -4818,6 +4818,7 @@ what is missing is only the Settings screen agreeing about who turned it off.
   the Live screen read neither key, and `tools/check_parity.py` has no route
   to decide here (both keys ride the route both apps already call). An older
   app of either kind simply ignores them, which the status shape allows.
+**The pack manager is chat-only on the PC, and the phone deliberately has no pack control** (2026-11-05; the owner's ask: *"add/remove plug-ins and skills from a wide variety of sources, with a full pre-install scan (safety, compatibility, effectiveness)"*; JARVIS-API §197; `backend/jarvis_packs.py`, `backend/test_packs.py`). What it adds today is one kind of pack - a **prompt-only skill** - from one of two local sources: a folder on this PC, or a `.zip` on this PC. The four doors are chat tools (`pack_list`, `pack_inspect`, `pack_install`, `pack_remove`), so **there is no route and therefore nothing for `tools/check_parity.py` to classify either way**. The desktop draws no pack screen in phase 1; the phone draws none and must not, because the install runs the scanner, writes the owner's skills folder and raises the ONE card on this PC, and because a phone may type a name it knows but **may not browse a catalogue** (the 2026-09-20 model rule, CLAUDE.md: "what is still off the phone is browsing"). A phone chat can still ask Jarvis to inspect a pack it names and can answer the same approval card - the card path is the ordinary one in both apps - so what is one-sided is the *screen*, not the permission. Two gaps are said here rather than hidden: phase 1 installs **no code packs** (a pack holding `.py`, `.pyc`, `.ps1`, `.bat`, `.cmd`, `.sh`, `.exe`, `.dll`, `.so`, `.pyd`, `.js`, `.ts`, `.wasm` or any binary is refused before any card, in one sentence naming the file; a folder holding a symlink or junction is refused too), and there is **no git or URL source** - a local folder and a local `.zip` only, so nothing in this feature opens a socket. Removing a pack needs its own `.zip`-less ledger: `jarvis-packs.json` in the config folder records every file the install wrote with that file's sha256, and `pack_remove` deletes exactly those files and nothing else. **An installed pack is immutable, and there is no update command** (the owner's Q3 ruling of 2026-11-05): every load re-hashes the whole manifest and a pack that no longer matches is refused and marked `tampered`; replacement is a full new scan plus a unified diff against the installed files on one NEW card, and nothing is swapped before that card is answered. `backend/packs-tamper-on-load.patch` is the one core patch this slice adds, so `jarvis_skills.load()` re-checks the manifest too - the hub's visible list, its reference reads, `pack_list`, the Skills menu and `jarvis_packs.load_pack()` are the rest of the same check.
 
 ## 9. Where the backend lives
 
@@ -6245,3 +6246,51 @@ are the same cold start; the third is a flag that outlived its turn.
   phone's own Live screen does not read them yet: its microphone is its own
   and it has no PC-side warm to wait for, so the honest line there is the
   session it already shows. §8 records this as one-sided on purpose.
+---
+
+## 19. Quotes: a public-domain corpus kept on the PC, on the one scheduler (added 2026-11-05)
+
+A quotation is a short excerpt from a work that is out of copyright, and Jarvis
+now keeps a list of them itself: `backend/quotes_corpus.json`, 108 entries, each
+with its words, author, work, year, source and licence. Only two licences are
+allowed - `public-domain` (Project Gutenberg bodies with every Gutenberg mark
+stripped, Wikisource pages that state the work is public domain, a
+nineteenth-century Bartlett's) and `cc0-1.0` (Standard Ebooks) - and the loader
+refuses anything else, a year after 1929, an unknown source scheme, a duplicate,
+or a missing author/work/source. **Wikiquote and the quote websites are
+deliberately not used**: the first is CC BY-SA for its selection and fair use for
+much of its text, the second are all rights reserved or have no data licence.
+The full reasoning is `decisions.d/2026-11-05-quotes-local-corpus.md` and §199 of
+`docs/JARVIS-API.md`.
+
+The two halves use the machinery that already exists, which is the whole design:
+
+- **"Send me a quote" / "give me a quote" / "quote of the day" / "daily quote"**
+  is the model-free fast path in `jarvis_quick.py`, so it answers in a second
+  with the model asleep and never reaches a model. The determiner or the whole
+  phrase is required, so "quote the last email" cannot match.
+- **A scheduled quote** is a KIND of job on the one scheduler
+  (`jarvis_schedule.register_kind`, registered by `jarvis_quotes`), with the
+  same missed-while-off rule, the same `schedule` event and the same Coming up
+  row in both apps. A repeat raises the briefing's own ONE `schedule_repeat`
+  card (which lists the next three fire times); a one-off needs none.
+
+**The picker is arithmetic, not a state file.** `pick(day)` is
+`(day * STEP + OFFSET) % SIZE` with `math.gcd(STEP, SIZE) == 1` asserted at
+import (measured: 108, 17, 11), so walking day by day visits every quotation
+exactly once before any repeats, and the same calendar day gives the same quote
+everywhere. Nothing is written down, so the PC and the phone cannot drift.
+
+**The one addition to the scheduler is `Kind.say`.** A quote's words change at
+every firing, so they cannot live on the job's `text` (written once at set-up):
+the kind supplies `say(job_id)`, and the fired event carries the result as an
+extra `text` key - additive, so an older client ignores it and every other
+kind's event is unchanged. Both apps read it before the job's own text, and only
+after the App lock / hidden-lists check has hidden the words, so a locked phone
+shows "Jarvis: a quote is ready." and never the quotation.
+
+It adds **no route, no model tool, no gate action, no reach row and no
+permission of any kind** - the safest feature is one that adds no way in. The
+suite is `backend/test_quotes.py` (74 checks) and the `quote` kind is in
+`contract/schedule-cases.json`, so the HUD, Coming up and the phone are compared
+on 32 cases each with no mismatch.

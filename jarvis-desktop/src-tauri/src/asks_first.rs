@@ -78,18 +78,17 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 /// Windows Hello on the PC, that turns it off (held on a stale link).
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
-/// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 55 at
-/// 2026-11-05: the owner's decision of 2026-11-04 made EVERY tool the AI model
-/// can be offered switchable, raw Tier C set and everyday helpers included (21
-/// before that; the 2026-10-31 tiered ruling is superseded), the six
-/// on-demand GitHub tools joined them when the GitHub tools branch landed (48
-/// at 2026-11-04), handsfree's send_text_message is the 55th and the
-/// approval-policy tool's approval_policy the 56th. A DIFFERENT
-/// list from [`SWITCHABLE`], and desktop only.
-/// The four tools that are NOT here are the ones whose own switch decides them
-/// ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
+/// The tools that may be OFFERED to the AI model at all from
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 60 at
+/// 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools, the four
+/// pack-manager tools that ship ON, hands-free's send_text_message and the
+/// approval-policy tool's own row): the
+/// owner's decision of 2026-11-04 made EVERY tool the AI model can be offered
+/// switchable, raw Tier C set and everyday helpers included (21 before that;
+/// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
+/// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
+/// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
+pub(crate) const TOOLS_SWITCHABLE: [&str; 60] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -130,8 +129,9 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     "propose_plan",
     "change_setting",
     "feature_guide",
-    // Jarvis's own tools, which had no switch row before 2026-11-04 (13; 12
-    // then, plus handsfree's send_text_message on 2026-11-05)
+    // Jarvis's own tools, which had no switch row before 2026-11-04 (23: the
+    // original 12, plus the four pack-manager tools, hands-free's
+    // send_text_message and the six on-demand GitHub tools)
     "goals_list",
     "goal_add",
     "goal_progress",
@@ -141,6 +141,10 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     "phone_apps",
     "plugin_list",
     "plugin_switch",
+    "pack_list",
+    "pack_inspect",
+    "pack_install",
+    "pack_remove",
     "send_text_message",
     "refresh_abilities",
     "self_portrait",
@@ -152,10 +156,6 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     "github_comment",
     "github_open_issue",
     "github_rerun_workflow",
-    // The approval-policy tool's own row (2026-11-05). LAST because the PC
-    // builds this list as jarvis_asks_first's TIER_A + TIER_B + TIER_C +
-    // TIER_UNLISTED + TIER_EXTRA, and approval_policy is TIER_EXTRA's final
-    // entry - the order is compared word for word.
     "approval_policy",
 ];
 

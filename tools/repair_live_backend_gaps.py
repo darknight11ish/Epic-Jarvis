@@ -90,6 +90,15 @@ the table is bounded, and adding a lineage means adding its verified bytes and
 its patch. New features continue to arrive as drop-in `install()` plugins, so
 these base files rarely need a new patch at all.
 
+A gate PROVED to be already at (or PAST) the repaired state is pinned by its own
+exact hash in `LIVE_GATE_ALREADY_REPAIRED`, a SECOND table read before the
+lineage lookup above. The owner's live gate of 2026-11-06 carries all twelve
+probes these repairs look for, yet it is ahead of the #1023 post-image, so it
+has no pre-image patch to store and belongs in neither `LIVE_LEGACY_GATES` nor
+the base path; the only correct answer for it is the idempotent no-op. That
+table authorises NO write, and every other unrecognised live-sized gate still
+refuses with its hash printed.
+
 This is a REPAIR for drifted installs, not a new mechanism to prefer: once the
 patch stack can be applied again (`apply-patches.ps1` succeeds), the base files
 carry every piece and this tool reports "already" and does nothing.
@@ -668,6 +677,21 @@ LIVE_LEGACY_GATES = {
     ),
 }
 
+#: Live gates PROVED to be already at (or past) the repaired state, by sha256.
+#: DELIBERATELY SEPARATE from LIVE_LEGACY_GATES: those entries are PRE-images,
+#: each with a stored patch UP to LIVE_GATE_TARGET_SHA256. A hash here is the
+#: opposite kind of fact - the exact bytes were read and every probe the repair
+#: looks for is already in them - so the only correct answer is "already", and
+#: no patch exists or is wanted. Membership authorises NO write: the caller
+#: returns "already" before any anchor is consulted. Pinning a hash is a claim
+#: about those exact bytes; a file edited afterwards has a different hash and
+#: falls back to the refusal below, never to a guess.
+LIVE_GATE_ALREADY_REPAIRED = frozenset({
+    # The owner's live gate, read 2026-11-06: 194,597 B, all six unknown-risk
+    # probes present exactly once, and the app-builder/timer/history probes too.
+    "61a34b1eff2627d9c50b7589c1f4bb4a07b0a887559fd246bc3de2507e8df0f1",
+})
+
 #: A live-lineage gate is ~175-185 KB. The published-base pre-image this
 #: repair also serves (backend/test_repair_live_backend_gaps.py) was ~149-157
 #: KB when this threshold was chosen, so it used to be the only thing that
@@ -1230,6 +1254,8 @@ def _live_lineage_state(repair: Repair, text: str) -> Optional[tuple]:
     if not repair.lineages:
         return None
     digest = _sha256_text(text)
+    if digest in LIVE_GATE_ALREADY_REPAIRED:
+        return ("already", None)
     if digest == LIVE_GATE_TARGET_SHA256:
         return ("already", None)
     patch = _legacy_patch(digest)

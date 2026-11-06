@@ -85,12 +85,16 @@ def main():
           and "A" * 4001 not in r.reply,
           f"got len={len(getattr(r, 'reply', '') or '')}")
     r = ask("read my notes")
-    check("read: many notes is refused in plain words",
-          r is not None and r.reply == Q.NOTES_ONE_AT_A_TIME,
+    check("read: many notes lists the titles and how each starts, then asks",
+          r is not None and r.reply.startswith("You have 5 notes.")
+          and "Tell me which one to read." in r.reply
+          and '"Welcome" (Hello world.)' in r.reply
+          and '"Shopping" (milk and eggs)' in r.reply,
           f"got {getattr(r, 'reply', None)!r}")
     r = ask("what does my Nonexistent note say?")
-    check("read: a missing note is an honest no-match, not a guess",
-          r is not None and "could not find a note called" in r.reply,
+    check("read: a missing note is an honest no-match naming the vault",
+          r is not None and "No note in your vault is called" in r.reply
+          and str(VAULT) in r.reply,
           f"got {getattr(r, 'reply', None)!r}")
 
     # --- 2. hidden lists / App lock: no word, no title. -----------------------

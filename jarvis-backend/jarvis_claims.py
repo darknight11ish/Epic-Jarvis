@@ -157,6 +157,10 @@ READ_ONLY_TOOLS = frozenset({
     # on/off state and the reason a plugin is off - and changes nothing. The
     # writing half is plugin_switch, in ACTING_TOOLS.
     "plugin_list",
+    # "pack_list" and "pack_inspect" (2026-11-05): list reads the pack folder and
+    # inspect runs the read-only scan and reports what it found - neither writes
+    # anything, so a claim after one must still be corrected as a read.
+    "pack_list", "pack_inspect",
     # The self portrait and the conversation reads (2026-11-03): they only
     # READ and change nothing, so an answer "I cannot tell you..." is never
     # corrected for them and a claim that one did something is still caught by
@@ -232,6 +236,10 @@ ACTING_TOOLS = frozenset({
     # failed. `plugin_list` is the read-only half and is in READ_ONLY_TOOLS: it
     # only lists the folder.
     "plugin_switch",
+    # "pack_install" and "pack_remove" (2026-11-05): install writes a pack's files
+    # after ONE card, and remove deletes exactly the files its ledger recorded -
+    # both change this PC, so "nothing was done" after one must be corrected.
+    "pack_install", "pack_remove",
     # The three GitHub ACTIONS (2026-11-03): each one changes something on
     # GitHub in the owner's name, and none of it can be taken back by Jarvis.
     # "I posted the comment" / "I opened the issue" / "I re-ran it" must be

@@ -24,6 +24,12 @@ rather than guessed. `backend/fixtures/def-021-gate-39a0c407.txt.gz` is the
 verified post-image; every accepted pre-image is derived from it and its hash
 checked here, so this suite fails if the tool's stored table drifts.
 
+One more input cannot be a stored patch at all: the owner's live gate measured on
+2026-11-06 is PAST the #1023 post-image and already carries all twelve probes, so
+it is pinned by its own exact hash in `LIVE_GATE_ALREADY_REPAIRED` - the
+idempotent no-op, authorising no write. A file edited afterwards has a different
+hash and falls back to the refusal, never to a guess.
+
 It writes into the LIVE backend folder, so every failure path matters more
 than the happy one: a missing or ambiguous anchor must refuse, an already
 repaired file must be a no-op, a broken rewrite must be rolled back, and the
@@ -483,6 +489,38 @@ def t_live_lineage_gates_repair_to_the_1023_post_image():
           and not any(live.glob("jarvis_gate.py.before-repair-*")))
     check("the published-base path is still its own (six pieces), not this one",
           len(mod.REPAIRS["unknown-risk"].parts()) == 6)
+
+
+def t_a_gate_pinned_as_already_repaired_is_a_no_op():
+    """The owner's live gate is a POST-#1023 shape: every probe the repair looks
+    for is already in it, so the only correct answer is the idempotent no-op.
+    The pin is by exact hash and it authorises no write."""
+    mod = load_tool()
+    live_hash = "61a34b1eff2627d9c50b7589c1f4bb4a07b0a887559fd246bc3de2507e8df0f1"
+    check("the live gate's hash is pinned as already repaired",
+          live_hash in mod.LIVE_GATE_ALREADY_REPAIRED)
+    check("... and it is NOT in LIVE_LEGACY_GATES (those are PRE-images)",
+          live_hash not in mod.LIVE_LEGACY_GATES)
+    # A synthetic live-sized file proves the mechanism without shipping the
+    # owner's private file. Reassign the module constant for this test only.
+    synthetic = "x" * (mod.LIVE_LINEAGE_MIN_BYTES + 1)
+    digest = mod._sha256_text(synthetic)
+    check("a synthetic live-sized file is not pinned by accident",
+          digest not in mod.LIVE_GATE_ALREADY_REPAIRED)
+    mod.LIVE_GATE_ALREADY_REPAIRED = frozenset({digest})
+    try:
+        live = a_live_folder_with_exact_bytes(synthetic)
+        before = (live / "jarvis_gate.py").read_bytes()
+        check("a pinned already-repaired hash is reported already",
+              mod.check_one(live, mod.REPAIRS["unknown-risk"]) == "already")
+        check("... apply is the same no-op",
+              mod.apply_one(live, mod.REPAIRS["unknown-risk"], stamp="test") == "already")
+        check("... and nothing was written or backed up",
+              not any(live.glob("jarvis_gate.py.before-repair-*")))
+        check("... the file is byte-identical",
+              (live / "jarvis_gate.py").read_bytes() == before)
+    finally:
+        mod.LIVE_GATE_ALREADY_REPAIRED = frozenset({live_hash})
 
 
 def main():

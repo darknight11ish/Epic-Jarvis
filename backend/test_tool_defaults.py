@@ -89,6 +89,11 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    # deletes a plugin; ON is one modify_own_code card, OFF is
                    # instant and cardless.
                    "plugin_list", "plugin_switch",
+                   # The pack tools (2026-11-05, section 188): they add and remove
+                   # a skill from a folder or .zip on THIS PC, and two of the four
+                   # only read. Installing is one modify_own_code card showing the
+                   # full scan; a refusal is a plain answer, never a card.
+                   "pack_list", "pack_inspect", "pack_install", "pack_remove",
                    # The four read-only self/chat tools (2026-11-04, Gemini's
                    # ruling Q2). Appended, so the comments above stay true; this
                    # is the same order the template names them in.
@@ -128,7 +133,8 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
 #: the permission - and the field test of 2026-11-02 found a Settings switch
 #: left it never offered at all.
 OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
-                     "plugin_switch", "web_search",
+                     "plugin_switch", "pack_list", "pack_inspect", "pack_install",
+                     "pack_remove", "web_search",
                      "change_setting", "feature_guide",
                      "refresh_abilities", "self_portrait",
                      "conversation_find", "conversation_open",
@@ -138,7 +144,8 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
 
 #: What a PC with at least one folder listed is offered: my_files joins it.
 OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
-                       "plugin_switch", "web_search",
+                       "plugin_switch", "pack_list", "pack_inspect", "pack_install",
+                       "pack_remove", "web_search",
                        "my_files", "change_setting", "feature_guide",
                        "refresh_abilities", "self_portrait",
                        "conversation_find", "conversation_open",

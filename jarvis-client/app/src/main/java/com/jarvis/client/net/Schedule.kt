@@ -309,6 +309,15 @@ object Schedule {
     /** The line naming the subject: `When you talk about "the dentist"`. */
     fun nextTimeAbout(about: String): String = "When you talk about \u201c$about\u201d"
 
+    /**
+     * A quote (backend jarvis_quotes.py, 2026-11-05): a job kind on the one
+     * scheduler whose words change at every firing, so the words arrive on the
+     * fired event and never on the job. Both apps' words (coming-up.js).
+     */
+    const val QUOTE = "quote"
+    const val QUOTE_TITLE = "Quote of the day"
+    const val QUOTE_LOCK_SCREEN = "Jarvis: a quote is ready."
+
     /** A notification's title, by kind. The desktop's toast says the same. */
     fun title(kind: String): String = when (kind) {
         "timer" -> "Timer done"
@@ -317,6 +326,7 @@ object Schedule {
         "todo" -> "To-do"
         Briefing.KIND -> Briefing.TITLE
         TELLME -> TELLME_TITLE
+        QUOTE -> QUOTE_TITLE
         else -> "Jarvis"
     }
 
@@ -328,6 +338,7 @@ object Schedule {
         "todo" -> "Jarvis: a to-do item is due."
         Briefing.KIND -> Briefing.LOCK_SCREEN
         TELLME -> TELLME_LOCK_SCREEN
+        QUOTE -> QUOTE_LOCK_SCREEN
         else -> "Jarvis: something is due."
     }
 
@@ -344,6 +355,7 @@ object Schedule {
         TODAY_CARD -> "today card"
         // Review decks' own daily job (backend jarvis_decks.KIND): named plainly.
         "review" -> "card review"
+        QUOTE -> "quote"
         else -> kind
     }
 
@@ -1141,6 +1153,8 @@ object Schedule {
         }
         // A morning briefing has no words of its own (Briefing.kt).
         if (job.kind == Briefing.KIND) return Briefing.TITLE
+        // A quote has no words on the job either: each firing carries its own.
+        if (job.kind == QUOTE) return QUOTE_TITLE
         // "When an email from Alex arrives" - what is watched, in the owner's words.
         if (job.kind == TELLME) return if (job.hidden || words.isEmpty()) TELLME_TITLE else "When $words"
         if (job.kind == NEXT_TIME) return if (job.hidden || words.isEmpty()) NEXT_TIME_TITLE else words
@@ -1342,7 +1356,8 @@ object Schedule {
      * is the kind's lock-screen words, never the job's own. The desktop's
      * toast does the same (brain/schedule.rs toast_words).
      */
-    fun notification(kind: String, job: Job?, private: Boolean): Pair<String, String> {
+    fun notification(kind: String, job: Job?, private: Boolean,
+                     said: String = ""): Pair<String, String> {
         val title = title(kind)
         // A question is what the notice SAYS when the reminder asks one
         // (2026-11-02): the reminder's own text is what it is about, the
@@ -1358,6 +1373,11 @@ object Schedule {
         else job?.lockScreen?.takeIf { it.isNotEmpty() } ?: lockScreen(kind)
         if (job == null || private) return title to fallback
         if (asking != null) return title to asking.question
+        // A quote's words (2026-11-05): they change at every firing, so the PC
+        // sends them ON THE EVENT, not on the job. Read only here, after the
+        // App lock / private-lists rule above has already returned - that rule
+        // is the same one every kind uses, and this adds none of its own.
+        if (said.isNotEmpty()) return title to said
         // A "tell me when" says its alert - made on the PC from the owner's
         // words - never its text, which is what is watched.
         val words = (if (kind == TELLME) job.alert else job.text).trim()
@@ -1381,6 +1401,15 @@ object Schedule {
         val id = data.text("id")?.takeIf { validId(it) } ?: return null
         return id to (data.text("kind") ?: "")
     }
+
+    /**
+     * From a `schedule` event: the words THIS firing says, when the PC sent
+     * them. Only a quote sends them (2026-11-05, backend jarvis_quotes.py):
+     * its words change at every firing, so they cannot live on the job.
+     * "" for every other kind, and for a PC older than this phone.
+     */
+    fun saidFrom(data: JsonObject?): String =
+        if (data == null) "" else (data.text("text") ?: "").trim()
 
     /**
      * From a `schedule` event: (id, urgent) when a "tell me when" matched,

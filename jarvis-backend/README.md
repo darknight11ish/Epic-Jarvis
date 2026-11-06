@@ -9,8 +9,9 @@ patches.
     181 files copied from the owner's backend folder, 11,108,190 bytes (10.59 MB)
       175 top-level .py - 173 named jarvis_*.py, plus eval_quiz_grader.py and
         import_history.py, which are run as scripts rather than imported
-      6 more files: jarvis_hud.html, jarvis-framework.toml, requirements.lock,
-        quiz_grader_cases.json, jarvis-visual-spec.json, rust-crates.lock
+      7 more files: jarvis_hud.html, jarvis-framework.toml, requirements.lock,
+        quiz_grader_cases.json, quotes_corpus.json, jarvis-visual-spec.json,
+        rust-crates.lock
     plus this README and this folder's .gitignore, which are not part of the copy
 
 Most of it was already in this repository byte for byte: **160 of the 175
@@ -44,11 +45,12 @@ every top-level *.py in the live backend folder, EXCEPT
     test_*.py             (12 files - see "What is not here")
     patch_openjarvis.py   (a tool for a different project)
     spike_sandbox.py      (an experiment)
-plus these six files:
+plus these files:
     jarvis_hud.html          from jarvis-desktop/src/          (see below)
     jarvis-framework.toml    from backend/rebuilt/  - the TEMPLATE, never the live file
     requirements.lock        from backend/
     quiz_grader_cases.json   from backend/
+    quotes_corpus.json       from backend/  - the local public-domain quote corpus (2026-11-05)
     rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
     jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
     plus, since 2026-10-23 (PWA Slice 3a), the browser page's own files, each

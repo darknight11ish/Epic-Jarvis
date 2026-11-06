@@ -340,6 +340,74 @@
  {
   "type": "function",
   "function": {
+   "name": "pack_list",
+   "description": "List the skill packs this PC has: name, kind, version, where each came from, its hash, and whether it is installed, turned off or removed. Use when the owner asks what skills are installed or where one came from. Read-only: no card.",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "pack_inspect",
+   "description": "Scan ONE pack (a folder or a .zip on this PC) and answer what it is, what it would change, whether it is safe, and whether it will work here - the full pre-install report: files and hashes, code or instructions-only, name collision, licence. Use when the owner asks what a pack would do before installing it. Writes nothing, no card, installs nothing.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "source": {
+      "type": "string",
+      "description": "one folder or .zip path on this PC, e.g. C:\\Users\\me\\Downloads\\my-skill"
+     }
+    },
+    "required": [
+     "source"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "pack_install",
+   "description": "Install ONE skill pack from a folder or a .zip on this PC. It is scanned first; a pack with code in it is refused in plain words and never becomes a card. A clean one raises ONE approval card showing the whole scan, and nothing is written until that yes. If a pack with that name is already installed, the same call is a REPLACEMENT: the new files are scanned from scratch and a unified diff against the installed ones is on the same ONE new card; nothing is swapped before the yes. There is no update that skips the scan or the card. Afterwards it is turned OFF. Never invent a path.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "source": {
+      "type": "string",
+      "description": "one folder or .zip path on this PC"
+     }
+    },
+    "required": [
+     "source"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "pack_remove",
+   "description": "Remove ONE skill pack by the name pack_list shows. It raises ONE card naming exactly the files the ledger recorded, then deletes exactly those; a file the pack did not write is kept and named. Refuses when the ledger has no record, rather than guessing. One pack per call.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "the pack's name, from pack_list"
+     }
+    },
+    "required": [
+     "name"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "github_search",
    "description": "Check GitHub for an existing library for a coding idea, graded by maintenance and licence. For a general web search, use web_search.",
    "parameters": {

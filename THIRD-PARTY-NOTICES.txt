@@ -931,6 +931,25 @@ py-fsrs (the `fsrs` package, version 6.3.2), MIT - https://github.com/open-space
   line its LICENSE file gives: Copyright (c) 2022 Open Spaced Repetition. It brings, also by pip,
   typing-extensions (PSF-2.0), named as its installed metadata names it.
 
+QUOTES (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+backend/quotes_corpus.json, 2026-11-05 - the words, author, work, year, source
+  and licence of 108 quotations, read by backend/jarvis_quotes.py. Nothing is
+  fetched and no other project's file is shipped. Every entry is a short
+  excerpt of a work out of copyright in the United States (published in or
+  before 1929), taken from one of: a Standard Ebooks edition, which dedicates
+  its own editorial work to the public domain (CC0 1.0,
+  https://creativecommons.org/publicdomain/zero/1.0/); a Project Gutenberg
+  body text, with every Gutenberg header, footer, licence paragraph and
+  trademark reference removed (https://www.gutenberg.org/policy/license.html
+  says what that leaves: a text unrestricted by U.S. intellectual property
+  law); a Wikisource page that states the work is public domain; or a
+  nineteenth-century edition of Bartlett's Familiar Quotations. The licence of
+  each entry is written on the entry itself (`public-domain` or `cc0-1.0`), and
+  jarvis_quotes.load refuses any other. Neither licence asks anything of a
+  reader. Wikiquote (CC BY-SA selection, fair-use text) and the quote websites
+  (all rights reserved, or no data licence) are deliberately not sources.
+
 YOUTUBE CAPTIONS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 youtube-transcript-api (version 1.2.4), MIT - https://github.com/jdepoix/youtube-transcript-api

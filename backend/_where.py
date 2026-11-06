@@ -982,6 +982,15 @@ SHIPPED = (
     # plugins/registry.json says which features fit and why the rest do not.
     # Standard library only, no network, no child process, writes nothing.
     "jarvis_plugins.py",
+    # The pack manager (2026-11-05): add a prompt-only skill from a local
+    # folder or a local .zip, after a FULL pre-install scan report (safety,
+    # compatibility, effectiveness), and remove it completely. Adds no route:
+    # the four doors are chat tools in jarvis_agent.py (pack_list, pack_inspect,
+    # pack_install, pack_remove), which is why this ships whole and needs no
+    # patch. Reuses jarvis_skills.install() and jarvis_skill_menu for the
+    # scanner, the ONE card and the skills-off move - it re-implements neither.
+    # Standard library only, no network, no child process, imports no pack.
+    "jarvis_packs.py",
     # The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5):
     # ONE clearly-labelled opt-in for fiction and role-play that is never the
     # everyday assistant and never a default, AND the abliterated models
@@ -1662,6 +1671,26 @@ SHIPPED = (
     # today. The same entry, in the same position, is in $SHIPPED in
     # scripts/apply-patches.ps1.
     "jarvis_upload.py",
+    # The local quotation corpus and its picker (jarvis_quotes.py, 2026-11-05;
+    # the owner's ask: "a quote generator with real insightful quotes that can
+    # send me one whenever i ask or if i set a schedule"). A list of real
+    # public-domain quotations kept on this PC in `quotes_corpus.json` beside
+    # it (BESIDE in tools/gen_base_from_backend.py, so the published base
+    # carries its own copy), a `quote` KIND of job on the one scheduler, and
+    # the model-free "send me a quote" fast path in the SHIPPED
+    # `jarvis_quick.py`. NO patch of its own: its routes come from the
+    # registry and its kind from `jarvis_schedule.register_kind`, so nothing
+    # under `jarvis_hud.py` changes, and it adds no model tool, no gate action
+    # and no permission. Standard library only, reads one file, opens no
+    # socket and asks no model. The same entry, in the same position, is in
+    # scripts/apply-patches.ps1's $SHIPPED. It sits BEFORE `jarvis_bench.py`
+    # on purpose: that entry is the LAST one.
+    "jarvis_quotes.py",
+    # The corpus file jarvis_quotes.py reads at import (2026-11-05): a data file
+    # shipped beside the module, so staging (run_suites.py stage()) and the
+    # published base carry it too. It is NOT a module; it is in this list
+    # because _where.SHIPPED is everything apply-patches.ps1 puts in the folder.
+    "quotes_corpus.json",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate
@@ -1673,8 +1702,9 @@ SHIPPED = (
     # never opens `speed.jsonl`. `bench.patch` is the five routes that reach
     # it. Standard library only, loopback only, no card and no model at import.
     # The same entry is at the end of $SHIPPED in scripts/apply-patches.ps1.
+    # It is the LAST entry, and it stays last: a new module goes above it, so
+    # the two lists cannot disagree about any other module's position.
     "jarvis_bench.py"
-
 )
 
 
