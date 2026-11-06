@@ -58,7 +58,7 @@ from typing import Callable, Optional
 #: The owner's live backend folder: where `jarvis_hud.py` and the `VERSION` file
 #: the updater writes both sit. `--backend-path` overrides it.
 DEFAULT_BACKEND_PATH = Path(
-    r"C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program")
+    "C:/Users/pcadmin/Documents/Claude/Open jarvis files/Desktop program")
 
 #: The installed desktop app, whose FileVersion is the release identity.
 #: `JARVIS_DESKTOP_EXE` overrides it; `--desktop-exe` overrides both.
