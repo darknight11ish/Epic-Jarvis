@@ -311,6 +311,11 @@ TITLES = {
     # a placeholder entry for this same action, which was a second key in this
     # dict; the merge keeps this one (the feature owner's words) and drops it.
     "storage_cleanup": "clear Jarvis's temporary files",
+    # --- a document sent from the owner's phone (jarvis_upload.py, 2026-11-05;
+    # the plugin folder plugins/ready/upload). ONE card per file, raised before
+    # a byte is written, and the card names the file, its size and the folder's
+    # name - never a path and never a byte of it.
+    "receive_uploaded_document": "save a document your phone sent",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -508,6 +513,9 @@ SUMMARY = {
     # ONE card per cleanup of Jarvis's own temporary files; the card lists every
     # path, so the words say only the kind of thing being cleared.
     "storage_cleanup": "clear Jarvis's temporary files",
+    # A document sent from the owner's phone (jarvis_upload.py, 2026-11-05):
+    # ONE card per file, before a byte is written.
+    "receive_uploaded_document": "save a document from your phone",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above

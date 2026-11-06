@@ -1551,6 +1551,23 @@ SHIPPED = (
     # before. It sits before the last entry on purpose: the zero-jargon
     # checker never scans an entry with no trailing comma.
     "jarvis_source_independence.py",
+    # A document from the owner's phone (jarvis_upload.py, 2026-11-05; the
+    # owner's ask: "upload any documents through the jarvis app ... fully
+    # processed as if I was uploading it to the jarvis desktop"). Three routes -
+    # POST /api/upload/begin, /chunk and /finish - added by its own install(),
+    # called by the drop-in folder plugins/ready/upload, so it adds no patch.
+    # ONE card per file (receive_uploaded_document, tier ask, in HARD_LIMITS and
+    # MUST_ASK) before a byte is written; 1 MiB chunks because the server's
+    # request-body cap is 4 MiB; sha256 and size checked at finish; staging in a
+    # dot-prefixed folder no reader may open, and for a Notion export in
+    # %LOCALAPPDATA%\Jarvis\uploads rather than ~/.openjarvis, which the
+    # importer refuses. The landed file is processed by the EXISTING documents
+    # path - nothing here indexes, converts or reads it.
+    # It sits BEFORE jarvis_bench.py on purpose: check_zero_jargon never scans
+    # the last entry of this tuple (no trailing comma), and that is bench's
+    # today. The same entry, in the same position, is in $SHIPPED in
+    # scripts/apply-patches.ps1.
+    "jarvis_upload.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

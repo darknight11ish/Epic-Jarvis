@@ -2756,6 +2756,32 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **A document can be sent from the phone; the phone's screen is the next lane,
+  and the desktop deliberately gets none** (2026-11-05; `backend/jarvis_upload.py`,
+  `plugins/ready/upload/`, JARVIS-API §188). This slice is the **backend half**
+  of the owner's ask - "upload any documents through the jarvis app and have it
+  be fully processed as if I was uploading it to the jarvis desktop" - and it is
+  split that way on purpose rather than by accident of time. The three routes
+  (`POST /api/upload/begin`, `/chunk`, `/finish`) are built, tested and
+  documented, and **no app calls any of them on this tree**: the phone's "Send a
+  document" button, its folder picker, its progress chip and its result sentence
+  are the next lane, so `tools/check_parity.py` keeps all three in its
+  backend-only register and the day a client calls one the checker fails and
+  asks for the reclassification - which is what the register is for. **The
+  desktop gets no screen, and that is not a gap:** it already has every door
+  this uses (put the file in a folder on the "Folders Jarvis may look in" list),
+  so a second way in would be a duplicate rather than parity. **The Notion half
+  is the same shape:** `GET /api/notion/vaults` and `POST /api/notion/phone-import`
+  are built and take no path either side, and the phone's row is the next lane
+  with them; the two path-taking PC-only Notion routes beside them are unchanged,
+  still refuse any other device, and keep the reason they were given
+  (`/api/notion/preview` and `/api/notion/import` in `check_parity.py`,
+  JARVIS-API §152). Nothing about the split loosens the permission model: one
+  file is ONE `receive_uploaded_document` card, raised before a byte is written
+  and unloosenable (`jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`), and the
+  vault is chosen from what the PC already validated, which is the same
+  "choose among what exists" shape `/api/models/switch` set on 2026-09-18.
+
 - **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
   is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
   setting he can turn OFF from chat, Jarvis Live, or Settings ... ANY approval

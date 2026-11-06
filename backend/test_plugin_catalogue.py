@@ -103,6 +103,13 @@ NO_PATCH = {
     # `jarvis_hud.py` - which also keeps the route out of that file's dispatch
     # tuple, where every addition has to be ordered around two other patches.
     "watch-decisions",
+    # A document from the owner's phone (2026-11-05, JARVIS-API section 188;
+    # the owner's ask: "upload any documents through the jarvis app ... fully
+    # processed as if I was uploading it to the jarvis desktop"). The three
+    # /api/upload routes come from jarvis_upload.install(), called by the
+    # drop-in loader, so the folder is the whole of its wiring and no patch is
+    # added to `jarvis_hud.py`.
+    "upload",
 }
 
 

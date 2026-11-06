@@ -829,6 +829,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -2693,6 +2702,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -4553,6 +4571,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -6407,6 +6434,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -8266,6 +8302,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -10140,6 +10185,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -12004,6 +12058,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -13871,6 +13934,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"
@@ -15731,6 +15803,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "receive_uploaded_document",
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent"
       }
      ],
      "title": "This PC and your phone"

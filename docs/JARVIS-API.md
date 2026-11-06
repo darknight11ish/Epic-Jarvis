@@ -27665,6 +27665,23 @@ detail only (no paths, no plan); both POST routes are the PC-only pair.
 | `POST /api/notion/preview` | `{"source": "<path to the .zip or the unzipped folder>", "vault": "<path to an Obsidian vault>"}` | `200 {"ok": true\|false, "plan": {...}, "said": "<plain words>"}` |
 | `POST /api/notion/import` | the same, plus optional `"digest"` copied from the preview | `200 {"ok": true, "folder", "receipt_id", "notes", "attachments", "databases", "rows", "rows_without_notes", "html_pages", "said"}` or `{"ok": false, "reason"}` |
 
+**A phone door exists beside them, and it takes no path at all (added 2026-11-05).** The two routes above are unchanged and still refuse any other device, because the export file and the vault are folders on this PC and a phone has neither to name. What a phone gets instead is two thin routes that never accept a path: the first offers the vaults this PC already validated, and the second takes the id of an export that `jarvis_upload` is holding, plus the id of one of those vaults.
+
+```
+GET  /api/notion/vaults
+POST /api/notion/phone-import   {"upload": "<upload id>", "vault": "<vault id>", "digest": "<optional>"}
+```
+
+| route | answer |
+|---|---|
+| `GET /api/notion/vaults` | `200 {"ok": true, "ready": true\|false, "vaults": [{"id": "<opaque, 12 hex>", "name": "My Vault", "path": "C:\\..."}], "said": "<plain sentence>"}`; `ready: false` with *"Choose your Obsidian vault on the PC first - Settings, Notes."* |
+| `POST /api/notion/phone-import` | `200 {"ok": true, "plan": {...}, "said": "<the card's words>", "vault": "<name>", "vault_id": "<id>"}` for the dry run, and nothing is written into the vault; `200 {"ok": true, "imported": true, "folder": "<the new folder's NAME>", "receipt_id", "notes", "attachments", "databases", "rows", "rows_without_notes", "html_pages", "vault", "said"}` for the import; `200 {"ok": false, "reason": "<why>"}` for a plan that cannot be made; `400` for a vault Jarvis did not offer; `410` for an upload that is no longer waiting |
+
+**Where the vault list comes from: two sources, in order, and no new settings screen.** `jarvis_notes.obsidian_vault()` - the vault the owner already configured for notes (`JARVIS_OBSIDIAN_VAULT`, else `[notes.obsidian] vault_directory`) - and then the last vault a Notion import used, which this module records in its own `notion-obsidian.json` beside `folders.json`. **Every candidate goes through `_vault_or_refuse` before it is offered**, so the phone can only ever see a folder that really is an Obsidian vault (it has a `.obsidian` folder) and is not a protected place. The phone picks by id from that list; it never types a path, and a value that was not offered is refused whatever it says. Returning a `path` is consistent with `GET /api/folders`, which already gives the phone the folder paths it picked from.
+
+**No `digest` is the dry run, and it is the same dry run `preview` is.** `plan_import` extracts into a throw-away folder, `describe` words the card, and **nothing is written into the vault and no card is raised**. A `digest` calls the EXISTING `request_import`, unchanged: the digest is re-checked, ONE `import_notion_export` card is raised at its own tier, `run_import(approved=True)` lands the whole tree in one atomic move, one reversible `jarvis_receipts` entry is recorded, and Undo takes the folder back off. This door adds **no writer, no permission and no second extractor**. **The answer names the vault and the new folder, never a path** - `folder` is the new folder's NAME - and the plan's own `source` is removed, because that is Jarvis's temporary staging folder and the phone has no business with it. **The staged export is deleted as soon as an import attempt ends** - success, refusal, a denied card or an error - in a `finally`; a dry run keeps it, because the import it is a dry run for comes next, and a phone that dies in between is cleaned up by the 30-minute expiry in section 188.
+
+
 **`/api/notion/preview` is a dry run.** It plans, extracts into a throw-away
 folder under the system temp folder, and writes nothing into the vault, nothing
 into the settings folder, and raises **no approval card**. The `plan` object
@@ -33934,3 +33951,66 @@ recorded in `test_tool_profiles_chat.py`, which fails if a third one appears, an
 the wording belongs to the module's own lane.
 
 The decision is `decisions.d/2026-11-04-capability-talk.md`.
+
+## 188. A document from your phone: three upload routes, ONE card a file, and the file lands as a desktop file (backend only, the phone's screen is the next lane, added 2026-11-05)
+
+**What it is.** The owner's ask - "upload any documents through the jarvis app and have it be fully processed as if I was uploading it to the jarvis desktop" - was never missing the processing. `jarvis_documents.py` already finds a file by name the moment it appears, indexes notes and text files on the next search, and converts PDF, Word, Excel and PowerPoint files on request; `jarvis_notion_obsidian.py` already turns a Notion export into a vault; and `jarvis_attached_file.py` already reads one file in one chat turn. What did not exist was a way for a paired phone to put a byte on this PC's disk, so this section is the pipe and nothing else.
+
+**It is a no-patch drop-in.** `plugins/ready/upload/plugin.json` names `jarvis_upload`, and the plugin loader calls its `install()`, which wraps the server's `do_POST` after the core's own origin and token checks. There is **no patch**, no `_stack.RATCHET` line, no `pin` line, and no edit to `jarvis_hud.py`. `jarvis_upload.py` is in `$SHIPPED` in **both** lists (`backend/_where.py` and `scripts/apply-patches.ps1`), so `apply-patches.ps1` copies it to the PC; without both, the plugin folder would import nothing.
+
+**The three routes.** None of them calls `jarvis_owner_check.from_this_pc`: a phone IS the caller, and that is the point of the feature. Every request is still origin-checked and token-checked by the core.
+
+```
+POST /api/upload/begin    {"name": "taxes.pdf", "size": 412345,
+                           "mime": "application/pdf",
+                           "into": "<a folder's path, exactly as GET /api/folders returned it>",
+                           "purpose": "document" | "notion",
+                           "sha256": "<optional hex>"}
+POST /api/upload/chunk    {"id": "<the id begin returned>", "index": 0,
+                           "data": "<base64, at most 1 MiB of raw bytes>"}
+POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
+```
+
+| route | answer |
+|---|---|
+| `POST /api/upload/begin` | `202 {"ok": true, "id": "<32 hex>", "waiting": true\|false, "chunk_bytes": 1048576, "max_bytes": 52428800, "said": "<plain sentence>"}` - and, for `purpose: "document"`, **ONE approval card**, raised before a byte is written |
+| `POST /api/upload/chunk` | `200 {"ok": true, "received": <bytes so far>}`; `400` for a body that is not an object, a bad index or undecodable base64; `409 {"ok": false, "waiting": true}` while the card is unanswered, and the same code for a piece out of turn; `403 {"ok": false, "denied": true}` once the card is denied or timed out; `410 {"ok": false}` for an id that expired or never existed; `413` for a piece over 1 MiB or one that would run past the declared size; `507` when this PC cannot write |
+| `POST /api/upload/finish` | `200 {"ok": true, "saved": true, "name": "taxes.pdf", "folder": "Documents", "sub": "From my phone", "size": 412345, "said": "Saved in \"Documents\", in the \"From my phone\" folder inside it. Ask Jarvis about it whenever you like."}` for a document; `200 {"ok": true, "ready": true, "id", "name", "size", "said": "Your export arrived. ..."}` for a Notion export, which is staged and NOT landed; `200 {"ok": false, "said": "<why>", "reason": "<code>"}` when the bytes are not what the name claims, the size or sha256 does not match, or the upload arrived short; `403`/`409`/`410` as above |
+
+**The card comes first, and one file is one card.** For `purpose: "document"` the action is `receive_uploaded_document`, tier `ask` (`backend/rebuilt/jarvis-framework.toml`), and it is in **both** `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`, so no app and no settings line can turn the card into a standing yes; `jarvis_card_words` gives it "save a document your phone sent", and the asks-first page lists it under "This PC and your phone". The card carries the file's name, its size and the **folder's name** - never a full path, never a byte of the file, never its contents - and `jarvis_upload.request_begin` refuses any tier but `ask` rather than read a looser line as consent (the same shape `phone_notifications_read` keeps). A denied, timed-out or refused card writes nothing and deletes anything staged. **For a Notion export there is no card here at all:** the export is only staged, and the card that matters is the existing `import_notion_export` one, raised later with the real note, attachment and database counts on it.
+
+**Where it lands.** `<the chosen listed folder>\From my phone\<name>`, created on the first successful upload. A name already taken there is never overwritten: the new file gets a number (`taxes (2).pdf`, `taxes (3).pdf`), the same rule the Notion importer uses. It is inside a folder the owner already granted, so no new grant and no second card for a folder, and the index walks it on the next search with no new code.
+
+**What processing runs is exactly what runs for a desktop file - there is no new step, and nothing here forks the reader.**
+
+1. **At once**: `my_files`'s `find` reaches it by name, because `_walk` reads the disk and has no cache.
+2. **On the next search**: `.md`, `.markdown`, `.txt` and `.csv` are indexed by `TextIndex.reconcile` (through `search()`), with the meaning half only if this PC has a meaning model loaded.
+3. **On request**: PDF, Word, Excel and PowerPoint are converted by `read`/`_text_of` through `_default_convert`, in a separate child process with a scrubbed environment and a 120-second clock.
+4. **Not at all**: nothing is transcribed, nothing is summarised on arrival, and PDF and Word bodies are not full-text searchable. Neither the card nor any answer claims otherwise.
+
+**The folder is chosen by equality, never typed by the phone.** The only folder-shaped field is `into`, and it is accepted only when it equals one of `jarvis_documents.folders()` - the same test `import_notion` makes - so a phone cannot create a grant; it can only use one the owner already gave, on the PC, with a card. An empty list answers with the PC's own line (`PHONE_ADD`), a damaged list with the module's own sentence, and a folder that is not on the list with "it can only go into a folder on the list - add the folder first".
+
+**The types: the same eight, and no more.** `.pdf .docx .xlsx .pptx .md .markdown .txt .csv` - exactly `jarvis_attached_file.KINDS`, exactly the phone's own picker. No `.zip` in this path (a zip is the Notion export's business), no pictures (they have their own path and their own secret cleaner), no audio or video, and never an executable or a script: nothing uploaded is ever run, and a kind Jarvis cannot read has no reason to be stored. The allowlist is enforced twice - `begin` checks the NAME, `finish` checks the BYTES - and the byte check is `jarvis_attached_file`'s own guards: `%PDF-` for a PDF, an encrypted PDF refused from its own trailer, `PK\x03\x04` plus the right `word/`/`xl/`/`ppt/` member for the three Office kinds, the declared unpacked total judged by `jarvis_documents.zip_bomb_problem`, and UTF-8 with no NUL characters for a note, text file or CSV. A name with a path in it, a leading dot, a control character, a Windows reserved name (`CON`, `NUL`, `COM1`...) or more than 150 characters is refused before a card is raised.
+
+**What `finish` checks, and the one moment a file becomes real.** It measures the bytes that actually arrived (never the declared size), refuses an upload that arrived short, verifies the sha256 when one was given, runs the byte guards above, and then does ONE `os.replace` on the same volume, so the move is atomic. A refusal at any point deletes the staging and leaves nothing behind - the owner's folder is not touched, so there is never a half file to clean up.
+
+**Staging, and why it is where it is.** A document's pieces are written into `<the chosen listed folder>\.jarvis-upload-<id>\<name>.part`; a Notion export's into `%LOCALAPPDATA%\Jarvis\uploads\<id>\<name>.zip`. The leading dot is the guard for a document: `jarvis_documents.allowed_path` refuses any path part that starts with one, so a half-written file is invisible to `find`, `read` and `search` **before** `finish`, by construction rather than by a list somebody must keep up to date. The Notion staging is deliberately **not** under `~/.openjarvis`: that folder is in `jarvis_agent._PROTECTED_DIRS`, so `jarvis_documents.protected()` would refuse the file and `jarvis_notion_obsidian.plan_import` would refuse its own receiving area. `JARVIS_UPLOADS_DIR` (an absolute path) moves it, which is how the suite stays off the owner's real folder; nothing else does.
+
+**Limits, in one place.**
+
+| limit | value | why |
+|---|---|---|
+| one piece | 1 MiB of raw bytes | about 1.37 MB of base64 and JSON, a third of the server's 4 MiB request-body cap (MAX_BODY), and the same number `import_history.py` already reads in |
+| a document | 50 MiB | the number the desktop reader already handles (`jarvis_documents.MAX_DOC_BYTES`), so nothing can be stored that Jarvis cannot open |
+| a Notion export | 250 MiB | it is stored and unpacked, never parsed as a document (`EXPORT_UNCOMPRESSED_MAX`) |
+| uploads in flight | 3 | so a stolen token cannot keep a queue of half files |
+| staged in all | 512 MiB | the disk ceiling before anything is landed |
+| an id's life | 30 minutes | one `finish`, then the id and its bytes are gone; a sweep on the next `begin` clears what a phone that died left |
+
+**Every way it refuses, in plain words.** At `begin`: no such folder on the list, an empty list, a damaged list, a name with a path or a reserved word in it, an extension outside the eight, a declared size over the cap, a fourth upload in flight, the staging quota, a protected destination and a "Protected from Jarvis" block. At `chunk`: an unknown or expired id, the card still waiting (409), the card denied (403), a piece out of turn (409), a piece over 1 MiB (413) and a piece past the declared size (413). At `finish`: bytes that do not match the name, an encrypted PDF, a zip bomb, zero bytes, a short upload, a sha256 that does not match, a destination that disappeared, a link where a folder should be, and a disk that will not take it (a sentence, never a stack trace).
+
+**Tests.** `backend/test_upload.py` - 180 checks and no skips on a machine whose temp folder takes a write: the chunked begin/chunk/finish happy path with the landed bytes compared byte for byte and `find` finding it, ONE card raised before anything is on disk and a 409 for every piece while it waits, a denied card and a timed-out card leaving nothing at all, the sha256 and size refusals, both caps and the 4 MiB body arithmetic, an unlisted folder, an empty and a damaged list, every refused extension, a renamed `.docx`, a `.docx` zip bomb, an encrypted PDF, a text file that is really binary, a name with a path in it, the staging folder invisible to `allowed_path`/`find`/`read` before `finish` and gone after, expiry and the sweep, the three-in-flight cap and the staging quota, the Notion dry run writing nothing into the vault and the import raising exactly ONE card and keeping its Undo, the two PC-only Notion routes still refusing a phone, the twins, the plugin catalogue and the gate tables. On a machine whose temp folder refuses a write, the Notion dry-run/import checks print `skip` and are **NOT RUN, never a pass**. `backend/test_documents.py`, `backend/test_notion_obsidian.py`, `backend/test_asks_first.py`, `backend/test_card_words.py` and `backend/test_plugin_catalogue.py` run unchanged.
+
+**One-sided, and said out loud.** This is the backend half. The phone's "Send a document" button, its folder picker, its progress chip and its result sentence are the next lane; the desktop deliberately gets no screen, because it already has every door this uses. `docs/ARCHITECTURE.md` section 8 records both, and `tools/check_parity.py` keeps the three routes in its backend-only register until an app calls one - at which point the checker fails and asks for the reclassification, which is the point of the register.
+
+**The decision this reverses is recorded.** On 2026-10-29 the record said, in as many words, "Deliberately not built, now or later: an upload endpoint, a resumable or chunked transfer, a document preview, a second image path, and any 'attach anything' share target on the phone" (`docs/DECISIONS.md:4943`). This section is the reversal of **"an upload endpoint"** and **"a resumable or chunked transfer"**, and of nothing else: there is no document preview here, no second image path and no share target on the phone, and pictures, audio and video are refused. `decisions.d/2026-11-05-phone-upload.md` records it.
