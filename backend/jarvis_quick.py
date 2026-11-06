@@ -6354,6 +6354,7 @@ PLUGIN_CATALOGUE = (
     ('spending', '"How much did I spend on food last month?", added up from a bank export the owner dropped into a folder Jarvis may look in.'),
     ('tool-updates', '"Check for tool updates", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newe...'),
     ('tutorials', "Tutorials and the FAQ, for both apps, with the owner's progress."),
+    ('upload', 'a document from your phone: one file into a folder Jarvis already looks in, after one approval card per file.'),
     ('vault-organizer', 'plan a tidy-up of an Obsidian vault without changing anything: tags merged, Map-of-Content hubs, a Vault Home - a read-only plan, OFF until the own...'),
     ('vault', 'a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value.'),
     ('voiceprint', "Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it..."),
