@@ -264,6 +264,15 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_readpage.py": 4,
     "backend/test_reasoning_fallback.py": 3,
     "backend/test_receipts.py": 3,
+    # 2026-11-05 (the wave-6 deploy-delta false-green fix, #1189): its new test
+    # proves the exact gate text the delta plan carries, so it reads the
+    # live-shaped `jarvis_gate.py` / `jarvis_hud.py` as TEXT and pins strings
+    # against it (the `desktop_update` / `storage_cleanup` ordering, and the
+    # DELTA_TABLE probes being absent). The reader is module-wide conservative,
+    # so all ten comparisons against `gate_text` count. Measured with
+    # `--measure` on this tree, 485 -> 495; recorded as debt, not approval -
+    # the ratchet only turns DOWN.
+    "backend/test_reconcile_live_backend.py": 10,
     "backend/test_referee.py": 3,
     "backend/test_retirement.py": 3,
     "backend/test_retrieve_count.py": 1,
