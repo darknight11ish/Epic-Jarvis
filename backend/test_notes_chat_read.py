@@ -154,11 +154,17 @@ def main():
     r = ask("read my Café Notes note")
     check("rich: the note's title is found with its accents",
           r is not None and r.reply.startswith('"Caf\u00e9 Notes" says:'))
-    # The vault reader normalises line endings to CRLF; that and the 4,000
-    # character cut are the ONLY transformations, and both are stated here.
-    expected = RICH.replace("\n", "\r\n").strip()
+    # The vault reader returns the note's own line endings, and the 4,000
+    # character cut is the ONLY other transformation. Compare with newlines
+    # canonicalised rather than demanding CRLF everywhere: the fixture is
+    # written with the platform's newlines, so a Linux CI runner has LF here
+    # (this check flickered red there on 2026-11-06 while passing on Windows).
+    def _canon(s):
+        return s.replace("\r\n", "\n").strip()
+
+    expected = _canon(RICH)
     check("rich: fenced code, table pipes and Unicode are byte-identical",
-          r is not None and expected in r.reply,
+          r is not None and expected in _canon(r.reply or ""),
           f"got {getattr(r, 'reply', None)!r}")
     check("rich: nothing mangles the Markdown (no escaped pipes, no lost fence)",
           r is not None and "| café | 3€ |" in r.reply

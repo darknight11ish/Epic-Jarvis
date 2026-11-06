@@ -434,8 +434,19 @@ def scan_text(text: str, where: str = "SKILL.md") -> list[Finding]:
     return out
 
 
-EXEC_SUFFIXES = (".sh", ".ps1", ".bat", ".cmd", ".py", ".js",
-                 ".exe", ".dll", ".dmg", ".pkg", ".msi")
+#: Suffixes that are a program, a script, or a binary that carries one. This
+#: list is deliberately the same set `jarvis_packs.CODE_SUFFIXES` holds. It
+#: used to be much shorter, and the gap was a real hole (2026-11-06): a
+#: `.vbs`, `.hta`, `.scr`, `.jar`, `.pyc`, `.wasm`, `.mjs`, `.ts` or `.class`
+#: file the pack manager's scan refused was not even flagged by the second vet
+#: here. `jarvis_packs.code_suffixes()` reads THIS tuple and unions it with its
+#: own, so the scan can never again be the narrower of the two.
+EXEC_SUFFIXES = (".sh", ".ps1", ".psm1", ".psd1", ".bat", ".cmd", ".com",
+                 ".py", ".pyw", ".pyc", ".pyo", ".pyd", ".js", ".mjs", ".cjs",
+                 ".ts", ".exe", ".dll", ".msi", ".scr", ".cpl", ".hta",
+                 ".vbs", ".vbe", ".wsf", ".wsh", ".jse", ".jar", ".class",
+                 ".war", ".wasm", ".so", ".dylib", ".dmg", ".pkg", ".bin",
+                 ".apk", ".dex", ".elf", ".bash", ".zsh", ".fish", ".command")
 
 
 def is_bundled_script(rel: str) -> bool:
@@ -447,9 +458,15 @@ def is_bundled_script(rel: str) -> bool:
     is one refactor away from being wrong. The cost of the second separator is
     nothing; the cost of missing a bundled script on Windows is the whole
     point of the scanner.
+
+    A trailing dot or space is stripped before the suffix is judged, because
+    Windows strips it when the file is created: `evil.vbs.` lands as
+    `evil.vbs`, and a name Windows will rename must be judged as the name the
+    disk gets (2026-11-06).
     """
-    head = rel.replace("\\", "/").split("/")[0]
-    return head == "scripts" or rel.lower().endswith(EXEC_SUFFIXES)
+    plain = rel.replace("\\", "/")
+    head = plain.split("/")[0]
+    return head == "scripts" or plain.rstrip(" .").lower().endswith(EXEC_SUFFIXES)
 
 
 def vet(skill: Skill) -> dict:
@@ -636,6 +653,21 @@ def install(source: Path, trust: str = "third_party",
                       "installed": time.time(), "uses": 0,
                       "verdict": report["verdict"], "notes": []}
     _write_index(ix)
+    # A pack the pack manager installed keeps a SHA-256 manifest in
+    # jarvis-packs.json, and EVERY door that writes a skill's files comes
+    # through this function: the pack manager's own install, the Skills
+    # screen's edit and its import, and turning a skill back on. The manifest
+    # is re-taken HERE, after the person said yes and after the copy, so an
+    # ordinary approved edit cannot leave the ledger holding the old hashes and
+    # reading as `tampered` (2026-11-06). A file that changes any other way still
+    # fails the pack manager's check. A skill the ledger does not know is
+    # unaffected, and when the pack module is not beside this file this door is
+    # exactly as it was.
+    try:
+        import jarvis_packs as _packs
+        _packs.repin_after_install(skill.name)
+    except Exception:
+        pass
     return {"ok": True, "installed": True, "skill": skill.name,
             "report": report, "asked": True,
             "reason": f"{skill.name} installed"}

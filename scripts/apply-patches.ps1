@@ -3090,6 +3090,9 @@ $SHIPPED = @(
     # only. The same entry, in the same position, is in backend/_where.py's
     # SHIPPED list. It sits BEFORE jarvis_bench.py, which stays LAST.
     'jarvis_quotes.py'
+    # The corpus file jarvis_quotes.py reads at import (2026-11-05): a data file
+    # shipped beside the module, so the base carries it too.
+    'quotes_corpus.json'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

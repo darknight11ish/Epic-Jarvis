@@ -98,6 +98,10 @@ CODE_SUFFIXES = frozenset({
     ".sh", ".bash", ".zsh", ".fish", ".command",
     ".js", ".mjs", ".cjs", ".ts", ".jar", ".class", ".war",
     ".so", ".dylib", ".bin", ".elf", ".apk", ".dex",
+    # An installer is a program in a box: `.dmg`/`.pkg` were on the skill
+    # library's own list and are named here too, so the two lists are the
+    # SAME set and `code_suffixes()` can never be the narrower one.
+    ".dmg", ".pkg",
     # `.wasm` is a program: it is compiled bytecode that a host runs as code,
     # so it belongs on the same hard-refusal list as `.py` and `.exe` even
     # though this project does not run one. The owner's Q2 ruling names it
@@ -358,8 +362,96 @@ def file_rows(folder: Path) -> list:
     return rows
 
 
+def code_suffixes() -> frozenset:
+    """Every suffix this module treats as code: its own list, UNIONED with the
+    skill library's `EXEC_SUFFIXES`, which is read and never copied.
+
+    The two lists used to disagree - `.vbs`, `.hta`, `.scr`, `.jar`, `.pyc`,
+    `.wasm`, `.mjs`, `.ts` and `.class` were here and absent there - so a
+    `.vbs` this scan refused was still a file the library's second vet never
+    flagged. Reading the base's own tuple makes this list a superset of it by
+    construction, so the two boundaries cannot drift apart again (2026-11-06).
+    """
+    sk = _sk()
+    try:
+        extra = tuple(getattr(sk, "EXEC_SUFFIXES", ()) or ())
+    except Exception:
+        extra = ()
+    return CODE_SUFFIXES | frozenset(str(s).lower() for s in extra)
+
+
 def _is_code(path: str) -> bool:
-    return Path(str(path)).suffix.lower() in CODE_SUFFIXES
+    """Can this path be a program, a script, or a binary that carries one?
+
+    ONE predicate, used by the folder scan, the `.zip` scan AND the unpack, so
+    the two reads of an archive cannot judge a member differently. The name is
+    judged after stripping trailing dots and spaces: Windows refuses to store
+    those and creates `evil.vbs.` as `evil.vbs`, so the suffix that matters is
+    the one the disk will really get, not the one the archive wrote
+    (2026-11-06).
+    """
+    name = str(path or "").replace("\\", "/").rsplit("/", 1)[-1]
+    plain = name.rstrip(" .").lower()
+    return any(plain.endswith(suffix) for suffix in code_suffixes())
+
+
+#: Names Windows keeps for its own devices: a file called CON, PRN, AUX, NUL,
+#: COM1-9 or LPT1-9 is that device whatever the extension says, so it is not a
+#: file a pack may carry.
+_RESERVED_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {"COM%d" % i for i in range(1, 10)}
+    | {"LPT%d" % i for i in range(1, 10)})
+
+
+def _plain_member(name: str) -> tuple:
+    """(the member's own path, why it is not a plain name).
+
+    ONE predicate for the scan and the unpack, so the two reads cannot let a
+    name through that the other refused. A pack is plain files with plain
+    names, and the reasons are all the same kind of reason:
+
+      * a component that ends in a dot or a space is refused because Windows
+        strips those when the file is created - `evil.vbs.` would land as
+        `evil.vbs`, a suffix the scan never judged (BLOCKER A1, 2026-11-06);
+      * an empty component, a `.` component (the folder itself, not a file
+        name), and a `..` or absolute head are structure, not a name;
+      * a Windows device name is the device, not a file;
+      * a colon is an alternate data stream on Windows: a second, invisible
+        body attached to a file whose plain text was scanned.
+
+    Nothing is normalised, on purpose: the name recorded in the report is the
+    member's REAL name, so the manifest, the receipt and the file that lands
+    all spell it the same way.
+    """
+    raw = str(name or "").replace("\\", "/")
+    if not raw:
+        return "", "it has no name"
+    if _NOT_A_MEMBER.match(raw):
+        return "", "it points outside the archive"
+    if "\0" in raw:
+        return "", "its name holds a NUL character, which Windows cannot store"
+    if ":" in raw:
+        return "", ("its name holds a colon, which is an alternate data stream "
+                    "on Windows")
+    parts = []
+    for part in raw.split("/"):
+        if part == "":
+            return "", "it has an empty path component"
+        if part == ".":
+            return "", ("it holds a '.' path component, which is the folder "
+                        "itself and not a file name")
+        if part != part.rstrip(" ."):
+            return "", (f"a path component ends in a dot or a space ({part!r}), "
+                        f"and Windows would store it as "
+                        f"{part.rstrip(' .')!r}")
+        stem = part.split(".", 1)[0].strip().upper()
+        if stem in _RESERVED_NAMES:
+            return "", f"a path component is a Windows device name ({part!r})"
+        parts.append(part)
+    if not parts:
+        return "", "it has no name"
+    return "/".join(parts), ""
 
 
 def _is_binary(path: Path) -> bool:
@@ -643,6 +735,16 @@ def _scan_folder_folder(folder: Path) -> dict:
 
     # ---- SAFETY: every file, its hash, and whether any of it can run -------
     rows = file_rows(folder)
+    # The same name rule the archive scan applies to a member. Windows stores
+    # `evil.vbs.` as `evil.vbs`, so a pack is judged on the names the disk
+    # really gets, not on the ones it was handed.
+    for row in rows:
+        _clean, problem = _plain_member(row["path"])
+        if problem:
+            return _refused(
+                f"that folder holds a file whose name is not a plain name "
+                f"({row['path']!r}) - {problem} - so nothing was installed",
+                report=report)
     code, binaries = [], []
     for row in rows:
         if _is_code(row["path"]):
@@ -1123,13 +1225,15 @@ def _scan_zip(zip_path: Path) -> dict:
                         f"the .zip holds a file that points outside itself "
                         f"({name!r}), so it was not unpacked and nothing was "
                         f"installed", report=report)
-                if "\0" in name or ":" in name:
-                    # A colon is an alternate data stream on Windows: a second,
-                    # invisible body attached to a file whose plain text was
-                    # scanned. A pack is plain files with plain names.
+                clean, problem = _plain_member(name)
+                if problem:
+                    # The name is checked BEFORE the bytes are judged, because
+                    # the name decides what the disk will be asked to store:
+                    # `evil.vbs.` is created as `evil.vbs` (BLOCKER A1).
                     return _refused(
                         f"the .zip holds a file with a name that is not a plain "
-                        f"name ({name!r}), so nothing was installed", report=report)
+                        f"name ({name!r}) - {problem} - so it was not unpacked "
+                        f"and nothing was installed", report=report)
                 mode = (info.external_attr >> 16) & 0o170000
                 if mode == 0o120000:
                     return _refused(
@@ -1148,14 +1252,14 @@ def _scan_zip(zip_path: Path) -> dict:
                         f"installed", report=report)
                 data = archive.read(info)
                 digest = sha256_bytes(data)
-                rows.append({"path": name, "sha256": digest, "bytes": len(data)})
-                base = Path(name).name
-                if _is_code(name):
-                    code.append(name)
+                rows.append({"path": clean, "sha256": digest, "bytes": len(data)})
+                base = Path(clean).name
+                if _is_code(clean):
+                    code.append(clean)
                 elif b"\0" in data[:65536]:
-                    binaries.append(name)
+                    binaries.append(clean)
                 if base == "SKILL.md":
-                    skills.append((name, data))
+                    skills.append((clean, data))
     except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
         return _refused(f"that .zip could not be read ({exc})", report=report)
     report["digest"]["files"] = rows
@@ -1532,19 +1636,25 @@ def _extract_zip(zip_path: Path, into: Path) -> tuple:
                 if _NOT_A_MEMBER.match(name):
                     return None, (f"the .zip holds a file that points outside "
                                   f"itself ({name!r})")
+                clean, problem = _plain_member(name)
+                if problem:
+                    # Checked again here, not only in the scan: the archive is
+                    # read a second time, and a name Windows would silently
+                    # rename (`evil.vbs.` -> `evil.vbs`) must not land either.
+                    return None, (f"the .zip holds a file with a name that is "
+                                  f"not a plain name ({name!r}) - {problem}")
                 if (info.external_attr >> 16) & 0o170000 == 0o120000:
                     return None, f"the .zip holds a link ({name!r})"
-                if "\0" in name or ":" in name:
-                    # Checked again here, not only in the scan: a colon is an
-                    # alternate data stream on Windows, and this is the second
-                    # read of the archive.
-                    return None, (f"the .zip holds a name that is not a plain "
-                                  f"name ({name!r})")
+                if _is_code(clean):
+                    # The code predicate runs on the SECOND read too: a script
+                    # added between the scan and the unpack is refused here,
+                    # before a byte of it is written (BLOCKER A1, 2026-11-06).
+                    return None, CODE_REFUSED.format(where=clean)
                 files += 1
                 total += int(info.file_size or 0)
                 if files > MAX_FILES or total > MAX_BYTES:
                     return None, "the .zip is larger than a skill may be"
-                parts = [p for p in name.split("/") if p not in ("", ".")]
+                parts = clean.split("/")
                 dest = Path(into).joinpath(*parts)
                 if not _inside(into, dest):
                     return None, (f"the .zip holds a file that points outside "
@@ -1700,6 +1810,15 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
                     "refused": True, "report": report,
                     "reason": (f"that pack now holds a link or a file that points "
                                f"outside it ({linked!r}), so nothing was installed")}
+        # The same second read for the code boundary: a .zip's unpack re-checks
+        # every member, and a FOLDER can gain a file between the scan and the
+        # copy, so the one predicate runs once more over what is about to land -
+        # before the card, never after it.
+        for rel in _walk_files(folder):
+            if _is_code(rel):
+                return {"ok": False, "installed": False, "asked": False,
+                        "refused": True, "report": report,
+                        "reason": CODE_REFUSED.format(where=rel)}
         if old_folder is not None and old_folder.is_dir():
             incoming = menu.incoming_root()
             if incoming is None:
@@ -2036,6 +2155,54 @@ def load_pack(name: str) -> dict:
                      "every file still matches what you approved.")}
 
 
+def _repin(name: str, action: str) -> dict:
+    """Re-take a pack's manifest after a person-approved install wrote its files.
+
+    The old digest is kept in the history and the tamper marks are cleared: the
+    bytes on disk are the ones the card was answered for. An unchanged manifest
+    writes nothing, so a surface that re-pins twice - the menu's own turn-ON
+    call after the shared install path already did - does not grow the history
+    for free.
+    """
+    clean = _clean_name(name)
+    if not clean:
+        return {"ok": False, "reason": "that is not a pack name"}
+    entry = _entry(clean)
+    if not entry:
+        return {"ok": False, "known": False,
+                "reason": f"the ledger has no record of {clean!r}"}
+    if str(entry.get("state")) == "removed":
+        return {"ok": False, "known": True, "removed": True,
+                "reason": (f"{clean!r} was removed, so there is nothing to "
+                           f"re-pin")}
+    folder = _folder_of(clean)
+    if folder is None:
+        return {"ok": False, "known": True,
+                "reason": f"{clean!r} has no folder on this PC"}
+    rows = file_rows(folder)
+    digest = pack_digest(rows)
+    if (digest == str(entry.get("pack_sha256") or "")
+            and str(entry.get("state")) != TAMPERED):
+        return {"ok": True, "name": clean, "folder": str(folder),
+                "files": len(rows), "pack_sha256": digest,
+                "unchanged": True, "ledger_written": False}
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    history = list(entry.get("history") or [])
+    history.append({"action": action, "at": now,
+                    "from_pack_sha256": str(entry.get("pack_sha256") or ""),
+                    "to_pack_sha256": digest})
+    entry.update(files=rows, installed_files=rows, folder=str(folder),
+                 state=_folder_state(folder), repinned_at=now,
+                 pack_sha256=digest, history=history)
+    for key in ("tampered_at", "tampered_missing", "tampered_changed",
+                "state_before_tamper"):
+        entry.pop(key, None)
+    wrote = _save_entry(entry)
+    return {"ok": bool(wrote), "name": clean, "folder": str(folder),
+            "files": len(rows), "pack_sha256": digest,
+            "ledger_written": bool(wrote)}
+
+
 def repin_after_enable(name: str) -> dict:
     """Re-pin the manifest after the existing ON card approved the folder again.
 
@@ -2044,31 +2211,21 @@ def repin_after_enable(name: str) -> dict:
     with whatever the owner approved. That is not tampering - a person said yes -
     so the manifest is re-taken here, with the old digest kept in the history.
     """
-    clean = _clean_name(name)
-    if not clean:
-        return {"ok": False, "reason": "that is not a pack name"}
-    entry = _entry(clean)
-    if not entry:
-        return {"ok": False, "reason": f"the ledger has no record of {clean!r}"}
-    folder = _folder_of(clean)
-    if folder is None:
-        return {"ok": False, "reason": f"{clean!r} has no folder on this PC"}
-    rows = file_rows(folder)
-    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    history = list(entry.get("history") or [])
-    history.append({"action": "enabled", "at": now,
-                    "from_pack_sha256": str(entry.get("pack_sha256") or ""),
-                    "to_pack_sha256": pack_digest(rows)})
-    entry.update(files=rows, installed_files=rows, folder=str(folder),
-                 state=_folder_state(folder), repinned_at=now,
-                 pack_sha256=pack_digest(rows), history=history)
-    for key in ("tampered_at", "tampered_missing", "tampered_changed",
-                "state_before_tamper"):
-        entry.pop(key, None)
-    wrote = _save_entry(entry)
-    return {"ok": bool(wrote), "name": clean, "folder": str(folder),
-            "files": len(rows), "pack_sha256": entry["pack_sha256"],
-            "ledger_written": bool(wrote)}
+    return _repin(name, "enabled")
+
+
+def repin_after_install(name: str) -> dict:
+    """Re-pin the manifest after ANY approved install wrote a pack's files.
+
+    `jarvis_skills.install()` is the one door every surface uses: the pack
+    manager's own install, the Skills screen's edit, its import and turning a
+    skill back on. It calls this after the copy, so an ordinary approved edit
+    no longer leaves the ledger holding the OLD hashes and reading as
+    `tampered` (REAL A2, 2026-11-06). A file that changes any other way still
+    fails `verify_pack()`, because only a card this install ran can re-pin.
+    A skill the ledger does not know is untouched.
+    """
+    return _repin(name, "reinstalled")
 
 
 def plan_remove(name: str) -> dict:

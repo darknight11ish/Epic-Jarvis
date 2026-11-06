@@ -18,6 +18,13 @@ refused for the whole run:
   * **a .zip's bounds are refusals.** A member that climbs out (`../`), a
     symlink member, and a member with an alternate-stream colon in its name are
     each refused before anything is unpacked;
+  * **a name Windows would silently rename is refused.** A member ending in a
+    dot or a space (`evil.vbs.`), a member under a directory ending in one, a
+    Windows device name, an empty path component and a `.` component are
+    refused by the scan and refused AGAIN on unpack, so the code boundary
+    judges the name the disk will really get, not the one the archive wrote -
+    and a script that appears in a folder between the scan and the copy is
+    refused before the card too;
   * **a name the ledger knows is a REPLACEMENT, and a new card shows a unified
     diff.** The new source is scanned from scratch, the diff against the
     installed files is in the one card's text, and with the gate stubbed to
@@ -33,6 +40,11 @@ refused for the whole run:
     `verify_pack` refuse, `load_pack` refuse, `pack_list` show `tampered`, the
     ledger record it, and the skill hub stop offering it - and restoring the
     bytes clears the mark;
+  * **an approved edit or import re-pins the pack's manifest.** The Skills
+    screen's edit and its import replace a pack's files through
+    `jarvis_skills.install()`, and that one shared door re-pins the ledger, so
+    an ordinary approved edit no longer leaves the pack un-loadable - while a
+    file changed by hand still reads as tampered;
   * **there is no update command.** The four pack tools are the only ones, none
     is named update/replace, and the module defines no in-place updater;
   * **a collision is refused.** A skill whose name is already installed does
@@ -156,6 +168,20 @@ def make_skill(root: Path, name: str, *, description: str = "A small repeatable 
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, "utf-8")
     return folder
+
+
+def make_zip(filename: str, members: dict) -> Path:
+    """A .zip in the scratch folder, with exactly these members.
+
+    `writestr` is used rather than a file on disk so a name Windows would
+    silently rename (`evil.vbs.`) can be written at all: on this platform a
+    real file cannot carry it, and that is the whole point of the attack.
+    """
+    path = SCRATCH / filename
+    with zipfile.ZipFile(path, "w") as zf:
+        for member, data in members.items():
+            zf.writestr(member, data)
+    return path
 
 
 def fresh_gate(*, allowed: bool, tier: str = "ask", reason: str = ""):
@@ -568,6 +594,143 @@ def t_a_zip_code_member_or_stream_name_is_refused():
           str(report.get("refusal")))
 
 
+def t_a_trailing_dot_or_space_cannot_smuggle_a_script_in():
+    """BLOCKER A1 (2026-11-06): Windows strips a trailing dot or space, so a
+    member named `evil.vbs.` lands as `evil.vbs`. The scan must judge the name
+    the DISK will get, and the unpack must refuse it again."""
+    # The predicate itself, before any archive.
+    check("every suffix the skill library calls executable is code here too",
+          all(P._is_code("payload" + s) for s in SK.EXEC_SUFFIXES),
+          repr([s for s in SK.EXEC_SUFFIXES if not P._is_code("payload" + s)]))
+    named = {".vbs", ".hta", ".scr", ".jar", ".pyc", ".wasm", ".mjs", ".ts",
+             ".class"}
+    check("the pack scan's own suffix list is the wider one",
+          named <= set(P.code_suffixes()),
+          repr(sorted(named - set(P.code_suffixes()))))
+    check("a trailing dot or space cannot hide a script",
+          P._is_code("evil.vbs.") and P._is_code("evil.vbs ")
+          and P._is_code("evil.vbs"),
+          repr([P._is_code(n) for n in ("evil.vbs.", "evil.vbs ", "evil.vbs")]))
+    check("plain markdown is still not code", not P._is_code("notes.md"))
+    for member, why in (("evil.vbs.", "a trailing dot"),
+                        ("evil.vbs ", "a trailing space"),
+                        ("my-skill./SKILL.md", "a directory ending in a dot"),
+                        ("dir /notes.md", "a directory ending in a space"),
+                        ("my-skill/CON.md", "a Windows device name"),
+                        ("my-skill/a//b.md", "an empty path component"),
+                        ("./SKILL.md", "a '.' path component"),
+                        ("../evil.md", "a climb out")):
+        clean, problem = P._plain_member(member)
+        check(f"a member with {why} is not a plain name",
+              not clean and bool(problem), f"{member!r} -> {clean!r} {problem!r}")
+
+    skill_text = GOOD_SKILL_MD.format(name="dot-pack",
+                                      description="a pack in a .zip")
+    cases = [
+        ("dot-pack/evil.vbs.", "trailing-dot-member.zip"),
+        ("dot-pack/evil.vbs ", "trailing-space-member.zip"),
+        ("dot-pack/references./notes.md", "dot-directory-member.zip"),
+        ("dot-pack/CON.md", "device-name-member.zip"),
+        ("./dot-pack/references/notes.md", "dot-component-member.zip"),
+        ("dot-pack/evil.vbs", "plain-vbs-member.zip"),        # the control
+    ]
+    for member, filename in cases:
+        archive = make_zip(filename, {"dot-pack/SKILL.md": skill_text,
+                                      member: "not really a payload\n"})
+        report = P.scan_source(str(archive))
+        check(f"{member!r} is refused by the scan before any card",
+              report.get("verdict") == "refuse"
+              and report.get("asked") is False,
+              repr(report.get("verdict")))
+        refusal = str(report.get("refusal") or "")
+        check("... and the refusal names the member or the rule that refused it",
+              member in refusal or "plain name" in refusal
+              or "executable code" in refusal, refusal)
+        gate, calls = fresh_gate(allowed=True)
+        SK._gate = gate
+        try:
+            out = P.install_pack(str(archive))
+        finally:
+            SK._gate = fresh_gate(allowed=True)[0]
+        check(f"... {filename} installs nothing and never asks",
+              out.get("ok") is False and out.get("asked") is False
+              and calls == [] and not (SKILLS / "dot-pack").exists()
+              and not (OFF / "dot-pack").exists(), repr(out)[:250])
+        check(f"... and the ledger has no record from {filename}",
+              "dot-pack" not in (P.read_ledger().get("packs") or {}))
+
+    # The unpack is the SECOND read of the archive: it refuses the same name
+    # on its own, not only because the scan ran first.
+    probe = SCRATCH / "extract-probe"
+    probe.mkdir(parents=True, exist_ok=True)
+    folder, why = P._extract_zip(
+        make_zip("extract-dot.zip", {"p/SKILL.md": skill_text,
+                                     "p/evil.vbs.": "payload\n"}), probe)
+    check("the unpack refuses a trailing-dot member on its own",
+          folder is None and ("dot or a space" in str(why)
+                              or "plain name" in str(why)), f"{folder} {why}")
+    check("... and no script landed",
+          not any(p.name.startswith("evil") for p in probe.rglob("*")
+                  if p.is_file()),
+          repr([p.name for p in probe.rglob("*") if p.is_file()]))
+
+    # A normal .md pack still installs, and the ledger records ONLY what landed.
+    good = make_zip("dot-pack-good.zip", {
+        "dot-pack/SKILL.md": skill_text,
+        "dot-pack/references/notes.md": "some detail\n",
+    })
+    gate, calls = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        out = P.install_pack(str(good))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("a normal .md pack still installs", out.get("ok") is True,
+          repr(out)[:250])
+    check("... its one card still says instructions only, no code",
+          bool(calls) and "instructions only - no code" in calls[0]["prompt"],
+          (calls[0]["prompt"][:300] if calls else "no card"))
+    entry = (P.read_ledger().get("packs") or {}).get("dot-pack") or {}
+    landed = sorted(str(p.relative_to(OFF / "dot-pack")).replace("\\", "/")
+                    for p in (OFF / "dot-pack").rglob("*") if p.is_file())
+    check("the ledger records exactly the files that were written",
+          landed == ["SKILL.md", "references/notes.md"]
+          and sorted(r["path"] for r in entry.get("files") or []) == landed,
+          f"{[r['path'] for r in entry.get('files') or []]} vs {landed}")
+    check("... and every recorded hash is the landed file's own",
+          all(P._sha256_file(OFF / "dot-pack" / r["path"]) == r["sha256"]
+              for r in entry.get("files") or []))
+
+    # The scan and the copy are two different reads: a script that appears in
+    # the folder between them must not land either (the folder half of A1).
+    late = make_skill(SOURCE / "late-code", "late-code")
+    real_scan = P.scan_source
+
+    def scan_then_plant(source):
+        report = real_scan(source)
+        (Path(source) / "evil.vbs").write_text("payload\n", "utf-8")
+        return report
+
+    gate, calls = fresh_gate(allowed=True)
+    SK._gate = gate
+    P.scan_source = scan_then_plant
+    try:
+        out = P.install_pack(str(late))
+    finally:
+        P.scan_source = real_scan
+        SK._gate = fresh_gate(allowed=True)[0]
+        try:
+            (late / "evil.vbs").unlink()
+        except OSError:
+            pass
+    check("a script planted between the scan and the copy is refused",
+          out.get("ok") is False and out.get("asked") is False
+          and "executable code" in str(out.get("reason")), repr(out)[:250])
+    check("... the gate was never asked", calls == [], repr(calls))
+    check("... and nothing landed", not (SKILLS / "late-code").exists()
+          and not (OFF / "late-code").exists())
+
+
 def t_a_folder_link_is_refused():
     outside = SCRATCH / "outside-pack"
     outside.mkdir(parents=True, exist_ok=True)
@@ -836,6 +999,75 @@ def t_a_changed_file_is_tampered_and_refused_on_load():
     check("... so the pack loads again", P.load_pack("tamper-test").get("ok") is True)
 
 
+def t_an_approved_edit_or_import_repins_the_pack_manifest():
+    """REAL A2 (2026-11-06): the Skills screen's edit and import write through
+    `jarvis_skills.install()`, so the ledger must be re-pinned THERE - the one
+    door every surface uses - or an ordinary approved edit reads as tampering."""
+    import jarvis_skill_menu as MENU
+    folder = make_skill(SOURCE / "repin", "repin-test",
+                        extra={"references/notes.md": "kept\n"})
+    gate, _ = fresh_gate(allowed=True)
+    SK._gate = gate
+    try:
+        first = P.install_pack(str(folder))
+    finally:
+        SK._gate = fresh_gate(allowed=True)[0]
+    check("repin-test installed and turned off", first.get("ok") is True
+          and first.get("state") == "disabled", repr(first)[:250])
+    check("... it verifies before anything else touches it",
+          P.verify_pack("repin-test").get("ok") is True)
+
+    code, on = MENU.set_state({"name": "repin-test", "on": True})
+    check("the existing ON card re-installs it", code == 200
+          and on.get("ok") is True, f"{code} {str(on)[:250]}")
+    check("... and the pack still verifies afterwards",
+          P.verify_pack("repin-test").get("ok") is True)
+
+    edited = GOOD_SKILL_MD.format(name="repin-test",
+                                  description="the edited thing")
+    code, out = MENU.edit({"name": "repin-test", "text": edited,
+                           "accept_warnings": True})
+    check("an ordinary approved edit lands", code == 200
+          and out.get("ok") is True, f"{code} {str(out)[:250]}")
+    check("the edited pack is NOT tampered",
+          P.verify_pack("repin-test").get("ok") is True,
+          repr(P.verify_pack("repin-test", mark=False))[:300])
+    loaded = SK.load("repin-test")
+    check("... the model can load it again", loaded.get("ok") is True,
+          repr(loaded)[:300])
+
+    # The immutability rule still bites: a change no card approved is refused.
+    notes = SKILLS / "repin-test" / "references" / "notes.md"
+    notes.write_text("changed behind jarvis's back\n", "utf-8")
+    check("a hand-changed file is still tampered",
+          P.verify_pack("repin-test").get("tampered") is True)
+    check("... and the model must not load it",
+          SK.load("repin-test").get("ok") is False)
+    notes.write_text("kept\n", "utf-8")
+    check("... restoring the approved bytes clears the mark",
+          P.verify_pack("repin-test").get("ok") is True)
+
+    # The other door: a same-name import through the Skills screen also
+    # re-pins, even though it replaces the whole file set.
+    fresh = make_skill(SOURCE / "repin2", "repin-test",
+                       description="imported again",
+                       extra={"references/other.md": "new file\n"})
+    code, out = MENU.install_source({"path": str(fresh),
+                                     "accept_warnings": True})
+    check("a same-name import through the Skills screen lands", code == 200
+          and out.get("ok") is True, f"{code} {str(out)[:250]}")
+    check("... and it re-pins the manifest to the new file set",
+          P.verify_pack("repin-test").get("ok") is True)
+    entry = (P.read_ledger().get("packs") or {}).get("repin-test") or {}
+    check("... the ledger holds the imported files, not the old ones",
+          sorted(r["path"] for r in entry.get("files") or [])
+          == ["SKILL.md", "references/other.md"],
+          repr([r["path"] for r in entry.get("files") or []]))
+    check("... so the model loads the imported version",
+          SK.load("repin-test").get("ok") is True)
+    P.remove_pack("repin-test")
+
+
 def t_there_is_no_update_command():
     import ast
     import jarvis_agent as AG
@@ -872,8 +1104,10 @@ def main():
                t_a_replacement_is_a_new_scan_with_a_unified_diff,
                t_the_same_bytes_are_not_a_replacement,
                t_a_changed_file_is_tampered_and_refused_on_load,
+               t_an_approved_edit_or_import_repins_the_pack_manifest,
                t_there_is_no_update_command,
                t_the_ledger_records_every_file_and_hash,
+               t_a_trailing_dot_or_space_cannot_smuggle_a_script_in,
                t_remove_deletes_exactly_the_ledger_files_and_keeps_owner_files,
                t_installing_enables_nothing,
                t_inspect_installs_nothing_and_is_stable,

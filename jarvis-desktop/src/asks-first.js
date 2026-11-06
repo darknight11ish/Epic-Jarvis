@@ -71,8 +71,8 @@ export const SWITCHABLE = Object.freeze([
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
  * 60 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
- * that landed with the GitHub tools branch, the four pack-manager tools and
- * hands-free's send_text_message). A DIFFERENT thing from SWITCHABLE
+ * that landed with the GitHub tools branch, the four pack-manager tools,
+ * hands-free's send_text_message and the approval-policy tool's own row). A DIFFERENT thing from SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -107,10 +107,10 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove",
   "send_text_message", "refresh_abilities", "self_portrait", "setup_quiz",
-  "approval_policy",
   // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",
+  "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

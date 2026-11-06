@@ -160,7 +160,8 @@ class AsksFirstTest {
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
         // 60 at 2026-11-05: the six on-demand GitHub tools, hands-free's
-        // send_text_message and the four pack-manager tools all joined the
+        // send_text_message, the four pack-manager tools and the approval-policy
+        // tool's own row all joined the
         // switchable list (48 since the owner's decision of 2026-11-04: every
         // tool the AI model can be offered is a switch, raw Tier C set and
         // everyday helpers included; 21 before that). The phone still shows

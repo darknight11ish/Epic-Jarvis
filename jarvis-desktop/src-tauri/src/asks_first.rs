@@ -78,10 +78,11 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 /// Windows Hello on the PC, that turns it off (held on a stale link).
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
-/// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
+/// The tools that may be OFFERED to the AI model at all from
 /// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 60 at
 /// 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools, the four
-/// pack-manager tools that ship ON and hands-free's send_text_message): the
+/// pack-manager tools that ship ON, hands-free's send_text_message and the
+/// approval-policy tool's own row): the
 /// owner's decision of 2026-11-04 made EVERY tool the AI model can be offered
 /// switchable, raw Tier C set and everyday helpers included (21 before that;
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
@@ -148,7 +149,6 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 60] = [
     "refresh_abilities",
     "self_portrait",
     "setup_quiz",
-    "approval_policy",
     // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
     "github_list",
     "github_read_file",
@@ -156,6 +156,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 60] = [
     "github_comment",
     "github_open_issue",
     "github_rerun_workflow",
+    "approval_policy",
 ];
 
 /// The four known tools with no switch of their own, each with the PC's own

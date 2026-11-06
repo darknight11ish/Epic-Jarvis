@@ -11139,10 +11139,8 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 
 **The 60 switches** (2026-11-05; 48 at 2026-11-04, plus the six on-demand
   GitHub tools, hands-free's `send_text_message`, the approval-policy tool's
-  own row and the four pack tools, below), in the page's own groups:
-**The 59 switches** (2026-11-05; 48 at 2026-11-04, plus the six on-demand
-GitHub tools, hands-free's `send_text_message` and the four pack tools, below),
-in the page's own groups:
+  own row and the four pack tools `pack_list`, `pack_inspect`, `pack_install`
+  and `pack_remove`, below), in the page's own groups:
 
 - **Notes and reading:** `calendar_read`, `notes_search`,
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
@@ -11211,7 +11209,6 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (60), not just Tier A/B. |
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (60), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11233,13 +11230,10 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
                              "why": <the plain note>}}
 ```
 
-`items` lists all 56 switches at 2026-11-05 (48 at 2026-11-04, plus the six
-GitHub tools, hands-free's `send_text_message` and the approval-policy tool's
-`approval_policy` - every tool the AI model can be offered except the four
-below), grouped; `vault` is the vault organizer's
-`items` lists all 59 switches at 2026-11-05 (48 at 2026-11-04, plus the six
-GitHub tools, hands-free's `send_text_message` and the four pack tools - every tool
-the AI model can be offered except the four below), grouped; `vault` is the vault organizer's
+`items` lists all 60 switches at 2026-11-05 (48 at 2026-11-04, plus the six
+GitHub tools, hands-free's `send_text_message`, the approval-policy tool's own
+row and the four pack tools - every tool the AI model can be offered except the
+four below), grouped; `vault` is the vault organizer's
 separate switch; `not_switchable` names the four tools whose own switch decides
 them, with the PC's own sentence, so the page points at the real switch instead
 of drawing one that would do nothing. `extra` is D4 (the owner, 2026-11-04):
@@ -35487,6 +35481,104 @@ POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
 **One-sided, and said out loud.** This is the backend half. The phone's "Send a document" button, its folder picker, its progress chip and its result sentence are the next lane; the desktop deliberately gets no screen, because it already has every door this uses. `docs/ARCHITECTURE.md` section 8 records both, and `tools/check_parity.py` keeps the three routes in its backend-only register until an app calls one - at which point the checker fails and asks for the reclassification, which is the point of the register.
 
 **The decision this reverses is recorded.** On 2026-10-29 the record said, in as many words, "Deliberately not built, now or later: an upload endpoint, a resumable or chunked transfer, a document preview, a second image path, and any 'attach anything' share target on the phone" (`docs/DECISIONS.md:4943`). This section is the reversal of **"an upload endpoint"** and **"a resumable or chunked transfer"**, and of nothing else: there is no document preview here, no second image path and no share target on the phone, and pictures, audio and video are refused. `decisions.d/2026-11-05-phone-upload.md` records it.
+## 197. Packs: add and remove a skill from a folder or a `.zip`, with the full scan on the card (added 2026-11-05)
+
+The owner asked for a manager that can "add/remove plug-ins and skills from a wide variety of sources, with a full pre-install scan (safety, compatibility, effectiveness)". This is **phase 1**: one kind of pack (`skill`), two local sources (a folder on this PC, a `.zip` on this PC), the full scan report, the ledger that makes removal complete, and four chat doors. Phase 1 deliberately installs **no code packs** and has **no git, URL or marketplace source** - see 197.7.
+
+There is no route in this section. All four doors are model tools in `jarvis_agent.py`, the same shape as `plugin_list`/`plugin_switch` (section 181), so no patch is involved and `jarvis_packs.py` ships whole.
+
+### 197.1 What a "pack" is here
+
+A pack is a skill: a folder with a `SKILL.md` whose YAML frontmatter names it, plus optional `references/` and `scripts/` (a `scripts/` folder is kept inert and never run - section 178). A pack may also carry an optional `pack.json` beside the `SKILL.md`:
+
+```jsonc
+{ "schema": 1, "kind": "skill",          // "skill" only in phase 1
+  "name": "tidy-desk", "version": "1.2.0",
+  "summary": "one line, the owner's words",
+  "requires": { "python": ">=3.10", "min_jarvis_version": "0.2.400" },
+  "licence": "MIT" }
+```
+
+`kind` is read from `pack.json` when present and defaults to `skill`; a `plugin` pack is refused with a plain sentence rather than half-installed. `version` comes from the frontmatter or `pack.json`; no version is a warning, not a refusal, because real skills (including the two in this repository) often carry none. `requires.python` and `requires.min_jarvis_version`, when declared, are checked against the running values.
+
+### 197.2 The four doors
+
+| tool | what it does | gate action | card |
+|---|---|---|---|
+| `pack_list` | every pack the ledger knows, its kind, version, source, digest, state (installed / disabled / removed / missing), plus a skill on disk with no record and every drop-in plug-in folder | `skill_list` (tier auto) | none |
+| `pack_inspect` | the full scan report for ONE folder or `.zip`, in plain words and structured fields; writes nothing | `skill_list` (tier auto) | none |
+| `pack_install` | scans ONE pack, refuses code before any card, then ONE `modify_own_code` card showing the whole report; writes only after the yes, and turns the pack OFF at once | `modify_own_code` (tier ask) | one |
+| `pack_remove` | ONE card naming exactly the files the ledger recorded, then deletes exactly those and keeps the rest | `modify_own_code` (tier ask) | one |
+
+Each takes one path (install/inspect) or one name (remove). There is no list argument, so no bulk path exists by construction; a call with anything else is refused with "one pack at a time".
+
+**Where the install card comes from.** Not from `jarvis_agent`: `pack_install` calls `jarvis_packs.install_pack()`, which calls **`jarvis_skills.install()`** - the same function the desktop Skills screen calls. That function vets the skill and raises its own ONE `modify_own_code` card; the scan report is handed to it as the card's `note=`, so the card shows what was scanned. Raising a second card in the agent as well would ask the same question twice under the same action, so `pack_install`'s path is answered before the generic gate and the card count is still taken (`CARD_LIMIT` sees it).
+
+**Where the remove card comes from.** The generic gate, under the same `modify_own_code` action, with the plan's own words as the card text. Removing a pack deletes files, so it is a change to what is on this PC and gets one card; a refused/absent ledger record is a plain answer and no card.
+
+### 197.3 The scan report
+
+Computed before any file lands, shown on the card, and saved as a receipt on approval. Four groups, named the owner's way:
+
+- **Safety** - the pack kind; whether anything in it can run. A file that can run is a **refusal**, not a warning, and the refusal names it. The list is every executable, script and compiled/bytecode suffix - `.py`, `.pyc`, `.ps1`, `.bat`, `.cmd`, `.sh`, `.exe`, `.dll`, `.so`, `.pyd`, `.js`, `.ts`, `.wasm` and the rest of the module's `CODE_SUFFIXES` - plus any binary (a NUL byte, or bytes that are not UTF-8 text). A **folder** holding a symlink or a Windows junction, or a file that resolves outside its own folder, is refused before a byte is read (Q2: path-traversal links are a hard reject; the check runs again right before the copy, because the scan and the copy are two reads). a `.zip` is bounded the same way: no absolute path, no `..` climb, no drive letter, no symlink member, no name with a colon (an alternate data stream on Windows) or a NUL, no more than `jarvis_skills.MAX_FILES` files, and no more than `jarvis_skills.MAX_SKILL_DIR` bytes. Every file and its sha256 is listed, with the combined pack digest; the existing scanner's own verdict and every finding it made (`jarvis_skills.vet`, called - a `refuse` never becomes a card) appear on the card under **SCAN FINDINGS**, including hidden/bidirectional Unicode and prompt-injection patterns; the skill's `allowed-tools` are listed as **DECLARED**, never as granted or published; the trust rung is `NOT VERIFIED`, because there is no signing key.
+- **Compatibility** - a declared `requires.python` / `requires.min_jarvis_version` is checked against the running values; where the files will be written; whether a restart is needed (a skill: no - the model is given the skill list again next turn). A name the pack ledger already holds is a **REPLACEMENT**, not a collision: the new bytes are scanned from scratch and a unified diff against the installed files goes on the new card (§197.9). A name that is on disk but NOT in the ledger is still refused: this module will not overwrite a skill it did not write, because it has no manifest to diff against.
+- **Effectiveness** - the trigger line (the skill's own `description`, which is what drives selection) plus the bullets under a "When to use" heading when it writes them; the **prompt-token cost**, estimated with `jarvis_agent.estimate_tokens` on the `SKILL.md` text, so the number is the number the chat budgets with; one plain sentence on what changes for the owner; for a code pack, the report says why it is refused rather than pretending to smoke-test it.
+- **Bookkeeping** - licence if declared (else "not declared"), source, pin (a folder's path and mtime, or the `.zip`'s own sha256), file count and size, where the files will be written, and how they will be removed.
+
+`pack_inspect` answers the four questions in plain words as well as fields: **what is this, what will it change, is it safe, will it work here** (`sentences()`), and the card carries the same four headings.
+
+**What the scan cannot do, said on the card and in every answer:** it does not sandbox anything, a clean scan is not permission, it cannot prove authorship, and it cannot see an update nobody asked for - there is no auto-update at all.
+
+### 197.4 The ledger, and what removal can honestly do
+
+`jarvis-packs.json` sits in the config folder (`jarvis_framework.config_path().parent`, so beside `jarvis-framework.toml`; `JARVIS_PACKS_DIR` overrides it for the suites). Per pack it records: kind, name, version, source (type, locator, pin), the combined `pack_sha256`, `installed_at`, `state` (`installed` / `disabled` / `removed`), the folder, and **every file with its own sha256 and size**.
+
+`pack_remove` deletes a file only when it is in the ledger **and its sha256 still matches**, so a file that changed since install is kept and named. A file in the folder that the ledger does not know is never deleted - it is reported and kept. The index row goes, the content pin is released, and the ledger entry is marked `removed` rather than forgotten, so a second removal refuses instead of guessing. A pack whose ledger record is missing is refused outright: "I no longer know which files this pack wrote".
+
+Removal says plainly what it cannot do: a **prompt-only skill** needs no restart - the model is given the skill list again on the next turn - while a **code pack** (phase 2) would answer until Jarvis restarts. Nothing here restarts anything.
+
+### 197.5 Installing enables nothing
+
+The copy lands and is then **moved to `skills-off`** by the existing off path (`jarvis_skill_menu.set_state({"name": ..., "on": false})`), so it is not offered to the model and `jarvis_skills.load()` cannot find it. Turning it on is the existing ON path - the scanner again and its own ONE card. If that move ever fails, the install answer says so and says the pack is on.
+
+### 197.6 The receipt
+
+`jarvis-packs-receipts/<name>-<pack_sha256[:12]>-<UTC stamp>.json` beside the ledger, one per install, never overwritten: the whole report plus `approved_by`, `approved_at`, the sha256 of the card text, and the ledger entry. The ledger says what the pack **wrote**; the receipt says what it **was** when the owner said yes. The receipt's own summary - the approval time, the card's sha256, the verdict, the findings and the file manifest - is also stored in the ledger entry as `receipt_scan`, so `jarvis-packs.json` alone answers "what was approved" when the receipts folder is gone.
+
+### 197.7 What phase 1 deliberately does not do
+
+- **No code packs.** A file that can run is a refusal, not a warning: `.py`, `.pyc`, `.ps1`, `.bat`, `.cmd`, `.sh`, `.exe`, `.dll`, `.so`, `.pyd`, `.js`, `.ts`, `.wasm`, the rest of the module's `CODE_SUFFIXES` and every binary. Third-party Python imported into the HUD process needs a separate-process runner before a card is enough (section 4 of the source brief, and the design's risk table). The scan reports the refusal instead of faking a smoke run.
+- **No git, URL, index or marketplace source.** A local folder and a local `.zip` only, so nothing in this feature opens a socket. A pinned git commit is phase 5 of the roadmap and waits on the egress work.
+- **No update command, no auto-update, no un-scanned swap.** Different bytes under a name the ledger holds are a **REPLACEMENT**: a full new scan plus a unified diff against the installed files on one NEW card, and the swap only after the yes (§197.9). There is no `pack_update`, `pack_upgrade` or `pack_replace` tool, and no path that changes an installed pack without that card.
+- **No enable from here**, no bulk install, no phone catalogue.
+- **PC-only with Windows Hello is NOT added by this change.** The install and removal cards go through the existing `modify_own_code` action at tier `ask`, which is what the Skills screen already raises. Making that card PC-only + Hello would need either a new gate action (a patch, and this feature is built to need none) or adding `modify_own_code` to `jarvis_owner_check.PC_ONLY_ACTIONS`, which would also take the phone's `plugin_switch` ON and every skill install/ edit with it. That is a decision for the owner, recorded in `decisions.d/2026-11-05-pack-manager-first-slice.md`; it is not silently skipped.
+
+### 197.8 Immutability: the manifest is re-checked on every load (Q3, 2026-11-05)
+
+An installed pack is **immutable**. At install, `jarvis-packs.json` pins every file's own sha256 and one combined `pack_sha256`; the receipt records the same. Every load re-hashes the whole manifest against the disk before the text becomes instructions:
+
+- `pack_list` re-checks every pack as it lists it and shows `tampered`, naming the files that no longer match;
+- `jarvis_packs.load_pack()` refuses and names the file;
+- `jarvis_skill_hub.visible_skills()` stops offering a tampered pack, and `references()` / `level2_reference()` refuse to read its manuals;
+- the Skills menu row shows it, and its ON path cannot quietly bring it back: turning on runs the scanner and its ONE card again, and only after that card does the pack manager re-take the manifest (`repin_after_enable`, with the old digest kept in `history`);
+- `jarvis_skills.load()` itself re-checks the manifest through `backend/packs-tamper-on-load.patch` - the one core patch this slice adds - so the body loader refuses too, not only the pack manager's own door.
+
+Marking is a ledger write, never a file move or delete: the pack stays exactly where it is, `state: "tampered"`, with `tampered_at` and the file names, and a plain sentence says why it will not load. Restoring the approved bytes by hand clears the mark. A tampered pack is still removable: removal deletes only files whose sha256 still matches and keeps the ones that changed.
+
+### 197.9 Replacement is a new scan and a diff, never an update (Q3, 2026-11-05)
+
+`pack_install` on a name the ledger already holds is a **replacement**, and the rules are the same at every step:
+
+1. the new folder or `.zip` is scanned **from scratch** - the same bounds, the same code refusal, the same scanner, a new receipt;
+2. a **unified diff** of the installed files (read from disk, so a pack changed by hand is diffed as it really is) against the new ones is built and shown, with the new scan report, on the **same one NEW `modify_own_code` card**. The card says `THIS IS A REPLACEMENT, NOT AN UPDATE` at the top, names the installed version/digest and the new one, and shows what changes;
+3. **nothing is swapped before that card is answered.** A refused card leaves the installed copy byte-for-byte unchanged - the installed folder is copied to the incoming folder first and put back if the copy fails, so a failed replacement cannot lose the version the owner already had;
+4. after the yes the new files are installed, turned OFF (exactly as a first install is), and the ledger keeps `replaced_at`, the replaced digest, the diff's own sha256 and the previous receipt in `history`.
+
+The same bytes are not a replacement: re-scanning exactly what is installed is a plain refusal and never becomes a card. A name that is on disk but **not** in the ledger is still refused outright - the manager will not overwrite a skill it did not write, because it has no manifest to diff against. Nothing else can change an installed pack: there is no update tool, no auto-update, and no in-place path anywhere in the module.
+
+### 197.10 What this leaves behind for the next phase
+
+The ledger, the receipt writer, `scan_source()` and the four doors are source-agnostic on purpose: phase 2 adds the AST/import and obfuscation half of the scan for code packs, phase 3 the plug-in kind (which writes two files and needs a restart sentence that already exists in `_restart_line("plugin")`), and phases 4-6 add the git/index/URL sources and the catalogue truth. None of them needs a second scanner or a second card.
 ## 198. Chat can read a note: one note's text, a which-one list, or the honest no (added 2026-11-05)
 
 *Numbering note, 2026-11-05: this section was written as 188; the call-recording section (2026-11-04) already held 188 when this branch merged main, so this one is 198, leaving 196 and 197 to the sections landing ahead of it in the merge train. The words below are unchanged.*
@@ -35681,101 +35773,3 @@ Coming up and the phone are compared on 32 cases each rather than 29, with no
 mismatch.
 
 The decision is `decisions.d/2026-11-05-quotes-local-corpus.md`.
-## 197. Packs: add and remove a skill from a folder or a `.zip`, with the full scan on the card (added 2026-11-05)
-
-The owner asked for a manager that can "add/remove plug-ins and skills from a wide variety of sources, with a full pre-install scan (safety, compatibility, effectiveness)". This is **phase 1**: one kind of pack (`skill`), two local sources (a folder on this PC, a `.zip` on this PC), the full scan report, the ledger that makes removal complete, and four chat doors. Phase 1 deliberately installs **no code packs** and has **no git, URL or marketplace source** - see 197.7.
-
-There is no route in this section. All four doors are model tools in `jarvis_agent.py`, the same shape as `plugin_list`/`plugin_switch` (section 181), so no patch is involved and `jarvis_packs.py` ships whole.
-
-### 197.1 What a "pack" is here
-
-A pack is a skill: a folder with a `SKILL.md` whose YAML frontmatter names it, plus optional `references/` and `scripts/` (a `scripts/` folder is kept inert and never run - section 178). A pack may also carry an optional `pack.json` beside the `SKILL.md`:
-
-```jsonc
-{ "schema": 1, "kind": "skill",          // "skill" only in phase 1
-  "name": "tidy-desk", "version": "1.2.0",
-  "summary": "one line, the owner's words",
-  "requires": { "python": ">=3.10", "min_jarvis_version": "0.2.400" },
-  "licence": "MIT" }
-```
-
-`kind` is read from `pack.json` when present and defaults to `skill`; a `plugin` pack is refused with a plain sentence rather than half-installed. `version` comes from the frontmatter or `pack.json`; no version is a warning, not a refusal, because real skills (including the two in this repository) often carry none. `requires.python` and `requires.min_jarvis_version`, when declared, are checked against the running values.
-
-### 197.2 The four doors
-
-| tool | what it does | gate action | card |
-|---|---|---|---|
-| `pack_list` | every pack the ledger knows, its kind, version, source, digest, state (installed / disabled / removed / missing), plus a skill on disk with no record and every drop-in plug-in folder | `skill_list` (tier auto) | none |
-| `pack_inspect` | the full scan report for ONE folder or `.zip`, in plain words and structured fields; writes nothing | `skill_list` (tier auto) | none |
-| `pack_install` | scans ONE pack, refuses code before any card, then ONE `modify_own_code` card showing the whole report; writes only after the yes, and turns the pack OFF at once | `modify_own_code` (tier ask) | one |
-| `pack_remove` | ONE card naming exactly the files the ledger recorded, then deletes exactly those and keeps the rest | `modify_own_code` (tier ask) | one |
-
-Each takes one path (install/inspect) or one name (remove). There is no list argument, so no bulk path exists by construction; a call with anything else is refused with "one pack at a time".
-
-**Where the install card comes from.** Not from `jarvis_agent`: `pack_install` calls `jarvis_packs.install_pack()`, which calls **`jarvis_skills.install()`** - the same function the desktop Skills screen calls. That function vets the skill and raises its own ONE `modify_own_code` card; the scan report is handed to it as the card's `note=`, so the card shows what was scanned. Raising a second card in the agent as well would ask the same question twice under the same action, so `pack_install`'s path is answered before the generic gate and the card count is still taken (`CARD_LIMIT` sees it).
-
-**Where the remove card comes from.** The generic gate, under the same `modify_own_code` action, with the plan's own words as the card text. Removing a pack deletes files, so it is a change to what is on this PC and gets one card; a refused/absent ledger record is a plain answer and no card.
-
-### 197.3 The scan report
-
-Computed before any file lands, shown on the card, and saved as a receipt on approval. Four groups, named the owner's way:
-
-- **Safety** - the pack kind; whether anything in it can run. A file that can run is a **refusal**, not a warning, and the refusal names it. The list is every executable, script and compiled/bytecode suffix - `.py`, `.pyc`, `.ps1`, `.bat`, `.cmd`, `.sh`, `.exe`, `.dll`, `.so`, `.pyd`, `.js`, `.ts`, `.wasm` and the rest of the module's `CODE_SUFFIXES` - plus any binary (a NUL byte, or bytes that are not UTF-8 text). A **folder** holding a symlink or a Windows junction, or a file that resolves outside its own folder, is refused before a byte is read (Q2: path-traversal links are a hard reject; the check runs again right before the copy, because the scan and the copy are two reads). a `.zip` is bounded the same way: no absolute path, no `..` climb, no drive letter, no symlink member, no name with a colon (an alternate data stream on Windows) or a NUL, no more than `jarvis_skills.MAX_FILES` files, and no more than `jarvis_skills.MAX_SKILL_DIR` bytes. Every file and its sha256 is listed, with the combined pack digest; the existing scanner's own verdict and every finding it made (`jarvis_skills.vet`, called - a `refuse` never becomes a card) appear on the card under **SCAN FINDINGS**, including hidden/bidirectional Unicode and prompt-injection patterns; the skill's `allowed-tools` are listed as **DECLARED**, never as granted or published; the trust rung is `NOT VERIFIED`, because there is no signing key.
-- **Compatibility** - a declared `requires.python` / `requires.min_jarvis_version` is checked against the running values; where the files will be written; whether a restart is needed (a skill: no - the model is given the skill list again next turn). A name the pack ledger already holds is a **REPLACEMENT**, not a collision: the new bytes are scanned from scratch and a unified diff against the installed files goes on the new card (§197.10). A name that is on disk but NOT in the ledger is still refused: this module will not overwrite a skill it did not write, because it has no manifest to diff against.
-- **Effectiveness** - the trigger line (the skill's own `description`, which is what drives selection) plus the bullets under a "When to use" heading when it writes them; the **prompt-token cost**, estimated with `jarvis_agent.estimate_tokens` on the `SKILL.md` text, so the number is the number the chat budgets with; one plain sentence on what changes for the owner; for a code pack, the report says why it is refused rather than pretending to smoke-test it.
-- **Bookkeeping** - licence if declared (else "not declared"), source, pin (a folder's path and mtime, or the `.zip`'s own sha256), file count and size, where the files will be written, and how they will be removed.
-
-`pack_inspect` answers the four questions in plain words as well as fields: **what is this, what will it change, is it safe, will it work here** (`sentences()`), and the card carries the same four headings.
-
-**What the scan cannot do, said on the card and in every answer:** it does not sandbox anything, a clean scan is not permission, it cannot prove authorship, and it cannot see an update nobody asked for - there is no auto-update at all.
-
-### 197.4 The ledger, and what removal can honestly do
-
-`jarvis-packs.json` sits in the config folder (`jarvis_framework.config_path().parent`, so beside `jarvis-framework.toml`; `JARVIS_PACKS_DIR` overrides it for the suites). Per pack it records: kind, name, version, source (type, locator, pin), the combined `pack_sha256`, `installed_at`, `state` (`installed` / `disabled` / `removed`), the folder, and **every file with its own sha256 and size**.
-
-`pack_remove` deletes a file only when it is in the ledger **and its sha256 still matches**, so a file that changed since install is kept and named. A file in the folder that the ledger does not know is never deleted - it is reported and kept. The index row goes, the content pin is released, and the ledger entry is marked `removed` rather than forgotten, so a second removal refuses instead of guessing. A pack whose ledger record is missing is refused outright: "I no longer know which files this pack wrote".
-
-Removal says plainly what it cannot do: a **prompt-only skill** needs no restart - the model is given the skill list again on the next turn - while a **code pack** (phase 2) would answer until Jarvis restarts. Nothing here restarts anything.
-
-### 197.5 Installing enables nothing
-
-The copy lands and is then **moved to `skills-off`** by the existing off path (`jarvis_skill_menu.set_state({"name": ..., "on": false})`), so it is not offered to the model and `jarvis_skills.load()` cannot find it. Turning it on is the existing ON path - the scanner again and its own ONE card. If that move ever fails, the install answer says so and says the pack is on.
-
-### 197.6 The receipt
-
-`jarvis-packs-receipts/<name>-<pack_sha256[:12]>-<UTC stamp>.json` beside the ledger, one per install, never overwritten: the whole report plus `approved_by`, `approved_at`, the sha256 of the card text, and the ledger entry. The ledger says what the pack **wrote**; the receipt says what it **was** when the owner said yes. The receipt's own summary - the approval time, the card's sha256, the verdict, the findings and the file manifest - is also stored in the ledger entry as `receipt_scan`, so `jarvis-packs.json` alone answers "what was approved" when the receipts folder is gone.
-
-### 197.7 What phase 1 deliberately does not do
-
-- **No code packs.** A file that can run is a refusal, not a warning: `.py`, `.pyc`, `.ps1`, `.bat`, `.cmd`, `.sh`, `.exe`, `.dll`, `.so`, `.pyd`, `.js`, `.ts`, `.wasm`, the rest of the module's `CODE_SUFFIXES` and every binary. Third-party Python imported into the HUD process needs a separate-process runner before a card is enough (section 4 of the source brief, and the design's risk table). The scan reports the refusal instead of faking a smoke run.
-- **No git, URL, index or marketplace source.** A local folder and a local `.zip` only, so nothing in this feature opens a socket. A pinned git commit is phase 5 of the roadmap and waits on the egress work.
-- **No update command, no auto-update, no un-scanned swap.** Different bytes under a name the ledger holds are a **REPLACEMENT**: a full new scan plus a unified diff against the installed files on one NEW card, and the swap only after the yes (§197.10). There is no `pack_update`, `pack_upgrade` or `pack_replace` tool, and no path that changes an installed pack without that card.
-- **No enable from here**, no bulk install, no phone catalogue.
-- **PC-only with Windows Hello is NOT added by this change.** The install and removal cards go through the existing `modify_own_code` action at tier `ask`, which is what the Skills screen already raises. Making that card PC-only + Hello would need either a new gate action (a patch, and this feature is built to need none) or adding `modify_own_code` to `jarvis_owner_check.PC_ONLY_ACTIONS`, which would also take the phone's `plugin_switch` ON and every skill install/ edit with it. That is a decision for the owner, recorded in `decisions.d/2026-11-05-pack-manager-first-slice.md`; it is not silently skipped.
-
-### 197.8 Immutability: the manifest is re-checked on every load (Q3, 2026-11-05)
-
-An installed pack is **immutable**. At install, `jarvis-packs.json` pins every file's own sha256 and one combined `pack_sha256`; the receipt records the same. Every load re-hashes the whole manifest against the disk before the text becomes instructions:
-
-- `pack_list` re-checks every pack as it lists it and shows `tampered`, naming the files that no longer match;
-- `jarvis_packs.load_pack()` refuses and names the file;
-- `jarvis_skill_hub.visible_skills()` stops offering a tampered pack, and `references()` / `level2_reference()` refuse to read its manuals;
-- the Skills menu row shows it, and its ON path cannot quietly bring it back: turning on runs the scanner and its ONE card again, and only after that card does the pack manager re-take the manifest (`repin_after_enable`, with the old digest kept in `history`);
-- `jarvis_skills.load()` itself re-checks the manifest through `backend/packs-tamper-on-load.patch` - the one core patch this slice adds - so the body loader refuses too, not only the pack manager's own door.
-
-Marking is a ledger write, never a file move or delete: the pack stays exactly where it is, `state: "tampered"`, with `tampered_at` and the file names, and a plain sentence says why it will not load. Restoring the approved bytes by hand clears the mark. A tampered pack is still removable: removal deletes only files whose sha256 still matches and keeps the ones that changed.
-
-### 197.9 Replacement is a new scan and a diff, never an update (Q3, 2026-11-05)
-
-`pack_install` on a name the ledger already holds is a **replacement**, and the rules are the same at every step:
-
-1. the new folder or `.zip` is scanned **from scratch** - the same bounds, the same code refusal, the same scanner, a new receipt;
-2. a **unified diff** of the installed files (read from disk, so a pack changed by hand is diffed as it really is) against the new ones is built and shown, with the new scan report, on the **same one NEW `modify_own_code` card**. The card says `THIS IS A REPLACEMENT, NOT AN UPDATE` at the top, names the installed version/digest and the new one, and shows what changes;
-3. **nothing is swapped before that card is answered.** A refused card leaves the installed copy byte-for-byte unchanged - the installed folder is copied to the incoming folder first and put back if the copy fails, so a failed replacement cannot lose the version the owner already had;
-4. after the yes the new files are installed, turned OFF (exactly as a first install is), and the ledger keeps `replaced_at`, the replaced digest, the diff's own sha256 and the previous receipt in `history`.
-
-The same bytes are not a replacement: re-scanning exactly what is installed is a plain refusal and never becomes a card. A name that is on disk but **not** in the ledger is still refused outright - the manager will not overwrite a skill it did not write, because it has no manifest to diff against. Nothing else can change an installed pack: there is no update tool, no auto-update, and no in-place path anywhere in the module.
-
-### 197.10 What this leaves behind for the next phase
-
-The ledger, the receipt writer, `scan_source()` and the four doors are source-agnostic on purpose: phase 2 adds the AST/import and obfuscation half of the scan for code packs, phase 3 the plug-in kind (which writes two files and needs a restart sentence that already exists in `_restart_line("plugin")`), and phases 4-6 add the git/index/URL sources and the catalogue truth. None of them needs a second scanner or a second card.

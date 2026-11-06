@@ -568,6 +568,15 @@ HISTORY_PURGE_PROBES = (
     'chats by date is off")',
 )
 
+#: Distinctive lines of packs-tamper-on-load.patch; all are absent before the
+#: patch and present exactly once after it (measured on the live jarvis_skills.py,
+#: 2026-11-06).
+PACKS_TAMPER_PROBES = (
+    "import jarvis_packs as _packs",
+    "_pack_check = _packs.verify_pack(name)",
+    '_pack_check.get("tampered")',
+)
+
 #: `record_call` (jarvis_call_notes.py, the owner's request of 2026-11-04) HAS a `_RISK`
 #: row, and jarvis_call_notes.py:207-214 says so: it was added 2026-11-05 by the privacy
 #: audit's D8 fix, because without it `risk_for()` fell back to `_UNKNOWN_RISK` and the
@@ -1331,6 +1340,18 @@ DELTA_TABLE = {
             "probes": ('    "record_call": ("yes", "local",',),
             "file": RECORD_CALL_FILE,
             "anchor": RECORD_CALL_ANCHOR,
+        },
+    },
+    # packs-tamper-on-load.patch -> jarvis_skills.py: ONE hunk, a pure insertion
+    # between the "no skill called" return and `ix = _read_index()`, so
+    # "hunks": True carries the patch's own 17 added lines where the stack puts
+    # them. Its pre-image appears once in the live file.
+    # Without this rule the dry run refused the whole plan (measured 2026-11-06):
+    # `state=absent`, `delta_table_rule=False`, `HUD DELTAS - REFUSED`, exit 2.
+    "packs-tamper-on-load.patch": {
+        "jarvis_skills.py": {
+            "probes": PACKS_TAMPER_PROBES,
+            "hunks": True,
         },
     },
 }

@@ -1686,6 +1686,11 @@ SHIPPED = (
     # scripts/apply-patches.ps1's $SHIPPED. It sits BEFORE `jarvis_bench.py`
     # on purpose: that entry is the LAST one.
     "jarvis_quotes.py",
+    # The corpus file jarvis_quotes.py reads at import (2026-11-05): a data file
+    # shipped beside the module, so staging (run_suites.py stage()) and the
+    # published base carry it too. It is NOT a module; it is in this list
+    # because _where.SHIPPED is everything apply-patches.ps1 puts in the folder.
+    "quotes_corpus.json",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate
