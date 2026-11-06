@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **54 drop-in modules**, in [`ready/`](ready/) -
+- **55 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **29** replace a patch, and are generated from it;
-  - **25** replace no patch: they were born as folders, and
+  - **26** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **146 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -57,7 +57,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 25 were never patches. There is nothing in the core
+These 26 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -91,6 +91,7 @@ it is one `apply-patches.ps1` copies in.
 | 176 | `product-check` | check ONE Amazon product page for sponsored-review and incentive patterns: one PC-only card, a read-only read in the owner's own signed-in browser, and the offline engine's reasons report - sample caveat first, counts and examples, every set-aside review with its reasons, never a trust score and never a per-review fake/real verdict. |
 | 177 | `skill-menu` | the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\.hermes\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all. |
 | 178 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
+| 188 | `upload` | a document from your phone: three routes put one file into a folder Jarvis already looks in, after ONE approval card per file, and then it is processed exactly as a file you dropped there yourself. |
 
 ## What stays in the core
 

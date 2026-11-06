@@ -19,9 +19,14 @@ import kotlinx.serialization.json.put
  *  - the list, in the PC's own words (`GET /api/folders`);
  *  - Remove on each folder - at once, never held on a stale link: it only
  *    lets Jarvis see less (`POST /api/folders/remove`);
- *  - NO Add and no Notion import: adding a folder is the PC's alone (the PC
- *    refuses it from any other device), so the phone shows the PC's line
- *    saying where (ARCHITECTURE section 8, "One-sided on purpose").
+ *  - NO Add: adding a folder is the PC's alone (the PC refuses it from any
+ *    other device), so the phone shows the PC's line saying where
+ *    (ARCHITECTURE section 8, "One-sided on purpose").
+ *  - Since 2026-11-05, TWO doors of its own: "Send a document" and "Bring in
+ *    a Notion export" ([Upload], [NotionImport]). The first uses the same
+ *    folder list and never creates a grant; the second starts the PC's own
+ *    Notion-import card. The PC's older path-taking import routes stay
+ *    PC-only.
  * Asking Jarvis about the files works from the phone like any question: the
  * PC reads them, with the model on the PC.
  *
@@ -52,6 +57,22 @@ object Folders {
         val documentsSaid: String,
         val documentsReady: Boolean,
         val removeLabel: String,
+        /**
+         * The PC's own "Bring in a Notion export" words (`jarvis_documents.view`,
+         * `notion.title` / `notion.detail`), shown on the phone since 2026-11-05
+         * above its own Notion door. Empty when an older PC sends no `notion`
+         * object, and the phone then falls back to [com.jarvis.client.net
+         * .NotionImport]'s copy of the same sentence.
+         */
+        val notionTitle: String = "",
+        val notionDetail: String = "",
+        /**
+         * The PC's old `can_import`: true only when the request came from the
+         * PC. The phone now has its own two no-path routes, so this is NOT the
+         * gate for the phone's door - it only says whether the PC's own
+         * Windows-picker import is offered there.
+         */
+        val notionCanImport: Boolean = false,
     )
 
     /** `GET /api/folders`. Null when the answer is not the list. */
@@ -64,6 +85,7 @@ object Folders {
             Folder(path = path, name = o.text("name") ?: path, exists = o.flag("exists") != false)
         }
         val docs = body["documents"] as? JsonObject
+        val notion = body["notion"] as? JsonObject
         val waiting = (body["waiting"] as? JsonObject)?.text("path") ?: ""
         return View(
             title = body.text("title") ?: TITLE,
@@ -77,6 +99,9 @@ object Folders {
             documentsSaid = docs?.text("said") ?: "",
             documentsReady = docs?.flag("ready") == true,
             removeLabel = body.text("remove_label") ?: REMOVE,
+            notionTitle = notion?.text("title") ?: "",
+            notionDetail = notion?.text("detail") ?: "",
+            notionCanImport = notion?.flag("can_import") == true,
         )
     }
 

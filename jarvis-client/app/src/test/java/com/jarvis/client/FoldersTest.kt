@@ -87,4 +87,19 @@ class FoldersTest {
         assertNotNull(Folders.MISSING)
         assertTrue(Folders.MISSING.contains("apply-patches.ps1"))
     }
+
+    /**
+     * The PC's own "Bring in a Notion export" words ride on the folder list
+     * (`notion.title` / `notion.detail`), so the phone's new Notion door says
+     * the PC's sentence rather than a second copy of it (2026-11-05). The
+     * PC's `can_import` is still false for the phone - it is about the PC's
+     * own Windows picker, NOT about the phone's two no-path routes.
+     */
+    @Test
+    fun `the PC's own Notion words ride on the folder list`() {
+        val v = Folders.parse(cases["two_folders_phone"]!!.jsonObject)!!
+        assertEquals("Bring in a Notion export", v.notionTitle)
+        assertTrue(v.notionDetail.contains("Markdown & CSV"))
+        assertFalse("the phone is no longer refused by the PC-picker flag", v.notionCanImport)
+    }
 }

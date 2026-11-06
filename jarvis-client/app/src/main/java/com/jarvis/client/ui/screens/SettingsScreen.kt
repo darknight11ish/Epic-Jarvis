@@ -326,6 +326,21 @@ fun SettingsScreen(
      */
     onOpenEditHud: (() -> Unit)? = null,
     /**
+     * "Send a document", on the Folders row (the owner's ask of 2026-11-05;
+     * docs/ARCHITECTURE.md section 8; `net/Upload.kt`): launches Android's own
+     * document picker, bound to ONE folder from the PC's list - the path the
+     * owner tapped. Null only in previews and tests, where the button is drawn
+     * without its action rather than with one that does nothing.
+     */
+    onSendDocument: ((String) -> Unit)? = null,
+    /**
+     * "Bring in a Notion export", the second door on the same row (the same
+     * ask; `net/NotionImport.kt`): launches the `.zip` picker for ONE vault id
+     * the PC offered. The owner exports from Notion himself - no login and no
+     * token here.
+     */
+    onPickNotionZip: ((String) -> Unit)? = null,
+    /**
      * "Pair with your PC", inside the Devices card - the way back into the
      * pairing screen from Settings (2026-10-28).
      *
@@ -758,7 +773,7 @@ fun SettingsScreen(
             if (drawn("asks-first")) item(key = "asks-first") { AsksFirstSection(canAct = canAct) }
             if (menus.shows("settings.reach")) if (drawn("reach")) if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }
             if (menus.shows("settings.email-sending")) if (drawn("email-sending")) if (menus.shows("settings.email-sending")) item(key = "email-sending") { MenuFrame(menus, "settings.email-sending") { EmailSendingSection() } }
-            if (menus.shows("settings.folders")) if (drawn("folders")) if (menus.shows("settings.folders")) item(key = "folders") { MenuFrame(menus, "settings.folders") { FoldersSection() } }
+            if (menus.shows("settings.folders")) if (drawn("folders")) if (menus.shows("settings.folders")) item(key = "folders") { MenuFrame(menus, "settings.folders") { FoldersSection(canAct = canAct, onSendDocument = onSendDocument, onPickNotionZip = onPickNotionZip) } }
             // "File from your PC" (2026-10-31, the owner's ask; Gemini Q7;
             // docs/JARVIS-API.md section 172; SendFilePlate.kt): ONE file Jarvis
             // sent after its own approval card, waiting ten minutes and working

@@ -7,8 +7,8 @@
     "core": 146,
     "missing": 0
   },
-  "folder_count": 25,
-  "ready_count": 54,
+  "folder_count": 26,
+  "ready_count": 55,
   "folders": [
     {
       "name": "skill-hub",
@@ -208,6 +208,14 @@
       "install": "handler",
       "stack_order": 178,
       "summary": "what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "upload",
+      "module": "jarvis_upload",
+      "install": "handler",
+      "stack_order": 188,
+      "summary": "a document from your phone: three routes put one file into a folder Jarvis already looks in, after ONE approval card per file, and then it is processed exactly as a file you dropped there yourself.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

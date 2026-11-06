@@ -39,11 +39,15 @@ import com.jarvis.client.net.Tasks
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.net.FocusPresets
 import com.jarvis.client.net.WorkSetups
+import com.jarvis.client.net.AttachFile
+import com.jarvis.client.net.NotionImport
+import com.jarvis.client.net.Upload
 import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
 import com.jarvis.client.widget.QuickLinkWidget
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineExceptionHandler
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -72,10 +76,13 @@ import com.jarvis.client.voice.VoiceSession
 import com.jarvis.client.voice.VoiceTraining
 import com.jarvis.client.voice.liveIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import java.io.InputStream
 
 /**
  * The raw JSON behind the brain screen.
@@ -377,18 +384,23 @@ object JarvisRuntime {
      *
      * A separate flag, not a null [handsfree]: "we have not asked" and "this
      * desktop cannot" are two different facts and only one of them is the
-     * owner's answer. Every surface that draws the switch or the status word
-     * reads [handsfreeLine], which uses [com.jarvis.client.net.Handsfree.NOT_HERE_SHORT]
-     * for this case.
+     * owner's answer. The Settings row reads it to print
+     * [com.jarvis.client.net.Handsfree.NOT_HERE] where the switch would be;
+     * Home's status row deliberately says NOTHING for it ([handsfreeLine]).
      */
     private val _handsfreeMissing = MutableStateFlow(false)
     val handsfreeMissing: StateFlow<Boolean> = _handsfreeMissing.asStateFlow()
 
     /**
-     * Home's one-line state (armed / not available on this PC / nothing), or
-     * null when there is nothing worth saying. The words are
-     * [com.jarvis.client.net.Handsfree.oneLine]'s, so the line and the rule that
-     * decides it cannot drift.
+     * Home's one-line state (armed, or nothing), or null when there is
+     * nothing worth saying. The words are
+     * [com.jarvis.client.net.Handsfree.oneLine]'s, so the line and the rule
+     * that decides it cannot drift.
+     *
+     * A PC that answered 404, or that says `available: false`, gets no line
+     * here at all (the owner's report of 2026-11-05: "Hands-free: not on this
+     * PC" in that row read as if the mode were on). The honest sentence is in
+     * Settings, Voice, where the switch would be.
      */
     val handsfreeLine: StateFlow<String?> =
         combine(_handsfree, _handsfreeMissing) { read, missing ->
@@ -1084,6 +1096,12 @@ object JarvisRuntime {
             // "Play a short sound when I finish speaking" (Checks), read
             // each time the "I heard you" sound would play.
             heardSoundOn = { clientSettings.heardSound.value },
+            // "Read out answers that use what Jarvis remembers" (Settings,
+            // Voice) - the owner's setting of 2026-11-05, this phone's own
+            // and OFF by default. Read per sentence, so a switch changed
+            // mid-answer applies at the next sentence, and only ever used for
+            // a mic-press question asked while the phone was unlocked.
+            memoryAloudOn = { clientSettings.readMemoriesAloud.value },
             // Where the owner cut a spoken answer off: sent once, with the
             // next question (typed or spoken), as `interrupted`.
             onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },
@@ -3361,6 +3379,362 @@ object JarvisRuntime {
                     "Not changed. " + describe(r.error)
                 }
         }
+
+    // --------------------------------- phone upload and Notion (2026-11-05) ---
+    // The owner's ask: send a document, or a Notion export .zip, from this
+    // phone and have the PC process it exactly as if it had been dropped into
+    // a folder there. The wire and every refusal live in [Upload] and
+    // [NotionImport]; this block is the orchestration: read the chosen file
+    // twice (once to measure it, once to send it), post the chunks, and keep
+    // the screen's progress and outcome here as StateFlows so navigating away
+    // does not abandon a transfer.
+    //
+    // Rule 4: a transfer is a WRITE, so it is held on a stale link
+    // ([actionBlocker]) - the screen also disables the button, and this is the
+    // half that cannot be forgotten by a later screen.
+
+    /** One file being sent from the phone, for the progress chip. */
+    data class UploadNow(
+        /** The name shown to the owner - never a path. */
+        val name: String,
+        /** Chunks actually posted so far. */
+        val sent: Int,
+        /** Chunks this file makes. Zero while it is still being measured. */
+        val total: Int,
+        /** True while the PC's approval card is holding the transfer. */
+        val waiting: Boolean,
+    )
+
+    private val _uploadNow = MutableStateFlow<UploadNow?>(null)
+
+    /** The transfer in flight, or null when nothing is being sent. */
+    val uploadNow: StateFlow<UploadNow?> = _uploadNow.asStateFlow()
+
+    private val _uploadSaid = MutableStateFlow<String?>(null)
+
+    /** The one plain sentence after a document send, or null before one. */
+    val uploadSaid: StateFlow<String?> = _uploadSaid.asStateFlow()
+
+    /** The Notion door's own state: vaults to choose from, a plan to confirm, or a sentence. */
+    sealed interface NotionNow {
+        data class Vaults(
+            val vaults: List<NotionImport.Vault>,
+            val said: String,
+        ) : NotionNow
+
+        /** The dry run's plan, and the upload id and vault id the import will name. */
+        data class Plan(
+            val upload: String,
+            val vault: String,
+            val plan: NotionImport.Plan,
+        ) : NotionNow
+
+        data class Said(val text: String) : NotionNow
+    }
+
+    private val _notionNow = MutableStateFlow<NotionNow?>(null)
+    val notionNow: StateFlow<NotionNow?> = _notionNow.asStateFlow()
+
+    private val _notionBusy = MutableStateFlow(false)
+    val notionBusy: StateFlow<Boolean> = _notionBusy.asStateFlow()
+
+    /** The first wait between retries while the PC's card is up, and its ceiling. */
+    private const val UPLOAD_CARD_PAUSE_MS = 2_000L
+    private const val UPLOAD_CARD_PAUSE_MAX_MS = 30_000L
+
+    /**
+     * How long the phone pauses before re-posting a chunk the PC answered 409
+     * for: 2, 4, 8, 16, then 30 seconds. It never posts the next chunk, and it
+     * never stops asking - the PC's own card lives 900 s, and each retry is
+     * one 1 MiB slice, so a fast retry loop would cost a quarter of a gigabyte
+     * over that window for nothing.
+     */
+    private fun uploadPause(): suspend () -> Unit {
+        var next = UPLOAD_CARD_PAUSE_MS
+        return {
+            delay(next)
+            next = minOf(next * 2, UPLOAD_CARD_PAUSE_MAX_MS)
+        }
+    }
+
+    /** A transfer this app stopped on purpose, with the sentence to show. */
+    private class UploadStopped(val why: String) : Exception(why)
+
+    /**
+     * One answered upload call, as [Upload] reads it. A transport failure or a
+     * refused pairing token is not an answer: it ends the transfer with the
+     * app's own plain sentence ([noticeFor]) instead of being read as a file
+     * refusal.
+     */
+    private fun uploadReply(result: ApiResult<Pair<Int, JsonObject?>>): Upload.Reply =
+        when (result) {
+            is ApiResult.Ok -> Upload.Reply(result.value.first, result.value.second)
+            is ApiResult.Failed ->
+                if (result.error == ApiError.NotFound) {
+                    // The same honest state a `probe` gives: this PC has no route.
+                    Upload.Reply(404, null)
+                } else {
+                    throw UploadStopped(noticeFor(result.error))
+                }
+        }
+
+    /** The type the PC is told: OUR type for the extension, the provider's only as a fallback. */
+    private fun wireMime(name: String?, provider: String?, purpose: Upload.Purpose): String =
+        if (purpose == Upload.Purpose.NOTION) {
+            "application/zip"
+        } else {
+            AttachFile.kindFor(name, provider)?.mime
+                ?: provider?.trim()?.lowercase(java.util.Locale.ROOT)?.substringBefore(';')
+                    ?.takeIf { it.isNotBlank() }
+                ?: "application/octet-stream"
+        }
+
+    /**
+     * One pass over the chosen file: its real size and SHA-256, or the refusal
+     * said through [onRefused]. The stream is opened, read and closed here;
+     * only the numbers are kept.
+     */
+    private suspend fun measured(
+        name: String,
+        mime: String?,
+        purpose: Upload.Purpose,
+        open: () -> InputStream?,
+        onRefused: (String) -> Unit,
+    ): Upload.Meta? {
+        val read = withContext(Dispatchers.IO) {
+            try {
+                open()?.use { Upload.measure(it, Upload.cap(purpose)) }
+                    ?: Upload.Measured.Unreadable
+            } catch (e: Exception) {
+                Upload.Measured.Unreadable
+            }
+        }
+        when (read) {
+            is Upload.Measured.Ok -> return Upload.Meta(
+                name = name,
+                mime = wireMime(name, mime, purpose),
+                size = read.size,
+                sha256 = read.sha256,
+                purpose = purpose,
+            )
+            Upload.Measured.Empty -> onRefused(Upload.EMPTY)
+            Upload.Measured.Unreadable -> onRefused(Upload.UNREADABLE)
+            is Upload.Measured.TooBig -> onRefused(Upload.overCap(purpose))
+        }
+        return null
+    }
+
+    /**
+     * Send ONE document into [into] - a folder from the PC's own list, exactly
+     * as `GET /api/folders` returned it. The PC puts it in `From my phone`
+     * inside that folder and raises its ONE card; nothing lands before the
+     * owner says yes. The outcome is [uploadSaid] when it is over.
+     */
+    fun startSendDocument(into: String, name: String, mime: String?, open: () -> InputStream?) {
+        if (_uploadNow.value != null) {
+            _uploadSaid.value = "Another upload is still going - let it finish first."
+            return
+        }
+        actionBlocker()?.let {
+            _uploadSaid.value = it
+            return
+        }
+        _uploadSaid.value = null
+        _uploadNow.value = UploadNow(name, 0, 0, false)
+        scope.launch {
+            try {
+                val meta = measured(name, mime, Upload.Purpose.DOCUMENT, open) { why ->
+                    _uploadSaid.value = why
+                } ?: return@launch
+                val outcome = Upload.send(
+                    meta = meta,
+                    into = into,
+                    open = open,
+                    begin = { body -> uploadReply(api.uploadBegin(body)) },
+                    chunk = { body -> uploadReply(api.uploadChunk(body)) },
+                    finish = { body -> uploadReply(api.uploadFinish(body)) },
+                    onProgress = { sent, total ->
+                        _uploadNow.value = UploadNow(name, sent, total, false)
+                    },
+                    onWaiting = { _uploadNow.value = UploadNow(name, 0, 0, true) },
+                    pause = uploadPause(),
+                )
+                _uploadSaid.value = Upload.outcomeText(outcome)
+            } catch (e: UploadStopped) {
+                _uploadSaid.value = e.why
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uploadSaid.value = Upload.STOPPED
+            } finally {
+                _uploadNow.value = null
+            }
+        }
+    }
+
+    /** Forget the last document outcome (the screen's Refresh / a new pick). */
+    fun clearUploadSaid() {
+        _uploadSaid.value = null
+    }
+
+    /** `GET /api/notion/vaults`: the vaults the PC already has, by name. A read. */
+    fun loadNotionVaults() {
+        if (_notionBusy.value) return
+        _notionBusy.value = true
+        _notionNow.value = null
+        scope.launch {
+            try {
+                when (val r = api.notionVaults()) {
+                    is ApiResult.Ok -> {
+                        val v = NotionImport.parseVaults(r.value)
+                        _notionNow.value = when {
+                            v == null -> NotionNow.Said(NotionImport.NOT_HERE)
+                            !v.ready || v.vaults.isEmpty() ->
+                                NotionNow.Said(v.said.ifBlank { NotionImport.NO_VAULT })
+                            else -> NotionNow.Vaults(v.vaults, v.said)
+                        }
+                    }
+                    is ApiResult.Failed ->
+                        _notionNow.value = NotionNow.Said(
+                            if (Upload.missing(r.error)) NotionImport.NOT_HERE else noticeFor(r.error),
+                        )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _notionNow.value = NotionNow.Said(NotionImport.NOT_HERE)
+            } finally {
+                _notionBusy.value = false
+            }
+        }
+    }
+
+    /**
+     * Send the chosen `.zip` into [vault] on the PC, then ask the PC for its
+     * dry-run plan ([previewNotion]). Nothing is written into the vault by
+     * this step: the zip is staged on the PC, and the import is a second call.
+     */
+    fun startNotionUpload(
+        vault: String,
+        name: String,
+        mime: String?,
+        open: () -> InputStream?,
+    ) {
+        if (_uploadNow.value != null || _notionBusy.value) {
+            _notionNow.value = NotionNow.Said("Another upload is still going - let it finish first.")
+            return
+        }
+        actionBlocker()?.let {
+            _notionNow.value = NotionNow.Said(it)
+            return
+        }
+        _notionBusy.value = true
+        _notionNow.value = null
+        _uploadNow.value = UploadNow(name, 0, 0, false)
+        scope.launch {
+            try {
+                val meta = measured(name, mime, Upload.Purpose.NOTION, open) { why ->
+                    _notionNow.value = NotionNow.Said(why)
+                } ?: return@launch
+                val outcome = Upload.send(
+                    meta = meta,
+                    into = null,
+                    open = open,
+                    begin = { body -> uploadReply(api.uploadBegin(body)) },
+                    chunk = { body -> uploadReply(api.uploadChunk(body)) },
+                    finish = { body -> uploadReply(api.uploadFinish(body)) },
+                    onProgress = { sent, total ->
+                        _uploadNow.value = UploadNow(name, sent, total, false)
+                    },
+                    onWaiting = { _uploadNow.value = UploadNow(name, 0, 0, true) },
+                    pause = uploadPause(),
+                )
+                when (outcome) {
+                    is Upload.Outcome.Uploaded -> previewNotion(vault, outcome.id)
+                    is Upload.Outcome.NotHere -> _notionNow.value = NotionNow.Said(Upload.NOT_HERE_NOTION)
+                    is Upload.Outcome.Waiting -> _notionNow.value = NotionNow.Said(Upload.SENT_WAITING)
+                    is Upload.Outcome.Refused -> _notionNow.value = NotionNow.Said(outcome.why)
+                    is Upload.Outcome.Saved ->
+                        _notionNow.value = NotionNow.Said(outcome.said.ifBlank { "Your export is on your PC." })
+                }
+            } catch (e: UploadStopped) {
+                _notionNow.value = NotionNow.Said(e.why)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _notionNow.value = NotionNow.Said(Upload.STOPPED)
+            } finally {
+                _uploadNow.value = null
+                _notionBusy.value = false
+            }
+        }
+    }
+
+    /** The dry run: plan the import and show it. No card, nothing written into the vault. */
+    private suspend fun previewNotion(vault: String, upload: String) {
+        when (val r = api.notionPhoneImport(NotionImport.body(upload, vault))) {
+            is ApiResult.Ok -> when (val p = NotionImport.readPreview(Upload.Reply(r.value.first, r.value.second))) {
+                is NotionImport.Preview.Ready -> _notionNow.value = NotionNow.Plan(upload, vault, p.plan)
+                is NotionImport.Preview.Refused -> _notionNow.value = NotionNow.Said(p.why)
+                NotionImport.Preview.NotHere -> _notionNow.value = NotionNow.Said(NotionImport.NOT_HERE)
+            }
+            is ApiResult.Failed ->
+                _notionNow.value = NotionNow.Said(
+                    if (Upload.missing(r.error)) NotionImport.NOT_HERE else noticeFor(r.error),
+                )
+        }
+    }
+
+    /**
+     * The owner pressed "Bring it in": ONE `import_notion_export` card on the
+     * PC, then the write. The call waits for the card, so [WAITING] is what the
+     * screen says meanwhile; a denied card brings nothing in and returns the
+     * PC's own reason.
+     */
+    fun confirmNotionImport() {
+        val state = _notionNow.value as? NotionNow.Plan ?: return
+        if (_notionBusy.value) return
+        actionBlocker()?.let {
+            _notionNow.value = NotionNow.Said(it)
+            return
+        }
+        _notionBusy.value = true
+        _notionNow.value = NotionNow.Said(NotionImport.WAITING)
+        scope.launch {
+            try {
+                val r = api.notionPhoneImport(
+                    NotionImport.body(state.upload, state.vault, state.plan.digest),
+                )
+                _notionNow.value = when (r) {
+                    is ApiResult.Ok -> {
+                        val body = r.value.second
+                        val waiting = (body?.get("waiting") as? JsonPrimitive)?.booleanOrNull == true
+                        when {
+                            body == null -> NotionNow.Said(NotionImport.nothing(""))
+                            waiting -> NotionNow.Said(NotionImport.WAITING)
+                            else -> NotionImport.refusal(body)?.let { NotionNow.Said(NotionImport.nothing(it)) }
+                                ?: NotionNow.Said(NotionImport.imported(body, state.plan))
+                        }
+                    }
+                    is ApiResult.Failed -> NotionNow.Said(
+                        if (Upload.missing(r.error)) NotionImport.NOT_HERE else noticeFor(r.error),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _notionNow.value = NotionNow.Said(NotionImport.nothing(""))
+            } finally {
+                _notionBusy.value = false
+            }
+        }
+    }
+
+    /** Close the Notion door's chooser / plan without doing anything. */
+    fun clearNotion() {
+        if (_notionBusy.value) return
+        _notionNow.value = null
+    }
 
     /**
      * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s

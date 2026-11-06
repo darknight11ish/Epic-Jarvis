@@ -160,14 +160,18 @@ object Handsfree {
     const val OFF = "Hands-free is off"
 
     /**
-     * The ONE sentence a PC without the feature gets, on every surface. Not a
-     * failure and not red: the app has no reason to think anything is broken -
+     * The ONE sentence a PC without the feature gets, on every surface that
+     * explains it. Not a failure and not red: the app has no reason to think
+     * anything is broken -
      * this desktop simply does not have it yet (both halves ship together).
+     *
+     * It belongs in the hands-free Settings row, where the switch would be.
+     * It is deliberately NOT Home's status line: Home's row lists what the
+     * link and the mode are DOING, and "Hands-free: not on this PC" there read
+     * as if the mode were on (the owner's report of 2026-11-05). Home draws
+     * nothing for a PC that lacks the feature ([oneLine]).
      */
     const val NOT_HERE = "Hands-free is not available on this PC yet."
-
-    /** The same fact, short enough for Home's one-line status. */
-    const val NOT_HERE_SHORT = "Hands-free: not on this PC"
 
     /** Home's status word while the mode is armed. */
     const val ARMED_SHORT = "Hands-free"
@@ -645,17 +649,20 @@ object Handsfree {
     /**
      * One line for Home's status, or null when there is nothing to say.
      *
-     * @param missing true when this PC answered 404 for the feature - the
-     *   honest "not on this PC yet", which is a fact about the desktop and not
-     *   a fault in the phone.
+     * ONLY the armed state is worth a word on that row: it says what this PC
+     * is DOING with this phone. Off is nothing (today's rule), and a PC that
+     * answered 404 or says `available: false` is nothing too - the status row
+     * is not the place for "this desktop does not have it yet", because there
+     * it read as if the mode were on (the owner's report of 2026-11-05). The
+     * honest sentence lives where the switch would be, in Settings, Voice
+     * ([NOT_HERE] and `ui/screens/HandsfreeSection.kt`).
+     *
+     * @param missing true when this PC answered 404 for the feature. Kept in
+     *   the signature because the caller has the fact and a future surface
+     *   may want it; Home's one line is null either way.
      */
-    fun oneLine(read: Read?, missing: Boolean): String? = when {
-        missing -> NOT_HERE_SHORT
-        read == null -> null
-        !read.available -> NOT_HERE_SHORT
-        read.enabled -> ARMED_SHORT
-        else -> null
-    }
+    fun oneLine(read: Read?, missing: Boolean): String? =
+        if (!missing && read != null && read.available && read.enabled) ARMED_SHORT else null
 
     // ------------------------------------------------------------ command ----
 

@@ -5,6 +5,7 @@ import android.media.audiofx.AcousticEchoCanceler
 import androidx.core.content.edit
 import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.voice.LiveRules
+import com.jarvis.client.voice.PrivateAloud
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,6 +105,26 @@ class ClientSettings(context: Context) {
     fun setHeardSound(value: Boolean) {
         prefs.edit { putBoolean(KEY_HEARD_SOUND, value) }
         _heardSound.value = value
+    }
+
+    private val _readMemoriesAloud =
+        MutableStateFlow(prefs.getBoolean(KEY_READ_MEMORIES_ALOUD, PrivateAloud.MEMORY_ALOUD_DEFAULT))
+
+    /**
+     * "Read out answers that use what Jarvis remembers" on this phone
+     * (voice.MemoryAloud) - the owner's setting of 2026-11-05, **OFF by
+     * default** ([PrivateAloud.MEMORY_ALOUD_DEFAULT]) and this phone's own:
+     * the PC has no matching switch, and nothing here changes what the PC
+     * reads. It only ever covers the mic press on this phone while it was
+     * unlocked at that press; "hey Jarvis" and Jarvis Live are not included,
+     * and a sensitive saved fact, a private tool or an answer about the
+     * screen still stays on screen (voice.PrivateAloud).
+     */
+    val readMemoriesAloud: StateFlow<Boolean> = _readMemoriesAloud.asStateFlow()
+
+    fun setReadMemoriesAloud(value: Boolean) {
+        prefs.edit { putBoolean(KEY_READ_MEMORIES_ALOUD, value) }
+        _readMemoriesAloud.value = value
     }
 
 
@@ -411,6 +432,9 @@ class ClientSettings(context: Context) {
         const val KEY_BARGE_IN = "barge_in"
         const val KEY_ONE_MOMENT = "one_moment"
         const val KEY_HEARD_SOUND = "heard_sound"
+
+        /** The owner's 2026-11-05 setting: off unless he turned it on. */
+        const val KEY_READ_MEMORIES_ALOUD = "read_memories_aloud"
         const val KEY_LIVE_INTERRUPT = "live_interrupt"
         const val KEY_INTERRUPT = "interrupt"
         const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"

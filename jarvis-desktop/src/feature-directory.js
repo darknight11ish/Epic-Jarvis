@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "bd62e16abf3537ebfde228f967ece3c7ee35ccfc328d644d87fdce6d7561518b",
+  "source_sha256": "7ea760b790a97c6150059367db1a5072104fdc39e49fd42bb4788af973e2c7f8",
   "feature_count": 178,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -1009,9 +1009,9 @@ export const FEATURE_DIRECTORY = {
       "label_note": "Real switch/choice; multi-field typed path is planned and its setter proof is pending",
       "example": "turn on Folders Jarvis may look in",
       "example_ok": true,
-      "where": "desktop Settings: folders; phone: All features and abilities",
+      "where": "desktop Settings: folders; phone: Settings, Folders Jarvis may look in",
       "where_desktop": "folders",
-      "where_phone": "All features and abilities",
+      "where_phone": "Settings, Folders Jarvis may look in",
       "note": "Settings control today; typed path still being wired.",
       "not_a_control": true
     },

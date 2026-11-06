@@ -3341,7 +3341,7 @@
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Folders Jarvis may look in",
-        "screen_path": "desktop Settings: folders; phone: All features and abilities"
+        "screen_path": "desktop Settings: folders; phone: Settings, Folders Jarvis may look in"
       },
       "command": {
         "status": "open-only",

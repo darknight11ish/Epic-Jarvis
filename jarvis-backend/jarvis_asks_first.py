@@ -654,6 +654,13 @@ HARD_LIMITS = frozenset({
     # name them. Neither leaves this PC; the module refuses outright if the
     # model store is not on this PC.
     "uncensored_models_enable", "fiction_roleplay_enable",
+    # A file arriving from another device (jarvis_upload.py, 2026-11-05; the
+    # owner's ask: "upload any documents through the jarvis app ... fully
+    # processed as if I was uploading it to the jarvis desktop"). The module
+    # refuses any tier but "ask" for its own card, so this page must name it -
+    # and a standing "yes to any file from any device" is exactly the bulk
+    # approval rule 4 forbids, which is why it is on this list as well.
+    "receive_uploaded_document",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -692,6 +699,10 @@ MUST_ASK = frozenset({
     # request() refuses a tier other than "ask" outright (503, no card), the
     # same shape phone_notifications_read already has.
     "uncensored_models_enable", "fiction_roleplay_enable",
+    # A file arriving from another device (jarvis_upload.py, 2026-11-05): its
+    # card is raised at `begin`, before a byte is written, and `request_begin`
+    # refuses anything but tier "ask" rather than take a looser line as consent.
+    "receive_uploaded_document",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -875,7 +886,14 @@ GROUPS = (
                                 # file's own "ask" line, and it is NOT in MUST_ASK
                                 # (the module calls jarvis_gate.check and does not
                                 # refuse a looser tier itself).
-                                "send_text_message"]),
+                                "send_text_message",
+                                # A file arriving from the owner's phone
+                                # (jarvis_upload.py, 2026-11-05): ONE card per
+                                # file, raised before a byte is written, and the
+                                # card names the file, its size and the folder it
+                                # goes into. It sits here with the other cards a
+                                # device is the caller for.
+                                "receive_uploaded_document"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,

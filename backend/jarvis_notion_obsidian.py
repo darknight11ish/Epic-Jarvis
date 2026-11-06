@@ -81,6 +81,7 @@ Standard library only. Nothing here opens a socket.
 from __future__ import annotations
 
 import html as _html
+import hashlib
 import io
 import json
 import os
@@ -126,6 +127,14 @@ GATE_ACTION = "import_notion_export"         # the action the gate is asked abou
 RECEIPT_TOOL = "import_notion_export"
 
 PATHS = ("/api/notion/preview", "/api/notion/import")
+
+#: The phone's two doors (2026-11-05), added beside the PC-only pair above and
+#: deliberately NOT behind `from_this_pc`: neither takes a path. `vaults` offers
+#: the vaults this PC already knows, by name and id; `phone-import` takes the id
+#: of an upload that `jarvis_upload` is holding and the id of one of those
+#: vaults. The two path-taking routes above are unchanged and still PC-only -
+#: they are how the desktop names a file and a folder, and a phone has neither.
+PHONE_PATHS = ("/api/notion/vaults", "/api/notion/phone-import")
 
 #: The vault's attachments folder, under the vault root.
 ATTACHMENTS = "attachments"
@@ -1764,6 +1773,176 @@ def _person_said_yes(verdict) -> bool:
         str(getattr(verdict, "outcome", "")) == "approved"
 
 
+# --------------------------------------------------------------------------
+#   The phone's two doors (2026-11-05): neither takes a path
+# --------------------------------------------------------------------------
+#
+# WHY TWO NEW ROUTES AND NOT A FLAG ON THE OLD TWO. `preview` and `request_import`
+# ask for `source` and `vault` as PATHS ON THIS PC. A phone has no path to give:
+# letting it call those routes would mean either the phone inventing one or the
+# PC leaking one into a request body, and it would delete a written rule
+# (docs/JARVIS-API.md section 152) and its test
+# (`test_notion_obsidian.py::t_both_routes_are_pc_only`). So those two stay
+# exactly as they are, PC-only, and the phone gets two thin doors that take no
+# path at all: the export is an upload id `jarvis_upload` is holding, and the
+# vault is one of the vaults this PC already has, chosen by id. The phone picks
+# from a list; it never types a path.
+
+VAULTS_SAID = "Choose your Obsidian vault on the PC first - Settings, Notes."
+VAULT_PICK = "Choose the vault to bring the export into."
+NOT_WAITING = "That export is no longer waiting on this PC - send it again."
+VAULT_NOT_OFFERED = ("Choose one of the vaults Jarvis showed you: the vault itself is chosen "
+                     "on the PC, and nothing else is written into.")
+UPLOAD_MISSING = ("The part of Jarvis that takes a file from your phone is not installed on "
+                  "this PC.")
+
+
+def _remembered_vault() -> str:
+    """The last vault a Notion import used, as this module already wrote down."""
+    try:
+        doc = json.loads(state_path().read_text(encoding="utf-8"))
+        if isinstance(doc, dict):
+            return str(doc.get("last_vault") or "")
+    except Exception:
+        pass
+    return ""
+
+
+def _remember_vault(vault) -> None:
+    """Keep the vault a real import used, so the phone is offered it next time."""
+    try:
+        p = state_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps({"last_vault": str(vault)}, indent=1), encoding="utf-8")
+        os.replace(tmp, p)
+    except Exception:
+        pass
+
+
+def _vault_id(path) -> str:
+    """An opaque, stable name for one vault: the phone sends this, never a path."""
+    return hashlib.sha256(os.path.normcase(str(path)).encode("utf-8")).hexdigest()[:12]
+
+
+def _vault_candidates() -> list:
+    """The vaults the PC already knows, in the order they are offered.
+
+    1. the vault the owner configured for notes (`jarvis_notes.obsidian_vault`:
+       `JARVIS_OBSIDIAN_VAULT`, else `[notes.obsidian] vault_directory`);
+    2. the vault the last Notion import used, which this module records itself.
+
+    No third source and no new settings screen.
+    """
+    found = []
+    try:
+        import jarvis_notes
+        got = jarvis_notes.obsidian_vault()
+        if got:
+            found.append(str(got))
+    except Exception:
+        pass
+    last = _remembered_vault()
+    if last:
+        found.append(last)
+    return found
+
+
+def vault_list() -> dict:
+    """GET /api/notion/vaults: the vaults this PC really has, each judged first.
+
+    Every candidate goes through `_vault_or_refuse` before it is offered, so
+    the phone can only ever see a folder that really is an Obsidian vault (it
+    has a `.obsidian` folder) and is not a protected place.
+    """
+    seen, offered = set(), []
+    for candidate in _vault_candidates():
+        try:
+            path = _vault_or_refuse(candidate)
+        except Exception:
+            continue
+        key = os.path.normcase(str(path))
+        if key in seen:
+            continue
+        seen.add(key)
+        offered.append({"id": _vault_id(path), "name": Path(path).name, "path": str(path)})
+    return {"ok": True, "ready": bool(offered), "vaults": offered,
+            "said": VAULT_PICK if offered else VAULTS_SAID}
+
+
+def _offered_vault(selector) -> Optional[dict]:
+    """The offered vault an id (or its exact name, or an exact offered path)
+    points at, or None. Anything else is refused - a path that was never
+    offered is not a vault, whatever it says."""
+    want = str(selector or "").strip()
+    if not want:
+        return None
+    offered = vault_list()["vaults"]
+    for row in offered:
+        if row["id"] == want:
+            return row
+    for row in offered:
+        if os.path.normcase(row["path"]) == os.path.normcase(want):
+            return row
+    by_name = [row for row in offered if row["name"].casefold() == want.casefold()]
+    return by_name[0] if len(by_name) == 1 else None
+
+
+def phone_import(body, *, gate=None) -> tuple:
+    """POST /api/notion/phone-import: the dry run, or the import behind ONE card.
+
+    No `digest` -> `plan_import` and `describe`, exactly what `preview` does,
+    with nothing written into the vault and no card. A `digest` -> the EXISTING
+    `request_import`, unchanged: it re-checks the digest, raises the ONE
+    `import_notion_export` card, and `run_import` writes the tree, records the
+    receipt and keeps Undo.
+
+    Either way the answer names the vault and the new folder, never a path, and
+    the staged export is deleted as soon as the import attempt ends - success,
+    refusal, a denied card or an error. A dry run KEEPS it, because the import
+    it is a dry run for comes next; a phone that dies in between is cleaned up
+    by `jarvis_upload`'s 30-minute expiry.
+    """
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "reason": 'need {"upload": "<id>", "vault": "<id>"}'}
+    try:
+        import jarvis_upload
+    except Exception:
+        return 503, {"ok": False, "reason": UPLOAD_MISSING}
+    upload = str(body.get("upload") or "")
+    source = jarvis_upload.staging_file(upload)
+    if not source:
+        return 410, {"ok": False, "reason": NOT_WAITING}
+    row = _offered_vault(body.get("vault"))
+    if row is None:
+        return 400, {"ok": False, "reason": VAULT_NOT_OFFERED}
+    digest = str(body.get("digest") or "").strip()
+    if not digest:
+        try:
+            p = plan_import(source, row["path"])
+        except Exception as exc:
+            return 200, {"ok": False, "reason": str(exc) or type(exc).__name__}
+        plan = p.as_dict()
+        plan.pop("source", None)               # Jarvis's own temporary place
+        plan["vault"] = row["name"]            # a name, never a path
+        plan["vault_id"] = row["id"]
+        return 200, {"ok": not p.refused, "plan": plan, "said": describe(p),
+                     "vault": row["name"], "vault_id": row["id"]}
+    try:
+        code, out = request_import({"source": source, "vault": row["path"],
+                                    "digest": digest}, gate=gate)
+    finally:
+        jarvis_upload.release(upload)
+    if isinstance(out, dict) and out.get("ok"):
+        _remember_vault(row["path"])
+        out = dict(out)
+        out["folder"] = os.path.basename(str(out.get("folder") or ""))
+        out["imported"] = True
+        out["vault"] = row["name"]
+        out["vault_id"] = row["id"]
+    return code, out
+
+
 def _peer_local(handler) -> tuple:
     """The two addresses a request carries, for `_from_this_pc`."""
     peer = (getattr(handler, "client_address", None) or ("",))[0]
@@ -1796,12 +1975,18 @@ PC_ONLY_REASON = ("Jarvis brings a Notion export in on the PC only - the export 
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
-    """Wrap the server's GET/POST so the two routes above are answered here.
+    """Wrap the server's GET/POST so the routes above are answered here.
 
-    Both POST routes are PC-only (2026-10-21 audit, R4): the export file and
-    the vault are folders on this PC, and the preview works out what is in the
-    export, so a paired device must not be able to ask either question - the
-    same rule `/api/folders/import` already keeps.
+    Both path-taking POST routes are PC-only (2026-10-21 audit, R4): the export
+    file and the vault are folders on this PC, and the preview works out what is
+    in the export, so a paired device must not be able to ask either question -
+    the same rule `/api/folders/import` already keeps.
+
+    The two 2026-11-05 phone doors are NOT behind that check, and each takes no
+    path: `GET /api/notion/vaults` offers the vaults this PC already has, and
+    `POST /api/notion/phone-import` takes an upload id and a vault id. A phone
+    is expected at both. Everything the PC-only pair keeps is kept: same origin
+    and token pair, same refusal sentence, same test.
     """
     global _ARMED
     get0, post0 = handler_cls.do_GET, handler_cls.do_POST
@@ -1815,8 +2000,26 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         except Exception:
             return False
 
+    def _body(self) -> dict:
+        try:
+            body = read_body(self)
+            if isinstance(body, bytes):
+                body = json.loads(body.decode("utf-8") or "{}")
+            return body if isinstance(body, dict) else {}
+        except Exception:
+            return {}
+
     def do_GET(self):
         route = str(getattr(self, "path", "")).split("?")[0]
+        if route == PHONE_PATHS[0]:
+            if not _allowed(self):
+                return _send(self, 403, {"ok": False, "reason": "not allowed"})
+            try:
+                out = vault_list()
+            except Exception as exc:
+                out = {"ok": False, "ready": False, "vaults": [], "said": VAULTS_SAID,
+                       "reason": type(exc).__name__}
+            return _send(self, 200, out)
         if route != PATHS[0]:
             return get0(self)
         if not _allowed(self):
@@ -1826,6 +2029,14 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_POST(self):
         route = str(getattr(self, "path", "")).split("?")[0]
+        if route == PHONE_PATHS[1]:
+            if not _allowed(self):
+                return _send(self, 403, {"ok": False, "reason": "not allowed"})
+            try:
+                code, out = phone_import(_body(self))
+            except Exception as exc:
+                code, out = 503, {"ok": False, "reason": type(exc).__name__}
+            return _send(self, code, out)
         if route not in PATHS:
             return post0(self)
         if not _allowed(self):
@@ -1833,12 +2044,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
         if not _from_this_pc(*_peer_local(self)):
             return _send(self, 403, {"ok": False, "pc_only": True,
                                      "reason": PC_ONLY_REASON})
-        try:
-            body = read_body(self)
-            if isinstance(body, bytes):
-                body = json.loads(body.decode("utf-8") or "{}")
-        except Exception:
-            body = {}
+        body = _body(self)
         # ONE ROUTE, ONE ACTION (2026-10-20, field test). This line used to be
         #     code, out = request_import(body if route == PATHS[1] else body)
         # - a conditional whose two branches are the same expression, so the

@@ -350,6 +350,11 @@ TITLES = {
     "send_text_message": "send a text message from your phone",
     # The one card that turns the mode on. Its body says what changes.
     "handsfree_enable": "turn on hands-free mode",
+    # --- a document sent from the owner's phone (jarvis_upload.py, 2026-11-05;
+    # the plugin folder plugins/ready/upload). ONE card per file, raised before
+    # a byte is written, and the card names the file, its size and the folder's
+    # name - never a path and never a byte of it.
+    "receive_uploaded_document": "save a document your phone sent",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -571,6 +576,9 @@ SUMMARY = {
     # --- hands-free mode (2026-11-04): the same two actions as TITLES above.
     "send_text_message": "send a text message from your phone",
     "handsfree_enable": "turn on hands-free mode",
+    # A document sent from the owner's phone (jarvis_upload.py, 2026-11-05):
+    # ONE card per file, before a byte is written.
+    "receive_uploaded_document": "save a document from your phone",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above

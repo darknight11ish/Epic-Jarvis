@@ -1059,6 +1059,17 @@
        "tier": "ask",
        "title": "Send a text message from your phone",
        "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -3360,6 +3371,17 @@
        "tier": "ask",
        "title": "Send a text message from your phone",
        "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -5657,6 +5679,17 @@
        "tier": "ask",
        "title": "Send a text message from your phone",
        "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -7947,6 +7980,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a text message from your phone",
+       "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
        "windows_hello": false
       }
      ],
@@ -10243,6 +10287,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a text message from your phone",
+       "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
        "windows_hello": false
       }
      ],
@@ -12555,6 +12610,17 @@
        "tier": "ask",
        "title": "Send a text message from your phone",
        "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -14855,6 +14921,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a text message from your phone",
+       "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
        "windows_hello": false
       }
      ],
@@ -17160,6 +17237,17 @@
        "tier": "ask",
        "title": "Send a text message from your phone",
        "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
+       "windows_hello": false
       }
      ],
      "title": "This PC and your phone"
@@ -19456,6 +19544,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a text message from your phone",
+       "windows_hello": false
+      },
+      {
+       "action": "receive_uploaded_document",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "receive_uploaded_document",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Save a document your phone sent",
        "windows_hello": false
       }
      ],

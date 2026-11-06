@@ -840,6 +840,16 @@ import_notion_export     = "ask"
 # has seen - takes this action. A missing line means "ask" anyway; it is
 # here so the tier is the owner's setting, not a fall-through.
 organize_obsidian_vault   = "ask"
+# A document sent from the owner's phone (jarvis_upload.py, 2026-11-05; the
+# owner's ask: "upload any documents through the jarvis app ... fully processed
+# as if I was uploading it to the jarvis desktop"). ONE card per file, raised at
+# `begin` and answered before a single chunk is written; the module refuses any
+# tier but "ask" (jarvis_upload.request_begin), the same shape as
+# phone_notifications_read, and the action is in jarvis_asks_first's HARD_LIMITS
+# and MUST_ASK so no settings line and no app can turn the card into a standing
+# yes. The file lands in a folder already on the "Folders Jarvis may look in"
+# list, so this card is the ONLY new permission the feature asks for.
+receive_uploaded_document = "ask"
 # Recording a phone call (backend/jarvis_call_notes.py, 2026-11-04; docs/
 # JARVIS-API.md section "Call recording"). The owner's own keyword, the phone's
 # own recorder and this PC's own transcription - but it starts capturing OTHER

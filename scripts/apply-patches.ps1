@@ -3057,6 +3057,15 @@ $SHIPPED = @(
     # where a new module is appended, so a new module goes above it. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     'jarvis_product_check.py'
+    # A document from the owner's phone (jarvis_upload.py, 2026-11-05; the
+    # owner's ask: "upload any documents through the jarvis app ... fully
+    # processed as if I was uploading it to the jarvis desktop"). Three routes -
+    # POST /api/upload/begin, /chunk and /finish - added by its own install(),
+    # called by the drop-in folder plugins\ready\upload, so it adds no patch.
+    # ONE card per file, 1 MiB chunks, sha256 and size checked at finish, and
+    # the landed file is processed by the EXISTING documents path. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_upload.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

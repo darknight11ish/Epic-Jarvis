@@ -81,9 +81,11 @@ import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StagedLine
 import com.jarvis.client.net.UpdateCheck
+import com.jarvis.client.net.Upload
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import com.jarvis.client.platform.ApprovalKey
 import com.jarvis.client.platform.CrashLog
+import com.jarvis.client.platform.DeviceSecure
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.LocalNetworkPermission
 import com.jarvis.client.platform.PictureEncoder
@@ -740,6 +742,84 @@ class MainActivity : FragmentActivity() {
         return AttachFile.picked(bytes, name, info.mime)
     }
 
+    // ------------------------------------- phone upload (2026-11-05) ---------
+    // Two doors on Settings' Folders row: "Send a document" and "Bring in a
+    // Notion export". Both use the same `OpenDocument()` picker as the attach
+    // row (no storage permission: the owner chooses one file, and the app may
+    // read that one, twice - once to measure it, once to send it). Neither
+    // reads the file into memory: `JarvisRuntime` streams it in 1 MiB chunks.
+
+    /** The listed folder the next picked document goes into, or null. */
+    private val sendDocumentInto = mutableStateOf<String?>(null)
+
+    /** The vault id the next picked Notion `.zip` goes into, or null. */
+    private val notionVaultId = mutableStateOf<String?>(null)
+
+    /**
+     * "Send a document": the eight kinds `my_files` already reads
+     * ([AttachFile.MIME_TYPES] - never a picture here). The folder was chosen
+     * one tap earlier, from the PC's own list.
+     *
+     * The provider's name, size and type are read first, and the pick is
+     * refused in plain words BEFORE a byte leaves the phone ([Upload.refusal]);
+     * a file past the 50 MB cap is then refused by the measure pass without
+     * being read in full.
+     */
+    private val pickSendDocument = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val into = sendDocumentInto.value ?: return@registerForActivityResult
+        sendDocumentInto.value = null
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val info = withContext(Dispatchers.IO) { readPickInfo(uri) }
+            val refusal = Upload.refusal(info.name, info.mime, info.stated, Upload.Purpose.DOCUMENT)
+            if (refusal != null) {
+                JarvisRuntime.setNotice(refusal)
+                return@launch
+            }
+            JarvisRuntime.startSendDocument(
+                into = into,
+                name = AttachFile.shownName(info.name),
+                mime = info.mime,
+                open = { openPicked(uri) },
+            )
+        }
+    }
+
+    /**
+     * "Bring in a Notion export": `.zip` only. Both types are offered because
+     * Android providers commonly report `application/octet-stream` for a zip;
+     * [Upload.refusal] decides by the NAME, the same name-first rule
+     * [AttachFile.kindFor] uses. The owner exports from Notion himself - there
+     * is no Notion login or token anywhere in this app.
+     */
+    private val pickNotionZip = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val vault = notionVaultId.value ?: return@registerForActivityResult
+        notionVaultId.value = null
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val info = withContext(Dispatchers.IO) { readPickInfo(uri) }
+            val refusal = Upload.refusal(info.name, info.mime, info.stated, Upload.Purpose.NOTION)
+            if (refusal != null) {
+                JarvisRuntime.setNotice(refusal)
+                return@launch
+            }
+            JarvisRuntime.startNotionUpload(
+                vault = vault,
+                name = AttachFile.shownName(info.name),
+                mime = info.mime,
+                open = { openPicked(uri) },
+            )
+        }
+    }
+
+    /** The chosen provider file, opened fresh for each of the two passes. Never kept. */
+    private fun openPicked(uri: Uri): java.io.InputStream? =
+        runCatching { contentResolver.openInputStream(uri) }.getOrNull()
+
     /**
      * Reads one photo - picked, or shared from another app - and makes it
      * small enough for the PC ([PictureEncoder]). The same path for both, so
@@ -1108,6 +1188,10 @@ class MainActivity : FragmentActivity() {
         val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
         val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
+        // The owner's own setting of 2026-11-05, this phone's and off by
+        // default: may a mic-press question on an unlocked phone read out an
+        // answer that uses what Jarvis remembers? (voice.MemoryAloud.)
+        val memoryAloudOn by JarvisRuntime.settings.readMemoriesAloud.collectAsState()
         // THE ONE VOICE-CHECK SETTING (2026-11-03): the rule is the PC's
         // (jarvis_live.voice_check_needed); this reads its answer over the
         // existing Live route, so the switch shows the PC's value and never a
@@ -1201,6 +1285,12 @@ class MainActivity : FragmentActivity() {
             // And whether the "I heard you" sound plays.
             heardSound = heardSoundOn,
             onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
+            // The owner's 2026-11-05 setting: read out an answer that uses
+            // what Jarvis remembers, on this phone's own mic press, while it
+            // was unlocked. Off by default and this phone's alone - nothing
+            // is sent to the PC to change.
+            memoryAloud = memoryAloudOn,
+            onMemoryAloud = { on -> JarvisRuntime.settings.setReadMemoriesAloud(on) },
             // The owner's 2026-11-03 switch. Asked on arrival like the wake
             // word's own state: a stale answer would show the wrong thing.
             voiceCheck = voiceCheckOn,
@@ -3882,6 +3972,23 @@ class MainActivity : FragmentActivity() {
                         // class as the theme. A phone with no desktop still has
                         // a Home screen to arrange.
                         onOpenEditHud = { nav.go(Screen.EDIT_HUD) },
+                        // "Send a document" and "Bring in a Notion export", on
+                        // the Folders row (the owner's ask of 2026-11-05). The
+                        // folder, or the vault, was chosen on that row one tap
+                        // earlier from the PC's own lists; these only open the
+                        // system picker and hand the URI's stream to the
+                        // runtime. Nothing is copied, and a pick that is the
+                        // wrong kind or too big is refused before a byte is read.
+                        onSendDocument = { path ->
+                            sendDocumentInto.value = path
+                            pickSendDocument.launch(AttachFile.MIME_TYPES)
+                        },
+                        onPickNotionZip = { vault ->
+                            notionVaultId.value = vault
+                            pickNotionZip.launch(
+                                arrayOf("application/zip", "application/octet-stream"),
+                            )
+                        },
                         floatingAvatar = floatingAvatar,
                         onFloatingAvatarChange = { JarvisRuntime.settings.setFloatingAvatar(it) },
                         // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md):
@@ -4815,14 +4922,25 @@ class MainActivity : FragmentActivity() {
      * Opens the microphone, asking for permission first if it has not been
      * granted — and then starting the capture, so the hold that triggered the
      * dialog is not wasted.
+     *
+     * THE UNLOCK STATE IS READ HERE, ONCE (the owner's setting of 2026-11-05:
+     * "read them aloud on my unlocked phone"). `DeviceSecure.isLocked` answers
+     * "was the phone locked at the moment of the press", and that answer is
+     * carried with THIS question - never re-read when the answer arrives, so a
+     * phone that locks while Jarvis thinks does not lose the permission he gave
+     * by pressing. When permission has to be asked first, the state is still
+     * read at the press and handed to the capture when it really starts: the
+     * press is the act, the dialog is only Android asking.
      */
     private fun beginVoice() {
         val voice = JarvisRuntime.voice
+        // `isLocked` fails as LOCKED: a phone that cannot say stays silent.
+        val unlockedAtPress = !DeviceSecure.isLocked(this)
         if (voice.recorder.hasPermission()) {
-            voice.begin()
+            voice.begin(unlockedAtPress = unlockedAtPress)
             return
         }
-        micGrantedCallback = { voice.begin() }
+        micGrantedCallback = { voice.begin(unlockedAtPress = unlockedAtPress) }
         micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
