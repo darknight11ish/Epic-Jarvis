@@ -130,12 +130,12 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
     # with web search); a
     # switch the turn ignored would be a lie. test_asks_first.py carries the
     # same 59 and the same reason.
-    check("the in-app rows: 59, every tool the model can be offered",
+    check("the in-app rows: 60, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 59)
+          and len(AF.TOOLS_SWITCHABLE) == 60)
     # The PC half of the law, proved against the page itself rather than
     # assumed: jarvis-desktop/src/asks-first.js carries its own copy of the
     # list (the Tools page's rows), so a tool added on one side alone fails

@@ -14,7 +14,7 @@ not move any count at all.
 WHAT THIS PINS, AS EXPLICIT SORTED NAME LISTS
   (a) FULL_ENABLED - what `enabled_tools_for_turn()` returns on a fresh
       install: the shipped template copied in as the settings file, in a temp
-      folder, exactly as `test_tool_defaults.py` does it. Thirteen names today.
+      folder, exactly as `test_tool_defaults.py` does it. Nineteen names today.
   (b) CLOUD_ALLOWED - the tools a cloud lane may be offered. There is no
       cloud-tool allow-list in this tree, and that is the answer: the local
       tool loop is never called for a cloud lane and no cloud request builder
@@ -81,7 +81,7 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: (a) A fresh install's `[tools].enabled`, read through
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
-    "calculator", "change_setting", "conversation_find", "conversation_open",
+    "approval_policy", "calculator", "change_setting", "conversation_find", "conversation_open",
     "feature_guide", "memory_search", "my_files", "pack_inspect", "pack_install",
     "pack_list", "pack_remove", "phone_apps", "plugin_list", "plugin_switch",
     "refresh_abilities", "self_portrait", "send_text_message",
@@ -97,7 +97,7 @@ CLOUD_ALLOWED = []
 #: so the decision is recorded here rather than assumed.
 PRIVATE_CHAT_ALLOWED = []
 
-#: What those enabled thirteen become when a turn is built: `my_files` is
+#: What those enabled nineteen become when a turn is built: `my_files` is
 #: dropped while no folder is listed (the model is never offered a tool that
 #: could read nothing), so a fresh PC offers twelve base tools - plus the
 #: conversation web-search approval and its instant stop, which ride with
@@ -111,7 +111,7 @@ PRIVATE_CHAT_ALLOWED = []
 #: and are offered like any other enabled tool - `conversation_clear` is not a
 #: tool at all, so it cannot appear here.
 OFFERED_FRESH = [
-    "approve_web_search_for_conversation", "calculator", "change_setting",
+    "approval_policy", "approve_web_search_for_conversation", "calculator", "change_setting",
     "conversation_find", "conversation_open", "feature_guide", "memory_search",
     "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
     "plugin_list", "plugin_switch", "refresh_abilities",
@@ -129,6 +129,7 @@ OFFERED_FRESH = [
 #: permission.
 CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily",
+    "approval_policy",
     "approve_web_search_for_conversation", "browser_control",
     "calculator", "calendar_read", "change_setting", "coming_up",
     "connect_account", "control_computer", "control_phone",
@@ -293,7 +294,7 @@ def t_a_fresh_install_enables_exactly_the_pinned_set():
         return sorted(AG.enabled_tools_for_turn())
 
     got = _with_fresh_settings(read)
-    check("a fresh install's turn enables exactly the thirteen pinned names",
+    check("a fresh install's turn enables exactly the nineteen pinned names",
           got == FULL_ENABLED, got)
 
 
@@ -305,8 +306,8 @@ def t_a_fresh_install_offers_exactly_the_pinned_list():
             lambda: sorted(AG.offered_tools(AG.enabled_tools_for_turn())))
     finally:
         JD.folders = real_folders
-    check("a fresh install (no folder listed) offers exactly fourteen names - "
-          "the twelve local defaults plus the grant ask and its stop, which "
+    check("a fresh install (no folder listed) offers exactly nineteen names - "
+          "the seventeen local defaults plus the grant ask and its stop, which "
           "ride with web search - with my_files withheld by its own rule",
           got == OFFERED_FRESH, got)
     check("...so my_files is enabled but not offered: the folder is the only "

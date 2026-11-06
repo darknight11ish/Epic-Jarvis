@@ -6,7 +6,7 @@
  *
  * What must hold:
  * - every tool the model can be offered is drawn with an ON switch, the raw
- *   Tier C set and the everyday helpers included (59 at 2026-11-05, 48 before);
+ *   Tier C set and the everyday helpers included (60 at 2026-11-05, 48 before);
  * - a name this PC does not know, or one of the four whose own switch decides
  *   it, is still listed when it is ON, with its real state and the PC's own
  *   plain reason, and that row is an OFF switch only;
@@ -56,8 +56,8 @@ check("every formerly locked tool is a switch row with an ON switch", () => {
       `${id} can be switched on from the PC: ${JSON.stringify(tv)}`);
     assert.ok(TOOLS_SWITCHABLE.includes(id), `${id} is in the switchable list`);
   }
-  assert.equal(view.tools.items.length, 59,
-    "59 switches, every tool the model can be offered (six GitHub tools, send_text_message and four pack tools since 2026-11-05)");
+  assert.equal(view.tools.items.length, 60,
+    "60 switches, every tool the model can be offered (six GitHub tools, send_text_message, the approval-policy row and four pack tools since 2026-11-05)");
 });
 
 check("the fixture really carries the name this PC does not know", () => {
@@ -70,7 +70,7 @@ check("the fixture really carries the name this PC does not know", () => {
   assert.ok(rows.every((r) => r.why.length > 20), "it carries the PC's plain reason");
   assert.ok(rows.every((r) => r.title && r.title !== r.id),
     "it is drawn with its human label, never the raw id");
-  assert.equal(view.tools.items.length, 59, "the switch rows are unchanged");
+  assert.equal(view.tools.items.length, 60, "the switch rows are unchanged");
   assert.ok(TOOLS_SWITCHABLE.includes("web_search"));
   assert.ok(!TOOLS_SWITCHABLE.includes("plugin_scan"));
 });
@@ -102,7 +102,7 @@ check("a PC with nothing else ON sends no extra and draws no extra rows", () => 
   const view = readAsksFirst(C.pc_shipped);
   assert.deepEqual(view.tools.extra, [], "no extra rows");
   assert.deepEqual(extraToolsView(view.tools), [], "nothing is drawn for them");
-  assert.equal(view.tools.items.length, 59);
+  assert.equal(view.tools.items.length, 60);
 });
 
 check("the page draws the extra rows and sends OFF through the same verb", () => {

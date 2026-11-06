@@ -79,7 +79,7 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 59 at
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 60 at
 /// 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools, the four
 /// pack-manager tools that ship ON and hands-free's send_text_message): the
 /// owner's decision of 2026-11-04 made EVERY tool the AI model can be offered
@@ -87,7 +87,7 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
 /// from [`SWITCHABLE`], and desktop only. The four tools that are NOT here
 /// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 59] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 60] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -148,6 +148,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 59] = [
     "refresh_abilities",
     "self_portrait",
     "setup_quiz",
+    "approval_policy",
     // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
     "github_list",
     "github_read_file",
