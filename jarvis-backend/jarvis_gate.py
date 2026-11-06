@@ -2743,20 +2743,6 @@ def pending() -> list[dict]:
                                          - time.time()))
         except (TypeError, ValueError):
             pass
-        # Hidden bytes and padding in the text this card SHOWS (2026-11-06,
-        # ruling PR 2, Hermes borrow #1). Deterministic, over the card's own
-        # text only - what the card says is NOT changed. Clean text gives [].
-        # `hidden_bytes_more` is the number the cap left out, so a hostile line
-        # with thousands is counted rather than quietly truncated.
-        _rows = hidden_bytes(card_text(d.get("detail"), d.get("prompt")))
-        d["hidden_bytes"] = _rows[:MAX_HIDDEN_ROWS]
-        if len(_rows) > MAX_HIDDEN_ROWS:
-            d["hidden_bytes_more"] = len(_rows) - MAX_HIDDEN_ROWS
-        # What this card costs, on a card that can spend money (2026-11-06,
-        # ruling PR 2, Hermes borrow #7). Absent for every other card.
-        _cost = cloud_cost(d.get("action", ""), d.get("detail"))
-        if _cost is not None:
-            d["cost"] = _cost
         # Why this is being asked about at all, when the table said otherwise.
         # A card shows this instead of a coloured dot: the reason is the thing
         # that changes the decision.
@@ -2767,6 +2753,39 @@ def pending() -> list[dict]:
                 d["raised"] = json.loads(raw)
             except Exception:
                 d["raised"] = None
+        # WHAT THE CARD SHOWS BEYOND ITS WORDS (2026-11-06, ruling PR 2): the
+        # hidden bytes and padding in its text (Hermes borrow #1), and what it
+        # costs when it can spend money (borrow #7). Both sit HERE, after the
+        # `raised` block and before the row is returned, rather than next to
+        # `expires_in` where they were first written - and the position is not
+        # taste. Three later patches in the stack (no-expiry-cards,
+        # no-deadline-cards and show-card-timer) rewrite the lines directly
+        # above and each hunk ENDS on the "# Why this is being asked" comment;
+        # a block inserted between that comment and the `expires_in` lines
+        # breaks all three when their own suites apply them to this base with
+        # `git apply`. Nothing above changes `detail` or `prompt`, so the order
+        # the fields are attached in makes no difference to what a card says.
+        #
+        # HIDDEN BYTES. A card's text can quote a name from a file, an email, a
+        # web page or a `.zip` - text the owner did not write. Unicode's
+        # zero-width and bidirectional controls are invisible on screen and can
+        # make a sentence read one way while a search or a model reads another
+        # (the "Trojan Source" class: `U+202E` reverses the run after it). The
+        # detector is DETERMINISTIC: it names the code point and where it is,
+        # and it never rewrites the card. What the card SAYS is unchanged - a
+        # bad character is reported, not deleted, so the owner can still see the
+        # exact request. The apps draw one warning pill. A clean card's text
+        # gives []; `hidden_bytes_more` is the number the cap left out, so a
+        # hostile line with thousands is counted rather than quietly truncated.
+        _rows = hidden_bytes(card_text(d.get("detail"), d.get("prompt")))
+        d["hidden_bytes"] = _rows[:MAX_HIDDEN_ROWS]
+        if len(_rows) > MAX_HIDDEN_ROWS:
+            d["hidden_bytes_more"] = len(_rows) - MAX_HIDDEN_ROWS
+        # WHAT IT COSTS. Absent for every card that cannot spend money, so an
+        # ordinary card never carries a field it has no use for.
+        _cost = cloud_cost(d.get("action", ""), d.get("detail"))
+        if _cost is not None:
+            d["cost"] = _cost
         out.append(d)
     return out
 

@@ -313,7 +313,13 @@ def t_the_stack_is_the_published_base_plus_both_patches():
 
     G = load_module("jarvis_gate", d)
     after = Path(G.__file__).read_text(encoding="utf-8")
-    pending_body = after.split("def pending")[1].split("def decide")[0]
+    # The EXACT def line, not a bare "def pending": the queue builder must be
+    # the function this reads, and a helper whose name starts with the same
+    # seven characters would otherwise be picked first. PR 2's `pending_text()`
+    # (the deny-note feature) is exactly such a helper - measured 2026-11-06:
+    # `after.split("def pending")` landed inside it and every check below read
+    # the wrong body. The old split was always ambiguous; it is now precise.
+    pending_body = after.split("def pending() -> list[dict]:")[1].split("def decide(")[0]
     check("the patched module compiles", True)     # importing it is the proof
     for action in NEVER_EXPIRES:
         check(f"{action}: its REQUEST waits for its own flow",
