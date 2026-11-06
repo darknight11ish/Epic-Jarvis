@@ -277,7 +277,7 @@ loosen_what_asks_first    = "ask"
 # enable_reading_tool - offering ONE tool to the AI model at all (adding it to
 # [tools].enabled, below) from the PC's "What asks first" page, one card plus
 # Windows Hello per tool. Since 2026-11-04 that page draws a switch for the
-# model's tools - 48 at 2026-11-04, the raw ones included (shell_exec,
+# model's tools - 52 at 2026-11-05, the raw ones included (shell_exec,
 # control_computer, browser_control) - and each of those cards is this one
 # action. Three tools are not switched here: run_data_script (its own Data
 # sandbox switch) and the two web-search grant tools (they ride with Web

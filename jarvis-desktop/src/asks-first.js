@@ -70,7 +70,7 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 48 at 2026-11-04. A DIFFERENT thing from SWITCHABLE (above): that is whether
+ * 52 at 2026-11-05. A DIFFERENT thing from SWITCHABLE (above): that is whether
  * an offered tool asks first; this is whether it is offered at all
  * ([tools].enabled).
  *
@@ -98,10 +98,12 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // The everyday helpers that used to be "not this slice" (8)
   "calculator", "memory_search", "file_read", "web_search", "my_files",
   "propose_plan", "change_setting", "feature_guide",
-  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (12)
+  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (16,
+  // plus the four pack-manager tools that ship ON since 2026-11-05)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
-  "plugin_switch", "refresh_abilities", "self_portrait", "setup_quiz",
+  "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove",
+  "refresh_abilities", "self_portrait", "setup_quiz",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =
