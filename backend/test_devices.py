@@ -591,6 +591,26 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
                                 # rewrites nothing this patch wrote.
                                 "bench.patch",
+             # history-purge.patch (2026-11-04, clearing old chats by date):
+             # ONE added install block in jarvis_hud.py, right after
+             # forget-range.patch's own block, and no hunk in jarvis_gate.py at
+             # all - every rule is in the shipped jarvis_history_purge.py. It
+             # rewrites nothing this patch wrote.
+             "history-purge.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
+                                # product-check.patch (2026-11-04, the product
+                                # check's wiring) is appended after this patch,
+                                # immediately before plugin-loader.patch. It
+                                # adds one _TOOL_ACTIONS line and, at the end
+                                # of jarvis_gate.py, its own action's _RISK row
+                                # and a _NO_RULE_FROM_DENIAL union - nothing
+                                # devices.patch wrote, so it rewrites nothing.
+                                "product-check.patch",
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",
@@ -960,7 +980,10 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # patch wrote, and the later_rewriting() half below
                                 # proves it.
                                 "model-recommendations.patch",
-                                "cloud-honesty.patch"}
+                                "cloud-honesty.patch",
+# github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+# everything these patches wrote, so it rewrites none of their lines.
+                                "github-tools.patch"}
           and not _stack.later_rewriting("devices.patch", DEVICES_TIER_LINE)
           and not _stack.later_rewriting("devices.patch", DEVICES_RISK_LINE), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

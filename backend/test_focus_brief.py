@@ -74,7 +74,16 @@ URL = "http://127.0.0.1:11434"
 
 def turn(messages, *, manner=None, focus_active=False):
     """One turn with jarvis_focus.is_active() faked; returns the messages
-    really sent to the model."""
+    really sent to the model.
+
+    `enabled_tools=set()` (2026-11-05): this suite is about the FOCUS note and
+    the request's message ORDER, not about tool schemas. Offering every tool
+    (`enabled_tools=None`) now spends enough of the 16,384-token context that
+    the one history exchange is folded into the "[EARLIER IN THIS CONVERSATION]"
+    digest before the order check can see it - an honest budget behaviour, but
+    one proved by test_manner.py and test_cut_off_note.py, not this suite. No
+    tool is invoked anywhere below, so nothing is skipped and no assertion is
+    relaxed."""
     sent = []
 
     def opener(url, body):
@@ -86,7 +95,7 @@ def turn(messages, *, manner=None, focus_active=False):
     AG._get_json = lambda *a, **k: (_ for _ in ()).throw(OSError("no network in this test"))
     try:
         AG.run_local_turn(messages, "jarvis-primary", ollama_url=URL,
-                          stream_out=lambda b: None, open_stream=opener, enabled_tools=None,
+                          stream_out=lambda b: None, open_stream=opener, enabled_tools=set(),
                           context_length=16384,
                           request={"model": "jarvis-primary", "stream": True,
                                    "messages": messages},

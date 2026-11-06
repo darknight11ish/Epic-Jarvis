@@ -97,8 +97,30 @@ def turn(request_messages):
     real_get = AG._get_json
     AG._get_json = lambda *a, **k: (_ for _ in ()).throw(OSError("no network in this test"))
     try:
+        # NO TOOLS ARE OFFERED, and that is deliberate (2026-11-04).
+        # `enabled_tools=None` means "every tool this module has"
+        # (`offered_tools`' own docstring) and it is the wrong stand-in for a
+        # real turn here: jarvis_hud passes the owner's `[tools].enabled`
+        # list, which the shipped file makes 14 tools and 2,924 tokens. This
+        # suite is about the cut-off note and where it sits, and the tool
+        # catalogue now costs 11,806 of a 16,384-token turn - leaving about
+        # 1,600 tokens for the conversation, which this fixture's own three
+        # messages (1,697 with the spoken note) do not fit in. Compaction then
+        # does exactly its job: it folds the history into an "[EARLIER IN
+        # THIS CONVERSATION]" digest, so the checks that pin "the history ...
+        # as they came" can never pass. CI run 41866121515, job
+        # `backend`/`backend-windows`, failed exactly that way on 2026-11-04
+        # once the six GitHub tool schemas (1,269 tokens together, each well
+        # inside the 300-token rule test_tool_text.py enforces) were added.
+        # With no tools the same window leaves 13,619 tokens, and every
+        # check keeps its assertion. `test_compaction.py` and `test_agent.py`
+        # are the suites that prove what a too-long prompt does. This is the
+        # same shape as the quiz line's own fix at the top of this file
+        # (2026-11-04): keep this suite free of unrelated prompt growth rather
+        # than loosen a check that pins the request.
         AG.run_local_turn(passed_in, "jarvis-primary", ollama_url=URL,
-                          stream_out=lambda b: None, open_stream=opener, enabled_tools=None,
+                          stream_out=lambda b: None, open_stream=opener,
+                          enabled_tools=set(),
                           context_length=16384,
                           request={"model": "jarvis-primary", "stream": True,
                                    "messages": request_messages},
@@ -156,6 +178,47 @@ def t_never_first():
           == {json.dumps(SPOKEN), json.dumps(note(SAID))}, json.dumps(msgs)[-600:])
 
 
+def t_a_folded_history_keeps_both_notes_between_it_and_the_question():
+    """The same thing on a conversation that really does not fit.
+
+    On a 16,384-token turn the prompt can be too long, and then
+    `run_local_turn` does not merely drop the oldest turns: it folds them into
+    ONE "[EARLIER IN THIS CONVERSATION]" digest, in their place
+    (jarvis_compaction, `compact_messages`). The two notes must survive that -
+    between the digest and the newest question, neither of them first - or a
+    spoken question in a long chat would lose exactly the sentence the owner
+    had just heard cut off.
+
+    This is the case the fixture above used to reach by ACCIDENT on
+    2026-11-04, when offering every tool left about 1,600 tokens for the
+    conversation and folded a THREE-message history (CI run 41866121515,
+    `backend` and `backend-windows`). Here it is reached on purpose, so the
+    behaviour is pinned instead of the accident.
+    """
+    long_history = []
+    for i in range(20):
+        long_history.append({"role": "user", "provenance": "typed",
+                             "content": f"question {i}: " + "word " * 400})
+        long_history.append({"role": "assistant", "content": f"answer {i}: " + "word " * 400})
+    msgs, passed = turn(long_history + [cut("the weekend")])
+    digest = [m for m in msgs
+              if str(m.get("content") or "").startswith("[EARLIER IN THIS CONVERSATION]")]
+    check("a long history is really folded: one digest, and turns are gone",
+          len(digest) == 1 and len(msgs) < len(long_history) + 2,
+          f"{len(msgs)} sent of {len(long_history) + 2}")
+    if not digest:
+        return
+    at = msgs.index(digest[0])
+    check("the rules are still first, before the digest", msgs[0] == BLOCK and at > 0)
+    check("the newest question is still last", msgs[-1] == passed[-1])
+    check("both notes are still there, between the digest and the question",
+          SPOKEN in msgs[at + 1:] and note(SAID) in msgs[at + 1:],
+          json.dumps(msgs)[-600:])
+    check("neither note is first", msgs[0] not in (SPOKEN, note(SAID)))
+    check("the cut-off note still quotes the sentence the owner heard",
+          note(SAID) in msgs[at + 1:] and SAID in str(note(SAID)["content"]))
+
+
 def t_nothing_to_say_adds_no_note():
     for name, last in (("no field", {"role": "user", "content": "next"}),
                        ("empty", cut("next", said="", provenance=None)),
@@ -209,6 +272,7 @@ def t_the_note_says_what_happened():
 if __name__ == "__main__":
     for fn in (t_the_note_goes_just_before_the_newest_question,
                t_never_first,
+               t_a_folded_history_keeps_both_notes_between_it_and_the_question,
                t_nothing_to_say_adds_no_note,
                t_the_sentence_is_cleaned,
                t_it_is_never_the_owners_words,

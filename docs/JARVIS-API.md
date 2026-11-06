@@ -2457,7 +2457,7 @@ shows the waiting line and does not follow the id yet (ARCHITECTURE §8).
 
 | Route | Body | Answers | What it does |
 |---|---|---|---|
-| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
+| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run, and (2026-11-05) the pooled both-cards coding lane on port 11450 too: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
 
 The mode clients show still comes from `/api/status` and the `power` event.
 Desktop: tray → Change power mode (`commands::set_power_mode`). Phone: Brain
@@ -2486,6 +2486,21 @@ link and let going quieter through.
   machine's Ollama - the chat path's two checks (ARCHITECTURE §4). If
   Jarvis is back on standby when the load finishes, the model is unloaded
   again.
+- **The chosen Coding lane comes back too (2026-11-05).** Standby also stops
+  the pooled both-cards coding lane on port 11450 (`jarvis_model_lanes.sleep`,
+  added 2026-11-04), and until 2026-11-05 nothing started it again: a
+  still-chosen Coding preset pointed at a stopped port until the owner
+  re-applied it. Waking now starts that lane again in the background through
+  `start_pooled_lane(by="waking from standby")`, and `message` says it is
+  happening. Only Active; only when standby's own `stopped` flag says it
+  really stopped the lane (one that was already down is never auto-loaded);
+  only when the preset in the choice file is the pooled one. **No new card is
+  raised**: the owner already chose the preset, its `switch_model` card was
+  answered when it was applied, and standby is what stopped the lane. The two
+  single-card lane models are not restored by the wake - the pooled start
+  pauses what it needs, exactly as a preset apply does. If Jarvis goes back
+  to standby while the lane is still loading, the lane is stopped again, so
+  standby's promise (the cards are free) still holds.
 - **The answer comes when the mode has changed.** Freeing the cards can
   take seconds; an answer that waited for it past `wait_s` (1.5 s) used to
   be the 202 "Waiting for your approval" with no card up. Now, once the
@@ -8259,7 +8274,7 @@ routed); phone control; commands on this PC; plug-in programs (MCP, id
 big model.
 `tools` is the list the chat's tool loop offers the model
 (`jarvis_agent.offered_tools()` of `[tools].enabled`), in plain names.
-For a tool with an in-app switch (§43 - every tool the model can be offered since 2026-11-04), an Off row's own line says it switches on in Settings, What asks first, with one approval card and Windows Hello. The three tools that have no switch of their own say where their real switch is instead: the data and maths sandbox for `run_data_script`, and Web search for the two conversation grant tools.
+For a tool with an in-app switch (§43 - every tool the model can be offered since 2026-11-04), an Off row's own line says it switches on in Settings, What asks first, with one approval card and Windows Hello. The four tools that have no switch of their own say where their real switch is instead: the data and maths sandbox for `run_data_script`, Web search for the two conversation grant tools, and the product check's own settings line `[product_check] enabled = true`.
 
 Both apps show a row as "`name` - `state_words`", then, only when it is on,
 "Goes to: `where`" and "Asks you first: `asks`" (not when `asks` is "-"),
@@ -11122,7 +11137,7 @@ the app"**. So every tool the AI model can be offered is switchable ON from the
 Tools page, one approval card each. The only limits left are the five
 non-negotiable rules (`CLAUDE.md`) and the shape below.
 
-**The 48 switches**, in the page's own groups:
+**The 56 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
 
 - **Notes and reading:** `calendar_read`, `notes_search`,
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
@@ -11142,13 +11157,21 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 - **Everyday helpers:** `calculator`, `memory_search`, `file_read`,
   `web_search`, `my_files`, `propose_plan`, `change_setting`, `feature_guide` -
   the tools the earlier slice left out.
-- **Jarvis's own tools:** `goals_list`, `goal_add`, `goal_progress`,
+- **Jarvis's own tools (20):** `goals_list`, `goal_add`, `goal_progress`,
   `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
-  `plugin_list`, `plugin_switch`, `refresh_abilities`, `self_portrait`,
-  `setup_quiz` - these shipped ON and had no switch row at all before
-  2026-11-04.
+  `plugin_list`, `plugin_switch`, `send_text_message`, `refresh_abilities`,
+  `self_portrait`, `setup_quiz`, `approval_policy` - the switch that offers
+  the approval-policy TOOL at all (it never changes a policy by itself;
+  §193 is the changing, and every loosening still needs its own card) - and,
+  since 2026-11-05, the six on-demand GitHub tools `github_list`,
+  `github_read_file`, `github_ci_status`, `github_comment`,
+  `github_open_issue`, `github_rerun_workflow` (the three reads share the
+  `github_inspect` action, the other three their own; every use still raises
+  its own card). The twelve before the GitHub six shipped ON and had no
+  switch row at all before 2026-11-04; `send_text_message` came with
+  hands-free the same day as the GitHub six.
 
-**Three known tools are NOT switches of their own**, because the turn ignores
+**Four known tools are NOT switches of their own**, because the turn ignores
 their line in `[tools].enabled` - a switch whose state the turn ignored would
 be a lie (the rule that removed the web-search grant's two switches on
 2026-11-02). They are named in `tools.not_switchable`, with the PC's own
@@ -11159,6 +11182,10 @@ sentence, and the route refuses ON for them with that sentence rather than
   Data sandbox; `POST /api/sandbox/enabled`). With it on the model is offered
   the tool whether or not the file names it; with it off the file cannot offer
   it.
+- `product_check` - the product check has its OWN switch too (`[product_check]
+  enabled` in the settings file, off by default; §192). With it on the model is
+  offered the tool whether or not `[tools].enabled` names it; with it off a
+  `[tools].enabled` line alone offers nothing.
 - `approve_web_search_for_conversation` and `stop_web_search_approval` - they
   ride with `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`).
 
@@ -11178,7 +11205,7 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the three `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (48), not just Tier A/B. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (56), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11200,13 +11227,15 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
                              "why": <the plain note>}}
 ```
 
-`items` lists all 48 switches at 2026-11-04 (every tool the AI model can be
-offered except the three below), grouped; `vault` is the vault organizer's
-separate switch; `not_switchable` names the three tools whose own switch decides
+`items` lists all 56 switches at 2026-11-05 (48 at 2026-11-04, plus the six
+GitHub tools, hands-free's `send_text_message` and the approval-policy tool's
+`approval_policy` - every tool the AI model can be offered except the four
+below), grouped; `vault` is the vault organizer's
+separate switch; `not_switchable` names the four tools whose own switch decides
 them, with the PC's own sentence, so the page points at the real switch instead
 of drawing one that would do nothing. `extra` is D4 (the owner, 2026-11-04):
 every name in `[tools].enabled` that has no row in `items` - a name this PC does
-not know, or one of the three when the file happens to name it - with its state
+not know, or one of the four when the file happens to name it - with its state
 read from the file (`on`) and the PC's own plain `why`; `switchable: false` says
 plainly that the page offers it no ON switch. A tool turned OFF through this
 route stays in `extra` with `on: false` and the line the owner just saw (until
@@ -14422,12 +14451,23 @@ sent as the `live` event on every change (the same object).
  "ending_soon": bool, "ended": str|null, "ended_words": str|null,
  "ended_say": str|null, "ended_device": str|null, "ended_ago_s": int|null,
  "resumable": bool, "turns": int, "refused_in_a_row": int,
+ "starting": bool, "starting_words": str|null,
  "limits": {..., "ended_show_s": 15, "crisis_more_s": 1800},
  "lines": {...}, "seen": {...},
  "end_on": "app_lock"|"windows_lock",
  "camera": {"ready": bool, "why": str}}
 ```
 
+- `starting` / `starting_words` (added 2026-11-05) - a session that just
+  started while the PC warms the speech engines (STT, the VAD, CAM++, TTS)
+  behind an open microphone. True only while that warm has not reported yet,
+  and never longer than `jarvis_live.START_MAX_S` (8 s), so it cannot stick.
+  Both apps show `starting_words` ("Starting microphone & voice...") for those
+  seconds instead of claiming to listen; the ready line `lines.started`
+  ("I'm listening.") is said only once `starting` is false. It is NOT a pause:
+  `state`, `on`, the clock and a `live` clip all behave as on any other
+  session, because the warm is a latency short-cut and never a gate. An older
+  app that does not know the keys shows the session exactly as before.
 - `conversation_id` (the chat audit, 2026-09-28) - the chat this session's
   words go in: the id the starting app sent with `start`, or - for a session
   started by voice or from the tray - the first one an app names with
@@ -31853,13 +31893,26 @@ words and is a patch of its own - `backend/skill-install-note.patch`:
 | `GET /api/skills/menu?name=<skill>` | ONE skill, plus its own `SKILL.md` text so the owner can read and edit it | none |
 | `POST /api/skills/install` | `{"path"}` a folder or `.zip` on this PC, or `{"hermes"}` a folder the scan named; `"dry_run": true` stops after the scanner; `"accept_warnings"` for a warning-level skill | **ONE** `modify_own_code` card |
 | `POST /api/skills/import/scan` | a READ-ONLY scan of `%USERPROFILE%\.hermes\skills`: every `SKILL.md`, its verdict, its `scripts/` count. Copies, moves and installs nothing | none |
-| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again | on: **ONE**; off: none |
+| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again. `{"name", "remove": true}` deletes ONE skill that is ALREADY turned off - the parked copy `uninstall` cannot see - and refuses an installed name | on: **ONE**; off and remove: none |
 | `POST /api/skills/edit` | `{"name", "text"}`: the new `SKILL.md`, scanned and installed through the same path | **ONE** |
 
 `GET /api/skills` (the list) and `POST /api/skills/decide` (removal, with its
 "are you sure?") are unchanged and still the only routes both apps call: the
 Settings menu's **Remove** calls the same `brain_remove_skill` command the
 Brain already had, so there is one removal path, not two.
+
+**Two objects, two doors, and never two doors to one folder** (2026-11-05).
+`POST /api/skills/decide` remains the one removal for an INSTALLED skill.
+What it could never reach is the copy this menu itself parked in `skills-off\`:
+`jarvis_skills.uninstall` resolves a name only under the skills folder, so a
+skill the owner switched off could be switched back on (one card) and never got
+rid of - in either app, because the phone's Remove goes through the same route.
+`{"name": "…", "remove": true}` on the state route deletes that one parked
+folder and its row in `skills-off\.off.json`, with **no card**: it is already
+out of the load path, so it only takes a capability away, the same rule that
+makes turning one off immediate. It refuses an installed name outright (with the
+sentence saying to use Remove), refuses `remove` and `on` in the same request,
+and takes ONE name - there is no list form anywhere.
 
 ### 178.3 The safety model, in the order it happens
 
@@ -31936,6 +31989,11 @@ which is the point of the sentence above, not a bug to work around.
   had (`GET /api/skills` and Remove with its "are you sure?"). The five routes
   are classified `deliberate` in `tools/check_parity.py` and the reason is in
   `docs/ARCHITECTURE.md` §8.
+- **No phone delete of a TURNED-OFF skill.** That copy is a folder the PC's
+  menu parked in `skills-off\`; the phone's list never shows it, and it gains
+  no control for it - the same one-sidedness, recorded in
+  `docs/ARCHITECTURE.md` §8. The phone therefore removes an installed skill
+  and nothing else.
 - **No renaming.** An edit cannot change a skill's name: the frontmatter
   `name:` must still match the folder, which is what stops a skill from being
   addressed by a name it does not own. Renaming is a new install plus a
@@ -33592,12 +33650,14 @@ on the card (its sentence leads with `PARTIAL:`), a failed run that writes
 `ok: false` + `why` and no zero, the store's append/tail/filters/get/delete, the
 500-run cap keeping whole runs, the byte ceiling, the allowlist, the
 three-run comparison floor, and that no run can start without `confirm`.
+
 **Two guards were added on 2026-11-04, and each failed before its fix:** the
 prefill prompt's per-repeat tag now leads, so two repeats at one depth share no
 word of prefix and 25 characters out of 3,690 (before: 512 of 518 words,
 3,653 characters - a tail measurement), and `lane` is dropped when it is not one
 of the three, because it used to sit in both the text-field and the enum table
 and the text-field branch won ("everyday lane" was stored as "everyday lan").
+
 
 ## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
 
@@ -33978,7 +34038,1385 @@ the wording belongs to the module's own lane.
 
 The decision is `decisions.d/2026-11-04-capability-talk.md`.
 
-## 188. A document from your phone: three upload routes, ONE card a file, and the file lands as a desktop file (backend only, the phone's screen is the next lane, added 2026-11-05)
+## 188. Call recording: the phone records on the speaker path, the PC transcribes, labels who spoke and files a new note (backend, both apps, added 2026-11-04)
+
+The owner's request, in their own words: *"add the ability of jarvis to record a
+call if I tell it a keyword 'record call' where it will record all the audio,
+transcribe it, put a date and identify the speakers in the transcription, and
+store all of it in a new obsidian note labeled with the date and time"*. The
+call is taken through the Android Jarvis app. The whole story, with the
+reasoning and the honest limits, is `docs/CALL-RECORDING.md`; this section is
+the wire contract the Android lane implements against.
+
+**The platform truth, first.** The call happens on the owner's phone, and his
+primary phone is a **Google Pixel 9**; this PC can neither see nor hear that
+call. **Android does not let an ordinary app capture the call's own audio
+stream** - `MediaRecorder.AudioSource.VOICE_CALL` is privileged and a normal app
+gets silence or a `SecurityException`. So the phone records **through its
+microphone with the call on speaker** and uploads that; the PC does everything
+after. The far end is therefore heard through the speaker and the words are less
+clear than a system recorder would give, which the note itself says.
+**No real call was driven on that phone by either lane** - the Pixel was not
+attached while this was built, which the Android half's own pull request states
+- so how the speaker path really sounds and how good the words are afterwards
+are **NOT-TESTABLE** until the owner's own field test. Importing a file from the
+phone's own call recorder, if it has one, is a later addition and is **not
+built**.
+
+### 188.1 The four routes
+
+Origin and token exactly as every other route (`X-Jarvis-Token`;
+`X-Jarvis-Client: hud` from either app). One audio shape only: **16 kHz, mono,
+signed 16-bit little-endian PCM**.
+
+```
+POST /api/call/recording/start
+     {"started_at": "2026-11-04T13:36:05-08:00", "sample_rate": 16000,
+      "channels": 1, "format": "s16le", "device": "phone"}
+  -> 200 {"ok": true, "session": "call_<24 hex>", "state": "recording",
+          "sample_rate": 16000, "channels": 1, "format": "s16le"}
+     202 {"ok": true, "session": ..., "state": "waiting", "message": "..."}
+     400 {"ok": false, "state": "refused", "error": "<one sentence>"}
+     403 {"ok": false, "state": "off"|"refused", "error": "<one sentence>"}
+```
+
+`started_at` is ISO 8601; a value more than a day away from this PC's clock is
+refused (400) so a wrong phone clock cannot name a note for the wrong time. A
+naive timestamp is read as this PC's local time. `sample_rate` must be 16000,
+`channels` 1, `format` `"s16le"` and `device` `"phone"`; anything else is
+refused **naming the accepted values**, never silently converted.
+
+```
+POST /api/call/recording/chunk
+     {"session": "call_...", "seq": 1, "data_b64": "<base64 PCM>"}
+  -> 200 {"ok": true, "session": ..., "seq": 1, "bytes": 32000,
+          "chunk_bytes": 32000}
+     200 {"ok": true, ..., "chunk_bytes": 0, "already": true}
+         (a seq BELOW the next one: already held, nothing written twice)
+     404 {"ok": false, "error": "that recording is not on this PC..."}
+     409 {"ok": false, "state": "waiting", "error": "..."}   the card is up
+     409 {"ok": false, "expected": <n>, "error": "...in order..."}
+     413 {"ok": false, "error": "...over the 512 KiB limit..."}
+     400 (bad base64, an empty chunk, a missing seq or a seq below 1)
+```
+
+`seq` starts at **1** - the Android half's own first chunk is 1
+(`CallRecordStore.nextSeq`) - and goes up by one. **A repeated `seq` is not an
+error, and a gap is.** A chunk whose `seq` is BELOW the next one the recording
+needs is a retry of a chunk this PC already holds - the phone died between the
+PC's 200 and its own `sent.txt` append - so it answers 200 with `already: true`
+and `chunk_bytes: 0`, and **writes nothing twice**. Only a `seq` ABOVE the next
+one is a hole in the audio that nothing later repairs, and only a gap is a 409,
+carrying the number the PC wanted in `expected`; the phone marks everything
+below `expected` as sent and retries the real gap. (Refusing the repeat, which
+this route did until 2026-11-05, retried the same number for ever and made the
+recording permanently unsendable.) `bytes` is the **running total** the PC holds
+for this recording, which is what the phone reads back to tell a PC that appends
+from one that answers 0 to every chunk; `chunk_bytes` is the piece that just
+landed. At most **512 KiB decoded per chunk** (16 s of 16 kHz mono; ~683 KiB
+once base64 is applied, well inside the PC's 4 MiB request ceiling) and **4
+hours** in all. The phone cuts 64 KiB pieces; the cap is generous so a phone
+that cuts a little more is never refused mid-call. A chunk that arrives while
+the start card waits is refused with 409 `state: "waiting"` - **no audio is
+kept before the owner says yes** (the session's folder, its `receipt.json` and
+an empty `audio.pcm` are made before the card, so a crash cannot lose the first
+chunk; not one audio byte is written until it is approved), and the phone
+retries the same number rather than skipping it.
+
+```
+POST /api/call/recording/finish
+     {"session": "call_...", "duration_sec": 812.4,
+      "title": "Talk with Sam", "consent_notice": "on"}
+  -> 200 {"ok": true, "session": ..., "receipt": "<one line>",
+          "note": "<vault path>" | "pending", "wav": "<path>",
+          "recording": {...}}
+     400 (no `consent_notice: "on"`, or no audio arrived)
+     403 (the feature is off, or the start card was denied)
+     409 (already finished, or not recording yet)
+```
+
+`consent_notice` must be the literal `"on"`: it is the phone saying the "this
+call is being recorded" notice was shown, and neither app may finish a
+recording without it. **`receipt` is a STRING** - the frozen contract's own
+shape, and the only one the phone reads (`CallRecordWire.finished` takes
+`receipt` when it is a string). It is one line: the session, the audio's length,
+how many lines and which speakers, and the note (or `pending`). The structured
+session record rides in `recording`, the same object the list route serves.
+
+**`finish` does not wait for the words**: the WAV is assembled and the
+transcription starts on a daemon thread, so the answer comes back with
+`note: "pending"` when the transcription or the note's own card is still
+running. **A client cannot poll for it**: the read route below is PC-only, so
+the phone has no read route at all - it keeps its own copy until `finish`
+answers, and the PC's own screen and the note itself are where the result is
+seen. That is the frozen Android half's real behaviour, written here instead of
+a poll it does not make.
+
+```
+GET /api/call/recording             -> {"ok": true, "enabled": true,
+                                        "recordings": [...], "where": "<folder>"}
+GET /api/call/recording?session=ID  -> {"ok": true, "recording": {...}}; 404 unknown
+                                       403 from any device but this PC
+
+POST /api/call/recording/delete
+     {"session": "call_..."}
+  -> 200 {"ok": true, "session": ..., "state": "deleted",
+          "removed": ["audio.pcm", "audio.wav", "receipt.json", "transcript.md"],
+          "message": "<one plain sentence>"}
+     202 {"ok": true, "state": "waiting", "message": "..."}  its card is up
+     403 {"ok": false, "state": "refused", "error": "..."}; 403 "off" is never used
+     404 {"ok": false, "state": "unknown", "error": "..."}
+     409 {"ok": false, "state": "recording"|"transcribing", "error": "..."}
+```
+
+Read-only: the date, duration, note path, status and speaker list. **Never the
+transcript text** - the note holds the words and this route does not.
+**PC-only**, through `jarvis_owner_check.from_this_pc` exactly as
+`GET /api/guardian/snapshots` and the other PC surfaces do it: the list names
+the owner's recordings and the note paths they went to, which is a PC surface,
+and the phone has no use for it. The three audio POST routes are the phone's by
+necessity - it holds the microphone - and that is the one deliberate departure,
+written down in `docs/CALL-RECORDING.md` §8.
+
+**`POST .../delete` is the ONE way a recording is removed**, and it is PC-only
+for the same reason: the phone never deletes anything on this PC. It is a POST
+rather than a `DELETE` because this backend wraps `do_GET` and `do_POST` for
+every optional feature and has no `do_DELETE` anywhere (§112 records the same
+choice for the goals store). It removes that session's whole folder -
+`audio.pcm`, `audio.wav`, `transcript.md`, `receipt.json` and any
+`part-*.wav` - which is also its row in the list above, and it raises **ONE
+`delete_call_recording` card at tier `ask`**: deleting the audio and its
+transcript cannot be undone, so it never happens without the owner's yes. The
+delete itself runs on the card's worker, so a card still waiting answers 202
+(the shape `start` uses) and the recording is gone from the GET once it is
+approved; 200 means it is already gone. It refuses while the session is
+`recording` or `transcribing` (409, in words) and it does **not** need
+`[call_recording] enabled = true` - removing something is the safe direction.
+**The Obsidian note is not deleted here**: it is a document of its own, written
+through the notes editor's own card and undo receipt, and the answer names it so
+the owner knows what is left. `docs/CALL-RECORDING.md` §7 is the retention
+policy: nothing expires on a timer, and the 400-recording cap refuses a new
+start rather than deleting anything.
+
+### 188.2 The session record
+
+`receipt.json` beside the audio, and the `recording` object on `finish` and on
+the `GET`: `session`, `status` (`waiting` | `recording` | `transcribing` |
+`done` | `refused` | `empty` | `failed`), `started_at`, `finished_at`,
+`duration_sec`, `sample_rate`, `channels`, `format`, `device`, `bytes`, `chunks`
+(the count of chunks taken), `audio`, `note`, `note_job`, `transcript`,
+`speakers`, `speaker_method`, `speaker_why`, `lines`, `message`,
+`consent_notice`, `english_only`, `date`. It is the session's own record of what
+was recorded and where it went - **not** an action receipt with an Undo; the
+note's create leaves its own undo receipt through the notes editor. `finish`'s
+`receipt` string is the one-line summary of the same facts.
+
+### 188.3 The chat command, and the `call_record` directive
+
+The eight whole messages, matched **whole-message only** (after the repo's own
+tidier, which drops a polite lead-in like "can you ..." for every command in
+`jarvis_quick.py`):
+
+- arm - "record call", "record this call", "record the call", "start recording
+  the call", "start call recording";
+- stop - "stop recording", "stop the call recording", "stop call recording".
+
+The answer carries ONE new additive field in `X-Jarvis-Route`:
+
+```json
+"call_record": {"action": "arm"}      /* or {"action": "stop"} */
+```
+
+The Android app reads it and starts or stops its own recorder. The reply says
+plainly what will happen (phone records on speaker; the PC transcribes and
+labels who spoke; a new note named for the date and time is created when the
+call ends; tell the other person), and adds one sentence when this PC's tier
+makes the start raise a card. **With the feature off the reply says so and the
+directive is absent** - an app must treat absence as "record nothing". Stopping
+is always answered, because stopping only narrows what is happening. The
+intent is `call_record`; a refusal is `call_record_refused`.
+
+### 188.4 The switch, and the card
+
+- **Off by default:** `[call_recording] enabled = false` in the shipped
+  `jarvis-framework.toml`; a settings file with no such table is off too.
+  Turning it on is a hand edit of that one line - there is **no in-app switch**,
+  the same shape `github_search` and `shell_exec` use, and
+  `features/features.json` says so in the row's own `where`.
+- **The gate action is `record_call`**, tier `ask` in `[autonomy.tiers]`. The
+  owner-initiated note actions (`append_obsidian_daily`,
+  `append_logseq_journal`) ship `auto`; this one asks because it starts
+  capturing **other people's** speech. The gate's `_RISK` table has a row for
+  the name (added 2026-11-05): `("yes", "local", ...)` - a recording changes
+  nothing on this PC, can be deleted again, and nothing leaves it. Before that
+  row the gate treated the action as unclassified and its card carried the
+  generic "unclassified action - treated as permanent and able to leave this
+  PC" warning, whose **second half was wrong for this action**. The row does
+  not loosen the tier: it stays `ask`. Deleting a recording is a second card of
+  its own, `delete_call_recording`, also `ask`.
+
+### 188.5 Transcription and speaker labels
+
+`jarvis_media_read.read_media()` - the existing sherpa-onnx model, English only,
+no network - reads the assembled WAV in **9-minute parts** (its own ceiling is
+10 minutes per file), and each part's segment times are shifted by its offset.
+No second speech-to-text, no model download. Segments are the reader's own
+**~10-second windows**, so two people talking inside one window get one label.
+
+Speaker labels, all on this PC: the owner's enrolled print first
+(`jarvis_voice.find_profile` + `jarvis_voice.cosine`, the print's own
+threshold), then clustering of the remaining segments at
+`SPEAKER_MERGE_SIMILARITY` = 0.55, up to six, numbered in first-speech order.
+A line too short to embed carries the previous line's label. **With no speaker
+model or no trained voice print, EVERY line says "Speaker"** and the note
+records which was missing - never a guessed name.
+
+### 188.6 The note
+
+`Calls/YYYY-MM-DD HHMM - Call.md`, a NEW file (a same-minute call gets
+" (2)"), created through `jarvis_notes_edit.handle_create()` - the notes
+editor's own public create path, so the vault/protected/collision checks, the
+File Guardian copy, the undo receipt and the ONE `edit_vault_note` card are
+unchanged. The transcript is marked `after_outside_text` provenance, because a
+call's words are other people's. The frontmatter carries `date`, `started_at`,
+`duration`, `duration_seconds`, `source` ("phone call, speaker recording"),
+`speakers`, `audio`, `session`, `consent` ("Recorded locally; tell the other
+person"), `title`, `speaker_labels`, `speaker_labels_why`, `english_only`; the
+body holds one heading, the consent reminder as a visible line, and
+`[HH:MM:SS] You: ...` per line in **the time of day it was said**.
+
+**If the vault is missing or invalid**, the transcript is still written as
+`transcript.md` beside the audio and that path is returned with a plain
+sentence saying why. The transcript is always written there first, so a vault
+problem or a refused card cannot lose a recording.
+
+### 188.7 What the phone does (the frozen Android half's checklist)
+
+1. Read `call_record` from `X-Jarvis-Route`; on `{"action": "arm"}` call
+   `start` with the date the call began, on `{"action": "stop"}` stop the
+   recorder and call `finish`. An unknown action, malformed JSON or an absent
+   field is **silence, never a guess** - and never an arming.
+2. Record 16 kHz mono s16le in 64 KiB pieces and POST them in order from `seq`
+   1, one at a time. A failed POST is retried with the **SAME** `seq`; the
+   audio is written to the phone's own files before it is posted, and a `sent`
+   list is appended only after the PC acknowledges a chunk, so a dropped
+   connection loses nothing. Show Android's own recording notification with the
+   consent line.
+3. **`start` may answer 202** while the `record_call` card waits. Keep
+   recording and keep retrying the first unsent chunk: the PC refuses a chunk
+   with 409 until the card is approved and then takes the queue in order. There
+   is **no poll**: the read route is PC-only, so the phone has no read route at
+   all, and **no audio is kept on the PC before the card is approved** (the
+   session's folder, its receipt and an empty `audio.pcm` are made first; the
+   audio bytes are not).
+4. Stop recording if the phone's link to this PC goes stale (the repo's rule 4
+   applies on the client side: never act on a stale picture of the world).
+5. On stop: `finish` with the elapsed `duration_sec` and
+   `consent_notice: "on"`. If it is refused, **keep the audio and the PC's
+   session id and retry later** - never delete the only copy. `note` is the
+   vault path, or `"pending"` while the transcription or its own
+   `edit_vault_note` card is still running. A recording the PC never takes (a
+   denied card, a recording that cannot be sent) is deleted **on the phone** by
+   the owner's own "Delete" on the call-recording card, with a confirmation -
+   the phone never sends a delete to the PC, and the PC never deletes a
+   recording by itself.
+
+### 188.8 What is not done
+
+The Android half is its own pull request against this contract; neither lane
+drove a real call on the owner's Pixel 9, so the speaker path and the quality of
+the words it yields are **NOT-TESTABLE** until his field test. **A call can
+raise TWO cards**: `record_call` before any audio is kept, and the notes
+editor's own `edit_vault_note` card before the note is written - a transcript is
+other people's words, so it is never a card-free write; deleting the recording
+is a third, `delete_call_recording` (§188.1). The audio is **not encrypted at
+rest** - an owner decision, not implemented here, and `docs/CALL-RECORDING.md`
+§9 says so. English only, ten-second segments, and no import of the phone's own
+recorder. No real phone recording, transcription, speaker model, vault write or
+approval card was driven by this lane - those rows are **NOT-TESTABLE**, never
+passed. `backend/test_call_notes.py` drives fake readers, fake embedders, fake
+prints and a fake note creator.
+
+## 189. Clearing old chats by date: a card, TWO yeses, a platform ticket, pinned chats kept, and the facts those chats taught erased with them (backend, routes for both apps, added 2026-11-04)
+
+The owner's ask, in his own words: *"how long does it take for you to clear old
+chats if i batched a lot of them together?"* - and the bug behind it. The live
+Jarvis answered that it had **no built-in "clear old chats" action** and that it
+**did not track how long it would take**. The first was false (§18.3 already
+pin, archives and deletes chats; §64 already forgets a time frame), the second
+was false the moment this section existed, and neither answer was what he
+wanted: *"it should be able to clear conversations it does NOT have pinned when
+asked to clear ones of a certain date, INCLUDING FACTS ... it must give a card
+with all the details, with a DOUBLE CONFIRMATION of yes, and require a Windows
+PIN or fingerprint (phone: fingerprint; Windows desktop: Windows Hello
+PIN/biometric) before deleting."*
+
+**Where it lives, and why there is no new list of screens.** `backend/
+jarvis_history_purge.py` (shipped whole, in `backend/` and `jarvis-backend/`)
+exports `install()`, and `history-purge.patch` is ONE added block in
+`jarvis_hud.py` right after `forget-range.patch`'s own, wrapping the running
+server's `do_GET`/`do_POST` for exactly its own three paths. Every rule is in
+the module. It adds **no tool**: an AI may never start a bulk delete (the same
+line §184 draws for `conversation_clear`).
+
+**What it is NOT, said first because the nearest neighbour exists.** §64
+"Forget a time frame" (`jarvis_forget_range.py`) already clears a date range,
+and this section does not replace it:
+
+| | §64 Forget a time frame | §187 Clear old chats by date |
+|---|---|---|
+| the facts it taught | **retired** - hidden, words kept | **erased** - the words are gone (`MemoryStore.erase`) |
+| pinned chats | not looked at | **kept**, unless the preview asked for them |
+| how it is approved | ONE approval card (`memory_forget_range`) | **two separate yeses**, the second needing a platform ticket |
+| Undo | ten minutes, one tap | **none**, and the card says so |
+
+### 189.1 The routes
+
+All three are POST, behind the token and the origin check like every other
+private route, and all three answer **423** while App lock or "Hide memory
+lists and chat history" is on - a card cannot show what it would delete while
+the lists are hidden, so nothing may be started.
+
+| Route | Body | Answers | Deletes? |
+|---|---|---|---|
+| `/api/history/purge/preview` | `{from, to, include_facts, include_pinned}` | the card (189.2) and a `preview_id` good for 10 minutes | **never** |
+| `/api/history/purge/confirm` | `{preview_id, step: 1}` | `{confirmed: true, next: "second_yes_required", confirm_id, restated: {...}}` | **never** |
+| `/api/history/purge/confirm` | `{preview_id, confirm_id, step: 2, auth_ticket}` | `{deleted: {conversations, messages, facts}, audit_id, elapsed_ms}` | **this is the only path that deletes** |
+| `/api/history/purge/cancel` | `{preview_id}` | `{ok, cancelled: true}` and the preview is dropped | **never** |
+
+`from` and `to` are `YYYY-MM-DD` (or `YYYY-MM-DDTHH:MM`), local time,
+**inclusive both ends** - the same grammar §64 uses, imported from that module
+rather than written twice. There is **ONE open preview at a time**: a new
+preview invalidates the one before it, so a card on screen can never be
+approved after it has been superseded. There is no bulk form, no preset list
+and no "always allow" anywhere in it.
+
+### 189.2 The card
+
+`preview` answers 200 with:
+
+```json
+{"ok": true, "schema": "jarvis-history-purge/1",
+ "preview_id": "<uuid>", "generated_at": 1790000000, "expires_at": 1790000600,
+ "expires_in_seconds": 600,
+ "window": {"from": "2026-10-01", "to": "2026-10-31",
+            "said": "1 to 31 October 2026", "start": 1790000000, "end": 1792670400},
+ "conversations": {"count": 41, "message_count": 612, "kept_pinned_count": 3,
+   "per_day": [{"day": "2026-10-02", "chats": 4, "messages": 58}]},
+ "facts": {"count": 7, "included": true, "names": ["..."],
+           "names_shown": 7, "names_truncated": 0, "kept_due_to_pinned": 2},
+ "storage": {"db_bytes": 466944, "estimated_bytes_freed": 81234, "estimate": true},
+ "irreversible": true,
+ "warnings": ["...", "..."],
+ "card": {"title": "Clear 41 chats from 1 to 31 October 2026?",
+          "details": ["Clear chats from 1 to 31 October 2026 on this PC.",
+                      "  2026-10-02: 4 chats, 58 messages",
+                      "And 7 facts these chats taught, erased for good:",
+                      "  - <the fact's own words>",
+                      "3 pinned chats in these days are kept.",
+                      "This cannot be undone. There is no Undo, and no copy is kept.",
+                      "This is asked twice: yes now, then your Windows Hello PIN or your phone's fingerprint."],
+          "irreversible": true, "undo_seconds": 0,
+          "counts": {"conversations": 41, "messages": 612, "facts": 7},
+          "kept": {"pinned": 3, "facts_from_pinned": 2}},
+ "next": "Read the card, then send confirm with step 1. ..."}
+```
+
+* `card.details` is EVERY line of the card, already in plain words, in reading
+  order: **an app may draw it however it likes and may not add a line of its
+  own** - the same rule §88 sets for a feature's own words. The counts, the days
+  and the fact names come from the backend because they were measured there; an
+  app that re-counted would be a second source of truth.
+* `facts.names` is the first **40** facts **by their own words**, truncated at
+  200 characters each. `names_truncated` is an **integer**: how many more names
+  exist beyond the ones shown, `0` when none. The card never hides how many it
+  is not showing.
+* `storage.estimated_bytes_freed` is an **estimate** and `estimate: true` says
+  so: SQLite zeroes a deleted row where it is (`secure_delete`) and the file
+  only gets smaller after a VACUUM. `db_bytes` is the real size of
+  `chat-history.db` plus its `-wal`.
+* `warnings` always carries the irreversible sentence, the sentence that this
+  is not an ordinary approval card, and the estimate caveat; then, each only
+  when it applies: FACTS ARE NOT INCLUDED (with how many there would have
+  been), INCLUDE_PINNED IS ON, pinned chats kept (with the count), facts kept
+  because their chat was pinned, and the count of chats that also hold messages
+  from outside the window and therefore go **in full**.
+
+### 189.3 Pinned chats are never deleted by accident
+
+The pin already exists (§18.3: `pinned`/`pinned_at` and `POST /api/history/pin`)
+and this module only **reads** it.
+
+* A pinned chat inside the window is left out of the count, out of the ids the
+  preview holds, and out of `fact_ids`; it is reported as
+  `conversations.kept_pinned_count` and named in the card.
+* The facts **it** taught are kept too (`facts.kept_due_to_pinned`), because
+  their recorded provenance is a chat that is still here.
+* `include_pinned: true` is the only way past it, is never the default, and the
+  card then says in words that pinned chats go too.
+* A chat **pinned between the preview and the second yes** is checked again at
+  execution time and **skipped**, and the skip is counted in the answer
+  (`kept.pinned`) and in the audit line. A pin set after the card is a pin the
+  owner meant.
+
+### 189.4 Facts: selected by provenance, never by a guess
+
+A fact records the conversation it was said in, in its own `meta`
+(`jarvis_memory.MemoryStore.add` writes `meta["conversation_id"]`, which is what
+§71's `/api/memory/conversation-facts` already reads). So:
+
+* the facts this purge clears are exactly the facts whose **recorded
+  conversation** is one of the chats being deleted - never "facts that look
+  like they came from there";
+* a fact that records **no** conversation, and a fact from **another** chat, are
+  untouched. If a chat was deleted long ago its facts no longer point at it, so
+  they are untouched too - this action never guesses at a link it cannot read;
+* **forgotten facts are included** (a forgotten fact still holds its words);
+  already-**erased** ones are not (there are no words left);
+* `include_facts: false` clears none of them, and the card says they are kept
+  and how many there would have been.
+
+The erase is `MemoryStore.erase(fact_id)` - the same call the per-fact **"Erase
+the words"** makes (§7), which replaces the text with the erased marker, strips
+`message_hash` and `conversation_id` from `meta`, deletes the word-search and
+vector rows, and VACUUMs `memory.db` so the words are gone from the file rather
+than merely unreachable. That is deliberately stronger than §64, which
+**forgets** (retires) the facts and keeps their words.
+
+### 189.5 The auth ticket - the contract both apps build to
+
+The second yes is signed by the app, and the backend checks the signature. The
+text that is signed is exactly
+
+```
+{preview_id}|{confirm_id}|{method}|{issued_at}
+```
+
+and the ticket the app sends as `auth_ticket` is
+
+```
+v1.{method}.{issued_at}.{hex HMAC-SHA256 of that text}
+```
+
+| | Desktop (`method: "windows_hello"`) | Phone (`method: "phone_biometric"`) |
+|---|---|---|
+| the key | the 32 random bytes in `~/.openjarvis/purge-auth.key`, created by the backend at start-up | **the existing pairing token** - nothing new is paired |
+| what the app does | reads that file, proves the owner through **Windows Hello** (`UserConsentVerifier`), HMACs the text | shows its **fingerprint prompt**, HMACs the text with the token it already holds |
+| the file | mode `0600`, owner only, created `O_CREAT|O_EXCL` so there is no window where it is world-readable; never logged, never returned by a route | - |
+
+The backend accepts a ticket only when **all** of these hold, and its refusal
+names which one failed:
+
+1. it parses and `method` is one of the two above;
+2. **`method` matches the app that sent it** - `X-Jarvis-Client` decides which
+   key is expected (a phone client needs `phone_biometric`, anything else needs
+   `windows_hello`);
+3. the HMAC matches, compared with `hmac.compare_digest`;
+4. `issued_at` is within **90 seconds** of this PC's clock and not in the future
+   (5 s of slack);
+5. it names **this** `preview_id` and **this** `confirm_id`;
+6. it has never been used before - a nonce store keyed by the ticket's own
+   digest refuses a replay even inside the 90 seconds;
+7. the first yes was recorded, and the preview is neither expired (10 minutes)
+   nor cancelled.
+
+Refusals are `401` (`bad_ticket`, `no_ticket`), `409` (`expired_ticket`,
+`ticket_reused`, `wrong_platform`) or `503` (`no_key` - this PC has no readable
+pairing token, so a phone ticket cannot be checked). Nothing is deleted by any
+refusal, and every one is audited as `history.purge.refused`.
+
+**Exactly what that proves, and what it does not.** It proves the caller was in
+possession of a secret only this owner's install holds, in a 90-second window,
+once. It does **not** prove a human was at the prompt: the backend cannot see
+Windows Hello or a fingerprint reader - the app asks and then signs. A local
+program running as this user that can read `purge-auth.key` (or the pairing
+token in Credential Manager) could mint a ticket without asking anybody, which
+is the same trust level the pairing token itself has. `X-Jarvis-Client` is
+asserted by the caller, so it chooses *which* key is expected, never *who* the
+caller is. This is written down rather than glossed over because it is the
+honest boundary of a local-only trust model.
+
+### 189.6 The audit line
+
+Every deletion appends ONE line to `~/.openjarvis/purge-audit.jsonl`:
+
+```json
+{"audit_id": "<uuid>", "at": 1790000123,
+ "window": {"from": "2026-10-01", "to": "2026-10-31"},
+ "preview_id": "...", "confirm_id": "...",
+ "auth_method": "windows_hello", "client": "hud",
+ "deleted": {"conversations": 41, "messages": 612, "facts": 7},
+ "kept": {"pinned": 0, "pinned_after_preview": 0, "facts_from_pinned": 2},
+ "estimated_bytes_freed": 81234, "elapsed_ms": 94,
+ "measured": "monotonic clock around the deletes on this PC"}
+```
+
+**No title, no message, no word of any fact** - counts, ids, the window, the
+auth method and the elapsed time, and that is the whole of it. A refusal writes
+the ordinary audit log (`history.purge.refused`, the reason only).
+`read_audit(limit)` returns the newest lines for an app that wants to show
+them.
+
+### 189.7 What it measures, and the answer to the owner's question
+
+`POST /api/history/purge/preview` is not the only measurement: the module also
+answers *"how long does that take?"* from this PC's own state, by running the
+same two calls a purge runs - one `take_out()` for the whole batch and one
+`purge_held_receipts()` - on a **copy** of `chat-history.db` in a temp folder.
+The live file is read once and never written; the copy is removed afterwards.
+The result is cached in `~/.openjarvis/purge-speed.json`, so a restart does not
+re-measure.
+
+Measured **on this PC, 2026-11-04** (a history built for the purpose in a temp
+folder, six messages a chat, three runs each, median):
+
+| chats | messages | time to delete (median of 5) |
+|---|---|---|
+| 120 | 720 | **63 ms** |
+| 500 | 3,000 | **94 ms** |
+| 1,000 | 6,000 | **156 ms** |
+| 2,000 | 12,000 | **359 ms** |
+| 500 | 10,000 | **250 ms** |
+
+So the answer to the owner's question is: batching does **not** make it slow.
+A thousand chats is about a sixth of a second; two thousand is about a third of
+a second. What takes real time is the card and the two yeses, and that is the
+owner's own time. (The receipts scrub is part of the number: the same count of
+phrases a real purge hands it is handed to a temp receipts store, one pass over
+the table per 200, because a COPY's rows cannot be decrypted and the scrub would
+otherwise be silently missing from the number quoted.)
+
+The same measurement, said in words, is what the fast path answers when the
+owner asks (§189.8):
+
+> Your chats are kept on this PC, encrypted, in `<path>` (`<n>` bytes on disk).
+> There are `<n>` conversations with `<n>` messages in all, `<n>` of them pinned
+> and `<n>` archived, plus `<n>` facts in what I remember. Recording is on and
+> nothing expires automatically: the retention setting is 0, which means keep
+> until you delete. Clearing a batch: I measured it on this PC on a copy of a
+> history, not on yours - deleting 500 chats (3000 messages) took 94 ms, about
+> 0.188 ms a chat. A batch of 500 like that would be roughly 94 ms of deleting;
+> the card and the two yeses take as long as you take. Clearing by date exists:
+> it keeps your pinned chats unless you say otherwise, it can clear the facts
+> those chats taught, it shows you a card with every count and every fact by
+> name, it asks twice, and the second yes needs your Windows Hello PIN or your
+> phone's fingerprint. It cannot be undone.
+
+If any part of that could not be read, the sentence **says which part** and
+refuses to guess (`unknown`); it never says "I do not track".
+
+### 189.8 The self-knowledge half
+
+The measured answer is `jarvis_history_purge.capability()`:
+
+```json
+{"schema": "jarvis-history-purge/1", "measured_at": 1790000000,
+ "where": {"db": "<path>", "folder": "<config folder>",
+           "encrypted_at_rest": true, "key_store": "Windows Credential Manager"},
+ "size": {"db_bytes": 466944, "wal_bytes": 0, "total_bytes": 466944},
+ "conversations": {"conversations": 31, "pinned": 2, "archived": 0,
+                   "messages": 412, "facts": 57},
+ "facts_known": true,
+ "recording": {"enabled": true, "keep_days": 0, "expires": false, "why_not": ""},
+ "purge_speed": {"measured": true, "chats": 120, "messages": 720,
+                 "elapsed_ms": 47, "per_chat_ms": 0.392, "at": 1790000000},
+ "route": {"preview": "/api/history/purge/preview",
+           "confirm": "/api/history/purge/confirm",
+           "cancel": "/api/history/purge/cancel"},
+ "irreversible": true, "unknown": [], "words": "<the paragraph above>"}
+```
+
+It is wired into `jarvis_quick` as the `history_purge` intent, ahead of the
+model lane, for whole-sentence shapes only: *"how long does it take to clear
+old chats"*, *"can you clear 200 chats"*, *"clear old chats"*, *"is there a way
+to delete chats from last week"*, *"where are my chats stored"*, *"how big is my
+chat history"*, *"do my chats expire"*. `X-Jarvis-Route`'s `quick` field carries
+`history_purge`, so an app can tell it from the model's prose. **The retention
+half is not taken on trust**: `keep_days` is the measured switch (0, 30, 90 or
+365) and the sentence says "nothing expires automatically" only when it is 0.
+
+### 189.9 What this section does NOT claim
+
+* **A human was present.** See §189.5: the backend checks a signature, not a
+  face. The one thing it can promise is that no caller without an owner-held
+  secret, both yeses and a 90-second window can delete anything.
+* **The bytes freed.** `estimated_bytes_freed` is an estimate and says so.
+* **That a pinned chat is protected from everything else.** §18.3's single-chat
+  delete still deletes a pinned chat when the owner asks for that one chat.
+* **Anything about the apps.** Both apps need the screens: the preview card,
+  the two yes buttons, the Windows Hello call (desktop) and the fingerprint call
+  (phone), and the ticket signing above. The backend half is what this section
+  documents; a screen that asks once, or that signs a ticket without asking the
+  OS, would break the guarantee this section describes.
+
+**PROVED BY** `backend/test_history_purge.py`: 178 checks, 0 failed, 1 skipped
+(the POSIX `0600` mode, which Windows has no equivalent of - printed as SKIPPED,
+never as a pass). It drives the real `ChatLog` and the real `MemoryStore` in a
+temp folder: the counts and the per-day rows, the card's every line, pinned kept
+and never counted, a chat pinned after the preview skipped, `include_pinned` as
+the only way past it, provenance-only facts, `include_facts: false` clearing
+none, step 2 without step 1 refused, a second step 1 refused, every bad ticket
+refused in words with nothing deleted (missing, garbage, wrong key, 91 seconds
+old, 60 seconds ahead, another preview, another confirm_id, the other platform,
+and a replay), a good ticket deleting exactly what the preview listed, a new
+preview invalidating the old one, an expired preview refusing, cancel deleting
+nothing, `423` on all three routes while locked, the audit line written and
+holding no words, both keys being the HMAC contract, the benchmark measured on a
+copy, and the capability answer carrying every measured number and never
+deflecting.
+
+## 190. Your own GitHub: read it, and three small actions on it - each one card, and it can never merge, push or close (backend, both apps' chat, added 2026-11-03)
+
+The owner's decision of 2026-11-03: *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card, never merge and never push**.
+
+### 190.1 What exists, and what each one does
+
+`backend/jarvis_github.py` is the whole of the network half. It talks to `api.github.com` and to nothing else: every address is built from the module's own `GITHUB_API` constant plus a path the module wrote, so there is **no arbitrary-URL code path at all** and a model cannot point it at another host. A redirect is REFUSED rather than followed (`_RefuseRedirect`), because following one would hand the owner's token to whoever answered. Every answer is capped (`MAX_BYTES` for a list, `MAX_FILE_CHARS` for a file) and every request has a timeout.
+
+Six tools in `backend/jarvis_agent.py`:
+
+| Tool | What it does | The request |
+|---|---|---|
+| `github_list` | lists ONE fixed thing: your repositories (`repos`), a repo's open pull requests (`pulls`), its open issues (`issues`), or its recent workflow runs (`runs`) | `GET /user/repos`, or `GET /repos/{owner}/{repo}/...` |
+| `github_read_file` | reads ONE file's text, at an optional branch or commit | `GET /repos/{owner}/{repo}/contents/{path}` |
+| `github_ci_status` | how CI went: the newest run for a branch, or for a pull request (whose head commit is read first) | `GET .../actions/runs`, or `GET .../pulls/{n}` then the runs for that commit |
+| `github_comment` | posts ONE comment on an issue or pull request | `POST .../issues/{n}/comments` |
+| `github_open_issue` | opens ONE issue, with a title and an optional body | `POST .../issues` |
+| `github_rerun_workflow` | asks GitHub to run an existing workflow run again | `POST .../actions/runs/{id}/rerun` |
+
+`github_list`'s `scope` is a **closed set of four names** (`SCOPES`), never a URL. A repository, a path, a branch and a number the model wrote are all checked before they go into an address (`_REPO`, `_PATH`, `_REF`, `_NUMBER`), and a path is percent-encoded rather than pasted, so a `../`, a `?` or a `#` cannot turn one request into a different one.
+
+### 190.2 The tiers: `ask`, on its own action, and never `auto`
+
+Four gate actions, every one `ask` in the shipped `[autonomy.tiers]`: `github_inspect` (the three reads), `github_comment`, `github_open_issue`, `github_rerun_workflow`. **`github_rerun_workflow`'s risk row is `reversible = "no"`** even though it changes nothing in the repository, because a workflow is free to deploy or send its own notifications and a run that has started cannot be taken back.
+
+**The reads ask too, and the reason is not red tape.** A fixed-endpoint read still sends the owner's own GitHub token to `api.github.com`, so it is egress with a credential attached: "it is only a read" is not a reason to spend a credential with nobody looking, and the same call was already made for `github_search` when it was found resolving to `web_research` at `auto`.
+
+**It is NOT the existing `github_read` action, and this is the part to read before changing anything.** `github_read` is the scheduled look a "tell me when" GitHub watch makes (`backend/jarvis_tellme.py`), its line ships as `auto`, and that module REFUSES to run a GitHub watch unless it stays `auto` - a look every ten minutes cannot raise a card every ten minutes. Reusing it would either run these on-demand reads at `auto`, or force that line to `ask` and break every GitHub watch. So the on-demand read is its own action, `github_inspect`. **Do not merge the two names.**
+
+All six tools are also in `jarvis_agent.NEEDS_A_PERSON`, so the setting says how much Jarvis asks and that set says a read like this is never done with nobody asked: an owner who loosens a tier line still gets a card. The one-per-conversation grant the owner chose for web search (2026-11-01) was considered and deliberately NOT copied here: a web search sends words he just asked about, while a GitHub read carries his personal access token and can reach private repositories, and a standing grant would let every later call in that chat spend the credential without a person looking at what was asked.
+
+### 190.3 No token, no card
+
+Without a saved token every one of the six answers in plain words - *"Jarvis has no GitHub token saved yet, so it cannot read your GitHub. Say "connect GitHub" and one card appears for a personal access token."* - and **raises no card at all**: `_one_call` returns before the gate, because a card nobody could act on is noise. `backend/jarvis_connect_account.py` is the one writer that fixes it (`GET /user`, then Windows Credential Manager).
+
+### 190.4 What Jarvis will never do with GitHub
+
+**No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing.
+
+### 190.5 The wording, the token and the failures
+
+The card prints the **literal address** of every request and, for a comment or an issue, **the whole text that will be posted** - the honest version of "may I post this" is to show the thing. It says the GitHub token is sent to `api.github.com` and nowhere else, and that nothing is merged, pushed, committed, deleted or closed. **The token is never printed**: not on a card, not in a tool result, not in a log line, not in an exception, and a server that echoes it back is scrubbed (`_scrub`). Failures are sentences with **no HTTP code in them**, and each one says what to do: the token was refused (save a new one with "connect GitHub"), GitHub said no for now (too many requests in the hour), there is nothing there (or it is private and this token cannot see it).
+
+### 190.6 Switching it on
+
+All six ship **SWITCHED OFF** - they are not in `[tools].enabled`, exactly like `github_search`. Add `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` to that list, and save a token by saying "connect GitHub". The Reach page shows each one as off with the line that turns it on until then.
+
+`backend/github-tools.patch` gives `jarvis_gate.py` the four actions and the six `_TOOL_ACTIONS` entries - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
+
+### 190.7 What proves it
+
+`backend/test_github_tools.py` - 191 checks, **no network and no real token**: a socket opened anywhere in it fails the run. It proves the host is `api.github.com` and only that (a `url` argument is ignored, a redirect raises), the scopes are the closed four, every bad repository/path/number is refused, the token appears in no card, body, address or result while it IS sent in the `Authorization` header (the control that stops that check passing for the wrong reason), no token is a plain answer with no card, each action is exactly ONE card naming the repository, the number and the full text, a refused token and a rate limit are sentences with no code in them, nothing from email/files/memory/credentials is sent, the registered tool list has no merge/push/commit/delete/close tool, the four tiers ship as `ask` while `github_read` stays `auto`, every registration table has the six (card words, the Reach page, the claim checker, the "What asks first" page, the small-card list, the short tool list's diet hints), and **the patch reverses out of the published base and applies forward again
+byte for byte, and it sits between `web-search-grant.patch` and the last
+writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
+those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
+
+**One-sided on purpose:** there is no screen for this in either app, and `tools/check_parity.py` is unchanged because no route was added. The ability is in both apps' chats (the tools run on this PC, and either app's chat is the same turn); a GitHub screen would be deep configuration, and `docs/ARCHITECTURE.md` §8 carries the reason.
+## 191. Hands-free mode: every card read out, one spoken answer, and a text message the phone sends (2026-11-04)
+
+The owner's own request of 2026-11-04:
+
+> "a handfree setting that i can turn off in chat, jarvis live, or through
+> settings. in this mode any approval card for a task i ask jarvis to do will
+> automatically be read out and i can answer confirm or deny (including
+> verbally) and it will approve the card. i want jarvis to be able to write text
+> messages to contacts for me in particular among the full fledged handsfree
+> mode"
+
+And their answer, on the clickable card that asked about the security conflict:
+**"A voice yes counts for every card."** That supersedes the sentence
+`docs/ARCHITECTURE.md` carried from the 2026-09 security review - "**Never
+approve-by-voice**: the voice check cannot tell a recording from the owner, so a
+spoken 'yes' answers nothing" - **for this mode only**, by the owner's
+precedence. The old sentence is still in that file, marked superseded;
+`decisions.d/2026-11-04-handsfree-voice-approval.md` is the record.
+
+**THIS SECTION IS THE FROZEN CONTRACT.** The Android lane builds the phone half
+against it and must not need to read `backend/jarvis_handsfree.py` to do so.
+Everything here is a name, a field or a window; nothing here is advice.
+
+### 191.0 The four routes, at a glance
+
+| Route | Method | Who calls it | What it does |
+|---|---|---|---|
+| `/api/handsfree` | GET | the PC's Settings card | reads the switch, the window, the vocabulary and whether a phone can take a text |
+| `/api/handsfree` | POST | the PC's Settings card | `{"enabled": bool}`: OFF at once and cardless, ON through ONE ask-tier card |
+| `/api/handsfree/answer` | POST | the phone half | one spoken clip, one card: the voice print, the words, the closed list, one decision |
+| `/api/phone/result` | POST | the phone half | the phone's own word on a text it was asked to send - the only thing that makes a receipt |
+
+### 191.1 The setting
+
+`[handsfree] enabled` in the owner's own settings file
+(`jarvis-framework.toml`), **`false` in both shipped copies**. OFF is the state
+of a PC that has never run it, and every read fails to OFF.
+
+Three doors, ONE writer (`jarvis_handsfree.request_enabled`):
+
+| Door | How | What happens |
+|---|---|---|
+| Chat | "turn on hands-free mode" / "turn off hands-free" (also "hands free", "handsfree", "enable hands-free") | the same `jarvis_settings_registry` BoolSetting the Settings row posts through (`jarvis_quick` → `set_handsfree`) |
+| Jarvis Live | the same words, because a spoken question takes the same `/api/chat` path | identical |
+| Settings | the PC's Settings row | `POST /api/handsfree` `{"enabled": true|false}` |
+
+**ON raises ONE ask-tier card** (`handsfree_enable`); it takes effect only when
+that card is approved. **OFF is immediate and raises nothing.** That asymmetry
+is the rule every loosening setting in this project follows: taking a power away
+is always safe.
+
+### 191.2 `GET /api/handsfree` - a read
+
+```json
+{"ok": true, "enabled": false, "window_sec": 60,
+ "vocabulary": {"confirm": ["yes", "yeah", "confirm", "approve", "do it",
+                            "go ahead", "okay", "ok"],
+                "deny":    ["no", "nope", "deny", "cancel", "stop", "don't",
+                            "do not"]},
+ "voice_print": "", "phone": {"ready": true, "why": ""},
+ "reading": null}
+```
+
+`voice_print` is the enrolled print's label, or `""` when none is enrolled.
+`phone.ready` is "a paired phone can receive a command"; `why` is the sentence
+to show when it is false, or the honest note when the phone has not checked in
+lately. `reading` is the newest read-out (`card_id`, `action`, `say`,
+`expires_in_sec`) or `null`. **This route decides nothing.**
+
+### 191.3 `POST /api/handsfree` - the switch
+
+Request `{"enabled": true|false}`. Answers `200 {"ok", "enabled", "changed",
+"message"}`; ON refused by its card answers `403 {"ok": false, "enabled": false,
+"error": "<the gate's own sentence>"}`; a settings file that cannot be written
+answers `409`. Idempotent: ON already on asks nobody, and says so.
+
+### 191.4 The read-out event: `handsfree_card`
+
+While the mode is on, every approval card that starts WAITING FOR A PERSON is
+announced once on `/api/events`:
+
+```json
+{"card_id": "<the pending row's id>", "action": "<the gate action>",
+ "say": "<the card's own words, then how to answer>",
+ "expires_in_sec": 60}
+```
+
+- **`say` is the card's own plain words** - `jarvis_gate.notice_for`'s
+  `title` + `body`, which are built from the gate's own tables and never read
+  the card's payload, plus `jarvis_card_words.HANDSFREE_ASK` ("Say \"yes\" to
+  approve it or \"no\" to refuse - one word, within a minute of hearing this.").
+  So the read-out is safe where a notice is safe: **the contact name and the
+  message text are on the CARD, never in the read-out.** A sentence about a
+  text message says "send a text message from your phone"; what it says and who
+  to is on the screen in front of the owner.
+- **`expires_in_sec`** is how long a spoken ANSWER is open - `WINDOW_SEC` (60),
+  or the card's own countdown from `/api/pending` when that is shorter, rounded
+  up, never negative. It is not the card's own deadline; that field is
+  `/api/pending`'s `expires_in` and is unchanged.
+- **A notification, never an approval.** The card is still in `/api/pending`,
+  unchanged, and still needs an answer. Reading a card out approves nothing,
+  denies nothing and touches no row.
+- One event per card, once. A decided or expired card's read-out is forgotten.
+  A phone that missed the event still has the card in `/api/pending`; a phone
+  that reconnects and asks `GET /api/handsfree` gets `reading` for the newest
+  one.
+
+### 191.5 `POST /api/handsfree/answer` - one card, one spoken answer
+
+```json
+{"card_id": "<the id from the read-out>",
+ "data_b64": "<base64 of a 16-bit PCM WAV, mono, 16 kHz>",
+ "sample_rate": 16000}
+```
+
+`sample_rate` must equal the WAV's own rate, in `8000..48000`. The clip is at
+most 30 seconds (`MAX_SECONDS`); a longer one is refused, never truncated.
+
+**The pipeline, in this order, and the order is the safety property:**
+
+1. **The mode must be on.** OFF refuses before anything else - `403` with
+   `say` = "Hands-free mode is off, so a spoken answer decides nothing." Nothing
+   is decoded, transcribed or decided.
+2. **The card must have been read out and its window must be open.** No
+   read-out for that id, or past its deadline, is `409`. A second answer for the
+   same read-out is `409` too: one read-out, one decision.
+3. **The card must still be waiting** (`/api/pending`). Gone is `409`
+   `card_state: "gone"`.
+4. **The voice print first, then the words.** `jarvis_voice.verify(samples,
+   sample_rate)` - the existing owner check, unchanged - runs BEFORE any
+   transcription. Its own docstring says why: "A voice that is not the owner's
+   is never turned into words - refusing after transcribing would leave a
+   stranger's speech in memory on the way to saying no." The brief for this
+   feature said "transcribe, then verify"; that order would break the rule, so
+   the code verifies first. A clip that is not the owner is `403` with
+   `say` = "That was not your voice, so nothing was decided.", `heard` = `""`.
+5. **No enrolled print means no spoken yes.** `verify` answers False with "no
+   enrolled voice profile - run enrolment first", and that becomes `403` with
+   `say` = "I can't tell your voice from anyone else's until you train my
+   voice, so I won't take a yes by voice. Say no, or answer the card on your
+   screen." This is deliberately STRICTER than "a voice yes counts for every
+   card": that decision assumes the check can run, and without a print a yes is
+   indistinguishable from a recording.
+6. **The words are made ON THIS PC** by `jarvis_speech._transcribe` (the
+   installed sherpa STT) - **a client never does speech-to-text**, and the clip
+   is never sent anywhere.
+7. **A CLOSED vocabulary decides.** The whole utterance, normalised (lowercase,
+   punctuation and spacing collapsed), must equal one entry of `confirm` or
+   `deny` in 191.2. A sentence that merely contains a yes - "yes but wait" - is
+   not a yes. Anything else is **unclear**: the first unclear answer asks once
+   more (`decision: "again"`, `say` = "Sorry - was that yes or no?", the card
+   still waiting); the second treats it as a DENY.
+8. **One decision, through the SAME approval function a tap uses.**
+   `jarvis_gate.decide(card_id, approved, by="handsfree_voice")` - no second
+   approval path, no bulk, one card one decision. A confirm additionally leaves
+   the in-memory stamp `jarvis_owner_check.stamp(card_id, action)` that a
+   Windows Hello approval leaves, which is the narrow branch the owner's
+   decision authorises; a deny leaves none (refusing needs no proof). **This
+   happens in exactly ONE function** (`jarvis_handsfree.approve_one`), reachable
+   only from this route after step 4 passed.
+
+Answers:
+
+| code | body | means |
+|---|---|---|
+| 200 | `{"ok": true, "heard", "decision": "approved"` or `"denied"`, `"card_state"`, `"say"`}` | decided |
+| 200 | `{"ok": false, "heard", "decision": "again", "card_state": "pending", "say"}` | unclear, asked once more |
+| 400 | `{"ok": false, "decision": "refused", "error"}` | no card id, no clip, an unreadable clip, a mismatched sample rate, or a clip over 30 s |
+| 403 | `{"ok": false, "decision": "refused", "say"}` | the mode is off, or the voice was not the owner's (or there is no print) |
+| 409 | `{"ok": false, "decision": "refused", "card_state"}` | no read-out, past the window, the card is gone, or it was already decided |
+| 503 | `{"ok": false, "decision": "refused", "error"}` | the voice check, the transcription or the decision could not run; nothing was decided |
+
+**`say` is what the phone speaks.** Every answer carries one, so a client never
+writes its own sentence for a refusal or a decision. `heard` is what the PC
+understood, so a wrong transcript is visible rather than guessed at.
+
+**The audit receipt** is one `handsfree.answer` line naming the card, the
+action, the heard words, the decision, who decided (`handsfree_voice`) and the
+**SHA-256 of the clip** - never the audio, never the clip itself.
+
+### 191.6 Text messages: `send_text_message`
+
+One model tool, offered **only while hands-free mode is on** (`jarvis_agent.
+offered_tools` withholds it otherwise, so with the mode off the model is not
+offered a tool that could only refuse). Arguments: `{"contact": "<a name>",
+"text": "<the message, word for word>"}`.
+
+- **ONE ask-tier card**, gate action `send_text_message`, tier `ask` in both
+  shipped settings copies, and a gate row that is `"no"`/`"outbound"` - a risky
+  approval, because a sent text cannot be unsent. Its words name the contact and
+  show the exact message word for word.
+- **Refused before any card**, with one sentence, when the mode is off, when the
+  contact or the message is unusable (empty, over 80 / 600 characters), or when
+  no phone is paired / the device list cannot be read. A card that promises a
+  send which cannot happen is worse than a refusal.
+- **After approval**, the PC publishes on `/api/events`:
+
+```json
+{"id": "<the command id>", "kind": "send_sms",
+ "contact": "<the name, exactly as the card showed it>",
+ "text": "<the message, exactly as the card showed it>"}
+```
+
+  and answers the owner "Asked your phone to send your text to <name>. It is
+  not sent until your phone reports back." It **never reports a text as sent**:
+  only the phone's own result does that. If no phone is paired between the card
+  and the dispatch, nothing is published and the answer says so.
+- **The phone resolves the contact and sends it.** Contacts never leave the
+  phone; **the PC never stores a phone number** and holds no contact list. The
+  PC's own dispatch record is in memory: the name, the text and the command id,
+  until the result arrives.
+- **The phone's own word** is `POST /api/phone/result`:
+
+```json
+{"id": "<the command id>", "ok": true,
+ "receipt": "<the phone's own short word, e.g. the SMS id or 'sent'>",
+ "why": "<the reason when ok is false>"}
+```
+
+  - `200 {"ok": true, "id", "sent", "say", "receipt", "why"}` - recorded.
+  - `400` - no id, or a body that is not an object.
+  - `409` - an id this PC never handed out, or one already reported. **A result
+    for an unknown id records no receipt** and is never read as one.
+
+  The PC writes ONE row into its own receipts store
+  (`handsfree-receipts.json`, the newest 200): the id, the contact, `ok`, the
+  phone's `receipt` and `why`, the message's length and its **SHA-256 - never
+  the message text**. It then publishes
+
+```json
+{"id": "<the command id>", "ok": true, "say": "<one spoken sentence>",
+ "receipt": "<the phone's word>", "why": "<the reason when it failed>"}
+```
+
+  as event kind `phone_result`, so the apps can say what happened. Until that
+  event, nothing anywhere says a text was sent.
+
+**Both event kinds are additions**: a client that does not know
+`handsfree_card`, `phone_command` or `phone_result` ignores them, exactly as it
+ignores every unknown kind. `tools/check_parity.py` records that these routes
+and events are called by the phone lane and not yet by the desktop.
+
+### 191.7 What is NOT changed
+
+- **The non-hands-free path is untouched.** `jarvis_owner_check.approve_check`
+  has no hands-free branch; `jarvis_gate`/`jarvis_owner_check` never import
+  `jarvis_handsfree`. With the mode off, a risky card still needs Windows Hello
+  on the PC or the phone's own lock and signature, exactly as before. The only
+  new writer of a stamp is `jarvis_handsfree.approve_one`, and it is reachable
+  only through the route above, only with the mode ON, and only after the voice
+  print passed. `backend/test_handsfree.py` pins both halves.
+- **No new setting, route or event changes the card, the queue or the gate.**
+  `/api/pending`, the card's shape, its words, `expires_in`, Windows Hello, the
+  deny rule and the two ceremonies of the 2026-10-23 ruling are all as they
+  were.
+- **Nothing here approves in bulk, clears a rush latch or touches a second
+  card.** One read-out is one card; one answer is one decision.
+
+### 191.8 What is PROVED, and what is not
+
+`backend/test_handsfree.py` - 175 checks, 0 failed, no model, no microphone, no
+network: the switch off in both templates, OFF instant and cardless, ON one card
+and refused leaves it off, the writer changing one line, the read-out's four
+fields and its card's own words, nothing approved by reading a card out, a
+spoken yes stamping then deciding, a spoken no stamping nothing, unclear asked
+once then denied, the 60-second window, a card never read out, a stranger's clip
+refused before any words, no print means no spoken yes, nothing decided with the
+mode off, a card already gone, a clip that cannot be read, the closed
+vocabulary, the Hello card approvable by voice only in hands-free (and the gate
+still refusing an unstamped approval), the voice checked before transcription,
+the text card's exact words, the three refusals, the `phone_command` payload,
+the receipt made only by the phone's result, an unknown id refused, a failed
+send recorded honestly, the audit receipt's clip hash, and the routes' shapes.
+
+**NOT VERIFIED on this tree, said plainly:** no real microphone clip, no real
+sherpa STT and no real voice print have been run against this route (the suite
+uses stand-ins for all three); no phone has ever received a `phone_command` or
+sent an SMS; and the desktop Settings row and the phone's screens are the two
+app lanes' own work. A desk test with a real clip and the owner's phone is the
+next step, and it is a field test, not a unit test.
+
+## 192. The product check: one tool, one route, and why there is no score
+
+**Status: wired on 2026-11-04, OFF by default, Amazon only.** The owner's
+choice that day was *"Wire the existing product check into Jarvis"*. The
+offline engine (`backend/jarvis_product_research.py`), the read half
+(`backend/jarvis_product_read.py`) and the capture seam
+(`backend/jarvis_product_capture.py`) shipped on 2026-10-25/26 and nothing
+imported them. `backend/jarvis_product_check.py` is the wiring; its design
+record is `docs/DESIGN-PRODUCT-RESEARCH.md`.
+
+```
+POST /api/product/check
+```
+
+**THE SWITCH.** `[product_check] enabled = false` in both shipped
+`jarvis-framework.toml` copies. Read fresh on every turn and every route call;
+a missing section, an unreadable file, or any value that is not a real `true`
+reads as OFF (fail closed). While it is off the model is **not offered** the
+tool at all, and the route answers `503` with the module's own sentence.
+Turning it on is one hand edit; there is no in-app switch and no card for the
+switch (the same shape as `[price_radar]`).
+
+### 192.1 The model tool: `product_check`
+
+| | |
+|---|---|
+| tool | `product_check` |
+| arguments | `{"url": "<one Amazon product address>"}` (required) |
+| gate action | `product_check`, tier `ask` in both shipped `[autonomy.tiers]` |
+| PC-only | yes - `jarvis_owner_check.PC_ONLY_ACTIONS`; only this PC approves it, with Windows Hello, and the phone's copy of that set refuses it too |
+| a person's yes | always: the tool is in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still cannot run it with nobody asked |
+| stale link | Approve is held on a stale event stream by both apps, like every card (rule 4); this adds no exemption |
+| card | ONE per address: *"Read this product page in your own browser session? Read-only; nothing is bought or added to a cart."* plus the address in full and what the read does not do |
+| off by default | yes; also not offered at all until `[product_check] enabled = true` |
+
+The address is checked **before** the card, with no network:
+`jarvis_product_capture.product_address_problem()` requires an http(s) Amazon
+product address with an ASIN (`/dp/<ASIN>` or `/gp/product/<ASIN>`) and
+`readonly_problem()` refuses a cart, checkout, order, account, payment or
+sign-in address **by whole path segments** (a product slug containing "Order"
+is still fine). A refusal is a plain sentence to the model and **no card**.
+
+**What the read does, after the yes.** ONE page, in the owner's own visible
+Chromium: `jarvis_browser_control.read_page_html(session, url)`, the browser
+module's documented public read-only seam (added 2026-11-04 for exactly this).
+The profile is persistent (the config folder's `browser-profile`), so a
+sign-in the owner completed once survives a restart. One navigation and one
+read of the loaded document: **no click, no typing, no form, no download, no
+second page, no CAPTCHA solved and no retry against a challenge.** A challenge
+page raises `ChallengeDetected` and the owner is told to open the page
+themselves; a sign-in page raises `OwnerLoginRequired` with *"sign in to
+Amazon once in Jarvis's browser window, then run the product check again.
+Jarvis never sees or types the password"*. The page's words are outside text:
+never learned, never acted on, and **nothing about the page is written to
+disk** (no file, cache, database or log).
+
+**The report.** The engine's report, plus the read half's listing and warnings
+and a `capture` block. The chat answer is written by code
+(`jarvis_product_check.chat_answer`), not by the model, so nothing can be added
+to it: the model's own words about the check are held and dropped, the same way
+the retirement what-if's figures are (`jarvis_agent.deliver_product_report`).
+Shape:
+
+```json
+{
+  "ok": true,
+  "engine": {"name": "jarvis_product_research", "network": false, "read_only": true},
+  "sample": {"caveat": "This is what Amazon chose to show, not all of the reviews. ...",
+             "raw": 6, "readable": 6, "with_text": 6, "dated": 6,
+             "verified_known": 6, "vine_known": 6, "listing_review_count": 1234},
+  "signals": {"verified_purchase_share": {"available": true, "counts": {},
+              "thresholds": {}, "examples": [], "flags": [], "note": ""},
+              "and the other seven, in ENGINE.SIGNAL_NAMES order": {}},
+  "aspects": {"available": false, "why": "no model output", "agreed": [],
+              "complained": [], "mixed": []},
+  "set_aside": {"reviews": [{"reviewer": "Reviewer 6", "rating": 5,
+                             "verified": false, "vine": false, "date": "2026-10-02",
+                             "reasons": ["one", "two"], "snippet": "..."}],
+                "total": 2, "more": 0},
+  "verdict": {"code": "risky", "words": "...", "reasons": [],
+              "what_would_change_it": []},
+  "could_not_check": ["one", "two"],
+  "plain_words": {"sample": ["the caveat", "..."], "agreed": []},
+  "source_url": "https://www.amazon.com/dp/...",
+  "listing": {"title": "...", "star_rating": 4.3, "rating_count": 1234,
+              "asin": "...", "url": "..."},
+  "warnings": [{"code": "...", "words": "..."}],
+  "capture": {"browser": "the owner's own signed-in browser session, one page",
+              "read_only": true, "stored": false, "network": false}
+}
+```
+
+`sample.caveat` is the **first field of `sample`**, and the chat answer's
+**first line**. Every set-aside review stays in the sample's counts and is
+listed with every reason; the report's own cap (40 rows, with `more` counting
+the rest) is stated in the answer rather than hidden.
+
+**NEVER A TRUST SCORE, NEVER A PER-REVIEW FAKE/REAL VERDICT.** There is no
+field for either, in the engine or here, for the measured reason in
+`docs/DESIGN-PRODUCT-RESEARCH.md`: people and LLMs are at chance telling
+AI-written reviews from real ones, so a number or a label would be false
+precision. The report is counts, examples, reasons and a small named-rule
+verdict; `backend/test_product_check_wiring.py` pins the absence structurally.
+
+### 192.2 The route: `POST /api/product/check`
+
+| | |
+|---|---|
+| route | `POST /api/product/check` |
+| body | `{"url": "<one Amazon product address>"}` |
+| success | `200` and the JSON report above |
+| refused from another device | `403 {"ok": false, "error": ..., "pc_only": true}` **before the body is read** (`jarvis_owner_check.from_this_pc`, fail closed) |
+| switch off | `503 {"ok": false, "enabled": false, "error": "<the module's sentence>"}` |
+| bad address | `400 {"ok": false, "error": ..., "kind": "..."}` - no card, nothing opened |
+| card not approved | `403 {"ok": false, "error": ..., "kind": "denied"/"timed_out"/"refused"}` - nothing opened |
+| action not at `ask` | `503` - no card is raised under a loosened tier |
+| installed by | its own `install()`, called by the drop-in folder `plugins/ready/product-check` - no patch to `jarvis_hud.py` |
+| auth | the server's own origin + token checks, then PC-only - no new scheme |
+
+**The route WAITS for the card** and returns the report in the same response:
+the desktop is the only caller, the card is on its screen, and a request that
+returned `202` would need a second route and a screen to poll it. A denial or a
+lapse is a plain `403` and nothing is opened. **No app screen calls this route
+yet** - the chat tool is the door that works today - so
+`tools/check_parity.py` lists it in `BACKEND_ONLY` with that reason; the
+desktop/phone report screen is the named follow-up, and it is **desktop-only by
+design** because the browser window and profile are on the PC
+(`docs/ARCHITECTURE.md` section 8).
+
+**PROVED BY** `backend/test_product_check_wiring.py` (fixtures only, fake
+driver and fake gate): the switch off-by-default and fail-closed, the tool's
+registration/schema/tier/PC-only/NEEDS_A_PERSON, the exact card question, every
+address refusal before a card, challenge and owner-login refusals, the report
+shape with the caveat first, every set-aside reason, the no-score/no-verdict
+pin, the route's 403/400/503/200 paths and its one card, the gate rows in the
+published base and `product-check.patch`, the card words, the feature row, and
+no network call anywhere. **NOT VERIFIED in this container:** no real Amazon
+page has been parsed, no real browser has been driven by a test, and no
+one-time Amazon sign-in has been exercised - those are field tests on the
+owner's PC, and this document says so rather than implying otherwise.
+
+## 193. What needs a card, how many yeses, and whether it needs Windows Hello - changed through chat (added 2026-11-05)
+
+The owner's ask, verbatim: *"i would also like the ability to change what gets
+an approval card through chat, including if something gets a double
+confirmation, or a fingerprint/windows hello"*.
+
+One model tool, `approval_policy` (`backend/jarvis_agent.py`), backed by
+`backend/jarvis_approval_policy.py`. It changes **one named action and one
+thing at a time**, in three independent dimensions:
+
+| dimension | what it means | where it is kept |
+|---|---|---|
+| `card` | whether the action raises an approval card at all | `[autonomy.tiers]` - the same table every part of Jarvis already reads |
+| `confirmations` | one yes, or two | `[autonomy.confirmations]`, `<action> = 2`; no line means one yes |
+| `windows_hello` | a yes must also meet Windows Hello on the PC | `[autonomy.windows_hello]`, `<action> = true`; no line means no extra check |
+
+All three live in the owner's existing settings file
+(`jarvis-framework.toml`), in the same table's neighbourhood, so there is one
+place to look and no second file to disagree with it. The writer follows the
+same discipline as `jarvis_asks_first.set_tier`: read the bytes, change exactly
+one line, parse the result again and compare it with the old settings plus
+that one change, then write a temporary file and move it into place. A file
+this cannot read safely is refused with a sentence saying to edit it by hand;
+nothing is written.
+
+### 193.1 The tool
+
+`approval_policy` takes `action`, `field` and `value`, all optional:
+
+- **No `field`** - a read. With `action`, it answers that action's current
+  policy. Without one, it answers the short list: what is set to ask twice,
+  what needs Windows Hello, what runs without a card, and that everything else
+  asks first.
+- **`field: "card"`, `value: "ask" | "auto"`** - whether the action raises a
+  card. Delegates to the existing "What asks first" path
+  (`jarvis_asks_first.request_tier`), so the list of actions an app may loosen
+  at all, the card's words and the PC-only + Windows Hello rule are the same
+  ones the Settings page already uses.
+- **`field: "confirmations"`, `value: "1" | "2"`** - one yes or two.
+- **`field: "windows_hello"`, `value: "true" | "false"`** - whether every yes
+  must also meet Windows Hello on this PC.
+
+The model's call is only a **preparation**. More asking is applied immediately
+and raises no card; less asks for ONE card, which must be approved before
+anything is written. The tool is handed to its own call path before the
+generic prepare/gate/execute loop (like `change_setting` and
+`connect_account`), because the card - not the tool call - is the permission.
+It is in `_PLAN_EXCLUDED_STEPS`, so it can never be a step of a plan.
+
+### 193.2 The direction rules - the safety core
+
+- **Tightening is instant and cardless**: adding a card where there was none,
+  adding a second yes, adding Windows Hello. It only makes Jarvis ask more. It
+  also withdraws a waiting card that would loosen the same thing, so an
+  approval arriving afterwards changes nothing.
+- **Loosening raises ONE card, on the PC, that needs Windows Hello to
+  approve**: removing a card, removing the second yes, removing Windows Hello.
+  The request is refused from any other device (`403 pc_only`) before any card
+  exists; `jarvis_owner_check.PC_ONLY_ACTIONS` holds `change_approval_policy`,
+  so the approval is refused from any other device too, and the card is
+  approved with Windows Hello. The card's words say exactly what stops being
+  asked, in the owner's words for the action, and never name a file the gate
+  protects.
+- **No bulk form**: one action, one dimension, one call. A body naming two
+  dimensions is refused before anything is read or raised.
+- **Unknown actions are refused before any card**, in one plain sentence that
+  names the nearest real actions in the owner's own words; the tool's result
+  also carries their real names as data, so the model can retry exactly.
+- **Nothing is auto-approved.** The policy decides only whether a card is
+  raised. A card that is raised still needs the owner's yes, the
+  event-stream-stale rule is untouched, and actions whose module refuses
+  anything but a yes keep their card whatever the settings file says.
+
+### 193.3 Where the second yes and Windows Hello are really enforced
+
+Not in the gate, and not by a new patch on the owner's file:
+`jarvis_owner_check.approve_check` - a shipped module that `owner-check.patch`
+already installs around `POST /api/approve` - reads the owner's policy for the
+action being approved and applies it:
+
+- **Windows Hello**: that action is refused from any other device and asks
+  Windows Hello on the PC on every yes, even when the card would otherwise be
+  a "small" one that skips the prompt - unless the owner's approvals mode asks
+  for small cards too.
+- **Two confirmations**: the first yes runs every check (including Windows
+  Hello when it applies) and then approves **nothing** - no stamp is taken, so
+  the gate keeps waiting - and answers `202` with "That is your first yes.
+  Approve the card once more to confirm". The second yes runs the same checks
+  and only then stamps the approval, which is the only thing the gate
+  believes. The counter is in the running process's memory, never on disk, so
+  a restart makes the owner confirm twice again.
+- A card that needs two yeses is approved on the PC only, said plainly: the
+  phone's one-tap approval (one fingerprint, one one-use signed challenge)
+  cannot carry a second yes, so the phone is refused with the same "answer it
+  on the PC" words every PC-only card already gets.
+
+### 193.4 What the owner sees and says
+
+- *"stop asking me before you send email"* -> `card = auto` for `send_email`:
+  ONE card on the PC, Windows Hello, naming "Send an email"; approving it
+  writes the one line.
+- *"make that ask twice"* -> `confirmations = 2`: instant, no card. From then
+  on that action's card needs two Approve presses on the PC, and the first one
+  says nothing was approved yet.
+- *"require Windows Hello for sending email"* -> `windows_hello = true`:
+  instant, no card. From then on every yes for that action is asked on the PC
+  with Windows Hello.
+- *"what needs a card?"* / *"does sending email ask twice?"* -> the real
+  current answers, read from the same settings file the approval path reads.
+- The **Settings "What asks first" page** and the **phone's page** get no write
+  control: the row for an action now carries `confirmations` and
+  `windows_hello` as data and one extra sentence in its existing note field
+  ("It asks you twice..."; "It also needs Windows Hello on this PC for every
+  yes."). `docs/ARCHITECTURE.md` section 8 records why this is one-sided.
+
+### 193.5 What it does not do
+
+It does not change the event-stream-stale rule, clear a rush latch, approve
+anything in bulk, or make any action run without its card when that action's
+own module refuses anything but a yes. It has no route of its own, so
+`tools/check_parity.py` has nothing new to classify; the two apps' existing
+read-only pages show the new lines. It has no model-free fast-path grammar on
+purpose (ARCHITECTURE section 8 says why). The decision is
+`decisions.d/2026-11-05-approval-policy-chat.md`; the change note is
+`changelog.d/2026-11-05-approval-policy-chat.md`.
+
+### 193.6 The floor, and what the owner can never loosen
+
+Three protections sit under every change, and the module owns only the card
+dimension explicitly:
+
+1. **The card itself.** An action in `jarvis_asks_first.MUST_ASK` or
+   `HARD_LIMITS` can never lose its card, whatever the owner asks: the `card`
+   dimension delegates to `jarvis_asks_first.request_tier`, whose own refusal
+   turns "stop asking before you open the door" into one sentence and changes
+   nothing. The change card's own action, `change_approval_policy`, is in both
+   lists.
+2. **Windows Hello for a risky card.** `jarvis_owner_check.is_risky` decides at
+   approval time, and its prompt rule runs whether or not the settings file asks
+   for it - so removing an `[autonomy.windows_hello]` line can never take the
+   prompt off a risky card. The policy only ever ADDS the check to a card that
+   would otherwise skip it (a "small" card).
+3. **The second yes is the owner's own choice.** It is the one dimension a
+   loosening can really remove, so it is behind the strongest card the system
+   has: ONE `change_approval_policy` card, on this PC only, which itself needs
+   Windows Hello, whose words say exactly what stops being asked, and nothing is
+   written until a person approves it. This is deliberately different from a
+   blanket "risky actions never lose their second yes" floor (Gemini's Q4 option
+   A, 2026-11-05): the owner asked in their own words to be able to change it, an
+   action-level risky test cannot be resolved from this repository at policy time
+   (the gate's risk rows live in the owner's live `jarvis_gate.py`), and treating
+   the 83 `HARD_LIMITS` actions as risky-at-policy-time would refuse the feature
+   for nearly every action the owner would use it on. The strength is moved from
+   a rule to the card.
+
+## 194. The Live utterance reply gains ignored_unmatched_speaker (additive, added 2026-11-05)
+
+POST /api/voice/utterance?source=live can now answer a clip it DROPPED as background audio. Nothing is renamed and nothing is removed: every field an older client reads keeps its meaning.
+
+- **ignored_unmatched_speaker: 	rue** on that reply, and absent-or-alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
+- **
+eason: "background_media_rejected"** on the same reply (jarvis_live.IGNORED_BACKGROUND).
+- **ok and owner are alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
+- **Nothing is sent to the model** on such a clip, nothing is kept, and no words of it appear in the reply. An app needs no change: a client that does not know the new field ignores it, and the clip is silent either way.
+- **Short confirmations are unaffected.** A clip under 1.2 s in a latched session is never put to this guard, so "yes" and "do it" answer exactly as they did before.
+
+The rule and its reasons are in docs/ARCHITECTURE.md §15; the tests are ackend/test_voice_check_rule.py's two new functions.
+
+## 195. A read-only repository map: the files and symbols of a project folder, ranked for the question (added 2026-11-05)
+
+The first piece of "Jarvis as a project worker", built in the order the
+2026-11-05 project-management audit recommended and Gemini's ruling fixed:
+**a read-only repository map FIRST**, before project-scoped chat and before any
+staged diff. It is the one capability that raises what Jarvis can do for a
+coding project without giving it a pen: a project's folder stops being a list of
+file names and becomes a short, ranked table of what is in it.
+
+**What a map is.** The files, classes, functions and imports of ONE folder the
+owner already allowed, ranked for a question and packed into a bounded block of
+text. It lists NAMES AND SIGNATURES ONLY - never a function's body - and it
+writes nothing at all: no index, no cache, no temp file.
+
+**The route.** `GET /api/projects/<id>/map` - `id` is a registered project
+(`projects.db`; the same list `GET /api/projects` returns) and the folder mapped
+is that project's own folder. Query: `q` (the question to rank for, optional) and
+`tokens` (the budget, default 1,500, clamped to 200 minimum and 2,000 maximum).
+It is answered by the project store's own table (`jarvis_projects.parse_route`
+returns `("map", <id>)`), after the server's origin and token checks like every
+other project route.
+
+```text
+GET /api/projects/{id}/map?q=where+are+routes+registered&tokens=1500
+```
+
+The answer:
+
+```json
+{"ok": true, "available": true,
+ "project": {"id": "…", "name": "Epic Jarvis"},
+ "folder": {"path": "C:\\…\\Epic-Jarvis-main", "name": "Epic-Jarvis-main"},
+ "question": "where are routes registered",
+ "map": "Repository map of Epic-Jarvis-main - 214 files with names to show, 3102 symbols declared.\n…",
+ "tokens": 1487, "budget": 1500,
+ "files": 42, "files_seen": 1234, "symbols": 310,
+ "truncated": true,
+ "ranked": [{"path": "backend/jarvis_documents.py", "score": 38.5, "symbols": 41}],
+ "outside_text": true}
+```
+
+`ranked` carries the top ten only, so the order can be checked without shipping
+the whole ranking twice; `map` is the text itself. A project with no folder, an
+unknown project id and a folder that is no longer on the owner's list each answer
+`ok: false` with their own one-sentence reason and status 400.
+
+**The tool.** The module is reached from chat through the EXISTING `my_files`
+tool: `{"action": "map", "project": "<id>"}` or `{"action": "map", "path": "<a
+folder on the list>"}`, with `words` as the question and an optional `tokens`.
+It returns the same map, plus `outside_text: true` and the store's own
+outside-text label on the text (the same treatment a file read gets). `map` is
+one more action on `my_files`; it adds **no tool**, no switch and no gate
+action.
+
+**Which boundary protects the walk.** The owner's "Folders Jarvis may look in"
+list, checked by the same function the files tool uses: `jarvis_documents.
+allowed_path()`. The project's folder is checked when the project is created
+(`jarvis_projects.check_folder`), and then **every file the walk would show is
+passed through `allowed_path()` again** with that folder as its root
+(`backend/jarvis_repomap.py`, `_walk()`). A folder that is not on the list is
+refused in ONE plain sentence and the walk never starts - it is not walked and
+then filtered, and nothing about it is guessed. Hidden folders are not entered,
+links are not followed, "Protected from Jarvis" items and the private places are
+refused by the existing checks, and a small set of dependency folders
+(`node_modules`, `target`, `dist`, `build`, `__pycache__`, …) is skipped even
+when a `.gitignore` forgets them. `.gitignore` itself is honoured per directory,
+including `!` negation. An unlisted folder answers: *"That folder is not on
+"Folders Jarvis may look in", so Jarvis does not map it - the folder is added on
+the PC first, in Settings, Folders Jarvis may look in."*
+
+**The ranking, written out** (the module docstring has the full formula and the
+module has no other rule): +12 per distinct question word in a declared symbol
+name, +6 in the file or folder's own name, +2 in an import target, +4 when a
+MATCHED file imports this one (its dependency), +1 when this file imports a
+matched file (a caller), and +0.5 × log2(1 + symbols) as a small tie-break.
+Ties break by relative path, so the order never depends on the walk. Imports are
+matched on names, not by resolving paths: a wrong edge costs a line of the map,
+a resolved guess could invent one. The answer is deterministic - the same tree
+and the same question give the same bytes - and needs **no model call**.
+
+**The budget.** At most 2,000 tokens, default 1,500, counted exactly the way
+`jarvis_agent.estimate_tokens` counts a string (3 characters a token, JSON
+framing included, so a map of 2,000 really arrives as 2,000 and not more). A
+file that does not fit has its symbol lines trimmed; a file too big to read
+(at most 512 KiB is read) is named and not read; nothing is ever refused for
+being large.
+
+**What it does not do, so nobody has to ask.** It does not write, move or delete
+anything; it runs no program, opens no socket and calls no model; it adds no
+route to the phone (PC-only read, classified backend-only in
+`tools/check_parity.py`, with the reason in `docs/ARCHITECTURE.md` §8); and it is
+not a diff, an editor or a test runner - `project_edit` remains unbuilt, exactly
+as `backend/jarvis_projects.py` says. Python is parsed with `ast`; JS/TS, Kotlin
+and Rust are read by a conservative signature/import scan that misses clever
+constructs by design and never prints a line that was not in the file.
+
+**Tests and records.** `backend/test_repomap.py` drives the real modules over a
+real temp tree: 78 checks covering the ranking, `.gitignore` (including
+negation), the one-sentence refusal, the bounded budget, determinism, that no
+file is written, the route's documented shape through the real project store, a
+huge file, and the `my_files` action through `jarvis_documents` and
+`jarvis_agent`'s own runner. The decision is
+`decisions.d/2026-11-05-project-repomap-first.md`.
+
+## 196. A document from your phone: three upload routes, ONE card a file, and the file lands as a desktop file (backend only, the phone's screen is the next lane, added 2026-11-05)
 
 **What it is.** The owner's ask - "upload any documents through the jarvis app and have it be fully processed as if I was uploading it to the jarvis desktop" - was never missing the processing. `jarvis_documents.py` already finds a file by name the moment it appears, indexes notes and text files on the next search, and converts PDF, Word, Excel and PowerPoint files on request; `jarvis_notion_obsidian.py` already turns a Notion export into a vault; and `jarvis_attached_file.py` already reads one file in one chat turn. What did not exist was a way for a paired phone to put a byte on this PC's disk, so this section is the pipe and nothing else.
 

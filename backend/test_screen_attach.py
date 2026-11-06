@@ -518,6 +518,24 @@ def t_hygiene():
              # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
              # rewrites nothing this patch wrote.
              "bench.patch",
+             # history-purge.patch (2026-11-04, clearing old chats by date):
+             # ONE added install block in jarvis_hud.py, right after
+             # forget-range.patch's own block, and no hunk in jarvis_gate.py at
+             # all - every rule is in the shipped jarvis_history_purge.py. It
+             # rewrites nothing this patch wrote.
+             "history-purge.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It adds one _TOOL_ACTIONS line, its own action's _RISK row at the
+             # end of jarvis_gate.py, and a _NO_RULE_FROM_DENIAL union - no line
+             # this patch's POST /api/screen wrapper wrote.
+             "product-check.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no line
              # this patch POST /api/screen wrapper wrote.
@@ -683,7 +701,10 @@ def t_hygiene():
              # appended after this patch, immediately before
              # unknown-risk-approvable.patch - it has no hunk in jarvis_hud.py's
              # screen wrapper, so it rewrites nothing this patch wrote.
-             "gate-tool-actions-gap.patch"}
+             "gate-tool-actions-gap.patch",
+# github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+# everything these patches wrote, so it rewrites none of their lines.
+             "github-tools.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

@@ -147,6 +147,12 @@ READ_ONLY_TOOLS = frozenset({
     # back out of the store and changes nothing - the three goal WRITES are
     # in ACTING_TOOLS below.
     "goals_list",
+    # The three GitHub READS (2026-11-03): each one asks GitHub and hands back
+    # words. Nothing on GitHub changes, so a claim like "your newest run failed"
+    # is not a claim that an action ran - it is the answer. The three GitHub
+    # ACTIONS are in ACTING_TOOLS below, because "I posted the comment" must be
+    # corrected when only the card was raised or the POST failed.
+    "github_list", "github_read_file", "github_ci_status",
     # "plugin_list" (2026-11-02): it lists the drop-in plugin folder - names,
     # on/off state and the reason a plugin is off - and changes nothing. The
     # writing half is plugin_switch, in ACTING_TOOLS.
@@ -165,6 +171,11 @@ READ_ONLY_TOOLS = frozenset({
     # changed after it must still be corrected, which is this set: read-only
     # for the claim check, exactly as the tool's own docstring says.
     "setup_quiz",
+    # "product_check" (2026-11-04): it opens ONE product page in the owner's
+    # own browser and reads it, and changes nothing - no cart, order, sign-in,
+    # click or typing. Read-only for the claim check: a sentence saying
+    # something was changed after it must still be corrected.
+    "product_check",
 })
 
 #: The other half of the same classification (audit H4): every tool that can
@@ -189,6 +200,10 @@ ACTING_TOOLS = frozenset({
     # folders is made fetchable by the phone, which can keep a copy - that is
     # an ACT, so a claimed "nothing was done" must not be said after it.
     "send_file_to_phone",
+    # "send_text_message" (2026-11-04, hands-free mode): the phone sends ONE
+    # real text in the owner's name, and a sent text cannot be unsent - an ACT,
+    # so a claimed "nothing was done" must not be said after it.
+    "send_text_message",
     # The conversation-scoped web-search approval and its stop (2026-11-01).
     # Both CHANGE something - what asks for the rest of this chat - so an answer
     # that says "searches in this chat will not ask you any more", in a turn
@@ -217,6 +232,13 @@ ACTING_TOOLS = frozenset({
     # failed. `plugin_list` is the read-only half and is in READ_ONLY_TOOLS: it
     # only lists the folder.
     "plugin_switch",
+    # The three GitHub ACTIONS (2026-11-03): each one changes something on
+    # GitHub in the owner's name, and none of it can be taken back by Jarvis.
+    # "I posted the comment" / "I opened the issue" / "I re-ran it" must be
+    # corrected when only the card was raised or the POST failed - exactly the
+    # reason `send_email` is in this set. The three GitHub READS are in
+    # READ_ONLY_TOOLS above.
+    "github_comment", "github_open_issue", "github_rerun_workflow",
     # "rea_investigate" (2026-11-04, the owner's decision to ship the full
     # REA toolbox): it left READ_ONLY_TOOLS for the reason written there - the
     # full toolbox patches a local file, writes an exported bundle or a pulled
@@ -227,6 +249,12 @@ ACTING_TOOLS = frozenset({
     # backend/test_smarter_answers.py caught ("every tool jarvis_agent offers
     # is read-only or an action") on 2026-11-05.
     "rea_investigate",
+    # "approval_policy" (2026-11-05, the owner's ask to change approvals by
+    # chat): it CHANGES one action's policy in the shipped settings file -
+    # more asking is instant and cardless, less asking waits for ONE PC card -
+    # so "I changed it so it no longer asks" must be corrected when only the
+    # card was raised or nothing ran, exactly like any other setting write.
+    "approval_policy",
     # Clearing a conversation is NOT a model tool: Gemini ruling 1 (2026-11-03)
     # keeps it route/app/fast-path only, behind its one card, so it is in
     # neither table here - the action still exists, the TOOL does not.

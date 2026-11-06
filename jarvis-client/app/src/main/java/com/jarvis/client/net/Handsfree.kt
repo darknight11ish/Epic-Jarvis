@@ -20,7 +20,7 @@ import kotlinx.serialization.json.intOrNull
  * so the phone records one clip and uploads it (`/api/handsfree/answer`), and
  * the PC transcribes it, checks it against the owner's voice print and decides.
  *
- * THE FROZEN CONTRACT is `docs/JARVIS-API.md` section 186, written by the PC
+ * THE FROZEN CONTRACT is `docs/JARVIS-API.md` section 191, written by the PC
  * half (PR #1169) and not phone-owned: this file follows it, and where this
  * file's older shape disagreed with it the contract won (2026-11-05). It is:
  *
@@ -54,10 +54,10 @@ import kotlinx.serialization.json.intOrNull
  * TWO THINGS THAT LOOK SMALL AND ARE NOT:
  *
  *  1. `expires_in_sec` is the ANSWER window, not the card's own deadline
- *     (section 186.4 says so in as many words). The phone listens for that
+ *     (section 191.4 says so in as many words). The phone listens for that
  *     window - a minute at most, or the card's own shorter countdown - and the
  *     clip it uploads is capped at the PC's 30 seconds, because a longer one is
- *     refused rather than truncated (section 186.5).
+ *     refused rather than truncated (section 191.5).
  *  2. `say` is the PC's own sentence and is what the phone speaks and shows. An
  *     answer read with no `say` falls back to this file's words, but a PC that
  *     sends `say` is never paraphrased - the refusal sentences are the PC's,
@@ -80,7 +80,7 @@ object Handsfree {
 
     /**
      * `GET` the state; `POST {"enabled": bool}` the switch. ONE path in the
-     * frozen contract (section 186.0/186.3) - the older
+     * frozen contract (section 191.0/191.3) - the older
      * `/api/handsfree/enabled` does not exist on the PC and is gone.
      */
     const val PATH = "/api/handsfree"
@@ -111,15 +111,15 @@ object Handsfree {
      * The rate the answer clip is sent at: the SAME format the PC asks every
      * other upload for (`audio_in` in `/api/voice/status`), and the rate
      * [com.jarvis.client.handsfree.HandsfreeClip] resamples to, so the body's
-     * `sample_rate` can never disagree with the WAV it carries (section 186.5).
+     * `sample_rate` can never disagree with the WAV it carries (section 191.5).
      */
     const val SAMPLE_RATE = 16_000
 
-    /** The answer window the PC opens for a read-out, in seconds (section 186.4). */
+    /** The answer window the PC opens for a read-out, in seconds (section 191.4). */
     const val WINDOW_SEC = 60
 
     /**
-     * The longest clip the PC will accept, in seconds (section 186.5).
+     * The longest clip the PC will accept, in seconds (section 191.5).
      *
      * A longer one is REFUSED, never truncated, so the phone records at most
      * this much however long the answer window is.
@@ -141,7 +141,7 @@ object Handsfree {
      * confirmation line, the docs) and three copies of a sentence about what
      * the microphone does is three chances to describe it differently. The
      * window is the PC's - a minute at most - so this says a minute, not the
-     * ten seconds this app used to open (section 186.4).
+     * ten seconds this app used to open (section 191.4).
      */
     const val ABOUT = "Jarvis reads each approval card out loud on this phone, " +
         "then listens for your answer - one word, within the minute your PC allows. " +
@@ -235,7 +235,7 @@ object Handsfree {
 
     /**
      * Shown when the PC has no enrolled voice print: a spoken yes is refused by
-     * the PC until one exists (section 186.5 step 5), and this is the one place
+     * the PC until one exists (section 191.5 step 5), and this is the one place
      * the owner can be told before he tries.
      */
     const val NO_PRINT = "No voice is trained on your PC yet, so a spoken yes will be refused. " +
@@ -306,7 +306,7 @@ object Handsfree {
 
     /**
      * The PC's own receipt for a text this phone was asked to send - the
-     * `phone_result` event (section 186.6).
+     * `phone_result` event (section 191.6).
      *
      * The phone has already posted its own result; this is the PC's sentence,
      * so the app can show the same words the PC will show. [ok] is the PC's
@@ -354,17 +354,17 @@ object Handsfree {
         val say: String? = null,
     )
 
-    /** The closed yes/no vocabulary `GET /api/handsfree` reports (section 186.2). */
+    /** The closed yes/no vocabulary `GET /api/handsfree` reports (section 191.2). */
     data class Vocabulary(
         val confirm: List<String> = emptyList(),
         val deny: List<String> = emptyList(),
     )
 
-    /** Whether a paired phone can receive a command, and why not (section 186.2). */
+    /** Whether a paired phone can receive a command, and why not (section 191.2). */
     data class Phone(val ready: Boolean = true, val why: String = "")
 
     /**
-     * The state `GET /api/handsfree` answers (section 186.2).
+     * The state `GET /api/handsfree` answers (section 191.2).
      *
      * @param available false only when the PC says so in words. A 404 from the
      *   route is a separate, stronger "this PC does not have it" and never
@@ -392,7 +392,7 @@ object Handsfree {
     )
 
     /**
-     * What `POST /api/handsfree {"enabled": bool}` answered (section 186.3).
+     * What `POST /api/handsfree {"enabled": bool}` answered (section 191.3).
      *
      * There is no 202 and no waiting state: the PC decides its own enable card
      * inside the request, and answers 200 once the mode is on (or already on),
@@ -520,7 +520,7 @@ object Handsfree {
     /**
      * The answer window for one card, in seconds: the card's own
      * `expires_in_sec` when the PC sent one, else [fallback] (the read's
-     * `window_sec`, section 186.2), else the contract's [WINDOW_SEC]. Never
+     * `window_sec`, section 191.2), else the contract's [WINDOW_SEC]. Never
      * shorter than a second and never longer than the minute the contract
      * allows - `expires_in_sec` is the ANSWER window, not the card's own
      * deadline, and the phone listens for exactly what the PC offered.
@@ -603,7 +603,7 @@ object Handsfree {
     /**
      * What the owner is shown after an answer, in plain words - and it is the
      * PC's own sentence whenever the PC sent one, because `say` is the contract
-     * field written FOR the owner (section 186.5).
+     * field written FOR the owner (section 191.5).
      *
      * The order of the fallback branches is the whole of the rule and is
      * written down here rather than discovered from the tests:

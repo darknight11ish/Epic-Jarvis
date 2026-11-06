@@ -14,7 +14,7 @@ not move any count at all.
 WHAT THIS PINS, AS EXPLICIT SORTED NAME LISTS
   (a) FULL_ENABLED - what `enabled_tools_for_turn()` returns on a fresh
       install: the shipped template copied in as the settings file, in a temp
-      folder, exactly as `test_tool_defaults.py` does it. Thirteen names today.
+      folder, exactly as `test_tool_defaults.py` does it. Fourteen names today.
   (b) CLOUD_ALLOWED - the tools a cloud lane may be offered. There is no
       cloud-tool allow-list in this tree, and that is the answer: the local
       tool loop is never called for a cloud lane and no cloud request builder
@@ -81,9 +81,10 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: (a) A fresh install's `[tools].enabled`, read through
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
-    "calculator", "change_setting", "conversation_find", "conversation_open",
-    "feature_guide", "memory_search", "my_files", "phone_apps", "plugin_list",
-    "plugin_switch", "refresh_abilities", "self_portrait", "web_search",
+    "approval_policy", "calculator", "change_setting", "conversation_find",
+    "conversation_open", "feature_guide", "memory_search", "my_files",
+    "phone_apps", "plugin_list", "plugin_switch", "refresh_abilities",
+    "self_portrait", "send_text_message", "web_search",
 ]
 
 #: (b) Tools a cloud lane may be offered. NONE: the tool loop is local-only
@@ -95,9 +96,9 @@ CLOUD_ALLOWED = []
 #: so the decision is recorded here rather than assumed.
 PRIVATE_CHAT_ALLOWED = []
 
-#: What those enabled thirteen become when a turn is built: `my_files` is
+#: What those enabled fourteen become when a turn is built: `my_files` is
 #: dropped while no folder is listed (the model is never offered a tool that
-#: could read nothing), so a fresh PC offers twelve base tools - plus the
+#: could read nothing), so a fresh PC offers thirteen base tools - plus the
 #: conversation web-search approval and its instant stop, which ride with
 #: `web_search` (2026-11-02, `jarvis_agent.GRANT_ASK_TOOLS`): offering the ASK
 #: grants nothing, because the store is written only after a person answers the
@@ -107,12 +108,15 @@ PRIVATE_CHAT_ALLOWED = []
 #: leaves the PC for the phone); the owner enables it in their own settings.
 #: The four read-only self/chat tools joined on 2026-11-04 (Gemini ruling Q2)
 #: and are offered like any other enabled tool - `conversation_clear` is not a
-#: tool at all, so it cannot appear here.
+#: tool at all, so it cannot appear here. `approval_policy` joined on 2026-11-05
+#: (the owner's ask to change approvals by chat) and is offered like any other
+#: enabled tool: it raises its own card before anything is loosened.
 OFFERED_FRESH = [
-    "approve_web_search_for_conversation", "calculator", "change_setting",
-    "conversation_find", "conversation_open", "feature_guide", "memory_search",
-    "phone_apps", "plugin_list", "plugin_switch", "refresh_abilities",
-    "self_portrait", "stop_web_search_approval", "web_search",
+    "approval_policy", "approve_web_search_for_conversation", "calculator",
+    "change_setting", "conversation_find", "conversation_open",
+    "feature_guide", "memory_search", "phone_apps", "plugin_list",
+    "plugin_switch", "refresh_abilities", "self_portrait",
+    "stop_web_search_approval", "web_search",
 ]
 
 #: (d) Every tool that exists, pinned in full. A future tool must be added
@@ -126,6 +130,11 @@ OFFERED_FRESH = [
 #: permission.
 CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily",
+    # Changing what needs a card, a second yes or Windows Hello by talking to
+    # Jarvis (2026-11-05, jarvis_approval_policy.py). A shipped default: the
+    # owner asked for it to be reachable from chat. It is in no cloud or
+    # private-turn allow-list (both are empty by design).
+    "approval_policy",
     "approve_web_search_for_conversation", "browser_control",
     "calculator", "calendar_read", "change_setting", "coming_up",
     "connect_account", "control_computer", "control_phone",
@@ -136,10 +145,24 @@ CATALOGUE = [
     "conversation_find", "conversation_open",
     "create_joplin_note",
     "draft_email",
-    "email_check", "feature_guide", "file_read", "github_search",
+    "email_check", "feature_guide", "file_read",
+    # Your own GitHub, on demand (2026-11-03, the owner's "Read + actions").
+    # None of the six is in FULL_ENABLED or OFFERED_FRESH: like `github_search`
+    # they ship SWITCHED OFF, because each one sends the owner's GitHub token
+    # out and the tools are useless until a token is saved anyway. They are in
+    # the catalogue so the next tool added has to be looked at here too.
+    "github_ci_status", "github_comment", "github_list", "github_open_issue",
+    "github_read_file", "github_rerun_workflow",
+    "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
-    "notes_search", "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
+    "notes_search", "phone_apps", "plugin_list", "plugin_switch",
+    # The product check (2026-11-04, the owner's choice "wire the existing
+    # product check"): ONE Amazon product page, one PC-only card, tier "ask".
+    # NOT in FULL_ENABLED - `[product_check] enabled = false` ships, and the
+    # tool is not even offered while it is off - and not in a cloud or
+    # private-turn allow-list (both are empty by design).
+    "product_check", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
     "read_web_page",
     # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh
@@ -152,6 +175,13 @@ CATALOGUE = [
     "retirement_whatif", "run_data_script",
     "self_portrait",
     "send_email", "send_file_to_phone",
+    # Texting a contact (2026-11-04, hands-free mode): a REAL message from the
+    # owner's own phone, in their name, which cannot be unsent. In the shipped
+    # template's list but withheld from every turn until the mode is on
+    # (`offered_tools`), so it is not in FULL_ENABLED; it is here because a
+    # cloud or private turn must never be offered it, and this list is where
+    # that decision is recorded.
+    "send_text_message",
     "set_reminder",
     "set_timer", "setup_quiz", "shell_exec", "stop_web_search_approval", "tidy_inbox",
     "todo_add", "todo_done",
@@ -264,7 +294,7 @@ def t_a_fresh_install_enables_exactly_the_pinned_set():
         return sorted(AG.enabled_tools_for_turn())
 
     got = _with_fresh_settings(read)
-    check("a fresh install's turn enables exactly the thirteen pinned names",
+    check("a fresh install's turn enables exactly the fourteen pinned names",
           got == FULL_ENABLED, got)
 
 
@@ -276,8 +306,8 @@ def t_a_fresh_install_offers_exactly_the_pinned_list():
             lambda: sorted(AG.offered_tools(AG.enabled_tools_for_turn())))
     finally:
         JD.folders = real_folders
-    check("a fresh install (no folder listed) offers exactly fourteen names - "
-          "the twelve local defaults plus the grant ask and its stop, which "
+    check("a fresh install (no folder listed) offers exactly fifteen names - "
+          "the thirteen local defaults plus the grant ask and its stop, which "
           "ride with web search - with my_files withheld by its own rule",
           got == OFFERED_FRESH, got)
     check("...so my_files is enabled but not offered: the folder is the only "

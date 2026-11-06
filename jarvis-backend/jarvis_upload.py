@@ -29,7 +29,7 @@ rest of that sentence (a document preview, a second image path and an "attach
 anything" share target stay not built). The reversal is recorded in
 decisions.d/2026-11-05-phone-upload.md; this paragraph is the code's copy of it.
 
-THE ROUTES (docs/JARVIS-API.md section 188)
+THE ROUTES (docs/JARVIS-API.md section 196)
 
     POST /api/upload/begin    {"name", "size", "mime"?, "into", "purpose"?,
                                "sha256"?}

@@ -548,9 +548,20 @@ out loud").** Two things were wrong, and only one of them was the wording:
   and a sensitive saved fact still stays on screen unless the owner allowed it.
 - **The Live instruction to the model says it too** (`jarvis_live.MODEL_NOTE`,
   the one note added to a spoken Live turn): when it already has the answer in
-  hand - a tool result, a page it read, a quick fact - it says it; a screen line
-  is for what it truly cannot say, such as a table of numbers, a picture or a
-  long list.
+  hand - a tool result, a page it read, a quick fact, a list - it says it, and
+  a screen line is **never** the answer. **Tightened 2026-11-05** after the
+  owner's next report (`OWNER-REPORTS-2026-11-04-LIVE.md` item A: "it said
+  it's on your screen as the answer instead of reading it out"): the note used
+  to allow a screen line for "a table of numbers, a picture or a long list",
+  and a long list is exactly what he was asking for. It now asks for the key
+  answer in one to four clear sentences and, for a list or a table, the first
+  five items or rows read aloud as plain prose and then how many more there
+  are - with no Markdown, no bullets and no table in what it writes.
+- **The final-step persona hint says it too, and now really reaches a Live
+  turn** (`jarvis_manner.post_history_hint(spoken_live=True)`, inserted by
+  `jarvis_agent.with_manner_note`). The spoken clause existed since 2026-11-01
+  but the agent never passed the `live` mark, so the hint nearest the question
+  said nothing about the screen in a long Live session. It does now.
 
 **What deliberately did NOT change in that 2026-11-01 change:** the apps' own
 read-aloud rules, the private/email/calendar/notes list, the screen rule and
@@ -561,6 +572,16 @@ own check earned. **The per-tool list itself changed once, on 2026-11-02**,
 when `feature_guide` joined it by the owner's decision above
 (`decisions.d/2026-11-02-speak-capability-answers.md`); nothing else on the
 list moved, and no tool was taken off it.
+
+**The 2026-11-05 tightening touched no permission, no route and no app.** No
+formatter in either app replaces a list or a table with a screen pointer: the
+desktop's `stripMarkdownForSpeech` strips markup and drops code blocks, and
+otherwise speaks the answer as written; the fixed "It's on your screen." is
+`private-speech.js` / `PrivateAloud.ON_SCREEN` when `mayReadAloud` says the
+answer is private. The money answers' own spoken lines (`jarvis_spending`,
+`jarvis_retirement`) still keep their figures on screen - that is the
+sensitive-fact rule, not wording - and a fast-path answer in Live is the typed
+answer word for word (`test_live_parity.py`).
 
 **Camera answers need a rule (question 2).** Today there is none: the PC
 records its reading of a picture's words as a reading tool

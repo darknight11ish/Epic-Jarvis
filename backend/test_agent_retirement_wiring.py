@@ -396,14 +396,19 @@ def t_the_short_list():
     # estimate_tokens, against 387 without it. test_short_tool_list.py's note
     # carries the same measured change and why a wider existing group was
     # turned down; this copy moves with it.
-    check("more_tools itself still fits the budget with every group in (425 since "
-          "2026-11-02, measured 411 with the goals group - see test_short_tool_list.py's "
-          "note; 395 since 2026-11-01, measured 387 with the web_search_grant group; "
-          "380 since 2026-10-28, measured 360 with connect_account's own group; 345 "
-          "since 2026-10-13: change_setting's own group; 325 since 2026-10-05 for "
-          "read_web_page's)",
+    # 460 since 2026-11-05 (was 425), and test_short_tool_list.py's note carries
+    # the measurement in full: the `send_text` group handsfree added costs this
+    # card 14, the `github` group's longer own line costs 22, and the card
+    # measures 447 - so 460 leaves 13. This copy moves with that pin, as it did
+    # for every earlier one.
+    check("more_tools itself still fits the budget with every group in (460 since "
+          "2026-11-05, measured 447 - see test_short_tool_list.py's note; 425 since "
+          "2026-11-02, measured 411 with the goals group; 395 since 2026-11-01, measured "
+          "387 with the web_search_grant group; 380 since 2026-10-28, measured 360 with "
+          "connect_account's own group; 345 since 2026-10-13: change_setting's own "
+          "group; 325 since 2026-10-05 for read_web_page's)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 425)
+          <= 460)
     check("the tool is offered only when [tools].enabled names it",
           AG.RETIREMENT_TOOL not in AG.offered_tools({"calculator"}) and AG.RETIREMENT_TOOL in AG.offered_tools(enabled))
 

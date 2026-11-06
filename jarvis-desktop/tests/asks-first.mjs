@@ -227,8 +227,8 @@ await check("the tool switch: ON held on a stale link and off the PC, OFF never,
 
 await check("the tool surface: groups, the vault row and the not-a-switch note", async () => {
   const pc = readAsksFirst(C.pc_shipped);
-  assert.equal(pc.tools.items.length, 48,
-    "every tool the model can be offered is a switch (2026-11-04; 21 before it)");
+  assert.equal(pc.tools.items.length, 56,
+    "every tool the model can be offered is a switch (56 at 2026-11-05: 48 at 2026-11-04 and 21 before it; the six GitHub tools, send_text_message and approval_policy joined the list)");
   assert.ok(pc.tools.items.every((i) => i.group), "every item carries its group");
   const groups = toolGroupsView(pc.tools);
   assert.deepEqual(groups.map((g) => g.title), C.pc_shipped.tools.groups.map((g) => g.title));
@@ -254,8 +254,9 @@ await check("the tool surface: groups, the vault row and the not-a-switch note",
   const note = notSwitchableView(pc.tools);
   const no = pc.tools.notSwitchable;
   assert.deepEqual(no.ids,
-    ["run_data_script", "approve_web_search_for_conversation", "stop_web_search_approval"],
-    "the three whose own switch decides them");
+    ["run_data_script", "product_check", "approve_web_search_for_conversation",
+      "stop_web_search_approval"],
+    "the four whose own switch decides them");
   for (const id of no.ids) {
     assert.ok(note.includes(no.labels[id] || id.replace(/_/g, " ")), "the note names " + id);
   }

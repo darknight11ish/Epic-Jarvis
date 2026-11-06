@@ -17,7 +17,7 @@
  }
  
  # Arguments that ESCALATE a shell-class tool. Regex on model-written text is
-@@ -2594,3 +2594,36 @@
+@@ -2594,6 +2594,39 @@
              print(f"  {r['id']}  {r['tier']:6} {r['action']}")
          sys.exit(0)
      sys.exit(review(a.days))
@@ -54,6 +54,9 @@
 +    # what the owner just asked to stop.
 +    "revoke_web_search_grant": ("yes", "local", "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on"),
 +})
+ 
+ 
+ # --------------------------------------------------------------------------
 @@ -1509,3 +1509,9 @@
  
 -_SAFE_KEYS = {"id", "action", "tier", "classified", "error", "by", "state"}

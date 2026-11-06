@@ -225,6 +225,16 @@
     },
     {
      "asks": "-",
+     "id": "call_recording",
+     "line": "Off. Turning it on is a hand edit of [call_recording] enabled in the settings file on this PC - there is no in-app switch, the same shape GitHub research and shell commands use.",
+     "name": "Call recording (your phone's microphone)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "shell",
      "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Commands on this PC",
@@ -532,6 +542,16 @@
     },
     {
      "asks": "-",
+     "id": "call_recording",
+     "line": "Off. Turning it on is a hand edit of [call_recording] enabled in the settings file on this PC - there is no in-app switch, the same shape GitHub research and shell commands use.",
+     "name": "Call recording (your phone's microphone)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "shell",
      "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Commands on this PC",
@@ -828,6 +848,16 @@
      "id": "phone_control",
      "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Phone control",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "call_recording",
+     "line": "Off. Turning it on is a hand edit of [call_recording] enabled in the settings file on this PC - there is no in-app switch, the same shape GitHub research and shell commands use.",
+     "name": "Call recording (your phone's microphone)",
      "on": false,
      "state": "off",
      "state_words": "Off",
@@ -1161,6 +1191,16 @@
      "where": "your phone, over adb"
     },
     {
+     "asks": "-",
+     "id": "call_recording",
+     "line": "Off. Turning it on is a hand edit of [call_recording] enabled in the settings file on this PC - there is no in-app switch, the same shape GitHub research and shell commands use.",
+     "name": "Call recording (your phone's microphone)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
      "asks": "Yes, every time",
      "id": "shell",
      "line": "Can run a command on this PC after you say yes to that exact command.",
@@ -1262,6 +1302,30 @@
     {
      "id": "github_search",
      "name": "GitHub research"
+    },
+    {
+     "id": "github_list",
+     "name": "Listing your GitHub repositories, pull requests, issues or runs (one card each)"
+    },
+    {
+     "id": "github_read_file",
+     "name": "Reading one file in a GitHub repository (one card each)"
+    },
+    {
+     "id": "github_ci_status",
+     "name": "Checking how CI went on GitHub (one card each)"
+    },
+    {
+     "id": "github_comment",
+     "name": "Posting a comment on GitHub (one card each)"
+    },
+    {
+     "id": "github_open_issue",
+     "name": "Opening a GitHub issue (one card each)"
+    },
+    {
+     "id": "github_rerun_workflow",
+     "name": "Running a GitHub workflow again (one card each)"
     },
     {
      "id": "web_search",
@@ -1398,6 +1462,10 @@
     {
      "id": "connect_account",
      "name": "Connecting a calendar or GitHub (one card on this PC; you type the details, never the model)"
+    },
+    {
+     "id": "approval_policy",
+     "name": "Changing what needs a card, a second yes or Windows Hello"
     },
     {
      "id": "approve_web_search_for_conversation",
@@ -1641,6 +1709,16 @@
     },
     {
      "asks": "-",
+     "id": "call_recording",
+     "line": "Off. Turning it on is a hand edit of [call_recording] enabled in the settings file on this PC - there is no in-app switch, the same shape GitHub research and shell commands use.",
+     "name": "Call recording (your phone's microphone)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "shell",
      "line": "Off. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Commands on this PC",
@@ -1732,6 +1810,7 @@
   "chatbot_api",
   "support_chat",
   "phone_control",
+  "call_recording",
   "shell",
   "plugins",
   "second_card",

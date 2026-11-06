@@ -146,6 +146,17 @@ youtube_captions_read     = "ask"
 # "never" switches the feature off. A file without this line asks too
 # (unknown_action_tier).
 read_web_page              = "ask"
+# The product check (jarvis_product_check.py, 2026-11-04; the owner's choice
+# "wire the existing product check"): ONE Amazon product page read in the
+# owner's own signed-in browser window, behind ONE card that names the address
+# and says "read-only; nothing is bought or added to a cart". The action is in
+# jarvis_owner_check.PC_ONLY_ACTIONS, so only this PC can approve it, with
+# Windows Hello - the browser window and the sign-in are here. Must stay
+# "ask": anything else and no page is read; "never" switches the action off
+# (the tool's own switch, [product_check] enabled, is the real on/off door).
+# A file without this line asks too (unknown_action_tier). The gate's own
+# _RISK row carries the card's risk words, added by product-check.patch.
+product_check              = "ask"
 # "Grade this better" on a quiz (jarvis_quiz_cloud.py; the owner's decision of
 # 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 7): ONE card per request,
 # listing EXACTLY what leaves this PC (the quiz's questions, your answers and
@@ -204,6 +215,37 @@ raise_attention_budget    = "ask"
 # page_read above, or a look every 10 minutes would mean a card every 10
 # minutes. Without this line GitHub watches are refused, with the reason.
 github_read               = "auto"
+# Reading the owner's own GitHub on demand, and three small actions on it (the
+# owner's decision of 2026-11-03: "Read + actions" - Jarvis may read his repos,
+# open pull requests, issues, CI status and one file, and may comment, open an
+# issue and re-run a workflow, each behind its own card; it may NEVER merge,
+# push, commit, delete or close).
+#
+# WHY A SECOND READ ACTION, and this is the part worth reading before changing
+# anything here: `github_read` above is a SCHEDULED look by a watch the owner
+# already approved, and it MUST stay "auto" - a look every 10 minutes cannot
+# raise a card every 10 minutes. The tools added on 2026-11-03 are LOOKS ON
+# DEMAND, at a moment the model chose, and each one sends the owner's GitHub
+# token out. They are therefore their own action, `github_inspect`, and it is
+# "ask": one card per read. Reusing `github_read` would either run them at
+# "auto" - egress with a credential and nobody asked - or force that line to
+# "ask" and break every GitHub watch. Do not merge the two names.
+#
+# All four are also in `jarvis_agent.NEEDS_A_PERSON`, so an owner who loosens a
+# line below still gets a card: the config says how much Jarvis asks, and that
+# set says a read like this is never done with nobody asked. The three actions
+# cannot be "auto" in any case - `github_comment` and `github_open_issue` post
+# in the owner's name, which cannot be taken back, and `github_rerun_workflow`
+# spends CI work.
+#
+# These tools ship SWITCHED OFF: they are not in [tools].enabled below, exactly
+# like `github_search`. Add the six names (github_list, github_read_file,
+# github_ci_status, github_comment, github_open_issue, github_rerun_workflow) to
+# that list when you want them offered, and save a token with "connect GitHub".
+github_inspect            = "ask"
+github_comment            = "ask"
+github_open_issue         = "ask"
+github_rerun_workflow     = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
@@ -285,6 +327,13 @@ loosen_what_asks_first    = "ask"
 # loosening whether a tool asks first - jarvis_asks_first.py refuses it unless
 # it comes from this PC, with Windows Hello, whatever this line says.
 enable_reading_tool       = "ask"
+# change_approval_policy - changing what needs a card, how many yeses it takes
+# or whether it needs Windows Hello, by talking to Jarvis (2026-11-05,
+# jarvis_approval_policy.py). This line is the ONE CARD a loosening raises: a
+# looser line would make "stop asking" cardless, so it must stay "ask", like
+# its two neighbours above. The two extra dimensions are kept beside this
+# table, in [autonomy.confirmations] and [autonomy.windows_hello] below.
+change_approval_policy    = "ask"
 # "Check for tool updates" (jarvis_tool_updates.py, the owner's own
 # request): the FIRST run ever asks PyPI, crates.io and GitHub over the
 # internet, so it needs a person's yes once. Must stay "ask": anything else
@@ -346,6 +395,21 @@ write_notes_after_outside_text = "ask"
 # FORCED to "ask", with its own outbound worst-case line (never looser). A
 # follow-up patch can classify it; keep this line at "ask".
 send_file_to_phone       = "ask"
+# "Text a contact for me" (2026-11-04, hands-free mode; jarvis_handsfree.py,
+# backend/handsfree.patch). ONE card per text, naming the contact and the EXACT
+# message word for word; nothing is sent until that card is answered. The phone
+# looks the contact up in its own contacts and sends it, so this PC never holds
+# a number. A sent text cannot be unsent, so its gate row is "no"/"outbound" - a
+# risky approval. It is offered to the model only while hands-free mode is on
+# (see [handsfree] at the end of this file), and it refuses before any card when
+# the mode is off or no phone is paired. Keep this line at "ask".
+send_text_message        = "ask"
+# The one card that turns hands-free mode on (jarvis_handsfree.py;
+# handsfree.patch). A loosening setting: while it is on a spoken yes may
+# answer a card, including one that would otherwise wait for Windows Hello,
+# so it is a risky approval and ON asks every time. OFF is instant and
+# cardless. Keep this line at "ask".
+handsfree_enable         = "ask"
 # "Protected from Jarvis" (jarvis_protection.py, 2026-10-31; the owner's
 # request: a list of folders, files and programs that blocks Jarvis, or makes
 # it read-only). ONE card for a chat add (the model proposes, the owner
@@ -624,6 +688,18 @@ conversation_clear        = "ask"
 # too (unknown_action_tier).
 storage_cleanup           = "ask"
 
+# "Clear old chats by date" (2026-11-04, the owner's own request: "how long does
+# it take for you to clear old chats if i batched a lot of them together?",
+# then "clear the ones i don't have pinned ... including facts ... a card ...
+# double confirmation ... windows pin or fingerprint"). It deletes the chats in
+# a date range from this PC and erases the words of the facts those chats
+# taught; pinned chats are kept unless the preview was asked for them. Must stay
+# "ask": jarvis_history_purge.py refuses any other tier outright (503) rather
+# than let this line become the owner's yes - and it needs a second yes and a
+# platform ticket on top of the tier, so "auto" here could never delete
+# anything anyway. A file without this line asks too (unknown_action_tier).
+history_purge             = "ask"
+
 # --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
 # Adding a voice (a recording of someone reading a sentence, kept on this
 # PC) is one approval card, and switching Jarvis to speak in one is
@@ -774,6 +850,36 @@ organize_obsidian_vault   = "ask"
 # yes. The file lands in a folder already on the "Folders Jarvis may look in"
 # list, so this card is the ONLY new permission the feature asks for.
 receive_uploaded_document = "ask"
+# Recording a phone call (backend/jarvis_call_notes.py, 2026-11-04; docs/
+# JARVIS-API.md section "Call recording"). The owner's own keyword, the phone's
+# own recorder and this PC's own transcription - but it starts capturing OTHER
+# PEOPLE'S speech, so it ships at "ask": the start route raises ONE card and
+# nothing is recorded until it is answered. The owner-initiated note actions
+# (append_obsidian_daily, append_logseq_journal) ship "auto"; this one asks
+# until the owner deliberately loosens it, and docs/CALL-RECORDING.md records
+# that choice. The gate's _RISK table has a row for this name (added
+# 2026-11-05): ("yes", "local", ...) - a recording changes nothing here, can be
+# deleted again on this PC, and nothing leaves it. Before that row the card
+# carried the gate's generic unclassified warning, whose "able to leave this
+# PC" half was wrong for this action. Deleting a recording is its own card,
+# delete_call_recording, also "ask".
+record_call              = "ask"
+
+# Talking to Jarvis changes what needs a card, what needs a second yes, and
+# what needs Windows Hello, one action and one thing at a time (2026-11-05,
+# jarvis_approval_policy.py; the owner's ask). "What asks first" is still
+# [autonomy.tiers] above - the SAME table every part of Jarvis already reads,
+# so this feature has one writer, not a second place that could disagree.
+#
+# ONE YES is the default and is stored by having no line at all, so these two
+# tables start empty. Both are only ever written by the feature itself: more
+# asking is instant, and less raises ONE card plus Windows Hello on the PC.
+# A line that cannot be read as written here counts as the stricter answer.
+[autonomy.confirmations]
+# e.g.  send_email = 2      # two yeses before it runs (PC only to approve)
+
+[autonomy.windows_hello]
+# e.g.  send_email = true   # every yes must meet Windows Hello on this PC
 
 [self_modification]
 enabled = true
@@ -2018,7 +2124,7 @@ star_floor = 25        # ...but never fewer than this many
 # control_computer, control_phone, read_web_page and the rest - each for the
 # reasons its own row of backend/README.md gives.
 [tools]
-enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities"]
+enabled = ["web_search", "change_setting", "feature_guide", "phone_apps", "calculator", "memory_search", "my_files", "plugin_list", "plugin_switch", "self_portrait", "conversation_find", "conversation_open", "refresh_abilities", "send_text_message", "approval_policy"]
 
 # ------------------------------------------------------------------------
 # YOUR PHONE'S OWN APPS - which ones Jarvis may open and search in (2026-11-01)
@@ -2309,3 +2415,107 @@ enabled = false
 # The local SearXNG address the F2 item sources ask (127.0.0.1:8888 is the
 # docker-compose host mapping; the container's own port is 8080).
 searxng_url = "http://127.0.0.1:8888"
+
+# CALL RECORDING - "record call" from the Android app (2026-11-04)
+# ------------------------------------------------------------------------
+# The owner's request: record a call, transcribe it, say who spoke, and keep it
+# in a NEW Obsidian note named for the date and time (backend/
+# jarvis_call_notes.py; docs/JARVIS-API.md, "Call recording"; docs/
+# CALL-RECORDING.md for the whole story).
+#
+# THE PHONE RECORDS ON THE SPEAKER PATH, and that is not a shortcut. Android 15
+# does not let an ordinary app capture the call's own audio stream (VOICE_CALL
+# is privileged), so the phone records through its microphone with the call on
+# speaker: the far end is heard through the speaker and the words are less
+# clear than a system recorder would give. Importing a file from the phone's
+# own call recorder is a later addition and is NOT built.
+#
+# THIS SHIPS OFF by the owner's own rule that a new feature is off until they
+# turn it on. Turning it on is a hand edit of the one line below - there is no
+# in-app switch, the same pattern github_search and shell_exec use - and it is
+# then their choice, recorded here.
+#
+# The safeguards are not optional: recording starts only from the owner's own
+# keyword or the phone app's own request, under the `record_call` card (tier
+# "ask" in [autonomy.tiers] above); the phone must say the consent notice was
+# shown ("consent_notice": "on") before a recording can be finished; the audio
+# stays under <config dir>/call-recordings/<session>/ and the words go into ONE
+# new note through the notes editor's own create path (its own edit_vault_note
+# card, File Guardian copy and undo receipt). Nothing leaves this PC. Deleting
+# ONE recording is POST /api/call/recording/delete, PC-only and behind its own
+# delete_call_recording card at tier "ask"; nothing expires on a timer and the
+# 400-recording cap refuses a new start rather than deleting anything
+# (docs/CALL-RECORDING.md section 7 is the retention policy).
+[call_recording]
+enabled = false
+
+# ------------------------------------------------------------------------
+# HANDS-FREE MODE - cards are read out, and a spoken yes or no answers one
+# (2026-11-04; the owner's own request; jarvis_handsfree.py, docs/JARVIS-API.md
+# section 191). OFF is the default and the state of a PC that has never run it.
+#
+# ON changes what an approval needs from then on: every waiting card is read
+# out to the phone, and one word from a short list - yes, yeah, confirm,
+# approve, do it, go ahead, okay / no, nope, deny, cancel, stop, don't - inside
+# a minute of the read-out answers THAT one card, including the cards that would
+# otherwise wait for Windows Hello on this PC. It is the owner's decision of
+# 2026-11-04 ("A voice yes counts for every card"), which supersedes the earlier
+# "never approve-by-voice" rule for this mode only; outside it, nothing changes.
+#
+# The safeguards are not settings: the clip is turned into words ON THIS PC
+# (never by a client), the owner's voice print is checked BEFORE any words are
+# made, no enrolled print means no spoken yes, a closed vocabulary decides
+# (anything else is asked once more and then treated as a refusal), one card
+# gets one decision, and a refusal always works. Turning it on is ONE approval
+# card; turning it off is instant and raises nothing.
+[handsfree]
+enabled = false
+
+# The product check (jarvis_product_check.py, 2026-11-04; the owner's choice
+# "wire the existing product check"). OFF BY DEFAULT, and a missing section
+# reads as OFF - the product-check module reads this line fresh on every turn
+# and every route call, so turning it on is one hand edit and turning it off
+# is immediate. What it does when on: the chat tool `product_check` and the
+# PC-only route POST /api/product/check read ONE Amazon product page in the
+# owner's own signed-in browser window, after ONE approval card, and return
+# the offline engine's reasons report - the sample caveat first, the eight
+# signals with counts and examples, every set-aside review with its reasons,
+# and what could not be checked. It never buys, orders, adds to a cart, signs
+# in, types, solves a CAPTCHA, follows a link, stores the page or checks out,
+# and the report has no trust score and no per-review fake/real verdict.
+# On the first read the visible browser window may need the owner to sign in
+# to Amazon once; that sign-in is kept in the browser profile in Jarvis's
+# config folder, and Jarvis never sees or types the password.
+[product_check]
+enabled = false
+
+# ------------------------------------------------------------------------
+# VOICESTUDIO - a separate voice program on this PC (owner-approved 2026-11-04)
+#
+# OFF by default, and it stays a SEPARATE program: VoiceStudio is AGPL-3.0, so
+# none of its code is in this repository and none of it is imported. Jarvis
+# sends it a sentence over 127.0.0.1:11439 and gets audio back - the clean
+# arrangement in docs/VOICESTUDIO.md, where nothing is conveyed and nothing
+# derived, and no model weights are shipped or fetched.
+#
+# It is off for a MEASURED reason, not caution: on this PC it needs about
+# 1.95 GB of the 8 GB card, and beside Jarvis's own two resident models the box
+# had only 382 MiB free at its peak - the driver paged ~1.9 GB into system RAM.
+# The verdict is CONTENTION, so VoiceStudio is DEMAND-ONLY: started when it is
+# needed (tools\voicestudio_sidecar.ps1 -Start), released when it is done, and
+# never resident beside Jarvis.
+#
+# Turning this on is a hand edit for now: there is no screen and no route in
+# this slice (the same first-slice position [vault_organizer] took above). The
+# read-only questions still answer while it is false - asking is not using -
+# and jarvis_speech.py does not call this module yet, so switching it on alone
+# changes nothing you would hear. The next slice wires the speaking voice, adds
+# the one-card Settings switch, and only then does ON mean "Jarvis may speak
+# with it".
+#
+# The weights are not covered by this switch and are never shipped: two model
+# licences (k2-fsa/OmniVoice, CC-BY-NC; eustlb/higgs-audio-v2-tokenizer) are
+# accepted once by the OWNER in VoiceStudio's own terms, or every speech
+# request answers 403 (docs/VOICESTUDIO.md, "The first run").
+[voicestudio]
+enabled = false

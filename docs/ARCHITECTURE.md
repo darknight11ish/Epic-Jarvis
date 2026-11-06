@@ -384,6 +384,51 @@ permission model rather than a hole in it:
   link chats together. A backend whose gate is too old to write those lines
   refuses to create a grant at all.
 
+**THE OWNER CAN CHANGE WHAT ASKS, BY TALKING - ONE ACTION AND ONE THING AT A
+TIME** (the owner's ask of 2026-11-05: *"i would also like the ability to
+change what gets an approval card through chat, including if something gets a
+double confirmation, or a fingerprint/windows hello"*; `backend/
+jarvis_approval_policy.py`, the `approval_policy` tool, JARVIS-API §188). It
+adds no permission mechanism: it changes the policy the EXISTING card path
+reads, in three independent dimensions per action - whether the action raises
+a card at all (`[autonomy.tiers]`, the one table `jarvis_framework.
+action_tier` and the gate already read), how many yeses it takes
+(`[autonomy.confirmations]`), and whether a yes must also meet Windows Hello
+on the PC (`[autonomy.windows_hello]`). The direction rules are the whole
+safety core:
+
+- **More asking is instant and raises no card** (a card where there was none,
+  a second yes, Windows Hello) - it only makes Jarvis ask more, like every
+  "turn it off" switch in both apps.
+- **Less asking raises ONE card, on the PC, that needs Windows Hello to
+  approve.** The request is refused from any other device before the card
+  exists, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses its approval from
+  any other device too. The card's words say exactly what stops being asked,
+  and name the action in the owner's own words; nothing is written until a
+  person approves.
+- **No bulk form.** One action, one dimension, one call. A second dimension in
+  one body is refused before anything is read or raised, and it is never a
+  plan step.
+- **A cardless action is still not an auto-approval.** The policy only decides
+  whether a card is RAISED; a card that is raised still needs the owner's yes,
+  and the event-stream-stale rule is untouched. Actions whose own module
+  refuses anything but a yes (`jarvis_asks_first.MUST_ASK`, the gate's hard
+  limits) keep their card whatever the settings file says, and the module
+  that changes the card dimension delegates to `jarvis_asks_first.
+  request_tier`, so it inherits that list rather than restating it.
+- **Unknown actions are refused before any card**, in one sentence naming the
+  nearest real actions in the owner's words (and the real names in the tool's
+  own data, so the model can retry exactly).
+- **A second yes is a real second yes**: `jarvis_owner_check.approve_check`
+  runs every check (including Windows Hello) on the first yes and then approves
+  NOTHING - no stamp is taken, so the gate keeps waiting - and only the second
+  yes stamps the approval the gate believes. **Windows Hello is a real check
+  too**: that action is refused from the phone and prompted on the PC on every
+  yes, even when the card would otherwise be a "small" one that skips the
+  prompt. The one-yes/second-yes counter lives in the running process's memory
+  and is lost on restart, which makes the owner confirm twice again - more
+  asking, never less.
+
 **What changed on 2026-09-26** (the approvals audit,
 `docs/APPROVALS-AUDIT-2026-09-26.md`; the owner's four decisions): a plain
 repeating alarm, reminder or standby schedule has no card (the briefing and
@@ -840,10 +885,20 @@ places between screens. Presentation only - no approval logic changed.
   waits on a card hears "I need your OK for that. There's a card on your
   screen.", then "Approved. Carrying on.", "OK, I won't do that." or "That
   card timed out, so nothing was done." - from `: jarvis-status` lines the PC
-  sends (JARVIS-API §4). Fixed words, never the card's. **Never
-  approve-by-voice**: the voice check cannot tell a recording from the owner,
-  so a spoken "yes" answers nothing. For the same reason no sentence says
-  "until you say yes" any more ("until you approve the card").
+  sends (JARVIS-API §4). Fixed words, never the card's.
+- **The old rule on that line - "Never approve-by-voice: the voice check cannot
+  tell a recording from the owner, so a spoken 'yes' answers nothing" - is
+  SUPERSEDED FOR HANDS-FREE MODE ONLY, by the owner on 2026-11-04** ("A voice
+  yes counts for every card"). While the owner has turned hands-free mode on, a
+  spoken yes DOES answer a card, including a risky one - see
+  `docs/JARVIS-API.md` §191 and
+  `decisions.d/2026-11-04-handsfree-voice-approval.md`, which also list the
+  guard rails that make it narrower than that sentence feared: the voice print
+  is checked BEFORE any words are made, no enrolled print means no spoken yes, a
+  closed vocabulary decides, one card gets one decision, and the mode itself
+  takes one approval card to turn on. With the mode off, the old rule is exactly
+  what happens: a spoken "yes" still answers nothing. For the same reason no
+  sentence says "until you say yes" any more ("until you approve the card").
 - **An expired card is dead on every screen, and says one sentence
   (2026-10-28).** The owner's ruling - *"the cards on android should match the
   cards on desktop"* - found that they did not, and that the phone was the one
@@ -1149,6 +1204,12 @@ SAY something false; the card is still the boundary for anything that acts), the
 latch's reach is the card chip, the swipe-lock and the small `auto`/`notify`
 set, and `jarvis_gate.filter_tool_result` still has no caller in this repository
 - the agent calls the same underlying `vet_tool_result`.
+
+**Every tool the AI model can be offered has an in-app switch**
+(`jarvis_asks_first.TOOLS_SWITCHABLE`); the only exceptions are the four names
+in `jarvis_asks_first.NOT_A_SWITCH` - the data sandbox, the product check and
+the two web-search grant tools, each decided by its own switch. **No fourth
+"settings-file only" tool tier may be added.**
 
 ---
 
@@ -2756,6 +2817,29 @@ with its reason, so a gap is never mistaken for an oversight (or an
 oversight for a decision). `tools/check_parity.py` checks the ones that are
 backend routes, in both directions; the rest are listed here only.
 
+- **Call recording is split by hardware, and each half is one-sided on
+  purpose** (2026-11-04; the owner's ask *"record a call if I tell it a keyword
+  'record call' ... transcribe it ... identify the speakers ... store all of it
+  in a new obsidian note labeled with the date and time"*; JARVIS-API §187,
+  `docs/CALL-RECORDING.md`, §15 of this file). Android does not let an ordinary
+  app capture the call's own audio stream, and this PC cannot see the call at
+  all, so the PHONE records through its microphone with the call on speaker and
+  uploads it, and this PC (`backend/jarvis_call_notes.py`) assembles the WAV,
+  transcribes it, labels who spoke and creates ONE new note. **The phone's
+  recorder is its own pull request against the same frozen contract**, and
+  neither lane drove a real call on the owner's Pixel 9, so the speaker path and
+  the words it yields are NOT-TESTABLE until his own field test. The feature
+  ships OFF by default anyway (`[call_recording] enabled = false`), and while it
+  is off the reply and the routes say so in plain words. **The three POST routes
+  are the phone's by necessity** - it holds the microphone, so a PC-only start
+  would make the feature impossible - with the origin+token checks, the ONE
+  `record_call` card and the off-by-default switch as their controls, and the
+  note write keeping the notes editor's own `edit_vault_note` card. **The read
+  route is the PC's**: `GET /api/call/recording` lists the owner's recordings
+  and the note paths they went to, so it refuses any other device
+  (`jarvis_owner_check.from_this_pc`). `tools/check_parity.py` carries the three
+  POSTs as `phone-only` in the phone's own pull request and the GET as
+  `BACKEND_ONLY` here, so no undecided drift is hidden while both land.
 - **A document can be sent from the phone; the phone's screen is the next lane,
   and the desktop deliberately gets none** (2026-11-05; `backend/jarvis_upload.py`,
   `plugins/ready/upload/`, JARVIS-API §188). This slice is the **backend half**
@@ -2832,21 +2916,21 @@ backend routes, in both directions; the rest are listed here only.
   call them; the desktop's own half of the same frozen contract (its own
   setting, its own read of the mode) is another lane's, and the day it calls the
   first of those routes the checker's rule 6 fails by name and it
-  moves to `ported`, which is the right change then. **This phone half lands
-  AHEAD of its PC half, and says so plainly.** None of those routes exists
-  in `main` yet: no module serves one, no `handsfree_card` or `phone_command` is
-  ever sent, and `main`'s `docs/JARVIS-API.md` documents none of them - that
-  record
-  describes what exists, and a route written into it before its code would be
-  the one kind of fiction this project keeps out of that file. So the feature is
-  INERT until the PC half lands: the Settings row shows the contract's own 404
-  sentence ("Hands-free is not available on this PC yet."), Home's status row
-  shows NOTHING for it (the owner's report of 2026-11-05: a short "not on this
-  PC" line there read as if the mode were on), no microphone is opened, and
-  nothing claims a mode that cannot be on. The phone was built
+  moves to `ported`, which is the right change then. **This phone half landed
+  AHEAD of its PC half, and said so plainly.** Those routes are in the tree now,
+  documented at `docs/JARVIS-API.md` §191 (hands-free): the PC half
+  (`jarvis_handsfree.py`) serves all four, sends `handsfree_card` and
+  `phone_command`, and records the phone's `phone_result` receipt - that
+  record describes what exists, and a route written into it before its code
+  would be the one kind of fiction this project keeps out of that file. So the
+  feature is no longer INERT: the switch is read and written on the PC, a
+  waiting card is read out and answered there, the contract's own 404 sentence
+  ("Hands-free is not available on this PC yet.") is no longer shown by any
+  surface, no microphone is opened until a card is read out, and nothing claims
+  a mode that cannot be on. The phone was built
   against the FROZEN contract, whose four shapes are written down in
   `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
-  request owns `JARVIS-API.md` section 186 for them. Nothing else about the
+  request owns `JARVIS-API.md` section 191 for them. Nothing else about the
   feature is one-sided: a card raised for something the owner asked is answered
   on the SAME card either way, `handsfree_card`, `phone_command` and
   `phone_result` ride the
@@ -2915,6 +2999,23 @@ backend routes, in both directions; the rest are listed here only.
   not given a "record the call" control: on the PC it could only record a room
   and confuse that for the call (the PC's own delete of a recording it holds is
   a separate, PC-only route behind its own card).
+- **Your own GitHub is read and acted on by chat, and neither app has a screen
+  for it - one-sided on purpose** (2026-11-03; the owner's decision: *"GitHub
+  tools = Read + actions"*; JARVIS-API §190). The ABILITY is on both apps'
+  chats, because the six model tools (`github_list`, `github_read_file`,
+  `github_ci_status`, `github_comment`, `github_open_issue`,
+  `github_rerun_workflow`) run on this PC and either app's chat is the same
+  turn. What is deliberately one-sided is a screen: neither app lists repos,
+  pull requests or runs, and neither opens a comment box. A repository list, a
+  diff and a comment editor are deep configuration and a second door onto the
+  owner's own code; the chat tool is the door, and the card is the decision. No
+  route was added, so `tools/check_parity.py` is unchanged and clean. What asks
+  first is four gate actions, every one `ask`: `github_inspect` (the three
+  reads - they ask too, because a read still sends the saved GitHub token out)
+  and the three actions. They are NOT the existing `github_read`, which is the
+  scheduled look a "tell me when" watch makes and must stay `auto`; the reason
+  is in JARVIS-API §190.2. Nothing can merge, push, commit, delete or close.
+  `backend/test_github_tools.py` holds the whole of it.
 
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows
@@ -3040,6 +3141,17 @@ backend routes, in both directions; the rest are listed here only.
   editor, so a phone toggle for `/api/skills/state` is the one piece of this
   that could reasonably go on both apps next - `install` and `edit` should
   not, for the reasons above.
+- **A turned-off skill can be removed on the PC only, and the phone must not
+  remove one** (2026-11-05; JARVIS-API §178). The copy the PC's menu parks in
+  `skills-off\` is deleted by `POST /api/skills/state {"remove": true}` - the
+  Settings card's own Remove on a turned-off row - because
+  `jarvis_skills.uninstall()` resolves a name only under the skills folder, so
+  that copy was beyond every removal door in either app. The phone gains no
+  door to it: its list never shows the skill, and there is deliberately no
+  route that would let a client delete a folder it cannot see. The phone's
+  Remove stays exactly what it always was - ONE installed skill, after its
+  "are you sure?" - so what is one-sided here is the delete of a parked copy,
+  not removal itself.
 - **The phone's mic press does not check the voice print, and the desktop's
   talk button still does - one-sided on purpose** (2026-11-02; the owner's
   words: *"when i do the mic press to make a short verbal message to jarvis,
@@ -3985,6 +4097,7 @@ are deliberate and recorded rather than left to be discovered:
 | "Jarvis is working on your screen, 0:42 - Stop" on the widget (`screen_work.rs`, `screen-work.js`, `GET /api/task`; the owner's choice of 2026-09-28, the research audit's idea 17) | Written with the feature. It is about the PC's own screen, seen by whoever sits at the PC while Jarvis moves its mouse and types there. Its Stop is the "Stop everything" key; the phone already has the same stop as Home's "Stop everything" button, and the task Pause/Stop, shown whenever Jarvis is busy. |
 | Signing in to a chatbot's account for "Talk to a chatbot for me" (the spare Google account Jarvis uses for Gemini; `docs/CHATBOT-DRIVER-DESIGN.md`, JARVIS-API §87) | Written with the feature's screens, 2026-09-28. The chatbot is driven in a visible browser window ON THE PC, in a browser profile used only for this, so the sign-in happens there, by the owner's own hands - and when Gemini asks to sign in again mid-conversation, the conversation pauses and asks the owner to do it in that window, then press Resume. Neither app ever carries the account's password; there is no route for one. Everything else about a conversation - starting one (one approval card), watching it, Pause, Resume, Stop, new limits, the summary - is on both apps (`/api/chatbot/*`, `ported` in `tools/check_parity.py`). The words both apps show come from the PC's `jarvis_chatbot_routes.WORDS`, through one contract file. |
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
+| The VoiceStudio sidecar (`backend/jarvis_voicestudio.py`, `tools/voicestudio_sidecar.ps1`; 2026-11-04) | **The program is the PC's alone, and that is one-sided on purpose.** VoiceStudio is a separate AGPL-3.0 program the owner installs and runs on this PC, outside this repository; Jarvis only has a socket to it at `127.0.0.1:11439`, and none of its code, binary or weights is in this tree (docs/VOICESTUDIO.md section 1). There is no phone version and no phone switch: a phone that could start a program on the PC would be a new power, and the measured verdict is CONTENTION - about 1.95 GB of the 8 GB card, 382 MiB free at the peak beside Jarvis's own models, ~1.9 GB paged to system RAM - so it is demand-only, serialised and never resident beside them. Nothing is wired to the speaking voice yet and this slice adds no route; the Settings switch, its one card and the voice wiring are the next slice. |
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (the phone's Brain, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
 | The animal on the floating face: its sleeping Zs, "Keep the animal still", the serious pose (2026-09-28) and the sun, moon and weather behind it (2026-09-28) | Written with the features. The desktop's floating face draws the real animal (`faces.html` in display mode), so it gets all three, like every other desktop face. The phone's "Floating Jarvis" is the app's own icon with a status dot (`AvatarOverlayService.kt`), not the animal - there is no animal there to sleep, keep still or go serious, or to put a sky behind. On the phone the Zs and Still reach every place the animal is drawn (Home and the Appearance preview), and the serious pose reaches Home (the preview shows the state being edited, not what Jarvis is doing). The same holds for the animal behaviour switches of "Animal options" (2026-09-28; shared by both apps, `/api/animal`): they reach wherever each app draws the animal, which on the phone is not "Floating Jarvis". |
@@ -4004,7 +4117,7 @@ are deliberate and recorded rather than left to be discovered:
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | The voice upgrades' bake-off (`backend/jarvis_bakeoff.py`, 2026-09-26) | Written with it. It is a program the owner runs on the PC, not an app screen: it measures the PC's own voice engines, the PC's graphics-card memory and the room through the PC's microphone. Its verdict decides a later change that reaches both apps (the phone's wake-word file, the engine name both apps show). |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
-| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 48 switches, the vault organizer and the three tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
+| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 56 switches, the vault organizer and the four tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
 | "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
 | A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
 | "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |
@@ -4042,6 +4155,7 @@ are deliberate and recorded rather than left to be discovered:
 | Topic controls: Brain -> Memory -> Topics (**2026-09-30**, JARVIS-API §107) | **Both apps get the rows, the four-choice picker, the "Check these" list, Show them, and add / rename / delete.** **One-sided on purpose:** (a) **editing a topic's keywords is the PC's** (typing a long list of words is deep configuration; the phone shows the count only); (b) **the Galaxy's editable map is the desktop's alone** (standing rule: no editable memory graph on the phone; since 2026-10-26 the phone draws a read-only picture of at most 48 names, with no edit), and it hides people linked only to an Off topic's facts; (c) **the fact words in the check list and in "Show them" are a memory list on both apps**: hidden under "Hide memory lists and chat history" and App lock, and topic **names** are hidden there too (rows read "Topic 1, 41 facts, mode"); (d) **turning a private topic back on is decided by tapping the card on either device** (tier ask; no Windows Hello - nothing leaves the PC), and every change is held on a stale link. |
 | Chatbot money limits: the Raise control, the "Remove the limit" button and the price boxes (`POST /api/chatbot/money`; JARVIS-API §122) | **The READ is on both apps now; the WRITE is the desktop's alone for this step (2026-10-12).** The backend answers a paired phone as well as this PC (`jarvis_chatbot_limits.py`: a raise from a phone raises the same card and is answered with that phone's own fingerprint or PIN; a lowering, a removal and a price correction need no card and may come from either app), and the phone draws the whole page in the PC's own words - every service's limit, what is spent, what is left, its price with `yours`/`default` and the UNVERIFIED mark, and its answer-length cap (`net/Money.kt`, `ui/screens/MoneyPlate.kt`, Brain -> Money and time). What the phone does NOT have yet is the control: it sends no body to this route at all, so `Chatbot.WRITE_PATHS` gains no entry until the caller that uses one exists (CLAUDE.md, "a `WRITE_PATHS` entry must ship with its caller or not at all"), and the plate says plainly that changing a limit from the phone is not built yet. The API key itself stays the PC's on both apps, which is what the PC's own `pc_only` sentence says. `tools/check_parity.py`'s entry is `ported` - it names the read half and says the write half is still to come. |
 | Which picture reader reads the words in a picture: Windows' own text recognition (the default) or RapidOCR (`jarvis_ocr.py`, 2026-10-13) | **The READ is on both apps; the CHOICE is the PC's alone.** `GET /api/second-card`'s `picture_text.engine` already names the reader in use and whether it works, and both apps read that route before a picture is sent - so the Hardware screen says which one answered, in words, on the phone too. What the phone does not have is the switch, and that is deliberate for the same reason as the speech-detector row above ("invisible upgrades get no switch"): the setting is a file on the PC, chosen by measurement, and **nobody can judge which picture reader is better by looking at a phone**. It is not a permission and not a loosening - both readers run locally and neither sends anything anywhere, so there is no card to approve and nothing an approval would decide (`jarvis_ocr.reader()`/`set_reader()`; `py -3 jarvis_ocr.py reader`). There is no new route, so `tools/check_parity.py` has nothing new to classify, and this row is here so the gap is not mistaken for an oversight. **The reader is OFF by default and is not measured as better** - `docs/MEASURED-2026-10-13-ocr-two-readers.md` has what the comparison actually said. |
+| Hands-free mode: which surface SPEAKS a card, and which surface draws the switch (2026-11-04; `backend/jarvis_handsfree.py`, `plugins/ready/handsfree`, JARVIS-API §191) | **The PC emits, the phone speaks - one backend switch, two drawing surfaces.** The PC publishes `handsfree_card` (the card's own notice words) and the phone says `say` out loud, shows the card and records the clip the owner answers with, because the owner is in hands-free mode away from the screen, and a second voice on the PC would race the PC's own answer (`/api/voice/say`) rather than help. So the desktop does NOT speak a read-out; it keeps the card on screen and answers it by tap. The switch itself is drawn by each app's own Settings (`handsfree-settings.js` on the PC; the phone's own row), both posting the same `POST /api/handsfree` - the same two-file pattern every local switch uses, not a second permission path. **The phone half is the Android lane's own PR against the frozen contract in JARVIS-API §191; it is not on this tree yet**, so until it lands `tools/check_parity.py` records these routes and event kinds as called by neither app, and this row is the reason they are not a code gap. Nothing here is a control that only one app may have: the phone may turn the mode on and off like the PC, and a spoken yes from the phone is the same one decision the PC's own route makes. |
 | Personality presets, the four tuning dials and "My personalities" (Settings -> How Jarvis talks, 2026-10-23, Personality Presets Slice 2a; a ninth preset, Patient Advocate, added 2026-10-24; a tenth, Reflective Coach, added 2026-10-27) | **The LIST and the CHOICE are on both apps; the EDITOR stays the desktop's (2026-10-28).** Until that day this row said "Desktop first, one-sided on purpose for now": the phone's Mind screen offered only the older Warm/Plain choice while the PC had ten presets, so it marked "Plain" as in use whenever the PC was on any preset but Warm Collaborator (`manner` is derived on the PC, `jarvis_manner.current()`) - a screen naming a preset Jarvis was not in, the same class of bug as the voice that disagreed with every screen showing it. The owner asked for consistency; now **both apps draw the PC's own `GET /api/manner` `personalities` array** - the same ids, titles, descriptions and order - mark the PC's `personality` and nothing else, and switch with the same one field (`{"personality": "<id>"}`). The desktop's local copy in `personalities.js` is only the older-PC fallback, held word-for-word to `contract/personalities.json` by `tests/personalities.mjs`. The PC rings one `manner` event, and the phone re-reads the same GET on it (`JarvisRuntime.mannerTick`), so neither screen keeps a stale copy. **What is still deliberately one-sided, and why:** the four tuning DIALS, the "My personalities" save/delete form and Hear Sample are the Windows Settings window's (`manner-settings.js`) - writing a personality by hand is deep configuration, the phone has no text-heavy editor for it, and the dials are where a preset's character is actually tuned rather than chosen. The phone says so in one line on the same card (`Manner.DIALS_ON_PC`) instead of drawing a second, weaker humour control that could disagree with the PC's own - the desktop hides its own legacy humour switch for the same reason (`paintPersona()`, `mn.humorTitle.hidden = pc`). The data still rides on the EXISTING `/api/manner` read and its one-field writes (`personality`, `dials`, `voice_sync`, `custom:{op}`); no route was added, so `tools/check_parity.py` has nothing to classify. **Hear Sample today plays the preset's base voice only** - the PC's `/api/voice/voices/sample` accepts `{"voice"}` and nothing else, so the blended-voice preview waits for the Kokoro/Live voice slice; the page says so under the grid. **The chat co-creation path added 2026-10-25 is on BOTH apps**, and that is not a reversal of any panel decision: `jarvis_personality_creator.py` is called from `jarvis_quick.py`'s fast path on the PC, so "make me a personality ..." is read out of the EXISTING chat request and answered on the PC - no route, no client change, and the phone gets it through the chat box it already has (JARVIS-API §27.7.1). |
 
 | **"Update both halves"** — one button that patches the Python backend and then installs the signed Jarvis Desktop release (`update.rs`'s `update_both`, `backend_update.rs`, `backend_update_status`/`set_update_folders`, and the repo tool `tools/update_backend.py`; the owner's own request, made directly, 2026-10-13; three paces and a real progress bar added 2026-10-17) | Written with the feature. **On the PC it is behind App lock when that is on** (DEF-045, 2026-11-04): `update::install_from_tray` asks Windows Hello before either half starts, so a right-click at a locked PC starts nothing and says so. **A phone cannot patch a PC's backend.** The patch program (`scripts/apply-patches.ps1`), the repository it lives in, and the Python folder it writes into are all on the PC, and the work is `git apply`, then `pip`, then the test suites - none of which a phone can run, and none of which should sit behind a pairing token that can be used from anywhere on the private network. So there is deliberately **no route**: the phone is not offered a control that cannot work, and `tools/check_parity.py` has nothing to classify because nothing was added to the API. What the phone already does about a version gap stays as it was and is truthful: every route a newer backend grew answers 404 to an older app, and each app says so in the PC's own words (`jarvis-client`'s "Update the backend by running apply-patches.ps1"). The desktop's own half of this - the signed release check - is the desktop's alone for the same reason `install_update` is: it replaces the executable on the PC, which is a thing only the PC has. **The three paces are the same one-sided decision** (2026-10-17): `max_speed`, `responsive` (the default and the recommended one) and `safe` choose how many of the SAME suites `backend/run_suites.py` runs at once while the backend half is updated - 22, 14 and 1 workers on this PC's 24 threads. They are worked out by `tools/update_backend.py --modes-json`, read by `backend_update_status` and shown as a choice when "Update everything" is pressed; an unknown pace is refused before anything runs. There is no phone equivalent because there is no phone half of this feature at all, and the progress bar is painted only from the tool's own `JARVIS-EVENT` rows (`update_progress.rs` -> `backend-update-progress`): its fraction is completed work, never a timer, and on a fallback the bar starts a labelled second (safe) pass rather than pretending the first one is still going. |
@@ -4614,6 +4728,8 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 **Habit check-ins and the mood log are backend only today, on BOTH apps, and that is a lane boundary rather than a platform decision** (2026-11-02; the owner's life-coach set, JARVIS-API §180; `backend/jarvis_habits.py` and `backend/jarvis_mood.py`, installed by the drop-in folders `plugins/ready/habits` and `plugins/ready/mood`; the two decisions are `decisions.d/2026-11-02-mood-log-recorded.md` and `decisions.d/2026-11-02-habit-mood-never-learned.md`). The routes are built, documented and classified backend-only in `tools/check_parity.py`: `GET`/`POST /api/habits` with tick/untick/stop, the weekly review and its on/off, and `GET`/`POST /api/mood`. **Neither app has a screen for either feature** - no habit row, no tick control, no 1-5 mood plate and no chart - so this is one gap on both sides at once, not one app missing what the other has. The UI half is the next lane, and when it is built it goes on BOTH apps on these same routes and stores: the phone's Reminders screen beside Reminders / Daily to-do / Goals, and the PC's equivalent (the owner's placement decision D3). Already decided and not the UI lane's to re-decide: no score, streak, percentage or praise anywhere; the mood chart is a picture of the owner's own taps and never a judgement; a tick and a mood entry raise no card; and neither store's data is ever learned, by construction rather than by a card (`backend/test_learning_exclusion.py`).
 
+**The product check's browser read is the PC's, and that is one-sided on purpose** (2026-11-04; the owner's choice *"Wire the existing product check into Jarvis"*, JARVIS-API §192; `backend/jarvis_product_check.py`, installed by the drop-in folder `plugins/ready/product-check`; the route is named in `tools/check_parity.py`'s `BACKEND_ONLY` with this reason). The check opens ONE Amazon product page in the owner's own VISIBLE, SIGNED-IN Chromium - the window and the persistent browser profile live on this PC - and the card that authorises it is in `jarvis_owner_check.PC_ONLY_ACTIONS`: only this PC may approve it, with Windows Hello, and the phone's copy of that set draws no Approve button. The `POST /api/product/check` route refuses a caller over the mesh with `403 pc_only` before the body is read. **The report has no phone screen, and neither app has a report screen yet**: the chat answer is the surface that works today (code-written, caveat first, counts and every set-aside reason), and a desktop report screen is the named follow-up - it would be DESKTOP-ONLY for the same reason, so it is not a parity miss. What is NOT one-sided is the reading: a model turn started from either app runs on this PC, but the CARD is only shown to this PC's owner, so in practice the check is asked for and read at the PC.
+
 **The watchers' decision log is read on the PC today, and neither app draws it - one-sided on purpose for now** (2026-11-04; the owner-forwarded dsh-superagent spec, Part II pattern 1; JARVIS-API §186.2; `backend/jarvis_watch_ci.py`, installed by `plugins/ready/watch-decisions/`). `GET /api/watch/decisions?limit=50` is the read that makes `observe` mode worth having: what the GitHub watcher would have said, with a closed reason code and the exact preview line, so the owner can promote it to `active` on evidence rather than on hope. **Neither app has a screen for it yet**, and `tools/check_parity.py` classifies the route `BACKEND_ONLY` with that reason rather than leaving it undecided. This is a deliberate desk-first order, not a platform decision: the arithmetic ("is this watcher quiet enough to speak?") is done at the PC, and a notification about noise is not something to interrupt the phone with. When a screen is built it goes on BOTH apps on this same module and the same store - a Work-pane row in the desktop's Work plate and the phone's Work/journal screen - and at that point the route moves out of `BACKEND_ONLY`. Nothing on this route writes, approves, pushes or merges; it is a read of rows another module already wrote.
 
 - **The superseded work setups' one write stays on the phone, and there is no
@@ -4634,6 +4750,74 @@ what is missing is only the Settings screen agreeing about who turned it off.
   place (2026-10-19) - so it is the superseded contract's compatibility path,
   not a live screen on either side. Written here rather than left as a parity
   warning, because a warning is not a reason.
+
+- **Changing what asks is chat-only, and there is no new patch on the owner's
+  file** (2026-11-05; the owner's ask; `backend/jarvis_approval_policy.py`,
+  `approval_policy` in `backend/jarvis_agent.py`; JARVIS-API §188). Neither app
+  gets a write control for the three dimensions: both apps draw the read-only
+  note under an existing "What asks first" row (the row's own `note` field, so
+  no client changed), and the change itself is a spoken or typed sentence in
+  chat. That is one-sided on purpose, and in the safe direction: a control on
+  the phone for "stop asking" would put a loosening one tap away on the device
+  that cannot meet the PC's Windows Hello check. **Why there is no
+  `backend/*.patch` for it:** the one place every real approval already passes
+  through is `jarvis_owner_check.approve_check`, a SHIPPED module that
+  `owner-check.patch` already installs around `POST /api/approve`; the gate
+  believes no "approved" that module did not stamp. Adding the second yes and
+  the Windows Hello requirement THERE (the module reads the same settings file
+  the page reads) enforces both without touching the owner's `jarvis_gate.py`
+  at all - so this feature needs no patch, no `build_patch_history` run and no
+  patch-stack round trip, and it cannot be half-applied: the module that reads
+  the policy and the module that enforces it ship together.
+  **Why a two-yes card is approved on the PC only:** the phone's approval is
+  one tap plus a one-use signed challenge, so a second yes cannot be carried
+  without a client change; refusing it there with the existing "answer it on
+  the PC" words is the honest limit, recorded rather than implied. **And there
+  is no model-free fast-path grammar** for these sentences (unlike "connect my
+  calendar"): a regex over "stop asking" is exactly how a sentence gets
+  misread into a loosening, and every loosening already needs the owner's own
+  card plus Windows Hello on the PC - so the gap is convenience, not safety.
+  `tools/check_parity.py` has nothing new to classify: this adds no route, and
+  both apps' existing page shows the new lines.
+
+- **The repository map is a read the MODEL uses, and no app screen is added yet -
+  one-sided on purpose for now** (2026-11-05; the owner's approved design and
+  Gemini's ruling: a read-only repo map FIRST, before project-scoped chat and
+  staged diffs; JARVIS-API §195; `backend/jarvis_repomap.py`, shipped whole;
+  `GET /api/projects/{id}/map` and the existing `my_files` action `map`).
+  `tools/check_parity.py` classifies the route **`BACKEND_ONLY`** with that
+  reason rather than leaving it undecided - and deliberately NOT `deliberate`,
+  which in that file means "the PC calls it and the phone must not": neither app
+  calls this yet, which is exactly the `BACKEND_ONLY` case (the watchers'
+  decision log is classified the same way). **Why neither app draws it:** a map
+  is a table of contents for the local model, not a picture for a person - the
+  owner's own reading path is chat ("map this project", "where is the route
+  registered"), and a person looking at a repository wants a tree they can
+  click, which is a different screen from a token budget. Drawing the model's
+  ranked block in an app would show a list sorted by a formula nobody on the
+  screen can audit, and the phone has no PC folder to walk anyway. **What is NOT
+  one-sided:** the read itself is allowed from either app by the backend - it is
+  a project route like `/api/projects/{id}/facts`, carries no `pc_only`
+  refusal, and the moment an app builds a screen it calls the same route and the
+  same store. The map writes nothing (no index, no cache), adds no gate action
+  and no card (a read, under the existing `read_files_readonly` line), runs no
+  model, opens no socket, and lists names and signatures only - never a
+  function's body. `project_edit` (a code-writing tool) remains unbuilt.
+
+**A spoken answer is not a screen, so the Live read-aloud fix adds nothing one-sided** (2026-11-05; the owner's report, `docs/LIVE-DESIGN.md` §3.6; `backend/jarvis_live.py`'s `MODEL_NOTE` and `backend/jarvis_manner.py`'s `post_history_hint`). Both apps already receive the same `/api/chat` reply and speak it with their own voice - the change is the model instruction for a Live turn, composed on the PC and never sent to either app as a field. No route, no card, no setting, no screen and no client code changed, so there is nothing for this section to declare one-sided: `tools/check_parity.py` has nothing new to classify.
+
+- **Live's "Starting microphone & voice..." is read by the desktop today, and
+  the phone shows the session it already has** (2026-11-05; `starting` and
+  `starting_words` on `GET /api/voice/live`, JARVIS-API §63.1; §15 above).
+  Neither app is missing a screen: the two keys describe a wait that exists
+  because the PC warms STT, the VAD, CAM++ and TTS behind an already-open
+  microphone. The desktop's microphone is that PC's, so its bar and badge show
+  the line and its watcher says "I'm listening." when the warm clears. The
+  phone's microphone is its own, its clips are checked by the PC's engines on
+  arrival, and a phone session has nothing to wait for - so `LiveRules.kt` and
+  the Live screen read neither key, and `tools/check_parity.py` has no route
+  to decide here (both keys ride the route both apps already call). An older
+  app of either kind simply ignores them, which the status shape allows.
 
 ## 9. Where the backend lives
 
@@ -5671,6 +5855,66 @@ marker, because 42 of the catalogue's 175 feature titles open with a tool's own
 words. JARVIS-API §185 is the wire shape; the decision is
 `decisions.d/2026-11-04-capability-talk.md`.
 
+### 13.10 The product check: one PC-only door, evidence instead of a score
+
+**Added 2026-11-04** (the owner's choice *"Wire the existing product check into
+Jarvis"*; JARVIS-API §192; `backend/jarvis_product_check.py`). Three modules had
+shipped and nothing imported them: the offline engine
+(`jarvis_product_research.py`, eight deterministic signals and a validator for
+the local model's quotes), the read half (`jarvis_product_read.py`, one
+Amazon product page's HTML to review records) and the capture seam
+(`jarvis_product_capture.py`, four page states and a driver it never fetches
+with). This section is how the door is built, and it follows §3's one
+permission model rather than inventing a second one.
+
+**The permission shape.** ONE model tool, `product_check`, and ONE route,
+`POST /api/product/check`, raise the SAME one card under the action
+`product_check`, tier `ask` in both shipped `[autonomy.tiers]` copies. The tool
+is in `jarvis_agent.NEEDS_A_PERSON`, so a settings file that loosened the tier
+still cannot run it with nobody asked. The action is in
+`jarvis_owner_check.PC_ONLY_ACTIONS`, so only this PC may approve it and only
+with Windows Hello; the phone's copy of that set refuses it and draws no
+Approve button. Both apps hold Approve on a stale event stream like every card
+(rule 4). The route is PC-only for the same reason and refuses a mesh caller
+before the body is read. Turning the feature on is **not** a card: it is one
+hand edit of `[product_check] enabled`, off by default in both shipped copies,
+missing-reads-as-off; while it is off the tool is not even offered to the model.
+
+**The read is a read.** The card names the page and says read-only, and only
+after the yes does the capture driver open ONE page in the owner's own visible,
+signed-in Chromium through `jarvis_browser_control.read_page_html(session,
+url)` - the browser module's public read-only seam (§4's egress boundary
+applies to that request: the site sees this PC's address and the request cannot
+be taken back). The seam does one navigation and one read of the loaded
+document, with downloads refused and every dialog dismissed, and the profile is
+persistent so a sign-in the owner completed once survives a restart. There is
+no click, no typing, no form, no second page, no CAPTCHA solved and no retry
+against a challenge; a cart/checkout/order/account/payment/sign-in address is
+refused by its shape before the card is even raised. The page's words are
+outside text (§3's tool loop): never learned, never acted on, and nothing about
+the page is written to disk.
+
+**Evidence, never a verdict.** The report is the engine's own: the sample
+caveat first, the eight signals with counts, thresholds and examples, every
+set-aside review with every reason, what could not be checked, and a small
+named-rule verdict with what would change it. There is **no trust score and no
+per-review fake/real label**, and there is no field where one could be put:
+people and LLMs are at chance telling AI-written reviews from real ones
+(`docs/DESIGN-PRODUCT-RESEARCH.md`), so a number would be false precision. The
+chat answer is written by code (`jarvis_product_check.chat_answer`) and
+delivered in place of the model's own words (`deliver_product_report`), so the
+model cannot add a score or a verdict; the engine ignores any score or verdict
+a model output carries.
+
+**What is not built, and is named rather than implied.** No app screen draws
+the report yet - the chat answer is the surface that works - and a desktop
+report screen is the follow-up. The route is therefore classified backend-only
+in `tools/check_parity.py`, with the phone omission recorded in §8. No real
+Amazon page has been parsed by a test, no test drives a real browser, and no
+one-time Amazon sign-in has been exercised: those are field tests on the
+owner's PC, and `backend/test_product_check_wiring.py` says so in its own
+words rather than implying a live proof.
+
 ## 14. Watchers, the attention budget, and what a restart owes (added 2026-11-04)
 
 The owner's decision of 2026-11-04 adopted four patterns from
@@ -5750,3 +5994,254 @@ shapes.
   yet; §8, "One-sided on purpose", says why and where a screen would go. The
   tests are `backend/test_watch_ci.py` and `backend/test_outbox.py` (plain
   Python, fake clock, fake `gh`, temp files: no network, no model).
+
+## 15. Recording a phone call, and what makes it honest (added 2026-11-04)
+
+The owner asked for one keyword: *"record a call if I tell it a keyword 'record
+call' where it will record all the audio, transcribe it, put a date and identify
+the speakers in the transcription, and store all of it in a new obsidian note
+labeled with the date and time"*. The whole story is
+`docs/CALL-RECORDING.md`; the wire contract is JARVIS-API §188. This section is
+the part that belongs in the architecture: **which half runs where, and what
+this PC refuses to guess.**
+
+### 15.1 The split, and why it is not a choice
+
+**The call happens on the owner's phone, and his primary phone is a Google
+Pixel 9; this PC can neither see nor hear it.** **Android does not let an
+ordinary app capture the call's own audio stream**: `MediaRecorder.AudioSource
+.VOICE_CALL` is privileged; a normal app gets silence or a `SecurityException`.
+So:
+
+- **the phone** records through its microphone with the call on speaker (the
+  "speaker path") and uploads 16 kHz mono s16le PCM in order;
+- **this PC** (`backend/jarvis_call_notes.py`, routes from
+  `plugins/ready/call-notes`) assembles the WAV, transcribes it with the
+  **existing** local reader, labels who spoke, and creates ONE new note.
+
+The speaker path is a real quality cost - the far end is heard through the
+speaker - and it is stated in the note's own body, in the docs and on the card.
+**No real call was driven on the Pixel by either lane** (it was not attached),
+so how that path really sounds, and how good the words are afterwards, are
+NOT-TESTABLE until the owner's own field test; nothing here claims a
+system-recorder result. Importing a file from the phone's own call recorder,
+where one exists, is a later addition and is **not built**.
+
+### 15.2 The permission model: the repo's own, unchanged
+
+- **Off by default.** `[call_recording] enabled = false`; a missing table is off
+  too. Turning it on is a hand edit of that one line - no in-app switch - the
+  same pattern `github_search` and `shell_exec` use. This is the rule that a
+  feature ships off until the owner turns it on, applied literally.
+- **ONE card.** The start route asks the approval gate under **`record_call`**,
+  shipped at tier `ask` in `[autonomy.tiers]`. The owner-initiated note actions
+  (`append_obsidian_daily`, `append_logseq_journal`) ship `auto`, but this one
+  starts capturing **other people's** speech, so it asks until the owner
+  deliberately loosens it. **No audio is kept while the card waits**: the
+  session's folder, its `receipt.json` and an empty `audio.pcm` are made before
+  the card (so a crash between the phone's first chunk and the approval cannot
+  lose it), and not one audio byte is written until it is approved.
+- **The note keeps the editor's own card.** The note is created through
+  `jarvis_notes_edit.handle_create()` with `after_outside_text` provenance, so
+  the ONE `edit_vault_note` card, the File Guardian copy and the undo receipt
+  are the ones the editor already raises. The transcript is other people's
+  words; it is never treated as an owner-typed write.
+- **Consent.** The phone must send `consent_notice: "on"` to finish, and the
+  reminder is on the card, in the reply, in the note's frontmatter and as a
+  visible line in the note's body.
+- **The three POST routes are the phone's by necessity; the read route is
+  PC-only.** The device that holds the microphone is the phone, so a PC-only
+  start would make the feature impossible; their controls are the origin+token
+  checks, the `record_call` card and the off-by-default switch. `GET
+  /api/call/recording` lists the owner's recordings and where each note went, so
+  it refuses any device but this PC through `jarvis_owner_check.from_this_pc` -
+  the same rule `jarvis_media_index` applies to its own POST.
+- **Everything stays on this PC.** Under `<config dir>/call-recordings/<session>/`:
+  `audio.pcm`, `audio.wav`, `receipt.json` and `transcript.md`. The module
+  imports no HTTP client and opens no socket.
+- **Deleting is its own card, and nothing expires by itself.**
+  `POST /api/call/recording/delete` removes ONE recording's folder (the audio,
+  the transcript and the receipt that is the list's row) behind ONE
+  `delete_call_recording` card at tier `ask`, PC-only, with no bulk form; the
+  Obsidian note is the notes editor's document and stays. Recordings and
+  transcripts are kept until the owner deletes them - there is no timer that
+  throws a recording away - and the 400-recording cap REFUSES a new start
+  rather than deleting anything. `docs/CALL-RECORDING.md` §7 is the retention
+  policy.
+
+### 15.3 Reuse, never a second engine
+
+- **Speech-to-text:** `jarvis_media_read.read_media()` - the existing
+  sherpa-onnx Parakeet TDT model in `jarvis_speech._transcribe()` (English only,
+  segment-level start/end already in its result). Its 10-minute ceiling is
+  handled by cutting the assembled WAV into **9-minute parts of the same file**
+  and shifting each part's times by its offset. No new model, no download.
+- **The owner's voice:** `jarvis_voice.find_profile()` / `load_profile()` and
+  the embedder the print was made with - `EcapaEmbedder` (`model.onnx`) or, when
+  the print says `strong`, `StrongEmbedder` (`strong.onnx`), both already under
+  `<config dir>/voice-models/speaker/` - compared with `jarvis_voice.cosine()`.
+  Choosing the wrong one would score 0 against every line and label the owner's
+  own voice "Speaker"; the voice modules are **imported, never edited**.
+- **The note:** the notes editor's own create path (14.2), never a hand-rolled
+  vault write.
+- **The audio:** the standard library's `wave`, so no new dependency and no
+  ffmpeg.
+
+### 15.4 Speaker labels: match, then cluster, then refuse to guess
+
+1. The owner's enrolled print first, using the print's **own** threshold
+   (clamped up to `jarvis_voice.MIN_THRESHOLD`) - at or above it, the line is
+   **You**.
+2. Every other line joins the cluster it is at least
+   `SPEAKER_MERGE_SIMILARITY` (0.55) similar to, else starts one, up to six; a
+   merge pass repeats until nothing merges. Clusters are numbered in the order
+   they first speak.
+3. A line shorter than 0.6 s, or one whose embedding is empty, carries the
+   previous line's label; it never invents a name.
+4. **No speaker model, or no trained print: every line says "Speaker"**, and the
+   note records which was missing. A guessed name on a transcript of other
+   people is worse than no name, so the degrade is the honest one.
+
+A segment is the reader's own **~10-second window**; two people talking inside
+one window get one label. That is the reader's granularity and it is in the docs.
+
+### 15.5 What is stated but not done
+
+- The **Android half** is its own pull request, written against JARVIS-API
+  §186; neither lane drove a real call on the owner's Pixel 9, so the speaker
+  path and the words it yields are NOT-TESTABLE until his field test.
+- The gate's `_RISK` table **has** a row for `record_call` (added 2026-11-05,
+  `("yes", "local", ...)`), so its card says what the action really is: a
+  recording made on this PC that never leaves it and can be deleted again.
+  Before that row the card printed the generic "unclassified action - treated
+  as permanent and able to leave this PC", whose second half was wrong here.
+- English only, ten-second segments, no import of the phone's own recorder.
+  (The delete route and the retention policy this bullet used to call missing
+  are in §15.2 and `docs/CALL-RECORDING.md` §7.)
+- **NOT-TESTABLE, not passed:** no real phone recording, no real transcription
+  run, no real speaker model run, no real vault write and no real approval card
+  were driven here. `backend/test_call_notes.py` drives fake readers, fake
+  embedders, fake prints and a fake note creator.
+
+## 16. Jarvis Live's session latch, and the cheap half of the owner check it may not skip (added 2026-11-05)
+
+Jarvis Live has TWO owner checks, and they answer different questions:
+
+- **the strict check** (`jarvis_voice.verify`, with its thresholds, cohort and
+  per-condition bars) answers "is this the owner, well enough to be told what
+  Jarvis remembers?" - it is what a private answer needs before it may be read
+  aloud, and it is the one that ends a session's trust when it fails;
+- **the cheap check** (one CAM++ embedding and one `jarvis_voice.cosine`
+  against the enrolled print's centroid, about 15 ms, nothing written and
+  nothing kept) answers only "is this voice even a candidate?".
+
+The 2026-11-01 ruling ("once I actively verify my voice in a single Jarvis
+Live session, Jarvis shouldn't need to re-verify my voice") was implemented as
+an exemption from BOTH, and that is what the owner's 2026-11-05 report found:
+with `trust_active` set, `jarvis_live.trust_decision` answered "trusted" for
+every clip in the 1.5-2.0 s band and `jarvis_speech.hear` built a
+`_SessionTrusted` verdict that runs no speaker model at all, so a radio, a
+television or a call in the room was transcribed and answered as the owner.
+The same hole is wider for a session whose trigger needed no check
+(`jarvis_live.voice_check_needed` false - the phone started unlocked with the
+setting ON): there, every clip of every length is "trusted".
+
+The rule now, and the one the next change must not undo:
+
+- **The latch stays.** One verified sentence still covers the session, the
+  owner is never asked to re-enrol mid-session, and `TRUST_SESSION_S` (2 h)
+  still bounds it. A failed check, a re-enrolled print and a different device
+  still void it.
+- **The latch never skips the cheap check.** In a latched session, a clip
+  with `jarvis_live.RADIO_GUARD_S` (1.2 s) of speech or more is compared with
+  the enrolled print; under `RADIO_MIN_COSINE` (0.25 when the clip carried
+  "hey Jarvis" or arrived inside the follow-up window) or
+  `RADIO_MIN_COSINE_NO_WAKE` (0.32 when nothing in it was addressed to
+  Jarvis) it is **background audio**: dropped in silence, never transcribed,
+  never sent to the model, and nothing is said about it. The rule's own shape
+  is `jarvis_live.IGNORED_BACKGROUND` (`ok`, `ignored_unmatched_speaker`,
+  `reason: "background_media_rejected"`). On the existing utterance wire the
+  same clip answers `ok` **false** - `Heard.as_dict()` defines `ok` as "a
+  transcript was produced", and none was - with `owner` false,
+  `ignored_unmatched_speaker` true and that same `reason`. `ok: true` is
+  deliberately NOT sent: both clients read `ok` as "there are words for you",
+  and a client handed `ok: true` with no text has nothing to do with it.
+- **Short confirmations are exempt on purpose.** "yes", "do it" and "stop"
+  are under 1.2 s and pass while latched. A speaker model has almost nothing
+  to go on in one second, and asking the owner to repeat himself to answer a
+  card is the behaviour the 2026-11-01 ruling removed.
+- **A guard that cannot measure does not reject.** No enrolled print, no
+  model, an unusable clip: `_owner_cosine` answers None and the ordinary
+  decision stands. Swallowing the owner's words on an unmeasured clip is the
+  worse of the two failures, and the strict check still owns the session's
+  first sentence and every clip of 2.0 s or more.
+- **Where each length lands.** Under 1.2 s: no guard, session trust. 1.2-1.5 s:
+  the guard, plus the existing short-clip check at `hear` step 3b. 1.5-2.0 s:
+  the guard, on session trust - this is the band the fix closes. 2.0 s or
+  more: the guard, plus the strict spot check that was always there.
+
+The tests are `backend/test_voice_check_rule.py`
+(`test_live_session_latch_rejects_radio_impostor_over_1200ms_but_allows_short_confirm`
+and `t_the_radio_guard_is_wired_into_the_hearing_path`); the end-to-end drop
+needs a real print and a real model, which CI has neither of, so the second
+test pins the wiring in `jarvis_speech.py` the way the rest of the suite pins a
+path it cannot drive.
+
+## 17. A spoken Live answer is said, never pointed at (added 2026-11-05)
+
+**What the owner reported, 2026-11-04:** "jarvis on the latest Android app version still has responses that are saying to look at the screen when jarvis could clearly read it out loud" and "it said it's on your screen as the answer instead of reading it out" (`.dsh-scratch/OWNER-REPORTS-2026-11-04-LIVE.md`, item A). This section records the seam, what changed, and what was deliberately left alone.
+
+- **The seam is the model instruction, not a speech formatter.** A Live reply is the same `/api/chat` answer a typed turn gets, and both apps speak it from their own queue (one `speak_reply` clip per sentence). The fixed sentence "It's on your screen." is the APPS' - `private-speech.js`'s `PRIVATE_LINE` / the phone's `PrivateAloud.ON_SCREEN` - said when `mayReadAloud` decides the answer is private. There is no backend formatter that turns a list or a table into a screen pointer: the desktop's `stripMarkdownForSpeech` removes markup and drops code blocks, and otherwise speaks the answer as written. So a pointer the owner HEARS is either (a) the model's own words, or (b) the apps' fixed line for an answer the route gate, a sensitive fact or the screen rule keeps on screen.
+- **What permitted (a):** `jarvis_live.MODEL_NOTE`, the one note added to a spoken Live turn's request, said *"use a screen line only for what you truly cannot say aloud, such as a table of numbers, a picture or a long list."* A list is exactly what the owner was asking for. The note now says the answer must be complete as speech: the key answer in one to four clear sentences, the first five items or rows of a list read aloud as plain prose, then how many more there are - and a screen line is never the answer. The same rule is added to `jarvis_manner.post_history_hint(spoken_live=True)`, the one-line hint inserted just before the final generation step, and `jarvis_agent.with_manner_note` now receives the turn's own `live` mark and passes it on. Before this the spoken clause existed but the agent never asked for it, so in a long Live session the note nearest the question said nothing about the screen.
+- **What was checked and left alone.** The money answers' own spoken lines (`jarvis_spending.SPOKEN_LINE`, `jarvis_retirement.SPOKEN_LINE`) keep the figures on screen - the owner's rule ("Money stays on screen: never read aloud") and the sensitive-fact gate; changing them would be a permission change, not a wording fix. The fast paths in `jarvis_quick.py` emit no screen pointer for content they could say: the only literal ones are the honest "a card is waiting, approve it on your phone or PC" lines and `_run_watch`'s safety sign, and Live is otherwise held to the typed answer word for word (`test_live_parity.py`'s `typed.reply == live.reply`). No route, field, card, setting or permission changed. The harnesses are `backend/test_live.py`'s `t_a_live_answer_is_said_never_pointed_at` (the note as the agent composes it, and the final-step hint) and `backend/test_quick_wins.py`'s `t_a_list_answer_in_live_carries_the_list_not_a_pointer` (a real to-do list, Live and typed, with every item still in it).
+
+## 18. Live's first turn, and the state that cannot stick (added 2026-11-05)
+
+The owner reported three things about starting Jarvis Live: the first words
+spoken after pressing Live were missed, the first answer took a long time, and
+the app could sit on "Thinking..." as if it had not heard him. The first two
+are the same cold start; the third is a flag that outlived its turn.
+
+- **The turn lifecycle is the CLIENT's, not the PC's.** There is no
+  THINKING/SPEAKING/LISTENING state machine in the Python backend and no
+  `_tts_playing` anywhere in this repository (checked 2026-11-05 with
+  `git grep`). The session's own state is `off`/`on`/`paused`/`ended`
+  (`jarvis_live.Live.status`); everything the owner sees as "thinking",
+  "speaking" or "listening" is decided in the apps: the bar's `live.thinking`
+  and the card's status text (`jarvis-desktop/src/main.js`), the Rust
+  `SPEAKING` flag that `voice.rs` reads before dropping a sentence said over an
+  answer (`jarvis-desktop/src-tauri/src/live.rs`), and the phone's
+  `LiveFlash` (`JarvisRuntime.kt`). A fix belongs on that side.
+- **The first words are kept, not just heard.** The desktop's VAD has always
+  stepped its clip back in front of the tick that first hears a voice, but by
+  the wake word's 300 ms. In Live that is not enough: the sentence can begin in
+  the same instant Live is pressed, and the poll interval plus the device's
+  start-up sit inside it. Live now keeps 500 ms (`voice.rs` `LIVE_PREROLL`,
+  `capture_preroll`), still in memory only and still bounded per utterance.
+- **"Starting microphone & voice..." is a real state, and it ends.** A
+  session that just started warms STT, the VAD, CAM++ and TTS in the
+  background (`jarvis_speech.prewarm`, already there). Until that warm
+  reports, `GET /api/voice/live` carries `starting: true` with
+  `starting_words`, and the apps show those words instead of claiming to
+  listen. The ready line ("I'm listening.") is said once, when `starting`
+  clears - the desktop says it from its watcher, which is also the side that
+  knows the microphone is really open. `START_MAX_S` (8 s) ends the wait
+  whatever the warm says, so the sign cannot stick either. It is not a pause:
+  clips are accepted the whole time, and the status grows by two keys, not by a
+  new state (`docs/JARVIS-API.md` 63.1).
+- **A playing claim now expires.** `SPEAKING` held a bare boolean. If the
+  player never cleared it - a crashed audio element, a cancelled turn, an
+  error between "answer arrived" and "answer finished" - every later Live
+  sentence began "over an answer" and was dropped, which is Live gone deaf for
+  the rest of the session. It now stores WHEN it was set and is believed for
+  `SPEAKING_MAX_MS` (120 s) at most; the bar renews it every second it really
+  plays. The backend keeps its own watchdog for the other half: the warm and
+  the model-lane warm-up are fire-and-forget threads that fail silently and
+  never block the start.
+
+- **Both apps, or the reason written down.** The two new status keys are read
+  by the desktop's `live-rules.js`, held to the shared table
+  (`tools/gen_live_cases.py`, `backend/test_live.py`, `jarvis-live.mjs`). The
+  phone's own Live screen does not read them yet: its microphone is its own
+  and it has no PC-side warm to wait for, so the honest line there is the
+  session it already shows. §8 records this as one-sided on purpose.

@@ -740,6 +740,92 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
     return R.matrix(out)
 
 
+# --------------------------------------------------------------------------
+#   GitHub: read it, and take three small actions (jarvis_github.py)
+# --------------------------------------------------------------------------
+#: The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
+#: open pull requests, issues, CI status, one file) and take three small ACTIONS
+#: (comment, open an issue, re-run a workflow) - each action behind its own
+#: approval card - and it may never merge, push, commit, delete or close.
+#:
+#: ALL SIX ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
+#: a fixed-endpoint read still sends the owner's own GitHub token to
+#: api.github.com, so it is egress with a credential attached. `github_read` is
+#: the action a "tell me when" GitHub watch already uses, and it MUST stay
+#: `"auto"` in the shipped config (a look every 30 minutes cannot raise a card
+#: every 30 minutes), which is exactly why these tools do NOT reuse that name.
+#: Their own action is `github_inspect`, shipped as `"ask"`; being in
+#: NEEDS_A_PERSON as well means an owner who loosens that line still cannot make
+#: a GitHub read run with nobody asked.
+GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status")
+GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow")
+GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
+
+
+class _GitHubNoToken:
+    """What a GitHub planner returns when no token is saved yet.
+
+    NOT a card: there is nothing to approve, and a card nobody can act on is
+    noise. `_one_call` answers with the plain "connect GitHub" sentence instead,
+    which is the one thing that actually fixes it.
+    """
+
+    def __init__(self, words: str):
+        self.words = words
+
+
+def _github_plan(planner, args: dict):
+    """(request, card text) for one GitHub tool, or the no-token answer.
+
+    `planner` is one of `jarvis_github.plan_*`: it validates its own arguments and
+    opens no socket. A bad argument raises out of here and reaches the model as an
+    ordinary tool result; no token is a plain answer with no card.
+    """
+    import jarvis_github as GH
+    if not GH.connected():
+        return _GitHubNoToken(GH.NOT_CONNECTED), ""
+    r = planner(args)
+    return r, GH.describe(r)
+
+
+def _prepare_github_list(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_list, args)
+
+
+def _prepare_github_read_file(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_read_file, args)
+
+
+def _prepare_github_ci_status(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_ci, args)
+
+
+def _prepare_github_comment(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_comment, args)
+
+
+def _prepare_github_open_issue(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_open_issue, args)
+
+
+def _prepare_github_rerun_workflow(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_rerun, args)
+
+
+def _run_github(args: dict, plan_obj, **_) -> dict:
+    """Run the ONE request the card showed - `plan_obj`, the object the card was
+    built from, never a new object built from `args` a second time (the same
+    shape send_email uses, and the reason `Tool.prepare`'s docstring gives)."""
+    import jarvis_github as GH
+    return GH.run(plan_obj, approved=True)
+
+
 def _prepare_web_search(args: dict):
     """Only for the tool test and for a caller outside _one_call: the chat
     loop handles web_search itself (_web_search_call), because when it asks
@@ -999,6 +1085,112 @@ FILES_PARTS_REFUSED = ("refused: this answer has already read {n} parts of docum
 #: folder and byte size.
 SEND_FILE_TOOL = "send_file_to_phone"
 SEND_FILE_ACTION = "send_file_to_phone"
+
+#: "Text a contact for me" (2026-11-04, hands-free mode; jarvis_handsfree.py,
+#: docs/JARVIS-API.md section 191). ONE text, ONE card naming the contact and
+#: the EXACT message; the phone resolves the contact and sends it, so this PC
+#: never holds a number. Its gate row (`handsfree.patch`) is "no"/"outbound",
+#: a risky approval, and `[autonomy.tiers]` carries `send_text_message = "ask"`
+#: in both shipped copies. OFFERED ONLY WHILE HANDS-FREE MODE IS ON
+#: (`offered_tools`): with the mode off the tool would only ever refuse, and a
+#: tool the model can see but never use is a worse answer than not having it.
+SEND_TEXT_TOOL = "send_text_message"
+SEND_TEXT_ACTION = "send_text_message"
+#: The product check (jarvis_product_check.py; 2026-11-04, the owner's choice
+#: "wire the existing product check"): ONE Amazon product page, read in the
+#: owner's own signed-in browser window after ONE PC-only card, then the
+#: engine's reasons report in plain words. Ships OFF: `[product_check] enabled
+#: = false` in both settings copies, and `offered_tools` does not offer the
+#: tool at all until the line says `true` - so a turn on a fresh install costs
+#: nothing and can do nothing. Its own action name (`product_check`) is the
+#: gate's `ask` line in both copies, and PC-only in jarvis_owner_check.
+PRODUCT_CHECK_TOOL = "product_check"
+PRODUCT_CHECK_ACTION = "product_check"
+
+#: What the model is told the tool is for. Written here (not imported from
+#: the module) so importing jarvis_agent never imports the product check's
+#: modules, exactly like every other optional feature here.
+PRODUCT_CHECK_DESCRIPTION = (
+    "Check one Amazon product page for sponsored-review and incentive "
+    "patterns. Use when: the owner gives an Amazon product link and asks "
+    "whether its reviews look sponsored, bought, incentivised or trustworthy, "
+    "or asks you to product-check a listing. Do NOT use it for an ordinary web "
+    "page, for flights or prices, or for a shop that is not Amazon. It reads "
+    "ONE page in the owner's own signed-in browser window after one approval "
+    "card, and returns reasons, counts and examples - never a trust score and "
+    "never a fake/real verdict for one review.")
+
+
+class _ProductCheckRefused:
+    """A product address this check cannot read: `problem` is in plain words,
+    and nothing was opened and nobody was asked (the _NoBrowser shape)."""
+
+    def __init__(self, problem: str) -> None:
+        self.problem = str(problem or "")
+
+
+def _prepare_product_check(args: dict):
+    """Check the address BEFORE the card: one Amazon product page, and not a
+    cart/checkout/order/account/payment/sign-in address. A refusal opens no
+    window and raises no card, because there is nothing to approve."""
+    try:
+        import jarvis_product_check as PC
+    except Exception as exc:                                # noqa: BLE001
+        return (_ProductCheckRefused(
+            f"the product check is not installed here ({type(exc).__name__})"),
+            "Check one Amazon product page")
+    try:
+        plan_obj = PC.plan(args.get("url"))
+    except Exception as exc:                                # noqa: BLE001
+        return (_ProductCheckRefused(getattr(exc, "why", str(exc))),
+                "Check one Amazon product page")
+    return plan_obj, PC.card_text(plan_obj)
+
+
+def _run_product_check(args: dict, plan_obj, **_) -> dict:
+    """Read the page the CARD showed and build the report - `plan_obj`, the
+    same object the card was worded from, never a new one built from `args`.
+
+    The full report rides back to the loop under `_product_report` and is
+    DELIVERED as code's own answer (`deliver_product_report`), the same way
+    the retirement what-if's figures are: the report is the answer, and the
+    model's own words about it are held and dropped so an invented trust
+    score or a per-review fake/real label cannot reach the owner. The model
+    gets a small result instead - enough to say the check ran, without a page
+    of its words in the context."""
+    try:
+        import jarvis_product_check as PC
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": f"the product check is not available here "
+                                      f"({type(exc).__name__})"}
+    if plan_obj is None:
+        return {"ok": False, "error": "there is no product page to read"}
+    try:
+        report = PC.run(plan_obj)
+    except Exception as exc:                                # noqa: BLE001
+        why = getattr(exc, "why", "")
+        if why:
+            return {"ok": False, "error": why,
+                    "kind": getattr(exc, "kind", "refused")}
+        return {"ok": False,
+                "error": f"the product check failed ({type(exc).__name__}); "
+                         f"nothing was stored"}
+    answer = PC.chat_answer(report)
+    verdict = report.get("verdict") or {}
+    sample = report.get("sample") or {}
+    return {
+        "ok": True,
+        "checked": True,
+        "page": report.get("source_url"),
+        "title": (report.get("listing") or {}).get("title"),
+        "reviews_read": sample.get("readable"),
+        "verdict": verdict.get("words"),
+        "note": ("The full reasons report is shown in the answer. Present it as it "
+                 "is: the sample caveat first, counts and reasons, no trust score "
+                 "and no fake/real verdict for any review."),
+        "_product_report": {"report": report, "answer": answer},
+    }
+
 
 
 def _prepare_my_files(args: dict):
@@ -1644,6 +1836,36 @@ def _run_send_file(args: dict, state, **_) -> dict:
 
 
 
+def _prepare_send_text(args: dict):
+    """prepare() for `send_text_message` (jarvis_handsfree.py, 2026-11-04).
+
+    Refuses BEFORE any card, with one sentence, when hands-free mode is off,
+    when the contact or the message is unusable, or when no phone is paired -
+    a card would otherwise promise a send that cannot happen. The card's own
+    words name the contact and the exact message.
+    """
+    try:
+        import jarvis_handsfree as HF
+    except Exception as exc:                                # noqa: BLE001
+        return None, f"Text a contact (unavailable: {type(exc).__name__})"
+    return HF.prepare_sms(args or {})
+
+
+def _run_send_text(args: dict, state, **_) -> dict:
+    """execute() for `send_text_message`: the card said yes, so the command
+    goes to the phone. It reports "asked", never "sent" - the phone's own
+    result does that."""
+    try:
+        import jarvis_handsfree as HF
+    except Exception as exc:                                # noqa: BLE001
+        return {"ok": False, "error": "the hands-free module is not available "
+                                      f"here ({type(exc).__name__})"}
+    try:
+        return HF.send(state or {})
+    except HF.Refused as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 class _ProtectionListed:
     """`prepare()`'s answer for the protection tool's ``list`` action.
 
@@ -1903,6 +2125,11 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
+                                  # What needs a card, a second yes or Windows
+                                  # Hello (2026-11-05): one change, one card, one
+                                  # action - a plan step would change several
+                                  # things around one approval.
+                                  "approval_policy",
                                   # One file and ONE card are a deliberate direct act:
                                   # a plan step would put a second mechanism around it.
                                   "send_file_to_phone",
@@ -2508,6 +2735,124 @@ def _run_connect_tool(args: dict) -> dict:
             "said": ("One card is waiting in the HUD window on this PC. The owner "
                      "types the value there and presses Save; nothing is saved until "
                      "then, and I test it straight away.")}
+
+
+# --------------------------------------------------------------------------
+#   "stop asking me before you send email" - what needs a card, a second yes
+#   or Windows Hello, changed by talking to Jarvis (2026-11-05)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, verbatim: "i would also like the ability to change what
+# gets an approval card through chat, including if something gets a double
+# confirmation, or a fingerprint/windows hello".
+#
+# ONE TOOL, THREE THINGS, ONE ACTION AT A TIME. jarvis_approval_policy.py
+# holds the rules - its own docstring says why each exists, and what enforces
+# the second yes and Windows Hello. This is only the model-facing door, and
+# the model's call is a PREPARATION, never the change: `request_change`
+# decides the direction and, for a loosening, raises the ONE card (on the PC,
+# with Windows Hello) that must be approved before anything is written. That
+# is why this tool is not put to the gate, exactly like SETTINGS_TOOL and
+# CONNECT_TOOL: the card IS the ask, so a second card in front of it would ask
+# the owner to approve asking.
+#
+# READING IS THE SAME TOOL, with `field` left out: "what needs a card?" and
+# "does sending email ask twice?" are answered from the table the page and the
+# approval path read, never from the model's memory.
+APPROVAL_POLICY_TOOL = "approval_policy"
+
+
+def _approval_policy_tool_text() -> str:
+    """The tool's description. Under 300 tokens, and it says the one thing
+    that keeps the direction rules: more asking happens at once, less raises
+    a card the owner must approve - so never claim a loosening is done."""
+    return ("Change what Jarvis asks about, one named action at a time: whether it "
+            "gets a card, needs two yeses, or needs Windows Hello on this PC. Use "
+            "when the owner says to stop asking before one action, to make it ask "
+            "twice, or to require Windows Hello. Leave field out to read. More asking "
+            "is instant; less raises ONE card that needs Windows Hello on the PC - "
+            "say it is waiting, never done.")
+
+
+def _prepare_approval_policy(args: dict):
+    """Present because every Tool needs a prepare; never reached by a real
+    turn - `_one_call` hands APPROVAL_POLICY_TOOL to `_approval_policy_call`
+    first, because the card (or the instant tightening) is the whole effect.
+    A path that somehow reached execute() changes nothing (`_run_` below)."""
+    return None, ("Change what needs a card, a second yes or Windows Hello, through "
+                  "the approval policy tool's own path.")
+
+
+def _run_approval_policy(args: dict) -> dict:
+    """NEVER REACHED - see _prepare_approval_policy. Refuses rather than
+    applies, so no path that skips _approval_policy_call changes anything."""
+    return {"ok": False, "changed": False, "raised": False,
+            "error": "refused: this is changed through its own card path, so nothing "
+                     "was changed."}
+
+
+#: Said when a turn has read outside text and asks to change what asks. A page
+#: that says "stop asking" is exactly the shape a prompt injection wants, and
+#: the owner's own sentence is what must start the change.
+APPROVAL_POLICY_AFTER_OUTSIDE = (
+    "refused: something outside Jarvis shaped this answer (a page, an email, a file "
+    "or a search result), so nothing is changed in it. Ask again in a new message, "
+    "in your own words.")
+
+
+def _approval_policy_call(args: dict, call: dict, convo: list, steps: list,
+                          say_step, *, watch: "_TurnWatch") -> None:
+    """One approval_policy call: a read, an instant tightening, or ONE card."""
+    name = APPROVAL_POLICY_TOOL
+
+    def reply(result: dict) -> None:
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+
+    def stop(why: str, outcome: str = "refused") -> None:
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": outcome})
+        say_step("tool_refused", name)
+        reply({"ok": False, "error": why})
+
+    try:
+        import jarvis_approval_policy as AP
+    except Exception:                       # noqa: BLE001 - module absent
+        return stop("I cannot change what asks on this PC: the part that does it is "
+                    "not installed. Run apply-patches.ps1 on the PC.")
+    reading = not (args or {}).get("field")
+    if not reading:
+        if watch.cards >= CARDS_PER_TURN:
+            return stop(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
+        if _settings_turn_is_shaped(watch):
+            return stop(APPROVAL_POLICY_AFTER_OUTSIDE)
+    step = {"tool": name, "ran": False, "ok": False,
+            "outcome": "read" if reading else "no card needed"}
+    steps.append(step)
+    say_step("tool_started", name)
+    try:
+        if reading:
+            code, result = AP.read_request(args or {})
+        else:
+            code, result = AP.request_change(args or {})
+    except Exception as exc:                # noqa: BLE001 - never take a turn down
+        step["outcome"] = "failed"
+        say_step("tool_finished", name, ok=False)
+        return reply({"ok": False, "error": f"could not do that ({type(exc).__name__})"})
+    step["ran"] = True
+    step["ok"] = bool(result.get("ok"))
+    if step["ok"]:
+        if reading:
+            step["outcome"] = "read"
+        elif result.get("waiting"):
+            # It DID raise a card, so the per-answer budget counts it.
+            watch.cards += 1
+            step["outcome"] = "waiting for your yes on the card"
+        elif result.get("changed"):
+            step["outcome"] = "changed"
+        else:
+            step["outcome"] = "already so"
+    say_step("tool_finished", name, ok=step["ok"])
+    reply(dict(result, status=code))
 
 
 # --------------------------------------------------------------------------
@@ -4192,6 +4537,92 @@ TOOLS: dict = {
         # which action name (and therefore which tier) governs THIS call.
         gate_lookup_name=lambda args: _github_search_action_name(),
         instead={"web_search": "For a general web search, use web_search."}),
+    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03: "Read + actions"). Every one of the six
+    # asks a person: `github_inspect`'s tier is "ask" in the shipped config, and
+    # all six are in NEEDS_A_PERSON, so a loosened tier still cannot run one with
+    # nobody asked (the reason is on GITHUB_READ_TOOLS above).
+    #
+    # The lookup names are the TOOL names: github-tools.patch registers each one
+    # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
+    # `action_for_tool` answers with that action rather than falling through to
+    # `unclassified_tool`. With no gate importable they stay their own name and
+    # ask, which is the same fail-safe.
+    "github_list": Tool(
+        "github_list",
+        "List ONE fixed thing on GitHub: your repositories (scope \"repos\"), the "
+        "open pull requests on one repository (\"pulls\"), its open issues "
+        "(\"issues\"), or its recent workflow runs (\"runs\"). Read-only: nothing "
+        "on GitHub changes. It asks you before every read. It cannot merge, push, "
+        "commit, delete or close anything.",
+        {"type": "object", "properties": {
+            "scope": {"type": "string", "enum": ["repos", "pulls", "issues", "runs"],
+                      "description": "which list to read"},
+            "repo": {"type": "string",
+                     "description": 'owner/name, e.g. "darknight11ish/Epic-Jarvis"; '
+                                    "not needed for \"repos\""}},
+         "required": ["scope"]},
+        _prepare_github_list, _run_github,
+        instead={"github_ci_status": "For how CI went, use github_ci_status."}),
+    "github_read_file": Tool(
+        "github_read_file",
+        "Read ONE file's text from a repository the saved GitHub token can see, "
+        "at an optional branch or commit. Read-only: nothing changes. It asks you "
+        "before every read. It cannot write, edit or commit a file.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "path": {"type": "string",
+                     "description": 'the path inside the repository, e.g. "README.md"'},
+            "ref": {"type": "string",
+                    "description": "a branch or commit; leave it out for the default"}},
+         "required": ["repo", "path"]},
+        _prepare_github_read_file, _run_github),
+    "github_ci_status": Tool(
+        "github_ci_status",
+        "How CI went: the newest workflow run for a repository and branch, or for "
+        "a pull request. Read-only: nothing changes. It asks you before every read.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "branch": {"type": "string", "description": "a branch name"},
+            "pr": {"type": "string", "description": "a pull request number"}},
+         "required": ["repo"]},
+        _prepare_github_ci_status, _run_github),
+    "github_comment": Tool(
+        "github_comment",
+        "Post ONE comment on a GitHub issue or pull request, exactly as written. "
+        "You see the whole comment on an approval card first and nothing is posted "
+        "without your yes. It never merges, pushes, commits, closes or deletes "
+        "anything, and it cannot take a comment back.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "number": {"type": "string", "description": "the issue or pull request number"},
+            "body": {"type": "string",
+                     "description": "the whole comment, as it will be posted"}},
+         "required": ["repo", "number", "body"]},
+        _prepare_github_comment, _run_github),
+    "github_open_issue": Tool(
+        "github_open_issue",
+        "Open ONE new issue on a repository, with a title and an optional body. You "
+        "see all of it on an approval card first and nothing is opened without your "
+        "yes. It never merges, pushes, commits, closes or deletes anything, and it "
+        "cannot close, edit or delete the issue afterwards.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "title": {"type": "string", "description": "the issue's title"},
+            "body": {"type": "string", "description": "the issue's text; may be left out"}},
+         "required": ["repo", "title"]},
+        _prepare_github_open_issue, _run_github),
+    "github_rerun_workflow": Tool(
+        "github_rerun_workflow",
+        "Ask GitHub to run an existing workflow run AGAIN, with the same code and "
+        "settings it ran with before. You see which run on an approval card first "
+        "and nothing re-runs without your yes. It changes no code and no setting, "
+        "and it never merges, pushes, commits, closes or deletes anything.",
+        {"type": "object", "properties": {
+            "repo": {"type": "string", "description": 'owner/name, e.g. "owner/repo"'},
+            "run_id": {"type": "string", "description": "the workflow run's number"}},
+         "required": ["repo", "run_id"]},
+        _prepare_github_rerun_workflow, _run_github),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
     # provider the owner chose - SearXNG on this PC by default - and never
     # another one quietly. Handled by _web_search_call, not the generic path:
@@ -4237,6 +4668,23 @@ TOOLS: dict = {
                                "web_search.",
                  "browser_control": "To work a page - click and type on it - use "
                                     "browser_control."}),
+    # The product check (jarvis_product_check.py; 2026-11-04, the owner's
+    # choice "wire the existing product check"). ONE Amazon product page, read
+    # in the owner's own signed-in browser window after ONE PC-only card, then
+    # the engine's reasons report. OFF by default: `offered_tools` does not
+    # offer it until `[product_check] enabled = true`. Never a trust score and
+    # never a per-review fake/real verdict - the report has no field for
+    # either, and its answer is delivered by code, not the model.
+    PRODUCT_CHECK_TOOL: Tool(
+        PRODUCT_CHECK_TOOL,
+        PRODUCT_CHECK_DESCRIPTION,
+        {"type": "object", "properties": {
+            "url": {"type": "string",
+                    "description": "the Amazon product page's full address (https://)"}},
+         "required": ["url"]},
+        _prepare_product_check, _run_product_check,
+        instead={"read_web_page": "To read a page's words out loud rather than check "
+                                  "a product's reviews, use read_web_page."}),
     "calendar_read": Tool(
         "calendar_read",
         "Read the owner's calendar events for the next N days. Read-only.",
@@ -4343,13 +4791,16 @@ TOOLS: dict = {
         "Find and read the owner's own files, only in folders they listed. "
         "find: file names. search: words inside notes/text. "
         "read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). "
+        "map: a folder's files and symbols, ranked for the question. "
         "read_media: one recording's words. search_media: stored spoken and "
         "on-screen recording words.",
         {"type": "object", "properties": {
-            "action": {"type": "string", "enum": ["find", "search", "read", "read_media",
+            "action": {"type": "string", "enum": ["find", "search", "read", "map", "read_media",
                                                   "search_media"]},
-            "words": {"type": "string", "description": "a few words; for read, picks the part"},
-            "path": {"type": "string", "description": "read / read_media: the full path"},
+            "words": {"type": "string", "description": "a few words; for read, the part; for map, "
+                                                       "the question"},
+            "path": {"type": "string", "description": "read / read_media: the full path; map: a "
+                                                      "folder or a project id"},
             "part": {"type": "integer", "description": "read: which part, from its list"}},
          "required": ["action"]},
         _prepare_my_files, _run_my_files,
@@ -4373,6 +4824,23 @@ TOOLS: dict = {
             "path": {"type": "string", "description": "one file's full path, if known"}},
          "required": []},
         _prepare_send_file, _run_send_file),
+    # Text a contact (2026-11-04, hands-free mode; jarvis_handsfree.py).
+    # Offered only while the mode is on (see SEND_TEXT_TOOL), ONE card naming
+    # the contact and the exact message, and the phone does the sending.
+    SEND_TEXT_TOOL: Tool(
+        SEND_TEXT_TOOL,
+        "Send ONE text message from the owner's phone to one of their contacts. "
+        "Use only when they ask you to text someone. Give the contact's name "
+        "exactly as the owner said it and the message word for word. ONE card "
+        "naming the contact and the exact text; nothing is sent until they "
+        "approve it, and only while hands-free mode is on.",
+        {"type": "object", "properties": {
+            "contact": {"type": "string",
+                        "description": "the contact's name, as the owner said it"},
+            "text": {"type": "string",
+                     "description": "the message, word for word"}},
+         "required": ["contact", "text"]},
+        _prepare_send_text, _run_send_text),
     PROTECT_TOOL: Tool(
         PROTECT_TOOL,
         "The owner's Protected from Jarvis list: folders, files and programs "
@@ -4734,6 +5202,24 @@ TOOLS: dict = {
         lambda args, state, **_: {"ok": False, "raised": False,
                                   "error": "refused: connecting is raised through its "
                                            "own card path, so nothing was raised here."}),
+    # Changing what needs a card, a second yes or Windows Hello, by talking
+    # (2026-11-05, the owner's ask) - see APPROVAL_POLICY_TOOL above for why
+    # this is not put to the gate. `_one_call` hands it to `_approval_policy_call`
+    # before the generic path; these two exist so a path that somehow reached
+    # them changes nothing.
+    APPROVAL_POLICY_TOOL: Tool(
+        APPROVAL_POLICY_TOOL, _approval_policy_tool_text(),
+        {"type": "object", "properties": {
+            "action": {"type": "string",
+                       "description": "the one action to read or change"},
+            "field": {"type": "string",
+                      "enum": ["card", "confirmations", "windows_hello"],
+                      "description": "one thing to change; leave out to read"},
+            "value": {"type": "string",
+                      "enum": ["ask", "auto", "1", "2", "true", "false"],
+                      "description": "the new value"}}},
+        _prepare_approval_policy,
+        lambda args, state, **_: _run_approval_policy(args)),
     REA_TOOL: Tool(
         REA_TOOL, _rea_tool_text(),
         {"type": "object", "properties": {
@@ -5145,6 +5631,23 @@ def _github_search_action_name() -> str:
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",
+    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03). The READS are here for the same reason
+    # `github_search` above is: a read sends the owner's own GitHub token to
+    # api.github.com on a fixed address, so it is egress with a credential
+    # attached, and "it is only a read" is not a reason to spend a credential
+    # with nobody looking. Each action's line says what changes.
+    "github_list": "sends the owner's GitHub token to api.github.com to read their "
+                   "repositories, pull requests, issues or workflow runs",
+    "github_read_file": "sends the owner's GitHub token to api.github.com to read one "
+                        "file in a repository",
+    "github_ci_status": "sends the owner's GitHub token to api.github.com to read how CI "
+                        "went",
+    "github_comment": "posts a comment on GitHub in the owner's name, which cannot be "
+                      "taken back",
+    "github_open_issue": "opens a new issue on GitHub in the owner's name",
+    "github_rerun_workflow": "starts a CI run on GitHub, which spends the work of running "
+                             "the checks again",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",
@@ -5155,6 +5658,12 @@ NEEDS_A_PERSON = {
     "tidy_inbox": "archives, stars, marks as read or moves to Trash emails in the owner's "
                   "own mailbox",
     "read_web_page": "fetches a page from the internet, which cannot be taken back",
+    # The product check (jarvis_product_check.py, 2026-11-04): the same shape
+    # as read_web_page - one page read in the owner's own signed-in browser -
+    # plus the owner's session, which is why its card is PC-only. It asks
+    # every time regardless of its tier: the belt below the card.
+    PRODUCT_CHECK_TOOL: "opens one Amazon product page in the owner's own signed-in "
+                        "browser window, which cannot be taken back",
     "propose_plan": "runs the safe steps of an approved plan at once, which can do "
                     "anything the tools inside it can do",
     "rea_investigate": "starts a local reverse-engineering program and then debugs, inspects, "
@@ -5164,6 +5673,10 @@ NEEDS_A_PERSON = {
     # phone's storage and the phone can keep a copy after it downloads it.
     SEND_FILE_TOOL: "makes one of the owner's own files fetchable by the phone, which "
                     "can keep a copy after it downloads it",
+    # Text a contact (2026-11-04): the phone sends a real message in the owner's
+    # name from the owner's own number, and a sent text cannot be unsent.
+    SEND_TEXT_TOOL: "sends a real text message from the owner's phone, in their name, "
+                    "which cannot be taken back",
     # Protected from Jarvis: adding to the list changes what Jarvis may
     # touch, and removing is loosening; both need a person every time.
     PROTECT_TOOL: "changes what Jarvis may touch, so it needs your yes every time",
@@ -5855,6 +6368,13 @@ def fetched_urls(name: str, state) -> list:
     (`state`) - never from the model's raw arguments, so the check sees the
     same address the card does. [] for any other tool."""
     if name == "read_web_page":
+        url = getattr(state, "url", "")
+        return [url] if isinstance(url, str) and url.strip() else []
+    if name == PRODUCT_CHECK_TOOL:
+        # The same rule for the product check (2026-11-04): a product page this
+        # PC opens in the owner's own signed-in browser is a page this PC
+        # CONTACTS, so a model-chosen address in a shaped turn says so on the
+        # card, exactly as read_web_page does.
         url = getattr(state, "url", "")
         return [url] if isinstance(url, str) and url.strip() else []
     if name != "browser_control":
@@ -8252,6 +8772,12 @@ class _TurnWatch:
         # words, held the same way (RETIREMENT_TOOL).
         self.retirement_result = None
         self.retirement_done = False
+        # The product check's report (jarvis_product_check.py, 2026-11-04): the
+        # full reasons report is CODE's own answer, held and delivered the same
+        # way the retirement what-if's figures are - so a trust score or a
+        # per-review fake/real verdict the model wrote cannot reach the owner.
+        self.product_result = None
+        self.product_done = False
         self.secrets: list = []      # KINDS of password or key read, never values
         # The websites (host names) browser_control read this turn, for the
         # form-review rule "only the form's own site" (FORM_REVIEW_OTHER_SITE).
@@ -8441,6 +8967,10 @@ class _TurnWatch:
             # The what-if's figures are for the owner's screen (see
             # RETIREMENT_TOOL); _one_call takes them out first, this is the belt.
             result = {k: v for k, v in result.items() if k != "_retirement_result"}
+        if "_product_report" in result:
+            # The product check's report is delivered by code, never read out of
+            # a tool result (see _TurnWatch.product_result); this is the belt.
+            result = {k: v for k, v in result.items() if k != "_product_report"}
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
             self._note_outside_now()
@@ -8830,6 +9360,31 @@ def _web_search_switched_off() -> bool:
         return False
 
 
+def _handsfree_on() -> bool:
+    """True when the owner turned hands-free mode on (jarvis_handsfree.enabled).
+
+    Missing, unreadable or broken means OFF - fail closed, and the same answer
+    jarvis_handsfree.read_out/answer give. Read every turn, so the switch works
+    without a restart."""
+    try:
+        import jarvis_handsfree as HF
+        return bool(HF.enabled())
+    except Exception:
+        return False
+def _product_check_on() -> bool:
+    """Is the product check's own switch ON? (`[product_check] enabled`.)
+
+    Its own switch, not a line in `[tools].enabled`: ON is what OFFERS the
+    tool, and a missing section, a broken file or anything that is not a real
+    `true` is OFF - the same fail-closed rule jarvis_product_check.enabled()
+    uses. A PC without the module never offers the tool."""
+    try:
+        import jarvis_product_check as PC
+        return bool(PC.enabled())
+    except Exception:                                       # noqa: BLE001
+        return False
+
+
 def _sandbox_offered() -> bool:
     """Is the owner's own data-and-maths sandbox switch ON? (LM-1, 2026-10-18.)
 
@@ -8897,6 +9452,12 @@ def offered_tools(enabled_tools) -> list:
         # read from its file every turn, so off means the AI model is not even
         # offered the tool - not merely refused when it tries.
         wanted.discard("web_search")
+    if SEND_TEXT_TOOL in wanted and not _handsfree_on():
+        # Hands-free mode off: the tool would only ever refuse, so the model is
+        # not offered it at all. The switch is read from the settings file every
+        # turn, exactly as the web-search one above is, so turning the mode on
+        # works without a restart (jarvis_handsfree.enabled).
+        wanted.discard(SEND_TEXT_TOOL)
     if "web_search" in wanted:
         # The conversation web-search approval and its instant stop are part of
         # the same ability, not a capability of their own (2026-11-02): the ask
@@ -8924,6 +9485,11 @@ def offered_tools(enabled_tools) -> list:
         # Its own switch, like Browser control's second-card rule: the tool is not
         # offered (so costs no tokens) until [rea] enabled = true.
         wanted.discard(REA_TOOL)
+    if PRODUCT_CHECK_TOOL in wanted and not _product_check_on():
+        # The product check's own switch (2026-11-04): OFF by default in both
+        # shipped settings copies, and not merely refused when called - the
+        # model is not offered a tool the owner has switched off.
+        wanted.discard(PRODUCT_CHECK_TOOL)
     if SPENDING_TOOL in wanted and not _folders_listed():
         wanted.discard(SPENDING_TOOL)
     if RETIREMENT_TOOL in wanted and _RET is None:
@@ -9030,14 +9596,23 @@ TOOL_GROUPS = (
     # because raising the card is a single deliberate act and nothing else in
     # this file may do it. `jarvis_quick.py` raises the same card with no model.
     ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
-    ("github", "search GitHub for a library", ("github_search",)),
+    # GitHub: searching it for a library, and (2026-11-03) reading the owner's
+    # own and taking the three small actions. The six joined this group rather
+    # than starting new ones for the reason the propose_plan note below gives: a
+    # NEW group name costs tokens in more_tools' own description on every turn,
+    # and a group's MEMBERS cost nothing extra there. They belong together
+    # anyway - every one of them is about GitHub, and all six ship switched off.
+    ("github", "search GitHub for a library, or read your own GitHub and act on it",
+     ("github_search", "github_list", "github_read_file", "github_ci_status",
+      "github_comment", "github_open_issue", "github_rerun_workflow")),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
     # group above: its own name, one member, because both are a single
     # deliberate act with its own approval card, never a plain read. A group
     # rather than the core: the core is offered on every turn, and this is a
     # way out with a 300-token description of its own.
-    ("read_web_page", "read one whole web page out loud", ("read_web_page",)),
+    ("read_web_page", "read one web page out loud, or check one Amazon product page",
+     ("read_web_page", PRODUCT_CHECK_TOOL)),
     # propose_plan (jarvis_plan.py, "one card, several steps") joins this
     # group rather than starting a new one: a NEW group's name would add
     # to more_tools' own description and enum every turn (more_tools_schema
@@ -9098,7 +9673,13 @@ TOOL_GROUPS = (
       # cost nothing there and are paid only when the group is opened, which
       # ships OFF. Both are read-only. Clearing is NOT a model tool (Gemini
       # ruling 1) - it stays route/app/fast-path only, behind its one card.
-      CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL)),
+      CONVERSATION_FIND_TOOL, CONVERSATION_OPEN_TOOL,
+      # Changing what needs a card, a second yes or Windows Hello (2026-11-05)
+      # is one of "Jarvis's own switches" like the rest of this group: a read
+      # changes nothing and a change is either instantly stricter or ONE card.
+      # A group's members cost nothing extra in more_tools' own enum, so the
+      # short list's token pin does not move.
+      APPROVAL_POLICY_TOOL)),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -9110,6 +9691,15 @@ TOOL_GROUPS = (
     # web search is (GRANT_ASK_TOOLS, 2026-11-02) and are not a Settings switch.
     ("web_search_grant", "let web searches in this chat stop asking",
      (GRANT_TOOL, REVOKE_TOOL)),
+    # Texting a contact (2026-11-04, hands-free mode; SEND_TEXT_TOOL). Its own
+    # group, the "send_email" shape: ONE deliberate act with its own approval
+    # card, so the model must be able to ask for a text without an email also
+    # appearing. A group rather than the core for the reason the read_web_page
+    # note gives - a group's name and one line are about 20 tokens, paid only
+    # with `[tools] short_list = true` (OFF by default), where its own tool
+    # description would be paid on every turn. Ungrouped is not an option:
+    # tool_offer always shows an ungrouped tool in the short list.
+    ("send_text", "text a contact", (SEND_TEXT_TOOL,)),
 )
 PLUGINS = "plugins"
 
@@ -9233,6 +9823,21 @@ TOOL_HINTS = {
                         r"\bfirefox\b", r"page element"),
     "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",
                       r"\bpackage\b", r"\bexisting\b"),
+    # Your own GitHub, on demand (2026-11-03). Each of the six has words of its
+    # own so `tool_diet` can tell them apart: `github` alone is on all six, and
+    # the six must not be sent to the model for every GitHub question - the
+    # other words are what actually narrow it.
+    "github_list": (r"\bgithub\b", r"\brepos?\b", r"\bpull requests?\b",
+                    r"\bissues?\b", r"\bworkflow runs?\b", r"\bmy repos\b"),
+    "github_read_file": (r"\bgithub\b", r"\bfile\b", r"\bsource\b", r"\breadme\b"),
+    "github_ci_status": (r"\bgithub\b", r"\bci\b", r"\bchecks?\b", r"\bworkflow\b",
+                         r"\bbuild\b", r"\bactions?\b", r"\bfailed\b"),
+    "github_comment": (r"\bgithub\b", r"\bcomment\b", r"\bpull request\b", r"\bissue\b",
+                       r"\breply\b"),
+    "github_open_issue": (r"\bgithub\b", r"\bopen\b[\s\S]{0,20}\bissue\b",
+                          r"\bfile\b[\s\S]{0,20}\bbug\b", r"\bnew issue\b"),
+    "github_rerun_workflow": (r"\bgithub\b", r"\bre-?run\b", r"\bworkflow\b",
+                              r"\bci\b", r"\bagain\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
                    r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),
@@ -9253,6 +9858,25 @@ TOOL_HINTS = {
     "send_file_to_phone": (r"\bsend\b.*\bfiles?\b", r"\bfiles?\b.*\bphone\b",
                            r"\bdownload\b", r"\bview (it|the file)\b",
                            r"\bto my phone\b"),
+    # "text Alex that I'm late" (2026-11-04, hands-free mode). \btext\b is the
+    # verb the owner uses ("text mum"); a bare "message" is deliberately NOT
+    # matched here, because email_check and the notes tools already own that
+    # word and this tool SENDS.
+    "send_text_message": (r"\btext\b", r"\btexts?\b.*\b(her|him|them|mum|mom|dad|"
+                          r"wife|husband|friend|contact)\b", r"\bsms\b"),
+
+    # Changing what needs a card, a second yes or Windows Hello by talking to
+    # Jarvis (2026-11-05, jarvis_approval_policy.py). Narrow on purpose: a bare
+    # "approve" belongs to a card's own buttons and to every email/notes
+    # sentence, so these are the owner's words for the POLICY itself - an
+    # approval card/policy, a second yes, Windows Hello, and "what asks first".
+    # Hints only decide what the model is SHOWN; the tool raises its own card
+    # before anything is loosened, and more asking is cardless.
+    "approval_policy": (r"\bapproval (?:card|polic(?:y|ies)|rule)s?\b",
+                        r"\b(?:double|second) (?:confirmation|yes)\b",
+                        r"\bwindows hello\b",
+                        r"\bwhat (?:asks|needs?) (?:me )?(?:first|a card)\b"),
+
     # Protected from Jarvis (2026-10-31; widened 2026-11-04 after a real chat
     # answer missed the tool). A question in these words hid the tool from the
     # model, which then answered generically about a capability the backend
@@ -9393,6 +10017,12 @@ TOOL_HINTS = {
         r"\bread (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bpull up (?:that|the|my|one) (?:chat|conversation)\b",
         r"\bwhat did (?:we|i) say (?:in|about)\b.*\bchat\b"),
+    # product_check (2026-11-04): the Amazon product-page check. It is only
+    # offered while the feature is on, and its own question words are the
+    # page's - "is this fake", the reviews, the listing.
+    "product_check": (r"\bproduct page\b", r"\bamazon\b", r"\bproduct\b",
+                      r"\breviews?\b", r"\bis (?:this|it) (?:fake|real|genuine)\b",
+                      r"\bscam\b", r"\bbuy(?:ing)?\b", r"\bprice\b"),
 }
 _TOOL_HINTS_RX = {name: tuple(re.compile(rx, re.I) for rx in patterns)
                   for name, patterns in TOOL_HINTS.items()}
@@ -11927,7 +12557,7 @@ def manner_message(manner: Optional[str], *, crisis: bool = False) -> Optional[d
 
 
 def with_manner_note(msgs: list, manner: Optional[str], *,
-                     crisis: bool = False) -> list:
+                     crisis: bool = False, spoken_live: bool = False) -> list:
     """A new list: `msgs` with the way-of-talking note(s) just before the
     newest user message - never first (see with_spoken_note, whose placing
     this is). `msgs` itself is not changed; no manner, or no user message,
@@ -11935,9 +12565,14 @@ def with_manner_note(msgs: list, manner: Optional[str], *,
 
     A chosen personality inserts its persona block AND, immediately after it
     (nearest the question), the one-line post_history_hint, so a long chat or
-    a long Live session cannot drift out of character. A crisis turn inserts
-    the calm support block instead of the persona (manner_message does that).
-    A PC with no chosen personality gets exactly the old single note."""
+    a long Live session cannot drift out of character. `spoken_live` is the
+    entry's own Live mark (`_TurnWatch.live`: a spoken message with
+    `live: true`), and it is passed on to the hint so a spoken Live turn is
+    also told to SAY the answer instead of pointing at the screen - the one
+    drift `jarvis_live.MODEL_NOTE` cannot keep for the whole of a long session.
+    A crisis turn inserts the calm support block instead of the persona
+    (manner_message does that). A PC with no chosen personality gets exactly
+    the old single note."""
     note = manner_message(manner, crisis=crisis)
     users = [i for i, m in enumerate(msgs) if isinstance(m, dict) and m.get("role") == "user"]
     if note is None or not users:
@@ -11946,7 +12581,7 @@ def with_manner_note(msgs: list, manner: Optional[str], *,
     try:
         import jarvis_manner
         if jarvis_manner.personality_chosen() and not crisis:
-            hint = jarvis_manner.post_history_hint()
+            hint = jarvis_manner.post_history_hint(spoken_live=bool(spoken_live))
             if hint:
                 insert.append({"role": "system", "content": hint})
     except Exception:
@@ -13071,8 +13706,10 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     # that say HOW to answer, nearer than anything stale.
     out = with_setup_state_note(out)
     # The owner's manner (warm or plain): wording only, never first, and
-    # before the spoken note so that one is nearer the question.
-    out = with_manner_note(out, manner, crisis=crisis)
+    # before the spoken note so that one is nearer the question. A Live turn
+    # passes its own mark on, so the final-step persona hint says the answer
+    # is said aloud rather than pointed at, exactly as `live` is read below.
+    out = with_manner_note(out, manner, crisis=crisis, spoken_live=live)
     if focus:
         # I144: additive on top of manner, never instead of it - nearer
         # the question than manner, further than spoken/cut-off/crisis.
@@ -14038,11 +14675,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # tool call are held too, so nothing with an amount in it can stream.)
         spend_hold = _spending_hold(watch, names)
         holding = (spend_hold
-                   or (watch.retirement_result is not None and not watch.retirement_done))
+                   or (watch.retirement_result is not None and not watch.retirement_done)
+                   or (watch.product_result is not None and not watch.product_done))
         # The model's words this round are thrown away and replaced by code's
-        # own text (a what-if): they are not "what it said" for the checks
-        # that read the model's words (the "I've done it" line).
-        dropping = watch.retirement_result is not None and not watch.retirement_done
+        # own text (a what-if, a product report): they are not "what it said"
+        # for the checks that read the model's words (the "I've done it" line).
+        dropping = ((watch.retirement_result is not None and not watch.retirement_done)
+                    or (watch.product_result is not None and not watch.product_done))
 
         def on_text(piece: str) -> None:
             clean = stripper.feed(piece)
@@ -14137,6 +14776,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             elif spend_hold:
                 deliver_plain("".join(held))
             deliver_retirement()
+            deliver_product_report()
         elif spend_hold and not watch.spending_asked and watch.spending_table is None:
             # Words before a tool call on a spending question: shown only when
             # they carry no amount of money (they were written before any bank
@@ -14213,6 +14853,28 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         said["gap"] = True          # a blank line after a spending sentence in the same answer
         out.set_status(None)
         emit(text)
+
+    def deliver_product_report() -> None:
+        """The product check's answer (jarvis_product_check.py, 2026-11-04):
+        code's own text, never a sentence the model wrote - whatever the model
+        said this round was held and is dropped. The engine's SAMPLE caveat is
+        its first line, and it carries the counts, the set-aside reviews and
+        their reasons, and the no-score line, so the owner cannot be handed a
+        trust score or a per-review fake/real verdict the model invented."""
+        if watch.product_done or watch.product_result is None:
+            return
+        watch.product_done = True
+        answer = ""
+        try:
+            answer = str((watch.product_result or {}).get("answer") or "")
+        except Exception:
+            answer = ""
+        if not answer.strip():
+            answer = ("The product page was read, but the report could not be "
+                      "shown. Ask for the check again.")
+        said["gap"] = True          # a blank line after another held sentence
+        out.set_status(None)
+        emit(answer)
 
     def fail(message: str) -> None:
         if out.sse:
@@ -14587,6 +15249,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         elif watch.spending_asked and not watch.spending_done:
             deliver_plain("")
         deliver_retirement()
+        deliver_product_report()
         # The Anti-Slop filter's last held words (2026-10-28): a trailing space
         # or em dash kept back so the piece after it could decide what it meant,
         # or the end of a code block. Sent before the checks below read
@@ -14741,7 +15404,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # (jarvis_chat_log reads `tools_ran` to mark a conversation as having read
     # outside text): its own table is the owner's figures, worked out by code,
     # and marking the chat would refuse the very next spending question.
-    ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] not in (SPENDING_TOOL, RETIREMENT_TOOL)]
+    ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] not in
+           (SPENDING_TOOL, RETIREMENT_TOOL, PRODUCT_CHECK_TOOL)]
     if picture_text is not None and picture_text.get("read"):
         ran = [PICTURE_TEXT_TOOL] + ran
     if file_text is not None and file_text.get("read"):
@@ -15740,6 +16404,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # the generic path, where a plug-in tool always needs a person's yes.
         _connect_call(args, call, convo, steps, say_step, watch=watch)
         return
+    if name == APPROVAL_POLICY_TOOL and not outside_program:
+        # What needs a card, a second yes or Windows Hello, by talking
+        # (2026-11-05) - not put to the gate here, for the same reason: a read
+        # changes nothing, and a change is either instantly stricter or ONE
+        # card that IS the ask. See APPROVAL_POLICY_TOOL.
+        _approval_policy_call(args, call, convo, steps, say_step, watch=watch)
+        return
     if name == "send_email":
         # Refused before anything is planned or anyone asked - see SEND_EMAIL_*.
         why = _send_email_refusal(watch)
@@ -15852,6 +16523,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # action at "ask" with its outbound worst case, and the tier row in
         # both shipped settings copies says "ask" too.
         action_name = SEND_FILE_ACTION
+    if name == PRODUCT_CHECK_TOOL:
+        # Its OWN action name (2026-11-04): `product_check` is the gate's own
+        # "ask" line in both shipped settings copies, its `_RISK` row carries
+        # the words, and jarvis_owner_check.PC_ONLY_ACTIONS makes the card
+        # PC-only with Windows Hello. The gate's table maps the tool to it too
+        # (the base and product-check.patch), so the Reach page names it.
+        action_name = PRODUCT_CHECK_ACTION
     if name == PROTECT_TOOL:
         # The chat ability asks under its OWN action name (jarvis_protection.py,
         # 2026-10-31): the gate forces an unclassified action to "ask", so the
@@ -15951,6 +16629,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                                     f"arguments: {type(exc).__name__}: {exc}"})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "unknown"})
         say_step("tool_finished", name, ok=False)
+        return
+    if name in GITHUB_TOOLS and isinstance(state, _GitHubNoToken):
+        # NO TOKEN, so nothing to approve and NO CARD (2026-11-03). A card here
+        # would ask the owner to approve a read that cannot happen; the plain
+        # sentence names the one thing that fixes it ("connect GitHub").
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content({"ok": False, "connected": False,
+                                                "error": state.words})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
         return
     if name == PROTECT_TOOL and isinstance(state, (_ProtectionListed,
                                                   _ProtectionNoChange)):
@@ -16078,6 +16766,21 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
                       "outcome": "no card needed" if ran else "refused"})
         return
+    if name == PRODUCT_CHECK_TOOL and isinstance(state, _ProductCheckRefused):
+        # A product address this check cannot read (not an Amazon product page,
+        # a cart/checkout/order/account/payment/sign-in address, an empty
+        # address, or the module missing): nothing to open and nothing to ask
+        # about, so NO card. The model is told in the address checker's own
+        # words and can retry with the address the owner actually meant.
+        problem = state.problem or "that is not an Amazon product page"
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content({
+                          "ok": False,
+                          "error": f"refused: {problem} Nothing was opened and "
+                                   f"nobody was asked."})})
+        steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+        say_step("tool_refused", name)
+        return
     if name == "send_email":
         # A plan that says why nothing could be sent (a bad address, too
         # long, not set up, the module missing): nothing to ask about, so no
@@ -16140,7 +16843,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # this line stays the card's very FIRST one when both apply (rule 1 is
         # the older promise, and test_browser_engine pins it; 2026-10-30).
         browser_top = browser_card_lines(state, watch)
-    if name == "read_web_page" or name == "browser_control":
+    if name in ("read_web_page", "browser_control", PRODUCT_CHECK_TOOL):
         # Gap 1 (Gemini's S-2, 2026-10-30): the same rule web_search already
         # has, for a URL this PC is about to CONTACT. When outside text shaped
         # this turn (or the conversation is tainted, or saved memories were
@@ -16250,6 +16953,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # The send-file card shows the filename, folder, size and cap in its
         # OWN words (prepare() built them), not the generic tool-call line.
         prompt = plan_text if name == SEND_FILE_TOOL else _gate_prompt(name, args)
+        if name == SEND_TEXT_TOOL:
+            prompt = plan_text
         verdict = checker(action_name, {"text": plan_text}, prompt)
         out.card_answered(verdict)
         out.set_status("thinking")
@@ -16434,6 +17139,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             kept = result.pop("_retirement_result")
             if isinstance(kept, dict) and watch.retirement_result is None:
                 watch.retirement_result = kept
+        if (name == PRODUCT_CHECK_TOOL and isinstance(result, dict)
+                and "_product_report" in result):
+            # The product check's report goes into the answer as code's own
+            # text (deliver_product_report), never to the model - so no answer
+            # can add a trust score or a per-review fake/real label. Kept for
+            # the answering round only.
+            result = dict(result)
+            kept = result.pop("_product_report")
+            if isinstance(kept, dict) and watch.product_result is None:
+                watch.product_result = kept
         if name == SPENDING_TOOL and isinstance(result, dict) and "_table" in result:
             # The table goes to the apps' screen, never to the model: keep it
             # for the sentence round and take it out of what the model reads.

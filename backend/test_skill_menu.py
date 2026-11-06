@@ -25,6 +25,12 @@ queue, no real audit log, and every socket refused for the whole run:
     `load()` cannot find it - with no card and nothing deleted. On is one card,
     re-scans, and restores it. A skill that changed while it was off is
     refused, and does not come back;
+  * **a turned-off skill can be removed.** `jarvis_skills.uninstall()` looks a
+    name up only under the skills folder, so the parked copy in `skills-off\\`
+    was beyond every removal in either app. `POST /api/skills/state` with
+    `{"remove": true}` deletes that one copy and its own off row, with no card
+    (it is already out of the load path), refuses an installed name (that
+    removal is unchanged and stays the only door to it), and takes no list;
   * **edit is a re-install.** The edited SKILL.md goes through the same
     scanner and the same ONE card; a block finding is refused before any card;
     an edit cannot rename a skill; `references/` and `scripts/` survive;
@@ -728,6 +734,82 @@ def t_off_and_on_refuse_a_name_that_is_not_a_name():
 
 
 # --------------------------------------------------------------------------
+#   5b. Removing a skill that is TURNED OFF
+# --------------------------------------------------------------------------
+
+def t_a_turned_off_skill_can_be_removed_and_only_that():
+    """The hole this closes, proved before the door is used.
+
+    `jarvis_skills.uninstall()` resolves a name only under the skills folder,
+    so a skill this menu parked in `skills-off\\` was beyond every removal in
+    either app: the Brain's Remove and the phone's Remove both answer "no skill
+    called X" for it, and it could only ever be turned back on.
+    """
+    fresh_skills()
+    root = case()
+    make_skill(root, "parked")
+    with with_gate(StubGate()):
+        M.install_source({"path": str(root / "parked")})
+        M.set_state({"name": "parked", "on": False})
+    check("it is turned off, not installed", installed_names() == set())
+    gone = SK.uninstall("parked")
+    check("the existing removal really cannot see it", gone.get("ok") is False,
+          repr(gone)[:200])
+    check("and it says which skill it could not find", "parked" in
+          str(gone.get("reason", "")), repr(gone)[:200])
+    gate = StubGate()
+    with with_gate(gate):
+        code, out = M.set_state({"name": "parked", "remove": True})
+    check("deleting a turned-off skill needs NO card", gate.seen == [],
+          repr(gate.seen)[:300])
+    check("it says it is deleted", code == 200 and out.get("ok") is True and
+          out.get("removed") is True, repr(out)[:300])
+    check("the folder is gone", not (OFF / "parked").exists())
+    check("its own off row is gone with it", "parked" not in M._read_off())
+    check("the menu no longer lists it", M.menu()["off"] == [])
+    check("nothing else was installed", installed_names() == set())
+    check("nothing else was quarantined", quarantined() == [])
+
+
+def t_removing_a_turned_off_skill_is_one_named_thing_and_nothing_bulk():
+    """One name, one request; an installed name is refused rather than removed."""
+    fresh_skills()
+    root = case()
+    make_skill(root, "installed-one")
+    make_skill(root, "off-one")
+    with with_gate(StubGate()):
+        M.install_source({"path": str(root / "installed-one")})
+        M.install_source({"path": str(root / "off-one")})
+        M.set_state({"name": "off-one", "on": False})
+    gate = StubGate()
+    with with_gate(gate):
+        code, out = M.set_state({"name": "installed-one", "remove": True})
+        check("an INSTALLED skill is refused, so there is one door per folder",
+              code == 409 and out.get("ok") is False and
+              "Remove" in str(out.get("reason", "")), repr(out)[:300])
+        check("and it is still installed", installed_names() == {"installed-one"})
+        code, out = M.set_state({"name": "off-one", "on": True, "remove": True})
+        check("one request is one thing: remove and on together is refused",
+              code == 400 and out.get("ok") is False, repr(out)[:200])
+        check("nothing was deleted by that", (OFF / "off-one" / "SKILL.md").is_file())
+        code, out = M.set_state({"name": "not-here", "remove": True})
+        check("a name that is not there is a 404 with words",
+              code == 404 and out.get("ok") is False, repr(out)[:200])
+        code, out = M.set_state({"name": "../jarvis_gate", "remove": True})
+        check("a name that is not a name is refused", code in (400, 404) and
+              out.get("ok") is False, repr(out)[:200])
+        code, out = M.set_state({"name": ["off-one"], "remove": True})
+        check("a LIST of names is refused before anything is opened",
+              code in (400, 404) and out.get("ok") is False, repr(out)[:200])
+        check("the turned-off one is still there after every refusal",
+              (OFF / "off-one" / "SKILL.md").is_file())
+    check("no card for any of them", gate.seen == [])
+    code, out = M.set_state({"name": "off-one", "remove": True})
+    check("the one real request does delete it", code == 200 and
+          not (OFF / "off-one").exists(), repr(out)[:300])
+
+
+# --------------------------------------------------------------------------
 #   6. Edit
 # --------------------------------------------------------------------------
 
@@ -1095,6 +1177,8 @@ def main():
                t_turning_it_back_on_keeps_the_history_written_about_it,
                t_a_skill_that_changed_while_off_is_scanned_again_and_stays_off,
                t_off_and_on_refuse_a_name_that_is_not_a_name,
+               t_a_turned_off_skill_can_be_removed_and_only_that,
+               t_removing_a_turned_off_skill_is_one_named_thing_and_nothing_bulk,
                t_an_edit_replaces_the_body_behind_one_card,
                t_an_edit_with_a_block_finding_never_reaches_the_card,
                t_an_edit_cannot_rename_a_skill,

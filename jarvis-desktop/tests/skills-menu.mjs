@@ -8,7 +8,9 @@
  * a `scripts/` folder word for word, a refused skill never offered for import,
  * and only the PC's own words shown. Part 2 reads the page, the Rust and the
  * permission tables for the wiring, and for what must NOT be there: no
- * download, no marketplace, no "install all", no second removal path.
+ * download, no marketplace, no "install all", and no second removal path for
+ * an INSTALLED skill (the turned-off list's Remove is a different folder, and
+ * it goes through the same state route that parked it).
  *
  * No browser is needed for either.
  */
@@ -180,6 +182,27 @@ await check("the page asks its one command, and removes through the PC's existin
   for (const bad of ["fetch(", "XMLHttpRequest", "http://", "https://", "download("]) {
     assert.ok(!PAGE.includes(bad), `the page must not contain ${bad}`);
   }
+});
+
+await check("a turned-off skill's Remove is the same command, not a second one", () => {
+  // Two objects and two doors: an INSTALLED skill is removed by the Brain's
+  // command (the one removal path both apps have always had); the copy this
+  // menu itself parked in skills-off\ is deleted through the state route,
+  // under `remove_off`. There is no third command, and no route of its own.
+  assert.ok(R.ACTIONS.includes("remove_off"));
+  assert.ok(PAGE.includes('ask("remove_off"'));
+  const invokes = [...PAGE.matchAll(/invoke\("([a-z_]+)"/g)].map((m) => m[1]).sort();
+  assert.deepEqual(invokes, ["brain_remove_skill", "skills_menu"],
+    "the page reaches exactly two commands");
+  const offFn = PAGE.slice(PAGE.indexOf("function offRow"), PAGE.indexOf("function paint"));
+  assert.ok(offFn.includes("removeOff(skill.name)"), "the off row offers Remove");
+  assert.ok(offFn.includes("turn(skill.name, true)"), "and still offers Turn on");
+  // The installed row's Remove is unchanged, and still the Brain's command.
+  const onFn = PAGE.slice(PAGE.indexOf("function skillRow"), PAGE.indexOf("function offRow"));
+  assert.ok(onFn.includes("remove(skill.name)"), "the installed row keeps its Remove");
+  assert.ok(!onFn.includes("removeOff("), "an installed skill never takes the off door");
+  // `remove_off` raises no card, so it is never held on a stale link.
+  assert.ok(!R.CARD_ACTIONS.includes("remove_off"));
 });
 
 await check("no download, no marketplace and no auto-install anywhere", () => {

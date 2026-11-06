@@ -55,7 +55,7 @@ object HandsfreeNotice {
      * answered, the one line it decided with.
      *
      * The number beside the card is the ANSWER WINDOW, not the card's own
-     * deadline (docs/JARVIS-API.md section 186.4: `expires_in_sec` is how long
+     * deadline (docs/JARVIS-API.md section 191.4: `expires_in_sec` is how long
      * a spoken answer is open, and the card's own `expires_in` is a different
      * field the phone does not get from this event). It used to read "60s
      * left", which claimed the card would expire - so it now says "to answer".

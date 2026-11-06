@@ -570,7 +570,7 @@ def t_registered_where_the_repo_expects():
 
 def t_its_generator_check_is_semantic_not_byte_exact():
     """What `tools/gen_picture_card_patch.py --check` compares, and what it must
-    still refuse (2026-10-14; the pin re-measured 2026-10-28).
+    still refuse (2026-10-14; the pin re-measured 2026-10-28 and 2026-11-05).
 
     The check was byte-exact, which made the hunk header's LINE NUMBER
     load-bearing. It is not: `git apply` finds a hunk by matching its context
@@ -579,9 +579,11 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     Slice 3a's static-asset block, the browser HUD's served face closure -
     `faces.html` and the scripts it loads - the History sidebar's modules and
     three.js (2026-10-27), and the shared invoke-budget asset's three
-    STATIC_ASSETS lines added 2026-10-28; 307 lines sit before this anchor
-    now): the committed patch says `@@ -6591,3 +6591,25 @@` and the generator
-    derives `@@ -6898,3 +6898,25 @@`. Both files are 29 lines and line 3 is the
+    STATIC_ASSETS lines added 2026-10-28; 323 lines sit before this anchor
+    now - the last 16 of them the history-purge routes added to
+    `jarvis-backend/jarvis_hud.py` on 2026-11-04): the committed patch says
+    `@@ -6591,3 +6591,25 @@` and the generator
+    derives `@@ -6914,3 +6914,25 @@`. Both files are 29 lines and line 3 is the
     only difference. That made CI red on EVERY branch, including ones that never
     touch this patch - while the 143-patch rehearsal passed with the stale
     number, which is the proof it applies.
@@ -622,13 +624,13 @@ def t_its_generator_check_is_semantic_not_byte_exact():
     check("the committed patch's header is the stale one this was measured on",
           committed[2] == b"@@ -6591,3 +6591,25 @@", committed[2])
     check("the generated header is the one this was measured on",
-          generated[2] == b"@@ -6898,3 +6898,25 @@", generated[2])
+          generated[2] == b"@@ -6914,3 +6914,25 @@", generated[2])
 
     ok, summary, why = gen.check(have, want)
     check("the committed patch PASSES the semantic check even though its hunk "
-          "header is 307 lines stale", ok, why)
+          "header is 323 lines stale", ok, why)
     check("... and the skew is reported, not swallowed",
-          ok and "307 line(s)" in (summary or ""), summary)
+          ok and "323 line(s)" in (summary or ""), summary)
 
     def must_fail(label, bad):
         ok, summary, why = gen.check(bad, want)

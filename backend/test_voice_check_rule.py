@@ -42,6 +42,7 @@ nothing:
 
 No network, no model, no microphone.
 """
+import ast
 import json
 import sys
 import tempfile
@@ -51,7 +52,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE / "rebuilt"))
 sys.path.insert(0, str(HERE))
-from _where import require_shipped  # noqa: E402
+from _where import BACKEND, require_shipped  # noqa: E402
 
 require_shipped("jarvis_live.py", "jarvis_settings_registry.py")
 
@@ -508,6 +509,141 @@ def t_the_registry_row_is_the_same_switch():
               out.ok and out.waiting and L.voice_check_setting() is False, out)
 
 
+def test_live_session_latch_rejects_radio_impostor_over_1200ms_but_allows_short_confirm():
+    """THE RADIO/TV IMPOSTOR (the owner's report of 2026-11-05; the regression
+    of #1104 / DEF-028).
+
+    The session latch is KEPT: one verified sentence still covers the whole
+    session, and nothing asks the owner to enrol again. What the latch may not
+    do is skip the CHEAP half of the owner check for every later clip - which
+    is how a radio in the room came to be transcribed and answered as the
+    owner. A latched clip of RADIO_GUARD_S or more is now put to the CAM++
+    embedding, and a clip under the bar is dropped as background audio; a
+    short confirmation ("yes", "do it") is still accepted, because asking the
+    owner to repeat himself to answer a card is the behaviour the 2026-11-01
+    ruling removed.
+    """
+    with TempConfig():
+        e, out = engine(locked=True)
+        check("a checking session starts", out.get("ok") is True, out)
+        check("...and its latch is NOT on before the first verified sentence",
+              e.trust_state()["active"] is False)
+        check("...so the guard has no opinion on the first clip: the real "
+              "strict check owns it",
+              e.radio_guard("phone", 3.0) == {"needed": False},
+              e.radio_guard("phone", 3.0))
+        # The hole this fixes, stated in the latch's own terms: after one
+        # verified sentence a 1.7 s clip runs on session trust with no speaker
+        # model at all.
+        e.note_verified("phone", strictness="very_strict", label="phone")
+        check("the latch is on after one verified sentence",
+              e.trust_state()["active"] is True)
+        check("...a 1.7 s clip is still trusted with no strict check (the "
+              "latch itself is unchanged)",
+              e.trust_decision("phone", 1.7)["action"] == "trusted",
+              e.trust_decision("phone", 1.7))
+        # ...and it is exactly that band the guard now measures.
+        d = e.radio_guard("phone", 1.7)
+        check("...but that same 1.7 s clip MUST prove it is the owner",
+              d.get("needed") is True, d)
+        check("...against the no-wake-word bar (0.32)",
+              d.get("min_cosine") == L.RADIO_MIN_COSINE_NO_WAKE
+              and L.RADIO_MIN_COSINE_NO_WAKE == 0.32, d)
+        d = e.radio_guard("phone", 2.5, had_wake=True)
+        check("a clip that said \"hey Jarvis\" is held to the lower bar (0.25)",
+              d.get("needed") is True and d.get("min_cosine") == L.RADIO_MIN_COSINE
+              and L.RADIO_MIN_COSINE == 0.25, d)
+        check("a long clip with no wake word is held to 0.32",
+              e.radio_guard("phone", 9.0).get("min_cosine")
+              == L.RADIO_MIN_COSINE_NO_WAKE)
+        # The line the owner drew: SHORT UTTERANCES ARE STILL ACCEPTED.
+        for secs in (0.0, 0.4, 0.9, 1.19):
+            check(f"a {secs} s confirmation is NOT guarded while latched "
+                  f"(the owner is never asked to repeat \"yes\")",
+                  e.radio_guard("phone", secs).get("needed") is False,
+                  e.radio_guard("phone", secs))
+        check("the guard starts exactly at 1.2 s",
+              e.radio_guard("phone", L.RADIO_GUARD_S).get("needed") is True
+              and L.RADIO_GUARD_S == 1.2)
+        check("another device's clip is not this session's to judge",
+              e.radio_guard("desktop", 3.0).get("needed") is False)
+        check("...and it reads no audio and writes nothing: a decision only",
+              set(e.radio_guard("phone", 3.0)) == {"needed", "seconds",
+                                                  "min_cosine"})
+        # What a dropped clip answers: nothing about the voice that was heard.
+        check("a dropped clip reports the background-media reason",
+              L.IGNORED_BACKGROUND == {"ok": True,
+                                       "ignored_unmatched_speaker": True,
+                                       "reason": "background_media_rejected"},
+              L.IGNORED_BACKGROUND)
+        # ...and what the ROUTE actually answers, which is deliberately not
+        # `ok: true`: `Heard.as_dict()` defines `ok` as "a transcript was
+        # produced", and both apps read it that way. A client handed `ok: true`
+        # with an empty `text` has nothing to do with it.
+        import jarvis_speech as S
+        _wire = S.Heard(False, reason=str(L.IGNORED_BACKGROUND["reason"]),
+                        ignored_unmatched_speaker=True).as_dict()
+        check("the wire says the clip was dropped, not that it failed",
+              _wire["ignored_unmatched_speaker"] is True
+              and _wire["reason"] == "background_media_rejected", _wire)
+        check("...and does NOT claim a transcript it never made",
+              _wire["ok"] is False and _wire["owner"] is False, _wire)
+        e.stop()
+
+
+def t_the_radio_guard_is_wired_into_the_hearing_path():
+    """The rule above is only worth anything if `hear()` asks it.
+
+    The drop lives in `jarvis_speech.hear`, which needs a real microphone clip
+    and a speaker model to drive end to end - CI has neither (it has no
+    enrolled print and no Ollama). So this checks the WIRING in the source the
+    product runs, by WALKING AST NODES rather than reading the source as text:
+    `tools/check_no_source_pins.py` is the ratchet that forbids a new source
+    pin (a `"token" in src` comparison goes red when the code is merely
+    reformatted), and a docstring is an `ast.Constant` that can never be
+    mistaken for an `ast.Call`. Same four facts the text version named, each
+    read structurally.
+    """
+    tree = ast.parse((BACKEND / "jarvis_speech.py").read_text(encoding="utf-8"))
+
+    def dotted(node) -> str:
+        parts = []
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if isinstance(node, ast.Name):
+            parts.append(node.id)
+        return ".".join(reversed(parts))
+
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)]
+    call_names = {dotted(c.func) for c in calls}
+    check("hear() asks the Live session whether this clip needs the guard",
+          "jarvis_live.ENGINE.radio_guard" in call_names)
+    check("...measures the CAM++ cosine against the enrolled print itself",
+          any(isinstance(n, ast.FunctionDef) and n.name == "_owner_cosine"
+              for n in ast.walk(tree))
+          and "jarvis_voice.cosine" in call_names)
+    check("...and DROPS an unmatched latched clip instead of transcribing it",
+          any(kw.arg == "ignored_unmatched_speaker"
+              and isinstance(kw.value, ast.Constant) and kw.value.value is True
+              for c in calls for kw in c.keywords)
+          and any(isinstance(n, ast.Subscript)
+                  and dotted(n.value) == "jarvis_live.IGNORED_BACKGROUND"
+                  and isinstance(n.slice, ast.Constant)
+                  and n.slice.value == "reason"
+                  for n in ast.walk(tree)))
+    compares = [n for n in ast.walk(tree) if isinstance(n, ast.Compare)]
+    check("a guard that cannot measure never swallows the owner's words "
+          "(None is not a rejection)",
+          any(isinstance(c.ops[0], ast.IsNot)
+              and isinstance(c.comparators[0], ast.Constant)
+              and c.comparators[0].value is None for c in compares)
+          and any(isinstance(c.ops[0], ast.Lt)
+                  and any(isinstance(x, ast.Call) and dotted(x.func) == "float"
+                          for x in ast.walk(c.comparators[0]))
+                  for c in compares))
+
+
 def main() -> int:
     for fn in (t_the_four_cases,
                t_an_absent_locked_is_the_old_behaviour,
@@ -523,7 +659,9 @@ def main() -> int:
                t_off_is_at_once_and_on_is_one_card,
                t_off_withdraws_a_waiting_card,
                t_the_route_carries_the_setting_itself,
-               t_the_registry_row_is_the_same_switch):
+               t_the_registry_row_is_the_same_switch,
+               test_live_session_latch_rejects_radio_impostor_over_1200ms_but_allows_short_confirm,
+               t_the_radio_guard_is_wired_into_the_hearing_path):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

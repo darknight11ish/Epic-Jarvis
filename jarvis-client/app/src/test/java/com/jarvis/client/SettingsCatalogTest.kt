@@ -75,7 +75,7 @@ class SettingsCatalogTest {
     }
 
     @Test
-    fun `there are 33 desktop toggles and 3 phone rows`() {
+    fun `there are 34 desktop toggles and 3 phone rows`() {
         // The number this work was briefed with was 19, which is the count of
         // rows spelled exactly `<label class="toggle">` - it misses the seven
         // that also carry a label id. Pinned here so it cannot quietly move.
@@ -85,18 +85,23 @@ class SettingsCatalogTest {
         // 21 to 22 bare, 28 to 29 desktop, and 2 to 3 phone rows.
         // Wave B's "Personalize Jarvis" reminder (2026-11-03) carries a label
         // id, so the bare count stays 25 while the desktop total is 33.
-        assertEquals(33, rows.count { it.s("owner") == "desktop" })
+        // Hands-free mode (2026-11-04, JARVIS-API section 191) is one more
+        // desktop toggle - a BARE one, so the bare count goes 25 to 26 while
+        // the desktop total is 34. It adds NO phone row: the phone's own
+        // hands-free row is the Android lane's separate change, so the phone
+        // count stays 3 here.
+        assertEquals(34, rows.count { it.s("owner") == "desktop" })
         assertEquals(3, rows.count { it.s("owner") == "phone" })
-        assertEquals(36, rows.size)
-        assertEquals(36, doc["counts"]!!.jsonObject.i("all"))
-        assertEquals(33, doc["counts"]!!.jsonObject.i("desktop"))
+        assertEquals(37, rows.size)
+        assertEquals(37, doc["counts"]!!.jsonObject.i("all"))
+        assertEquals(34, doc["counts"]!!.jsonObject.i("desktop"))
         assertEquals(3, doc["counts"]!!.jsonObject.i("phone"))
     }
 
     @Test
-    fun `every order is unique and the desktop rows run 1 to 33`() {
+    fun `every order is unique and the desktop rows run 1 to 34`() {
         val desktop = rows.filter { it.s("owner") == "desktop" }.map { it.i("order") }
-        assertEquals((1..33).toList(), desktop)
+        assertEquals((1..34).toList(), desktop)
         assertEquals(rows.size, SettingsCatalog.ROWS.map { it.id }.toSet().size)
     }
 
@@ -164,17 +169,21 @@ class SettingsCatalogTest {
 
     @Test
     fun `the rows the PC words are marked, and the phone must keep reading the PC`() {
-        // Eleven rows get their visible words from the PC at read time: the
+        // TWELVE rows get their visible words from the PC at read time: the
         // words in the catalogue are a FALLBACK for those, never the words the
         // owner ends up reading. This test names them so that a future change
         // that "helpfully" starts rendering one from here is caught, and it
         // pins the count that was mis-reported as twelve.
+        // "hf-enabled" (2026-11-04) is the twelfth: the hands-free switch's
+        // label, detail and status are read from GET /api/handsfree every
+        // time the card is drawn, so the catalogue's words are only the
+        // fallback until that route answers.
         val fallback = SettingsCatalog.FALLBACK_ROWS.map { it.id }
         assertEquals(
             listOf(
                 "sky-show", "voice-one-moment", "voice-heard-sound", "mn-humor",
                 "coach-enabled", "sec-app-lock", "sec-private", "cv-face-switch",
-                "ws-enabled", "ws-ask",
+                "ws-enabled", "ws-ask", "hf-enabled",
             ),
             fallback,
         )
@@ -187,12 +196,12 @@ class SettingsCatalogTest {
     fun `exactly one row is not a setting at all`() {
         val notSettings = SettingsCatalog.ROWS.filter { !it.settingRow }.map { it.id }
         assertEquals(listOf("spd-accept"), notSettings)
-        // 35 since Wave B's "Personalize Jarvis" reminder joined the
-        // notifications card (2026-11-03): 36 rows, one of which is the
-        // spending accept-all control and not a setting.
+        // 36 since hands-free mode's switch joined the sandbox's card position
+        // (2026-11-04): 37 rows, one of which is the spending accept-all
+        // control and not a setting.
         // (It was 31 when "Making pictures" joined on 2026-10-11, at 30 rows;
         // 32 after the sandbox, 34 after Learning, 35 after Wave B.)
-        assertEquals(35, SettingsCatalog.SETTING_ROWS.size)
+        assertEquals(36, SettingsCatalog.SETTING_ROWS.size)
         // ...and it is hidden, because it is the spending screen's accept-all
         // control rather than a preference.
         assertTrue(rows.first { it.s("id") == "spd-accept" }.b("hidden"))

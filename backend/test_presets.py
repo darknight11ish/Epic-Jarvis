@@ -1,5 +1,6 @@
 """The nine focus presets: ids, lanes, honest measurements, one rendered contract."""
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -235,6 +236,30 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
           "not installed yet" in two["three_gpu_plan"]["cards"][2]["card"]
           and two["by_gpu_count"]["3"]["agentic_vision"]["card_index"] == 0,
           two["three_gpu_plan"]["cards"][2])
+    # This check's invariant is "never an invented array position", NOT a
+    # particular card: origin/main moved Agentic+Vision to the everyday card
+    # (it needs about 7.00 GiB and a headless 8 GB card has 6.65 GiB free), so
+    # the role word it must print is the everyday one. The `card` field and the
+    # `note`'s opening must still be the same words (2026-11-05).
+    check("two cards installed: the Agentic+Vision ROW's own `card` is a role "
+          "word too, never the old invented 'card 2' from _row()'s fallback "
+          "(fixed 2026-11-05)",
+          not re.match(r"^card \d+$",
+                       two["by_gpu_count"]["3"]["agentic_vision"]["card"])
+          and two["by_gpu_count"]["3"]["agentic_vision"]["note"].startswith(
+              two["by_gpu_count"]["3"]["agentic_vision"]["card"]),
+          two["by_gpu_count"]["3"]["agentic_vision"])
+    check("... and NO 3-GPU row falls back to an array position at all: every "
+          "row names a role (the coding row names the pooled lane)",
+          all(not re.match(r"^card \d+$", row["card"])
+              for row in two["by_gpu_count"]["3"].values()),
+          {k: v["card"] for k, v in two["by_gpu_count"]["3"].items()})
+    check("... every non-pooled 3-GPU row's card is the same role word its own "
+          "note opens with, so the two fields cannot disagree",
+          all(row["note"].startswith(row["card"])
+              for row in two["by_gpu_count"]["3"].values()
+              if row["preset"] != "coding"),
+          {k: (v["card"], v["note"]) for k, v in two["by_gpu_count"]["3"].items()})
     check("the pooled lane's port is ONE number, pinned to the two modules that "
           "own it rather than typed three times",
           P.POOLED_PLAN_PORT == 11450, P.POOLED_PLAN_PORT)
@@ -243,6 +268,85 @@ def t_three_gpu_rows_name_the_cards_by_role_not_by_index():
     check("... and it is the lane module's POOLED_PORT and the big-coder's BIG_PORT",
           P.POOLED_PLAN_PORT == L.POOLED_PORT == BC.BIG_PORT,
           (P.POOLED_PLAN_PORT, L.POOLED_PORT, BC.BIG_PORT))
+
+
+def t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane():
+    """2026-11-05. `_card_roles()` took `main` = highest VRAM and then searched
+    only `rest` for `monitor is True`. On a PC whose main card HAS the monitor
+    that search found nothing, so the display role fell through to `rest[0]` -
+    a card with NO monitor - and `_role_words(..., "display")` described that
+    card as "the card with no monitor" while the plan called the same row the
+    monitor lane. The monitor is now searched for on EVERY card.
+
+    When the monitor is on the everyday card, the Fast/Live lane still gets its
+    own card (the model does not need the screen) and the words say where the
+    monitor really is. The 12 GB card with `monitor=True` is the reported case.
+    """
+    cards = _three_card_block(True, False, False)["cards"]
+    roles = P._card_roles(cards)
+    words = P._role_words(cards, roles, "display")
+    check("the monitor on the everyday card is FOUND, not silently missed",
+          roles["monitor_on_main"] is True and roles["main"] == 0, roles)
+    check("the Fast/Live lane still has a card of its own (the monitor card is "
+          "already the everyday card)",
+          roles["display"] == 1, roles)
+    check("... and its words say where the monitor is instead of claiming this "
+          "card has it",
+          "the card with the monitor" not in words
+          and "the card with no monitor" not in words
+          and "the monitor is on the everyday card instead" in words, words)
+    real = P._detected_cards
+    P._detected_cards = lambda: {"count": 3,
+                                 "source": "jarvis_hardware.detect()",
+                                 "cards": cards}
+    try:
+        rec = P.recommendations()
+    finally:
+        P._detected_cards = real
+    three = rec["by_gpu_count"]["3"]
+    fast = three["fast"]
+    check("the 3-GPU Fast row says where the monitor is; it is never labelled "
+          "the monitor lane on a card with no monitor",
+          "the monitor is on the everyday card instead" in fast["note"]
+          and "the monitor is on the everyday card instead" in fast["card"]
+          and "the card with the monitor" not in fast["note"]
+          and "the card with the monitor" not in fast["card"], fast)
+    plan = rec["three_gpu_plan"]["cards"]
+    check("the plan's display row is not called the monitor card's lane when the "
+          "monitor is on the everyday card",
+          "the card with the monitor" not in plan[1]["card"]
+          and "the monitor is on the everyday card instead" in plan[1]["card"]
+          and "monitor card's lane" not in plan[1]["role"], plan[1])
+    check("the headless row keeps the third card and names its own PCI address",
+          "0000:0a:00.0" in plan[2]["card"], plan[2])
+    check("... and Agentic+Vision, which cannot fit that 8 GB card, is on the "
+          "everyday card and names ITS PCI address - never the headless one",
+          three["agentic_vision"]["card_index"] == 0
+          and "0000:04:00.0" in three["agentic_vision"]["card"],
+          three["agentic_vision"])
+
+    # The same reported case with only the two cards this PC has: the other
+    # card gets the Fast lane and the third role stays honestly not installed.
+    P._detected_cards = lambda: {"count": 2,
+                                 "source": "jarvis_hardware.detect()",
+                                 "cards": _three_card_block(True, False, False)["cards"][:2]}
+    try:
+        two = P.recommendations()
+    finally:
+        P._detected_cards = real
+    rows = two["by_gpu_count"]["3"]
+    check("two cards with the monitor on the everyday one: no 3-GPU row invents "
+          "an array position",
+          all(not re.match(r"^card \d+$", row["card"]) for row in rows.values()),
+          {k: v["card"] for k, v in rows.items()})
+    check("... the Fast row is the other card and says where the monitor is",
+          "the monitor is on the everyday card instead" in rows["fast"]["card"]
+          and "the card with the monitor" not in rows["fast"]["card"], rows["fast"])
+    check("... and Agentic+Vision stays on the installed everyday card instead of "
+          "claiming a third card it cannot fit",
+          rows["agentic_vision"]["card_index"] == 0
+          and "not installed yet" not in rows["agentic_vision"]["card"],
+          rows["agentic_vision"])
 
 
 def main() -> int:
@@ -390,6 +494,21 @@ def main() -> int:
               for n in ("1", "3") for r in rec["by_gpu_count"][n].values()),
           "1/3 GPU rows")
     three = rec["by_gpu_count"]["3"]
+    # Both sides rewrote this block, and they disagree about ONE fact: where
+    # Agentic+Vision goes on a 3-GPU PC. origin/main moved it to the everyday
+    # card with a measured reason - the 9B weights plus the vision projector
+    # need about 7.00 GiB and a headless 8 GB card has 6.65 GiB free - after
+    # this branch was written against the older headless placement (2026-11-05).
+    # main's measured placement wins; this branch's two NEW invariants are kept
+    # and pointed at it, so neither side's paragraph is lost.
+    check("the fixture's 3-GPU rows never print an invented array position "
+          "('card 2'), because every row carries a role word (fixed 2026-11-05)",
+          all(not re.match(r"^card \d+$", row["card"]) for row in three.values()),
+          {k: v["card"] for k, v in three.items()})
+    check("... and the Agentic+Vision row's card words are the same words its own "
+          "note opens with, so no row names a card its note contradicts",
+          three["agentic_vision"]["note"].startswith(three["agentic_vision"]["card"]),
+          three["agentic_vision"])
     check("3-GPU confirmed layout: Fast on the display card, Agentic+Vision on the "
           "everyday card (it cannot fit an 8 GB card)",
           three["fast"]["card_index"] == 1 and three["agentic_vision"]["card_index"] == 0,
@@ -423,6 +542,7 @@ def main() -> int:
           and rec["by_gpu_count"]["2"]["general_uncensored"]["measured"] is True)
 
     t_three_gpu_rows_name_the_cards_by_role_not_by_index()
+    t_a_monitor_on_the_everyday_card_is_never_called_a_monitor_lane()
     t_the_live_route_matches_the_generated_contract()
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

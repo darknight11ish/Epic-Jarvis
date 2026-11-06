@@ -15,7 +15,7 @@ import org.junit.Test
  * bodies and answers, every line of plain words, and the honest degradation
  * against a PC that has never heard of hands-free.
  *
- * `docs/JARVIS-API.md` section 186 is the contract (PR #1169, the PC half), and
+ * `docs/JARVIS-API.md` section 191 is the contract (PR #1169, the PC half), and
  * this file is the phone half's reading of it. net/Handsfree.kt is pure, so all
  * of it is held here: a `handsfree_card` with no id is dropped (an answer to it
  * could not be posted), an unknown event kind is silently ignored (the stream
@@ -399,7 +399,7 @@ class HandsfreeEventTest {
         assertEquals(setOf("card_id", "data_b64", "sample_rate"), body.keys)
         assertEquals("card-7", body["card_id"]!!.toString().trim('"'))
         // The clip is always the 16 kHz WAV HandsfreeClip built, so the
-        // declared rate can never disagree with the file (section 186.5).
+        // declared rate can never disagree with the file (section 191.5).
         assertEquals(16_000, body["sample_rate"].toString().toInt())
         assertEquals(16_000, Handsfree.SAMPLE_RATE)
         assertEquals("AQID", body["data_b64"]!!.toString().trim('"'))

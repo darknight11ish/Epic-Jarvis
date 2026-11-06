@@ -21,7 +21,7 @@ WHAT THIS PROVES (2026-11-04, the self-awareness audit's gap 4):
     own refresh. No typed list, and no 136 the old counts() used to emit.
   - THE ANSWER FOLLOWS A REAL SETTINGS FILE. A one-tool [tools].enabled is
     written through JARVIS_FRAMEWORK_TOML, and "what tools do you have" must
-    say ONE switched on - not a constant, and not the shipped 13.
+    say ONE switched on - not a constant, and not the shipped 15.
   - ALL FOUR ARE READ-ONLY. "cancel that" must not be able to undo a question,
     and a question must not clear a pending card; each name is in
     jarvis_quick.READ_ONLY_INTENTS.
@@ -161,16 +161,22 @@ def all_four_are_read_only():
 
 
 def tools_answer_is_the_registry_and_the_live_file():
+    # 60, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
+    # GitHub "Read + actions") are in jarvis_agent.TOOLS and ship switched OFF,
+    # hands-free then added send_text_message (on by default, 14), and the
+# approval-policy tool added approval_policy (on by default, so enabled is 15)
+    # and the product check added product_check (off). The answer is still read
+    # from the registry and the settings file, never typed.
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 51,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 60,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
-          inv["enabled"] == 13, str(inv["enabled"]))
+          inv["enabled"] == 15, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "51 tools" in reply, reply[:120])
-    check("it names the switched-on count", "13 of them are switched on" in reply,
+    check("it names the registered count", "60 tools" in reply, reply[:120])
+    check("it names the switched-on count", "15 of them are switched on" in reply,
           reply[:160])
     check("it names a REAL tool in plain words",
           "Calculator" in reply and "Web search" in reply, reply[:200])
@@ -201,8 +207,8 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 50 are not switched on",
-              bool(reply) and "other 50 are built in but not switched on" in reply,
+        check("... and says the other 59 are not switched on",
+              bool(reply) and "other 59 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:
@@ -363,7 +369,7 @@ def the_two_settings_numbers_reconcile():
     data = REG.changeable_settings()
     registry_rows = (len(REG.BOOL_SETTINGS) + len(REG.CHOICE_SETTINGS)
                      + len(REG.NUMBER_SETTINGS))
-    check("the registry's own row count is 48", registry_rows == 48,
+    check("the registry's own row count is 49", registry_rows == 49,
           str(registry_rows))
     check("the spoken answer names how many of its count are those rows",
           f"{registry_rows} of them are the switches, named choices and numbers" in

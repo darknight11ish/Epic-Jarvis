@@ -50,6 +50,14 @@ FAILED, PASSED, SKIPPED = [], [], []
 #: put it here too.
 NO_PATCH = {
     "antislop",
+    # Hands-free mode (2026-11-04, jarvis_handsfree.py): its four routes come
+    # from the module's own install(), called by the drop-in loader, so the
+    # folder is the whole of its wiring and no patch is added to
+    # `jarvis_hud.py`. `backend/handsfree.patch` exists but touches ONLY
+    # `jarvis_gate.py` (two `_RISK` rows, one `_TOOL_ACTIONS` line, two
+    # `_NO_RULE_FROM_DENIAL` lines) - a patch that is not a route patch is not
+    # what this list is about.
+    "handsfree",
     "google-calendar",
     # The app builder's last two steps (2026-10-30, JARVIS-API section 166):
     # `jarvis_android_builder.install()` answers its four routes, called by the
@@ -78,6 +86,12 @@ NO_PATCH = {
     "auto-router",
     "media-index",
     "notion-obsidian",
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the owner's
+    # choice "wire the existing product check"): its ONE route comes from its
+    # own install(), called by the drop-in loader, so the folder is the whole
+    # of its wiring and no patch is added to `jarvis_hud.py` (the gate's own
+    # two rows are `product-check.patch`, which is a core patch).
+    "product-check",
     "receipts",
     "sandbox",
     "self-improve",
@@ -96,14 +110,18 @@ NO_PATCH = {
     "vault",
     "vault-organizer",
     "voiceprint",
-    # The watchers' decision log (2026-11-04, the owner-forwarded
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04): its four
+    # routes come from its own install(), called by the drop-in loader, so the
+    # folder is the whole of its wiring and no patch is added to
+    # `jarvis_hud.py`.
+    "call-notes",    # The watchers' decision log (2026-11-04, the owner-forwarded
     # dsh-superagent spec, Part II pattern 1): GET /api/watch/decisions comes
     # from jarvis_watch_ci.install(), called by the drop-in loader, so the
     # folder is the whole of its wiring and no patch is added to
     # `jarvis_hud.py` - which also keeps the route out of that file's dispatch
     # tuple, where every addition has to be ordered around two other patches.
     "watch-decisions",
-    # A document from the owner's phone (2026-11-05, JARVIS-API section 188;
+    # A document from the owner's phone (2026-11-05, JARVIS-API section 196;
     # the owner's ask: "upload any documents through the jarvis app ... fully
     # processed as if I was uploading it to the jarvis desktop"). The three
     # /api/upload routes come from jarvis_upload.install(), called by the

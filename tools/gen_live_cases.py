@@ -202,6 +202,11 @@ def sign(st: dict, me: str, stale: bool = False, thinking: bool = False,
         detail = L.PAUSE_WORDS["card"]
     elif st.get("quiet_warn"):
         detail = L.SEEN["quiet_warn"]
+    elif st.get("starting") and st.get("starting_words"):
+        # Just started: the microphone is open but the PC is still warming the
+        # speech engines (jarvis_live.START_WORDS). Same place in the order as
+        # live-rules.js's own check.
+        detail = st["starting_words"]
     elif thinking:
         detail = L.SEEN["heard"]
     elif short:
@@ -441,12 +446,13 @@ class _Clock:
         return self.t
 
 
-def _engine(cards=None):
+def _engine(cards=None, warm_ready=True):
     clock = _Clock()
     box = {"cards": cards if cards is not None else []}
     e = L.Live(clock=clock, publish=lambda k, d: None, run_loop=False,
                cards_waiting=lambda: box["cards"], windows_locked=lambda: None,
                voice_ready=lambda d: None, power_mode=lambda: "active", warm=lambda: None,
+               warm_ready=lambda: warm_ready,
                end_on=lambda: L.END_ON_APP_LOCK)
     return e, clock, box
 
@@ -552,6 +558,11 @@ def statuses() -> dict:
     dready = dict(out["desktop_on"])
     dready["camera"] = {"ready": True, "why": ""}
     out["desktop_camera_ready"] = dready
+    # A session that just started while the speech engines are still warming:
+    # the microphone is open, the PC cannot hear yet, and the sign says so.
+    e7, _, _ = _engine(warm_ready=False)
+    e7.start("desktop")
+    out["desktop_starting"] = _st(e7)
     return out
 
 
