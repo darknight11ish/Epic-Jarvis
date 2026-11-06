@@ -12848,9 +12848,25 @@ def _note_asking(s: str) -> Optional[Intent]:
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
+    # The read/search shapes the 2026-10-31 audit measured chat refusing. They
+    # are REAL reads now (`_notes_chat` above answers most of them first); this
+    # is the second door for the shapes it does not word, and it routes to the
+    # SAME deterministic store - a named note by title, a topic by content
+    # search, and anything else to the list of what there is. The old refusal
+    # ("Chat does not read note text today") is gone: it was true when it was
+    # written and this file replaced it.
     for rx in _NOTE_READ_PATTERNS:
-        if rx.fullmatch(s):
-            return Intent("note_read_honest")
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        gd = m.groupdict()
+        name = str(gd.get("name") or "").strip(" \"'")
+        query = str(gd.get("query") or "").strip(" \"'")
+        if name and name.lower() not in ("the", "my", "a", "an"):
+            return Intent("note_read", {"title": name})
+        if query:
+            return Intent("note_search", {"needle": query})
+        return Intent("note_list")
     if _VAULT_APPLY.fullmatch(s):
         return Intent("vault_organizer_apply")
     m = _VAULT_SCOPED.match(s)
@@ -12886,11 +12902,6 @@ NOTE_CHANGE_REFUSAL = (
     "The notes editor does not create, rename or delete notes. It can browse, "
     "search and open any note, and save a change to an existing one. Nothing "
     "was changed.")
-#: Chat does not read note text today; the Notes plate is the real door.
-NOTE_READ_HONEST = (
-    "Chat does not read note text today. The Notes plate in the Brain window "
-    "can search, read and open any note, and saving a change there takes one "
-    "approval card. Nothing was read or changed.")
 #: Obsidian's own theme, style sheets, templates and plugins belong to Obsidian.
 #: The hard sentence is the same one the catalogue answers use, so the two paths
 #: cannot say different things.
@@ -13005,11 +13016,6 @@ def _run_note_make(f: dict) -> Result:
 def _run_note_change_refused() -> Result:
     """"create/rename/delete a note" - one plain refusal, nothing changed."""
     return Result(NOTE_CHANGE_REFUSAL, "note_change_refused")
-
-
-def _run_note_read_honest() -> Result:
-    """"what does my note say?" - chat does not read note text; say the door."""
-    return Result(NOTE_READ_HONEST, "note_read_honest")
 
 
 def _run_obsidian_style_refused() -> Result:
@@ -13324,10 +13330,45 @@ _NOTE_MENTION = re.compile(r"which\s+notes?\s+mention\s+(.+)")
 _NOTE_SEARCH = re.compile(
     r"(?:find|search|show|list|any)\s+(?:me\s+)?(?:my\s+)?notes?\s+"
     r"(?:about|for|mentioning|mention|on)\s+(.+)")
+#: "what did I write about X", "what do my notes say about X", "do I have a
+#: note about X" - a CONTENT question about the notes' own text, so it goes to
+#: the content search (the one `chat_search_notes` makes), never to a title
+#: guess: a note called "Welcome" need not contain the word.
+_NOTE_WROTE = re.compile(
+    r"what\s+did\s+i\s+(?:write|note|jot)\s+(?:about|on|down\s+about)\s+(.+)")
+_NOTE_SAY_ABOUT = re.compile(
+    r"what\s+do\s+(?:my|the)\s+notes?\s+say\s+about\s+(.+)")
+_NOTE_HAVE_ABOUT = re.compile(
+    r"do\s+i\s+have\s+(?:a\s+|any\s+)?notes?\s+(?:about|on|called|named)\s+(.+)"
+    r"|what\s+notes?\s+do\s+i\s+have\s+(?:about|on|for)\s+(.+)")
+#: "read my notes", "what do my notes say", "what notes do I have", "search
+#: through my notes" - which notes there ARE, or a search with no term yet.
+#: These list the titles (and how each starts) and ask which one to read,
+#: instead of guessing one or printing the vault's whole index.
+_NOTE_LIST_SHAPES = (
+    re.compile(r"what\s+do\s+(?:my|the)\s+notes?\s+say\s*"),
+    re.compile(r"what\s+notes?\s+do\s+i\s+have\b.*"),
+    re.compile(r"(?:search|look)\s+(?:through\s+|in\s+|at\s+)?(?:my|the)\s+notes?\s*"),
+)
 
 
 def _notes_chat(s: str) -> Optional[Intent]:
-    """The three note questions this file answers without a model."""
+    """The note questions this file answers without a model.
+
+    Deterministic and read-only: every branch lands on `jarvis_notes_edit`'s
+    `chat_*` helpers, which read the SAME vault files the editor routes read.
+    The content questions come first, so "what do my notes say about milk" is a
+    search rather than a note called "say about milk".
+    """
+    m = _NOTE_WROTE.fullmatch(s) or _NOTE_SAY_ABOUT.fullmatch(s)
+    if m:
+        return Intent("note_read_about", {"needle": m.group(1).strip(" \"'")})
+    m = _NOTE_HAVE_ABOUT.fullmatch(s)
+    if m:
+        needle = next((g for g in m.groups() if g), "").strip(" \"'")
+        return Intent("note_search", {"needle": needle})
+    if any(rx.fullmatch(s) for rx in _NOTE_LIST_SHAPES):
+        return Intent("note_list")
     if _NOTE_READ_PLURAL.fullmatch(s):
         return Intent("note_read", {"title": ""})
     m = _NOTE_READ_MY.fullmatch(s) or _NOTE_READ.fullmatch(s)
@@ -13342,27 +13383,145 @@ def _notes_chat(s: str) -> Optional[Intent]:
     return None
 
 
+def _note_unreadable(body: dict) -> str:
+    """The vault's own why, as a chat sentence that NAMES the switch.
+
+    `jarvis_notes.vault_problem` already says which setting is missing
+    (`[notes.obsidian] vault_directory`, or `JARVIS_OBSIDIAN_VAULT`); the
+    route's own "No notes list:" prefix is dropped because this answer is chat,
+    not a route.
+    """
+    said = str((body or {}).get("said") or (body or {}).get("error") or "").strip()
+    said = re.sub(r"^No notes list:\s*", "", said)
+    if not said:
+        said = "the Obsidian vault setting on this PC could not be read"
+    return "I cannot read a note: " + said.rstrip(".") + "."
+
+
+def _note_no_match(title: str) -> str:
+    """No note has that title: say so, and name the vault that was searched."""
+    said = 'No note in your vault is called "{0}".'.format(str(title or "").strip())
+    root = ""
+    try:
+        import jarvis_notes_edit as NE
+        root = NE.chat_vault_root()
+    except Exception:                       # noqa: BLE001 - never a second guess
+        root = ""
+    return said + (" Your vault is the folder {0}.".format(root) if root else "")
+
+
+def _note_choices_said(title: str = "") -> Result:
+    """Which note? - each candidate's title and how it starts, then the ask.
+
+    A read that names no title ("read my notes") and a title that matches more
+    than one note ("read my Note") are the same question, so they get the same
+    answer: at most `CHAT_SEARCH_SHOWN` titles with the first line of each, and
+    one plain sentence asking which. Exactly one candidate is READ, not listed.
+    """
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_read_choices(title)
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result("The notes could not be read on this PC.", "note_read")
+    if code != 200:
+        return Result(_note_unreadable(body), "note_read")
+    rows = list(body.get("choices") or [])
+    count = int(body.get("count") or 0)
+    if not rows:
+        return Result(_note_no_match(title), "note_read")
+    if count == 1:
+        return _run_note_read(str(rows[0].get("title") or ""))
+    head = ('You have {0} notes'.format(count) if not str(title or "").strip()
+            else '"{0}" matches {1} notes'.format(str(title).strip(), count))
+    parts = []
+    for row in rows:
+        start = str(row.get("start") or "").strip()
+        name = '"' + str(row.get("title") or "") + '"'
+        # The note's own first line is kept verbatim (it is a quote), in
+        # brackets so its own full stop is not the sentence's.
+        parts.append(name + (" (" + start + ")" if start else ""))
+    said = head + ". " + "; ".join(parts) + "."
+    if body.get("truncated"):
+        said += " I have shown the first {0}.".format(len(rows))
+    return Result(said + " Tell me which one to read.", "note_read")
+
+
 def _run_note_read(title: str) -> Result:
+    """One note's text, or the honest list of which note was meant."""
     if _notes_hidden():
         return Result(NOTES_READ_HIDDEN, "note_read")
+    if not str(title or "").strip():
+        return _note_choices_said("")
     try:
         import jarvis_notes_edit as NE
         code, body = NE.chat_read_note(title)
-    except Exception:
+    except Exception:                       # noqa: BLE001 - module absent
         return Result("The notes could not be read on this PC.", "note_read")
     if code == 409:
-        titles = "; ".join(body.get("titles") or [])
-        said = NOTES_ONE_AT_A_TIME + (" " + titles if titles else "")
-        return Result(said, "note_read")
+        return _note_choices_said(title)
+    if code == 404:
+        return Result(_note_no_match(title), "note_read")
     if code != 200:
-        return Result(str(body.get("said") or NE.CHAT_NO_NOTE.format(title)), "note_read")
+        return Result(_note_unreadable(body), "note_read")
     said = '"{0}" says:\n\n{1}'.format(body["title"], body["text"])
     if body.get("more"):
         said += "\n\n\u2026and {0} more characters.".format(body["more"])
-    return Result(said, "note_read")
+    # The reply QUOTES a file on this PC, so it carries the outside-text fact
+    # through `read`: the briefing path turns that field into "this turn read
+    # outside text", which is what keeps the words from being learned as a fact
+    # about the owner or acted on. `notes_search` is the existing tool that
+    # reads this same store, so it is the name the record already has - no new
+    # tool and no new permission is invented for a read the owner asked for.
+    return Result(said, "note_read", read=["notes_search"])
+
+
+def _run_note_list() -> Result:
+    """Which notes there are - titles and how each starts, then the ask."""
+    if _notes_hidden():
+        return Result(NOTES_SEARCH_HIDDEN, "note_list")
+    return _note_choices_said("")
+
+
+def _run_note_read_about(needle: str) -> Result:
+    """"what did I write about X?" - ONE matching note is read, several are listed.
+
+    A topic question is a read, so it ends in text when there is exactly one
+    note it could mean. It never guesses between several: those come back as
+    titles and the same "tell me which one" ask as a title that matches more
+    than one note. "find my notes about X" stays a SEARCH (titles only), so the
+    two questions keep the two answers the product already gives them.
+    """
+    want = str(needle or "").strip()
+    if not want:
+        return Result('What should I look for? Say "what did I write about milk".',
+                      "note_read_about")
+    if _notes_hidden():
+        return Result(NOTES_SEARCH_HIDDEN, "note_read_about")
+    try:
+        import jarvis_notes_edit as NE
+        code, body = NE.chat_search_notes(want)
+    except Exception:                       # noqa: BLE001 - module absent
+        return Result("The notes could not be searched on this PC.", "note_read_about")
+    if code != 200:
+        return Result(_note_unreadable(body), "note_read_about")
+    count = int(body.get("count") or 0)
+    if count == 0:
+        return Result('No note in your vault mentions "{0}". {1}'.format(
+            want, NOTES_SEARCH_DOOR), "note_read_about")
+    titles = [str(t) for t in (body.get("titles") or [])]
+    if count == 1 and titles:
+        return _run_note_read(titles[0])
+    said = '{0} notes mention "{1}": {2}. Tell me which one to read.'.format(
+        count, want, "; ".join(titles))
+    if count > len(titles):
+        said += " I have shown the first {0}.".format(len(titles))
+    return Result(said, "note_read_about")
 
 
 def _run_note_search(needle: str) -> Result:
+    if not str(needle or "").strip():
+        return Result('What should I search your notes for? Say "search my notes '
+                      'for milk".', "note_search")
     try:
         import jarvis_notes_edit as NE
         code, body = NE.chat_search_notes(needle)
@@ -19577,8 +19736,6 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result(NOTE_HIDDEN_SAID, "note_write_hidden")
     if n == "note_delete_refused":
         return Result(NOTE_DELETE_SAID, "note_delete_refused")
-    if n == "note_read_honest":
-        return _run_note_read_honest()
     if n in ("note_change_refused", "obsidian_style_refused"):
         return (_run_note_change_refused() if n == "note_change_refused"
                 else _run_obsidian_style_refused())
@@ -19861,6 +20018,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
             "that is on purpose.", n)
     if n == "note_read":
         return _run_note_read(intent.f.get("title") or "")
+    if n == "note_list":
+        return _run_note_list()
+    if n == "note_read_about":
+        return _run_note_read_about(intent.f.get("needle") or "")
     if n == "note_search":
         return _run_note_search(intent.f.get("needle") or "")
     if n == "note_open":
@@ -20397,7 +20558,7 @@ READ_ONLY_INTENTS = frozenset({
     # here: the daily note may have changed, so the old record goes; a note that
     # was refused wrote nothing, so `note_make_refused` is read-only.
     "vault_organizer_plan", "vault_organizer_scoped", "note_change_refused",
-    "obsidian_style_refused", "note_make_refused", "note_read_honest",
+    "obsidian_style_refused", "note_make_refused", "note_list", "note_read_about",
     # The card-free create's capability answer and the where-is-my-vault answer
     # (2026-10-31): both only read the vault setting and change nothing.
     "note_create_capability", "note_location",
@@ -21257,6 +21418,11 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
         # model's answer, never about a reminder set before it.
         _forget_set(sched, conversation)
     if res is not None:
+        # Live is spoken, so a long quoted note says its start and where it
+        # stopped (2026-11-05). Typed answers are untouched: the full capped
+        # text and the "N more characters" tail stay exactly as they were.
+        if live:
+            res.reply = _live_said(res.reply, res.intent)
         # Wording only (jarvis_manner.py): the same facts, the owner's
         # manner - this conversation's own "from now on ..." override when
         # it is a temporary chat that has one, else the PC's saved setting.
@@ -21323,6 +21489,28 @@ def _temporary_body(body) -> bool:
         return bool(jarvis_intake.temporary_body(body))
     except Exception:
         return isinstance(body, dict) and body.get("temporary") is True
+
+
+#: How much of a note a SPOKEN answer reads before it says where it stopped.
+#: Live is heard, not scrolled: a 4,000-character note is a minute of speech
+#: the owner did not ask for, and the typed answer keeps the whole capped text.
+LIVE_NOTE_CHARS = 1000
+LIVE_NOTE_START = "...(that is the start)"
+
+
+def _live_said(reply: str, intent: str) -> str:
+    """A long note read shortened for speech, and it SAYS where it stopped.
+
+    Only `note_read` - every other quick answer is already short enough, and
+    this must never quietly cut an answer that is not a quoted file. A short
+    note is returned exactly as typed.
+    """
+    if intent != "note_read":
+        return reply
+    text = str(reply or "")
+    if len(text) <= LIVE_NOTE_CHARS:
+        return text
+    return text[:LIVE_NOTE_CHARS].rstrip() + " " + LIVE_NOTE_START
 
 
 def _live_body(body) -> bool:

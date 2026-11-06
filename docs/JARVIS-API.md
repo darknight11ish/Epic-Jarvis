@@ -35478,3 +35478,44 @@ POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
 **One-sided, and said out loud.** This is the backend half. The phone's "Send a document" button, its folder picker, its progress chip and its result sentence are the next lane; the desktop deliberately gets no screen, because it already has every door this uses. `docs/ARCHITECTURE.md` section 8 records both, and `tools/check_parity.py` keeps the three routes in its backend-only register until an app calls one - at which point the checker fails and asks for the reclassification, which is the point of the register.
 
 **The decision this reverses is recorded.** On 2026-10-29 the record said, in as many words, "Deliberately not built, now or later: an upload endpoint, a resumable or chunked transfer, a document preview, a second image path, and any 'attach anything' share target on the phone" (`docs/DECISIONS.md:4943`). This section is the reversal of **"an upload endpoint"** and **"a resumable or chunked transfer"**, and of nothing else: there is no document preview here, no second image path and no share target on the phone, and pictures, audio and video are refused. `decisions.d/2026-11-05-phone-upload.md` records it.
+## 198. Chat can read a note: one note's text, a which-one list, or the honest no (added 2026-11-05)
+
+*Numbering note, 2026-11-05: this section was written as 188; the call-recording section (2026-11-04) already held 188 when this branch merged main, so this one is 198, leaving 196 and 197 to the sections landing ahead of it in the merge train. The words below are unchanged.*
+
+The owner asked chat to read a note and was told "Chat does not read note text
+today". Named reads had already been real since 2026-10-31; the shapes that still
+reached the refusal were the unworded ones ("what do my notes say about milk",
+"what notes do I have", "do I have a note about milk", "search through my notes"),
+and "what did I write about milk" matched nothing at all. **No route is added.**
+Every answer is a deterministic fast-path reply in `backend/jarvis_quick.py` built
+on `jarvis_notes_edit`'s own chat helpers, which read the same vault files the
+notes editor's `GET /api/notes/list` and `GET /api/notes/read` read, under the
+same dot-folder, protection and size rules.
+
+The intents and what they answer:
+
+| Intent | In the owner's words | The answer |
+| --- | --- | --- |
+| `note_read` | "read my Welcome note", "what does my Welcome note say", "show me my Welcome note" | `"Welcome" says:` then the note's text, capped at 4,000 characters, then `…and N more characters.` |
+| `note_read` (no title) / `note_list` | "read my notes", "what notes do I have", "what do my notes say", "search through my notes" | `You have N notes.` then up to five `"Title" (first line)` rows, then `Tell me which one to read.` A vault holding exactly one note is simply read. |
+| `note_read` (several match) | a title that matches more than one note | the same which-one list, then the same ask |
+| `note_read_about` | "what did I write about milk", "what do my notes say about milk" | exactly one note mentions it: that note is read; several: their titles and `Tell me which one to read.`; none: `No note in your vault mentions "milk".` |
+| `note_search` | "find my notes about milk", "do I have a note about milk" | titles only, never a body (unchanged); an empty search asks what to look for |
+| `note_read` (no match) | a title no note has | `No note in your vault is called "X". Your vault is the folder <path>.` |
+| `note_read` (no vault) | any read with nothing configured | `I cannot read a note:` then the setting, naming `[notes.obsidian] vault_directory` and `JARVIS_OBSIDIAN_VAULT` |
+
+Two rules travel with the text. **Outside text:** a successful read sets
+`read: ["notes_search"]` on the reply - the field the briefing path already turns
+into "this turn read outside text" - so a note's words are never learned as a fact
+about the owner and never acted on; `jarvis_notes_edit.chat_read_note` also sets
+`outside_text: True` in its own body. **Live:** the spoken form of a `note_read`
+longer than 1,000 characters is cut to the first 1,000 and ends
+`...(that is the start)`; the typed answer keeps the whole 4,000-character cap.
+A screen pointer is never part of either (only `note_open` sets `open_brain`).
+
+`NOTE_READ_HONEST`, `_run_note_read_honest` and its dispatch branch are deleted.
+Hidden lists / App lock still show no title and no word of any note
+(`NOTES_READ_HIDDEN` / `NOTES_SEARCH_HIDDEN`). The decision is
+`decisions.d/2026-11-05-chat-reads-notes.md`; the proof is
+`backend/test_notes_chat_read.py` (29 checks) and the updated
+`backend/test_notes_read_search.py` (27 checks).

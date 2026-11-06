@@ -916,7 +916,7 @@ def t_note_reading_questions_really_read_or_say_they_cannot():
               got.intent if got else "the model")
         reply = got.reply if got else ""
         check("... and on an empty vault says it cannot find that note",
-              "could not find a note called" in reply, reply[:260])
+              "No note in your vault is called" in reply, reply[:260])
         check("... never claiming it located or read a note",
               "located" not in reply.lower() and "I read" not in reply,
               reply[:260])

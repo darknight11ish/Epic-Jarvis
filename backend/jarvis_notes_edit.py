@@ -3162,6 +3162,9 @@ CHAT_READ_CHARS = 4000
 CHAT_SEARCH_SCAN = 500
 #: How many matching titles one search prints.
 CHAT_SEARCH_SHOWN = 5
+#: How much of a note's first line "which one?" shows - enough to tell two
+#: notes apart, never a paragraph.
+CHAT_START_CHARS = 120
 
 CHAT_NO_NOTE = "I could not find a note called \"{}\" in the vault."
 CHAT_ONE_AT_A_TIME = "I can read one note at a time; tell me which one."
@@ -3197,6 +3200,54 @@ def _chat_read(path: str) -> tuple:
     return handle_read("?path=" + quote(str(path), safe=""))
 
 
+def chat_vault_root() -> str:
+    """The configured vault's folder, or "" when it cannot be read (never a guess)."""
+    vault, _why = _vault()
+    return str(vault) if vault is not None else ""
+
+
+def chat_read_choices(text: str) -> tuple:
+    """The notes a read question could mean, each with how it STARTS.
+
+    "read my notes" names no title, and a title that matches several notes names
+    more than one - both are answered by asking which, never by guessing. Each
+    row carries the note's real `title` and `start`: its first non-empty line,
+    the same bytes `handle_read` returns, cut to CHAT_START_CHARS so a long
+    paragraph cannot flood the answer. With `text` empty every note is a
+    candidate; otherwise title matching is `chat_find_notes`' own rule (exact
+    first, then merely contains) so the two answers cannot disagree about what
+    "Welcome" matches.
+
+    Nothing here reads a file outside the vault or a dot-folder: it goes through
+    `_chat_notes_meta`/`_chat_read`, the same two readers the editor routes use.
+    """
+    notes, why = _chat_notes_meta()
+    if notes is None:
+        return 503, {"said": why}
+    want = str(text or "").strip()
+    if want:
+        low = want.lower()
+        matches = [n for n in notes if low in str(n.get("title", "")).lower()]
+        exact = [n for n in matches if str(n.get("title", "")).lower() == low]
+        if exact:
+            matches = exact
+    else:
+        matches = list(notes)
+    rows = []
+    for note in matches[:CHAT_SEARCH_SHOWN]:
+        start = ""
+        code, read = _chat_read(note.get("path", ""))
+        if code == 200:
+            for line in str(read.get("text") or "").splitlines():
+                line = line.strip()
+                if line:
+                    start = line[:CHAT_START_CHARS]
+                    break
+        rows.append({"title": str(note.get("title") or ""), "start": start})
+    return 200, {"ok": True, "choices": rows, "count": len(matches),
+                 "truncated": len(matches) > len(rows)}
+
+
 def chat_read_note(title: str) -> tuple:
     """One note's text, bounded, named only by the real title it was read from."""
     code, found = chat_find_notes(title)
@@ -3215,9 +3266,15 @@ def chat_read_note(title: str) -> tuple:
         return code, {"said": str(read.get("error") or "The note could not be read.")}
     text = str(read.get("text") or "")
     cut = text[:CHAT_READ_CHARS]
+    # `outside_text` is the store's own fact, not a prefix string a caller can
+    # drop (the same shape jarvis_documents._mark_answer sets): a note is a
+    # FILE, so its words are data to read, never something to learn from or act
+    # on. The text itself is returned exactly as the bytes are - cutting the
+    # tail is the only transformation, and `total_chars`/`more` state it.
     return 200, {"ok": True, "title": str(note.get("title") or ""),
                  "path": note.get("path", ""), "text": cut,
-                 "total_chars": len(text), "more": max(0, len(text) - len(cut))}
+                 "total_chars": len(text), "more": max(0, len(text) - len(cut)),
+                 "outside_text": True}
 
 
 def chat_search_notes(needle: str) -> tuple:
