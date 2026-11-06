@@ -140,8 +140,8 @@ TAMPERED = "tampered"
 LOCKED_WORDS = "Owner-locked: cannot be replaced or removed until unlocked on PC"
 LOCKING_ONLY_HERE = ("A pack can only be locked or unlocked on the PC that holds "
                      "it. Nothing was changed.")
-LOCKED_REFUSED = (LOCKED_WORDS + ". Unlock it on this PC first (py -3 "
-                  "jarvis_packs.py unlock <name>), then try again.")
+LOCKED_REFUSED = (LOCKED_WORDS + ". Unlock it on this PC first - the pack manager "
+                  "has a lock command for the owner there - and then try again.")
 
 #: WHERE A PACK CAME FROM, as one of three tiers the install card states
 #: plainly. It is decided by the source, never by anything the pack says about
@@ -2737,8 +2737,7 @@ def _cli(argv) -> int:
     if what in ("lock", "unlock"):
         if len(args) < 2:
             print(json.dumps({"ok": False,
-                              "error": "say which pack: py -3 jarvis_packs.py "
-                                       "lock <name>"}, indent=2))
+                              "error": "say which pack: lock <name> or unlock <name>"}, indent=2))
             return 2
         out = set_locked(args[1], what == "lock", here=True, by="the owner, on this PC")
         print(json.dumps(out, indent=2))
