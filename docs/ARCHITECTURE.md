@@ -384,6 +384,51 @@ permission model rather than a hole in it:
   link chats together. A backend whose gate is too old to write those lines
   refuses to create a grant at all.
 
+**THE OWNER CAN CHANGE WHAT ASKS, BY TALKING - ONE ACTION AND ONE THING AT A
+TIME** (the owner's ask of 2026-11-05: *"i would also like the ability to
+change what gets an approval card through chat, including if something gets a
+double confirmation, or a fingerprint/windows hello"*; `backend/
+jarvis_approval_policy.py`, the `approval_policy` tool, JARVIS-API §188). It
+adds no permission mechanism: it changes the policy the EXISTING card path
+reads, in three independent dimensions per action - whether the action raises
+a card at all (`[autonomy.tiers]`, the one table `jarvis_framework.
+action_tier` and the gate already read), how many yeses it takes
+(`[autonomy.confirmations]`), and whether a yes must also meet Windows Hello
+on the PC (`[autonomy.windows_hello]`). The direction rules are the whole
+safety core:
+
+- **More asking is instant and raises no card** (a card where there was none,
+  a second yes, Windows Hello) - it only makes Jarvis ask more, like every
+  "turn it off" switch in both apps.
+- **Less asking raises ONE card, on the PC, that needs Windows Hello to
+  approve.** The request is refused from any other device before the card
+  exists, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses its approval from
+  any other device too. The card's words say exactly what stops being asked,
+  and name the action in the owner's own words; nothing is written until a
+  person approves.
+- **No bulk form.** One action, one dimension, one call. A second dimension in
+  one body is refused before anything is read or raised, and it is never a
+  plan step.
+- **A cardless action is still not an auto-approval.** The policy only decides
+  whether a card is RAISED; a card that is raised still needs the owner's yes,
+  and the event-stream-stale rule is untouched. Actions whose own module
+  refuses anything but a yes (`jarvis_asks_first.MUST_ASK`, the gate's hard
+  limits) keep their card whatever the settings file says, and the module
+  that changes the card dimension delegates to `jarvis_asks_first.
+  request_tier`, so it inherits that list rather than restating it.
+- **Unknown actions are refused before any card**, in one sentence naming the
+  nearest real actions in the owner's words (and the real names in the tool's
+  own data, so the model can retry exactly).
+- **A second yes is a real second yes**: `jarvis_owner_check.approve_check`
+  runs every check (including Windows Hello) on the first yes and then approves
+  NOTHING - no stamp is taken, so the gate keeps waiting - and only the second
+  yes stamps the approval the gate believes. **Windows Hello is a real check
+  too**: that action is refused from the phone and prompted on the PC on every
+  yes, even when the card would otherwise be a "small" one that skips the
+  prompt. The one-yes/second-yes counter lives in the running process's memory
+  and is lost on restart, which makes the owner confirm twice again - more
+  asking, never less.
+
 **What changed on 2026-09-26** (the approvals audit,
 `docs/APPROVALS-AUDIT-2026-09-26.md`; the owner's four decisions): a plain
 repeating alarm, reminder or standby schedule has no card (the briefing and
@@ -3042,6 +3087,17 @@ backend routes, in both directions; the rest are listed here only.
   editor, so a phone toggle for `/api/skills/state` is the one piece of this
   that could reasonably go on both apps next - `install` and `edit` should
   not, for the reasons above.
+- **A turned-off skill can be removed on the PC only, and the phone must not
+  remove one** (2026-11-05; JARVIS-API §178). The copy the PC's menu parks in
+  `skills-off\` is deleted by `POST /api/skills/state {"remove": true}` - the
+  Settings card's own Remove on a turned-off row - because
+  `jarvis_skills.uninstall()` resolves a name only under the skills folder, so
+  that copy was beyond every removal door in either app. The phone gains no
+  door to it: its list never shows the skill, and there is deliberately no
+  route that would let a client delete a folder it cannot see. The phone's
+  Remove stays exactly what it always was - ONE installed skill, after its
+  "are you sure?" - so what is one-sided here is the delete of a parked copy,
+  not removal itself.
 - **The phone's mic press does not check the voice print, and the desktop's
   talk button still does - one-sided on purpose** (2026-11-02; the owner's
   words: *"when i do the mic press to make a short verbal message to jarvis,
@@ -4007,7 +4063,7 @@ are deliberate and recorded rather than left to be discovered:
 | Focus sessions: watching which app or site is in front, and saying a drift out loud (`GET /api/focus/callout`), and the widget's "Lock on" (the owner's decision of 2026-09-25: "Jarvis watches which app/site is in front ON THE PC ONLY ... Nothing leaves the PC") | Written with the feature. The watching happens in the backend, on the PC, and is about the PC's screen: a phone has nothing to watch, and the spoken line names what was in front, so it stays on the PC - the backend refuses `/api/focus/callout` to any address but loopback, and the desktop's Rust fetches it as sound (JARVIS-API §26). "Lock on" is about the PC's screen too. Everything else is on both apps: starting a session (minutes, "on what"), the countdown, on or off target, the drift count, Pause / Resume, +10 minutes, Stop and the report card (the phone's Brain, Focus session; the desktop's Brain -> Work and the widget), and every voice command ("snooze", "I'm doing research", "lock on this") works when said or typed to Jarvis from either app. |
 | The voice upgrades' bake-off (`backend/jarvis_bakeoff.py`, 2026-09-26) | Written with it. It is a program the owner runs on the PC, not an app screen: it measures the PC's own voice engines, the PC's graphics-card memory and the room through the PC's microphone. Its verdict decides a later change that reaches both apps (the phone's wake-word file, the engine name both apps show). |
 | Loosening a line on "What asks first" (`POST /api/asks_first/tier` with `"ask": false`; the owner's decision of 2026-09-26: "On the PC only, the owner may also loosen a short safe list - one card plus Windows Hello per change") | Written with the feature. The phone shows the same page in the same words, and its "Ask me first" switches turn ON only (stricter, at once) - once a row asks, the phone's line says to loosen it on the PC. Loosening is one card that must meet Windows Hello, and Windows Hello is the PC's: the backend refuses the request from any device but the PC, and `jarvis_owner_check.PC_ONLY_ACTIONS` refuses the card's approval from any other device too, so a stolen token used from elsewhere cannot loosen anything. The phone shows that card with Deny only ("Approve this one on the PC - it needs Windows Hello there."). "Lights, plugs and fans without a card" is on both apps (ON one card, OFF at once). |
-| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 55 switches, the vault organizer and the four tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
+| Offering a tool to the AI model at all (`POST /api/asks_first/tools`; the owner's answer of 2026-09-27, ease-of-use audit row 14: "Reading tools ... can be switched on from the PC app, each with a card plus Windows Hello"; since 2026-11-04 EVERY tool the model can be offered is switchable, raw Tier C set included) | Written with the feature. Same shape as loosening a tier line, above, and the same reason: `enable_reading_tool` is one card that must meet Windows Hello, and the backend refuses the request, and the card's approval, from any device but the PC (`jarvis_owner_check.PC_ONLY_ACTIONS`). CLAUDE.md's standing rule against deep config editing on the phone also applies on its own: switching what the AI model may even be offered is config, not a card the owner answers about one action. The phone's "What asks first" page shows the same 56 switches, the vault organizer and the four tools whose own switch decides them, in the PC's own words, and changes none of them (`can_enable` is false for a request that did not come from the PC); `jarvis_reach.py`'s "What Jarvis can reach" names Settings, "What asks first" for every tool that has a switch there, its own switch for the data sandbox and Web search for the two grant tools, and says for a name the PC does not know that adding it to the file would offer nothing. `deliberate` in `tools/check_parity.py`. |
 | "Show me where" under "Jarvis isn't running on your PC." (ease-of-use audit 2026-09-27, #2) | Written with the change. It opens the desktop's own Settings at "Starting Jarvis for you", with More options open. The phone has no Settings for the PC to open: it shows the same words (the shared plain-errors list), which name that place, and its "Try again". |
 | A filter box on "What Jarvis knows about you" (ease-of-use audit #7) | That list - every fact, forgotten ones too - is on the desktop only (the Forget and Erase rows above), so its filter is too. |
 | "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |
@@ -4639,6 +4695,74 @@ what is missing is only the Settings screen agreeing about who turned it off.
   place (2026-10-19) - so it is the superseded contract's compatibility path,
   not a live screen on either side. Written here rather than left as a parity
   warning, because a warning is not a reason.
+
+- **Changing what asks is chat-only, and there is no new patch on the owner's
+  file** (2026-11-05; the owner's ask; `backend/jarvis_approval_policy.py`,
+  `approval_policy` in `backend/jarvis_agent.py`; JARVIS-API §188). Neither app
+  gets a write control for the three dimensions: both apps draw the read-only
+  note under an existing "What asks first" row (the row's own `note` field, so
+  no client changed), and the change itself is a spoken or typed sentence in
+  chat. That is one-sided on purpose, and in the safe direction: a control on
+  the phone for "stop asking" would put a loosening one tap away on the device
+  that cannot meet the PC's Windows Hello check. **Why there is no
+  `backend/*.patch` for it:** the one place every real approval already passes
+  through is `jarvis_owner_check.approve_check`, a SHIPPED module that
+  `owner-check.patch` already installs around `POST /api/approve`; the gate
+  believes no "approved" that module did not stamp. Adding the second yes and
+  the Windows Hello requirement THERE (the module reads the same settings file
+  the page reads) enforces both without touching the owner's `jarvis_gate.py`
+  at all - so this feature needs no patch, no `build_patch_history` run and no
+  patch-stack round trip, and it cannot be half-applied: the module that reads
+  the policy and the module that enforces it ship together.
+  **Why a two-yes card is approved on the PC only:** the phone's approval is
+  one tap plus a one-use signed challenge, so a second yes cannot be carried
+  without a client change; refusing it there with the existing "answer it on
+  the PC" words is the honest limit, recorded rather than implied. **And there
+  is no model-free fast-path grammar** for these sentences (unlike "connect my
+  calendar"): a regex over "stop asking" is exactly how a sentence gets
+  misread into a loosening, and every loosening already needs the owner's own
+  card plus Windows Hello on the PC - so the gap is convenience, not safety.
+  `tools/check_parity.py` has nothing new to classify: this adds no route, and
+  both apps' existing page shows the new lines.
+
+- **The repository map is a read the MODEL uses, and no app screen is added yet -
+  one-sided on purpose for now** (2026-11-05; the owner's approved design and
+  Gemini's ruling: a read-only repo map FIRST, before project-scoped chat and
+  staged diffs; JARVIS-API §195; `backend/jarvis_repomap.py`, shipped whole;
+  `GET /api/projects/{id}/map` and the existing `my_files` action `map`).
+  `tools/check_parity.py` classifies the route **`BACKEND_ONLY`** with that
+  reason rather than leaving it undecided - and deliberately NOT `deliberate`,
+  which in that file means "the PC calls it and the phone must not": neither app
+  calls this yet, which is exactly the `BACKEND_ONLY` case (the watchers'
+  decision log is classified the same way). **Why neither app draws it:** a map
+  is a table of contents for the local model, not a picture for a person - the
+  owner's own reading path is chat ("map this project", "where is the route
+  registered"), and a person looking at a repository wants a tree they can
+  click, which is a different screen from a token budget. Drawing the model's
+  ranked block in an app would show a list sorted by a formula nobody on the
+  screen can audit, and the phone has no PC folder to walk anyway. **What is NOT
+  one-sided:** the read itself is allowed from either app by the backend - it is
+  a project route like `/api/projects/{id}/facts`, carries no `pc_only`
+  refusal, and the moment an app builds a screen it calls the same route and the
+  same store. The map writes nothing (no index, no cache), adds no gate action
+  and no card (a read, under the existing `read_files_readonly` line), runs no
+  model, opens no socket, and lists names and signatures only - never a
+  function's body. `project_edit` (a code-writing tool) remains unbuilt.
+
+**A spoken answer is not a screen, so the Live read-aloud fix adds nothing one-sided** (2026-11-05; the owner's report, `docs/LIVE-DESIGN.md` §3.6; `backend/jarvis_live.py`'s `MODEL_NOTE` and `backend/jarvis_manner.py`'s `post_history_hint`). Both apps already receive the same `/api/chat` reply and speak it with their own voice - the change is the model instruction for a Live turn, composed on the PC and never sent to either app as a field. No route, no card, no setting, no screen and no client code changed, so there is nothing for this section to declare one-sided: `tools/check_parity.py` has nothing new to classify.
+
+- **Live's "Starting microphone & voice..." is read by the desktop today, and
+  the phone shows the session it already has** (2026-11-05; `starting` and
+  `starting_words` on `GET /api/voice/live`, JARVIS-API §63.1; §15 above).
+  Neither app is missing a screen: the two keys describe a wait that exists
+  because the PC warms STT, the VAD, CAM++ and TTS behind an already-open
+  microphone. The desktop's microphone is that PC's, so its bar and badge show
+  the line and its watcher says "I'm listening." when the warm clears. The
+  phone's microphone is its own, its clips are checked by the PC's engines on
+  arrival, and a phone session has nothing to wait for - so `LiveRules.kt` and
+  the Live screen read neither key, and `tools/check_parity.py` has no route
+  to decide here (both keys ride the route both apps already call). An older
+  app of either kind simply ignores them, which the status shape allows.
 
 ## 9. Where the backend lives
 
@@ -5943,3 +6067,126 @@ one window get one label. That is the reader's granularity and it is in the docs
   run, no real speaker model run, no real vault write and no real approval card
   were driven here. `backend/test_call_notes.py` drives fake readers, fake
   embedders, fake prints and a fake note creator.
+
+## 16. Jarvis Live's session latch, and the cheap half of the owner check it may not skip (added 2026-11-05)
+
+Jarvis Live has TWO owner checks, and they answer different questions:
+
+- **the strict check** (`jarvis_voice.verify`, with its thresholds, cohort and
+  per-condition bars) answers "is this the owner, well enough to be told what
+  Jarvis remembers?" - it is what a private answer needs before it may be read
+  aloud, and it is the one that ends a session's trust when it fails;
+- **the cheap check** (one CAM++ embedding and one `jarvis_voice.cosine`
+  against the enrolled print's centroid, about 15 ms, nothing written and
+  nothing kept) answers only "is this voice even a candidate?".
+
+The 2026-11-01 ruling ("once I actively verify my voice in a single Jarvis
+Live session, Jarvis shouldn't need to re-verify my voice") was implemented as
+an exemption from BOTH, and that is what the owner's 2026-11-05 report found:
+with `trust_active` set, `jarvis_live.trust_decision` answered "trusted" for
+every clip in the 1.5-2.0 s band and `jarvis_speech.hear` built a
+`_SessionTrusted` verdict that runs no speaker model at all, so a radio, a
+television or a call in the room was transcribed and answered as the owner.
+The same hole is wider for a session whose trigger needed no check
+(`jarvis_live.voice_check_needed` false - the phone started unlocked with the
+setting ON): there, every clip of every length is "trusted".
+
+The rule now, and the one the next change must not undo:
+
+- **The latch stays.** One verified sentence still covers the session, the
+  owner is never asked to re-enrol mid-session, and `TRUST_SESSION_S` (2 h)
+  still bounds it. A failed check, a re-enrolled print and a different device
+  still void it.
+- **The latch never skips the cheap check.** In a latched session, a clip
+  with `jarvis_live.RADIO_GUARD_S` (1.2 s) of speech or more is compared with
+  the enrolled print; under `RADIO_MIN_COSINE` (0.25 when the clip carried
+  "hey Jarvis" or arrived inside the follow-up window) or
+  `RADIO_MIN_COSINE_NO_WAKE` (0.32 when nothing in it was addressed to
+  Jarvis) it is **background audio**: dropped in silence, never transcribed,
+  never sent to the model, and nothing is said about it. The rule's own shape
+  is `jarvis_live.IGNORED_BACKGROUND` (`ok`, `ignored_unmatched_speaker`,
+  `reason: "background_media_rejected"`). On the existing utterance wire the
+  same clip answers `ok` **false** - `Heard.as_dict()` defines `ok` as "a
+  transcript was produced", and none was - with `owner` false,
+  `ignored_unmatched_speaker` true and that same `reason`. `ok: true` is
+  deliberately NOT sent: both clients read `ok` as "there are words for you",
+  and a client handed `ok: true` with no text has nothing to do with it.
+- **Short confirmations are exempt on purpose.** "yes", "do it" and "stop"
+  are under 1.2 s and pass while latched. A speaker model has almost nothing
+  to go on in one second, and asking the owner to repeat himself to answer a
+  card is the behaviour the 2026-11-01 ruling removed.
+- **A guard that cannot measure does not reject.** No enrolled print, no
+  model, an unusable clip: `_owner_cosine` answers None and the ordinary
+  decision stands. Swallowing the owner's words on an unmeasured clip is the
+  worse of the two failures, and the strict check still owns the session's
+  first sentence and every clip of 2.0 s or more.
+- **Where each length lands.** Under 1.2 s: no guard, session trust. 1.2-1.5 s:
+  the guard, plus the existing short-clip check at `hear` step 3b. 1.5-2.0 s:
+  the guard, on session trust - this is the band the fix closes. 2.0 s or
+  more: the guard, plus the strict spot check that was always there.
+
+The tests are `backend/test_voice_check_rule.py`
+(`test_live_session_latch_rejects_radio_impostor_over_1200ms_but_allows_short_confirm`
+and `t_the_radio_guard_is_wired_into_the_hearing_path`); the end-to-end drop
+needs a real print and a real model, which CI has neither of, so the second
+test pins the wiring in `jarvis_speech.py` the way the rest of the suite pins a
+path it cannot drive.
+
+## 17. A spoken Live answer is said, never pointed at (added 2026-11-05)
+
+**What the owner reported, 2026-11-04:** "jarvis on the latest Android app version still has responses that are saying to look at the screen when jarvis could clearly read it out loud" and "it said it's on your screen as the answer instead of reading it out" (`.dsh-scratch/OWNER-REPORTS-2026-11-04-LIVE.md`, item A). This section records the seam, what changed, and what was deliberately left alone.
+
+- **The seam is the model instruction, not a speech formatter.** A Live reply is the same `/api/chat` answer a typed turn gets, and both apps speak it from their own queue (one `speak_reply` clip per sentence). The fixed sentence "It's on your screen." is the APPS' - `private-speech.js`'s `PRIVATE_LINE` / the phone's `PrivateAloud.ON_SCREEN` - said when `mayReadAloud` decides the answer is private. There is no backend formatter that turns a list or a table into a screen pointer: the desktop's `stripMarkdownForSpeech` removes markup and drops code blocks, and otherwise speaks the answer as written. So a pointer the owner HEARS is either (a) the model's own words, or (b) the apps' fixed line for an answer the route gate, a sensitive fact or the screen rule keeps on screen.
+- **What permitted (a):** `jarvis_live.MODEL_NOTE`, the one note added to a spoken Live turn's request, said *"use a screen line only for what you truly cannot say aloud, such as a table of numbers, a picture or a long list."* A list is exactly what the owner was asking for. The note now says the answer must be complete as speech: the key answer in one to four clear sentences, the first five items or rows of a list read aloud as plain prose, then how many more there are - and a screen line is never the answer. The same rule is added to `jarvis_manner.post_history_hint(spoken_live=True)`, the one-line hint inserted just before the final generation step, and `jarvis_agent.with_manner_note` now receives the turn's own `live` mark and passes it on. Before this the spoken clause existed but the agent never asked for it, so in a long Live session the note nearest the question said nothing about the screen.
+- **What was checked and left alone.** The money answers' own spoken lines (`jarvis_spending.SPOKEN_LINE`, `jarvis_retirement.SPOKEN_LINE`) keep the figures on screen - the owner's rule ("Money stays on screen: never read aloud") and the sensitive-fact gate; changing them would be a permission change, not a wording fix. The fast paths in `jarvis_quick.py` emit no screen pointer for content they could say: the only literal ones are the honest "a card is waiting, approve it on your phone or PC" lines and `_run_watch`'s safety sign, and Live is otherwise held to the typed answer word for word (`test_live_parity.py`'s `typed.reply == live.reply`). No route, field, card, setting or permission changed. The harnesses are `backend/test_live.py`'s `t_a_live_answer_is_said_never_pointed_at` (the note as the agent composes it, and the final-step hint) and `backend/test_quick_wins.py`'s `t_a_list_answer_in_live_carries_the_list_not_a_pointer` (a real to-do list, Live and typed, with every item still in it).
+
+## 18. Live's first turn, and the state that cannot stick (added 2026-11-05)
+
+The owner reported three things about starting Jarvis Live: the first words
+spoken after pressing Live were missed, the first answer took a long time, and
+the app could sit on "Thinking..." as if it had not heard him. The first two
+are the same cold start; the third is a flag that outlived its turn.
+
+- **The turn lifecycle is the CLIENT's, not the PC's.** There is no
+  THINKING/SPEAKING/LISTENING state machine in the Python backend and no
+  `_tts_playing` anywhere in this repository (checked 2026-11-05 with
+  `git grep`). The session's own state is `off`/`on`/`paused`/`ended`
+  (`jarvis_live.Live.status`); everything the owner sees as "thinking",
+  "speaking" or "listening" is decided in the apps: the bar's `live.thinking`
+  and the card's status text (`jarvis-desktop/src/main.js`), the Rust
+  `SPEAKING` flag that `voice.rs` reads before dropping a sentence said over an
+  answer (`jarvis-desktop/src-tauri/src/live.rs`), and the phone's
+  `LiveFlash` (`JarvisRuntime.kt`). A fix belongs on that side.
+- **The first words are kept, not just heard.** The desktop's VAD has always
+  stepped its clip back in front of the tick that first hears a voice, but by
+  the wake word's 300 ms. In Live that is not enough: the sentence can begin in
+  the same instant Live is pressed, and the poll interval plus the device's
+  start-up sit inside it. Live now keeps 500 ms (`voice.rs` `LIVE_PREROLL`,
+  `capture_preroll`), still in memory only and still bounded per utterance.
+- **"Starting microphone & voice..." is a real state, and it ends.** A
+  session that just started warms STT, the VAD, CAM++ and TTS in the
+  background (`jarvis_speech.prewarm`, already there). Until that warm
+  reports, `GET /api/voice/live` carries `starting: true` with
+  `starting_words`, and the apps show those words instead of claiming to
+  listen. The ready line ("I'm listening.") is said once, when `starting`
+  clears - the desktop says it from its watcher, which is also the side that
+  knows the microphone is really open. `START_MAX_S` (8 s) ends the wait
+  whatever the warm says, so the sign cannot stick either. It is not a pause:
+  clips are accepted the whole time, and the status grows by two keys, not by a
+  new state (`docs/JARVIS-API.md` 63.1).
+- **A playing claim now expires.** `SPEAKING` held a bare boolean. If the
+  player never cleared it - a crashed audio element, a cancelled turn, an
+  error between "answer arrived" and "answer finished" - every later Live
+  sentence began "over an answer" and was dropped, which is Live gone deaf for
+  the rest of the session. It now stores WHEN it was set and is believed for
+  `SPEAKING_MAX_MS` (120 s) at most; the bar renews it every second it really
+  plays. The backend keeps its own watchdog for the other half: the warm and
+  the model-lane warm-up are fire-and-forget threads that fail silently and
+  never block the start.
+
+- **Both apps, or the reason written down.** The two new status keys are read
+  by the desktop's `live-rules.js`, held to the shared table
+  (`tools/gen_live_cases.py`, `backend/test_live.py`, `jarvis-live.mjs`). The
+  phone's own Live screen does not read them yet: its microphone is its own
+  and it has no PC-side warm to wait for, so the honest line there is the
+  session it already shows. §8 records this as one-sided on purpose.

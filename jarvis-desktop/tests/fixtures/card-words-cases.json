@@ -63,6 +63,10 @@
       "title": "Jarvis wants to read your calendar"
     },
     {
+      "action": "change_approval_policy",
+      "title": "Jarvis wants to stop asking so much about one thing"
+    },
+    {
       "action": "change_own_config",
       "title": "Jarvis wants to change one of its settings"
     },
@@ -688,6 +692,18 @@
         "full": "reads your calendar on this PC; changes nothing in it. nothing has happened yet.",
         "body": "reads your calendar on this PC; changes nothing in it. nothing has happened yet.",
         "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "change_approval_policy",
+      "notice": {
+        "title": "Jarvis wants to stop asking so much about one thing",
+        "summary": "Jarvis wants to stop asking so much about one thing.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -2266,6 +2282,7 @@
   "timed_out": "Timed out: Jarvis stopped waiting and refused it by itself.",
   "timed_out_next": "Ask the desktop to raise this again.",
   "pc_only_actions": [
+    "change_approval_policy",
     "desktop_update",
     "enable_reading_tool",
     "handoff_bring_to_front",

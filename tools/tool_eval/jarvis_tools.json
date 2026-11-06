@@ -768,7 +768,7 @@
   "type": "function",
   "function": {
    "name": "my_files",
-   "description": "Find and read the owner's own files, only in folders they listed. find: file names. search: words inside notes/text. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). read_media: one recording's words. search_media: stored spoken and on-screen recording words. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
+   "description": "Find and read the owner's own files, only in folders they listed. find: file names. search: words inside notes/text. read: one part of one file (PDF, Word, Excel, PowerPoint, Markdown, text, CSV). map: a folder's files and symbols, ranked for the question. read_media: one recording's words. search_media: stored spoken and on-screen recording words. For Obsidian or Joplin notes, use notes_search. For a PDF or Word file, use this, not file_read.",
    "parameters": {
     "type": "object",
     "properties": {
@@ -778,17 +778,18 @@
        "find",
        "search",
        "read",
+       "map",
        "read_media",
        "search_media"
       ]
      },
      "words": {
       "type": "string",
-      "description": "a few words; for read, picks the part"
+      "description": "a few words; for read, the part; for map, the question"
      },
      "path": {
       "type": "string",
-      "description": "read / read_media: the full path"
+      "description": "read / read_media: the full path; map: a folder or a project id"
      },
      "part": {
       "type": "integer",
@@ -1518,6 +1519,43 @@
     "required": [
      "service"
     ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "approval_policy",
+   "description": "Change what Jarvis asks about, one named action at a time: whether it gets a card, needs two yeses, or needs Windows Hello on this PC. Use when the owner says to stop asking before one action, to make it ask twice, or to require Windows Hello. Leave field out to read. More asking is instant; less raises ONE card that needs Windows Hello on the PC - say it is waiting, never done.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "description": "the one action to read or change"
+     },
+     "field": {
+      "type": "string",
+      "enum": [
+       "card",
+       "confirmations",
+       "windows_hello"
+      ],
+      "description": "one thing to change; leave out to read"
+     },
+     "value": {
+      "type": "string",
+      "enum": [
+       "ask",
+       "auto",
+       "1",
+       "2",
+       "true",
+       "false"
+      ],
+      "description": "the new value"
+     }
+    }
    }
   }
  },

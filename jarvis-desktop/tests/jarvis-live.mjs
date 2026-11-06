@@ -80,6 +80,23 @@ await check(`the sign: all ${T.sign.length} cases`, () => {
   }
 });
 
+await check("a session that just started says so, and Listening only after it", () => {
+  const on = { on: true, device: "desktop", state: "on", minutes_left: 30, limits: T.limits };
+  const warming = R.liveSign(
+    { ...on, starting: true, starting_words: "Starting microphone & voice..." },
+    "desktop",
+    {}
+  );
+  assert.equal(warming.detail, "Starting microphone & voice...", "the honest starting line is shown");
+  const ready = R.liveSign({ ...on, starting: false, starting_words: null }, "desktop", {});
+  assert.equal(ready.detail, "", "nothing claims a wait once the PC can hear");
+  // A card or Mute still wins: a starting session is not a reason to hide them.
+  const card = R.liveSign({ ...on, starting: true, starting_words: "Starting microphone & voice..." }, "desktop", { cardShown: true });
+  assert.equal(card.detail, R.CARD_WORDS);
+  // An older PC without the keys is shown exactly as it always was.
+  assert.equal(R.liveSign({ ...on, starting: undefined, starting_words: undefined }, "desktop", {}).detail, "");
+});
+
 await check(`may it listen, and may the microphone be open: all ${T.listen.length} cases`, () => {
   for (const c of T.listen) {
     const got = R.liveListen(S[c.status], c.me, {

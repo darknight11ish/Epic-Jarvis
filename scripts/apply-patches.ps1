@@ -2309,6 +2309,7 @@ $SHIPPED = @(
     'jarvis_focus.py'            # focus sessions: a timer plus Quiet, drifts named out loud on this PC, counts only
     # --- what asks first (asks-first.patch) ---
     'jarvis_asks_first.py'       # "What asks first": every action and whether it asks; stricter from either app, looser on the PC only; lights without a card
+    'jarvis_approval_policy.py'  # 2026-11-05: what needs a card, a second yes or Windows Hello, changed by talking to Jarvis, one action and one thing at a time; no patch (jarvis_owner_check.py enforces the extra dimensions)
     # --- folders Jarvis may look in (documents.patch) ---
     'jarvis_documents.py'        # "Folders Jarvis may look in": the list, the my_files tool (find, search, read PDFs and Word files in parts), the Notion import
     # --- the words in a picture (2026-09-26) ---
@@ -2384,6 +2385,7 @@ $SHIPPED = @(
     'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation
     # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
+    'jarvis_repomap.py'          # a READ-ONLY repository map of a project's folder (2026-11-05): names and signatures ranked for a question, packed to a token budget; no patch, no route of its own (the project store's table answers GET /api/projects/<id>/map), no model, no write
     'jarvis_forecast.py'         # the pure finish-time range ("about 6 to 9 weeks") jarvis_projects.py and jarvis_goals.py read; no patch (JARVIS-API section 101)
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
     'jarvis_chatbot_routes.py'   # chatbot-routes.patch: GET /api/chatbot/status, POST /api/chatbot/start (ONE card), /stop and /limits (a new card)

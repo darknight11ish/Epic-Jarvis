@@ -14,11 +14,12 @@ WHAT THIS DOES (power-mode.patch adds `POST /api/power`)
     quiet     answers, but does not start things on its own.
     standby   also frees the graphics cards (what the desktop FAQ
               promises): the loaded model is unloaded, and so are the
-              second card's Ollama, the big model and the better voice
-              when they run (jarvis_second_card.sleep, jarvis_big_model.sleep,
-              jarvis_voices.sleep; a big-model job already under way is left
-              to finish; custom voices go on speaking from the processor).
-              The next answer
+              second card's Ollama, the big model, the better voice and the
+              pooled both-cards coding lane (port 11450) when they run
+              (jarvis_second_card.sleep, jarvis_big_model.sleep,
+              jarvis_voices.sleep, jarvis_model_lanes.sleep; a big-model job
+              already under way is left to finish; custom voices go on
+              speaking from the processor). The next answer
               takes 5-15 seconds while it loads again.
 
 EVERY MODEL, NOT ONLY THE ONE jarvis_models NAMES (added 2026-09-25, with
@@ -47,8 +48,23 @@ loaded", on the owner's PC). Refused, with the reason, for a cloud model
 (":cloud", "-cloud") or an OLLAMA_URL that is not this PC - the same two
 checks the chat path makes (ARCHITECTURE section 4). If Jarvis is back on
 standby by the time the model has loaded, it is unloaded again. The second
-card's engines are not warmed: they start when a feature needs them, as
-before. `warm_status()` says how the last one went.
+card's own engines are not warmed: they start when a feature needs them, as
+before - the chosen pooled Coding lane is the one exception, below.
+`warm_status()` says how the last one went.
+
+THE CHOSEN POOLED LANE COMES BACK TOO (added 2026-11-05). Before this, standby
+stopped the Coding preset's 30B model on port 11450 and nothing ever started
+it again: after any standby, the still-chosen Coding preset pointed at a
+stopped port until the owner re-applied it. Now, when standby's own `sleep()`
+reports that it REALLY stopped that lane, waking starts the chosen pooled lane
+again through `jarvis_model_lanes.start_pooled_lane(by="waking from
+standby")`, on its own thread. Only Active, only when the lane was really
+stopped (one that was already down is never auto-loaded), and only when the
+preset in `choice()` is the pooled one. It raises no new card: the owner
+already chose the preset and its own card was answered when it was applied;
+standby is what stopped it (see `_AlreadyChosen`). The two single-card lane
+models are not restored here - the pooled start pauses what it needs, exactly
+as a preset apply does. The waking answer's `message` says it is happening.
 
 EVERY PRELOAD NAMES A CONTEXT (added 2026-10-11). Ollama's "load with an
 empty prompt" - `POST /api/generate` carrying a model and no prompt - loads a
@@ -594,6 +610,114 @@ _PENDING_LOCK = threading.Lock()
 #: The one power card that may be waiting: {"mode", "since"}, or None.
 _PENDING: dict = {}
 
+#: Did the standby just REALLY stop the Coding preset's pooled lane? A stop
+#: that only touched a lane which was already down answers `stopped: False`,
+#: and waking must not load a lane it did not put down (2026-11-05). Set from
+#: `sleep()`'s own `stopped` flag in `_free_other_engines`, read and cleared
+#: ONCE by the next waking.
+_STANDBY_LOCK = threading.Lock()
+_STANDBY = {"pooled_stopped": False}
+
+
+def _note_pooled_stopped() -> None:
+    with _STANDBY_LOCK:
+        _STANDBY["pooled_stopped"] = True
+
+
+def _take_pooled_stopped() -> bool:
+    """True once, if standby really stopped the pooled lane; then forget it."""
+    with _STANDBY_LOCK:
+        held = bool(_STANDBY["pooled_stopped"])
+        _STANDBY["pooled_stopped"] = False
+        return held
+
+
+class _AlreadyChosen:
+    """The verdict `start_pooled_lane` gets when it is put back on waking.
+
+    WHY NO CARD HERE. `switch_model` is at `ask` in the shipped settings, and
+    `start_pooled_lane` usually raises one. But waking is not a new choice:
+    the owner already chose this preset (the `choice()` file says so), its
+    card was already answered when it was applied, and STANDBY is what stopped
+    the lane. Loading it again is the same safe direction as the chat model's
+    own warm-up. A new card would ask the owner to approve a thing he already
+    approved, every single morning.
+    """
+
+    allowed = True
+    outcome = "auto"
+    reason = "the owner already chose this preset; standby stopped its lane"
+
+
+def _chosen_preset_is_pooled() -> bool:
+    """Is the preset the owner last applied the pooled Coding one? Never raises."""
+    try:
+        import jarvis_presets
+        chosen = jarvis_presets.choice()
+        preset = jarvis_presets.by_id(chosen) if chosen else None
+        return bool(preset is not None and getattr(preset, "lane", "") == "pooled")
+    except Exception:
+        return False
+
+
+def _start_pooled_lane_on_waking() -> None:
+    """Put the chosen pooled lane back. Runs on a daemon thread, never on the
+    power answer's thread; the lane's own start pauses what it normally does.
+
+    BACK ON STANDBY WHILE IT LOADED: the lane is stopped again, so standby's
+    promise (the cards are free) still holds after an immediate Standby. This
+    is the same rule `warm_up()` keeps for the chat model, and it matters more
+    here: the 30B model is the largest thing this PC loads.
+    """
+    try:
+        import jarvis_model_lanes
+        code, body = jarvis_model_lanes.start_pooled_lane(
+            by="waking from standby",
+            gate=lambda *a, **k: _AlreadyChosen())
+        body = body if isinstance(body, dict) else {}
+        if code not in (200, 202) or not body.get("ok"):
+            _audit("power.wake_pooled",
+                   {"ok": False, "code": code,
+                    "why": str(body.get("error") or body.get("message") or "")})
+            return
+        try:
+            import jarvis_power
+            if str(jarvis_power.current()) == "standby":
+                jarvis_model_lanes.stop_pooled_lane(by="standby", restore=False)
+                _audit("power.wake_pooled", {"ok": False, "why": "back on standby"})
+                return
+        except Exception:
+            pass
+    except Exception as exc:
+        _audit("power.wake_pooled", {"ok": False, "why": type(exc).__name__})
+        return
+    _audit("power.wake_pooled",
+           {"ok": True, "running": bool(body.get("running")),
+            "changed": bool(body.get("changed"))})
+
+
+def _restart_pooled_after_standby(
+        spawn: Optional[Callable[[Callable[[], None]], None]]) -> str:
+    """One sentence for the waking answer, and start the lane behind it.
+
+    Only when BOTH are true: standby really stopped the lane (the `stopped`
+    flag, not "the lane is down now" - it may have been down all along) and the
+    chosen preset is the pooled one. `spawn` is the same "start work in the
+    background" seam the chat warm-up uses, so a suite can run it in place.
+    """
+    if not _take_pooled_stopped():
+        return ""
+    if not _chosen_preset_is_pooled():
+        return ""
+    try:
+        (spawn or _spawn_warm)(_start_pooled_lane_on_waking)
+    except Exception:
+        return ("Standby stopped the Coding preset's pooled lane, and it could "
+                "not be started again in the background; apply the Coding "
+                "preset again to bring it back.")
+    return ("Standby stopped the Coding preset's pooled lane, so it is being "
+            "started again in the background on port 11450.")
+
 
 def _free_other_engines(others=None) -> list:
     """Standby frees the SECOND graphics card and the big model too, not only
@@ -606,7 +730,10 @@ def _free_other_engines(others=None) -> list:
     2026-11-04, the one thing standby left resident all night. Its `sleep()`
     reads `/api/ps` first and stops the lane only when it is really holding
     the model, and it leaves the two single-card lanes stopped rather than
-    putting them back, because standby is emptying the cards.
+    putting them back, because standby is emptying the cards. Its `stopped`
+    flag is remembered here (not just its sentence), so the next waking knows
+    whether it may put that lane back; a lane that was already down answers
+    False and is never loaded on waking (2026-11-05).
     """
     if others is None:
         others = []
@@ -621,9 +748,20 @@ def _free_other_engines(others=None) -> list:
     out = []
     for mod in others:
         try:
-            said = (mod.sleep("Jarvis is on standby") or {}).get("sentence", "")
+            answer = mod.sleep("Jarvis is on standby") or {}
         except Exception as exc:
             said = f"Could not free {getattr(mod, '__name__', 'an engine')} ({type(exc).__name__})."
+        else:
+            said = (str(answer.get("sentence", ""))
+                    if isinstance(answer, dict) else "")
+            # `stopped` is the lane module's own PROOF that the pooled lane
+            # really was stopped: True only when it saw the model on the lane
+            # and the stop answered ok. A lane that was already down says
+            # False, so waking never auto-loads one it did not put down
+            # (2026-11-05).
+            if (isinstance(answer, dict) and answer.get("stopped") is True
+                    and getattr(mod, "__name__", "") == "jarvis_model_lanes"):
+                _note_pooled_stopped()
         if said:
             out.append(str(said))
     return out
@@ -644,12 +782,14 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
     """Change the power mode through the gate. Returns (http_status, body).
 
     `ollama`: the everyday Ollama (everyday_ollama() when None). `warm`:
-    how the warm-up is started (its own thread when None; the tests run it
-    in place). `why`: what jarvis_power records as the reason - "the owner,
-    from <by>" when empty; the standby schedule gives its own. `force`: skip
-    the "already in that mode" answer - jarvis_power.enforce() needs it inside
-    the owner's standby hours, where current() already READS standby while the
-    stored mode is still active. Every guard still runs. See the docstring."""
+    how work started on waking is run - the chat warm-up and, when standby
+    stopped it, the chosen pooled lane (its own thread when None; the tests
+    run it in place). `why`: what jarvis_power records as the reason - "the
+    owner, from <by>" when empty; the standby schedule gives its own. `force`:
+    skip the "already in that mode" answer - jarvis_power.enforce() needs it
+    inside the owner's standby hours, where current() already READS standby
+    while the stored mode is still active. Every guard still runs. See the
+    docstring."""
     mode = str(mode or "").strip().lower()
     if mode not in MODES:
         return 400, {"ok": False, "error": f"mode must be one of {', '.join(MODES)}"}
@@ -726,6 +866,9 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
             # Waking: load the chat model again now, not at the first
             # question. Active only - the direction the apps hold on a
             # stale link; Quiet is let through there and must load nothing.
+            # The chosen pooled Coding lane comes back too when standby was
+            # what stopped it; both run in the background, so the power answer
+            # is not held for a model load (2026-11-05).
             name = chat_model()
             (warm or _spawn_warm)(lambda: warm_up(power, ollama, name) and None)
             if name and not _is_cloud_model(name):
@@ -735,6 +878,9 @@ def set_mode(mode, *, by: str = "", gate_check: Optional[Callable] = None,
             else:
                 out["message"] += (" The first answer will take 5-15 seconds while the chat "
                                    "model loads.")
+            said = _restart_pooled_after_standby(warm)
+            if said:
+                out["message"] += " " + said
             box["out"] = (200, out)
             return
         if mode != "standby":

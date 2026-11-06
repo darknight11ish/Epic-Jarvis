@@ -70,9 +70,10 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 55 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
+ * 56 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
  * that landed with the GitHub tools branch, plus hands-free's
- * send_text_message). A DIFFERENT thing from SWITCHABLE
+ * send_text_message, plus the approval-policy tool's own row). A DIFFERENT
+ * thing from SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -109,6 +110,11 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",
+  // The approval-policy tool's own row (2026-11-05). LAST, because the PC
+  // builds this list as TIER_A + TIER_B + TIER_C + TIER_UNLISTED + TIER_EXTRA
+  // and approval_policy is TIER_EXTRA's final entry - Settings shows the PC's
+  // order, and the contract file is compared word for word.
+  "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

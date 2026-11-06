@@ -12,7 +12,7 @@ repository chose, not the owner: the template is what
 `scripts/apply-patches.ps1` copies to the PC when there is no settings file.
 
 WHAT THIS PINS
-  1. BOTH SHIPPED TEMPLATES name the thirteen defaults. The repository's copy
+  1. BOTH SHIPPED TEMPLATES name the fourteen defaults. The repository's copy
      (`backend/rebuilt/jarvis-framework.toml`) and the published base's copy
      (`jarvis-backend/jarvis-framework.toml`) are byte-identical, and every
      name in the list is a real tool (`jarvis_agent.TOOLS`) - a name that is
@@ -20,11 +20,11 @@ WHAT THIS PINS
      default can look on and do nothing.
   2. A FRESH INSTALL OFFERS THEM. The template copied in as the settings file
      (exactly what apply-patches.ps1 installs) makes a turn's enabled set the
-     thirteen, and the model is offered the local ones - calculator,
+     fourteen, and the model is offered the local ones - calculator,
      memory_search, phone_apps, plugin_list, plugin_switch, web_search,
      change_setting, feature_guide, refresh_abilities, self_portrait,
-     conversation_find and conversation_open - plus the two web-search-grant
-     tools that ride with web search.
+     conversation_find, conversation_open and approval_policy - plus the two
+     web-search-grant tools that ride with web search.
   3. my_files IS STILL HIDDEN WITH NO FOLDER. It is in the list, but with no
      folder in "Folders Jarvis may look in" `offered_tools` omits it, so a
      fresh PC pays no tokens for it and reads nothing; once a folder is listed
@@ -104,13 +104,25 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    # edit; withheld from every turn until the mode is on
                    # (jarvis_agent.offered_tools), so OFFERED_NO_FOLDER is
                    # unchanged and a fresh install offers exactly what it did.
-                   "send_text_message"]
+                   "send_text_message",
+                   # The approval-policy tool (2026-11-05, JARVIS-API section
+                   # 193, jarvis_approval_policy.py): the owner asked to change
+                   # what needs a card, a second yes or Windows Hello by talking
+                   # to Jarvis. In the shipped list so that ask works on a fresh
+                   # install - a tool reachable only by hand-editing this file
+                   # would not be changeable by chat. It changes ONE action and
+                   # ONE dimension at a time; more asking is cardless, and less
+                   # asking raises ONE PC-only card that needs Windows Hello, so
+                   # being a default grants nothing.
+                   "approval_policy"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
 #: `phone_apps` is a shipped default (#1097, 2026-11-02). The four self/chat
 #: tools (2026-11-04) sit between `feature_guide` and the grant pair, which is
-#: where TOOLS puts them. The last two ride with web search and are NOT in
+#: where TOOLS puts them. `approval_policy` (2026-11-05) sits where TOOLS puts
+#: it, between `conversation_open` and the grant pair. The last two ride with
+#: web search and are NOT in
 #: `[tools].enabled` (#1100, 2026-11-02, `jarvis_agent.GRANT_ASK_TOOLS`): the
 #: conversation web-search approval is an ASK, not a capability - its card is
 #: the permission - and the field test of 2026-11-02 found a Settings switch
@@ -120,6 +132,7 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                      "change_setting", "feature_guide",
                      "refresh_abilities", "self_portrait",
                      "conversation_find", "conversation_open",
+                     "approval_policy",
                      "approve_web_search_for_conversation",
                      "stop_web_search_approval"]
 
@@ -129,6 +142,7 @@ OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list
                        "my_files", "change_setting", "feature_guide",
                        "refresh_abilities", "self_portrait",
                        "conversation_find", "conversation_open",
+                       "approval_policy",
                        "approve_web_search_for_conversation",
                        "stop_web_search_approval"]
 
@@ -219,7 +233,7 @@ def t_a_fresh_install_offers_the_defaults():
     os.environ["JARVIS_FRAMEWORK_TOML"] = str(settings)
     try:
         enabled = AG.enabled_tools_for_turn()
-        check("a fresh install's turn reads the fourteen-name enabled set",
+        check("a fresh install's turn reads the fifteen-name enabled set",
               enabled == set(DEFAULT_ENABLED), enabled)
         offered = AG.offered_tools(enabled)
         check("...and the model is offered the local defaults, plus the grant ask "

@@ -1611,6 +1611,34 @@
       "read": false
     },
     {
+      "name": "the tool approval_policy ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "approval_policy"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "approval_policy"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool rea_investigate ran",
       "heard": {
         "private_aloud": false,

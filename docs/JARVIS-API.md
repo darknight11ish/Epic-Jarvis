@@ -2457,7 +2457,7 @@ shows the waiting line and does not follow the id yet (ARCHITECTURE §8).
 
 | Route | Body | Answers | What it does |
 |---|---|---|---|
-| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
+| `POST /api/power` | `{"mode": "active"\|"quiet"\|"standby"}` | 200 `{"ok", "mode", "changed", "message", "unloaded"?, "still_loaded"?, "also"?, "note"?, "warm_up"?}`; **202** `{"waiting": true, ...}` while a card is up (only if the owner set `power_manage` to ask); **400** unknown mode; **409** standby while a task runs, or while another power card waits; **503** no power module | Through `jarvis_gate` as `power_manage` (`auto` in the shipped toml). Standby also unloads the resident model, and (2026-09-24) stops the second card's Ollama and the big model when they run, and (2026-11-05) the pooled both-cards coding lane on port 11450 too: `also` is one sentence per engine that had something to say, and each sentence is appended to `message`, so an app that shows `message` shows them. The second card then stays stopped - status reads do not restart it - until the owner uses a second-card feature or Jarvis leaves standby; background learning does not wake it. A big-model job already under way is left to finish. |
 
 The mode clients show still comes from `/api/status` and the `power` event.
 Desktop: tray → Change power mode (`commands::set_power_mode`). Phone: Brain
@@ -2486,6 +2486,21 @@ link and let going quieter through.
   machine's Ollama - the chat path's two checks (ARCHITECTURE §4). If
   Jarvis is back on standby when the load finishes, the model is unloaded
   again.
+- **The chosen Coding lane comes back too (2026-11-05).** Standby also stops
+  the pooled both-cards coding lane on port 11450 (`jarvis_model_lanes.sleep`,
+  added 2026-11-04), and until 2026-11-05 nothing started it again: a
+  still-chosen Coding preset pointed at a stopped port until the owner
+  re-applied it. Waking now starts that lane again in the background through
+  `start_pooled_lane(by="waking from standby")`, and `message` says it is
+  happening. Only Active; only when standby's own `stopped` flag says it
+  really stopped the lane (one that was already down is never auto-loaded);
+  only when the preset in the choice file is the pooled one. **No new card is
+  raised**: the owner already chose the preset, its `switch_model` card was
+  answered when it was applied, and standby is what stopped the lane. The two
+  single-card lane models are not restored by the wake - the pooled start
+  pauses what it needs, exactly as a preset apply does. If Jarvis goes back
+  to standby while the lane is still loading, the lane is stopped again, so
+  standby's promise (the cards are free) still holds.
 - **The answer comes when the mode has changed.** Freeing the cards can
   take seconds; an answer that waited for it past `wait_s` (1.5 s) used to
   be the 202 "Waiting for your approval" with no card up. Now, once the
@@ -11096,7 +11111,7 @@ the app"**. So every tool the AI model can be offered is switchable ON from the
 Tools page, one approval card each. The only limits left are the five
 non-negotiable rules (`CLAUDE.md`) and the shape below.
 
-**The 55 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
+**The 56 switches** (2026-11-05; 48 at 2026-11-04), in the page's own groups:
 
 - **Notes and reading:** `calendar_read`, `notes_search`,
   `append_obsidian_daily`, `create_joplin_note`, `append_logseq_journal`.
@@ -11116,16 +11131,19 @@ non-negotiable rules (`CLAUDE.md`) and the shape below.
 - **Everyday helpers:** `calculator`, `memory_search`, `file_read`,
   `web_search`, `my_files`, `propose_plan`, `change_setting`, `feature_guide` -
   the tools the earlier slice left out.
-- **Jarvis's own tools (19):** `goals_list`, `goal_add`, `goal_progress`,
+- **Jarvis's own tools (20):** `goals_list`, `goal_add`, `goal_progress`,
   `goal_done`, `conversation_find`, `conversation_open`, `phone_apps`,
   `plugin_list`, `plugin_switch`, `send_text_message`, `refresh_abilities`,
-  `self_portrait`, `setup_quiz`, and - since 2026-11-05 - the six on-demand
-  GitHub tools `github_list`, `github_read_file`, `github_ci_status`,
-  `github_comment`, `github_open_issue`, `github_rerun_workflow` (the three
-  reads share the `github_inspect` action, the other three their own; every
-  use still raises its own card). The twelve before the GitHub six shipped ON
-  and had no switch row at all before 2026-11-04; `send_text_message` came
-  with hands-free the same day as the GitHub six.
+  `self_portrait`, `setup_quiz`, `approval_policy` - the switch that offers
+  the approval-policy TOOL at all (it never changes a policy by itself;
+  §193 is the changing, and every loosening still needs its own card) - and,
+  since 2026-11-05, the six on-demand GitHub tools `github_list`,
+  `github_read_file`, `github_ci_status`, `github_comment`,
+  `github_open_issue`, `github_rerun_workflow` (the three reads share the
+  `github_inspect` action, the other three their own; every use still raises
+  its own card). The twelve before the GitHub six shipped ON and had no
+  switch row at all before 2026-11-04; `send_text_message` came with
+  hands-free the same day as the GitHub six.
 
 **Four known tools are NOT switches of their own**, because the turn ignores
 their line in `[tools].enabled` - a switch whose state the turn ignored would
@@ -11161,7 +11179,7 @@ editing on the phone): the phone reads the same list but `can_enable` is false.
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
-| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (55), not just Tier A/B. |
+| `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** with the PC's own sentence naming the real switch for one of the four `not_switchable` tools, and "does not know that name" for an unknown one; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. **Since 2026-11-04 this accepts EVERY tool the AI model can be offered** (56), not just Tier A/B. |
 | (both) | **A row may name a legacy row id.** The row id and the tool name are the same now except `email_read` -> `email_check`; an old `"email_read"` entry in the file is read as `email_check` and removed when that switch is turned off (`jarvis_asks_first.TOOL_NAME`). | | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app, never held: it only narrows what the model may be offered. **Since D4 (the owner, 2026-11-04) this works for EVERY tool that is on**, including one enabled in `[tools].enabled` that has no in-app switch row, or a name this PC does not know at all (a drop-in module's own tool). The settings line is removed. For a name the PC does not know, the answer names `jarvis-framework.toml` so the owner can put it back by hand; for `run_data_script` it says the Data sandbox switch still offers it, and for the two grant tools that they ride with Web search - never "not offered any more", which would be false. An OFF for a name with no switch of its own that is **not** on changes nothing and keeps the old **403**. |
 
@@ -11183,9 +11201,10 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
                              "why": <the plain note>}}
 ```
 
-`items` lists all 55 switches at 2026-11-05 (48 at 2026-11-04, plus the six
-GitHub tools and hands-free's `send_text_message` - every tool the AI model can be
-offered except the four below), grouped; `vault` is the vault organizer's
+`items` lists all 56 switches at 2026-11-05 (48 at 2026-11-04, plus the six
+GitHub tools, hands-free's `send_text_message` and the approval-policy tool's
+`approval_policy` - every tool the AI model can be offered except the four
+below), grouped; `vault` is the vault organizer's
 separate switch; `not_switchable` names the four tools whose own switch decides
 them, with the PC's own sentence, so the page points at the real switch instead
 of drawing one that would do nothing. `extra` is D4 (the owner, 2026-11-04):
@@ -14406,12 +14425,23 @@ sent as the `live` event on every change (the same object).
  "ending_soon": bool, "ended": str|null, "ended_words": str|null,
  "ended_say": str|null, "ended_device": str|null, "ended_ago_s": int|null,
  "resumable": bool, "turns": int, "refused_in_a_row": int,
+ "starting": bool, "starting_words": str|null,
  "limits": {..., "ended_show_s": 15, "crisis_more_s": 1800},
  "lines": {...}, "seen": {...},
  "end_on": "app_lock"|"windows_lock",
  "camera": {"ready": bool, "why": str}}
 ```
 
+- `starting` / `starting_words` (added 2026-11-05) - a session that just
+  started while the PC warms the speech engines (STT, the VAD, CAM++, TTS)
+  behind an open microphone. True only while that warm has not reported yet,
+  and never longer than `jarvis_live.START_MAX_S` (8 s), so it cannot stick.
+  Both apps show `starting_words` ("Starting microphone & voice...") for those
+  seconds instead of claiming to listen; the ready line `lines.started`
+  ("I'm listening.") is said only once `starting` is false. It is NOT a pause:
+  `state`, `on`, the clock and a `live` clip all behave as on any other
+  session, because the warm is a latency short-cut and never a gate. An older
+  app that does not know the keys shows the session exactly as before.
 - `conversation_id` (the chat audit, 2026-09-28) - the chat this session's
   words go in: the id the starting app sent with `start`, or - for a session
   started by voice or from the tray - the first one an app names with
@@ -31820,13 +31850,26 @@ words and is a patch of its own - `backend/skill-install-note.patch`:
 | `GET /api/skills/menu?name=<skill>` | ONE skill, plus its own `SKILL.md` text so the owner can read and edit it | none |
 | `POST /api/skills/install` | `{"path"}` a folder or `.zip` on this PC, or `{"hermes"}` a folder the scan named; `"dry_run": true` stops after the scanner; `"accept_warnings"` for a warning-level skill | **ONE** `modify_own_code` card |
 | `POST /api/skills/import/scan` | a READ-ONLY scan of `%USERPROFILE%\.hermes\skills`: every `SKILL.md`, its verdict, its `scripts/` count. Copies, moves and installs nothing | none |
-| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again | on: **ONE**; off: none |
+| `POST /api/skills/state` | `{"name", "on"}`: off moves the folder to `skills-off\` and drops its index row; on runs the scanner and the card again. `{"name", "remove": true}` deletes ONE skill that is ALREADY turned off - the parked copy `uninstall` cannot see - and refuses an installed name | on: **ONE**; off and remove: none |
 | `POST /api/skills/edit` | `{"name", "text"}`: the new `SKILL.md`, scanned and installed through the same path | **ONE** |
 
 `GET /api/skills` (the list) and `POST /api/skills/decide` (removal, with its
 "are you sure?") are unchanged and still the only routes both apps call: the
 Settings menu's **Remove** calls the same `brain_remove_skill` command the
 Brain already had, so there is one removal path, not two.
+
+**Two objects, two doors, and never two doors to one folder** (2026-11-05).
+`POST /api/skills/decide` remains the one removal for an INSTALLED skill.
+What it could never reach is the copy this menu itself parked in `skills-off\`:
+`jarvis_skills.uninstall` resolves a name only under the skills folder, so a
+skill the owner switched off could be switched back on (one card) and never got
+rid of - in either app, because the phone's Remove goes through the same route.
+`{"name": "…", "remove": true}` on the state route deletes that one parked
+folder and its row in `skills-off\.off.json`, with **no card**: it is already
+out of the load path, so it only takes a capability away, the same rule that
+makes turning one off immediate. It refuses an installed name outright (with the
+sentence saying to use Remove), refuses `remove` and `on` in the same request,
+and takes ONE name - there is no list form anywhere.
 
 ### 178.3 The safety model, in the order it happens
 
@@ -31903,6 +31946,11 @@ which is the point of the sentence above, not a bug to work around.
   had (`GET /api/skills` and Remove with its "are you sure?"). The five routes
   are classified `deliberate` in `tools/check_parity.py` and the reason is in
   `docs/ARCHITECTURE.md` §8.
+- **No phone delete of a TURNED-OFF skill.** That copy is a folder the PC's
+  menu parked in `skills-off\`; the phone's list never shows it, and it gains
+  no control for it - the same one-sidedness, recorded in
+  `docs/ARCHITECTURE.md` §8. The phone therefore removes an installed skill
+  and nothing else.
 - **No renaming.** An edit cannot change a skill's name: the frontmatter
   `name:` must still match the folder, which is what stops a skill from being
   addressed by a name it does not own. Renaming is a new install plus a
@@ -35052,3 +35100,275 @@ no network call anywhere. **NOT VERIFIED in this container:** no real Amazon
 page has been parsed, no real browser has been driven by a test, and no
 one-time Amazon sign-in has been exercised - those are field tests on the
 owner's PC, and this document says so rather than implying otherwise.
+
+## 193. What needs a card, how many yeses, and whether it needs Windows Hello - changed through chat (added 2026-11-05)
+
+The owner's ask, verbatim: *"i would also like the ability to change what gets
+an approval card through chat, including if something gets a double
+confirmation, or a fingerprint/windows hello"*.
+
+One model tool, `approval_policy` (`backend/jarvis_agent.py`), backed by
+`backend/jarvis_approval_policy.py`. It changes **one named action and one
+thing at a time**, in three independent dimensions:
+
+| dimension | what it means | where it is kept |
+|---|---|---|
+| `card` | whether the action raises an approval card at all | `[autonomy.tiers]` - the same table every part of Jarvis already reads |
+| `confirmations` | one yes, or two | `[autonomy.confirmations]`, `<action> = 2`; no line means one yes |
+| `windows_hello` | a yes must also meet Windows Hello on the PC | `[autonomy.windows_hello]`, `<action> = true`; no line means no extra check |
+
+All three live in the owner's existing settings file
+(`jarvis-framework.toml`), in the same table's neighbourhood, so there is one
+place to look and no second file to disagree with it. The writer follows the
+same discipline as `jarvis_asks_first.set_tier`: read the bytes, change exactly
+one line, parse the result again and compare it with the old settings plus
+that one change, then write a temporary file and move it into place. A file
+this cannot read safely is refused with a sentence saying to edit it by hand;
+nothing is written.
+
+### 193.1 The tool
+
+`approval_policy` takes `action`, `field` and `value`, all optional:
+
+- **No `field`** - a read. With `action`, it answers that action's current
+  policy. Without one, it answers the short list: what is set to ask twice,
+  what needs Windows Hello, what runs without a card, and that everything else
+  asks first.
+- **`field: "card"`, `value: "ask" | "auto"`** - whether the action raises a
+  card. Delegates to the existing "What asks first" path
+  (`jarvis_asks_first.request_tier`), so the list of actions an app may loosen
+  at all, the card's words and the PC-only + Windows Hello rule are the same
+  ones the Settings page already uses.
+- **`field: "confirmations"`, `value: "1" | "2"`** - one yes or two.
+- **`field: "windows_hello"`, `value: "true" | "false"`** - whether every yes
+  must also meet Windows Hello on this PC.
+
+The model's call is only a **preparation**. More asking is applied immediately
+and raises no card; less asks for ONE card, which must be approved before
+anything is written. The tool is handed to its own call path before the
+generic prepare/gate/execute loop (like `change_setting` and
+`connect_account`), because the card - not the tool call - is the permission.
+It is in `_PLAN_EXCLUDED_STEPS`, so it can never be a step of a plan.
+
+### 193.2 The direction rules - the safety core
+
+- **Tightening is instant and cardless**: adding a card where there was none,
+  adding a second yes, adding Windows Hello. It only makes Jarvis ask more. It
+  also withdraws a waiting card that would loosen the same thing, so an
+  approval arriving afterwards changes nothing.
+- **Loosening raises ONE card, on the PC, that needs Windows Hello to
+  approve**: removing a card, removing the second yes, removing Windows Hello.
+  The request is refused from any other device (`403 pc_only`) before any card
+  exists; `jarvis_owner_check.PC_ONLY_ACTIONS` holds `change_approval_policy`,
+  so the approval is refused from any other device too, and the card is
+  approved with Windows Hello. The card's words say exactly what stops being
+  asked, in the owner's words for the action, and never name a file the gate
+  protects.
+- **No bulk form**: one action, one dimension, one call. A body naming two
+  dimensions is refused before anything is read or raised.
+- **Unknown actions are refused before any card**, in one plain sentence that
+  names the nearest real actions in the owner's own words; the tool's result
+  also carries their real names as data, so the model can retry exactly.
+- **Nothing is auto-approved.** The policy decides only whether a card is
+  raised. A card that is raised still needs the owner's yes, the
+  event-stream-stale rule is untouched, and actions whose module refuses
+  anything but a yes keep their card whatever the settings file says.
+
+### 193.3 Where the second yes and Windows Hello are really enforced
+
+Not in the gate, and not by a new patch on the owner's file:
+`jarvis_owner_check.approve_check` - a shipped module that `owner-check.patch`
+already installs around `POST /api/approve` - reads the owner's policy for the
+action being approved and applies it:
+
+- **Windows Hello**: that action is refused from any other device and asks
+  Windows Hello on the PC on every yes, even when the card would otherwise be
+  a "small" one that skips the prompt - unless the owner's approvals mode asks
+  for small cards too.
+- **Two confirmations**: the first yes runs every check (including Windows
+  Hello when it applies) and then approves **nothing** - no stamp is taken, so
+  the gate keeps waiting - and answers `202` with "That is your first yes.
+  Approve the card once more to confirm". The second yes runs the same checks
+  and only then stamps the approval, which is the only thing the gate
+  believes. The counter is in the running process's memory, never on disk, so
+  a restart makes the owner confirm twice again.
+- A card that needs two yeses is approved on the PC only, said plainly: the
+  phone's one-tap approval (one fingerprint, one one-use signed challenge)
+  cannot carry a second yes, so the phone is refused with the same "answer it
+  on the PC" words every PC-only card already gets.
+
+### 193.4 What the owner sees and says
+
+- *"stop asking me before you send email"* -> `card = auto` for `send_email`:
+  ONE card on the PC, Windows Hello, naming "Send an email"; approving it
+  writes the one line.
+- *"make that ask twice"* -> `confirmations = 2`: instant, no card. From then
+  on that action's card needs two Approve presses on the PC, and the first one
+  says nothing was approved yet.
+- *"require Windows Hello for sending email"* -> `windows_hello = true`:
+  instant, no card. From then on every yes for that action is asked on the PC
+  with Windows Hello.
+- *"what needs a card?"* / *"does sending email ask twice?"* -> the real
+  current answers, read from the same settings file the approval path reads.
+- The **Settings "What asks first" page** and the **phone's page** get no write
+  control: the row for an action now carries `confirmations` and
+  `windows_hello` as data and one extra sentence in its existing note field
+  ("It asks you twice..."; "It also needs Windows Hello on this PC for every
+  yes."). `docs/ARCHITECTURE.md` section 8 records why this is one-sided.
+
+### 193.5 What it does not do
+
+It does not change the event-stream-stale rule, clear a rush latch, approve
+anything in bulk, or make any action run without its card when that action's
+own module refuses anything but a yes. It has no route of its own, so
+`tools/check_parity.py` has nothing new to classify; the two apps' existing
+read-only pages show the new lines. It has no model-free fast-path grammar on
+purpose (ARCHITECTURE section 8 says why). The decision is
+`decisions.d/2026-11-05-approval-policy-chat.md`; the change note is
+`changelog.d/2026-11-05-approval-policy-chat.md`.
+
+### 193.6 The floor, and what the owner can never loosen
+
+Three protections sit under every change, and the module owns only the card
+dimension explicitly:
+
+1. **The card itself.** An action in `jarvis_asks_first.MUST_ASK` or
+   `HARD_LIMITS` can never lose its card, whatever the owner asks: the `card`
+   dimension delegates to `jarvis_asks_first.request_tier`, whose own refusal
+   turns "stop asking before you open the door" into one sentence and changes
+   nothing. The change card's own action, `change_approval_policy`, is in both
+   lists.
+2. **Windows Hello for a risky card.** `jarvis_owner_check.is_risky` decides at
+   approval time, and its prompt rule runs whether or not the settings file asks
+   for it - so removing an `[autonomy.windows_hello]` line can never take the
+   prompt off a risky card. The policy only ever ADDS the check to a card that
+   would otherwise skip it (a "small" card).
+3. **The second yes is the owner's own choice.** It is the one dimension a
+   loosening can really remove, so it is behind the strongest card the system
+   has: ONE `change_approval_policy` card, on this PC only, which itself needs
+   Windows Hello, whose words say exactly what stops being asked, and nothing is
+   written until a person approves it. This is deliberately different from a
+   blanket "risky actions never lose their second yes" floor (Gemini's Q4 option
+   A, 2026-11-05): the owner asked in their own words to be able to change it, an
+   action-level risky test cannot be resolved from this repository at policy time
+   (the gate's risk rows live in the owner's live `jarvis_gate.py`), and treating
+   the 83 `HARD_LIMITS` actions as risky-at-policy-time would refuse the feature
+   for nearly every action the owner would use it on. The strength is moved from
+   a rule to the card.
+
+## 194. The Live utterance reply gains ignored_unmatched_speaker (additive, added 2026-11-05)
+
+POST /api/voice/utterance?source=live can now answer a clip it DROPPED as background audio. Nothing is renamed and nothing is removed: every field an older client reads keeps its meaning.
+
+- **ignored_unmatched_speaker: 	rue** on that reply, and absent-or-alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
+- **
+eason: "background_media_rejected"** on the same reply (jarvis_live.IGNORED_BACKGROUND).
+- **ok and owner are alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
+- **Nothing is sent to the model** on such a clip, nothing is kept, and no words of it appear in the reply. An app needs no change: a client that does not know the new field ignores it, and the clip is silent either way.
+- **Short confirmations are unaffected.** A clip under 1.2 s in a latched session is never put to this guard, so "yes" and "do it" answer exactly as they did before.
+
+The rule and its reasons are in docs/ARCHITECTURE.md §15; the tests are ackend/test_voice_check_rule.py's two new functions.
+
+## 195. A read-only repository map: the files and symbols of a project folder, ranked for the question (added 2026-11-05)
+
+The first piece of "Jarvis as a project worker", built in the order the
+2026-11-05 project-management audit recommended and Gemini's ruling fixed:
+**a read-only repository map FIRST**, before project-scoped chat and before any
+staged diff. It is the one capability that raises what Jarvis can do for a
+coding project without giving it a pen: a project's folder stops being a list of
+file names and becomes a short, ranked table of what is in it.
+
+**What a map is.** The files, classes, functions and imports of ONE folder the
+owner already allowed, ranked for a question and packed into a bounded block of
+text. It lists NAMES AND SIGNATURES ONLY - never a function's body - and it
+writes nothing at all: no index, no cache, no temp file.
+
+**The route.** `GET /api/projects/<id>/map` - `id` is a registered project
+(`projects.db`; the same list `GET /api/projects` returns) and the folder mapped
+is that project's own folder. Query: `q` (the question to rank for, optional) and
+`tokens` (the budget, default 1,500, clamped to 200 minimum and 2,000 maximum).
+It is answered by the project store's own table (`jarvis_projects.parse_route`
+returns `("map", <id>)`), after the server's origin and token checks like every
+other project route.
+
+```text
+GET /api/projects/{id}/map?q=where+are+routes+registered&tokens=1500
+```
+
+The answer:
+
+```json
+{"ok": true, "available": true,
+ "project": {"id": "…", "name": "Epic Jarvis"},
+ "folder": {"path": "C:\\…\\Epic-Jarvis-main", "name": "Epic-Jarvis-main"},
+ "question": "where are routes registered",
+ "map": "Repository map of Epic-Jarvis-main - 214 files with names to show, 3102 symbols declared.\n…",
+ "tokens": 1487, "budget": 1500,
+ "files": 42, "files_seen": 1234, "symbols": 310,
+ "truncated": true,
+ "ranked": [{"path": "backend/jarvis_documents.py", "score": 38.5, "symbols": 41}],
+ "outside_text": true}
+```
+
+`ranked` carries the top ten only, so the order can be checked without shipping
+the whole ranking twice; `map` is the text itself. A project with no folder, an
+unknown project id and a folder that is no longer on the owner's list each answer
+`ok: false` with their own one-sentence reason and status 400.
+
+**The tool.** The module is reached from chat through the EXISTING `my_files`
+tool: `{"action": "map", "project": "<id>"}` or `{"action": "map", "path": "<a
+folder on the list>"}`, with `words` as the question and an optional `tokens`.
+It returns the same map, plus `outside_text: true` and the store's own
+outside-text label on the text (the same treatment a file read gets). `map` is
+one more action on `my_files`; it adds **no tool**, no switch and no gate
+action.
+
+**Which boundary protects the walk.** The owner's "Folders Jarvis may look in"
+list, checked by the same function the files tool uses: `jarvis_documents.
+allowed_path()`. The project's folder is checked when the project is created
+(`jarvis_projects.check_folder`), and then **every file the walk would show is
+passed through `allowed_path()` again** with that folder as its root
+(`backend/jarvis_repomap.py`, `_walk()`). A folder that is not on the list is
+refused in ONE plain sentence and the walk never starts - it is not walked and
+then filtered, and nothing about it is guessed. Hidden folders are not entered,
+links are not followed, "Protected from Jarvis" items and the private places are
+refused by the existing checks, and a small set of dependency folders
+(`node_modules`, `target`, `dist`, `build`, `__pycache__`, …) is skipped even
+when a `.gitignore` forgets them. `.gitignore` itself is honoured per directory,
+including `!` negation. An unlisted folder answers: *"That folder is not on
+"Folders Jarvis may look in", so Jarvis does not map it - the folder is added on
+the PC first, in Settings, Folders Jarvis may look in."*
+
+**The ranking, written out** (the module docstring has the full formula and the
+module has no other rule): +12 per distinct question word in a declared symbol
+name, +6 in the file or folder's own name, +2 in an import target, +4 when a
+MATCHED file imports this one (its dependency), +1 when this file imports a
+matched file (a caller), and +0.5 × log2(1 + symbols) as a small tie-break.
+Ties break by relative path, so the order never depends on the walk. Imports are
+matched on names, not by resolving paths: a wrong edge costs a line of the map,
+a resolved guess could invent one. The answer is deterministic - the same tree
+and the same question give the same bytes - and needs **no model call**.
+
+**The budget.** At most 2,000 tokens, default 1,500, counted exactly the way
+`jarvis_agent.estimate_tokens` counts a string (3 characters a token, JSON
+framing included, so a map of 2,000 really arrives as 2,000 and not more). A
+file that does not fit has its symbol lines trimmed; a file too big to read
+(at most 512 KiB is read) is named and not read; nothing is ever refused for
+being large.
+
+**What it does not do, so nobody has to ask.** It does not write, move or delete
+anything; it runs no program, opens no socket and calls no model; it adds no
+route to the phone (PC-only read, classified backend-only in
+`tools/check_parity.py`, with the reason in `docs/ARCHITECTURE.md` §8); and it is
+not a diff, an editor or a test runner - `project_edit` remains unbuilt, exactly
+as `backend/jarvis_projects.py` says. Python is parsed with `ast`; JS/TS, Kotlin
+and Rust are read by a conservative signature/import scan that misses clever
+constructs by design and never prints a line that was not in the file.
+
+**Tests and records.** `backend/test_repomap.py` drives the real modules over a
+real temp tree: 78 checks covering the ranking, `.gitignore` (including
+negation), the one-sentence refusal, the bounded budget, determinism, that no
+file is written, the route's documented shape through the real project store, a
+huge file, and the `my_files` action through `jarvis_documents` and
+`jarvis_agent`'s own runner. The decision is
+`decisions.d/2026-11-05-project-repomap-first.md`.

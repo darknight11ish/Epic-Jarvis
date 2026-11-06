@@ -84,11 +84,12 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// can be offered switchable, raw Tier C set and everyday helpers included (21
 /// before that; the 2026-10-31 tiered ruling is superseded), the six
 /// on-demand GitHub tools joined them when the GitHub tools branch landed (48
-/// at 2026-11-04), and handsfree's send_text_message is the 55th. A DIFFERENT
+/// at 2026-11-04), handsfree's send_text_message is the 55th and the
+/// approval-policy tool's approval_policy the 56th. A DIFFERENT
 /// list from [`SWITCHABLE`], and desktop only.
 /// The four tools that are NOT here are the ones whose own switch decides them
 /// ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 55] = [
+pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -151,6 +152,11 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 55] = [
     "github_comment",
     "github_open_issue",
     "github_rerun_workflow",
+    // The approval-policy tool's own row (2026-11-05). LAST because the PC
+    // builds this list as jarvis_asks_first's TIER_A + TIER_B + TIER_C +
+    // TIER_UNLISTED + TIER_EXTRA, and approval_policy is TIER_EXTRA's final
+    // entry - the order is compared word for word.
+    "approval_policy",
 ];
 
 /// The four known tools with no switch of their own, each with the PC's own

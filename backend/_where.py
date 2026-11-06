@@ -482,6 +482,12 @@ SHIPPED = (
     "jarvis_focus.py",
     # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
     "jarvis_asks_first.py",
+    # What needs a card, a second yes or Windows Hello, changed by talking to
+    # Jarvis, one action and one thing at a time (2026-11-05, the owner's ask;
+    # no patch of its own - the enforcement lives in jarvis_owner_check.py,
+    # which owner-check.patch already installs). Kept beside the page it is
+    # read on, so the table and the row cannot disagree.
+    "jarvis_approval_policy.py",
     # "Folders Jarvis may look in" and the my_files tool (documents.patch)
     "jarvis_documents.py",
     # the words in a picture, read on this PC and marked as outside text (no patch)
@@ -608,6 +614,12 @@ SHIPPED = (
     # Projects, build steps 1 and 2: projects, life benchmarks and their
     # numbers in projects.db; GET/POST /api/projects (projects.patch)
     "jarvis_projects.py",
+    # A READ-ONLY repository map of a project's folder (2026-11-05): the files,
+    # classes, functions and imports inside "Folders Jarvis may look in",
+    # ranked for a question and packed to a token budget. Writes nothing, runs
+    # no model, opens no socket; GET /api/projects/<id>/map and the `my_files`
+    # action `map`.
+    "jarvis_repomap.py",
     # "about N to M weeks": the pure finish-time range jarvis_projects.py
     # and jarvis_goals.py read (2026-09-30, JARVIS-API section 101)
     "jarvis_forecast.py",

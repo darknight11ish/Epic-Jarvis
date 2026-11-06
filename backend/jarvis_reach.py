@@ -218,6 +218,11 @@ TOOL_NAMES = {
     "self_portrait": "Saying what it is made of on this PC (read-only)",
     "refresh_abilities": "Re-reading its own abilities and settings when you ask "
                          "(read-only, nothing restarted)",
+    # Changing what asks, how many yeses and whether Windows Hello is needed,
+    # by talking to Jarvis (2026-11-05; jarvis_approval_policy.py). Listed here
+    # because test_reach.py requires plain words for every tool: the sentence
+    # has to say both halves - it can loosen, and a loosening is never free.
+    "approval_policy": "Changing what needs a card, a second yes or Windows Hello",
     "conversation_find": "Finding your old conversations by their titles "
                          "(read-only, titles and dates only)",
     "conversation_open": "Opening one of your old conversations to read it "

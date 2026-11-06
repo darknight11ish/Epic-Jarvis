@@ -219,6 +219,12 @@ SHORT_LINE_EVERY_S = 60
 TICK_S = 1.0
 #: A gap this long between two checks means the PC slept: the session ends.
 SLEEP_GAP_S = 30.0
+#: How long a just-started session may say "Starting microphone & voice..."
+#: (START_WORDS) while the PC warms STT, the VAD and CAM++ and the apps open
+#: their microphone. The warm report normally lands in a few seconds; this is
+#: the honest ceiling, so a warm that never reports cannot leave the sign on
+#: "Starting" for ever (the same rule as the turn watchdog: never stuck).
+START_MAX_S = 8.0
 #: A card raised this long before Live started still counts as new (clocks).
 CARD_SLACK_S = 2.0
 #: After a crisis turn (the owner's answer of 2026-09-28): Live does not end
@@ -286,6 +292,39 @@ TRUST_FIRST_S = 2.0
 #: by MAX_MINUTES (opts.py's own limit), far below this.
 TRUST_SESSION_S = 2 * 3600.0
 SAY_RECHECK = "Say a full sentence so I can re-check your voice."
+
+#: THE RADIO/TV IMPOSTOR GUARD (the owner's report of 2026-11-05, the
+#: regression of #1104 / DEF-028). A session latch is a convenience, not a
+#: claim that everything the microphone hears is the owner: with the latch on,
+#: a radio, a television or a video call in the room was transcribed and
+#: answered as if the owner had said it.
+#:
+#: What the latch may NOT skip is the cheap half of the owner check. Every
+#: clip of RADIO_GUARD_S of speech or more, in a latched session, is put to
+#: the in-RAM CAM++ embedding and compared with the enrolled owner print
+#: (~15 ms - one `embed_with` and one `cosine`, no strict check, no retraining,
+#: nothing written). Below the bar it is BACKGROUND AUDIO: dropped in silence,
+#: never transcribed, never sent to the model, and nothing is said about it.
+#:
+#: SHORT UTTERANCES ARE STILL WELCOME. "yes", "do it", "stop" are under 1.2 s
+#: and skip the guard entirely - a speaker model has almost nothing to go on
+#: in one second, and asking the owner to repeat himself to confirm a card is
+#: exactly the behaviour the 2026-11-01 ruling removed. The guard is about the
+#: room, not about the length of a sentence.
+#:
+#: TWO BARS, because a wake word is proof on its own. A clip that said "hey
+#: Jarvis" (or arrived inside the follow-up window) gets RADIO_MIN_COSINE;
+#: one with no wake-word prefix must clear RADIO_MIN_COSINE_NO_WAKE, since
+#: nothing else in the clip claims to be addressed to Jarvis.
+RADIO_GUARD_S = 1.2
+RADIO_MIN_COSINE = 0.25
+RADIO_MIN_COSINE_NO_WAKE = 0.32
+#: What a dropped clip answers, and the whole of what an app is told: `ok`
+#: True because nothing failed, `ignored_unmatched_speaker` True because that
+#: is what happened, and a reason a person can read. No words of the clip, no
+#: score, no name - a background voice gets nothing back.
+IGNORED_BACKGROUND = {"ok": True, "ignored_unmatched_speaker": True,
+                      "reason": "background_media_rejected"}
 
 
 def print_identity(device, label: str = "") -> str:
@@ -650,6 +689,12 @@ END_SAID = {
     "standby": "Live ended - Jarvis is on standby.",
     "other_device": "Live moved to your other device.",
 }
+#: What both apps SHOW while a session that just started is not ready to hear
+#: yet: the microphone is open and the PC is warming the engines behind it
+#: (status()["starting"]). Shown, never said - the ready line (SAY_STARTED) is
+#: the one that means "I can hear you now". An older app that does not know the
+#: key simply shows the session as it always did.
+START_WORDS = "Starting microphone & voice..."
 #: Every fixed line, for the apps' shared fixture (tools/gen_live_cases.py).
 LINES = {"started": SAY_STARTED, "waking": SAY_WAKING, "short": SAY_SHORT, "bye": SAY_BYE,
          "extended": SAY_EXTENDED, "warn": SAY_WARN, "quiet": SAY_QUIET}
@@ -733,15 +778,18 @@ SIDE_TALK_MARK = "[not for me]"
 #: for this PC's model - never to the caller's messages, never to a cloud
 #: model (the same placing as SPOKEN_NOTE).
 MODEL_NOTE = (
-    "This is a live spoken conversation. The owner's very short replies, like yes or no, "
+    "This is a live spoken conversation: the owner is listening hands-free and may not be "
+    "looking at the monitor, so the answer must be complete as speech. Never answer that "
+    "the answer is on the screen, in the chat, below, or in a table - a screen line is "
+    "never the answer. When you already have the answer in hand - a tool result, a page "
+    "you read, a quick fact, a list - SAY it: the key answer in one to four clear "
+    "sentences, and when it is a list or a table read the first five items or rows aloud "
+    "as plain prose, then say how many more there are. Write it the way it is said aloud: "
+    "no Markdown, no bullets, no table. The owner's very short replies, like yes or no, "
     "cannot be checked by their voice, so do not end with a yes-or-no question: when you "
     "need a choice, name the options in a few words each, so the owner can say one as a "
-    "full phrase. When you already have the answer in hand - a tool result, a page you "
-    "read, a quick fact - SAY it: never answer that it is on the screen instead of saying "
-    "it, and use a screen line only for what you truly cannot say aloud, such as a table "
-    "of numbers, a picture or a long list. If these words were clearly said to someone "
-    "else in the room and not to you, reply with exactly " + SIDE_TALK_MARK + " and "
-    "nothing else.")
+    "full phrase. If these words were clearly said to someone else in the room and not to "
+    "you, reply with exactly " + SIDE_TALK_MARK + " and nothing else.")
 
 
 def is_side_talk(answer) -> bool:
@@ -924,6 +972,23 @@ def _default_power_mode() -> str:
         return str(jarvis_power.current() or "")
     except Exception:
         return ""
+
+
+def _default_warm_ready() -> bool:
+    """Has the warm `_default_warm` started reported for the SPEECH engines?
+
+    True once `jarvis_speech.prewarm` has answered - whether it loaded them or
+    failed, because a failure is also an answer and waiting longer would be the
+    same lie in slower words. The model's own warm is NOT waited for: it is the
+    first turn's job, and the apps must be told they can start listening before
+    a 10-second model load finishes. Never raises; a missing engine report is
+    "not ready yet" (the START_MAX_S ceiling in Live.tick ends the wait)."""
+    try:
+        eng = globals().get("ENGINE")
+        warm = getattr(eng, "_warm", None) if eng is not None else None
+        return isinstance(warm, dict) and isinstance(warm.get("speech"), dict)
+    except Exception:
+        return False
 
 
 def _default_warm() -> None:
@@ -1359,6 +1424,7 @@ class Live:
                  voice_ready: Optional[Callable[[str], Optional[str]]] = None,
                  power_mode: Optional[Callable[[], str]] = None,
                  warm: Optional[Callable[[], None]] = None,
+                 warm_ready: Optional[Callable[[], bool]] = None,
                  end_on: Optional[Callable[[], str]] = None,
                  run_loop: bool = True):
         self.clock = clock
@@ -1368,6 +1434,7 @@ class Live:
         self.voice_ready = voice_ready or _default_voice_ready
         self.power_mode = power_mode or _default_power_mode
         self.warm = warm or _default_warm
+        self.warm_ready = warm_ready or _default_warm_ready
         self.end_on = end_on or _default_end_on
         self.run_loop = run_loop
         # Whether the session's own loop ticks (so a gap in its ticks means
@@ -1405,6 +1472,12 @@ class Live:
         self.muted = False
         self.muted_why = ""
         self.started_by = ""
+        #: A session that just started, while the PC is still warming the
+        #: speech engines behind an open microphone: the apps show
+        #: START_WORDS and do NOT say "I'm listening." yet. Cleared by tick()
+        #: when the warm reports (or after START_MAX_S, so it cannot stick).
+        self.starting = False
+        self.starting_since = 0.0
         #: The phone's OWN word about its screen lock when this session
         #: started: True/False, or None when it did not say (an older app).
         #: `voice_check_needed()` is the only reader that decides anything
@@ -1446,6 +1519,8 @@ class Live:
         self.ended_device = self.device
         self.ended_at = self.clock()
         self.state, self.pause, self.hint, self.ended_why = ENDED, None, None, why
+        self.starting = False
+        self.starting_since = 0.0
         self.ends_at, self.warned, self.crisis = 0.0, False, False
         self.muted, self.muted_why = False, ""
         self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
@@ -1514,6 +1589,12 @@ class Live:
             self.conversation_id = cid
             self.refused_row, self.near_row, self.refused_since = 0, 0, 0.0
             self.turns = 0
+            # A fresh session that will warm its engines in the background is
+            # "starting" until they report (or START_MAX_S): the microphone is
+            # open, but nothing may claim to be listening yet. Standby warms
+            # nothing (see below), so it has nothing to wait for.
+            self.starting = not standby
+            self.starting_since = now
             self._trust_start()
             self.phone_locked = locked_flag
             self.awake_seen = not standby
@@ -1547,7 +1628,10 @@ class Live:
                              daemon=True).start()
         self._emit()
         return {"ok": True, "status": self.status(),
-                "say": SAY_WAKING if standby else SAY_STARTED}
+                # "I'm listening." only when it can hear: a starting session
+                # says nothing yet, and the ready line is said on the status
+                # that clears `starting` (live-rules.js `liveTransition`).
+                "say": SAY_WAKING if standby else ("" if self.starting else SAY_STARTED)}
 
     def _loop(self, gen: int) -> None:
         while True:
@@ -1714,6 +1798,17 @@ class Live:
                 self.last_tick = now
                 if loop:
                     self.last_loop_tick = now
+                # The starting sign ends when the speech engines' warm reports,
+                # or after START_MAX_S whatever happens - so "Starting..." is
+                # never a state the session can be stuck in.
+                if self.starting:
+                    try:
+                        ready = bool(self.warm_ready())
+                    except Exception:
+                        ready = False
+                    if ready or now - self.starting_since >= START_MAX_S:
+                        self.starting = False
+                        changed = True
                 locked = None
                 if self.device == "desktop":
                     try:
@@ -1913,6 +2008,44 @@ class Live:
                             "strictness": self.trust_strictness}
                 return {"action": "refuse_stale", "words": SAY_RECHECK}
             return {"action": "too_short"}
+
+    def radio_guard(self, device, seconds, had_wake: bool = False) -> dict:
+        """Does this latched clip still have to prove it is the owner?
+
+        `{"needed": True, "min_cosine": ..., "seconds": ...}` when it does:
+        the caller puts the clip to the CAM++ embedding and compares the
+        cosine with the enrolled print, dropping it as background audio when
+        it comes in under `min_cosine`. `{"needed": False}` in every other
+        case, and that answer is not a pass - it only means the guard has no
+        opinion and the ordinary decision stands.
+
+        IT ONLY APPLIES TO A LATCHED SESSION (`trust_active`). Before the
+        session's first verified sentence the real strict check runs and this
+        guard has nothing to add; a session whose verification was voided asks
+        for a full sentence again, exactly as before. The one thing the guard
+        changes is the LATTER half of the latch: the 1.5-2.0 s band that runs
+        on session trust with no speaker model at all, and every latched clip
+        at or above RADIO_GUARD_S next to it.
+
+        Reads no audio and writes nothing: this is the rule, and
+        `jarvis_speech.hear` is what measures the cosine.
+        """
+        with self._lock:
+            if not self._on() or _norm_device(device) != self.device:
+                return {"needed": False}
+            if not self.trust_active:
+                return {"needed": False}
+            try:
+                spoken = float(seconds or 0.0)
+            except (TypeError, ValueError):
+                return {"needed": False}
+            if spoken < RADIO_GUARD_S:
+                # "yes", "do it", "stop": under the guard's own floor, and
+                # deliberately allowed while latched.
+                return {"needed": False}
+            return {"needed": True, "seconds": spoken,
+                    "min_cosine": (RADIO_MIN_COSINE if had_wake
+                                   else RADIO_MIN_COSINE_NO_WAKE)}
 
     def note_verified(self, device, strictness: str = "", label: str = "") -> dict:
         """A >= 2.0 s clip passed the full strict check: this session is verified.
@@ -2155,6 +2288,12 @@ class Live:
                 "quiet_warn": bool(quiet_left is not None and quiet_left <= QUIET_WARN_S),
                 "paused": self.pause if self.state == PAUSED else None,
                 "pause_words": PAUSE_WORDS.get(self.pause) if self.state == PAUSED else None,
+                # Just started: the microphone is open but the speech engines
+                # may still be loading. Nothing may say "listening" yet; both
+                # apps show START_WORDS for these few seconds (an older app
+                # does not know the keys and shows the session as before).
+                "starting": bool(on and self.starting),
+                "starting_words": START_WORDS if on and self.starting else None,
                 "muted": bool(on and self.muted),
                 "muted_why": self.muted_why if on and self.muted else None,
                 "muted_words": (MUTE_WORDS.get(self.muted_why) if on and self.muted else None),

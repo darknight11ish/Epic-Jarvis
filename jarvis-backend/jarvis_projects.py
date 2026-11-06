@@ -2828,10 +2828,10 @@ def parse_route(route: str) -> Optional[tuple]:
         # list form of Forget (jarvis_memory's own "used" note says the same).
         return ("fact_forget", pid, p[2])
     if len(p) == 2 and p[1] in ("delete", "shareable", "benchmarks", "context",
-                                "auto-route"):
+                                "auto-route", "map"):
         return ({"delete": "project_delete", "shareable": "shareable",
                  "benchmarks": "benchmarks", "context": "context",
-                 "auto-route": "auto_route"}[p[1]], pid)
+                 "auto-route": "auto_route", "map": "map"}[p[1]], pid)
     if len(p) >= 3 and p[1] == "benchmarks" and p[2]:
         bid = p[2]
         if len(p) == 3:
@@ -2908,6 +2908,20 @@ def handle_get(route: str, query: str = "", *, store: Optional[Projects] = None)
             q = parse_qs(query or "")
             n = (q.get("points") or [CHART_POINTS])[0]
             return 200, {"ok": True, "benchmark": store.results(hit[1], hit[2], n)}
+        if hit[0] == "map":
+            # A READ-ONLY repository map of this project's own folder
+            # (jarvis_repomap.py, 2026-11-05): names and signatures only,
+            # ranked for the question, packed to a token budget. It adds no
+            # gate action and no card - it is a read under the same
+            # read_files_readonly line file_read uses - and the module itself
+            # writes nothing. Imported here so a backend that does not ship
+            # the module still answers every other project route.
+            try:
+                import jarvis_repomap as RM
+            except Exception:                            # noqa: BLE001
+                return 503, {"ok": False, "available": False,
+                             "error": "The repository map is not installed on this backend."}
+            return RM.handle_get(hit[1], query, store=store)
     except Exception as exc:
         return _err(exc)
     return 405, {"ok": False, "error": "use POST for this"}
