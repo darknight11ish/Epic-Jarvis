@@ -388,7 +388,7 @@ permission model rather than a hole in it:
 TIME** (the owner's ask of 2026-11-05: *"i would also like the ability to
 change what gets an approval card through chat, including if something gets a
 double confirmation, or a fingerprint/windows hello"*; `backend/
-jarvis_approval_policy.py`, the `approval_policy` tool, JARVIS-API §188). It
+jarvis_approval_policy.py`, the `approval_policy` tool, JARVIS-API §193). It
 adds no permission mechanism: it changes the policy the EXISTING card path
 reads, in three independent dimensions per action - whether the action raises
 a card at all (`[autonomy.tiers]`, the one table `jarvis_framework.
@@ -4753,7 +4753,7 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **Changing what asks is chat-only, and there is no new patch on the owner's
   file** (2026-11-05; the owner's ask; `backend/jarvis_approval_policy.py`,
-  `approval_policy` in `backend/jarvis_agent.py`; JARVIS-API §188). Neither app
+  `approval_policy` in `backend/jarvis_agent.py`; JARVIS-API §193). Neither app
   gets a write control for the three dimensions: both apps draw the read-only
   note under an existing "What asks first" row (the row's own `note` field, so
   no client changed), and the change itself is a spoken or typed sentence in
