@@ -1239,6 +1239,34 @@ select:focus-visible {
 .af-lockdown > strong, .af-lockdown > .sc-gpu-role { display: block; margin-top: 4px; }
 .af-lockdown > .btn { margin-top: 8px; }
 
+/* "New — currently off" (the owner's ruling of 2026-11-06, Q7), at the top of
+   the tools card. Deliberately quiet: one pill and the names, no banner, no
+   colour of its own beyond the accent the cards already use. It is a signpost;
+   the switches it points at are below, and each ON is still its own card. */
+.af-new-off {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+.af-new-off-pill {
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--border-accent);
+  border-radius: 999px;
+  background: rgb(var(--accent-rgb) / 0.08);
+  color: var(--accent, var(--text));
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+.af-new-off-names {
+  font-size: var(--text-sm);
+  color: var(--text-faint);
+}
+
 .sc-blocked {
   margin: 0 0 12px;
   padding: 8px 10px;

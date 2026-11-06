@@ -1904,6 +1904,72 @@ def tools_enabled_set() -> set:
         return set()
 
 
+# ---------------------------------------------------------------------------
+#   "New — currently off" (the owner's ruling of 2026-11-06, Q7)
+# ---------------------------------------------------------------------------
+#
+# THE PROBLEM THE OWNER RULED ON. The shipped template offers the model 19
+# abilities. The owner's live [tools].enabled names 14, because five were added
+# after he last edited that line (approval_policy, pack_list, pack_inspect,
+# pack_install, pack_remove - the 2026-11-05 packs work and the approval-policy
+# reader). So a feature he asked for is in the program and switched off, and
+# nothing tells him. The ruling (Q7): do NOT pop up a startup notification or
+# an unsolicited chat card - that is noise. Instead, inside Settings -> "What
+# asks first", show a subtle "New — currently off" pill at the top of the tools
+# card for exactly those tools, so he can turn one on in one click (each is its
+# own Windows Hello card).
+#
+# WHERE THE LIST COMES FROM, and why it is a constant. The SHIPPED template is
+# `backend/rebuilt/jarvis-framework.toml` in this repository, and the deployed
+# backend cannot read the repository from the owner's PC. So the 19 names are
+# written here, and `backend/test_asks_first.py` parses the template and fails
+# if this tuple stops matching it - the same shape as every other "the shipped
+# file says X" pin in this project. It is a list of NAMES only: nothing here
+# enables anything, and every enable still goes through request_tool_enable's
+# one card.
+TEMPLATE_TOOLS = (
+    "web_search", "change_setting", "feature_guide", "phone_apps", "calculator",
+    "memory_search", "my_files", "plugin_list", "plugin_switch", "pack_list",
+    "pack_inspect", "pack_install", "pack_remove", "self_portrait",
+    "conversation_find", "conversation_open", "refresh_abilities",
+    "send_text_message", "approval_policy",
+)
+#: The tools this build added on top of what the owner's live file named on
+#: 2026-11-05/06. A name here that is NOT in the live list is offered with the
+#: pill even on a PC whose template predates it - so the read stays honest on
+#: an older install, where "enabled in the shipped template" cannot be known.
+NEW_IN_THIS_BUILD = ("approval_policy", "pack_list", "pack_inspect",
+                     "pack_install", "pack_remove")
+#: The pill's exact words, from the ruling. Both apps draw this string.
+NEW_OFF_LABEL = "New — currently off"
+NEW_OFF_WHY = ("This build offers it and your settings file does not name it yet, so "
+               "the AI model is not offered it. Turning it on is one approval card "
+               "(and Windows Hello) on this PC.")
+
+
+def newly_off_tools(enabled: Optional[set] = None) -> list:
+    """Tools this build offers that the owner's own [tools].enabled omits.
+
+    Read-only, always: it is computed from the settings file and two tuples,
+    and nothing here writes a line or raises a card. `enabled` is for a caller
+    that already read the file (and for the suites). Order is the template's,
+    then anything in NEW_IN_THIS_BUILD the template does not name, so the pill
+    reads in the same order as the page.
+    """
+    on = tools_enabled_set() if enabled is None else set(enabled)
+    on = {real_tool(str(n)) for n in on}
+    wanted = list(TEMPLATE_TOOLS) + [t for t in NEW_IN_THIS_BUILD
+                                     if t not in TEMPLATE_TOOLS]
+    out, seen = [], set()
+    for tool in wanted:
+        real = real_tool(tool)
+        if real in on or real in seen:
+            continue
+        seen.add(real)
+        out.append({"id": real, "title": tool_label(real)})
+    return out
+
+
 #: For a tool whose own one-line label is a NAME rather than an action
 #: ("Computer control", "Browser control"), the card says what using it means -
 #: the owner is never asked to switch on a phrase they cannot picture.
@@ -2419,6 +2485,12 @@ def tools_status(*, here: bool = False) -> dict:
                        for title, tools in SWITCHABLE_GROUPS],
             "vault": _vault_switch_status(here),
             "extra": _extra_tool_rows(items, enabled),
+            # Q7 (2026-11-06): the tools this build offers that the owner's own
+            # [tools].enabled does not name, with the pill's own words. Read
+            # only - it never writes a line, and turning one on is still its
+            # own card via request_tool_enable.
+            "new_off": {"label": NEW_OFF_LABEL, "why": NEW_OFF_WHY,
+                        "items": newly_off_tools(enabled)},
             "not_switchable": {
                 "ids": list(NOT_A_SWITCH),
                 "labels": {tool: tool_label(tool) for tool in NOT_A_SWITCH},

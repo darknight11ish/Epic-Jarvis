@@ -265,6 +265,37 @@ explicit that the queue itself is fetched from `/api/pending` — **not**
 | `/api/deny` | POST | see below | `commands.rs:954` | `JarvisApi.kt:397` | Same. |
 | `/api/pending/<id>/amend` | POST | `{"note": "…"}` | via `amend_approval` | `JarvisApi.amend` | **Real since `backend/task-control.patch`.** Keeps a note with one waiting card; approves and denies nothing. See §11. |
 
+### Two more fields on every waiting row (2026-11-06)
+
+`jarvis_gate.pending()` — the one function that turns a database row into the
+row both apps draw — adds two fields (the owner's ruling of 2026-11-06,
+next-sprint PR 2, Hermes borrows #1 and #7). Both are absent or empty on an
+ordinary card, and neither changes what the card SAYS.
+
+| Field | On which cards | Shape |
+|---|---|---|
+| `hidden_bytes` (+ `hidden_bytes_more`) | every card | `[{"codepoint": "U+202E", "position": 12, "label": "[hidden byte: U+202E]", "kind": "bidi", "count": 1}]` |
+| `cost` | only a card that can spend money | `{"estimate_usd": 0.003, "monthly_usd": 1.14, "cap_usd": 10.0}` — or `{"why": "…"}` |
+
+- **`hidden_bytes`** is a deterministic scan of the text the card shows
+  (`detail.text` when there is one, else `prompt`): zero-width characters
+  (`U+200B..U+200F`), bidirectional controls (`U+202A..U+202E`,
+  `U+2066..U+2069`), other control bytes (C0/C1 except tab, newline and
+  carriage return), and any run of 20 or more spaces. One entry per run, at
+  most 12 entries, with `hidden_bytes_more` counting the rest. `label` is the
+  exact pill both apps draw. The card's text is **not** changed — the reader
+  still sees the exact request.
+- **`cost`** is on a card that can spend money: the `raise_a_limit` and
+  `quiz_cloud_grade` actions, and any card whose own detail carries
+  `"costs_money": "cloud"` (the standing cloud-escalation switch). All three
+  numbers are real: `monthly_usd` and `cap_usd` come from the money file the
+  monthly limit is enforced against (`jarvis_chatbot_api.spent_of` /
+  `limit_of`), and `estimate_usd` is this month's own average cost per request
+  when there is one, otherwise the model price table applied to the 2048-token
+  answer length the 2026-10-14 field test measured. When the ledger or the
+  price cannot be read the object is `{"why": "<plain words>"}` instead —
+  never an invented figure on a spending decision.
+
 ### The list-key trap
 
 `/api/pending` does not answer a bare array. It answers an object, and each
@@ -313,6 +344,36 @@ client gives it its own named outcome rather than rendering it as a failure
 (`JarvisApi.kt:501`). A 409 is also the server half of "no dead Approve on a
 resolved card": the verdict cannot be recorded twice, and both apps re-read the
 queue when they see one.
+
+### A denial can say what to do instead — `note` on `/api/deny` (2026-11-06)
+
+The owner's ruling of 2026-11-06 (next-sprint PR 2, Hermes borrow #1): the deny
+path gains an **optional** `"note"` in the owner's own words, fed back into the
+turn that was waiting so the next attempt can change course without the request
+being retyped.
+
+```
+POST /api/deny  {"id": "<id>", "by": "hud", "note": "use Documents, not the Desktop"}
+```
+
+- A deny with **no** `note` behaves exactly as it always has. `note` is ignored
+  on `/api/approve` — approving never reads one.
+- A deny **with** a note keeps it against that card **before** the gate is told
+  (`jarvis_task_control.amend()`), so the waiting turn reads it together with
+  the answer through the mechanism that already carries a card's outcome:
+  `take_amend()` → `owner_note` in the tool result the model reads
+  (`jarvis_agent.py`). It is taken once, so it is never repeated.
+- The note is **never** the card's own text, and **never** something that looks
+  like a password, key or account number. `jarvis_task_control.deny_note()`
+  refuses both and says why — the check is the existing local
+  `jarvis_sensitive.patterns()` (no model, no network) — and the denial itself
+  still goes through.
+- Nothing is approved, no standing permission is granted, and one card per
+  action is unchanged. The answer carries `"note_kept": bool` and
+  `"note_why": "<plain words>"`.
+- The same store is reachable through `POST /api/pending/<id>/amend` (above),
+  which is what both apps use: a note typed before the deny is read with it,
+  and the desktop keeps its decision on `commands.rs`'s route untouched.
 
 ### Approving with a choice
 
@@ -11227,7 +11288,10 @@ Its state rides on `GET /api/asks_first` (§32.2), which now carries:
                      "switchable": false, "why",
                      "last": {"outcome", "message", "at"}|null}, ...],
           "not_switchable": {"ids": [...], "labels": {...},
-                             "why": <the plain note>}}
+                             "why": <the plain note>},
+          "new_off": {"label": "New — currently off",
+                      "why": <the plain reason>,
+                      "items": [{"id", "title"}, ...]}}
 ```
 
 `items` lists all 60 switches at 2026-11-05 (48 at 2026-11-04, plus the six
@@ -11247,6 +11311,19 @@ vanishing; a tool the settings file lists again is shown as ON from the file.
 The phone reads the same `GET /api/asks_first` and simply does not toggle
 anything (`can_enable` false); it reads `extra` not at all, so the phone's page
 is unchanged.
+
+**`new_off`** (the owner's ruling of 2026-11-06, Q7). The tools the SHIPPED
+template offers (`[tools].enabled` in `backend/rebuilt/jarvis-framework.toml`,
+19 names) or this build added (the five: `approval_policy`, `pack_list`,
+`pack_inspect`, `pack_install`, `pack_remove`), minus whatever the owner's own
+`[tools].enabled` already names. Both apps draw `label` as one subtle pill at
+the top of the tools card - "New — currently off" - with the titles beside it.
+It is a signpost ONLY: nothing pops up, no chat card is raised, nothing starts
+a notification, and turning one on is still `POST /api/asks_first/tools`
+(§43.1), which is one Windows Hello card on the PC. The payload writes nothing:
+`backend/test_asks_first_new_off.py` proves two reads leave the settings file
+byte for byte as it was, and that the 19-name constant is the template's own
+list, parsed from the template.
 
 ### 43.2 The card
 
@@ -35554,7 +35631,7 @@ Computed before any file lands, shown on the card, and saved as a receipt on app
 
 ### 197.4 The ledger, and what removal can honestly do
 
-`jarvis-packs.json` sits in the config folder (`jarvis_framework.config_path().parent`, so beside `jarvis-framework.toml`; `JARVIS_PACKS_DIR` overrides it for the suites). Per pack it records: kind, name, version, source (type, locator, pin), the combined `pack_sha256`, `installed_at`, `state` (`installed` / `disabled` / `removed`), the folder, and **every file with its own sha256 and size**.
+`jarvis-packs.json` sits in the config folder (`jarvis_framework.config_path().parent`, so beside `jarvis-framework.toml`; `JARVIS_PACKS_DIR` overrides it for the suites). Per pack it records: kind, name, version, source (type, locator, pin), the combined `pack_sha256`, `installed_at`, `state` (`installed` / `disabled` / `removed`), the folder, **every file with its own sha256 and size**, the **`provenance`** tier and the **`locked`** flag (§197.10, §197.11).
 
 `pack_remove` deletes a file only when it is in the ledger **and its sha256 still matches**, so a file that changed since install is kept and named. A file in the folder that the ledger does not know is never deleted - it is reported and kept. The index row goes, the content pin is released, and the ledger entry is marked `removed` rather than forgotten, so a second removal refuses instead of guessing. A pack whose ledger record is missing is refused outright: "I no longer know which files this pack wrote".
 
@@ -35602,6 +35679,49 @@ The same bytes are not a replacement: re-scanning exactly what is installed is a
 ### 197.10 What this leaves behind for the next phase
 
 The ledger, the receipt writer, `scan_source()` and the four doors are source-agnostic on purpose: phase 2 adds the AST/import and obfuscation half of the scan for code packs, phase 3 the plug-in kind (which writes two files and needs a restart sentence that already exists in `_restart_line("plugin")`), and phases 4-6 add the git/index/URL sources and the catalogue truth. None of them needs a second scanner or a second card.
+
+### 197.11 The curator lock, and where a pack came from (added 2026-11-06)
+
+The owner's ruling of 2026-11-06 (next-sprint PR 2, Hermes borrows #5/#8) adds
+two things to the pack ledger. **No route is added**, so `tools/check_parity.py`
+sees no change.
+
+**`"locked": true`** — a per-pack flag in `jarvis-packs.json`. A locked pack
+cannot be replaced and cannot be removed: `install_pack()` refuses a
+replacement before it hashes anything, before the backup and before the card
+(nobody is asked, nothing lands), and `plan_remove()` / `remove_pack()` refuse
+with the same sentence. The exact words are
+**"Owner-locked: cannot be replaced or removed until unlocked on PC"**
+(`jarvis_packs.LOCKED_WORDS`).
+
+The flag is written **only by the PC**: `jarvis_packs.set_locked(name, on,
+here=True)` refuses `here=False` and writes nothing, and the one command-line
+door is
+
+```
+py -3 jarvis_packs.py lock <name>
+py -3 jarvis_packs.py unlock <name>
+py -3 jarvis_packs.py locked
+```
+
+Locking is a tightening and is written at once; unlocking is the PC's alone
+too. A pack's own `pack.json` cannot lock itself - the ledger write at the end
+of `install_pack()` copies `old_entry["locked"]`, never the pack's claim.
+`pack_list` shows the flag, and `_self_check()` lists every locked name.
+
+**A provenance tier** on the install card and in the ledger, decided by where
+the pack came from - never by a trust score:
+
+| `provenance` | Decided by | The card's sentence |
+|---|---|---|
+| `owner-local` | a folder on this PC (`source.type == "folder"`) | "Came from a folder on this PC. The scan read exactly these files; who wrote them is not something Jarvis can prove." |
+| `imported-hermes` | a `.zip` whose own `pack.json` or `SKILL.md` frontmatter names Hermes/agentskills (an origin key) | "Imported from a Hermes (agentskills.io) archive. The archive says where it came from; Jarvis did not write it and cannot prove who did." |
+| `unverified-archive` | any other `.zip` | "Came out of a .zip archive. Nothing in the archive says who wrote it, so this is an unverified archive - the scan read the files, and that is all that is known." |
+
+The `.zip`'s own claim is a claim, which is why that tier is called *imported*
+and its sentence says Jarvis cannot prove who wrote it. A hash proves the
+bytes, never an author.
+
 ## 198. Chat can read a note: one note's text, a which-one list, or the honest no (added 2026-11-05)
 
 *Numbering note, 2026-11-05: this section was written as 188; the call-recording section (2026-11-04) already held 188 when this branch merged main, so this one is 198, leaving 196 and 197 to the sections landing ahead of it in the merge train. The words below are unchanged.*

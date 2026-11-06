@@ -385,6 +385,64 @@ def take_amend(approval_id: Optional[str]) -> Optional[str]:
     return got["note"] if got else None
 
 
+# ---- "No, and tell Jarvis what to do instead" (2026-11-06) ----------------
+#
+# THE OWNER'S RULING (2026-11-06 11:35 PT, next-sprint PR 2, Hermes borrow #1):
+# a denial may carry an OPTIONAL note in the owner's own words, and that note
+# reaches the model with the denial so the next attempt can change course
+# without the owner retyping the request. It is the SAME mechanism the amend
+# route already uses: POST /api/pending/<id>/amend keeps a note against the
+# card, take_amend() removes it on the turn that reads it, and jarvis_agent.py
+# puts it in the tool result as `owner_note`. A deny with no note is unchanged.
+#
+# TWO THINGS A NOTE MAY NEVER BE, and both are refused rather than silently
+# stored:
+#   * the card's OWN text. Storing that would feed the card's words back as if
+#     the owner had written them, and it is exactly the text they were shown.
+#   * a secret. A note is read back to a model, so a pasted password, key or
+#     account number would leave the string it belongs to - and this project
+#     never reads a stored secret into a model. The existing local patterns
+#     checker decides (`jarvis_sensitive.patterns`, no model, no network); when
+#     it flags credentials the note is dropped and the denial still stands.
+NOTE_ECHOED_CARD = ("Your note was the card's own text, so it was not kept - that "
+                    "would put the same words back into the next attempt. The denial "
+                    "still went through. Write what Jarvis should do instead, and deny "
+                    "again if you want it to plan differently.")
+NOTE_LOOKS_SECRET = ("That note looks like a password, a key or an account number, so "
+                     "it was NOT kept and it was not written down anywhere. The denial "
+                     "still went through. Say what Jarvis should do instead, without "
+                     "the secret.")
+
+
+def deny_note(raw, card_text: str = "") -> tuple:
+    """(note, why-not-kept) for the note a denial may carry.
+
+    `note` is the cleaned text to keep, or None. `why` is "" when the note was
+    kept (or there was none), and otherwise the plain sentence the app shows.
+    Pure: it stores nothing itself - the caller calls `amend()` with the note
+    BEFORE the gate is told, so the turn that was waiting on the card reads it
+    with the answer.
+    """
+    note = _clean_note(raw)
+    if note is None:
+        return None, ""
+    flat = " ".join(note.split())
+    card = " ".join(str(card_text or "").split())
+    if card and flat == card:
+        return None, NOTE_ECHOED_CARD
+    try:
+        import jarvis_sensitive
+        cats = jarvis_sensitive.patterns(note).get("categories") or []
+        if "credentials" in cats:
+            return None, NOTE_LOOKS_SECRET
+    except Exception:
+        # The checker is absent or raised. The note is NOT silently kept: this
+        # is the same fail-closed direction the rest of the program uses for a
+        # check that cannot run, and the denial itself is unaffected.
+        return None, NOTE_LOOKS_SECRET
+    return note, ""
+
+
 # ---- resume: one new decision, never a carry-on --------------------------
 
 def _gate_check(action: str, detail: dict, prompt: str):

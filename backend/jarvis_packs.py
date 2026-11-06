@@ -126,6 +126,46 @@ SCHEMA = 1
 #: owner installs it again (Q3, 2026-11-05: packs are immutable once installed).
 TAMPERED = "tampered"
 
+#: THE CURATOR LOCK (the owner's ruling of 2026-11-06, next-sprint PR 2,
+#: Hermes borrows #5/#8; `curator_lock`). A pack the owner has locked cannot be
+#: replaced or removed until they unlock it. `lock` writes `"locked": true` into
+#: the pack's own row in jarvis-packs.json, and it is the ONE field in that file
+#: a pack itself can never change: install and removal both refuse a locked
+#: pack, and the only way to write or clear the flag is the PC (set_locked, or
+#: `py -3 jarvis_packs.py lock <name>` on this PC). There is no route that sets
+#: it, so a phone cannot lock or unlock anything.
+#:
+#: The sentence is the owner's own, word for word from the ruling, and it is
+#: shown on every card that touches a locked pack.
+LOCKED_WORDS = "Owner-locked: cannot be replaced or removed until unlocked on PC"
+LOCKING_ONLY_HERE = ("A pack can only be locked or unlocked on the PC that holds "
+                     "it. Nothing was changed.")
+LOCKED_REFUSED = (LOCKED_WORDS + ". Unlock it on this PC first - the pack manager "
+                  "has a lock command for the owner there - and then try again.")
+
+#: WHERE A PACK CAME FROM, as one of three tiers the install card states
+#: plainly. It is decided by the source, never by anything the pack says about
+#: itself: a folder the owner pointed Jarvis at is theirs, a `.zip` is an
+#: archive of unknown authorship, and a `.zip` whose own manifest names Hermes
+#: (the agentskills.io skill collection) is still an archive - just one whose
+#: provenance is known. A hash proves bytes, never an author, and none of these
+#: tiers is a trust verdict.
+PROVENANCE_OWNER_LOCAL = "owner-local"
+PROVENANCE_HERMES = "imported-hermes"
+PROVENANCE_ARCHIVE = "unverified-archive"
+PROVENANCE_TIERS = (PROVENANCE_OWNER_LOCAL, PROVENANCE_HERMES, PROVENANCE_ARCHIVE)
+PROVENANCE_WORDS = {
+    PROVENANCE_OWNER_LOCAL: ("Came from a folder on this PC. The scan read exactly "
+                             "these files; who wrote them is not something Jarvis "
+                             "can prove."),
+    PROVENANCE_HERMES: ("Imported from a Hermes (agentskills.io) archive. The "
+                        "archive says where it came from; Jarvis did not write it "
+                        "and cannot prove who did."),
+    PROVENANCE_ARCHIVE: ("Came out of a .zip archive. Nothing in the archive says "
+                         "who wrote it, so this is an unverified archive - the scan "
+                         "read the files, and that is all that is known."),
+}
+
 #: How much of a replacement's unified diff the card and the receipt carry.
 #: A card is read in seconds; the cut is said out loud rather than hidden.
 MAX_DIFF_LINES = 200
@@ -303,6 +343,113 @@ def _save_entry(entry: dict) -> bool:
     data["schema"] = SCHEMA
     data.pop("note", None)
     return _write_ledger(data)
+
+
+# ---- the curator lock, and where a pack came from ------------------------
+
+def locked_of(name: str) -> bool:
+    """True only when the ledger's own row for `name` says "locked": true.
+
+    A missing or unreadable ledger reads as NOT locked, and that direction is
+    deliberate the same way every other read here is: read_ledger() says in its
+    own note that it could not be read, and a lock nobody can find is not a lock
+    the owner set. What it must never do is claim a pack is locked when the file
+    that says so is gone - that would refuse a removal the owner asked for with
+    an instruction they cannot follow.
+    """
+    return bool(_entry(name).get("locked"))
+
+
+def set_locked(name: str, on: bool, *, here: bool, by: str = "") -> dict:
+    """Lock or unlock ONE pack in the ledger. PC ONLY.
+
+    This is the ONE writer of `"locked"` in jarvis-packs.json. Locking is a
+    tightening - it refuses a replacement and a removal - so it is written at
+    once, the same asymmetry every other switch in this program keeps. It has
+    no route and no app button: a phone path must never be able to lock or
+    unlock a pack (the owner's rule for this feature), and the only doors are
+    this function on the PC and the command line at the bottom of this file.
+    `here` is the caller's own statement that the request comes from this PC;
+    False is refused and nothing is written.
+    """
+    clean = _clean_name(name)
+    if not clean:
+        return {"ok": False, "error": "that is not a pack name", "changed": False}
+    if not here:
+        return {"ok": False, "error": LOCKING_ONLY_HERE, "changed": False}
+    entry = _entry(clean)
+    if not entry:
+        return {"ok": False, "changed": False,
+                "error": (f"the pack ledger has no record of {clean!r}, so there is "
+                          f"nothing to lock")}
+    want = bool(on)
+    if bool(entry.get("locked")) == want:
+        return {"ok": True, "name": clean, "locked": want, "changed": False,
+                "words": LOCKED_WORDS if want else "This pack is not locked."}
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    entry["locked"] = want
+    entry["locked_at"] = now if want else ""
+    entry["locked_by"] = (str(by or "the owner on this PC")[:64]) if want else ""
+    history = list(entry.get("history") or [])
+    history.append({"action": "locked" if want else "unlocked", "at": now,
+                    "by": str(by or "the owner on this PC")[:64]})
+    entry["history"] = history
+    if not _save_entry(entry):
+        return {"ok": False, "name": clean, "locked": not want, "changed": False,
+                "error": ("the pack ledger could not be written, so nothing was "
+                          "changed")}
+    return {"ok": True, "name": clean, "locked": want, "changed": True,
+            "words": (LOCKED_WORDS if want else
+                      (f"{clean!r} is unlocked again: it can be replaced or removed "
+                       f"like any other pack."))}
+
+
+#: The keys a pack's own `pack.json` or SKILL.md frontmatter may use to say
+#: WHERE it came from. Read for the provenance tier only; never trusted for
+#: anything else, and never a reason to skip a scan.
+_ORIGIN_KEYS = ("origin", "source", "from", "imported_from", "author",
+                "publisher", "homepage", "url", "repository")
+
+
+def _hermes_named(*docs) -> bool:
+    """True only when one of the pack's own manifests names Hermes/agentskills.
+
+    A pack saying "I came from Hermes" is a claim, not proof - which is why the
+    tier it produces is called `imported-hermes` and its card sentence says
+    Jarvis did not write it and cannot prove who did.
+    """
+    for doc in docs:
+        if not isinstance(doc, dict):
+            continue
+        for key in _ORIGIN_KEYS:
+            value = doc.get(key)
+            if not isinstance(value, str):
+                continue
+            low = value.lower()
+            if "hermes" in low or "agentskills" in low:
+                return True
+    return False
+
+
+def provenance_of(report: dict) -> str:
+    """The provenance tier for a scan report: one of PROVENANCE_TIERS.
+
+    Decided by WHERE the pack came from, which the scan recorded:
+      * a folder the owner pointed Jarvis at  -> owner-local
+      * a .zip whose own manifest names Hermes -> imported-hermes
+      * any other .zip                         -> unverified-archive
+    A report with no usable source reads as the cautious tier, never as the
+    owner's own folder.
+    """
+    src = report.get("source") or {}
+    kind = str(src.get("type") or "").strip().lower()
+    if kind == "folder":
+        return PROVENANCE_OWNER_LOCAL
+    if kind == "zip":
+        if bool(src.get("hermes")):
+            return PROVENANCE_HERMES
+        return PROVENANCE_ARCHIVE
+    return PROVENANCE_ARCHIVE
 
 
 # --------------------------------------------------------------------------
@@ -1318,6 +1465,11 @@ def _scan_zip(zip_path: Path) -> dict:
     if manifest.get("_error"):
         return _refused(f"that pack's pack.json cannot be read ({manifest['_error']})",
                         report=report)
+    # Where this archive says it came from - the provenance tier's one input
+    # for a .zip (2026-11-06, Hermes borrows #5/#8). A claim, never proof: the
+    # tier it produces is `imported-hermes`, and the card says Jarvis did not
+    # write it and cannot prove who did.
+    report["source"]["hermes"] = _hermes_named(manifest, fm)
     kind = str(manifest.get("kind") or "skill").strip().lower() or "skill"
     if kind != "skill":
         return _refused(f"that pack says it is a {kind!r} pack, and phase 1 "
@@ -1539,6 +1691,7 @@ def card_text(report: dict) -> str:
     src = report.get("source") or {}
     eff = report.get("effectiveness") or {}
     rep = report.get("replacement") or {}
+    provenance = provenance_of(report)
     said = sentences(report)
     verb = "Replace the installed skill" if rep else "Install the skill"
     lines = [
@@ -1584,6 +1737,12 @@ def card_text(report: dict) -> str:
         "",
         "LICENCE:   " + (str(pack.get("licence") or "") or "not declared"),
         "TRUST:     NOT VERIFIED - unsigned. A hash proves the bytes, never the author.",
+        # WHERE IT CAME FROM (2026-11-06, Hermes borrows #5/#8). One of three
+        # tiers, decided by the source, in the apps' own words - the owner
+        # reads it before the licence line, so it is never mistaken for a trust
+        # verdict. A folder on this PC, a Hermes archive, or an unverified .zip.
+        "PROVENANCE: " + provenance,
+        "  " + PROVENANCE_WORDS[provenance],
         "REMOVAL:   " + (
             "say \"remove the " + str(pack.get("name")) + " pack\" and I delete "
             "exactly the files in this receipt; a file you made beside it is kept."),
@@ -1772,6 +1931,14 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
                 "reason": str(report.get("refusal") or "the scan refused it"),
                 "sentences": report.get("sentences") or sentences(report)}
     name = str((report.get("pack") or {}).get("name") or "")
+    # THE CURATOR LOCK (2026-11-06, Hermes borrows #5/#8). Checked BEFORE
+    # anything is written - before the backup, before the card, before the
+    # replacement swap - so a locked pack cannot be replaced by any path that
+    # reaches this function. Nothing was asked and nothing landed.
+    if locked_of(name):
+        return {"ok": False, "installed": False, "asked": False, "locked": True,
+                "name": name, "report": report,
+                "reason": LOCKED_REFUSED}
     src = report.get("source") or {}
     ref = Path(str(src.get("ref") or ""))
     replacement = dict(report.get("replacement") or {})
@@ -1887,6 +2054,12 @@ def install_pack(source: Any, *, accept_warnings: bool = False) -> dict:
             "source": {"type": str(src.get("type") or "folder"),
                        "ref": str(src.get("ref") or ""),
                        "pin": dict(src.get("pin") or {})},
+            # Where it came from, as one of the three tiers (2026-11-06). Kept
+            # in the ledger so a later list or removal card can still say it.
+            "provenance": provenance_of(report),
+            # A pack that was unlocked and is being replaced stays unlocked;
+            # a locked one cannot reach here at all (checked above).
+            "locked": bool(old_entry.get("locked")),
             "pack_sha256": new_sha,
             "installed_at": now,
             "state": "installed",
@@ -2243,6 +2416,13 @@ def plan_remove(name: str) -> dict:
     if str(entry.get("state")) == "removed":
         return {"ok": False, "name": clean, "removed": True,
                 "reason": f"{clean!r} was already removed."}
+    # THE CURATOR LOCK (2026-11-06, Hermes borrows #5/#8): a locked pack is not
+    # even PLANNED for removal - no card is raised, because there is no question
+    # to ask while the lock holds. `locked` travels on the refusal so a caller
+    # can say why without parsing the sentence.
+    if bool(entry.get("locked")):
+        return {"ok": False, "name": clean, "locked": True,
+                "reason": LOCKED_REFUSED}
     folder = _folder_of(clean)
     if folder is None:
         return {"ok": False, "name": clean,
@@ -2425,6 +2605,12 @@ def list_packs() -> dict:
                          "version": entry.get("version") or "",
                          "state": "removed", "on_disk": False,
                          "source": entry.get("source") or {},
+                         # The two fields added on 2026-11-06 (Hermes borrows
+                         # #5/#8). A removed pack cannot be locked: the lock
+                         # exists to stop a replacement or a removal, and both
+                         # are moot once it is gone.
+                         "locked": False,
+                         "provenance": str(entry.get("provenance") or ""),
                          "pack_sha256": entry.get("pack_sha256") or "",
                          "files": len(entry.get("files") or []),
                          "installed_at": entry.get("installed_at") or "",
@@ -2443,6 +2629,8 @@ def list_packs() -> dict:
             "state": state,
             "on_disk": folder is not None,
             "source": entry.get("source") or {},
+            "locked": bool(entry.get("locked")),
+            "provenance": str(entry.get("provenance") or ""),
             "pack_sha256": entry.get("pack_sha256") or "",
             "files": len(entry.get("files") or []),
             "installed_at": entry.get("installed_at") or "",
@@ -2513,10 +2701,12 @@ def list_packs() -> dict:
 def _self_check() -> dict:
     """What this module can see right now. Read-only."""
     packs = read_ledger().get("packs") or {}
-    return {"module": "jarvis_packs", "version": 2,
+    return {"module": "jarvis_packs", "version": 3,
             "ledger": str(ledger_path()), "receipts": str(receipts_dir()),
             "skills_dir": str(_skills_root()), "off_dir": str(_off_root()),
             "packs": len(packs),
+            "locked": sorted(str(n) for n, e in packs.items()
+                             if isinstance(e, dict) and e.get("locked")),
             "tampered": sorted(str(n) for n, e in packs.items()
                                if isinstance(e, dict)
                                and str(e.get("state")) == TAMPERED),
@@ -2525,5 +2715,39 @@ def _self_check() -> dict:
             "python": "%d.%d" % _python_version()}
 
 
+#: The command line, and the ONLY door to the curator lock. It runs on this PC,
+#: by hand, which is what "PC only" means for this feature: no route answers it
+#: and no app can send it, so a phone cannot lock or unlock a pack.
+#:
+#:     py -3 jarvis_packs.py lock <name>
+#:     py -3 jarvis_packs.py unlock <name>
+#:     py -3 jarvis_packs.py locked
+#:
+#: With no arguments it prints the read-only self-check, exactly as before.
+def _cli(argv) -> int:
+    args = [str(a) for a in (argv or [])]
+    if not args:
+        print(json.dumps(_self_check(), indent=2))
+        return 0
+    what = args[0].strip().lower()
+    if what == "locked":
+        out = {"ok": True, "locked": _self_check()["locked"]}
+        print(json.dumps(out, indent=2))
+        return 0
+    if what in ("lock", "unlock"):
+        if len(args) < 2:
+            print(json.dumps({"ok": False,
+                              "error": "say which pack: lock <name> or unlock <name>"}, indent=2))
+            return 2
+        out = set_locked(args[1], what == "lock", here=True, by="the owner, on this PC")
+        print(json.dumps(out, indent=2))
+        return 0 if out.get("ok") else 1
+    print(json.dumps({"ok": False,
+                      "error": "say lock <name>, unlock <name>, or locked"},
+                     indent=2))
+    return 2
+
+
 if __name__ == "__main__":                              # pragma: no cover
-    print(json.dumps(_self_check(), indent=2))
+    import sys
+    sys.exit(_cli(sys.argv[1:]))

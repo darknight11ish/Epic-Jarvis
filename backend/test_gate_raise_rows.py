@@ -387,8 +387,18 @@ def t_the_patch_applies_to_the_published_base():
               "not classified" not in r["why"], r["why"])
         check(f"{action}: it is in _NO_RULE_FROM_DENIAL, so a denial proposes nothing",
               f'\n    "{action}",  #' in base)
-        check(f"{action}: ... and it is NOT in the pre-image, which is the "
-              "defect this fixes", f'"{action}"' not in stripped)
+        # The defect was that the action had NO ROW in either table, so that is
+        # what the pre-image must not hold. This used to test the bare name
+        # (`'"{action}"' not in stripped`), which was true only while nothing
+        # else in the file named the action - and 2026-11-06's PR 2 legitimately
+        # names `raise_a_limit` in the new CLOUD_MONEY_ACTIONS set (a card that
+        # raises a cloud spending limit CAN spend money, so it carries the cost
+        # line). The bare-name test then failed on a mention that is not a row
+        # and not the defect; the two ROW SHAPES are the precise instrument.
+        check(f"{action}: ... and NEITHER of its gate rows is in the pre-image, "
+              "which is the defect this fixes",
+              f'    "{action}": {SHAPE}' not in stripped
+              and f'\n    "{action}",  #' not in stripped)
     # The base is untouched by this test: only the temp copy was written to.
     check("the published base is read-only here (it is a repository file)",
           BASE.read_text(encoding="utf-8") == base)

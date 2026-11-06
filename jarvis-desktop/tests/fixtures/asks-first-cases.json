@@ -2319,6 +2319,88 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "web_search",
+       "title": "Web search"
+      },
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -4667,6 +4749,88 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "web_search",
+       "title": "Web search"
+      },
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -7010,6 +7174,88 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "web_search",
+       "title": "Web search"
+      },
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -9348,6 +9594,88 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "web_search",
+       "title": "Web search"
+      },
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -11706,6 +12034,84 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -14059,6 +14465,84 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -16397,6 +16881,88 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "web_search",
+       "title": "Web search"
+      },
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -18749,6 +19315,88 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "web_search",
+       "title": "Web search"
+      },
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",
@@ -21092,6 +21740,88 @@
      }
     ],
     "label": "Let the AI use this",
+    "new_off": {
+     "items": [
+      {
+       "id": "web_search",
+       "title": "Web search"
+      },
+      {
+       "id": "change_setting",
+       "title": "Changing one of Jarvis's own settings when you ask (only a loosening, or a switch that reads more, asks first)"
+      },
+      {
+       "id": "feature_guide",
+       "title": "Explaining and checking one of Jarvis's own features (read-only)"
+      },
+      {
+       "id": "phone_apps",
+       "title": "Managing the apps Jarvis may open on your phone (one card per app; the list itself stays in your settings file)"
+      },
+      {
+       "id": "calculator",
+       "title": "Calculator"
+      },
+      {
+       "id": "memory_search",
+       "title": "Searching what it has learned about you"
+      },
+      {
+       "id": "my_files",
+       "title": "Finding and reading files in the folders you listed"
+      },
+      {
+       "id": "plugin_list",
+       "title": "Listing Jarvis's drop-in plugins and why one is off (read-only)"
+      },
+      {
+       "id": "plugin_switch",
+       "title": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
+      },
+      {
+       "id": "pack_list",
+       "title": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+      },
+      {
+       "id": "pack_inspect",
+       "title": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+      },
+      {
+       "id": "pack_install",
+       "title": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+      },
+      {
+       "id": "pack_remove",
+       "title": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+      },
+      {
+       "id": "self_portrait",
+       "title": "Saying what it is made of on this PC (read-only)"
+      },
+      {
+       "id": "conversation_find",
+       "title": "Finding your old conversations by their titles (read-only, titles and dates only)"
+      },
+      {
+       "id": "conversation_open",
+       "title": "Opening one of your old conversations to read it (read-only, on this PC)"
+      },
+      {
+       "id": "refresh_abilities",
+       "title": "Re-reading its own abilities and settings when you ask (read-only, nothing restarted)"
+      },
+      {
+       "id": "send_text_message",
+       "title": "Sending one text message from your phone (one card each)"
+      },
+      {
+       "id": "approval_policy",
+       "title": "Changing what needs a card, a second yes or Windows Hello"
+      }
+     ],
+     "label": "New — currently off",
+     "why": "This build offers it and your settings file does not name it yet, so the AI model is not offered it. Turning it on is one approval card (and Windows Hello) on this PC."
+    },
     "not_switchable": {
      "ids": [
       "run_data_script",

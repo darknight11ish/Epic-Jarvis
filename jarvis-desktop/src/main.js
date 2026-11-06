@@ -440,6 +440,8 @@ const dom = {
   approvalAction: $("approval-action"),
   approvalTarget: $("approval-target"),
   approvalPreview: $("approval-preview"),
+  approvalWarnings: $("approval-warnings"),
+  approvalCost: $("approval-cost"),
   approvalOptions: $("approval-options"),
   approvalNoteInput: $("approval-note"),
   approvalNoteSend: $("approval-note-send"),
@@ -2595,6 +2597,11 @@ function refreshApproval(approval) {
   if (target) dom.approvalTarget.textContent = String(target);
 
   renderRaised(approval.raised);
+  // The two 2026-11-06 card-payload fields: hidden bytes in the card's own
+  // text, and what the card costs when it can spend money. Both are absent on
+  // an ordinary card and both draw nothing then.
+  renderCardWarnings(approval);
+  renderCardCost(approval);
 
   if (isEmailCard(approval)) {
     // An email is shown exactly as it will be sent - never as Markdown,
@@ -2972,6 +2979,82 @@ function renderRaised(raised) {
 }
 
 /**
+ * The hidden-byte warning pills (2026-11-06, the owner's ruling, Hermes
+ * borrow #1).
+ *
+ * The PC scans the text the card shows and sends `hiddenBytes`: zero-width
+ * characters, bidirectional controls, other control bytes, and a long run of
+ * padding, each with its own label ("[hidden byte: U+202E]"). This draws one
+ * pill per entry. It NEVER changes the card's words - a bad character is
+ * reported, not deleted, because the reader has to see the exact request. A
+ * clean card draws nothing at all, which is almost every card.
+ */
+function renderCardWarnings(approval) {
+  const rows = approval && Array.isArray(approval.hiddenBytes) ? approval.hiddenBytes : [];
+  if (!rows.length) {
+    dom.approvalWarnings.replaceChildren();
+    dom.approvalWarnings.hidden = true;
+    return;
+  }
+  const nodes = rows.map((row) => {
+    const pill = document.createElement("span");
+    pill.className = "approval-warning";
+    // The PC's own label, textContent (never innerHTML): it is built from a
+    // code point, and this keeps that true even if a field were ever loose.
+    pill.textContent = row.label;
+    if (Number.isFinite(row.position) && row.position >= 0) {
+      const detail = document.createElement("span");
+      detail.className = "approval-warning-detail";
+      detail.textContent = `at character ${row.position + 1}`;
+      pill.appendChild(detail);
+    }
+    return pill;
+  });
+  if (Number(approval.hiddenBytesMore) > 0) {
+    const more = document.createElement("span");
+    more.className = "approval-warning";
+    more.textContent = `and ${approval.hiddenBytesMore} more`;
+    nodes.push(more);
+  }
+  dom.approvalWarnings.replaceChildren(...nodes);
+  dom.approvalWarnings.hidden = false;
+}
+
+/**
+ * What this card costs (2026-11-06, the owner's ruling, Hermes borrow #7).
+ *
+ * One line, on a card that can spend money:
+ *   Est. $0.003 · Monthly cloud ledger: $1.14 / $10.00
+ * The three numbers are the PC's own: one answer's estimate, this month's
+ * count, and the cap the owner set. When the ledger or the price cannot be
+ * read the PC sends the reason instead of a number, and this draws the reason
+ * - an invented figure on a spending decision is the one thing that must not
+ * happen here. Absent on every other card.
+ */
+function renderCardCost(approval) {
+  const cost = approval ? approval.cost : null;
+  if (!cost || typeof cost !== "object") {
+    dom.approvalCost.replaceChildren();
+    dom.approvalCost.hidden = true;
+    dom.approvalCost.classList.remove("approval-cost-unknown");
+    return;
+  }
+  if (typeof cost.estimate === "number" && typeof cost.monthly === "number"
+      && typeof cost.cap === "number") {
+    // 3 decimals for one answer (a cloud answer costs a fraction of a cent),
+    // 2 for the ledger, which is the same rule the PC's own money words use.
+    dom.approvalCost.textContent =
+      `Est. $${cost.estimate.toFixed(3)} · Monthly cloud ledger: `
+      + `$${cost.monthly.toFixed(2)} / $${cost.cap.toFixed(2)}`;
+    dom.approvalCost.classList.remove("approval-cost-unknown");
+  } else {
+    dom.approvalCost.textContent = `No cost shown: ${cost.why || "the ledger could not be read"}`;
+    dom.approvalCost.classList.add("approval-cost-unknown");
+  }
+  dom.approvalCost.hidden = false;
+}
+
+/**
  * Puts the gate away without answering it.
  *
  * The item stays pending and stays counted; only this window stops showing it,
@@ -3052,6 +3135,8 @@ function closeApproval() {
   dom.approvalDeny.hidden = false;
   dom.approvalNoteInput.value = "";
   renderRaised(null);
+  renderCardWarnings(null);
+  renderCardCost(null);
   // The pin was taken to hold the window open for the gate. Every path that
   // ends a gate has to give it back, not only the one where the user answered
   // here: an approval resolved on the phone used to leave a 750px always-on-top
@@ -3285,6 +3370,27 @@ async function decideApproval(approved, optionId = null) {
   let outcomeHint = "";
 
   try {
+    // "No, and tell Jarvis what to do instead" (2026-11-06, the owner's ruling,
+    // Hermes borrow #1). A DENY that carries text in the note field sends that
+    // text through the SAME route the note button uses
+    // (POST /api/pending/<id>/amend), deliberately BEFORE the decision: the
+    // turn waiting on this card reads the note together with the answer
+    // (jarvis_task_control.take_amend -> the tool result's `owner_note`), so the
+    // next attempt can change course without the owner retyping the request.
+    // The decision itself still goes through `decide_approval` in Rust, so the
+    // Windows Hello and 409 handling are untouched. It approves nothing and
+    // creates no standing permission; a deny with an empty note sends exactly
+    // what it always did.
+    const redirect = approved ? "" : dom.approvalNoteInput.value.trim();
+    if (redirect) {
+      try {
+        await amendOnBackend(approval.id, redirect);
+        dom.approvalNoteInput.value = "";
+      } catch (error) {
+        outcomeHint =
+          `Denying, but your note was not kept: ${String((error && error.message) || error)}`;
+      }
+    }
     await decideOnBackend(approval.id, approved, optionId);
     // An inbox tidy approved here: its Undo strip shows as soon as the PC has done it.
     if (approved && approval.action === "tidy_inbox" && inboxTidyView) {
