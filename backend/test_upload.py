@@ -294,6 +294,17 @@ def fresh():
 
 def t_the_route_contract():
     fresh()
+    # The route test drives the REAL gate through the installed handler, and the
+    # card is asked for on its own thread. On a machine whose gate answers in
+    # microseconds (a CI runner with no approval UI), the answer could land
+    # before begin read the state, so the same request said waiting: true or
+    # false depending on timing - it flickered red on CI twice on 2026-11-06
+    # while passing 180/180 here. This replaces the thread that raises the card
+    # with one that leaves it raised and unanswered, which is exactly the state
+    # a phone sees: "a card is waiting for your yes". The card path itself is
+    # driven on a real thread by t_the_card_is_raised_before_anything_lands.
+    saved_spawn = U._spawn
+    U._spawn = lambda fn: None
     into, = listed("Documents")
     stand = Stander()
     line = U.install(stand.Handler, origin_ok=stand.origin_ok,
@@ -337,6 +348,7 @@ def t_the_route_contract():
     check("installing twice says it is already on instead of double-wrapping",
           "already on" in line3, line3)
     U._reset_for_tests()
+    U._spawn = saved_spawn
 
 
 # ==========================================================================
