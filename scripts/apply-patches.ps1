@@ -3055,6 +3055,17 @@ $SHIPPED = @(
     # where a new module is appended, so a new module goes above it. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
     'jarvis_product_check.py'
+    # The local quotation corpus and its picker (jarvis_quotes.py, 2026-11-05;
+    # the owner's ask for a quote generator that can send one on request or on
+    # a schedule). A list of real public-domain quotations kept on this PC in
+    # quotes_corpus.json beside it (BESIDE in tools/gen_base_from_backend.py),
+    # a quote KIND of job on the one scheduler, and the model-free "send me a
+    # quote" fast path in the shipped jarvis_quick.py. NO patch of its own:
+    # its kind comes from jarvis_schedule.register_kind and its routes are the
+    # existing ones, so nothing under jarvis_hud.py changes. Standard library
+    # only. The same entry, in the same position, is in backend/_where.py's
+    # SHIPPED list. It sits BEFORE jarvis_bench.py, which stays LAST.
+    'jarvis_quotes.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate
@@ -3064,9 +3075,8 @@ $SHIPPED = @(
     # and its own `bench.jsonl` (never `speed.jsonl`). `bench.patch` is the
     # routes that reach it. Standard library only, loopback only. The same
     # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    # It is the LAST entry, and it stays last.
     'jarvis_bench.py'
-
-    'jarvis_quotes.py'           # quotes.patch: the local public-domain corpus, a `quote` kind, and the model-free fast path
 )
 
 # The settings file. Installed only where none exists; never overwritten.
