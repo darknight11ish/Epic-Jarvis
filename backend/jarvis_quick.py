@@ -1661,6 +1661,11 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- a quote (jarvis_quotes.py, 2026-11-05) --------------------------------
+    got = _quote(s, now)
+    if got is not None:
+        return got
+
     # --- web search: which one, and switching (jarvis_search.py) -----------------
     got = _web_search(s)
     if got is not None:
@@ -4182,6 +4187,48 @@ def _briefing(s: str, now: float) -> Optional[Intent]:
         when = parse_when(m.group(1), now, "alarm")
         if when is not None:
             return Intent("briefing_set", {"when": when})
+    return None
+
+
+#: "a quote", "the daily quote", "one quote", "an insightful quote". The
+#: determiner (or "of the day"/"daily") is REQUIRED, so a sentence that uses
+#: "quote" as a VERB - "quote the last email" - cannot reach here, and neither
+#: can the quote CHECK in jarvis_sources.py, which is about an answer's words.
+_QUOTE = (r"(?:(?:a|an|the|one|another|today'?s)\s+)?(?:daily\s+|insightful\s+|good\s+"
+          r"|public[- ]domain\s+)?quotes?")
+
+
+def _quote(s: str, now: float) -> Optional[Intent]:
+    """A quote (jarvis_quotes.py, 2026-11-05): now, set up, stop, when.
+
+    The whole path is model-free and local: the words come from a file beside
+    the backend module, so this answers in a second with the model asleep.
+    """
+    # Now - "send me a quote", "give me a quote", "quote of the day",
+    # "daily quote", "a quote for today", "what's today's quote".
+    if re.fullmatch(r"quote\s+of\s+the\s+day|daily\s+quotes?"
+                    r"|(?:send|give|tell|read|say|show)\s+me\s+" + _QUOTE
+                    + r"(?:\s+(?:please|now|today|for\s+today|of\s+the\s+day))?"
+                    r"|(?:what's|whats|what\s+is)\s+(?:today'?s\s+|the\s+)?quotes?"
+                    r"(?:\s+of\s+the\s+day)?", s):
+        return Intent("quote_now")
+    # When - "when is my quote", "is my daily quote set up".
+    if re.fullmatch(r"(?:when\s+is|what\s+time\s+is|is)\s+(?:my|the)\s+(?:daily\s+)?quotes?"
+                    r"(?:\s+(?:set\s+up|on|set))?", s):
+        return Intent("quote_list")
+    # Stop - one at a time, the same rule as a briefing.
+    if re.fullmatch(r"(?:stop|cancel|delete|remove|turn\s+off|switch\s+off|end)\s+"
+                    r"(?:my|the)\s+(?:daily\s+)?quotes?", s):
+        return Intent("quote_cancel")
+    # Set up - "send me a quote every morning at 8", "give me a quote every day".
+    # An alarm's reading of the time: a bare hour on another day is the morning.
+    m = re.fullmatch(r"(?:(?:send|give|tell|read|say|show)\s+me\s+" + _QUOTE
+                     + r"|(?:set\s+up|schedule|start)\s+(?:a\s+|the\s+|one\s+)?"
+                     r"(?:daily\s+)?quotes?)\s+(?:for\s+)?(.+)", s)
+    if m:
+        when = parse_when(m.group(1), now, "alarm")
+        if when is not None:
+            return Intent("quote_set", {"when": when})
     return None
 
 
@@ -19915,6 +19962,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_lists(intent, sched)
     if n.startswith("briefing_"):
         return _run_briefing(intent, sched, now)
+    if n.startswith("quote_"):
+        return _run_quote(intent, sched, now)
     if n == "weather_now":
         return _run_weather(now)
     if n == "news_read":
@@ -20540,6 +20589,10 @@ READ_ONLY_INTENTS = frozenset({
     "read_link_q",
     "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
+    # A quote from the local corpus (2026-11-05): reads a file beside the
+    # backend, writes nothing, calls no model and raises no card - so it must
+    # not take away what "cancel that" would undo.
+    "quote_now", "quote_list",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
     # fixed answer that reads this PC's own settings and connects nothing, so it
@@ -21056,6 +21109,75 @@ def _briefing_without_repeats(text: str) -> str:
             continue
         kept.append(line)
     return "\n".join(kept)
+
+
+QUOTE_MISSING = ("Your PC's Jarvis does not have the quote feature yet - run "
+                 "apply-patches.ps1 on the PC.")
+
+
+def _run_quote(intent: Intent, sched, now: float) -> Result:
+    """A quote (jarvis_quotes.py, 2026-11-05): the words now, or set up a
+    repeating one - which is the scheduler's ONE schedule_repeat card, the
+    same one a repeating briefing raises. Nothing is written, no model is
+    asked, and nothing leaves this PC."""
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_quotes as Q
+    except Exception:
+        return Result(QUOTE_MISSING, n)
+    import jarvis_schedule as S
+    if n == "quote_now":
+        # `now` is the scheduler's clock, so a test with a hand-moved clock and
+        # a real afternoon agree about which day it is.
+        return Result(Q.today_line(now), n)
+    jobs = Q.setups(sched)
+    if n == "quote_list":
+        if not jobs:
+            return Result("No quote is set up. Say \"send me a quote every morning "
+                          "at 8\" to set one up, or \"send me a quote\" for one now.", n)
+        words = _join(_quote_words(j, now) for j in jobs[:4])
+        return Result(("Your quote: " if len(jobs) == 1 else f"{len(jobs)} quotes: ")
+                      + words + ".", n, [j["id"] for j in jobs[:4]])
+    if n == "quote_cancel":
+        if not jobs:
+            return Result("No quote is set up.", n)
+        if len(jobs) > 1:
+            return Result(f"You have {len(jobs)} quotes set up. Delete the one you mean "
+                          "under Coming up.", n)
+        code, out = sched.act(jobs[0]["id"], "delete")
+        if code != 200:
+            return Result(out.get("error") or "That did not work.", n)
+        return Result("Stopped your quote.", n, [jobs[0]["id"]])
+    # quote_set
+    w: When = f["when"]
+    if w.rule is not None:
+        try:
+            j = sched.add_repeat(Q.KIND, w.rule, "", source="quick")
+        except (ValueError, OverflowError) as exc:
+            return Result(S._sentence(exc), n)
+        words = S.rule_words(j.get("rule") or w.rule)
+        return Result(f"That quote repeats ({words}), so there is an approval card for it "
+                      f"on your screen. {UNTIL_APPROVED}", n, [j["id"]], made=[j["id"]],
+                      what=f"the repeating quote ({words})", nouns=("quote",))
+    if w.passed:
+        return Result(f"{S.when_words(w.at, now)} has already passed. Say another time.", n)
+    try:
+        j = sched.add_at(Q.KIND, w.at, "", source="quick")
+    except (ValueError, OverflowError) as exc:
+        return Result(S._sentence(exc), n)
+    return Result(f"Quote set for {S.when_words(w.at, now)}.", n, [j["id"]],
+                  made=[j["id"]], what=f"the quote for {S.when_words(w.at, now)}",
+                  nouns=("quote",))
+
+
+def _quote_words(j: dict, now: float) -> str:
+    import jarvis_schedule as S
+    words = S.rule_words(j.get("rule")) if j.get("repeats") else ""
+    if not words:
+        words = "at " + str(j.get("when") or "")
+    if j.get("state") == "waiting":
+        return words + " (waiting for your yes on the approval card)"
+    return words
 
 
 def _run_briefing(intent: Intent, sched, now: float) -> Result:

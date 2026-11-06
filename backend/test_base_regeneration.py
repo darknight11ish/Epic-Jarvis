@@ -87,7 +87,8 @@ def t_the_rule_is_the_readme_s_rule():
     beside = [n for n, _w, _y in G.BESIDE] + [n for n, _w, _y in G.BESIDE_BINARY]
     check("the files beside the code are the README's own list",
           beside == ["jarvis_hud.html", "jarvis-framework.toml", "requirements.lock",
-                     "quiz_grader_cases.json", "rust-crates.lock", "jarvis-visual-spec.json",
+                     "quiz_grader_cases.json", "quotes_corpus.json", "rust-crates.lock",
+                     "jarvis-visual-spec.json",
                      # the browser's own files (2026-10-23, PWA Slice 3a):
                      # jarvis_hud.py's STATIC_ASSETS whitelist reads each beside
                      # itself; the page's real copies live in jarvis-desktop/src/

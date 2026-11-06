@@ -8728,7 +8728,9 @@ object JarvisRuntime {
                     com.jarvis.client.net.Schedule.partCount(job),
                     locked,
                 )
-            } ?: com.jarvis.client.net.Schedule.notification(kind, job, locked)
+            } ?: com.jarvis.client.net.Schedule.notification(
+                kind, job, locked, com.jarvis.client.net.Schedule.saidFrom(obj),
+            )
             val lockScreen = job?.lockScreen?.takeIf { it.isNotEmpty() }
                 ?: com.jarvis.client.net.Schedule.lockScreen(kind)
             // Heard more than ten minutes after it went off (the phone was

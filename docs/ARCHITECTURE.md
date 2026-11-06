@@ -6245,3 +6245,51 @@ are the same cold start; the third is a flag that outlived its turn.
   phone's own Live screen does not read them yet: its microphone is its own
   and it has no PC-side warm to wait for, so the honest line there is the
   session it already shows. §8 records this as one-sided on purpose.
+---
+
+## 19. Quotes: a public-domain corpus kept on the PC, on the one scheduler (added 2026-11-05)
+
+A quotation is a short excerpt from a work that is out of copyright, and Jarvis
+now keeps a list of them itself: `backend/quotes_corpus.json`, 108 entries, each
+with its words, author, work, year, source and licence. Only two licences are
+allowed - `public-domain` (Project Gutenberg bodies with every Gutenberg mark
+stripped, Wikisource pages that state the work is public domain, a
+nineteenth-century Bartlett's) and `cc0-1.0` (Standard Ebooks) - and the loader
+refuses anything else, a year after 1929, an unknown source scheme, a duplicate,
+or a missing author/work/source. **Wikiquote and the quote websites are
+deliberately not used**: the first is CC BY-SA for its selection and fair use for
+much of its text, the second are all rights reserved or have no data licence.
+The full reasoning is `decisions.d/2026-11-05-quotes-local-corpus.md` and §199 of
+`docs/JARVIS-API.md`.
+
+The two halves use the machinery that already exists, which is the whole design:
+
+- **"Send me a quote" / "give me a quote" / "quote of the day" / "daily quote"**
+  is the model-free fast path in `jarvis_quick.py`, so it answers in a second
+  with the model asleep and never reaches a model. The determiner or the whole
+  phrase is required, so "quote the last email" cannot match.
+- **A scheduled quote** is a KIND of job on the one scheduler
+  (`jarvis_schedule.register_kind`, registered by `jarvis_quotes`), with the
+  same missed-while-off rule, the same `schedule` event and the same Coming up
+  row in both apps. A repeat raises the briefing's own ONE `schedule_repeat`
+  card (which lists the next three fire times); a one-off needs none.
+
+**The picker is arithmetic, not a state file.** `pick(day)` is
+`(day * STEP + OFFSET) % SIZE` with `math.gcd(STEP, SIZE) == 1` asserted at
+import (measured: 108, 17, 11), so walking day by day visits every quotation
+exactly once before any repeats, and the same calendar day gives the same quote
+everywhere. Nothing is written down, so the PC and the phone cannot drift.
+
+**The one addition to the scheduler is `Kind.say`.** A quote's words change at
+every firing, so they cannot live on the job's `text` (written once at set-up):
+the kind supplies `say(job_id)`, and the fired event carries the result as an
+extra `text` key - additive, so an older client ignores it and every other
+kind's event is unchanged. Both apps read it before the job's own text, and only
+after the App lock / hidden-lists check has hidden the words, so a locked phone
+shows "Jarvis: a quote is ready." and never the quotation.
+
+It adds **no route, no model tool, no gate action, no reach row and no
+permission of any kind** - the safest feature is one that adds no way in. The
+suite is `backend/test_quotes.py` (74 checks) and the `quote` kind is in
+`contract/schedule-cases.json`, so the HUD, Coming up and the phone are compared
+on 32 cases each with no mismatch.

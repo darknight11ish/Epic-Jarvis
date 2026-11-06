@@ -35519,3 +35519,156 @@ Hidden lists / App lock still show no title and no word of any note
 `decisions.d/2026-11-05-chat-reads-notes.md`; the proof is
 `backend/test_notes_chat_read.py` (29 checks) and the updated
 `backend/test_notes_read_search.py` (27 checks).
+## 199. A quote now, and a quote on a schedule: a public-domain corpus kept on the PC, on the one scheduler (backend, both apps, added 2026-11-05)
+
+The owner's ask of 2026-11-05, in his own words: *"research on integrating a
+quote generator with real insightful quotes that can send me one whenever i ask
+or if i set a schedule"*. The approved design is a local corpus file, a
+model-free fast path for "send me a quote", and a `quote` KIND of job on the one
+scheduler. **No route is added, no model tool is added, no internet is used, and
+no model ever writes a quotation.**
+
+### 199.1 The words: `backend/quotes_corpus.json`, checked at load
+
+`backend/jarvis_quotes.py` reads one JSON file beside itself at import, and
+refuses the whole corpus rather than serve a bad entry. The file holds **108
+quotations** on this tree, each with exactly six fields: `text`, `author`,
+`work`, `year`, `source_id`, `licence`.
+
+| Licence | Count | Where the text was taken from |
+|---|---|---|
+| `public-domain` | 92 | Project Gutenberg (`pg:`, 60), Wikisource (`ws:`, 11), a nineteenth-century Bartlett's (`bartlett:`, 21) |
+| `cc0-1.0` | 16 | Standard Ebooks (`se:`) |
+
+The loader (`jarvis_quotes.load`) REFUSES: a missing author, work, source or
+licence; a licence other than the two above; a `year` after 1929 (works published
+through 1929 are out of copyright in the United States); an unknown
+`source_id` scheme; two entries with the same words; and any text still carrying
+a Project Gutenberg header, footer, licence paragraph or trademark reference
+(`GUTENBERG_MARKS`). `MAX_TEXT` is 300 characters, `MAX_AUTHOR` 80, `MAX_WORK`
+120. The source schemes are documented in the module's own docstring, and the
+two rejected kinds of source are rejected on the record there: Wikiquote
+(CC BY-SA selection, and fair-use text) and the quote websites (all rights
+reserved, or no data licence). There are **no modern copyrighted or CC BY-SA
+quotations**.
+
+The corpus travels beside the module the same way `quiz_grader_cases.json` does:
+`quotes_corpus.json` is in `BESIDE` in `tools/gen_base_from_backend.py`, so
+`jarvis-backend/quotes_corpus.json` is byte-identical to `backend/`'s copy and a
+fresh install's first quote works.
+
+### 199.2 The picker: arithmetic, not a state file
+
+`pick(day)` is `(day * STEP + OFFSET) % SIZE` - measured on this tree `SIZE =
+108`, `STEP = 17`, `OFFSET = 11`, and `math.gcd(STEP, SIZE) == 1` is asserted at
+import. Day by day it therefore visits every quotation exactly once before any
+repeats (the suite walks 108 days and checks all 108 are distinct), and
+`pick(1000) == pick(1000 + SIZE)`. **Nothing is written down**: no "last quote",
+no cursor, no JSON, no database, so the PC and the phone cannot drift apart. A
+plain `day % SIZE` was refused because consecutive days would be adjacent
+entries, which reads as a pattern. `day_index(now)` is the PC's own local date
+as an ordinal, so the same calendar day gives the same quote from midnight to
+midnight.
+
+The on-demand half is the same picker: `for_now()` is `pick(day_index())`, and
+`line(entry)` is the words plus `"Author - Work (Year)"` - the attribution that
+makes it a quotation and not a sentence somebody made up.
+
+### 199.3 "Send me a quote" - the model-free fast path
+
+`backend/jarvis_quick.py` answers these with **no model at all** (a finished
+`Result`, so nothing is sent to the local model either):
+
+| The owner says | Intent |
+|---|---|
+| "send me a quote", "give me a quote" | `quote_now` |
+| "quote of the day", "daily quote" | `quote_now` |
+| "send me today's quote", "read me a quote", "give me a daily quote" | `quote_now` |
+| "send me a quote every morning at 8" | `quote_set` (a repeat) |
+| "give me a quote tomorrow at 6" | `quote_set` (once) |
+| "when is my quote" | `quote_list` |
+| "stop my quote" | `quote_cancel` |
+
+`quote_now` and `quote_list` are in `READ_ONLY_INTENTS`: they write nothing, call
+no model and raise no card, so they must not take away what "cancel that" would
+undo.
+
+The pattern REQUIRES the determiner ("a quote", "the quote", "daily quote") or
+one of the four whole phrases, so the word "quote" as a VERB cannot reach it:
+"quote the last email", "quote this in your answer", "quote the paragraph
+above", "put that in quotes", "quote me a price for the job" and "the quote
+check flagged it" are all proved NOT to match. The quote CHECK in
+`jarvis_sources.py` (a quoted phrase in an answer must be traceable to what was
+read) is a different thing and is untouched.
+
+The reply is `quick: quote_now`, `where: local`, with the words and the
+attribution - for example `Brevity is the soul of wit. - William Shakespeare -
+Hamlet (1603)`.
+
+### 199.4 The `quote` kind: one card for a repeat, none for once, one fired event
+
+`jarvis_quotes` calls `S.register_kind("quote", ...)` at import, exactly as
+`jarvis_briefing.py:278-280` does: `has_text=False`, `owner_listed=True`,
+`repeatable=True`, no `plain_repeat`, plus `say=` (199.4.2). The module is in
+`jarvis_schedule.KIND_MODULES`, so `S.get()` imports it before the loop first
+runs. A quote job appears in Coming up in both apps like any other row, and the
+existing routes carry it: **no new route** (`POST /api/schedule/add`,
+`POST /api/schedule/act` look the kind up in the registry).
+
+**199.4.1 The card.** A REPEATING quote raises ONE `schedule_repeat` approval
+card - the briefing's own card, tier `ask` in the shipped settings - and the
+card lists the next three fire times ("Friday 6 November at 07:00", ...). It
+also says where the words come from: a list of real public-domain quotations on
+the PC, the same day always giving the same quote, nothing sent anywhere and no
+AI model asked. A one-off quote needs **no** card. The same repeat set up twice
+is refused ("already set up"), like every other kind.
+
+**199.4.2 The fired event carries that firing's words.** A quote is different
+every day, and the job's own `text` is written once when it is set up, so the
+kind supplies `say(job_id)` and the scheduler adds the result to the ordinary
+`state:"fired"` event as an extra `text` key (`jarvis_schedule.py`, the fired
+branch). The body is the words plus `"Author - Work (Year)"` for **the day it
+actually went off on** (the scheduler's own clock, so a job missed while the PC
+was off says the quote for the day it went off). It is additive: an older client
+ignores the key and still has the job's own (empty) text; nothing about any
+other kind's event changes, and a kind whose `say` raises simply adds no key.
+
+**199.4.3 Both apps read it.** The desktop toast (`brain/schedule.rs`,
+`toast_words`) and the phone's notification (`net/Schedule.kt`,
+`Schedule.notification`) take the event's `text` before the job's own text, and
+only AFTER the App lock / private-lists check has hidden the words - the same
+rule every other kind uses, so a locked phone shows only "Jarvis: a quote is
+ready." Both apps name the kind: `coming-up.js`'s `KIND_TAGS` and title
+("Quote of the day"), `Schedule.kt`'s `tag`/`title`/`lockScreen`, and
+`brain/schedule.rs`'s `toast_title`/`lock_screen_words`. The row shows the title,
+because the words belong to the firing and not to the job.
+
+### 199.5 What this adds, and what it deliberately does not
+
+- **No new route.** Nothing under `/api/` changed.
+- **No model tool.** The on-demand path is the model-free fast path, so there is
+  no `[tools].enabled` line, no tool switch and no `SCHEDULE_TOOLS` entry.
+- **No gate, no reach row, no permission.** A quotation from a local file is
+  Jarvis's own text, not outside text; nothing is fetched, so there is nothing
+  for `jarvis_gate` or "What Jarvis can reach" to record.
+- **No file written.** The picker is arithmetic; nothing records which quote was
+  shown.
+- **No content pin.** The suite proves the corpus's PROPERTIES (licences,
+  attribution, no Gutenberg marks, no duplicate words, pre-1929 years), never a
+  particular quotation's text, so the corpus can grow without failing a test.
+
+### 199.6 The files, and the proofs
+
+`backend/jarvis_quotes.py` and `backend/quotes_corpus.json`, shipped whole (the
+`SHIPPED` list in `backend/_where.py`, `BESIDE` in
+`tools/gen_base_from_backend.py`, and `scripts/apply-patches.ps1`'s `$SHIPPED`),
+so `jarvis-backend/` holds byte-identical twins. The suite is
+`backend/test_quotes.py` (74 checks): the corpus's own properties, the loader's
+refusals, the coprime full cycle, determinism and no file written, the four
+phrases and the six near-misses, the kind's registration, the single card with
+three fire times, the fired event's body, and the two-file rule. The schedule
+contract (`contract/schedule-cases.json`) gained the `quote` kind, so the HUD,
+Coming up and the phone are compared on 32 cases each rather than 29, with no
+mismatch.
+
+The decision is `decisions.d/2026-11-05-quotes-local-corpus.md`.

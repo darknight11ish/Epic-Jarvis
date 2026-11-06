@@ -1,7 +1,7 @@
 {
   "$comment": "F5/Q2 - the ONE canonical schedule action table. Derived from the real backend authority (backend/jarvis_schedule.py: Scheduler.act's decision table, the Kind registry, and Wave D-1's propose_ready/suggest_done for ready_for_review) and the words both apps already share. Surfaces (HUD jarvis_hud.html, coming-up.js, Schedule.kt) MUST match this table; tools/check_schedule_actions.py reports each surface, and contract/README.md says who still has to consume it. Data only: no code, no words that are not user-facing below. The shared desktop table is jarvis-desktop/src/hud-actions.js (coherence #729): the HUD's fallback and the Brain consume it; the shared table section below is the only desktop source of truth the checker reads. Phase 2 (HUD Reminders edit/move/reorder, 2026-10-22) is in the separate `management` block: those verbs open an editor/list picker/keyboard reorder, so they are not one-tap entries in a kind's `states` actions. The checker asserts `authority.verbs` equals the verb set it reads out of `backend/jarvis_schedule.py`'s `Scheduler.act` source.",
   "schema": 1,
-  "updated": "2026-10-22",
+  "updated": "2026-11-05",
   "owner": "prompt-wiring (contract + checker only; surfaces are owned by their PRs)",
   "authority": {
     "module": "backend/jarvis_schedule.py",
@@ -563,6 +563,26 @@
       "tag": "today card",
       "snoozable": false,
       "kind_module": "jarvis_today",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": []
+      }
+    },
+    "quote": {
+      "listed": true,
+      "tag": "quote",
+      "snoozable": false,
+      "kind_module": "jarvis_quotes",
       "states": {
         "active": [
           "pause",

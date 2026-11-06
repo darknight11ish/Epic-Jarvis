@@ -147,6 +147,10 @@ BESIDE = (
      "jarvis_tool_updates.py, jarvis_backup.py, jarvis_pc_help.py read it"),
     ("quiz_grader_cases.json", "{repo}/backend/quiz_grader_cases.json",
      "eval_quiz_grader.py reads it"),
+    # The quote corpus (2026-11-05): jarvis_quotes.py reads it beside itself, so
+    # a fresh copy of the base has to carry it or its first quote fails.
+    ("quotes_corpus.json", "{repo}/backend/quotes_corpus.json",
+     "jarvis_quotes.py reads it beside itself"),
     ("rust-crates.lock", "{repo}/jarvis-desktop/src-tauri/Cargo.lock",
      "jarvis_tool_updates.py reads it"),
     ("jarvis-visual-spec.json", "{source}/jarvis-visual-spec.json",

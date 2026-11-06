@@ -819,7 +819,8 @@ class Kind:
                  card: Optional[Callable] = None, silent: bool = False,
                  add: Optional[Callable] = None, first_now: bool = False,
                  fields: Optional[Callable[[str], dict]] = None, what: str = "",
-                 leaves: bool = False, plain_repeat: bool = False, ends: bool = False):
+                 leaves: bool = False, plain_repeat: bool = False, ends: bool = False,
+                 say: Optional[Callable[[str], str]] = None):
         self.name = name
         self.noun = noun                 # "timer", "reminder"
         self.lock_screen = lock_screen   # what a locked phone may show
@@ -895,6 +896,14 @@ class Kind:
         # says "until <day>" instead of a time it goes off; going off at the
         # end rings no doorbell (such a kind is also `silent`).
         self.ends = ends
+        # say(job_id) -> the words THIS firing says (the quote of the day,
+        # 2026-11-05). A kind whose words change from one firing to the next
+        # cannot put them in the job's own `text` - that is written once, when
+        # the job is set up - so the scheduler puts them on the fired event as
+        # an additive key (`text`), which an older client ignores and both
+        # apps read before the job's own text. None for every other kind, and
+        # nothing about them changes.
+        self.say = say
 
 
 KINDS: dict = {}
@@ -928,7 +937,7 @@ KINDS: dict = {}
 #: files nothing by itself.
 KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
                 "jarvis_next_time", "jarvis_tidy", "jarvis_today", "jarvis_decks",
-                "jarvis_topics", "jarvis_referee", "jarvis_tag_suggest")
+                "jarvis_topics", "jarvis_referee", "jarvis_tag_suggest", "jarvis_quotes")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,
@@ -941,7 +950,7 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
                   add: Optional[Callable] = None, first_now: bool = False,
                   fields: Optional[Callable[[str], dict]] = None, what: str = "",
                   leaves: bool = False, plain_repeat: bool = False,
-                  ends: bool = False) -> Kind:
+                  ends: bool = False, say: Optional[Callable[[str], str]] = None) -> Kind:
     """Add a kind of job. For the features still to come (briefing, tidy,
     sleep): their job goes off through the same loop, the same missed-while-
     off rule and the same event; `on_fire(job_id)` is called after the event,
@@ -958,7 +967,7 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
              edges=edges, about=about, note=note, repeatable=repeatable,
              card_note=card_note, check=check, card=card, silent=silent, add=add,
              first_now=first_now, fields=fields, what=what, leaves=leaves,
-             plain_repeat=plain_repeat, ends=ends)
+             plain_repeat=plain_repeat, ends=ends, say=say)
     KINDS[name] = k
     return k
 
@@ -4315,6 +4324,21 @@ class Scheduler:
                     # Nothing to tell the owner (the standby schedule at
                     # 01:00): both apps show no notification or toast for it.
                     data["notify"] = False
+                if k is not None and k.say is not None:
+                    # The words THIS firing says (the quote of the day,
+                    # 2026-11-05). Additive, like step/parts above: an older
+                    # client ignores it and reads the job's own text instead.
+                    # A kind says this rather than writing the job's `text`,
+                    # which is written once at set-up and would give every
+                    # firing of a repeating job the same words. It never
+                    # raises into the loop: a kind that cannot say anything
+                    # just does not add the key.
+                    try:
+                        said = str(k.say(jid) or "").strip()
+                    except Exception:
+                        said = ""
+                    if said:
+                        data["text"] = said
                 self._publish("schedule", data)
             if k is not None and k.on_fire is not None:
                 fn = k.on_fire
