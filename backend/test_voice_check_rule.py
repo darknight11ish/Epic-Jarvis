@@ -42,6 +42,7 @@ nothing:
 
 No network, no model, no microphone.
 """
+import ast
 import json
 import sys
 import tempfile
@@ -595,21 +596,52 @@ def t_the_radio_guard_is_wired_into_the_hearing_path():
 
     The drop lives in `jarvis_speech.hear`, which needs a real microphone clip
     and a speaker model to drive end to end - CI has neither (it has no
-    enrolled print and no Ollama). So this pins the wiring in the source the
-    product runs, and names each of the three tokens the fix depends on. The
-    same shape every other suite here uses for a path it cannot drive.
+    enrolled print and no Ollama). So this checks the WIRING in the source the
+    product runs, by WALKING AST NODES rather than reading the source as text:
+    `tools/check_no_source_pins.py` is the ratchet that forbids a new source
+    pin (a `"token" in src` comparison goes red when the code is merely
+    reformatted), and a docstring is an `ast.Constant` that can never be
+    mistaken for an `ast.Call`. Same four facts the text version named, each
+    read structurally.
     """
-    src = (BACKEND / "jarvis_speech.py").read_text(encoding="utf-8")
+    tree = ast.parse((BACKEND / "jarvis_speech.py").read_text(encoding="utf-8"))
+
+    def dotted(node) -> str:
+        parts = []
+        while isinstance(node, ast.Attribute):
+            parts.append(node.attr)
+            node = node.value
+        if isinstance(node, ast.Name):
+            parts.append(node.id)
+        return ".".join(reversed(parts))
+
+    calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)]
+    call_names = {dotted(c.func) for c in calls}
     check("hear() asks the Live session whether this clip needs the guard",
-          "jarvis_live.ENGINE.radio_guard(" in src)
+          "jarvis_live.ENGINE.radio_guard" in call_names)
     check("...measures the CAM++ cosine against the enrolled print itself",
-          "def _owner_cosine(" in src and "jarvis_voice.cosine(vec, centroid)" in src)
+          any(isinstance(n, ast.FunctionDef) and n.name == "_owner_cosine"
+              for n in ast.walk(tree))
+          and "jarvis_voice.cosine" in call_names)
     check("...and DROPS an unmatched latched clip instead of transcribing it",
-          "ignored_unmatched_speaker=True" in src
-          and 'jarvis_live.IGNORED_BACKGROUND["reason"]' in src)
+          any(kw.arg == "ignored_unmatched_speaker"
+              and isinstance(kw.value, ast.Constant) and kw.value.value is True
+              for c in calls for kw in c.keywords)
+          and any(isinstance(n, ast.Subscript)
+                  and dotted(n.value) == "jarvis_live.IGNORED_BACKGROUND"
+                  and isinstance(n.slice, ast.Constant)
+                  and n.slice.value == "reason"
+                  for n in ast.walk(tree)))
+    compares = [n for n in ast.walk(tree) if isinstance(n, ast.Compare)]
     check("a guard that cannot measure never swallows the owner's words "
           "(None is not a rejection)",
-          "if _cos is not None and _cos < float(" in src)
+          any(isinstance(c.ops[0], ast.IsNot)
+              and isinstance(c.comparators[0], ast.Constant)
+              and c.comparators[0].value is None for c in compares)
+          and any(isinstance(c.ops[0], ast.Lt)
+                  and any(isinstance(x, ast.Call) and dotted(x.func) == "float"
+                          for x in ast.walk(c.comparators[0]))
+                  for c in compares))
 
 
 def main() -> int:

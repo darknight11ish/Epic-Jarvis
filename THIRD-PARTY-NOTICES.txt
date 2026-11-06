@@ -29,8 +29,8 @@ Worth knowing:
     under it. They are used unmodified; their source is on crates.io, at the
     address given beside each.
   * No GPL, LGPL, AGPL, SSPL or CDDL part is inside either app. SearXNG
-    (AGPL-3.0), Ollama and VoiceStudio (AGPL-3.0) are separate programs the
-    owner runs; nothing of them is distributed with Jarvis.
+    (AGPL-3.0) and Ollama are separate programs the owner runs; nothing of
+    them is distributed with Jarvis.
   * The WebView2 Runtime is Microsoft's and is not redistributed: the
     installer uses Microsoft's own bootstrapper.
   * The desktop's JavaScript has ONE third-party library: three.js r128,

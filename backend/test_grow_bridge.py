@@ -177,8 +177,11 @@ def t_the_agent_really_sends_the_hint():
     """The sentences are only a prompt if the turn actually carries them: this
     pins the caller that inserts the persona block and the hint together."""
     agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
-    check("jarvis_agent.with_manner_note reads post_history_hint()",
-          "jarvis_manner.post_history_hint()" in agent)
+    # 2026-11-05: the call carries `spoken_live=...` now (a spoken Live answer
+    # is said, not pointed at - jarvis_manner.post_history_hint(spoken_live)),
+    # so this pins the CALL and its receiver, not the empty argument list.
+    check("jarvis_agent.with_manner_note reads post_history_hint(...)",
+          "jarvis_manner.post_history_hint(" in agent)
     check("... and inserts it beside the persona block on a chosen personality",
           "personality_chosen()" in agent and "insert.append" in agent)
 

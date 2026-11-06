@@ -130,9 +130,8 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     "propose_plan",
     "change_setting",
     "feature_guide",
-    // Jarvis's own tools, which had no switch row before 2026-11-04 (14; 12
-    // then, plus handsfree's send_text_message on 2026-11-05, plus the
-    // approval-policy tool's own row the same day)
+    // Jarvis's own tools, which had no switch row before 2026-11-04 (13; 12
+    // then, plus handsfree's send_text_message on 2026-11-05)
     "goals_list",
     "goal_add",
     "goal_progress",
@@ -146,7 +145,6 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     "refresh_abilities",
     "self_portrait",
     "setup_quiz",
-    "approval_policy",
     // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
     "github_list",
     "github_read_file",
@@ -154,6 +152,11 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 56] = [
     "github_comment",
     "github_open_issue",
     "github_rerun_workflow",
+    // The approval-policy tool's own row (2026-11-05). LAST because the PC
+    // builds this list as jarvis_asks_first's TIER_A + TIER_B + TIER_C +
+    // TIER_UNLISTED + TIER_EXTRA, and approval_policy is TIER_EXTRA's final
+    // entry - the order is compared word for word.
+    "approval_policy",
 ];
 
 /// The four known tools with no switch of their own, each with the PC's own

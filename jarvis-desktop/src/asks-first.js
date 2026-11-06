@@ -101,16 +101,20 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // The everyday helpers that used to be "not this slice" (8)
   "calculator", "memory_search", "file_read", "web_search", "my_files",
   "propose_plan", "change_setting", "feature_guide",
-  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (14;
-  // 12 then, plus handsfree's send_text_message on 2026-11-05, plus the
-  // approval-policy tool's own row on the same day)
+  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (13;
+  // 12 then, plus handsfree's send_text_message on 2026-11-05)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "send_text_message", "refresh_abilities", "self_portrait",
-  "setup_quiz", "approval_policy",
+  "setup_quiz",
   // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",
+  // The approval-policy tool's own row (2026-11-05). LAST, because the PC
+  // builds this list as TIER_A + TIER_B + TIER_C + TIER_UNLISTED + TIER_EXTRA
+  // and approval_policy is TIER_EXTRA's final entry - Settings shows the PC's
+  // order, and the contract file is compared word for word.
+  "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

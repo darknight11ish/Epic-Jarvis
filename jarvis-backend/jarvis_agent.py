@@ -9865,6 +9865,18 @@ TOOL_HINTS = {
     "send_text_message": (r"\btext\b", r"\btexts?\b.*\b(her|him|them|mum|mom|dad|"
                           r"wife|husband|friend|contact)\b", r"\bsms\b"),
 
+    # Changing what needs a card, a second yes or Windows Hello by talking to
+    # Jarvis (2026-11-05, jarvis_approval_policy.py). Narrow on purpose: a bare
+    # "approve" belongs to a card's own buttons and to every email/notes
+    # sentence, so these are the owner's words for the POLICY itself - an
+    # approval card/policy, a second yes, Windows Hello, and "what asks first".
+    # Hints only decide what the model is SHOWN; the tool raises its own card
+    # before anything is loosened, and more asking is cardless.
+    "approval_policy": (r"\bapproval (?:card|polic(?:y|ies)|rule)s?\b",
+                        r"\b(?:double|second) (?:confirmation|yes)\b",
+                        r"\bwindows hello\b",
+                        r"\bwhat (?:asks|needs?) (?:me )?(?:first|a card)\b"),
+
     # Protected from Jarvis (2026-10-31; widened 2026-11-04 after a real chat
     # answer missed the tool). A question in these words hid the tool from the
     # model, which then answered generically about a capability the backend

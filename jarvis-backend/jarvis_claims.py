@@ -249,6 +249,12 @@ ACTING_TOOLS = frozenset({
     # backend/test_smarter_answers.py caught ("every tool jarvis_agent offers
     # is read-only or an action") on 2026-11-05.
     "rea_investigate",
+    # "approval_policy" (2026-11-05, the owner's ask to change approvals by
+    # chat): it CHANGES one action's policy in the shipped settings file -
+    # more asking is instant and cardless, less asking waits for ONE PC card -
+    # so "I changed it so it no longer asks" must be corrected when only the
+    # card was raised or nothing ran, exactly like any other setting write.
+    "approval_policy",
     # Clearing a conversation is NOT a model tool: Gemini ruling 1 (2026-11-03)
     # keeps it route/app/fast-path only, behind its one card, so it is in
     # neither table here - the action still exists, the TOOL does not.

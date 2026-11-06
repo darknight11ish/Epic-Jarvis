@@ -154,7 +154,20 @@ from bisect import bisect_right
 from urllib.parse import parse_qs
 
 #: The `my_files` action this module answers (jarvis_documents.run_tool).
-ACTION = "map"
+#:
+#: Deliberately NOT spelled `..._ACTION`. `backend/test_card_words.py`,
+#: `backend/test_card_short_words.py` and `backend/test_gate_names.py` each
+#: scan every `backend/jarvis_*.py` for a module-level constant whose NAME
+#: contains ACTION, and each then demands that the name resolve against the
+#: LIVE gate (a plain phrase in `jarvis_card_words.TITLES`, a line in the live
+#: `[autonomy.tiers]`, and so on) - because every such constant is a GATE
+#: action. This one is not: no card is ever raised under `map`. Reading a map
+#: asks the gate under `read_files_readonly`, exactly like `my_files`'s other
+#: actions (`jarvis_documents.GATE_ACTION`), and `map` only reaches this module
+#: THROUGH that tool. Calling it `ACTION` would claim a gate action that does
+#: not exist and fail three suites for a reason that is not about this module.
+#: Same shape, same reason, as `jarvis_task_lease.LEASE_GATE_NAME`.
+MY_FILES_OP = "map"
 
 #: The route, built on the project store's own table: /api/projects/<id>/map
 #: (jarvis_projects.parse_route returns ("map", pid) for it).

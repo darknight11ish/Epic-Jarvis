@@ -79,7 +79,21 @@ PER_TOOL = 300
 #: until the owner turns REA on ([rea] enabled AND [tools].enabled both say
 #: yes). 2000 leaves 47 tokens of room.
 PER_TOOL_EXCEPT = {"browser_control": 600, "control_phone": 540,
-                   "rea_investigate": 2000}
+                   "rea_investigate": 2000,
+                   # my_files (2026-11-05, the read-only repository map): a
+                   # sixth action, `map`, joined a tool that already carried six
+                   # format names and two "use that" lines. Measured 329 with
+                   # this module's own rule - the sentence that says what map
+                   # does, one enum member and two parameter notes are the ~29
+                   # tokens. No smaller shape stays honest: the enum is how the
+                   # model picks an action, and cutting the format list
+                   # (PDF/Word/Excel/PowerPoint/Markdown/text/CSV) or "stored
+                   # spoken and on-screen recording words" would hide what the
+                   # tool can actually read. Like control_phone it is a shipped
+                   # default, so this cost is paid on a turn only while the
+                   # owner leaves it in `[tools].enabled`. 340 keeps 11 tokens
+                   # of headroom, the same shape as the exceptions above.
+                   "my_files": 340}
 
 #: The pairs the research found the model mixes up, each told apart both ways.
 CONFUSABLE = (("memory_search", "notes_search"), ("home_read", "home_control"),
