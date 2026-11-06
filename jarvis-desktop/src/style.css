@@ -2409,7 +2409,7 @@ html[data-state="approval"] .pulse {
   padding: 6px 10px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-card);
-  background: rgb(255 255 255 / 0.03);
+  background: var(--surface-hover);
   color: var(--text);
   font-size: var(--text-sm);
   line-height: 1.4;

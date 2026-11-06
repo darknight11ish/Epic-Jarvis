@@ -1255,7 +1255,7 @@ select:focus-visible {
   padding: 2px 9px;
   border: 1px solid var(--border-accent);
   border-radius: 999px;
-  background: var(--accent-soft, rgba(56, 240, 255, 0.08));
+  background: rgb(var(--accent-rgb) / 0.08);
   color: var(--accent, var(--text));
   font-size: var(--text-2xs);
   font-weight: 700;
