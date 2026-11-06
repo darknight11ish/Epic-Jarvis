@@ -2189,6 +2189,23 @@ $PATCHES = @(
     # which MUST stay the last entry of all (tools/check_plugins.py): it is a
     # core patch, and only drop-in folders follow the loader.
     'packs-tamper-on-load.patch'
+    # activity-turn-guard.patch (2026-11-06) - a finished chat turn can no
+    # longer leave the event bus saying Jarvis is still "thinking". FOUR hunks,
+    # all in jarvis_hud.py: the one wrapper do_POST every /api/chat request
+    # passes through now clears the activity mark and jarvis_bench's exact
+    # in-process answer count on every exit (the quick-answer early return and
+    # a raise while the lane is being chosen both used to bypass the answer
+    # path's own finally); `_do_post` is the old handler, unchanged; the boot
+    # sequence resets the mark explicitly; and /api/status gains its state and
+    # age, read-only and additive. Measured 2026-11-06: a quick-answered chat
+    # turn left "thinking" behind and /api/bench/run refused for over four
+    # hours until the desktop app - and with it this backend - was restarted.
+    # It sits immediately BEFORE plugin-loader.patch, which MUST stay the last
+    # entry of all. Every patch that enumerates "the patches written after me"
+    # has had its name added there (test_devices.py, test_gate_risk_rows.py,
+    # test_gate_touches.py, test_referee.py, test_screen_attach.py,
+    # test_hud_manual_lane_gate.py).
+    'activity-turn-guard.patch'
     'plugin-loader.patch'
 )
 

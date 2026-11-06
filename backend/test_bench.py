@@ -891,10 +891,12 @@ def t_a_run_writes_one_row_per_repeat_plus_a_summary():
     check("the context really in use is recorded beside the one asked for",
           summary[0]["ctx"] == 16384 and summary[0]["ctx_used"] == 16384,
           (summary[0]["ctx"], summary[0]["ctx_used"]))
-    check("the layers on the card default to all of them, read from /api/show",
-          summary[0]["num_gpu"] == 32 and summary[0]["block_count"] == 32,
+    check("the run's resolved request asks for ALL layers - block_count + 1, "
+          "so the output layer is offloaded too (and a 100% on-card baseline "
+          "is reachable at all)",
+          summary[0]["num_gpu"] == 33 and summary[0]["block_count"] == 32,
           (summary[0]["num_gpu"], summary[0]["block_count"]))
-    check("... and the derived RAM share is 0% for all of them",
+    check("... and the derived RAM share is still 0% for all of them",
           summary[0]["ram_share_percent"] == 0, summary[0]["ram_share_percent"])
     check("the driver and Ollama versions are on the row: a tok/s number "
           "without them is not comparable to anything",
@@ -1182,11 +1184,23 @@ def t_a_value_off_the_ladder_is_reported_not_silently_changed():
     check("a prefill depth that was never measured snaps to one that was",
           got["prefill_tokens"] == 512, got["prefill_tokens"])
     got, _ = B.normalise_controls({}, block_count=32)
-    check("num_gpu defaults to all the layers the model has",
-          got["num_gpu"] == 32, got["num_gpu"])
+    check("num_gpu defaults to ALL layers, including the output layer "
+          "(block_count + 1 - measured 2026-11-06: 32 blocks loaded 83.6% "
+          "on card, 33 loaded 100%)",
+          got["num_gpu"] == 33, got["num_gpu"])
     got, notes = B.normalise_controls({"num_gpu": 99}, block_count=32)
-    check("more layers than the model has is clamped and reported",
-          got["num_gpu"] == 32 and any("num_gpu" in n for n in notes), notes)
+    check("an explicit larger value is clamped to block_count + 1 and "
+          "reported as all layers - not to block_count, which would leave "
+          "the model partly on the processor",
+          got["num_gpu"] == 33 and any("num_gpu" in n for n in notes), notes)
+    check("... and the corrected note says every layer is requested",
+          any("all 33 layers" in n for n in notes), notes)
+    check("the derived RAM-share arithmetic is untouched: block_count + 1 "
+          "still reads as 0% off the card",
+          B.ram_share_percent(33, 32) == 0, B.ram_share_percent(33, 32))
+    check("... and the spill rule is untouched: 100% is NOT spilled, 84% is",
+          B.spilled(100, 33, 33) is False and B.spilled(84, 32, 32) is True,
+          (B.spilled(100, 33, 33), B.spilled(84, 32, 32)))
     got, _ = B.normalise_controls({"lane": "nonsense"})
     check("an unknown lane falls back to everyday rather than a KeyError",
           got["lane"] == "everyday", got["lane"])

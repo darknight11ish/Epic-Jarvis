@@ -202,6 +202,13 @@ def t_the_patch_and_the_base():
              # touches neither jarvis_gate.py nor jarvis_hud.py - so it rewrites
              # nothing this patch wrote.
              "packs-tamper-on-load.patch",
+                 # activity-turn-guard.patch (2026-11-06) is the LAST core patch,
+                 # immediately before plugin-loader.patch: SIX hunks, ALL in
+                 # jarvis_hud.py and not one in jarvis_gate.py - so it rewrites no
+                 # line this patch wrote. Its do_POST wrapper adds a new method and
+                 # renames the old one; the rest is additive (a boot reset, stream
+                 # heartbeats and two read-only /api/status keys).
+             "activity-turn-guard.patch",
              # handsfree.patch (2026-11-04, hands-free mode) is appended after this
              # patch, immediately before plugin-loader.patch: THREE hunks, all in
              # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two

@@ -119,8 +119,17 @@ packs-tamper-on-load.patch (immediately before plugin-loader.patch, which
 must stay last of the stack): its one hunk reads two blocks of the owner's own
 jarvis_skills.load() - the "no skill called" return and the _read_index()
 line under it - to insert the pack manager's immutable-manifest check on the
-body loader, and nothing earlier in the walk has ever touched load(). The pin
-below records all TWENTY-EIGHT - those thirteen, plus private-chat.patch at position 152, added
+body loader, and nothing earlier in the walk has ever touched load().
+Added 2026-11-06: `activity-turn-guard.patch` (immediately before
+plugin-loader.patch, which stays last of the stack): FOUR of its six hunks
+read the owner's own jarvis_hud.py - the status payload's latch lines, the
+`def do_POST` it wraps, the boot block's pump lines and the cloud relay's
+chunk loop - and no earlier patch writes any of them. Its other two hunks (the
+`_activity_*` helpers and the local stream_out lambda) anchor on text earlier
+patches already wrote and cost nothing. Honest rather than drift: the owner's
+file is the only place those four blocks exist, and the patch is what stops a
+finished chat turn leaving the benchmark refusing for hours. The pin
+below records all TWENTY-NINE - those thirteen, plus private-chat.patch at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -260,6 +269,18 @@ PIN = {
     # 5 -> 6 for the same honest reason, and backend/test_packs.py proves the
     # load door refuses a pack whose manifest no longer matches.
     "packs-tamper-on-load.patch":               (1, 6),     # position 170 - the loader stays last
+    # activity-turn-guard.patch (2026-11-06) - the LAST core patch, immediately
+    # before plugin-loader.patch (which stays last of all). FOUR of its six
+    # hunks read the owner's own jarvis_hud.py: the /api/status payload's latch
+    # lines, the `def do_POST` it wraps, the boot block's pump lines, and the
+    # cloud relay's chunk loop. No earlier patch writes any of them, so the
+    # walk materialises them - honest, not drift. Its other two hunks (the
+    # `_activity_*` helpers and the local stream_out lambda) anchor on text
+    # earlier patches wrote and cost nothing. `backend/_stack.py`'s RATCHET
+    # moves jarvis_hud.py 68 -> 72 for the same reason, and
+    # backend/test_activity_turn_guard.py drives the wrapper with the real
+    # bus and the real bench module.
+    "activity-turn-guard.patch":                (4, 24),    # position 175 - the loader stays last
     # position 137 - 2 hunks / 15 lines were the PROTECTED-rule change. RAISED
     # 2026-10-18 to 5/59 for the DEF-012 and I6 hunks: gate_tool's whole-args
     # prompt, latch_taint's process-local fallback, and clear_taint's reset are

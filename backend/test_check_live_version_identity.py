@@ -32,8 +32,10 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -222,13 +224,182 @@ def t_the_cli_returns_the_same_codes():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   4. the owner's Q6 ruling: runtime-tree equality, on temporary git repos
+# --------------------------------------------------------------------------
+
+def _git(repo, *args):
+    return subprocess.run(["git", "-C", str(repo)] + list(args),
+                          capture_output=True, text=True)
+
+
+def _commit(repo, message):
+    _git(repo, "add", "-A")
+    got = _git(repo, "commit", "-qm", message)
+    assert got.returncode == 0, got.stderr
+    return _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def make_repo():
+    """A tiny repo with all four runtime paths, then a test/docs-only commit."""
+    root = tmpdir("version-identity-git-")
+    _git(root, "init", "-q")
+    _git(root, "config", "user.email", "t@example.test")
+    _git(root, "config", "user.name", "test")
+    write(root / "jarvis-backend" / "jarvis_hud.py", "# hud\n")
+    write(root / "jarvis-desktop" / "src" / "app.js", "// ui\n")
+    write(root / "jarvis-desktop" / "src-tauri" / "src" / "main.rs", "// shell\n")
+    write(root / "jarvis-client" / "app" / "src" / "main" / "Main.kt", "// phone\n")
+    write(root / "docs" / "NOTE.md", "docs\n")
+    write(root / "backend" / "test_x.py", "# a test\n")
+    runtime = _commit(root, "the runtime")
+    # Tests, docs and tools only: no runtime byte changes - Q6 says no reinstall.
+    write(root / "backend" / "test_x.py", "# a test, changed\n")
+    write(root / "docs" / "NOTE.md", "docs, changed\n")
+    write(root / "tools" / "a_tool.py", "# tool\n")
+    close = _commit(root, "tests, docs and tools only")
+    return root, runtime, close
+
+
+def test_runtime_tree(root, deployed, main_ref):
+    lines = []
+    code = C.check_runtime_tree(root, deployed, main_ref, out=lines.append)
+    return code, lines
+
+
+def t_q6_a_test_only_merge_needs_no_reinstall():
+    root, runtime, close = make_repo()
+    try:
+        code, lines = test_runtime_tree(root, runtime, close)
+        check("Q6: a test/docs/tools-only commit is exit 0", code == 0, (code, lines))
+        check("Q6: ... exactly one line is printed", len(lines) == 1, lines)
+        expected = f"PASS (runtime tree identical to deployed ref {runtime[:7]})"
+        check("Q6: ... and it is the exact PASS sentence the ruling asks for",
+              len(lines) == 1 and lines[0] == expected, (lines, expected))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_q6_a_runtime_change_requires_a_deploy():
+    root, runtime, _close = make_repo()
+    try:
+        write(root / "jarvis-desktop" / "src" / "app.js", "// ui, changed\n")
+        after = _commit(root, "the desktop changes")
+        code, lines = test_runtime_tree(root, runtime, after)
+        check("Q6: a changed runtime file is exit 1", code == 1, (code, lines))
+        check("Q6: ... one line, naming the changed runtime file",
+              len(lines) == 1 and "CHANGED" in lines[0]
+              and "jarvis-desktop/src/app.js" in lines[0], lines)
+        check("Q6: ... and saying a deploy is required",
+              len(lines) == 1 and "deploy is required" in lines[0], lines)
+
+        write(root / "jarvis-backend" / "jarvis_hud.py", "# hud, changed\n")
+        after2 = _commit(root, "the backend changes")
+        code2, lines2 = test_runtime_tree(root, runtime, after2)
+        check("Q6: a changed shipped backend module is exit 1 too", code2 == 1, lines2)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_q6_an_unreadable_ref_is_exit_2_never_a_pass():
+    root, runtime, _close = make_repo()
+    try:
+        code, lines = test_runtime_tree(root, "0" * 40, runtime)
+        check("Q6: an unknown deployed ref is exit 2", code == 2, (code, lines))
+        check("Q6: ... the line says UNREADABLE and not a pass",
+              len(lines) == 1 and "UNREADABLE" in lines[0]
+              and "not a pass" in lines[0], lines)
+        code2, lines2 = test_runtime_tree(root, runtime, "no-such-ref")
+        check("Q6: an unknown main ref is exit 2", code2 == 2, lines2)
+        check("Q6: ... and names the main ref it could not read",
+              len(lines2) == 1 and "no-such-ref" in lines2[0], lines2)
+        code3, lines3 = test_runtime_tree(root, runtime, "HEAD")
+        check("Q6: a ref that resolves is not mistaken for unreadable",
+              code3 == 0, lines3)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_q6_the_default_path_is_still_the_identity_check():
+    root = tmpdir()
+    try:
+        # No _jarvis-state.json, so there is no deployed ref: main() must run
+        # the OLD identity check, whose UNREADABLE line names the FileVersion.
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = C.main(["--backend-path", str(root / "no-live"),
+                           "--desktop-exe", str(root / "no-exe.exe")])
+        line = buf.getvalue()
+        check("Q6: with no deployed ref the default is still the identity check",
+              code == 2 and "no VERSION file to read" in line
+              and "runtime trees" not in line, (code, line))
+        write(root / "live" / "VERSION", "0.2.433")
+        buf1b = io.StringIO()
+        with contextlib.redirect_stdout(buf1b):
+            code1b = C.main(["--backend-path", str(root / "live"),
+                             "--desktop-exe", str(root / "no-exe.exe")])
+        check("Q6: ... and an unreadable desktop still names its FileVersion",
+              code1b == 2 and "FileVersion" in buf1b.getvalue(),
+              (code1b, buf1b.getvalue()))
+
+        # ... and the default is CHOSEN again when the record is unreadable.
+        write(root / "bad-live" / C.STATE_FILE, "{not json")
+        check("Q6: a broken deploy record reads as no deployed ref",
+              C.read_deployed_ref(root / "bad-live") == "")
+        write(root / "plain-live" / C.STATE_FILE,
+              json.dumps({"patches": {}}))
+        check("Q6: a record with no 'resealed' key reads as no deployed ref",
+              C.read_deployed_ref(root / "plain-live") == "")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_q6_the_live_record_is_the_deployed_ref():
+    root, runtime, close = make_repo()
+    live = tmpdir("version-identity-live-")
+    try:
+        check("Q6: resealed.ref is read from the live record",
+              (write(live / C.STATE_FILE,
+                     json.dumps({"resealed": {"ref": close}}))
+               or C.read_deployed_ref(live) == close), C.read_deployed_ref(live))
+        write(live / C.STATE_FILE, json.dumps({"resealed": {"commit": runtime}}))
+        check("Q6: ... and resealed.commit is the fallback",
+              C.read_deployed_ref(live) == runtime, C.read_deployed_ref(live))
+
+        # The CLI, with the live record as its default and a temp repo:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = C.main(["--backend-path", str(live), "--repo", str(root),
+                           "--main-ref", close])
+        check("Q6: main() auto-reads the deployed ref and prints the PASS line",
+              code == 0 and "PASS (runtime tree identical to deployed ref" in buf.getvalue(),
+              (code, buf.getvalue()))
+        write(root / "jarvis-desktop" / "src" / "app.js", "// ui, changed\n")
+        after = _commit(root, "runtime moves on")
+        buf2 = io.StringIO()
+        with contextlib.redirect_stdout(buf2):
+            code2 = C.main(["--backend-path", str(live), "--repo", str(root),
+                            "--deployed-ref", runtime, "--main-ref", after])
+        check("Q6: ... and a runtime change through main() is exit 1",
+              code2 == 1 and "deploy is required" in buf2.getvalue(),
+              (code2, buf2.getvalue()))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+        shutil.rmtree(live, ignore_errors=True)
+
+
 def main():
     for fn in (t_a_match_is_exit_0_and_says_the_agreed_value,
                t_a_mismatch_is_exit_1_and_names_both_values,
                t_an_unreadable_side_is_exit_2_and_never_a_pass,
                t_the_real_readers_read_the_files_on_disk,
                t_the_desktop_path_precedence_is_the_deploy_tools,
-               t_the_cli_returns_the_same_codes):
+               t_the_cli_returns_the_same_codes,
+               t_q6_a_test_only_merge_needs_no_reinstall,
+               t_q6_a_runtime_change_requires_a_deploy,
+               t_q6_an_unreadable_ref_is_exit_2_never_a_pass,
+               t_q6_the_default_path_is_still_the_identity_check,
+               t_q6_the_live_record_is_the_deployed_ref):
         fn()
     print()
     if FAILED:
