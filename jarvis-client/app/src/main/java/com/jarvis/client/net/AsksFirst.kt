@@ -139,8 +139,9 @@ object AsksFirst {
     // --- The switchable tools (2026-10-31; unlocked 2026-11-04) --------------
     //
     // The PC offers a one-tool switch for EVERY tool the AI model can be
-    // offered - 48 at 2026-11-04, the owner's decision that day (raw Tier C set
-    // and everyday helpers included), up from 21 - in seven groups, plus the
+    // offered - 49 at 2026-11-05 (48 at 2026-11-04, the owner's decision that
+    // day; raw Tier C set and everyday helpers included), up from 21 - in seven
+    // groups, plus the
     // vault organizer's own switch and the three tools that have no switch of
     // their own because their own switch decides them (the data and maths
     // sandbox and the two web-search conversation tools). The PHONE IS

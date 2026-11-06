@@ -1023,12 +1023,14 @@ def t_the_patch_and_the_tables():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     entry = "'web-search-grant.patch'"
     tail = ps1.split(entry, 1)[1] if entry in ps1 else ""
-    after = next((ln.strip() for ln in tail.splitlines() if ln.strip().startswith("'")), "")
-    check("the patch is in the stack, immediately before "
-          "unknown-risk-approvable.patch (whose guard requires that patch to stay "
-          "the LAST writer of jarvis_gate.py, so this one may not sit after it)",
-          after == "'unknown-risk-approvable.patch'",
-          f"not found in apply-patches.ps1, or the entry after it is {after!r}")
+    after = [ln.strip() for ln in tail.splitlines() if ln.strip().startswith("'")]
+    check("the patch is in the stack BEFORE unknown-risk-approvable.patch "
+          "(whose guard requires that patch to stay the LAST writer of "
+          "jarvis_gate.py, so this one may not sit after it), with only "
+          "github-tools.patch between them - it anchors on this patch's own "
+          "trailing block, which is why it must follow it)",
+          after[:2] == ["'github-tools.patch'", "'unknown-risk-approvable.patch'"],
+          f"not found in apply-patches.ps1, or the entries after it are {after[:2]!r}")
     check("its header is the bare `a/`/`b/` form every patch here uses",
           text.startswith("--- a/jarvis_gate.py\n+++ b/jarvis_gate.py\n@@"), text[:80])
     work = Path(tempfile.mkdtemp(prefix="jarvis-wsgrant-patch-"))

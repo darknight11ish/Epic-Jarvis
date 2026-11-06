@@ -866,19 +866,23 @@ def t_offering_a_tool_is_a_different_thing_from_loosening():
     # the core values of jarvis that have already been established,
     # particularly reverse engineer anything among other things". The ON half of
     # the 2026-10-31 tiered ruling is gone - EVERY tool the AI model can be
-    # offered is switchable from the Tools page now, 48 of them, and the only
-    # three that are not are the ones whose own switch decides them.
-    check("every tool the model can be offered is switchable in-app, 48 at 2026-11-04",
+    # offered is switchable from the Tools page now, 55 of them since the six
+    # on-demand GitHub tools landed (48 at 2026-11-04) and hands-free added
+    # send_text_message, and the only
+    # four that are not are the ones whose own switch decides them.
+    check("every tool the model can be offered is switchable in-app, 55 at 2026-11-05",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 48 and "calendar_read" in AF.TIER_A)
-    check("the tier lists plus the three exceptions ARE the model's own tool list",
+          and len(AF.TOOLS_SWITCHABLE) == 55 and "calendar_read" in AF.TIER_A)
+    check("the tier lists plus the four exceptions ARE the model's own tool list",
           set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH) == set(AG.TOOLS),
           sorted(set(AG.TOOLS) ^ (set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH))))
-    check("the three exceptions are the sandbox and the two web-search grant tools",
-          set(AF.NOT_A_SWITCH) == {"run_data_script"} | set(AG.GRANT_ASK_TOOLS),
+    check("the four exceptions are the sandbox, the product check and the two "
+          "web-search grant tools",
+          set(AF.NOT_A_SWITCH) == {"run_data_script", "product_check"}
+          | set(AG.GRANT_ASK_TOOLS),
           AF.NOT_A_SWITCH)
     check("no row is both switchable and an exception",
           not set(AF.TOOLS_SWITCHABLE) & set(AF.NOT_A_SWITCH))
@@ -971,7 +975,7 @@ def t_on_only_on_the_pc_only_from_the_list_only_with_a_card():
         code, out = _treq({"tool": tool, "enabled": True}, tools, here=True)
         check(f"{tool}: had no switch row before 2026-11-04, now switchable",
               code == 202 and tools.writes == [(AF.real_tool(tool), True)], (code, out))
-    # The three whose own switch decides them are refused with a sentence that
+    # The four whose own switch decides them are refused with a sentence that
     # names that switch - never the false "does not know that name".
     for tool in AF.NOT_A_SWITCH:
         tools = ToolsFile()
@@ -1074,10 +1078,12 @@ def t_the_tools_status_and_the_page():
         # AF.SWITCHABLE_GROUPS, not AF.TOOL_GROUPS: jarvis_storage_health.py
         # (PR #1117) appends a row of tools that raise cards but are never
         # switchable from an app, so the SWITCH list is the switchable subset.
-        # The storage row adds none of them, so the items are the 48.
-        check("the label, the 48 grouped items, the vault row and the three exceptions",
+        # The storage row adds none of them, so the items are the 55 now that
+        # the six on-demand GitHub tools have their own rows and hands-free's
+        # send_text_message joined them.
+        check("the label, the 55 grouped items, the vault row and the four exceptions",
               st["label"] == AF.TOOLS_LABEL and st["can_enable"] is True
-              and len(st["items"]) == 48
+              and len(st["items"]) == 55
               and [g["title"] for g in st["groups"]]
               == [title for title, _tools in AF.SWITCHABLE_GROUPS]
               and st["items"][0]["group"] == AF.SWITCHABLE_GROUPS[0][0]
@@ -1117,7 +1123,7 @@ def t_off_a_tool_the_page_was_never_told_about():
     2026-11-04, and the ON half on the same day: every tool the PC knows now
     has a switch row, so what is left for this test is the OFF half's real
     remaining case - a name this PC does not know at all (a drop-in program's
-    own tool), and the three tools whose own switch decides them.
+    own tool), and the four tools whose own switch decides them.
     """
     # A name this PC does not know at all: the settings file lists it, so it is
     # ON, and OFF must remove exactly that one entry with no card.

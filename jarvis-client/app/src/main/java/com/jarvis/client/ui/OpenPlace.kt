@@ -315,6 +315,15 @@ object OpenPlace {
         // and Remove it always had. "open skills" answers with the honest
         // PC-only sentence, and docs/ARCHITECTURE.md section 8 records it.
         "skills-menu",
+        // Hands-free mode (2026-11-04, the owner's own request; JARVIS-API
+        // section 191). The PC's Settings card and its one switch are landing
+        // in this change; the phone's own Settings row for the same mode is a
+        // separate change, so this build has no row to open yet and the honest
+        // answer is the PC-only sentence. When the phone's row lands, this id
+        // moves to [PLACES] (Settings, the phone's own hands-free row) rather
+        // than staying here - and docs/ARCHITECTURE.md section 8 records the
+        // one-sided slice until then.
+        "handsfree",
     )
 
     /**

@@ -580,6 +580,23 @@ fn main() {
             // window only.
             "get_antislop",
             "set_antislop",
+            // Hands-free mode (2026-11-04; JARVIS-API section 191,
+            // backend/jarvis_handsfree.py). The read is a read; ON raises ONE
+            // `handsfree_enable` approval card through the backend and the call
+            // returns when that card is answered, so the page draws a waiting
+            // line rather than flipping the switch. OFF is immediate and
+            // cardless. Neither direction is a second permission path - the
+            // card is answered by `/api/approve` like every other one - and
+            // neither is held on a stale link. Settings window only.
+            //
+            // MISSING UNTIL 2026-11-05: lib.rs registered both in
+            // `generate_handler!` while this list did not name them, so Tauri
+            // generated no allow-*/deny-* pair and the page's own two calls
+            // were refused by the ACL from every window - the runtime "not
+            // allowed on window" failure this list exists to prevent, caught
+            // by tools/check_command_acl.py in CI's `backend` job.
+            "get_handsfree",
+            "set_handsfree",
             // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
             // critique of the words in the box plus the last few turns, from
             // the same local model, through the same route. It sends nothing

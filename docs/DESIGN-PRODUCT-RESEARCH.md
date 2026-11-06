@@ -1,35 +1,40 @@
 # Design: the product check (offline engine + read half)
 
-**Status: the engine and read half are built, plus a capture SEAM; none of it is
-wired to anything.** The engine
-turns review records into a reasons-based report, and the read half turns the
-HTML of one Amazon product page into those records plus honest warnings about
-what could not be read. There is **no route, no chat tool, no approval card, no
-Settings row, no app surface, no browser automation and no network call** in
-this work, and nothing imports either module yet - the same shape as the price
-radar's F1 (`docs/DESIGN-PRICE-RADAR.md`). The design contract is the owner's
-product-research document, revision 2
+**Status (updated 2026-11-04): the engine, the read half and the capture seam
+are built, and the check is now WIRED - one chat tool, one PC-only route, one
+approval card, and the report in plain words. It ships OFF by default and there
+is still no app report screen.** The owner's choice of 2026-11-04 was *"wire the
+existing product check into Jarvis"*: `backend/jarvis_product_check.py` is that
+wiring, `jarvis_browser_control.read_page_html()` is the real read seam it
+drives, and JARVIS-API §192 is the contract. Everything below that says "none of
+it is wired" was true from 2026-10-25/26 until that slice, and is kept in the
+record with its new state stated rather than deleted. The design contract is
+still the owner's product-research document, revision 2
 (`product_research_for_jarvis_2026_10_26.md`, on the Lead's Desktop rather than
 in this repository); sections 4, 5, 8 and 9 of that document are the contract
 followed here.
 
-The page is **supplied as HTML** by a later, explicitly carded capture slice: the
-read half only parses a string it is given. `capture_with_owner_browser()` is the
-named seam for that later capture and it raises
-`CaptureNeedsOwnerBrowser` with the sentence that reading a page needs the
-owner's own browser session - it never pretends to fetch. No real Amazon page
-has ever been parsed by this code; every fixture in the tests is synthetic.
+The page is **supplied as HTML** by the read half's caller: the read half only
+parses a string it is given. Since 2026-11-04 the shipping caller is
+`jarvis_product_check.run()` -> `jarvis_product_capture.capture_page(driver=...)`
+-> `jarvis_product_capture.real_driver()`, which reads one page through
+`jarvis_browser_control.read_page_html()` in the owner's own visible signed-in
+browser after ONE PC-only card. `capture_with_owner_browser()` in the read
+module is still a named error, not a fetch. No real Amazon page has ever been
+parsed by this code; every fixture in the tests is synthetic, and no test drives
+a browser.
 
 | item | state |
 |---|---|
 | The engine | `backend/jarvis_product_research.py` (+ byte-identical `jarvis-backend/` twin, shipped whole): review-record normaliser, eight deterministic signals, model-output validator and quote validator, report builder. |
 | The read half | `backend/jarvis_product_read.py` (+ byte-identical `jarvis-backend/` twin): one tolerant HTML pass, listing facts and review records in the engine's own schema, warnings for an unreadable page, and `assemble_report()` which returns the engine report with the records kept for debugging. |
-| The capture seam | `backend/jarvis_product_capture.py` (+ byte-identical `jarvis-backend/` twin): classifies a supplied page string as product / owner-login / challenge / not-a-product, takes an INJECTED driver so the later browser slice can supply the HTML, and refuses with `CaptureUnavailable` / `OwnerLoginRequired` / `ChallengeDetected` instead of fetching. No real driver, route or surface is built. |
-| New dependencies | **None.** Standard library only: engine `datetime`, `hashlib`, `json`, `re`, `collections`; read half `datetime`, `html.parser`, `re`, and the engine module. |
-| Network | **None, anywhere.** No `urllib`, no socket, no subprocess, no browser automation import. The engine suite patches socket/urlopen and proves no call is made, and an **AST scan of the module's own source** proves it imports no network/shell module and calls no file/URL opener; the read suite does the same for its module. |
+| The capture seam | `backend/jarvis_product_capture.py` (+ byte-identical `jarvis-backend/` twin): classifies a supplied page string as product / owner-login / challenge / not-a-product, refuses a cart/checkout/order/account/payment/sign-in address by its shape before any fetch, and takes an INJECTED driver (`BrowserSessionDriver`; `real_driver()` builds it, lazily importing the browser module only on a real read). |
+| The wiring | `backend/jarvis_product_check.py` (+ byte-identical `jarvis-backend/` twin, `[product_check] enabled = false` in both settings copies, installed by the drop-in folder `plugins/ready/product-check`): ONE model tool `product_check`, ONE PC-only route `POST /api/product/check`, ONE card naming the page and saying read-only, and the report in plain words. The action `product_check` is tier `ask`, PC-only in `jarvis_owner_check.PC_ONLY_ACTIONS`, and in `jarvis_agent.NEEDS_A_PERSON`; the gate rows come from `backend/product-check.patch`. |
+| New dependencies | **None.** Standard library only: engine `datetime`, `hashlib`, `json`, `re`, `collections`; read half `datetime`, `html.parser`, `re`, and the engine module; the wiring `datetime`, `json`, and the three product modules. The browser read uses Playwright, which the browser-control feature already required; nothing here installs it. |
+| Network | **None in the engine, the read half or the wiring.** No `urllib`, no socket, no subprocess in those modules. The engine suite patches socket/urlopen and proves no call is made, and an **AST scan of the module's own source** proves it imports no network/shell module and calls no file/URL opener; the read suite does the same, and the wiring suite spies socket/urlopen around every call. The ONE network path is the browser read itself, after the card, in the owner's browser: one page, no second address. |
 | Why not a per-review verdict | The contract's measured reason: people and LLMs are at chance telling AI-written reviews from real ones (50.8% for people). A "fake/real" label per review would be false precision, so the report shows **patterns, counts and reasons** instead. |
 | Why no trust score | A single number would hide which rule fired and would invite over-trust. Every signal carries counts, thresholds, examples and the reviews it flagged; the verdict is a small named rule summary with its reasons and what would change it. |
-| Tests | `backend/test_product_research.py` **118 checks**, `backend/test_product_read.py` **67 checks** and `backend/test_product_capture.py` **33 checks**; synthetic fixtures only, no network, no browser. |
+| Tests | `backend/test_product_research.py` **118 checks**, `backend/test_product_read.py` **67 checks**, `backend/test_product_capture.py` **58 checks** and `backend/test_product_check_wiring.py` **155 checks**; synthetic fixtures only, no network, no browser. |
 
 ## 1. What the report contains
 
@@ -167,39 +172,58 @@ an injected driver (a callable or an object with `get_html(url)`), then raises
 `ChallengeDetected` on a CAPTCHA page, `OwnerLoginRequired` on a sign-in page and
 `CaptureUnavailable` for anything else unreadable. `open_owner_login()` is the
 one-time login seam; the owner signs in and Jarvis never sees the password.
-`real_driver()` says plainly that the real browser-session driver is not built
-yet - the repository's browser automation exposes no public URL-to-HTML reader,
-so nothing here opens a window or fetches a page.
+
+**The real driver now exists (2026-11-04).** `real_driver()` /
+`browser_driver()` return a `BrowserSessionDriver` backed by
+`jarvis_browser_control.read_page_html(session, url)` - the browser module's
+public, documented, read-only seam - in the product-check session's persistent
+profile. Building one fetches nothing and opens no window: the browser is
+touched only when `get_html()` or `open_owner_login()` is actually called. The
+read-only URL policy (`readonly_problem`) refuses a cart/checkout/order/account/
+payment/sign-in address BEFORE that call, as the belt; the tool's plan refuses
+it even earlier, before any card.
 
 ## 6. What is deliberately not built yet
 
-* **No live capture driver, route or wiring.** No route, chat tool, approval
-  card, Settings row or app surface exists; nothing imports these modules. The
-  page must be supplied as HTML by the later capture slice, which owns the
-  one-time owner login. `jarvis_product_capture.py` is the classification/seam
-  half only; `real_driver()` and `capture_with_owner_browser()` raising are the
-  honest placeholders.
+* **No app report screen and no Settings switch.** The door exists since
+  2026-11-04 (`product_check` tool, `POST /api/product/check`, ONE PC-only card),
+  and the report is delivered in the chat answer - but neither app draws a
+  screen for it, and there is no in-app switch: the on/off door is the settings
+  file's own `[product_check] enabled` line. Both are named follow-ups rather
+  than half-built; the route is classified backend-only in
+  `tools/check_parity.py` with the reason. A desktop report screen would be
+  desktop-only on purpose (`docs/ARCHITECTURE.md` §8) because the browser window
+  and the sign-in are on the PC.
 * **No Amazon automation, ever.** The design contract's revision 2 decision:
   the owner browses, Jarvis reads and analyses. No crawler, no CAPTCHA work,
   no Agent Terms fight. Jarvis's own visible browser remains a separate,
   explicitly carded possibility for the owner to choose, never a background
-  crawler.
+  crawler. The read is ONE page in the owner's own session, after the card,
+  with no click, no typing, no second page and no retry against a challenge.
 * **No per-review authenticity label and no numeric trust score.** Deliberate,
   for the measured reason in the contract.
 * **No dataset, model or training.** The engine uses no labelled dataset (the
   public ones are share-alike licensed and old). Its rules are readable and
   reviewable; that is the whole method.
-* **No storage, cache, logging or learning.** Both modules work in memory; they
-  read no file and write none. Nothing about a review or the owner is kept.
-* **No live network check.** These are pure modules; the network spies and AST
-  source scans in the suites are the evidence that they cannot dial out.
+* **No storage, cache, logging or learning.** The modules work in memory; they
+  read no file and write none. Nothing about a review or the owner is kept. The
+  one thing kept beside the code is the browser's own sign-in profile (the
+  config folder's `browser-profile`), which is what makes the one-time login
+  work; no page, review or report is stored in it.
+* **No live network check in the pure modules.** The engine, the read half and
+  the wiring are pure; the network spies and AST source scans in the suites are
+  the evidence that they cannot dial out. The ONE network path is the browser
+  read itself (`jarvis_browser_control.read_page_html`), which is not a test:
+  it needs the owner's PC, Playwright and the owner's own Amazon session.
 
 ## 7. Honest limits
 
 * **All evidence is synthetic.** No real Amazon page, browser session or real
-  review sample has ever been run through either half. The HTML fixtures are
-  hand-written page shapes; real markup changes will need fixture and parser
-  updates.
+  review sample has ever been run through the code by a test. The HTML fixtures
+  are hand-written page shapes; real markup changes will need fixture and parser
+  updates. Since 2026-11-04 the driver that WOULD read a real page exists and is
+  wired; it has simply not been driven by any test, and that is a field test on
+  the owner's PC.
 * **The signals are cues, not measurements of intent.** Copy-paste templates,
   honest repeated phrases, a genuine launch spike, a Vine-heavy early batch and
   a suspicious one can look identical to these rules. The report says so in its
@@ -212,27 +236,33 @@ so nothing here opens a window or fetches a page.
 * **No calibration against real data.** The thresholds are conservative,
   readable rules, not fitted to a dataset; the synthetic fixtures prove the
   rules fire as written, not that they match reality.
-* **The capture seam is a placeholder.** Real page reading needs the real
-  browser-session driver and the owner's one-time login in Jarvis's own browser;
-  until that captured HTML is supplied, the seam's only evidence is fixture
-  HTML. The live driver, the persistent profile, the one-time login and a real
-  Amazon read are NOT-TESTABLE in this development container.
+* **The capture seam was a placeholder until 2026-11-04; it is wired now.** The
+  real driver and the one-time login exist (`real_driver()` ->
+  `jarvis_browser_control.read_page_html`, a persistent profile), but the live
+  driver, the persistent profile, the one-time login and a real Amazon read are
+  still NOT-TESTABLE in this development container: no test drives a browser,
+  opens a window or makes a network call. Their only evidence is fixture HTML
+  and a fake driver, and that is said rather than implied.
 * **Review dates and badges depend on the extractor's page shape.** Missing or
   impossible values are counted as unknown and the relevant signals say they
   cannot be checked; a thin extraction therefore produces a weaker but still
-  honest report.
+  honest report. The browser read cuts a very long page at the browser module's
+  own cap (2,000,000 characters of HTML), and the read half's "truncated page"
+  warning says so when it happens.
 
 ## 8. Validation
 
 ```
-py -3 -B backend/test_product_research.py      # 118 checks
-py -3 -B backend/test_product_read.py          #  67 checks
-py -3 -B backend/test_product_capture.py       #  33 checks
-py -3 -B backend/run_suites.py test_product_research.py test_product_read.py test_product_capture.py
+py -3 -B backend/test_product_research.py            # 118 checks
+py -3 -B backend/test_product_read.py                #  67 checks
+py -3 -B backend/test_product_capture.py             #  58 checks
+py -3 -B backend/test_product_check_wiring.py        # 155 checks
+py -3 -B backend/run_suites.py test_product_research.py test_product_read.py test_product_capture.py test_product_check_wiring.py
 py -3 -B backend/test_base_matches_repo.py
 py -3 -B backend/test_base_regeneration.py
 py -3 -B tools/check_stale_twins.py
 py -3 -B tools/roll_changelog.py --check
+py -3 -B tools/check_decisions.py 2>$null
 py -3 -B tools/check_docs_map.py
 ```
 
@@ -243,6 +273,7 @@ date regressions, the per-field/minimum-length quote rules, the burst baseline
 in use, the body-only `with_text`, the mixed-stance list, the exact
 duplicate-pair counts, the caveat words, the not-enough-data outcome, the
 set-aside list without removal, the model contract and quote-validator bites,
-the read half's listing/review/warning paths and the capture seam's four
-classification states and refusals, the no-network
+the read half's listing/review/warning paths, the capture seam's four
+classification states and refusals and its read-only address policy, the
+wiring's tool/card/route/report shape and its no-score pin, the no-network
 spies, and AST source scans that would fail on a forbidden import or call.

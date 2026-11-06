@@ -92,6 +92,19 @@ one of them is `cloud-say-yes.patch`:
                                              `body` dict it posts and the record written beside them,
                                              in the owner's `jarvis_extract.py`)
 
+The two newest exceptions were added on 2026-11-04 and re-measured together on
+2026-11-05, when the combined tree put both in the stack: `product-check.patch`
+(position 164) and `handsfree.patch` (position 165). Each has ONE hunk that
+appends its gate rows at the very end of `jarvis_gate.py`, and each one's three
+context lines are the owner's own `if __name__` tail - the same text
+`web-search-grant.patch`'s end-of-file hunk already reads. Two patches cannot
+both be the end of the file, so whichever runs second materialises those three
+lines; both sit before `web-search-grant.patch` so
+`unknown-risk-approvable.patch` stays the last writer of the file, and
+`handsfree.patch` is pinned immediately before it by
+`backend/test_phone_app_allowlist.py`. Their cost is in `PIN` below and in
+`backend/_stack.py`'s RATCHET (60 -> 61 for `jarvis_gate.py`).
+
 A checker enforcing "0 except cloud-say-yes" would therefore be RED on a clean
 `main` with eight findings - the false positives the audit's own next sentence
 warns about. Those eight are honest rather than drift: each anchors on lines
@@ -102,7 +115,7 @@ its hunks read the owner's own `jarvis_skills.py` - install()'s signature, its
 docstring and the `_gate(...)` call it already makes - and that file is one of
 the five the patcher edits, so `backend/_stack.py` has no stand-in for those
 lines and nothing earlier in the walk writes them. The pin below records
-all TWENTY-THREE - those thirteen, plus `private-chat.patch` at position 152, added
+all TWENTY-SEVEN - those thirteen, plus `private-chat.patch` at position 152, added
 2026-10-25 (the architect's H10 ruling: eleven of its thirteen hunks anchor on
 text an earlier patch writes, and the other two - the body-parse block that
 reads the private flag, and the route-audit line - read the owner's own line),
@@ -154,6 +167,17 @@ Checked the other way by
 it byte for byte, and walks the applied AST for both route branches. With
 their positions, instead of pretending they are not there. The position-29
 rule is kept as a REPORTED fact, not a gate.
+
+The twenty-fifth, added 2026-11-03, is `github-tools.patch` at position 165:
+ONE hunk, and it reads SIX lines of the owner's own `jarvis_gate.py` - the end
+of `review()` and the opening of the `if __name__` block - because no patch in
+this walk writes them. It sits there rather than at the very end of the file for
+two measured reasons: the end is `web-search-grant.patch`'s own block, whose
+last hunk must stay the last bytes of the file (`git apply -R` needs that whole
+post-image contiguous and ending at EOF), and `unknown-risk-approvable.patch`
+must stay the LAST writer. Checked the other way by
+`backend/test_github_tools.py`, which reverses this patch out of the published
+base and applies it forward again, byte for byte.
 
 THE PIN
 
@@ -377,7 +401,25 @@ PIN = {
     # Checked the other way by backend/test_web_search_grant.py, which applies
     # this patch to jarvis-backend/jarvis_gate.py forwards and reverses it byte
     # for byte.
-    "web-search-grant.patch":                   (4, 21),    # position 164 - moved before unknown-risk-approvable.patch on 2026-11-02, so that patch stays the last writer of jarvis_gate.py (the same move main made for gate-tool-actions-gap.patch)
+    "web-search-grant.patch":                   (4, 24),    # position 164 - moved before unknown-risk-approvable.patch on 2026-11-02, so that patch stays the last writer of jarvis_gate.py (the same move main made for gate-tool-actions-gap.patch)
+    # 2026-11-04 (PR #1169): handsfree.patch is ONE hunk appending its gate rows at
+    # the END OF THE FILE, and its 3 context lines are the owner's own `if __name__`
+    # tail (the same text web-search-grant.patch's EOF hunk reads). It is applied
+    # before web-search-grant.patch, whose EOF hunk gained 3 trailing context lines
+    # (the head of this block) - hence its own 4/21 -> 4/24 above.
+    "handsfree.patch":                          (1, 3),
+    # 2026-11-04 (#1164): the EOF hunk gained 3 TRAILING context lines - the
+    # head of product-check.patch's block, which now follows it in the file -
+    # so the same hunk reads 24 lines of the owner's pre-image, not 21. Those
+    # three are written by the patch before it, but the stand-in still has to
+    # invent the block they sit in, exactly as it did before.
+    # 2026-11-04, product-check.patch: ONE hunk appending its gate rows at the
+    # END OF THE FILE - the only place no earlier patch's hunk reaches. Its 3
+    # context lines are the owner's own `if __name__` tail, the same text
+    # web-search-grant.patch's end-of-file hunk reads; nothing in this
+    # repository writes it. The patch is applied before web-search-grant.patch
+    # so unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
+    "product-check.patch":                      (1, 3),
     # 2026-10-25, private-chat.patch (the architect's H10 ruling: a private
     # chat is strictly reads-only): TWO hunks read the owner's original HUD
     # text. One is the route-audit line - `if GATING:` sits four lines under
@@ -508,6 +550,18 @@ PIN = {
     # stack changed one later patch's invented-hunk count and
     # backend/test_app_control.py caught it.
     "jobs-routes.patch":                       (4, 27),     # position 164
+    # 2026-11-03, github-tools.patch (position 165). ONE hunk and it reads SIX
+    # lines of the owner's own `jarvis_gate.py`: the end of `review()` and the
+    # opening of the `if __name__` block. HONEST, not drift - no patch in this
+    # walk writes either place, and the block cannot go at the very END of the
+    # file: that is `web-search-grant.patch`'s own block, whose last hunk must
+    # stay the last bytes (`git apply -R` of it fails otherwise - measured, and
+    # backend/test_web_search_grant.py caught it when this patch first sat
+    # there). It must also stay BEFORE `unknown-risk-approvable.patch`, the last
+    # writer of this file. Checked the other way by
+    # backend/test_github_tools.py: reverse it out of the published base, then
+    # apply it forward again, byte for byte.
+    "github-tools.patch":                      (1, 6),      # position 165
 }
 
 #: The audit's position, kept because the rule it states is the shape of this

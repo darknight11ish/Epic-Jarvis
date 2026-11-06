@@ -49,6 +49,9 @@ pub mod focus_presets;
 pub mod folders;
 pub mod frame_feed;
 pub mod handoff;
+// Hands-free mode (2026-11-04, JARVIS-API section 191): the one switch on its
+// Settings card. ON is one approval card answered in the app, OFF is immediate.
+pub mod handsfree;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_calendar;
@@ -1453,6 +1456,15 @@ pub fn run() {
             // Settings window only.
             antislop::get_antislop,
             antislop::set_antislop,
+            // Hands-free mode (2026-11-04; JARVIS-API section 191).
+            // Settings window only. The read is a read; ON raises ONE approval
+            // card through the backend and the call returns when that card is
+            // answered, so the page draws a waiting line rather than flipping
+            // the switch. OFF is immediate and cardless. Neither direction is a
+            // second permission path: the card is an ordinary `handsfree_enable`
+            // card, answered by `/api/approve` like every other one.
+            handsfree::get_handsfree,
+            handsfree::set_handsfree,
             // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
             // critique of the words in the box plus the last few turns, asked
             // of the same local model the chat would use. It SENDS NOTHING and

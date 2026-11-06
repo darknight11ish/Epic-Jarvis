@@ -166,7 +166,18 @@ PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "r
                              # so only the PC it runs on can say yes - with
                              # Windows Hello. A phone approving it would promise an
                              # install nothing on the phone can perform.
-                             "desktop_update"})
+                             "desktop_update",
+                             # 2026-11-04: the product check opens ONE Amazon
+                             # product page in the owner's own signed-in browser
+                             # window. That window, and the profile it is signed
+                             # in with, are on this PC; a phone approving it would
+                             # promise a read nothing on the phone can perform,
+                             # and the card is about the owner's own browsing
+                             # session, so it is PC-only with Windows Hello. It is
+                             # read-only and NOT in SMALL_ACTIONS: the card is a
+                             # person's yes, and the Windows Hello check is the
+                             # one that says it was this person at this PC.
+                             "product_check"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 
@@ -340,6 +351,12 @@ SMALL_ACTIONS = frozenset({
     "news_read",
     "page_read",
     "github_read",
+    # Your own GitHub, read on demand (2026-11-03): the same pair of facts as
+    # `github_read` above - nothing on GitHub changes, and the request leaves
+    # this PC - so it is a small card, not one that also demands a fingerprint.
+    # The three GitHub ACTIONS are deliberately NOT here: each one posts or
+    # starts something in the owner's name and cannot be taken back.
+    "github_inspect",
     "browse_model_catalog",
     # the local reads
     "calendar_read",

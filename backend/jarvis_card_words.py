@@ -164,8 +164,22 @@ TITLES = {
     # over, then that one page's words are read out. Its own name, not
     # "page_read" above: that one is the watch's per-look fetch.
     "read_web_page": "read a web page out loud",
+    # jarvis_product_check.py (2026-11-04): ONE card per Amazon product page,
+    # then that page is read in the owner's own signed-in browser and the
+    # reasons report is built. Its own name, not "read_web_page": that one
+    # fetches a page out loud, this one reads a product's reviews.
+    "product_check": "read a product page in your own browser",
     # --- GitHub watches in "tell me when" (2026-09-28)
     "github_read": "check GitHub for a \"tell me when\"",
+    # --- your own GitHub, on demand (2026-11-03, the owner's "Read + actions").
+    # A DIFFERENT action from `github_read` just above, which is the scheduled
+    # look a watch makes: these are looks the model asks for, each one sending
+    # the owner's token out, so each one is its own card. The three actions say
+    # what they will do; none of them can merge, push, commit, delete or close.
+    "github_inspect": "read your GitHub",
+    "github_comment": "post a comment on GitHub",
+    "github_open_issue": "open an issue on GitHub",
+    "github_rerun_workflow": "run a GitHub workflow again",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -226,6 +240,13 @@ TITLES = {
     # relative - ONE kept conversation from this PC, after ONE card that names it
     # (title and message count) and says the facts it taught are kept.
     "conversation_clear": "delete one conversation from this PC",
+    # jarvis_history_purge.py (2026-11-04, the owner's own request): a whole date
+    # range after TWO yeses and a Windows Hello / phone fingerprint ticket. It
+    # raises no card of its own; this phrase is the card's own line, and the
+    # "What asks first" page uses ROW_TITLES in jarvis_asks_first.py for the
+    # longer version. Kept under 80 characters, which is what title_for may
+    # produce (t_each_title_is_a_phrase_somebody_wrote).
+    "history_purge": "delete the chats from the days you chose",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",
@@ -311,6 +332,23 @@ TITLES = {
     # a placeholder entry for this same action, which was a second key in this
     # dict; the merge keeps this one (the feature owner's words) and drops it.
     "storage_cleanup": "clear Jarvis's temporary files",
+    # --- recording a phone call (jarvis_call_notes.py, 2026-11-04)
+    # ONE card when the owner's own keyword starts a recording: the phone
+    # records through its microphone with the call on speaker, and the words
+    # say only that kind of thing - never a transcript, a name or a path.
+    "record_call": "record a call",
+    # --- deleting one recorded call (jarvis_call_notes.py, 2026-11-05; the
+    # privacy audit's D4). ONE card, ON THE PC, for removing that recording's
+    # audio, transcript and receipt; its full words say the Obsidian note stays
+    # and that it cannot be undone.
+    "delete_call_recording": "delete a recorded call",
+    # --- hands-free mode (2026-11-04, the owner's own request; jarvis_handsfree.py)
+    # A text message, read out and approved like any other card. The contact and
+    # the exact message are on the card (its detail), never in these words: this
+    # title is also spoken aloud and shown on a lock screen.
+    "send_text_message": "send a text message from your phone",
+    # The one card that turns the mode on. Its body says what changes.
+    "handsfree_enable": "turn on hands-free mode",
 }
 
 #: The SHORT words on a card, keyed on the same action names as TITLES - what
@@ -403,8 +441,16 @@ SUMMARY = {
     "news_read": "read a news feed you added",
     "page_read": "fetch a page you're watching",
     "read_web_page": "read a web page out loud",
+    # The product check (2026-11-04) - its own short summary, the same words
+    # as its title: one Amazon product page, read-only, in the owner's browser.
+    "product_check": "read a product page in your own browser",
     # --- GitHub watches in "tell me when"
     "github_read": "check GitHub for a \"tell me when\"",
+    # The on-demand ones (2026-11-03) - the short line, before "explain more".
+    "github_inspect": "read your GitHub",
+    "github_comment": "post a GitHub comment",
+    "github_open_issue": "open a GitHub issue",
+    "github_rerun_workflow": "run a workflow again",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -499,6 +545,8 @@ SUMMARY = {
     # jarvis_self_portrait.py (2026-11-03): ONE kept conversation from this PC,
     # after ONE card; the learned facts are kept.
     "conversation_clear": "delete one conversation",
+    # jarvis_history_purge.py (2026-11-04): the same act for a whole range.
+    "history_purge": "delete old chats by date",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",
@@ -508,6 +556,19 @@ SUMMARY = {
     # ONE card per cleanup of Jarvis's own temporary files; the card lists every
     # path, so the words say only the kind of thing being cleared.
     "storage_cleanup": "clear Jarvis's temporary files",
+    # --- recording a phone call (jarvis_call_notes.py, 2026-11-04)
+    # ONE card when the owner's own keyword starts a recording: the phone
+    # records through its microphone with the call on speaker, and the words
+    # say only that kind of thing - never a transcript, a name or a path.
+    "record_call": "record a call",
+    # --- deleting one recorded call (jarvis_call_notes.py, 2026-11-05; the
+    # privacy audit's D4). ONE card, ON THE PC, for removing that recording's
+    # audio, transcript and receipt; its full words say the Obsidian note stays
+    # and that it cannot be undone.
+    "delete_call_recording": "delete a recorded call",
+    # --- hands-free mode (2026-11-04): the same two actions as TITLES above.
+    "send_text_message": "send a text message from your phone",
+    "handsfree_enable": "turn on hands-free mode",
 }
 
 #: The most words a summary may be. Long enough for the honest ones above
@@ -664,6 +725,14 @@ TIMED_OUT = "Timed out: Jarvis stopped waiting and refused it by itself."
 
 #: The phone's second sentence on the same card. Never shown on the PC.
 TIMED_OUT_NEXT = "Ask the desktop to raise this again."
+
+#: The one sentence a hands-free read-out ends with (2026-11-04,
+#: `jarvis_handsfree.read_out`): the card's own notice words, then this, so the
+#: owner knows what to say. Its two lists are `jarvis_handsfree.CONFIRM` and
+#: `DENY`, and `backend/test_handsfree.py` fails if these words and those lists
+#: disagree - the same "one source of words" rule as KICKER and TIMED_OUT.
+HANDSFREE_ASK = ('Say "yes" to approve it or "no" to refuse - one word, within '
+                 "a minute of hearing this.")
 
 _MAX_NAME = 60
 

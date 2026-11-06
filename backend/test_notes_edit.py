@@ -237,8 +237,11 @@ def t_the_module_is_shipped_twinned_and_catalogued():
     folder = [f for f in registry.get("folders") or [] if f.get("name") == "notes-edit"]
     check("the generated catalogue lists the folder as a no-patch drop-in",
           len(folder) == 1 and folder[0].get("module") == "jarvis_notes_edit", folder)
-    check("the registry is not stale (the folder count rose, and one more ready module)",
-          registry.get("folder_count") == 22 and registry.get("ready_count") == 50,
+    # 2026-11-05: three more no-patch drop-ins arrived with the wave
+    # (handsfree, history-purge, product-check) on top of call-notes, so this pin
+    # moves with them - the same one-line change every new drop-in makes here.
+    check("the registry is not stale (the folder count rose, and more ready modules)",
+          registry.get("folder_count") == 25 and registry.get("ready_count") == 54,
           {registry.get("folder_count"), registry.get("ready_count")})
     docs = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs have the section", "## 170. The Obsidian notes editor" in docs)

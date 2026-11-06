@@ -415,7 +415,7 @@ object JarvisRuntime {
 
     /**
      * The PC's own receipt for the last text this phone sent (`phone_result`,
-     * section 186.6), on the same one-shot terms as [handsfreeCard].
+     * section 191.6), on the same one-shot terms as [handsfreeCard].
      *
      * The phone has already posted its own result and shown the platform's
      * verdict; this is the PC's sentence beside it, so the app can say the same
@@ -504,7 +504,7 @@ object JarvisRuntime {
      * The switch, from Settings, chat or Live - ONE entry point.
      *
      * The frozen contract's shape is kept in what the owner is told as well as
-     * in what is sent (section 186.3): the PC's own route answers AFTER its
+     * in what is sent (section 191.3): the PC's own route answers AFTER its
      * enable card has been decided - 200 with `enabled`/`message`, 403 with
      * `error` when the card was declined - so there is no "waiting" state to
      * model here and the switch is never called on before the PC says it is.
@@ -2122,7 +2122,7 @@ object JarvisRuntime {
             }
             // A card the PC wants read out, something it wants this phone to do,
             // or its own receipt for a text this phone sent (net/Handsfree.kt,
-            // docs/JARVIS-API.md section 186; the owner's request of
+            // docs/JARVIS-API.md section 191; the owner's request of
             // 2026-11-04). All three are accepted only while the PC itself says
             // the mode is armed: an event that arrives with the mode off would
             // otherwise sit in the flow until the owner turned it on, and be
