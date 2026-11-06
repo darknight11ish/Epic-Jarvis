@@ -309,10 +309,26 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "EmailSendingPlate.kt"),
         ),
         Row(
+            // "Folders Jarvis may look in" now carries TWO doors of its own
+            // (2026-11-05: send a document, and bring a Notion export in from
+            // the phone), so the words a person would type for them are in the
+            // same row's label and quotes - `net/Upload.kt` and
+            // `net/NotionImport.kt` print them, so the index quotes the app's
+            // own words rather than inventing a second copy.
             key = "folders", title = "Folders Jarvis may look in",
-            label = "Which folders Jarvis may read; Obsidian; Logseq; Joplin; Notion",
-            quotes = listOf("Folders Jarvis may look in"),
-            source = JUMP + listOf(PLATES + "FoldersPlate.kt"),
+            label = "Which folders Jarvis may read; Obsidian; Logseq; Joplin; Notion; " +
+                "send a document from your phone; phone uploads; upload a file; " +
+                "bring in a Notion export; the .zip Notion made; From my phone",
+            quotes = listOf(
+                "Folders Jarvis may look in",
+                "Send a document",
+                "Bring in a Notion export",
+            ),
+            source = JUMP + listOf(
+                PLATES + "FoldersPlate.kt",
+                "net/Upload.kt",
+                "net/NotionImport.kt",
+            ),
         ),
         Row(
             key = "files", title = "File from your PC",

@@ -351,6 +351,23 @@ class JarvisApi(
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    /**
+     * The upload calls (2026-11-05, [Upload]): one body is up to 1 MiB of raw
+     * bytes, about 1.4 MB of base64 and JSON, and the PC may be writing the
+     * slice to disk while it answers. The ordinary 15-20 s windows are too
+     * tight on a slow private-network link, and a cut-off chunk would look like
+     * a refusal; 120 s a window and 180 s for the whole call is generous
+     * without letting a dead link hang the screen for minutes.
+     *
+     * No call timeout on [makeCall]'s own reason would apply here: these routes
+     * do not think for minutes, they copy bytes.
+     */
+    private val uploadHttp: OkHttpClient = client.newBuilder()
+        .readTimeout(120, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
+        .callTimeout(180, TimeUnit.SECONDS)
+        .build()
+
     fun baseUrl(): String? = settings.baseUrl()
 
     /** Why the saved address is refused (off the owner's own networks), or null. */
@@ -2628,6 +2645,87 @@ class JarvisApi(
      */
     suspend fun removeFolder(path: String): ApiResult<DesktopWrite.Outcome> =
         postWrite(Folders.REMOVE_PATH, Folders.removeBody(path))
+
+    // ---------------------------------------------- phone upload (2026-11-05) ---
+    // The owner's ask: send a document, or a Notion export .zip, from the phone
+    // into a folder Jarvis already looks in, exactly as a desktop upload is
+    // processed. The three routes are the PC's ([Upload]'s own doc says what
+    // each does); the phone only carries the bytes.
+
+    /**
+     * `POST /api/upload/begin`: the name, size, type, sha256, purpose and the
+     * chosen listed folder. For a document this is where the PC raises its ONE
+     * approval card, before a byte is written.
+     */
+    suspend fun uploadBegin(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        uploadCall(Upload.BEGIN_PATH, json)
+
+    /**
+     * `POST /api/upload/chunk`: ONE 1 MiB slice. A 409 carrying `waiting` is
+     * the card, not a failure - [Upload.send] pauses and posts the same slice
+     * again.
+     */
+    suspend fun uploadChunk(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        uploadCall(Upload.CHUNK_PATH, json)
+
+    /** `POST /api/upload/finish`: the id alone. Only here does a document become a file. */
+    suspend fun uploadFinish(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        uploadCall(Upload.FINISH_PATH, json)
+
+    /**
+     * `GET /api/notion/vaults` - the Obsidian vaults the PC already has and
+     * has checked ([NotionImport.parseVaults]). A read; a 404 is a PC without
+     * the phone routes.
+     */
+    suspend fun notionVaults(): ApiResult<JsonObject> = probe(NotionImport.VAULTS_PATH)
+
+    /**
+     * `POST /api/notion/phone-import`: `{upload, vault}` is the dry run;
+     * `{upload, vault, digest}` is the import, which waits on the PC's ONE
+     * `import_notion_export` card - so this call gets [applyCall]'s window, the
+     * same one every other card-deciding call uses (the PC's approval timeout
+     * is 900 s).
+     */
+    suspend fun notionPhoneImport(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        uploadCall(NotionImport.IMPORT_PATH, json, applyCall)
+
+    /**
+     * One POST whose STATUS matters as much as its body: the upload routes
+     * answer 202 (a card is up), 409 (still waiting), 403 `denied`, 410
+     * (expired) and 413 (too big), and every one of those carries a sentence
+     * the screen shows. `(status, body)` comes back whole, the same shape
+     * [picturesCall] returns.
+     *
+     * A 403 with NO answer in its body is the pairing/origin refusal and stays
+     * [ApiError.BadToken]; a 403 that says `denied` or `ok: false` is the
+     * owner's no, which is an ANSWER and is read by [Upload].
+     */
+    private suspend fun uploadCall(
+        path: String,
+        json: String,
+        call: OkHttpClient = uploadHttp,
+    ): ApiResult<Pair<Int, JsonObject?>> = withContext(Dispatchers.IO) {
+        val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+        val body = json.toRequestBody("application/json".toMediaType())
+        val req = Request.Builder().url(target).post(body).authed().build()
+        runCatching {
+            call.newCall(req).execute().use { resp ->
+                val text = resp.body?.string().orEmpty()
+                val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                    .getOrNull()
+                if (resp.code == 401 || (resp.code == 403 && !answers(obj))) {
+                    ApiResult.Failed(ApiError.BadToken)
+                } else {
+                    ApiResult.Ok(resp.code to obj)
+                }
+            }
+        }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+    }
+
+    /** Does this body carry the PC's own answer, rather than a bare refusal? */
+    private fun answers(body: JsonObject?): Boolean =
+        body != null && (body.containsKey("ok") || body.containsKey("denied") ||
+            body.containsKey("said") || body.containsKey("reason") || body.containsKey("error"))
 
     /**
      * `GET /api/focus`: the focus session - its countdown, booleans and counts

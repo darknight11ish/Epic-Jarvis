@@ -81,6 +81,7 @@ import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StagedLine
 import com.jarvis.client.net.UpdateCheck
+import com.jarvis.client.net.Upload
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import com.jarvis.client.platform.ApprovalKey
 import com.jarvis.client.platform.CrashLog
@@ -739,6 +740,84 @@ class MainActivity : FragmentActivity() {
         }.getOrNull() ?: return AttachFile.Picked.Refused(AttachFile.UNREADABLE)
         return AttachFile.picked(bytes, name, info.mime)
     }
+
+    // ------------------------------------- phone upload (2026-11-05) ---------
+    // Two doors on Settings' Folders row: "Send a document" and "Bring in a
+    // Notion export". Both use the same `OpenDocument()` picker as the attach
+    // row (no storage permission: the owner chooses one file, and the app may
+    // read that one, twice - once to measure it, once to send it). Neither
+    // reads the file into memory: `JarvisRuntime` streams it in 1 MiB chunks.
+
+    /** The listed folder the next picked document goes into, or null. */
+    private val sendDocumentInto = mutableStateOf<String?>(null)
+
+    /** The vault id the next picked Notion `.zip` goes into, or null. */
+    private val notionVaultId = mutableStateOf<String?>(null)
+
+    /**
+     * "Send a document": the eight kinds `my_files` already reads
+     * ([AttachFile.MIME_TYPES] - never a picture here). The folder was chosen
+     * one tap earlier, from the PC's own list.
+     *
+     * The provider's name, size and type are read first, and the pick is
+     * refused in plain words BEFORE a byte leaves the phone ([Upload.refusal]);
+     * a file past the 50 MB cap is then refused by the measure pass without
+     * being read in full.
+     */
+    private val pickSendDocument = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val into = sendDocumentInto.value ?: return@registerForActivityResult
+        sendDocumentInto.value = null
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val info = withContext(Dispatchers.IO) { readPickInfo(uri) }
+            val refusal = Upload.refusal(info.name, info.mime, info.stated, Upload.Purpose.DOCUMENT)
+            if (refusal != null) {
+                JarvisRuntime.setNotice(refusal)
+                return@launch
+            }
+            JarvisRuntime.startSendDocument(
+                into = into,
+                name = AttachFile.shownName(info.name),
+                mime = info.mime,
+                open = { openPicked(uri) },
+            )
+        }
+    }
+
+    /**
+     * "Bring in a Notion export": `.zip` only. Both types are offered because
+     * Android providers commonly report `application/octet-stream` for a zip;
+     * [Upload.refusal] decides by the NAME, the same name-first rule
+     * [AttachFile.kindFor] uses. The owner exports from Notion himself - there
+     * is no Notion login or token anywhere in this app.
+     */
+    private val pickNotionZip = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        val vault = notionVaultId.value ?: return@registerForActivityResult
+        notionVaultId.value = null
+        if (uri == null) return@registerForActivityResult
+        lifecycleScope.launch {
+            val info = withContext(Dispatchers.IO) { readPickInfo(uri) }
+            val refusal = Upload.refusal(info.name, info.mime, info.stated, Upload.Purpose.NOTION)
+            if (refusal != null) {
+                JarvisRuntime.setNotice(refusal)
+                return@launch
+            }
+            JarvisRuntime.startNotionUpload(
+                vault = vault,
+                name = AttachFile.shownName(info.name),
+                mime = info.mime,
+                open = { openPicked(uri) },
+            )
+        }
+    }
+
+    /** The chosen provider file, opened fresh for each of the two passes. Never kept. */
+    private fun openPicked(uri: Uri): java.io.InputStream? =
+        runCatching { contentResolver.openInputStream(uri) }.getOrNull()
 
     /**
      * Reads one photo - picked, or shared from another app - and makes it
@@ -3882,6 +3961,23 @@ class MainActivity : FragmentActivity() {
                         // class as the theme. A phone with no desktop still has
                         // a Home screen to arrange.
                         onOpenEditHud = { nav.go(Screen.EDIT_HUD) },
+                        // "Send a document" and "Bring in a Notion export", on
+                        // the Folders row (the owner's ask of 2026-11-05). The
+                        // folder, or the vault, was chosen on that row one tap
+                        // earlier from the PC's own lists; these only open the
+                        // system picker and hand the URI's stream to the
+                        // runtime. Nothing is copied, and a pick that is the
+                        // wrong kind or too big is refused before a byte is read.
+                        onSendDocument = { path ->
+                            sendDocumentInto.value = path
+                            pickSendDocument.launch(AttachFile.MIME_TYPES)
+                        },
+                        onPickNotionZip = { vault ->
+                            notionVaultId.value = vault
+                            pickNotionZip.launch(
+                                arrayOf("application/zip", "application/octet-stream"),
+                            )
+                        },
                         floatingAvatar = floatingAvatar,
                         onFloatingAvatarChange = { JarvisRuntime.settings.setFloatingAvatar(it) },
                         // "Picture-in-picture" (2026-10-30, docs/PIP-DESIGN.md):
