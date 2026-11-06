@@ -111,6 +111,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -297,6 +298,8 @@ def fake_show(repo, ref, repo_path):
         "jarvis_agent.py": b'"""agent"""\nVALUE = 2\n',
         "jarvis_compute.py": b'"""compute"""\nVALUE = 2\n',
         "jarvis_hud.html": b"<html>same</html>\n",
+        "requirements.lock": b"# fixture requirements lock\n",
+        "quiz_grader_cases.json": b'{"cases": []}\n',
         "demo-unknown.patch": b"",
     }
     if repo_path in blobs:
@@ -940,6 +943,13 @@ def run_fixture(repo: Path, live: Path, *, apply: bool, out_lines=None,
 
     return R.run_deploy(repo, live, apply=apply, ref=kw.pop("ref", "origin/main"),
                         allow_worktree_mismatch=kw.pop("allow_worktree_mismatch", False),
+                        # Hermetic by default: no test may read the owner's installed
+                        # desktop. A test that wants the VERSION step injects its own
+                        # temp fake exe and reader.
+                        desktop_exe=kw.pop("desktop_exe",
+                                           repo / "no-installed-desktop.exe"),
+                        version_reader=kw.pop("version_reader",
+                                              R.read_desktop_version),
                         resolve_shas=kw.pop(
                             "resolve_shas", lambda _repo, _ref: (FIXTURE_HEAD, FIXTURE_HEAD)),
                         show=kw.pop("show", fake_show),
@@ -4504,8 +4514,320 @@ def t_the_packs_tamper_patch_is_carried_by_its_hunk():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   14. RELEASE MARKERS: the shared VERSION and the non-$SHIPPED beside-files
+# --------------------------------------------------------------------------
+#
+# The measured gap (WAVE6-RESULT-2026-11-06, "One real deploy gap found and fixed
+# after the first restart"): the deploy wrote the backend correctly but left the
+# live `VERSION` at 0.2.421, and the desktop HUD said "MISMATCH: the backend
+# 0.2.421, but this HUD expects 0.2.433". The in-app updater writes that file; the
+# reconcile tool did not. These tests drive a TEMP fake live folder and a TEMP fake
+# desktop exe - the reader is injected, so no test reads the owner's installed app
+# or his live folder - and pin every line the deploy promises.
+
+FIXTURE_DESKTOP_VERSION = "9.9.9"
+
+
+def fake_desktop(root: Path) -> Path:
+    """A temp stand-in for the installed desktop exe; only its PATH is used."""
+    return write(root / "desktop" / "jarvis-desktop.exe", "not a real PE")
+
+
+def fixture_version_reader(exe: Path):
+    def read(path):
+        return FIXTURE_DESKTOP_VERSION if Path(path) == Path(exe) else ""
+    return read
+
+
+def release_report(text: str) -> list:
+    """The VERSION:/BESIDE: lines, for a failure message that shows the report."""
+    return [line for line in text.splitlines()
+            if line.startswith(("VERSION:", "BESIDE:"))]
+
+
+def t_release_markers_carry_the_version_and_the_beside_files():
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        write(live / "VERSION", "0.2.421")
+        before = (live / "VERSION").read_bytes()
+
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("release: a dry run succeeds", code == 0, (code, lines[-5:]))
+        check("release: the dry run says it WOULD write the installed version",
+              "VERSION: would write 9.9.9 (now 0.2.421)" in text, release_report(text))
+        check("release: ... and both non-$SHIPPED beside-files",
+              "BESIDE: would write requirements.lock" in text
+              and "BESIDE: would write quiz_grader_cases.json" in text,
+              release_report(text))
+        check("release: the dry run leaves the live VERSION alone",
+              (live / "VERSION").read_bytes() == before)
+        check("release: ... and creates no beside-file",
+              not (live / "requirements.lock").exists()
+              and not (live / "quiz_grader_cases.json").exists())
+        # The runbook's formula: to add + to update + the DISTINCT files among
+        # the inserts + the release markers (each differing beside file plus the
+        # VERSION when it differs) - `wrote N` covers all of them since 2026-11-06.
+        # Here VERSION differs (0.2.421 -> 9.9.9) and BOTH beside files are
+        # missing, so the release term is 3.
+        def summ(label):
+            found = re.search(rf"^  {re.escape(label)}: (\d+)$", text, re.M)
+            return int(found.group(1)) if found else 0
+        expected_release = 3
+        expected_wrote = (summ("to add") + summ("to update")
+                          + len(set(re.findall(r"^ {6}\S.*? -> (\S+) \(", text, re.M)))
+                          + expected_release)
+
+        lines2 = []
+        code2 = run_fixture(repo, live, apply=True, out_lines=lines2,
+                            desktop_exe=exe, version_reader=reader)
+        text2 = "\n".join(lines2)
+        check("release: the apply succeeds", code2 == 0, (code2, lines2[-8:]))
+        check("release: VERSION is the desktop FileVersion, with no newline",
+              (live / "VERSION").read_bytes() == b"9.9.9",
+              (live / "VERSION").read_bytes())
+        check("release: ... and the report says what it wrote and the old value",
+              "VERSION: wrote 9.9.9 (was 0.2.421, from the installed desktop)" in text2,
+              release_report(text2))
+        check("release: both beside-files are the ref's bytes",
+              (live / "requirements.lock").read_bytes()
+              == fake_show(repo, "origin/main", "requirements.lock")
+              and (live / "quiz_grader_cases.json").read_bytes()
+              == fake_show(repo, "origin/main", "quiz_grader_cases.json"))
+        check("release: ... and the report names them as written",
+              "BESIDE: wrote requirements.lock" in text2
+              and "BESIDE: wrote quiz_grader_cases.json" in text2,
+              release_report(text2))
+        wrote = re.search(r"wrote (\d+) file\(s\)", text2)
+        check("release: `wrote N` is add + update + insert + beside + version",
+              wrote is not None and int(wrote.group(1)) == expected_wrote,
+              (wrote.group(1) if wrote else None, expected_wrote))
+        check("release: ... and the report says how many were release markers",
+              "wrote %d file(s) (3 of them release markers: VERSION, "
+              "requirements.lock, quiz_grader_cases.json)" % expected_wrote in text2,
+              (text2[-4:], expected_wrote))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_release_markers_never_touch_the_owners_toml_or_the_excluded_files():
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        toml = live / "jarvis-framework.toml"
+        toml_before = toml.read_bytes()
+        # The excluded BESIDE entries, present in the live folder with live bytes.
+        visual = write(live / "jarvis-visual-spec.json", '{"owner": "live"}\n')
+        derived = write(live / "_where.py", "# live derived copy\n")
+        cargo = write(live / "jarvis-desktop" / "src-tauri" / "Cargo.lock",
+                      "# the desktop's lock\n")
+        # ... and the repository holds DIFFERENT copies under the same names.
+        write(repo / "backend" / "jarvis-framework.toml", "[owner]\nrepo = true\n")
+        write(repo / "backend" / "jarvis-visual-spec.json", '{"repo": true}\n')
+        write(repo / "backend" / "_where.py", "BASE = 1\n")
+        write(repo / "backend" / "Cargo.lock", "repo-lock\n")
+        write(repo / "VERSION", "0.2.0")
+        asked = []
+
+        def show(repo_path, ref, name):
+            asked.append(Path(name).name)
+            return fake_show(repo_path, ref, name)
+
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines, show=show,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("release: the apply with excluded files present still succeeds",
+              code == 0, (code, lines[-8:]))
+        check("release: the owner's jarvis-framework.toml is byte-for-byte unchanged",
+              toml.read_bytes() == toml_before)
+        check("release: the derived _where.py is untouched",
+              derived.read_text(encoding="utf-8") == "# live derived copy\n")
+        check("release: jarvis-visual-spec.json is untouched",
+              visual.read_text(encoding="utf-8") == '{"owner": "live"}\n')
+        check("release: the desktop Cargo.lock is untouched",
+              cargo.read_text(encoding="utf-8") == "# the desktop's lock\n")
+        excluded = {"jarvis-framework.toml", "jarvis-visual-spec.json",
+                    "_where.py", "Cargo.lock", "VERSION"}
+        check("release: the tool never even asks the ref for an excluded file",
+              not (excluded & set(asked)), sorted(set(asked) & excluded))
+        check("release: the live VERSION is the desktop's, never the repo's 0.2.0",
+              (live / "VERSION").read_bytes() == b"9.9.9",
+              (live / "VERSION").read_bytes())
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_a_missing_installed_desktop_is_skipped_not_guessed():
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        missing = root / "no-desktop" / "jarvis-desktop.exe"
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           desktop_exe=missing, version_reader=R.read_desktop_version)
+        text = "\n".join(lines)
+        check("release: a missing desktop still plans the run (exit 0)", code == 0,
+              (code, lines[-5:]))
+        check("release: it reports VERSION: skipped, never a guess",
+              "VERSION: skipped (no installed desktop)" in text,
+              release_report(text))
+        check("release: ... and the beside plan is still printed",
+              "BESIDE: would write requirements.lock" in text,
+              release_report(text))
+        lines2 = []
+        code2 = run_fixture(repo, live, apply=True, out_lines=lines2,
+                            desktop_exe=missing,
+                            version_reader=R.read_desktop_version)
+        text2 = "\n".join(lines2)
+        check("release: an apply with no installed desktop succeeds", code2 == 0,
+              (code2, lines2[-8:]))
+        check("release: ... it writes no VERSION file at all",
+              not (live / "VERSION").exists())
+        check("release: ... and still carries the beside-files",
+              (live / "requirements.lock").is_file()
+              and (live / "quiz_grader_cases.json").is_file())
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_release_marker_writes_are_in_the_planned_and_wrote_counts():
+    """Q1.1 (owner ruling 2026-11-06 11:35 PT): the formula counts them.
+
+    One beside file differs and the VERSION differs -> the release term is 2, and
+    `PLANNED CHANGES` and `wrote N` must both include it. The arithmetic is pinned
+    from the run's OWN printed bucket counts, never from a hard-coded plan size."""
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        write(live / "VERSION", "0.2.421")            # differs -> counts
+        lock = write(live / "requirements.lock", "")  # same bytes as the ref -> does NOT count
+        lock.write_bytes(fake_show(repo, "origin/main", "requirements.lock"))
+        # quiz_grader_cases.json is absent -> differs -> counts.
+        expected_release = 2
+
+        lines = []
+        code = run_fixture(repo, live, apply=False, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("formula: the dry run succeeds", code == 0, (code, lines[-5:]))
+        check("formula: the release header states the count in the formula",
+              "RELEASE MARKERS (2 in the formula: VERSION and beside-files):" in text,
+              release_report(text))
+        check("formula: ... and its lines name exactly the two writes",
+              "VERSION: would write 9.9.9 (now 0.2.421)" in text
+              and "BESIDE: would write quiz_grader_cases.json" in text
+              and "BESIDE: unchanged requirements.lock" in text,
+              release_report(text))
+        planned = re.search(
+            r"^PLANNED CHANGES: (\d+) file-level change\(s\) = add (\d+) \+ "
+            r"update (\d+) \+ insert (\d+) \+ beside\+version (\d+) \+ "
+            r"pycache (\d+)",
+            text, re.M)
+        check("formula: PLANNED CHANGES prints its own buckets", planned is not None,
+              [l for l in lines if l.startswith("PLANNED CHANGES")])
+        if planned:
+            total, add_n, upd_n, ins_n, rel_n, pyc_n = (int(g) for g in planned.groups())
+            check("formula: ... with beside+version = 2 (one beside file + VERSION)",
+                  rel_n == expected_release, rel_n)
+            check("formula: ... and the total is add + update + insert + "
+                  "beside+version + pycache",
+                  total == add_n + upd_n + ins_n + rel_n + pyc_n,
+                  (total, add_n, upd_n, ins_n, rel_n, pyc_n))
+
+        lines2 = []
+        code2 = run_fixture(repo, live, apply=True, out_lines=lines2,
+                            desktop_exe=exe, version_reader=reader)
+        text2 = "\n".join(lines2)
+        check("formula: the apply succeeds", code2 == 0, (code2, lines2[-8:]))
+
+        def summ(label):
+            found = re.search(rf"^  {re.escape(label)}: (\d+)$", text2, re.M)
+            return int(found.group(1)) if found else 0
+        distinct_inserts = len(set(re.findall(
+            r"^ {6}\S.*? -> (\S+) \(", text2, re.M)))
+        wrote = re.search(r"wrote (\d+) file\(s\)", text2)
+        wrote_n = int(wrote.group(1)) if wrote else -1
+        check("formula: wrote N is add + update + distinct insert files + "
+              "beside + version",
+              wrote_n == (summ("to add") + summ("to update") + distinct_inserts
+                          + expected_release),
+              (wrote_n, summ("to add"), summ("to update"), distinct_inserts,
+               expected_release))
+        check("formula: ... and the report names the release markers it counted",
+              wrote_n > 0 and ("wrote %d file(s) (2 of them release markers: "
+                               "VERSION, quiz_grader_cases.json)" % wrote_n) in text2,
+              (text2[-4:], wrote_n))
+
+        lines3 = []
+        code3 = run_fixture(repo, live, apply=True, out_lines=lines3,
+                            desktop_exe=exe, version_reader=reader)
+        text3 = "\n".join(lines3)
+        check("formula: a second apply is idempotent", code3 == 0, (code3, lines3[-8:]))
+        check("formula: ... it plans 0 release markers, because nothing differs",
+              "RELEASE MARKERS (0 in the formula: VERSION and beside-files):" in text3,
+              release_report(text3))
+        check("formula: ... and says no file changed",
+              "no file changed (already current)" in text3, text3[-4:])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_release_markers_leave_unchanged_files_alone():
+    root = tmpdir()
+    try:
+        repo, live, _show = make_fixture_pc(root)
+        exe = fake_desktop(root)
+        reader = fixture_version_reader(exe)
+        write(live / "VERSION", FIXTURE_DESKTOP_VERSION)
+        # Seed BYTES: the fixture's `write()` opens in text mode and would put CRLF
+        # on Windows, which is exactly the "different bytes" case, not "unchanged".
+        lock = write(live / "requirements.lock", "")
+        lock.write_bytes(fake_show(repo, "origin/main", "requirements.lock"))
+        quiz = write(live / "quiz_grader_cases.json", "")
+        quiz.write_bytes(fake_show(repo, "origin/main", "quiz_grader_cases.json"))
+        stamp = 1_600_000_000_000_000_000
+        for path in (live / "VERSION", lock, quiz):
+            os.utime(path, ns=(stamp, stamp))
+        before = {p.name: (p.read_bytes(), p.stat().st_mtime_ns)
+                  for p in (live / "VERSION", lock, quiz)}
+        lines = []
+        code = run_fixture(repo, live, apply=True, out_lines=lines,
+                           desktop_exe=exe, version_reader=reader)
+        text = "\n".join(lines)
+        check("release: an already-current apply succeeds", code == 0,
+              (code, lines[-8:]))
+        check("release: the version is reported unchanged",
+              "VERSION: unchanged 9.9.9" in text, release_report(text))
+        check("release: both beside-files are reported unchanged",
+              "BESIDE: unchanged requirements.lock" in text
+              and "BESIDE: unchanged quiz_grader_cases.json" in text,
+              release_report(text))
+        after = {p.name: (p.read_bytes(), p.stat().st_mtime_ns)
+                 for p in (live / "VERSION", lock, quiz)}
+        check("release: unchanged files keep their bytes AND their mtime",
+              after == before, (before, after))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
-    for fn in (t_the_lists_parse_from_apply_patches,
+    for fn in (t_release_markers_carry_the_version_and_the_beside_files,
+               t_release_marker_writes_are_in_the_planned_and_wrote_counts,
+               t_release_markers_never_touch_the_owners_toml_or_the_excluded_files,
+               t_a_missing_installed_desktop_is_skipped_not_guessed,
+               t_release_markers_leave_unchanged_files_alone,
+               t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
                t_a_half_applied_gate_is_refused_not_guessed,
                t_a_duplicated_old_block_is_refused,
