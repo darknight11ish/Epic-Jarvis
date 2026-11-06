@@ -424,8 +424,8 @@ data class ProposalOption(
 
 /**
  * The approvals the PC only ever answers on the PC itself, with Windows Hello:
- * a client-side copy of `jarvis_owner_check.PC_ONLY_ACTIONS` (nine on
- * 2026-10-28, listed here in the PC's own order).
+ * a client-side copy of `jarvis_owner_check.PC_ONLY_ACTIONS` (ten on
+ * 2026-11-04, listed here in the PC's own order).
  *
  * The phone cannot ask the server which cards are PC-only, and copying only the
  * one action it used to know is what offered an Approve button on the other
@@ -455,6 +455,11 @@ object PcOnlyActions {
         // can approve it, with Windows Hello. Approving it here would promise
         // an install nothing on the phone can perform.
         "desktop_update",
+        // 2026-11-04, the PC's tenth: the product check opens one Amazon
+        // product page in the owner's own signed-in browser window on the PC,
+        // so only the PC can approve it, with Windows Hello. Approving it here
+        // would promise a read nothing on the phone can perform.
+        "product_check",
     )
 }
 

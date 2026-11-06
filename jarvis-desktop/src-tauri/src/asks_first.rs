@@ -79,13 +79,16 @@ pub(crate) const SWITCHABLE: [&str; 12] = [
 pub(crate) const LOCKDOWN: &str = "lockdown";
 
 /// The Tier A + Tier B tools that may be OFFERED to the AI model at all from
-/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 48 at
-/// 2026-11-04: the owner's decision that day made EVERY tool the AI model can
-/// be offered switchable, raw Tier C set and everyday helpers included (21
-/// before that; the 2026-10-31 tiered ruling is superseded). A DIFFERENT list
-/// from [`SWITCHABLE`], and desktop only. The three tools that are NOT here
-/// are the ones whose own switch decides them ([`TOOLS_NO_SWITCH`]).
-pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
+/// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 55 at
+/// 2026-11-05: the owner's decision of 2026-11-04 made EVERY tool the AI model
+/// can be offered switchable, raw Tier C set and everyday helpers included (21
+/// before that; the 2026-10-31 tiered ruling is superseded), the six
+/// on-demand GitHub tools joined them when the GitHub tools branch landed (48
+/// at 2026-11-04), and handsfree's send_text_message is the 55th. A DIFFERENT
+/// list from [`SWITCHABLE`], and desktop only.
+/// The four tools that are NOT here are the ones whose own switch decides them
+/// ([`TOOLS_NO_SWITCH`]).
+pub(crate) const TOOLS_SWITCHABLE: [&str; 55] = [
     // Tier A (13)
     "calendar_read",
     "notes_search",
@@ -126,7 +129,8 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
     "propose_plan",
     "change_setting",
     "feature_guide",
-    // Jarvis's own tools, which had no switch row before 2026-11-04 (12)
+    // Jarvis's own tools, which had no switch row before 2026-11-04 (13; 12
+    // then, plus handsfree's send_text_message on 2026-11-05)
     "goals_list",
     "goal_add",
     "goal_progress",
@@ -136,25 +140,42 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 48] = [
     "phone_apps",
     "plugin_list",
     "plugin_switch",
+    "send_text_message",
     "refresh_abilities",
     "self_portrait",
     "setup_quiz",
+    // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
+    "github_list",
+    "github_read_file",
+    "github_ci_status",
+    "github_comment",
+    "github_open_issue",
+    "github_rerun_workflow",
 ];
 
-/// The three known tools with no switch of their own, each with the PC's own
+/// The four known tools with no switch of their own, each with the PC's own
 /// sentence - `jarvis_asks_first.NO_SWITCH_NOTE`, word for word (checked
 /// against the contract file). They are here because the turn IGNORES their
 /// line in `[tools].enabled`: `run_data_script` is offered by its own switch
-/// (Settings, Data sandbox), and the two web-search tools ride with
-/// `web_search`. Refusing them with "this PC does not know that name" would be
-/// false, so the PC's own explanation is sent before the request is made.
-pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 3] = [
+/// (Settings, Data sandbox), `product_check` by the settings file's own
+/// `[product_check] enabled` line (2026-11-04), and the two web-search tools
+/// ride with `web_search`. Refusing them with "this PC does not know that name"
+/// would be false, so the PC's own explanation is sent before the request is
+/// made.
+pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 4] = [
     (
         "run_data_script",
         "The data and maths sandbox has its own switch: Settings, Data sandbox \
          (or the sandbox row on the What asks first page). That switch is what \
          offers this tool, so a line in [tools].enabled would change nothing. \
          Nothing was changed here.",
+    ),
+    (
+        "product_check",
+        "The product check has its own switch: the line [product_check] enabled \
+         = true in jarvis-framework.toml. That line is what offers this tool, \
+         so a line in [tools].enabled would change nothing. Nothing was changed \
+         here.",
     ),
     (
         "approve_web_search_for_conversation",

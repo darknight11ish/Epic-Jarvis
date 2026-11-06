@@ -119,6 +119,10 @@
       "title": "Jarvis wants to delete an event from your calendar"
     },
     {
+      "action": "delete_call_recording",
+      "title": "Jarvis wants to delete a recorded call"
+    },
+    {
       "action": "delete_file",
       "title": "Jarvis wants to delete a file"
     },
@@ -183,8 +187,24 @@
       "title": "Jarvis wants to turn on a separate lane for fiction and role-play"
     },
     {
+      "action": "github_comment",
+      "title": "Jarvis wants to post a comment on GitHub"
+    },
+    {
+      "action": "github_inspect",
+      "title": "Jarvis wants to read your GitHub"
+    },
+    {
+      "action": "github_open_issue",
+      "title": "Jarvis wants to open an issue on GitHub"
+    },
+    {
       "action": "github_read",
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
+    },
+    {
+      "action": "github_rerun_workflow",
+      "title": "Jarvis wants to run a GitHub workflow again"
     },
     {
       "action": "google_calendar_write",
@@ -203,8 +223,16 @@
       "title": "Jarvis wants to keep the phone's live view on offer for 15 minutes"
     },
     {
+      "action": "handsfree_enable",
+      "title": "Jarvis wants to turn on hands-free mode"
+    },
+    {
       "action": "history_enable",
       "title": "Jarvis wants to keep your chat history"
+    },
+    {
+      "action": "history_purge",
+      "title": "Jarvis wants to delete the chats from the days you chose"
     },
     {
       "action": "home_control",
@@ -303,6 +331,10 @@
       "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)"
     },
     {
+      "action": "product_check",
+      "title": "Jarvis wants to read a product page in your own browser"
+    },
+    {
       "action": "protect_item",
       "title": "Jarvis wants to protect a folder, file or program from Jarvis"
     },
@@ -341,6 +373,10 @@
     {
       "action": "read_web_page",
       "title": "Jarvis wants to read a web page out loud"
+    },
+    {
+      "action": "record_call",
+      "title": "Jarvis wants to record a call"
     },
     {
       "action": "referee_tick",
@@ -417,6 +453,10 @@
     {
       "action": "send_file_to_phone",
       "title": "Jarvis wants to send a file from your PC to your phone"
+    },
+    {
+      "action": "send_text_message",
+      "title": "Jarvis wants to send a text message from your phone"
     },
     {
       "action": "spend_money",
@@ -821,6 +861,18 @@
       }
     },
     {
+      "action": "delete_call_recording",
+      "notice": {
+        "title": "Jarvis wants to delete a recorded call",
+        "summary": "Jarvis wants to delete a recorded call.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "delete_file",
       "notice": {
         "title": "Jarvis wants to delete a file",
@@ -1013,12 +1065,60 @@
       }
     },
     {
+      "action": "github_comment",
+      "notice": {
+        "title": "Jarvis wants to post a comment on GitHub",
+        "summary": "Jarvis wants to post a GitHub comment.",
+        "full": "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards. nothing has happened yet.",
+        "body": "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_inspect",
+      "notice": {
+        "title": "Jarvis wants to read your GitHub",
+        "summary": "Jarvis wants to read your GitHub.",
+        "full": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+        "body": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_open_issue",
+      "notice": {
+        "title": "Jarvis wants to open an issue on GitHub",
+        "summary": "Jarvis wants to open a GitHub issue.",
+        "full": "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards. nothing has happened yet.",
+        "body": "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_read",
       "notice": {
         "title": "Jarvis wants to check GitHub for a \"tell me when\"",
         "summary": "Jarvis wants to check GitHub for a \"tell me when\".",
         "full": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
         "body": "reads public GitHub data; sends nothing of yours and changes nothing. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_rerun_workflow",
+      "notice": {
+        "title": "Jarvis wants to run a GitHub workflow again",
+        "summary": "Jarvis wants to run a workflow again.",
+        "full": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
+        "body": "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1073,6 +1173,18 @@
       }
     },
     {
+      "action": "handsfree_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on hands-free mode",
+        "summary": "Jarvis wants to turn on hands-free mode.",
+        "full": "turns on hands-free mode, where a spoken yes answers an approval card - including the cards that would otherwise wait for Windows Hello or your phone's fingerprint; while it is on, a recording of your voice or a person in the room could answer one, and what it allowed may already have happened by the time you turn it off, which is instant. nothing has happened yet.",
+        "body": "turns on hands-free mode, where a spoken yes answers an approval card - including the cards that would otherwise wait for Windows Hello or your phone's fingerprint; while it is on, a recording of your voice or a person in the room could answer one, and what it allowed may already have happened by the time you turn it off, which is instant. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "history_enable",
       "notice": {
         "title": "Jarvis wants to keep your chat history",
@@ -1080,6 +1192,18 @@
         "full": "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted. nothing has happened yet.",
         "body": "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted. nothing has happened yet.",
         "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "history_purge",
+      "notice": {
+        "title": "Jarvis wants to delete the chats from the days you chose",
+        "summary": "Jarvis wants to delete old chats by date.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
       }
@@ -1373,6 +1497,18 @@
       }
     },
     {
+      "action": "product_check",
+      "notice": {
+        "title": "Jarvis wants to read a product page in your own browser",
+        "summary": "Jarvis wants to read a product page in your own browser.",
+        "full": "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored. nothing has happened yet.",
+        "body": "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "protect_item",
       "notice": {
         "title": "Jarvis wants to protect a folder, file or program from Jarvis",
@@ -1487,6 +1623,18 @@
         "summary": "Jarvis wants to read a web page out loud.",
         "full": "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on. nothing has happened yet.",
         "body": "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "record_call",
+      "notice": {
+        "title": "Jarvis wants to record a call",
+        "summary": "Jarvis wants to record a call.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -1715,6 +1863,18 @@
         "summary": "Jarvis wants to send one file from your folders to your phone.",
         "full": "not classified, so treated as the worst case. nothing has happened yet.",
         "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "send_text_message",
+      "notice": {
+        "title": "Jarvis wants to send a text message from your phone",
+        "summary": "Jarvis wants to send a text message from your phone.",
+        "full": "sends one text message from your phone to the contact named on the card, word for word as the card shows it; a sent text cannot be unsent or edited, and your phone's own contacts decide who that name is. nothing has happened yet.",
+        "body": "sends one text message from your phone to the contact named on the card, word for word as the card shows it; a sent text cannot be unsent or edited, and your phone's own contacts decide who that name is. nothing has happened yet.",
         "weight": "heavy",
         "deny_ok": true,
         "approve_ok": false
@@ -2112,6 +2272,7 @@
     "handoff_keep_offering",
     "loosen_what_asks_first",
     "pair_device",
+    "product_check",
     "register_approval_key",
     "restore_backup",
     "unretire_shared_key"

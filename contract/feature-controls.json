@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 175,
+  "feature_count": 178,
   "features": [
     {
       "id": "typing",
@@ -5834,6 +5834,57 @@
       "label_note": ""
     },
     {
+      "id": "call-recording",
+      "name": "Record a phone call and file it as a note",
+      "group": "Phone",
+      "surface": "both",
+      "where": "Off by default; there is no in-app switch. Add [call_recording] enabled = true with a text editor to the settings file (jarvis-framework.toml), then say \"record call\" on the phone.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Record a phone call and file it as a note",
+        "turn_off": "turn off Record a phone call and file it as a note",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add [call_recording] enabled = true with a text editor to the settings file (jarvis-framework.toml), then say \"record call\" on the phone.",
+        "search": [
+          "Record a phone call and file it as a note"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default; there is no in-app switch. Add [call_recording] enabled = true with a text editor to the settings file (jarvis-framework.toml), then say \"record call\" on the phone.",
+        "search": [
+          "record a phone call and file it as a note"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Record a phone call and file it as a note",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "appearance",
       "name": "Appearance",
       "group": "The PC itself",
@@ -9510,6 +9561,108 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "product-check",
+      "name": "Check a product's reviews",
+      "group": "Money and health",
+      "surface": "desktop",
+      "where": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Check a product's reviews",
+        "turn_off": "turn off Check a product's reviews",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+        "search": [
+          "Check a product's reviews"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+        "search": [
+          "check a product's reviews"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Do arithmetic",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
+      "id": "voicestudio",
+      "name": "A second voice program (VoiceStudio)",
+      "group": "The PC itself",
+      "surface": "desktop",
+      "where": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on A second voice program (VoiceStudio)",
+        "turn_off": "turn off A second voice program (VoiceStudio)",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "search": [
+          "A second voice program (VoiceStudio)"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "search": [
+          "a second voice program (voicestudio)"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on A second voice program (VoiceStudio)",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "The VoiceStudio client has no typed command and no Settings control yet: the speaking-voice wiring and its one-card switch are the named next slice.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -10156,6 +10309,25 @@
       "status": "planned",
       "owner": "setup-ui",
       "reason": "typed switch works; no SETTINGS_ROWS row or phone row draws it yet - the Calendar Settings card is the UI slice's"
+    },
+    {
+      "key": "handsfree",
+      "names": [
+        "hands-free mode",
+        "hands free mode",
+        "hands-free",
+        "hands free",
+        "handsfree",
+        "hands free setting"
+      ],
+      "section": "handsfree",
+      "desktop_row": "hf-enabled",
+      "turn_on": "turn on hands-free mode",
+      "turn_off": "turn off hands-free",
+      "resolved": true,
+      "status": "enforced",
+      "owner": "none-needed",
+      "reason": "switch present on the desktop Settings page"
     }
   ],
   "setting_rows": [
@@ -10518,6 +10690,16 @@
       "in_settings_html": true,
       "in_desktop_catalog": true,
       "in_phone_catalog": true
+    },
+    {
+      "id": "hf-enabled",
+      "label": "Hands-free mode",
+      "section": "handsfree",
+      "owner": "desktop",
+      "phone_key": null,
+      "in_settings_html": true,
+      "in_desktop_catalog": true,
+      "in_phone_catalog": false
     }
   ],
   "sections": [
@@ -11275,6 +11457,19 @@
         "the to-do list's own day"
       ],
       "app": "both",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
+    },
+    {
+      "id": "handsfree",
+      "names": [
+        "hands-free mode",
+        "hands free mode",
+        "hands-free settings",
+        "the hands-free page"
+      ],
+      "app": "desktop",
       "where": "settings",
       "in_desktop_settings": true,
       "in_phone_settings": false
@@ -13868,7 +14063,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 102
+      "not-a-setting": 103
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 29,
@@ -13885,11 +14080,11 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 102,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 105,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },
-  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (plugins by chat): the \"Turn a drop-in module on or off by asking\" row joined as Command-Only (95 -> 96 Command-Only, 168 -> 169 features), because the two chat tools and the modify_own_code card are the feature and there is no stored setting for it. 2026-11-02 (stacked #1111 onto #1110's stacked head for the merge train): the plugin-switch row joined as Command-Only, so 43/2/16/102/12 (175 total). Measured from the contract, not chosen."
+  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (plugins by chat): the \"Turn a drop-in module on or off by asking\" row joined as Command-Only (95 -> 96 Command-Only, 168 -> 169 features), because the two chat tools and the modify_own_code card are the feature and there is no stored setting for it. 2026-11-02 (stacked #1111 onto #1110's stacked head for the merge train): the plugin-switch row joined as Command-Only, so 43/2/16/102/12 (175 total). Measured from the contract, not chosen. The call-recording row joined as Command-Only on 2026-11-04 (the owner's 'record call' feature: the phone records, this PC transcribes and labels, and ONE new note named for the date and time is created through the notes editor's own card - there is no in-app switch, so there is no setting row). The six-PR wave of 2026-11-05 landed three Command-Only rows together - call recording, the product check and VoiceStudio - so the measured combined mix is 43 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 105 Command-Only, 12 Always-On (178 total). Measured from the contract, not chosen."
 }

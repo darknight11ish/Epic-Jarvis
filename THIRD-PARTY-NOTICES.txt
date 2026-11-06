@@ -29,8 +29,8 @@ Worth knowing:
     under it. They are used unmodified; their source is on crates.io, at the
     address given beside each.
   * No GPL, LGPL, AGPL, SSPL or CDDL part is inside either app. SearXNG
-    (AGPL-3.0) and Ollama are separate programs the owner runs; nothing of
-    them is distributed with Jarvis.
+    (AGPL-3.0), Ollama and VoiceStudio (AGPL-3.0) are separate programs the
+    owner runs; nothing of them is distributed with Jarvis.
   * The WebView2 Runtime is Microsoft's and is not redistributed: the
     installer uses Microsoft's own bootstrapper.
   * The desktop's JavaScript has ONE third-party library: three.js r128,
@@ -568,6 +568,28 @@ ddgs (deedy5), MIT - https://github.com/deedy5/ddgs
   their own terms. Exa is called directly over HTTPS; its exa-py library (MIT) is not
   a dependency - its 2.22.2 source was only read, to confirm the request's
   address, header and field names, and none of it is copied.
+
+VOICESTUDIO (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+VoiceStudio (Palash Debnath and VoiceStudio contributors; Yupcha Softwares
+Private Limited) is AGPL-3.0-only - https://github.com/debpalash/VoiceStudio
+  NOT part of Jarvis and NOT bundled. It is a separate, unmodified program the
+  owner installs and runs on their own PC, OUTSIDE this repository.
+  backend/jarvis_voicestudio.py is a client that sends it one HTTP request on
+  127.0.0.1:11439 and reads the audio back. No file, module or byte of
+  VoiceStudio's source is copied, adapted or imported here, so nothing of it is
+  conveyed with Jarvis and no Corresponding Source is owed; AGPL section 2
+  explicitly permits running the unmodified program. A separate process that
+  Jarvis calls over a socket is not a combined work - the reasoning, the
+  evidence and the alternatives are in docs/VOICESTUDIO.md section 1 and, in
+  the evaluation tree, VOICESTUDIO-EVAL/REPORT-LEGAL.md section 2.
+  Its model weights are NOT covered by that licence. They are NEVER shipped or
+  redistributed, and Jarvis never downloads them: k2-fsa/OmniVoice (CC-BY-NC,
+  plus Higgs Audio 2 and Meta Llama 3 terms) and
+  eustlb/higgs-audio-v2-tokenizer (no licence found in its metadata) are
+  personal, non-commercial use only (rule 5), and the owner accepts their terms
+  once, in VoiceStudio's own terms. docs/VOICESTUDIO.md section 4 has the table
+  and the first-run 403 gate in plain words.
 
 SCREEN SAFETY (not generated - keep when regenerating)
 ---------------------------------------------------------------------------

@@ -159,17 +159,21 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        // 48 since the owner's decision of 2026-11-04: every tool the AI model
+        // 55 since the six on-demand GitHub tools and hands-free's
+        // send_text_message joined the switchable list
+        // (48 since the owner's decision of 2026-11-04: every tool the AI model
         // can be offered is a switch, raw Tier C set and everyday helpers
-        // included (21 before that). The phone still shows them read-only.
-        assertEquals("48 one-tool switches", 48, rawIds.size)
+        // included; 21 before that). The phone still shows them read-only.
+        assertEquals("55 one-tool switches", 55, rawIds.size)
         for (id in listOf("shell_exec", "control_computer", "browser_control",
                 "read_web_page", "connect_account", "rea_investigate",
-                "calculator", "propose_plan", "web_search")) {
+                "calculator", "propose_plan", "web_search",
+                "github_list", "github_read_file", "github_ci_status",
+                "github_comment", "github_open_issue", "github_rerun_workflow")) {
             assertTrue("$id is switchable in the app since 2026-11-04", rawIds.contains(id))
         }
         for (id in listOf("approve_web_search_for_conversation", "stop_web_search_approval",
-                "run_data_script")) {
+                "run_data_script", "product_check")) {
             assertFalse("$id has no switch of its own (its own switch decides it)",
                 rawIds.contains(id))
         }
@@ -198,10 +202,12 @@ class AsksFirstTest {
         assertTrue("its own words explain what it does", vault.what.contains("tidy-up"))
         assertTrue("its state is in words", AsksFirst.vaultState(vault).isNotEmpty())
         val no = requireNotNull(t.notSwitchable) { "the not-a-switch list is missing" }
-        assertEquals("3 tools have no switch of their own", 3, no.labels.size)
+        assertEquals("4 tools have no switch of their own", 4, no.labels.size)
         assertTrue("the note names the real switch for the sandbox", no.why.contains("Data sandbox"))
         assertTrue("... and says the web-search two ride with web search",
             no.why.contains("Web search"))
+        assertTrue("... and names the product check's own settings-file line",
+            no.why.contains("[product_check] enabled"))
         assertEquals("the phone shows the PC's own sentence",
             word("tools_pc_only"), AsksFirst.TOOLS_PC_ONLY)
     }

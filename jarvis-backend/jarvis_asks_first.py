@@ -296,6 +296,20 @@ NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits fo
 #: only about "no app switch". The organizer needs the other three promises
 #: said too - the vault it touches, ONE card, and Undo.
 NOTE_EXTRA = {
+    "delete_call_recording": (
+        "It removes ONE recording's own folder on this PC - the audio, the "
+        "transcript and the row you see in the list - and it cannot be undone. "
+        "The note it wrote in your vault is a document of its own and is NOT "
+        "deleted here; the answer names it so you know what is left. It works "
+        "with the feature switched off, because removing something only ever "
+        "narrows what Jarvis keeps."),
+    "record_call": (
+        "It records the phone's microphone with the call on speaker (Android does "
+        "not let an app record the call's own audio), keeps the audio on this PC, "
+        "transcribes it here, and writes ONE new note through the notes editor's "
+        "own card. Nothing leaves this PC, every recording stays until you remove "
+        "it, and the feature itself is off until the settings file says on - there "
+        "is no app switch for turning it on."),
     "organize_obsidian_vault": (
         "It changes only notes inside the vault the owner named, under ONE card "
         "for the whole batch; nothing is deleted, and ONE Undo puts the vault "
@@ -444,7 +458,17 @@ TIER_EXTRA = (
     "goals_list", "goal_add", "goal_progress", "goal_done",
     "conversation_find", "conversation_open",
     "phone_apps", "plugin_list", "plugin_switch",
+    "send_text_message",
     "refresh_abilities", "self_portrait", "setup_quiz",
+    # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
+    # 2026-11-03: "Read + actions"). They joined this list when the GitHub
+    # tools branch met the owner's 2026-11-04 decision - EVERY tool the model
+    # can be offered is switchable from an app except the four NOT_A_SWITCH
+    # names - so leaving them nowhere would have been the one hole in that
+    # rule. Each one still raises its own card, and the ACTION they share
+    # (github_inspect for the three reads) stays the "ask" tier.
+    "github_list", "github_read_file", "github_ci_status",
+    "github_comment", "github_open_issue", "github_rerun_workflow",
 )
 
 #: Known tools that are deliberately NOT switches of their own on this page.
@@ -454,11 +478,18 @@ TIER_EXTRA = (
 #: 2026-11-02. `run_data_script` is offered from its OWN switch (Settings, Data
 #: sandbox): with that on the model is offered it whether or not the file names
 #: it, and with it off the file cannot offer it. The two grant tools ride with
-#: `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`).
-NOT_A_SWITCH = ("run_data_script",) + GRANT_ASK_TOOLS
+#: `web_search` (`jarvis_agent.GRANT_ASK_TOOLS`). `product_check` is offered
+#: from ITS OWN switch too - the settings file's `[product_check] enabled`, off
+#: by default: `offered_tools` drops it unless that line is on, so a
+#: `[tools].enabled` line alone would change nothing, exactly as for the
+#: sandbox.
+NOT_A_SWITCH = ("run_data_script", "product_check") + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: three above. 48 at 2026-11-04.
+#: four above. 55 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
+#: GitHub tools the tool list had grown without a row of their own, plus
+#: hands-free's send_text_message; the product check is the fourth exception
+#: rather than a row).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
@@ -535,7 +566,7 @@ def _app_can_switch(tool: str) -> bool:
     test request_tool_enable applies. A group row can be appended for a tool
     that raises a card but must never be switched from an app:
     jarvis_storage_health.py's scan and cleanup are one (a cleanup is a
-    deletion, so storage_cleanup is in MUST_ASK) - and NOT_A_SWITCH's three are
+    deletion, so storage_cleanup is in MUST_ASK) - and NOT_A_SWITCH's four are
     the others (their own switch decides them)."""
     return (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
             or real_tool(tool) in SWITCHABLE_TOOL_NAMES)
@@ -602,6 +633,7 @@ HARD_LIMITS = frozenset({
     "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "conversation_clear",
+    "history_purge",
     "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
@@ -635,6 +667,7 @@ MUST_ASK = frozenset({
     "phone_notifications_read",
     "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "conversation_clear",
+    "history_purge",
     "storage_cleanup", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "app_build_android", "app_install_android",
@@ -752,7 +785,23 @@ GROUPS = (
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",
                       "open_public_tunnel",
-                      "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
+                      "news_read", "page_read", "read_web_page",
+                      # The product check (jarvis_product_check.py, 2026-11-04):
+                      # ONE PC-only card per Amazon product page, read once in
+                      # the owner's own signed-in browser. A card can name it, so
+                      # the page names it (test_asks_first.py); there is no app
+                      # switch - the tool's own door is [product_check] enabled.
+                      "product_check",
+                      "github_read", "chatbot_session",
+                      # Your own GitHub, on demand (jarvis_github.py, the owner's
+                      # decision of 2026-11-03: "Read + actions"). All four are
+                      # actions a card can be raised under, so all four are rows
+                      # on this page (test_asks_first.py requires it). The READ
+                      # is here too, not only the three writes: it sends the
+                      # owner's GitHub token out, which is why it asks, and the
+                      # page should say so instead of implying a read is free.
+                      "github_inspect", "github_comment", "github_open_issue",
+                      "github_rerun_workflow",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
                       # decision of 2026-10-08): keeping the live picture of one of the
@@ -786,7 +835,32 @@ GROUPS = (
                                 # The app builder's last two steps (2026-10-30):
                                 # ONE card each, on this PC only, and the card
                                 # carries the exact command it will run.
-                                "app_build_android", "app_install_android"]),
+                                "app_build_android", "app_install_android",
+                                # Recording a phone call (jarvis_call_notes.py,
+                                # 2026-11-04): the owner's own keyword asks the
+                                # PHONE to record, and the start route raises
+                                # this ONE card before a byte is kept. Its tier
+                                # is the shipped "ask" line, and the gate also
+                                # forces "ask" for an action with no _RISK row,
+                                # so the page says "Always asks" honestly. The
+                                # note below carries the two promises a card
+                                # cannot: nothing leaves this PC, and the feature
+                                # itself is off until the settings file says on.
+                                "record_call",
+                                # Deleting ONE recording (2026-11-05, the
+                                # privacy audit's D4): the audio, the transcript
+                                # and the row go, behind ONE card of its own at
+                                # tier "ask" and PC-only. It cannot be undone, so
+                                # the page promises it by name.
+                                "delete_call_recording",
+                                # Hands-free mode's text message (2026-11-04,
+                                # JARVIS-API section 191): the phone sends it from
+                                # its own contact list, so it is a phone action. Its
+                                # words are jarvis_card_words.TITLES, its tier is the
+                                # file's own "ask" line, and it is NOT in MUST_ASK
+                                # (the module calls jarvis_gate.check and does not
+                                # refuse a looser tier itself).
+                                "send_text_message"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,
@@ -805,12 +879,21 @@ GROUPS = (
     # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
     # page promises every action, and starting Live is one (the review of
     # 2026-09-28). Decided in the code: no card, ever.
-    ("Talking with Jarvis", ["fixed:live", "fixed:screen"]),
+    ("Talking with Jarvis", ["fixed:live", "fixed:screen",
+                            # The switch that lets a spoken yes answer a card
+                            # (2026-11-04, JARVIS-API section 191): ON is ONE
+                            # ask-tier card, OFF is instant and cardless.
+                            "handsfree_enable"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable",
         "learning_paraphrase_enable", "history_enable",
         "memory_manage", "memory_forget_range", "conversation_clear",
+        # Clearing old chats by date (jarvis_history_purge.py, 2026-11-04): it
+        # deletes the chats in a range from this PC and erases the words of the
+        # facts they taught, so it is a page row - and a hard limit, so the page
+        # offers no switch that could loosen it.
+        "history_purge",
         # The storage self-scan's ONE tidy (jarvis_storage_health.py, a separate
         # 2026-11-03 drop-in): it deletes temporary files and moves old deploy
         # backups, so its card is a page row the moment the tier line exists -
@@ -1059,6 +1142,12 @@ def _file_tiers() -> dict:
 #: side: it says what the action really is here (only these kinds still ask).
 ROW_TITLES = {
     "schedule_repeat": "set up the morning briefing or a \"tell me when\" alert",
+    # jarvis_history_purge.py (2026-11-04, the owner's own request). It raises no
+    # card of its own - its two yeses and its Windows Hello / fingerprint ticket
+    # are what approve it - so it has no jarvis_card_words.TITLES line and this
+    # is the phrase the page shows for it. Kept honest to what the module does:
+    # the chats from the days chosen, and the facts those chats taught.
+    "history_purge": "delete the chats from the days you chose, and the facts they taught",
 }
 
 
@@ -1624,21 +1713,32 @@ TOOLS_DETAIL = ("Whether the AI model is offered each ability at all - a separat
 TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
                  "What asks first). It takes one approval card and Windows Hello.")
 TOOLS_NOT_ON_LIST = ("This PC does not know a tool by that name, so nothing was changed.")
-#: The three known tools that have no switch of their own (NOT_A_SWITCH). The
-#: page lists them so nobody hunts for a switch that is not there, and the
-#: route answers ON for one of them with the same sentence - never "does not
-#: know that name", which would be false.
+#: The known tools that have no switch of their own (NOT_A_SWITCH). The page
+#: lists them so nobody hunts for a switch that is not there, and the route
+#: answers ON for one of them with the same sentence - never "does not know
+#: that name", which would be false.
 TOOLS_NOT_SWITCHED_WHY = (
     "A few tools are not switches here because the AI's own settings line does "
     "not decide them: the data and maths sandbox has its own switch under "
-    "Settings, Data sandbox, and the two conversation web-search tools ride "
-    "with Web search. Each is named above; turning on its real switch offers it.")
+    "Settings, Data sandbox, the two conversation web-search tools ride with "
+    "Web search, and the product check is offered by its own settings-file line "
+    "([product_check] enabled = true). Each is named above; turning on its real "
+    "switch offers it.")
 NO_SWITCH_NOTE = {
     "run_data_script": (
         "The data and maths sandbox has its own switch: Settings, Data sandbox "
         "(or the sandbox row on the What asks first page). That switch is what "
         "offers this tool, so a line in [tools].enabled would change nothing. "
         "Nothing was changed here."),
+    # The product check (jarvis_product_check.py, 2026-11-04): its own door is
+    # the settings file's `[product_check] enabled` line, read fresh on every
+    # turn; an ON switch here would write a line the turn ignores, which is the
+    # lie this whole NOT_A_SWITCH mechanism exists to avoid.
+    "product_check": (
+        "The product check has its own switch: the line [product_check] enabled "
+        "= true in jarvis-framework.toml. That line is what offers this tool, "
+        "so a line in [tools].enabled would change nothing. Nothing was changed "
+        "here."),
     "approve_web_search_for_conversation": (
         "This one rides with Web search: with Web search offered, the AI is "
         "offered this too, and without it this tool could not search anyway. It "
@@ -2073,7 +2173,7 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
 
     ON accepts EVERY tool the AI model can be offered (the owner's decision,
     2026-11-04): Tier A and B, the raw Tier C set, the everyday helpers and
-    Jarvis's own tools. The three names in NOT_A_SWITCH are refused with the
+    Jarvis's own tools. The four names in NOT_A_SWITCH are refused with the
     sentence naming their real switch, never "does not know that name" - this
     PC does know them. A name it really does not know gets the plain
     "does not know" answer. Nothing is written until the person approves.
@@ -2200,7 +2300,7 @@ def _extra_tool_rows(items: list, enabled: set) -> list:
 
     Since 2026-11-04 every tool this PC knows has a switch row, so what lands
     here is a name this PC does not know (a drop-in program's own tool) and the
-    three NOT_A_SWITCH tools when the settings file happens to name them. The
+    four NOT_A_SWITCH tools when the settings file happens to name them. The
     state is the settings file's own (`enabled`, from tools_enabled_set), never
     a guess. `switchable: False` says plainly that this page offers no ON
     switch for the row; the page draws it with an OFF switch only. A row turned
@@ -2234,11 +2334,11 @@ def tools_status(*, here: bool = False) -> dict:
     EVERY tool the AI model can be offered has a switch here since 2026-11-04
     (the owner's decision), in eight groups - the raw and everyday ones
     included. The vault organizer's own switch rides beside them as a different
-    kind of row; the three tools whose own switch decides them are named in
+    kind of row; the four tools whose own switch decides them are named in
     `not_switchable` with the plain reason, so the page points at the real
     switch instead of drawing one that would do nothing; and `extra` lists
     every OTHER name in the settings file - a drop-in program's own tool, or
-    one of the three - with its real state and a plain reason (D4). `extra`
+    one of the four - with its real state and a plain reason (D4). `extra`
     rows can be turned OFF from the page; an ON switch exists for every tool
     this PC knows (`items`).
     """
@@ -2535,6 +2635,12 @@ LOCKDOWN_ACTIONS = frozenset({
     "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
     "news_read", "page_read", "read_web_page", "github_read", "youtube_captions_read", "quiz_cloud_grade",
+    # your own GitHub, on demand (2026-11-03): all four leave this PC through
+    # api.github.com with the owner's token. They ship as "ask", so Lockdown
+    # changes nothing today - they are here so that a line loosened to
+    # "notify" one day still asks while Lockdown is on, like every other way
+    # out of this PC on this list.
+    "github_inspect", "github_comment", "github_open_issue", "github_rerun_workflow",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

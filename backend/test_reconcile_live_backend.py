@@ -80,6 +80,21 @@ real PC:
      region pairs carry the block - proved byte-for-byte against `git apply` on the
      published base, inserted exactly once (a half-applied pair is completed, not
      duplicated) and idempotent on the next plan.
+  14. the 2026-11-05 wave-6 false green - the same shape a third time, and the one a
+     dry-run rehearsal caught before a live deploy: FOUR patches this wave adds
+     (github-tools, handsfree, product-check -> `jarvis_gate.py`; history-purge ->
+     `jarvis_hud.py`) plus the `call_notes` risk row that NO patch carries were all
+     reported PRESENT on a copy of the live folder whose own reseal counter says
+     0/53, 0/31, 0/27 and 0/13 applied rows. The lines doing the false proving are
+     the ones the rehearsal named: the bare `# ----------` separator (24 in the live
+     gate), `_RISK.update({` (1) and `token_ok=_token_ok, read_body=_read_body))`
+     (47 in the live HUD). The four entries carry real probes (one line from every
+     `update` block a patch adds) and a real rule each: three replay the patch's own
+     hunk, product-check is an anchor because its hunk's context is measurably one
+     space short, and the risk row is a literal delta - the class the tool's docstring
+     names for a fix that lives in the published base and in no patch. Fixture copies
+     of both live files prove absent -> four inserts, present -> none, and the generic
+     lines alone -> still ABSENT.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
@@ -1819,6 +1834,25 @@ MINI_GATE = (
     "\n"
     "def gate_tool(name, params):\n"
     "    return check(name + str(params))\n"
+    # The live gate's OWN end-of-file `_RISK.update` block, in the shape the real
+    # file has it (web-search-grant.patch's two rows). No test here is about those
+    # rows; the block is the ANCHOR the `call-notes-risk.patch` literal delta
+    # inserts the `record_call` row in front of, and every fixture that plans the
+    # whole table with literals=True needs it - the same gap MINI_HUD's anchors fill.
+    "\n"
+    "\n"
+    # The bare separator above the block is deliberate: it is one of the generic
+    # lines that false-greened the wave-6 patches, so a fixture that plans the whole
+    # table proves the record_call rule does not depend on it.
+    "# --------------------------------------------------------------------------\n"
+    "#   Two risk rows for the conversation-scoped web-search approval\n"
+    "# --------------------------------------------------------------------------\n"
+    "_RISK.update({\n"
+    '    "grant_web_search_conversation": ("yes", "outbound", "one chat"),\n'
+    + R.RECORD_CALL_ANCHOR + "\n"
+    "    # nothing is asked.\n"
+    '    "revoke_web_search_grant": ("yes", "local", "stops the grant"),\n'
+    "})\n"
 )
 
 
@@ -3974,6 +4008,394 @@ def t_the_bench_patch_is_carried_not_false_greened():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   WAVE 6 (2026-11-04/05): the four patches that write a patched base file,
+#   plus the `call_notes` risk row that NO patch carries
+# --------------------------------------------------------------------------
+#
+# MEASURED ON A COPY OF THE OWNER'S LIVE FOLDER, 2026-11-05
+# (`.dsh-scratch/DEPLOY-WAVE-2026-11-04/wave6-run-2026-11-05/DRYRUN-REHEARSAL-CORE.md`
+# sections 5, 6 and 10a). The rehearsal's dry run printed `to insert: none` and ZERO
+# refusals, while `reseal_live_install.py` counted the same four patches at 0/53, 0/31,
+# 0/27 and 0/13 applied rows: github-tools.patch, handsfree.patch and product-check.patch
+# add `_RISK`/`_TOOL_ACTIONS`/`_NO_RULE_FROM_DENIAL` blocks to `jarvis_gate.py`, and
+# history-purge.patch adds its install block to `jarvis_hud.py`. The fallback rule said
+# PRESENT because each patch's added side holds lines the live files already have from
+# unrelated code: the bare `# ----------` separator (24 in the live gate), `_RISK.update({`
+# (1) and `token_ok=_token_ok, read_body=_read_body))` (47 in the live HUD). ONE match
+# proved a whole patch.
+#
+# The tests below build fixture copies of the two live files in the SHAPE the copy
+# showed (the anchors, the `if __name__` block, the install-block tail, the generic
+# lines) and stand-in patches with the same shapes, so they can prove the entries on a
+# ref where the wave's own `backend/*.patch` files do not exist yet. The last test
+# re-checks every entry against the REAL patch bytes whenever they are in the tree, and
+# says SKIPPED (never "ok") when they are not.
+
+WAVE6_GATE_LIVE = '''"""a live gate stand-in: the shape of the owner's file, none of wave 6"""
+
+
+def review(days: int = 7) -> int:
+    print()
+    return 0
+
+
+if __name__ == "__main__":
+    import argparse
+    ap = argparse.ArgumentParser(description="Approval gate: status and tuning.")
+    ap.add_argument("--pending", action="store_true", help="list waiting actions")
+    a = ap.parse_args()
+    if a.pending:
+        for r in pending():
+            print(f"  {r['id']}  {r['tier']:6} {r['action']}")
+        sys.exit(0)
+    sys.exit(review(a.days))
+
+
+# --------------------------------------------------------------------------
+#   Two risk rows for the conversation-scoped web-search approval
+# --------------------------------------------------------------------------
+_RISK.update({
+    "grant_web_search_conversation": ("yes", "outbound", "one chat, until you say stop"),
+    # The instant stop, under its own action and tier line "auto": no card, and
+    # nothing is asked.
+    "revoke_web_search_grant": ("yes", "local", "stops the grant at once"),
+})
+'''
+
+WAVE6_HUD_LIVE = '''"""a live HUD stand-in: the shape of the owner's file, none of wave 6"""
+
+
+def _install(Handler):
+    try:
+        import jarvis_presets
+        print(jarvis_presets.install(Handler, origin_ok=_origin_ok,
+                                     token_ok=_token_ok, read_body=_read_body))
+    except Exception as exc:
+        print(f"  presets    NOT ON ({type(exc).__name__})")
+    # ----------------------------------------------------------------------
+    #   another install block, for the separator every patch adds
+    # ----------------------------------------------------------------------
+    return True
+
+
+def main() -> None:
+    try:
+        import jarvis_forget_range
+        print(jarvis_forget_range.install(None))
+    except Exception as exc:
+        print(f"  forget     NOT ON ({type(exc).__name__}) - Forget a time frame is off")
+        print("             until jarvis_forget_range.py is back: run apply-patches.ps1 again")
+    # sky.patch (the owner's decisions of 2026-09-28, "Sun and moon behind
+    # the animals" and "Weather in the animals' scene"): GET /api/sky and
+    # POST /api/sky - whether the sun and moon show, the town typed on this
+    return None
+'''
+
+_SEPARATOR = "# --------------------------------------------------------------------------"
+
+
+def _synth_patch(target: str, before, added, after) -> bytes:
+    """A unified diff in the shape the tool's parser reads, for a fixture stand-in."""
+    lines = [f"--- a/{target}", f"+++ b/{target}",
+             "@@ -1,%d +1,%d @@" % (len(before) + len(after),
+                                   len(before) + len(added) + len(after))]
+    lines += [" " + str(line) for line in before]
+    lines += ["+" + str(line) for line in added]
+    lines += [" " + str(line) for line in after]
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+def _wave6_stack() -> dict:
+    """Stand-in patch text for the four wave-6 patches, in the shapes measured.
+
+    github-tools and handsfree insert in front of `if __name__` / at the end of its
+    `--pending` loop; product-check's context is deliberately ONE SPACE SHORT, which is
+    what the real patch does (measured: 0 occurrences in the live gate, and
+    `git apply --check` fails on it there); history-purge inserts its install block
+    after the `forget` block and before sky.patch's comment."""
+    gate = WAVE6_GATE_LIVE.splitlines()
+    hud = WAVE6_HUD_LIVE.splitlines()
+    github_before = ["    print()", "    return 0", ""]
+    github_after = ["", 'if __name__ == "__main__":', "    import argparse"]
+    hand_before = ['            print(f"  {r[\'id\']}  {r[\'tier\']:6} {r[\'action\']}")',
+                   "        sys.exit(0)", "    sys.exit(review(a.days))"]
+    # handsfree's hunk has NO trailing context: all three of its pre-image lines are
+    # leading, so the block is appended after the `--pending` loop's last line.
+    hand_after = []
+    # product-check's context is deliberately ONE SPACE SHORT, exactly as the real
+    # patch's is (measured: 0 occurrences in the live gate, and `git apply --check`
+    # fails on it there), which is why that entry is an anchor and not a hunk replay.
+    product_before = ['           print(f"  {r[\'id\']}  {r[\'tier\']:6} {r[\'action\']}")',
+                      "       sys.exit(0)", "   sys.exit(review(a.days))"]
+    product_after = ["", _SEPARATOR,
+                     "#   Two risk rows for the conversation-scoped web-search approval"]
+    forget_at = next(i for i, line in enumerate(hud)
+                     if line.startswith('        print(f"  forget'))
+    purge_before = hud[forget_at - 1:forget_at + 5]
+    purge_after = []
+    return {
+        "github-tools.patch": _synth_patch(
+            "jarvis_gate.py", github_before,
+            [_SEPARATOR,
+             "#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions",
+             "_TOOL_ACTIONS.update({",
+             '    "github_list": "github_inspect",',
+             '    "github_read_file": "github_inspect",',
+             "})",
+             "_RISK.update({",
+             '    "github_comment": ("no", "outbound", "posts a comment in your name"),',
+             "})"], github_after),
+        "handsfree.patch": _synth_patch(
+            "jarvis_gate.py", hand_before,
+            ["", "", _SEPARATOR,
+             "_TOOL_ACTIONS.update({",
+             '    "send_text_message": "send_text_message",',
+             "})",
+             "_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {",
+             '    "send_text_message",  # jarvis_handsfree.py acts only on tier "ask"',
+             "}",
+             "_RISK.update({",
+             '    "handsfree_enable": ("no", "local", "turns on hands-free mode"),',
+             "})"], hand_after),
+        "product-check.patch": _synth_patch(
+            "jarvis_gate.py", product_before,
+            ["", "", _SEPARATOR,
+             "#   The product check's gate rows (jarvis_product_check.py, 2026-11-04)",
+             "_TOOL_ACTIONS.update({",
+             '    "product_check": "product_check",',
+             "})",
+             "_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {",
+             '    "product_check",  # jarvis_product_check.py acts only on tier "ask"',
+             "}",
+             "_RISK.update({",
+             '    "product_check": ("yes", "outbound", "reads one product page"),',
+             "})"],
+            product_after),
+        "history-purge.patch": _synth_patch(
+            "jarvis_hud.py", purge_before,
+            ["    # history-purge.patch (jarvis_history_purge.py, the owner's request of",
+             "    try:", "        import jarvis_history_purge",
+             "        print(jarvis_history_purge.install(Handler, origin_ok=_origin_ok,",
+             "                                          token_ok=_token_ok, "
+             "read_body=_read_body))",
+             "    except Exception as exc:",
+             '        print(f"  purge      NOT ON ({type(exc).__name__}) - clearing old '
+             'chats by date is off")',
+             '        print("             until jarvis_history_purge.py is back: run '
+             'apply-patches.ps1 again")'], purge_after),
+    }
+
+
+#: The live gate's anchor line for the `record_call` row, kept here as a constant so the
+#: fixture and the assertion cannot drift: it is the first line of the comment above the
+#: NEXT row, so the inserted comment stays attached to the inserted row.
+RECORD_CALL_ANCHOR_LINE = R.RECORD_CALL_ANCHOR
+
+
+def _wave6_live(root: Path) -> Path:
+    return make_base_live(root, "wave6", {"jarvis_gate.py": WAVE6_GATE_LIVE,
+                                          "jarvis_hud.py": WAVE6_HUD_LIVE})
+
+
+def t_the_wave6_patch_regions_are_carried_not_false_greened():
+    """(a) absent -> an insert is planned; (b) present -> none; (c) generic lines lie."""
+    root = tmpdir()
+    try:
+        stack = _wave6_stack()
+        live = _wave6_live(root)
+        names = ["github-tools.patch", "handsfree.patch", "product-check.patch",
+                 "history-purge.patch"]
+
+        def show(repo, ref, repo_path):
+            return stack.get(Path(repo_path).name, b"")
+
+        # (c) The false green, reproduced: with NO table entry the fallback rule calls
+        # all four patches present even though none of their regions is in the fixture.
+        for patch in names:
+            target = "jarvis_hud.py" if patch == "history-purge.patch" else "jarvis_gate.py"
+            raw = stack[patch].decode("utf-8")
+            added = R.parse_patch_files(raw)[target]["added"]
+            pre = R.patch_pre_image(raw, target)
+            fixture = (live / target).read_text(encoding="utf-8")
+            shared = [line for line in R.distinctive_added_lines(added, pre)
+                      if line in fixture]
+            state, why = R.patch_presence(patch, target, added, fixture, table={},
+                                          pre_image=pre)
+            check(f"the loose fallback rule calls {patch} ALREADY_PRESENT (DEF-035)",
+                  state == R.PRESENT, (state, why))
+            check(f"... proved by a line the fixture already had: {patch}",
+                  bool(shared), shared)
+            state2, why2 = R.patch_presence(patch, target, added, fixture,
+                                            pre_image=pre)
+            check(f"with its DELTA_TABLE entry the SAME fixture is ABSENT: {patch}",
+                  state2 == R.ABSENT, (state2, why2))
+
+        # (b) The generic lines the rehearsal named may never satisfy a probe.
+        gate_text = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        hud_text = (live / "jarvis_hud.py").read_text(encoding="utf-8")
+        check("the fixture really holds the generic lines the rehearsal measured",
+              gate_text.count(_SEPARATOR) >= 2 and "_RISK.update({" in gate_text
+              and "token_ok=_token_ok, read_body=_read_body))" in hud_text)
+        for patch in names:
+            target = "jarvis_hud.py" if patch == "history-purge.patch" else "jarvis_gate.py"
+            probes = (R.DELTA_TABLE[patch][target] or {}).get("probes") or ()
+            text = hud_text if target == "jarvis_hud.py" else gate_text
+            check(f"{patch}: every probe is absent from the live-shaped fixture",
+                  probes and all(str(p) not in text for p in probes), probes)
+            check(f"... and none of them is one of the generic lines",
+                  all(str(p) not in (_SEPARATOR, "_RISK.update({",
+                                     "token_ok=_token_ok, read_body=_read_body))")
+                      for p in probes), probes)
+
+        # (a) A live folder WITHOUT the regions plans one insert per patch.
+        deltas, staged, refusals = R.plan_deltas(live, names, show=show, repo=REPO,
+                                                 state_patches=[])
+        check("a live gate/HUD without the regions plans FOUR inserts, no refusal",
+              refusals == [] and [d.status for d in deltas] == ["insert"] * 4,
+              (refusals, [(d.patch, d.status) for d in deltas]))
+        check("... the plan, not the fallback, is what put them in the staging set",
+              sorted(staged) == ["jarvis_gate.py", "jarvis_hud.py"], sorted(staged))
+        gate_out = staged.get("jarvis_gate.py", "")
+        hud_out = staged.get("jarvis_hud.py", "")
+        for patch in names:
+            target = "jarvis_hud.py" if patch == "history-purge.patch" else "jarvis_gate.py"
+            probes = (R.DELTA_TABLE[patch][target] or {}).get("probes") or ()
+            out = hud_out if target == "jarvis_hud.py" else gate_out
+            check(f"every probe {patch} names is now IN the staged file",
+                  all(str(p) in out for p in probes), probes)
+        check("the staged gate still compiles", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        check("the staged HUD still compiles",
+              R.rehearse({"jarvis_hud.py": hud_out}) == [])
+
+        # (b) A live folder WITH the regions plans NOTHING.
+        (live / "jarvis_gate.py").write_text(gate_out, encoding="utf-8")
+        (live / "jarvis_hud.py").write_text(hud_out, encoding="utf-8")
+        again, staged2, refusals2 = R.plan_deltas(live, names, show=show, repo=REPO,
+                                                  state_patches=[])
+        check("a live folder WITH all four regions plans NO insert and no refusal",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"] * 4,
+              (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_call_notes_risk_row_is_carried_to_the_live_gate():
+    """(d) The `record_call` row is planned when absent, and not when present.
+
+    `jarvis_call_notes.py:207-214` says the gate HAS a `_RISK` row for the action, added
+    by the 2026-11-05 privacy audit's D8 fix, and why: without it `risk_for()` fell back
+    to `_UNKNOWN_RISK` and the card told the owner the action was "able to leave this
+    PC". Measured on a copy of the live folder: 0 occurrences of `record_call` there,
+    none of the 177 patches carries it, and the only copy in the repository is
+    `jarvis-backend/jarvis_gate.py` (the published base, which the deploy never copies
+    over live). A literal delta is the carrier, and this proves the plan would carry it.
+    """
+    root = tmpdir()
+    try:
+        live = _wave6_live(root)
+        before = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        check("the live-shaped fixture has NO `record_call` row and no other wave content",
+              "record_call" not in before and "handsfree" not in before
+              and "product_check" not in before and "github_list" not in before)
+        gate_before = (live / "jarvis_gate.py").read_bytes()
+        # ONLY the record_call entry's own rule: the rest of DELTA_TABLE is data for
+        # other files (its literal entries would be refused on this small fixture, and
+        # that refusal would empty the staged text and prove nothing about this row).
+        only = {"call-notes-risk.patch": R.DELTA_TABLE["call-notes-risk.patch"]}
+        deltas, staged, refusals = R.plan_deltas(live, [], show=lambda *a: b"",
+                                                 repo=REPO, state_patches=[],
+                                                 table=only, literals=True)
+        check("the record_call delta is planned as ONE insert, with no refusal",
+              refusals == [] and [(d.patch, d.status) for d in deltas]
+              == [("call-notes-risk.patch", "insert")], (refusals, deltas))
+        text = staged.get("jarvis_gate.py", "")
+        row = R._delta_lines(R.RECORD_CALL_FILE)[-1]
+        check("... the block is the published base's own 13 comment lines + row",
+              len(R._delta_lines(R.RECORD_CALL_FILE)) == 14
+              and row.startswith('    "record_call": ("yes", "local",')
+              and row in text)
+        open_at = text.index("_RISK.update({")
+        close_at = text.index("\n})", open_at)
+        check("... it lands INSIDE the live gate's `_RISK.update({ ... })` block",
+              open_at < text.index(row) < close_at)
+        check("... the anchor it was inserted in front of is the NEXT row's comment, whole",
+              text.index(R.RECORD_CALL_ANCHOR) > text.index(row)
+              and before.count(R.RECORD_CALL_ANCHOR) == 1)
+        check("... and the staged gate still compiles",
+              R.rehearse({"jarvis_gate.py": text}) == [])
+        check("... the live fixture file was never touched",
+              (live / "jarvis_gate.py").read_bytes() == gate_before)
+        # A second plan on the staged text must report ALREADY and stage nothing.
+        (live / "jarvis_gate.py").write_text(text, encoding="utf-8")
+        again, staged2, refusals2 = R.plan_deltas(live, [], show=lambda *a: b"",
+                                                  repo=REPO, state_patches=[],
+                                                  table=only, literals=True)
+        check("a live gate that ALREADY has the row plans nothing (idempotent)",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"], (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_wave6_entries_agree_with_the_real_patches():
+    """The same five rules, re-checked against the REAL `backend/*.patch` bytes.
+
+    The wave's patches ship in PR #1185, so a branch off `main` does not have them and
+    there is nothing to read: this prints SKIPPED, which is never a pass. On a ref that
+    carries them (the wave's own rehearsal worktree at `e2ae6e3b3`) it proves the two
+    invariants the entries rest on - every probe is a line the patch ADDS and none is a
+    line its own pre-image already shows, and product-check's hunk really cannot be
+    replayed (its pre-image is one space short, which is why that entry is an anchor).
+    """
+    names = ("github-tools.patch", "handsfree.patch", "product-check.patch",
+             "history-purge.patch")
+    missing = [n for n in names if not (REPO / "backend" / n).is_file()]
+    if missing:
+        print(f"SKIPPED  t_the_wave6_entries_agree_with_the_real_patches - "
+              f"backend/{', backend/'.join(missing)} are not in this ref (they ship in "
+              f"PR #1185). This test did NOT run, and it did NOT pass.")
+        return
+    root = tmpdir()
+    try:
+        live = _wave6_live(root)
+        for patch in names:
+            target = "jarvis_hud.py" if patch == "history-purge.patch" else "jarvis_gate.py"
+            raw = patch_text(patch).decode("utf-8")
+            added = R.parse_patch_files(raw)[target]["added"]
+            pre = R.patch_pre_image(raw, target)
+            probes = (R.DELTA_TABLE[patch][target] or {}).get("probes") or ()
+            check(f"{patch}: every entry probe is one of the patch's ADDED lines",
+                  probes and all(any(str(p) in str(a) for a in added) for p in probes),
+                  probes)
+            check(f"... and none of them is a line its own pre-image shows",
+                  all(str(p) not in pre for p in probes), probes)
+            fixture = (live / target).read_text(encoding="utf-8")
+            check(f"{patch}: the live-shaped fixture is ABSENT for it",
+                  R.patch_presence(patch, target, added, fixture, pre_image=pre)[0]
+                  == R.ABSENT)
+        checks = {}
+        for patch in names:
+            target = "jarvis_hud.py" if patch == "history-purge.patch" else "jarvis_gate.py"
+            raw = patch_text(patch).decode("utf-8")
+            hunks = R.patch_hunks(raw, target)
+            fixture = (live / target).read_text(encoding="utf-8")
+            checks[patch] = (len(hunks),
+                             [fixture.count("\n".join(h["old"])) for h in hunks])
+        check("the three hunk entries have ONE hunk whose pre-image is exactly once",
+              all(checks[p] == (1, [1]) for p in names if p != "product-check.patch"),
+              checks)
+        check("product-check's own hunk CANNOT be replayed: its pre-image is 0 times",
+              checks["product-check.patch"] == (1, [0]), checks["product-check.patch"])
+        gate = (live / "jarvis_gate.py").read_text(encoding="utf-8")
+        check("... so its entry is the anchor, and that anchor is exactly once",
+              gate.count(R.PRODUCT_CHECK_ANCHOR) == 1)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -3987,6 +4409,9 @@ def main():
                t_the_final_guard_deltas_reach_the_live_gate,
                t_a_duplicated_final_old_block_is_refused,
                t_the_real_live_gate_gets_the_final_guard_read_only,
+               t_the_wave6_patch_regions_are_carried_not_false_greened,
+               t_the_call_notes_risk_row_is_carried_to_the_live_gate,
+               t_the_wave6_entries_agree_with_the_real_patches,
                t_private_chat_delta_is_carried_as_its_patch_hunks,
                t_a_private_chat_hunk_that_shifted_is_refused,
                t_the_list_parser_refuses_rather_than_reading_nothing,

@@ -267,8 +267,15 @@ class FindAnythingTest {
             // and the phone's OpenPlace.kt answers "only in Jarvis on your PC" for
             // it, but it is still a name the catalogue carries, so the count moved
             // and the finder must be able to say where it is.
+            //
+            // 131 -> 132 (2026-11-04, hands-free mode): `settings.handsfree` is
+            // the PC's Settings card (JARVIS-API section 191). It is DESKTOP-only
+            // for the same reason `settings.skills-menu` was: the phone's own
+            // hands-free row is the Android lane's separate change, and until it
+            // lands OpenPlace.kt answers "only in Jarvis on your PC" for this id.
+            // It is still a name the catalogue carries, so the count moves.
             "the catalogue must still carry the names at all",
-            131,
+            132,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

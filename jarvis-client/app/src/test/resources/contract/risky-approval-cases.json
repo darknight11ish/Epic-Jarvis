@@ -635,6 +635,37 @@
       "small": true
     },
     {
+      "message": "Jarvis wants to read your GitHub\nreads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes",
+      "name": "small read: github_inspect",
+      "risky": true,
+      "row": {
+        "action": "github_inspect",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "id": "s-github_inspect",
+        "notice": {
+          "approve_ok": false,
+          "body": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+          "deny_ok": true,
+          "full": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes. nothing has happened yet.",
+          "summary": "Jarvis wants to read your GitHub.",
+          "title": "Jarvis wants to read your GitHub",
+          "weight": "heavy"
+        },
+        "prompt": "tool github_inspect {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "outbound",
+          "reversible": "yes",
+          "swipe_ok": false,
+          "why": "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"
+        },
+        "tier": "ask"
+      },
+      "small": true
+    },
+    {
       "message": "Jarvis wants to look up AI models online\na fixed public query; downloads nothing",
       "name": "small read: browse_model_catalog",
       "risky": true,

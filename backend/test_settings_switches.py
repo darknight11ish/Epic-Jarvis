@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -115,18 +116,40 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    # 48 since 2026-11-04: the owner's decision made EVERY tool the AI model
-    # can be offered switchable - the raw Tier C set and the everyday helpers
-    # included. The only three that are not are the ones whose own switch
-    # decides them (the data sandbox and the two web-search grant tools, which
-    # ride with web search); a switch the turn ignored would be a lie.
-    # test_asks_first.py carries the same 48 and the same reason.
-    check("the in-app rows: 48, every tool the model can be offered",
+    # 55 since 2026-11-05 (48 at 2026-11-04): the owner's decision made EVERY
+    # tool the AI model can be offered switchable - the raw Tier C set and the
+    # everyday helpers included - and the six on-demand GitHub tools joined that
+    # set with the GitHub branch, hands-free's send_text_message with that one.
+    # They are model tools (they run on this PC, in
+    # either app's chat), so each one has its row on the PC's Tools page; what
+    # the GitHub branch keeps one-sided is a SCREEN (no repo list, no diff, no
+    # comment box), which ARCHITECTURE.md section 8 records. The only four that
+    # are not switchable are the ones whose own switch decides them (the data
+    # sandbox, the product check and the two web-search grant tools, which ride
+    # with web search); a
+    # switch the turn ignored would be a lie. test_asks_first.py carries the
+    # same 55 and the same reason.
+    check("the in-app rows: 55, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 48)
+          and len(AF.TOOLS_SWITCHABLE) == 55)
+    # The PC half of the law, proved against the page itself rather than
+    # assumed: jarvis-desktop/src/asks-first.js carries its own copy of the
+    # list (the Tools page's rows), so a tool added on one side alone fails
+    # here. The phone's half needs no file of its own - AsksFirstPlate.kt draws
+    # a row for every switchable tool the PC sends, read-only, because turning
+    # one ON is a PC card (ARCHITECTURE.md section 8).
+    page = REPO / "jarvis-desktop" / "src" / "asks-first.js"
+    block = page.read_text(encoding="utf-8").split(
+        "export const TOOLS_SWITCHABLE = Object.freeze([", 1)[1].split("]);", 1)[0]
+    block = "\n".join(line.split("//", 1)[0] for line in block.splitlines())
+    rows = re.findall(r'"([a-z0-9_]+)"', block)
+    check("the PC Tools page lists the same rows, so both apps have the switch",
+          set(rows) == set(AF.TOOLS_SWITCHABLE) and len(rows) == len(set(rows)),
+          f"page only: {sorted(set(rows) - set(AF.TOOLS_SWITCHABLE))} | "
+          f"backend only: {sorted(set(AF.TOOLS_SWITCHABLE) - set(rows))}")
     for action in AF.TOOLS_SWITCHABLE:
         real = AF.real_tool(action)
         check(f"{action}: the tool it switches ({real}) is a real tool in jarvis_agent.TOOLS",
@@ -139,10 +162,11 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
         check(f"{action}: the file now lists {real} (and never the action's own name if that differs)",
               real in got and (action == real or action not in got), got)
         if real not in ("my_spending", "retirement_whatif", "browser_control",
-                        "rea_investigate", "my_files"):
-            # Those five are offered by their own setup rule as well as the
+                        "rea_investigate", "my_files", "send_text_message"):
+            # Those six are offered by their own setup rule as well as the
             # file (a listed folder, the second card's browser lane, [rea]
-            # enabled), so only the file line is asserted for them here.
+            # enabled, hands-free mode on), so only the file line is asserted
+            # for them here.
             check(f"{action}: the model is offered it (jarvis_agent.offered_tools)",
                   real in AG.offered_tools(got), AG.offered_tools(got))
         st = AF.tools_status(here=True)

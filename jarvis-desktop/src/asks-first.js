@@ -70,19 +70,21 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 48 at 2026-11-04. A DIFFERENT thing from SWITCHABLE (above): that is whether
- * an offered tool asks first; this is whether it is offered at all
- * ([tools].enabled).
+ * 55 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
+ * that landed with the GitHub tools branch, plus hands-free's
+ * send_text_message). A DIFFERENT thing from SWITCHABLE
+ * (above): that is whether an offered tool asks first; this is whether it is
+ * offered at all ([tools].enabled).
  *
  * Until 2026-11-04 this was "the Tier A + Tier B tools only" (the 2026-10-31
  * tiered ruling). The owner reversed the ON half: "few restrictions on its
  * tools beyond the core values of jarvis that have already been established,
  * particularly reverse engineer anything among other things". Every tool the
- * AI model can be offered is here now. The three that are NOT are the ones
- * whose own switch decides them (the data and maths sandbox, and the two
- * web-search conversation tools, which ride with Web search) - a switch whose
- * state the turn ignored would be a lie. The PC lists them under
- * `tools.not_switchable`.
+ * AI model can be offered is here now. The four that are NOT are the ones
+ * whose own switch decides them (the data and maths sandbox, the product
+ * check, and the two web-search conversation tools, which ride with Web
+ * search) - a switch whose state the turn ignored would be a lie. The PC lists
+ * them under `tools.not_switchable`.
  */
 export const TOOLS_SWITCHABLE = Object.freeze([
   // Tier A (13)
@@ -98,10 +100,15 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // The everyday helpers that used to be "not this slice" (8)
   "calculator", "memory_search", "file_read", "web_search", "my_files",
   "propose_plan", "change_setting", "feature_guide",
-  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (12)
+  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (13;
+  // 12 then, plus handsfree's send_text_message on 2026-11-05)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
-  "plugin_switch", "refresh_abilities", "self_portrait", "setup_quiz",
+  "plugin_switch", "send_text_message", "refresh_abilities", "self_portrait",
+  "setup_quiz",
+  // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
+  "github_list", "github_read_file", "github_ci_status",
+  "github_comment", "github_open_issue", "github_rerun_workflow",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =
@@ -119,7 +126,7 @@ export const TOOLS_PC_ONLY =
  * settings file switched on that this page has no switch row for. Since the
  * same day's ON decision the ONLY rows that land here are names this PC does
  * not know (a drop-in program's own tool) and, when the file happens to name
- * them, the three whose own switch decides them. Those rows are OFF switches
+ * them, the four whose own switch decides them. Those rows are OFF switches
  * only - turning one back on is a hand edit of [tools].enabled, and the PC's
  * own "why" under the row says so.
  */
@@ -127,7 +134,7 @@ export const TOOLS_ELSEWHERE_LABEL = "Also on in your settings file";
 export const TOOLS_ELSEWHERE_OFF =
   "Off now. This page has no switch to turn it back on: add it back to [tools].enabled in " +
   "jarvis-framework.toml on this PC by hand, then restart Jarvis.";
-/** The three tools that have no switch of their own (`tools.not_switchable`). */
+/** The four tools that have no switch of their own (`tools.not_switchable`). */
 export const TOOLS_NOT_SWITCHABLE_LABEL = "Not a switch on this page";
 
 /** Lockdown (2026-09-28): the PC's words (jarvis_asks_first.py LOCKDOWN_*). */
@@ -483,9 +490,9 @@ export function vaultSwitchView(vault, live) {
 
 /**
  * The plain note naming the tools that have no switch on this page, and why
- * (2026-11-04: the three whose own switch decides them - the data and maths
- * sandbox, and the two web-search conversation tools that ride with Web
- * search). Empty from a PC that sends no `not_switchable`.
+ * (2026-11-04: the four whose own switch decides them - the data and maths
+ * sandbox, the product check, and the two web-search conversation tools that
+ * ride with Web search). Empty from a PC that sends no `not_switchable`.
  */
 export function notSwitchableView(tools) {
   const n = tools && tools.notSwitchable;

@@ -1,0 +1,26 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -6655,6 +6655,22 @@ def main() -> None:
+     except Exception as exc:
+         print(f"  forget     NOT ON ({type(exc).__name__}) - Forget a time frame is off")
+         print("             until jarvis_forget_range.py is back: run apply-patches.ps1 again")
++    # history-purge.patch (jarvis_history_purge.py, the owner's request of
++    # 2026-11-04: clearing old chats by date, pinned ones kept, the facts those
++    # chats taught included, a card, TWO yeses and a Windows Hello / phone
++    # fingerprint ticket). POST /api/history/purge/preview (what would go, day
++    # by day, by name), /confirm (step 1 = first yes, step 2 = second yes plus
++    # the ticket) and /cancel. Nothing else in this file deletes anything, and
++    # the module itself refuses any tier but "ask". Wrapped round Handler here,
++    # before anything listens, like forget above; every rule is in
++    # jarvis_history_purge.py.
++    try:
++        import jarvis_history_purge
++        print(jarvis_history_purge.install(Handler, origin_ok=_origin_ok,
++                                          token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  purge      NOT ON ({type(exc).__name__}) - clearing old chats by date is off")
++        print("             until jarvis_history_purge.py is back: run apply-patches.ps1 again")
+     # sky.patch (the owner's decisions of 2026-09-28, "Sun and moon behind
+     # the animals" and "Weather in the animals' scene"): GET /api/sky and
+     # POST /api/sky - whether the sun and moon show, the town typed on this

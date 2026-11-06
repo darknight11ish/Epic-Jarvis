@@ -1,0 +1,46 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -2594,3 +2594,43 @@
+            print(f"  {r['id']}  {r['tier']:6} {r['action']}")
+        sys.exit(0)
+    sys.exit(review(a.days))
++
++
++# --------------------------------------------------------------------------
++#   The product check's gate rows (jarvis_product_check.py, 2026-11-04)
++# --------------------------------------------------------------------------
++# THEY ARE HERE, AT THE END OF THE FILE, for the reason the block above gives:
++# almost every line inside `_RISK`, `_TOOL_ACTIONS` and `_NO_RULE_FROM_DENIAL`
++# is some earlier patch's hunk context, and the end of this file belongs to no
++# hunk. product-check.patch is applied BEFORE web-search-grant.patch - it has
++# to be, because unknown-risk-approvable.patch must stay the LAST patch that
++# writes jarvis_gate.py (backend/test_gate_unknown_risk.py pins that with no
++# whitelist) and web-search-grant.patch must stay immediately before it. So
++# this block is the file's end when its own hunk runs, and web-search-grant's
++# block is then inserted ABOVE it. All three updates run at import, so the gate
++# sees the rows exactly as if they sat inside the literals.
++_TOOL_ACTIONS.update({
++    # jarvis_agent.py's product_check tool, under the action name
++    # jarvis_agent.PRODUCT_CHECK_ACTION. Its own name IS the action, and
++    # `product_check = "ask"` ships in both settings copies; without this line
++    # action_for_tool() answers "unclassified_tool" - the Reach page calls it
++    # unclassified and the card is never the one the tool raises, the same gap
++    # gate-tool-actions-gap.patch fixed above.
++    "product_check": "product_check",
++})
++# A denial of a product-page read is about THAT page, never a standing rule.
++_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
++    "product_check",  # jarvis_product_check.py acts only on tier "ask": ONE PC-only card per Amazon product page, read once in the owner's own signed-in browser; a denial is about that one page, not a standing rule (product-check.patch)
++}
++_RISK.update({
++    # product-check.patch (jarvis_product_check.py, 2026-11-04; the owner's
++    # choice "wire the existing product check"). ONE card per Amazon product
++    # page, showing the address in full and raised BEFORE the browser is
++    # opened. The page is read in the owner's own signed-in browser window -
++    # the request is to Amazon from this PC's own address, and it cannot be
++    # taken back - so "outbound". It changes nothing: the read is one page,
++    # read-only, and no cart, order, sign-in, click or typing is possible from
++    # it, so "yes": there is nothing to undo. The card is PC-only (the window
++    # and the sign-in are here) and always asks a person.
++    "product_check": ("yes", "outbound", "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored"),
++})
