@@ -1300,6 +1300,22 @@
      "name": "Switching ONE of Jarvis's own drop-in plugins on (one card) or off (instant); it takes effect the next time Jarvis starts"
     },
     {
+     "id": "pack_list",
+     "name": "Listing the skill packs on this PC, where each came from and whether it is installed, off or removed (read-only)"
+    },
+    {
+     "id": "pack_inspect",
+     "name": "Scanning one skill pack before installing it: what it is, what it changes, whether it is safe and whether it works here (read-only, nothing written)"
+    },
+    {
+     "id": "pack_install",
+     "name": "Installing ONE skill pack from a folder or .zip on this PC (one card showing the whole scan; nothing lands until you say yes)"
+    },
+    {
+     "id": "pack_remove",
+     "name": "Removing ONE skill pack: one card naming exactly the files it would delete, and the files it did not write are kept"
+    },
+    {
      "id": "github_search",
      "name": "GitHub research"
     },

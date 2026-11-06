@@ -171,6 +171,44 @@ def _skills():
         return None
 
 
+def _packs():
+    """jarvis_packs, or None. The pack ledger knows the install-time SHA-256.
+
+    Reached lazily so this module imports anywhere; when it is absent the
+    tamper check is simply not applied here, and every answer still comes from
+    the skill library exactly as it did before.
+    """
+    try:
+        import jarvis_packs
+        return jarvis_packs
+    except Exception:
+        return None
+
+
+def pack_refusal(name: str) -> str:
+    """Why a pack cannot be offered or read, or "" when it may be.
+
+    Q3 (2026-11-05): an installed pack is immutable, and its whole SHA-256
+    manifest is re-checked on every load. A pack that no longer matches is
+    refused here, and `jarvis_packs.verify_pack` marks it `tampered` in the
+    ledger - so the refusal is recorded, not just returned.
+    """
+    packs = _packs()
+    if packs is None:
+        return ""
+    try:
+        check = packs.verify_pack(name)
+    except Exception:
+        return ""
+    if not check.get("tampered"):
+        return ""
+    changed = list(check.get("changed") or []) + list(check.get("missing") or [])
+    named = ", ".join(str(c) for c in changed[:3])
+    return (f"it has changed on disk since it was installed "
+            f"({named or 'a file'}), so its SHA-256 no longer matches the one "
+            f"you approved and it is not loaded until it is installed again")
+
+
 def _scrubber():
     """jarvis_scrub, or None. Fails CLOSED: no scrubber, nothing is written.
 
@@ -282,6 +320,10 @@ def references(name: str, *, skills_dir=None) -> dict:
         return {"ok": False, "reason": str(exc)}
     if not (dest / "SKILL.md").is_file():
         return {"ok": False, "reason": f"no skill called {name}"}
+    refused = pack_refusal(name)
+    if refused:
+        return {"ok": False, "refused": True, "tampered": True, "name": name,
+                "reason": f"{name} is refused: {refused}"}
     try:
         skill = sk.parse_skill(dest)
     except Exception as exc:
@@ -333,6 +375,10 @@ def level2_reference(name: str, ref_file: str, *, skills_dir=None) -> dict:
     if not (dest / "SKILL.md").is_file():
         return {"ok": False, "reason": f"no skill called {name}"}
 
+    refused = pack_refusal(name)
+    if refused:
+        return {"ok": False, "refused": True, "tampered": True, "name": name,
+                "reason": f"{name} is refused: {refused}"}
     path = dest / "references" / ref
     try:
         if path.resolve().parent != (dest / "references").resolve():
@@ -1276,6 +1322,10 @@ def visible_skills(enabled_tools=None, *, skills_dir=None,
         elif have is not None and stands_in_for and set(stands_in_for) & have:
             why = ("stands in for " + ", ".join(sorted(set(stands_in_for) & have))
                    + ", which is enabled")
+        if not why:
+            # Q3 (2026-11-05): a pack whose bytes changed after install is not
+            # offered. The check runs on every listing, and records the tamper.
+            why = pack_refusal(name)
         row = {"name": name, "requires_tools": need,
                "fallback_for_tools": stands_in_for,
                "trust_level": effective_trust(rows.get(name)), "why": why}

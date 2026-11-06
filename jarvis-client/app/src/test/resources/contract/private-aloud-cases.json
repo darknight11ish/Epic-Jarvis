@@ -323,6 +323,118 @@
       "read": false
     },
     {
+      "name": "the tool pack_list ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "pack_list"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "pack_list"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool pack_inspect ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "pack_inspect"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "pack_inspect"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool pack_install ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "pack_install"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "pack_install"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
+      "name": "the tool pack_remove ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "pack_remove"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "pack_remove"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool browser_control ran",
       "heard": {
         "private_aloud": false,

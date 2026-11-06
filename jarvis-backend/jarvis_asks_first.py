@@ -458,6 +458,11 @@ TIER_EXTRA = (
     "goals_list", "goal_add", "goal_progress", "goal_done",
     "conversation_find", "conversation_open",
     "phone_apps", "plugin_list", "plugin_switch",
+    # Packs (2026-11-05): the four shipped ON in [tools].enabled, each really
+    # decided by its own line there - list and inspect only read, install and
+    # remove each raise their ONE card. So a switch on this page is real, the
+    # same reason every other row in this group is here.
+    "pack_list", "pack_inspect", "pack_install", "pack_remove",
     "send_text_message",
     "refresh_abilities", "self_portrait", "setup_quiz",
     # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
@@ -491,10 +496,11 @@ TIER_EXTRA = (
 NOT_A_SWITCH = ("run_data_script", "product_check") + GRANT_ASK_TOOLS
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: four above. 56 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
+#: four above. 60 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
 #: GitHub tools the tool list had grown without a row of their own, plus
-#: hands-free's send_text_message, plus the approval-policy tool's own row;
-#: the product check is the fourth exception rather than a row).
+#: hands-free's send_text_message, plus the approval-policy tool's own row,
+#: plus the four pack tools; the product check is the fourth exception
+#: rather than a row).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)

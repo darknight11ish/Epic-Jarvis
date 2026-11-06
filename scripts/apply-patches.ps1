@@ -2177,6 +2177,18 @@ $PATCHES = @(
     # added there (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
     # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
     'bench.patch'
+
+    # packs-tamper-on-load.patch (2026-11-05) - the pack manager's immutability
+    # rule reaches the SKILL BODY loader. `jarvis_packs.py` pins every file's
+    # SHA-256 at install in jarvis-packs.json; this patch adds the one check in
+    # `jarvis_skills.load()` that re-hashes that manifest before the body
+    # becomes instructions, and refuses a pack that no longer matches (the
+    # module marks it `tampered`). A skill the pack manager did not install is
+    # not in its ledger and is untouched, and with the module absent the door
+    # is exactly as it was. It sits immediately BEFORE plugin-loader.patch,
+    # which MUST stay the last entry of all (tools/check_plugins.py): it is a
+    # core patch, and only drop-in folders follow the loader.
+    'packs-tamper-on-load.patch'
     'plugin-loader.patch'
 )
 
@@ -2599,6 +2611,7 @@ $SHIPPED = @(
     'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
     # --- Drop-in modules (feat/plug-and-play-modules) ---
     'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
+    'jarvis_packs.py'            # The pack manager (2026-11-05): add a prompt-only skill from a local folder or a local .zip after a FULL pre-install scan report (safety, compatibility, effectiveness), and remove exactly the files it wrote. The ledger beside the config records every file and its hash; a receipt is saved on every install. Adds no patch and no route: the four doors are chat tools in jarvis_agent.py (pack_list, pack_inspect, pack_install, pack_remove), and it reuses jarvis_skills.install() and jarvis_skill_menu rather than re-implementing the scanner, the ONE card or the skills-off move. Standard library only, no network, no child process, imports no pack
     # --- The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5) ---
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---

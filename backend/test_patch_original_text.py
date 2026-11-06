@@ -176,11 +176,16 @@ def t_the_late_patches_are_pinned_and_not_new():
     # be the end of the file, so whichever runs second materialises those three
     # lines; `_stack.RATCHET`'s jarvis_gate.py pin moved 60 -> 61 for exactly
     # that, and handsfree.patch is pinned immediately before
-    # web-search-grant.patch by backend/test_phone_app_allowlist.py. Measured,
-    # not chosen: the walk (and `tools/check_patch_original_text.py`'s own run)
-    # prints 27.
-    check("the twenty-seven exceptions the tool's docstring names are the "
-          "twenty-seven the walk finds", len(late) == 27,
+    # web-search-grant.patch by backend/test_phone_app_allowlist.py.
+    # ...and the pack manager's immutability patch (packs-tamper-on-load.patch,
+    # 2026-11-05) makes TWENTY-EIGHT: its ONE hunk reads two blocks of the
+    # owner's own `jarvis_skills.load()` - the "no skill called" return and the
+    # `_read_index()` line under it - which no earlier patch in this walk
+    # writes, and it sits last of the core patches, immediately before
+    # plugin-loader.patch. Measured, not chosen: the walk (and
+    # `tools/check_patch_original_text.py`'s own run) prints 28.
+    check("the twenty-eight exceptions the tool's docstring names are the "
+          "twenty-eight the walk finds", len(late) == 28,
           f"the walk found {len(late)}: {late}")
 
 

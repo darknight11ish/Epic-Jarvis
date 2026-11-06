@@ -720,6 +720,12 @@ def t_the_patch_is_registered_and_carries_the_change():
              # all - every rule is in the shipped jarvis_history_purge.py. It
              # rewrites nothing this patch wrote.
              "history-purge.patch",
+             # packs-tamper-on-load.patch (2026-11-05, the pack manager's immutable
+             # manifest) is appended last of the core patches, immediately before
+             # plugin-loader.patch: ONE hunk, and it is in jarvis_skills.py - it
+             # touches neither jarvis_gate.py nor jarvis_hud.py - so it rewrites
+             # nothing this patch wrote.
+             "packs-tamper-on-load.patch",
             # handsfree.patch (2026-11-04, hands-free mode) is appended after this
             # patch, immediately before plugin-loader.patch: THREE hunks, all in
             # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two

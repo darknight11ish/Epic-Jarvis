@@ -3503,6 +3503,306 @@ def _execute_plugin_switch(args: dict, state) -> dict:
 
 
 # --------------------------------------------------------------------------
+#   Packs: adding and removing a skill from a folder or a .zip (2026-11-05)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S ASK, 2026-11-05: "add/remove plug-ins and skills from a wide
+# variety of sources, with a full pre-install scan (safety, compatibility,
+# effectiveness)". This is phase 1 of `backend/jarvis_packs.py` - prompt-only
+# skills from a local folder or a local `.zip`, and nothing else yet.
+#
+# FOUR TOOLS, because four different acts:
+#   * `pack_list`    reads the pack ledger and the folders. No card.
+#   * `pack_inspect` runs the full scan and answers what it would do. No card,
+#                    and nothing is written anywhere.
+#   * `pack_install` scans, then ONE card showing the whole report, then writes
+#                    and turns the pack OFF. Nothing lands before the yes.
+#   * `pack_remove`  ONE card naming exactly the files it would delete, then
+#                    deletes exactly those and marks the pack removed.
+#
+# WHERE THE ONE INSTALL CARD COMES FROM. Not from this file: `install_pack`
+# calls `jarvis_skills.install()`, the same function the Skills screen calls,
+# which vets the skill and raises its own ONE `modify_own_code` card. The scan
+# report is handed to it as the card's `note=`, so the card shows what was
+# scanned. Raising a second card here as well would be the double-ask this
+# project refuses, so the generic gate below is deliberately NOT used for
+# `pack_install` - the card it would raise is the same action and the same
+# decision, and it would be asked twice.
+#
+# THE HONEST BOUNDARY, SAID IN EVERY ANSWER. A scan reduces risk; it does not
+# sandbox. A sha256 proves the bytes did not change between the card and the
+# disk, never who wrote them - there is no signing key here, so every pack
+# reads "NOT VERIFIED". And installing enables nothing: the pack is moved to
+# `skills-off` straight after the copy, which is the existing off state.
+PACK_LIST_TOOL = "pack_list"
+PACK_INSPECT_TOOL = "pack_inspect"
+PACK_INSTALL_TOOL = "pack_install"
+PACK_REMOVE_TOOL = "pack_remove"
+
+#: The action both changing tools are decided under. `modify_own_code` ships
+#: at tier "ask", and it is the ONE card `jarvis_skills.install()` already
+#: raises. `remove` uses the generic gate under the same action, because
+#: deleting the files a pack wrote is a change to what is on this PC.
+PACK_TOGGLE_ACTION = "modify_own_code"
+
+#: What every answer says about the scan's limit. One sentence, one place.
+PACK_TRUST_LINE = ("A scan lowers the risk; it does not sandbox anything, and a "
+                   "clean scan is not permission. Every pack reads NOT VERIFIED: "
+                   "no signing key exists here, so a hash proves the bytes, never "
+                   "the author.")
+
+
+def _packs():
+    """jarvis_packs, or None. None is an answer, not an error."""
+    try:
+        import jarvis_packs
+        return jarvis_packs
+    except Exception:                            # noqa: BLE001 - module absent
+        return None
+
+
+class _PacksAnswer:
+    """A pack tool's read-only (or refused) answer: no card was raised.
+
+    `pack_list`, `pack_inspect`, and every hard refusal come back as one of
+    these, so a card is never drawn for something that changes nothing.
+    """
+
+    def __init__(self, payload: dict) -> None:
+        self.payload = payload
+
+
+class _PacksReady:
+    """A scanned pack that passed every check, ready for its ONE card.
+
+    The card is raised by `jarvis_skills.install()` inside the install call
+    itself, so this state is handed to `pack_install`'s own branch in
+    `_one_call` instead of to the generic gate - see the section comment.
+    """
+
+    def __init__(self, source: str, report: dict) -> None:
+        self.source = source
+        self.report = report
+
+
+def _pack_source_of(args: dict) -> tuple:
+    """(the one path this call names, why it is not one)."""
+    args = args or {}
+    extra = sorted(str(k) for k in args if str(k) not in ("source", "name"))
+    if extra:
+        return "", (f"one pack at a time, please - this tool takes one folder or "
+                    f".zip path and nothing else ({', '.join(extra)} was sent), "
+                    f"so nothing was changed")
+    for key in ("source", "name"):
+        value = str(args.get(key) or "").strip()
+        if value:
+            return value, ""
+    return "", ("name one folder or .zip on this PC - for example "
+                "C:\\Users\\me\\Downloads\\my-skill - so nothing was scanned")
+
+
+def _pack_rows_for_change(entry: dict) -> list:
+    """The files a pack wrote, as the answer shows them."""
+    return [str(r.get("path")) for r in (entry.get("files") or [])
+            if isinstance(r, dict)]
+
+
+def _prepare_pack_list(args: dict) -> tuple:
+    """(the list, the plan's own line). Read-only: no card."""
+    packs = _packs()
+    if packs is None:
+        return (_PacksAnswer({"ok": False,
+                              "error": ("jarvis_packs.py is not beside this file, "
+                                        "so there is no pack ledger to read")}),
+                "List the packs")
+    try:
+        listed = packs.list_packs()
+    except Exception as exc:                     # noqa: BLE001 - the ledger
+        return (_PacksAnswer({"ok": False,
+                              "error": f"the pack ledger could not be read "
+                                       f"({type(exc).__name__})"}),
+                "List the packs")
+    listed["trust"] = PACK_TRUST_LINE
+    return _PacksAnswer(listed), "List the packs"
+
+
+def _prepare_pack_inspect(args: dict) -> tuple:
+    """Run the full scan and answer it. WRITES NOTHING and raises no card."""
+    packs = _packs()
+    if packs is None:
+        return (_PacksAnswer({"ok": False,
+                              "error": ("jarvis_packs.py is not beside this file, "
+                                        "so there is no scanner here")}),
+                "Inspect a pack")
+    source, problem = _pack_source_of(args)
+    if problem:
+        return _PacksAnswer({"ok": False, "error": problem}), "Inspect a pack"
+    try:
+        report = packs.scan_source(source)
+    except Exception as exc:                     # noqa: BLE001 - the scan
+        return (_PacksAnswer({"ok": False,
+                              "error": f"that pack could not be scanned "
+                                       f"({type(exc).__name__})"}),
+                "Inspect a pack")
+    out = {"ok": True, "source": source, "verdict": report.get("verdict"),
+           "asked": False, "installed": False, "report": report,
+           "sentences": report.get("sentences") or packs.sentences(report),
+           "refusal": report.get("refusal") or "",
+           "trust": PACK_TRUST_LINE,
+           "note": ("Nothing was installed, nothing was written and nobody was "
+                    "asked: this is the scan the install card would show.")}
+    return _PacksAnswer(out), f"Inspect the pack at {source}"
+
+
+def _prepare_pack_install(args: dict):
+    """Scan ONE pack; a hard refusal is a plain answer, never a card.
+
+    A pack that passes comes back as `_PacksReady`, which `_one_call` hands to
+    `jarvis_packs.install_pack()` - that call raises the ONE approval card
+    itself, with the scan report on it.
+    """
+    packs = _packs()
+    if packs is None:
+        return (_PacksAnswer({"ok": False, "installed": False,
+                              "error": ("jarvis_packs.py is not beside this file, "
+                                        "so nothing can be installed")}),
+                "Install a pack")
+    source, problem = _pack_source_of(args)
+    if problem:
+        return _PacksAnswer({"ok": False, "installed": False, "error": problem}), \
+            "Install a pack"
+    try:
+        report = packs.scan_source(source)
+    except Exception as exc:                     # noqa: BLE001 - the scan
+        return (_PacksAnswer({"ok": False, "installed": False,
+                              "error": f"that pack could not be scanned "
+                                       f"({type(exc).__name__})"}),
+                "Install a pack")
+    if report.get("verdict") in ("refuse", "malformed"):
+        return (_PacksAnswer({
+            "ok": False, "installed": False, "asked": False, "refused": True,
+            "error": str(report.get("refusal") or "the scan refused it"),
+            "report": report,
+            "sentences": report.get("sentences") or packs.sentences(report),
+            "note": ("Nothing was installed and nobody was asked: a pack the scan "
+                     "refuses never becomes a card.")}),
+            "Install a pack")
+    return _PacksReady(source, report), f"Install the pack at {source}"
+
+
+def _execute_pack_install(args: dict, state) -> dict:
+    """Scan, ONE card, then the copy - in that order, and only in that order."""
+    packs = _packs()
+    if packs is None or not isinstance(state, _PacksReady):
+        return {"ok": False, "installed": False,
+                "error": ("refused: that call named no one pack, so nothing was "
+                          "installed")}
+    return packs.install_pack(state.source)
+
+
+def _prepare_pack_remove(args: dict):
+    """ONE removal card naming exactly the files, or a plain answer.
+
+    A name the ledger does not know is NOT guessed at: removal refuses rather
+    than deleting by a filename pattern, which is how a removal would take the
+    owner's own file with it.
+    """
+    packs = _packs()
+    if packs is None:
+        return (_PacksAnswer({"ok": False, "removed": False,
+                              "error": ("jarvis_packs.py is not beside this file, "
+                                        "so nothing can be removed")}),
+                "Remove a pack")
+    name = str((args or {}).get("name") or "").strip()
+    if not name:
+        return (_PacksAnswer({"ok": False, "removed": False,
+                              "error": "which pack? Name the one pack to remove"}),
+                "Remove a pack")
+    try:
+        plan = packs.plan_remove(name)
+    except Exception as exc:                     # noqa: BLE001 - the ledger
+        return (_PacksAnswer({"ok": False, "removed": False,
+                              "error": f"that pack could not be planned for removal "
+                                       f"({type(exc).__name__})"}),
+                "Remove a pack")
+    if not plan.get("ok"):
+        return (_PacksAnswer({"ok": False, "removed": False,
+                              "error": str(plan.get("reason") or "nothing to remove"),
+                              "plan": plan}),
+                "Remove a pack")
+    if not (plan.get("delete") or plan.get("keep") or plan.get("changed")):
+        return (_PacksAnswer({"ok": False, "removed": False,
+                              "error": (f"there is nothing on disk to remove for "
+                                        f"{name!r}")}), "Remove a pack")
+    state = {"name": str(plan.get("name")), "plan": plan}
+    return state, packs.remove_card_text(plan)
+
+
+def _execute_pack_remove(args: dict, state) -> dict:
+    """Delete exactly the files the card showed, and mark the pack removed."""
+    packs = _packs()
+    if packs is None or not isinstance(state, dict) or not state.get("name"):
+        return {"ok": False, "removed": False,
+                "error": "refused: that call named no one pack, so nothing was "
+                         "removed"}
+    out = packs.remove_pack(str(state["name"]))
+    if isinstance(out, dict):
+        out.setdefault("restart", packs._restart_line("skill"))
+    return out
+
+
+def _packs_tool_text(which: str) -> str:
+    """The four tool descriptions, kept short: each rides in the prompt."""
+    if which == PACK_LIST_TOOL:
+        return ("List the skill packs this PC has: name, kind, version, where each "
+                "came from, its hash, and whether it is installed, turned off or "
+                "removed. Use when the owner asks what skills are installed or "
+                "where one came from. Read-only: no card.")
+    if which == PACK_INSPECT_TOOL:
+        return ("Scan ONE pack (a folder or a .zip on this PC) and answer what it "
+                "is, what it would change, whether it is safe, and whether it will "
+                "work here - the full pre-install report: files and hashes, code "
+                "or instructions-only, name collision, licence. Use when the owner "
+                "asks what a pack would do before installing it. Writes nothing, no "
+                "card, installs nothing.")
+    if which == PACK_INSTALL_TOOL:
+        return ("Install ONE skill pack from a folder or a .zip on this PC. It is "
+                "scanned first; a pack with code in it is refused in plain words "
+                "and never becomes a card. A clean one raises ONE approval card "
+                "showing the whole scan, and nothing is written until that yes. "
+                "If a pack with that name is already installed, the same call is "
+                "a REPLACEMENT: the new files are scanned from scratch and a "
+                "unified diff against the installed ones is on the same ONE new "
+                "card; nothing is swapped before the yes. There is no update "
+                "that skips the scan or the card. Afterwards it is turned OFF. "
+                "Never invent a path.")
+    return ("Remove ONE skill pack by the name pack_list shows. It raises ONE card "
+            "naming exactly the files the ledger recorded, then deletes exactly "
+            "those; a file the pack did not write is kept and named. Refuses when "
+            "the ledger has no record, rather than guessing. One pack per call.")
+
+
+def _pack_schema(which: str) -> dict:
+    if which == PACK_LIST_TOOL:
+        return {"type": "object", "properties": {}}
+    if which == PACK_INSPECT_TOOL:
+        return {"type": "object", "properties": {
+            "source": {"type": "string", "description":
+                       "one folder or .zip path on this PC, e.g. "
+                       "C:\\Users\\me\\Downloads\\my-skill"}},
+            "required": ["source"]}
+    if which == PACK_INSTALL_TOOL:
+        return {"type": "object", "properties": {
+            "source": {"type": "string", "description":
+                       "one folder or .zip path on this PC"}},
+            "required": ["source"]}
+    return {"type": "object", "properties": {
+        "name": {"type": "string", "description":
+                 "the pack's name, from pack_list"}},
+        "required": ["name"]}
+
+
+# --------------------------------------------------------------------------
 #   "What is this feature?" - explaining Jarvis's own features (2026-10-20)
 # --------------------------------------------------------------------------
 #
@@ -4477,6 +4777,38 @@ TOOLS: dict = {
          "required": ["plugin", "action"]},
         _prepare_plugin_switch,
         _execute_plugin_switch,
+        gate_lookup_name=lambda args: "skill_manage"),
+    # Packs (2026-11-05, the owner's plug-in/skill manager, phase 1: a
+    # prompt-only skill from a local folder or .zip). Four tools because four
+    # different acts - list, inspect, install, remove - and a refusal is a
+    # plain answer, never a card. The INSTALL card is raised by
+    # `jarvis_skills.install()` inside `pack_install` itself (see the section
+    # above PACK_LIST_TOOL), so `pack_install`'s own gate branch in `_one_call`
+    # must not raise a second one. `skill_list` is the gate's own read-only
+    # action (tier "auto") for the two that change nothing.
+    PACK_LIST_TOOL: Tool(
+        PACK_LIST_TOOL, _packs_tool_text(PACK_LIST_TOOL),
+        _pack_schema(PACK_LIST_TOOL),
+        _prepare_pack_list,
+        lambda args, state, **_: {"ok": False},
+        gate_lookup_name=lambda args: "skill_list"),
+    PACK_INSPECT_TOOL: Tool(
+        PACK_INSPECT_TOOL, _packs_tool_text(PACK_INSPECT_TOOL),
+        _pack_schema(PACK_INSPECT_TOOL),
+        _prepare_pack_inspect,
+        lambda args, state, **_: {"ok": False},
+        gate_lookup_name=lambda args: "skill_list"),
+    PACK_INSTALL_TOOL: Tool(
+        PACK_INSTALL_TOOL, _packs_tool_text(PACK_INSTALL_TOOL),
+        _pack_schema(PACK_INSTALL_TOOL),
+        _prepare_pack_install,
+        _execute_pack_install,
+        gate_lookup_name=lambda args: "skill_manage"),
+    PACK_REMOVE_TOOL: Tool(
+        PACK_REMOVE_TOOL, _packs_tool_text(PACK_REMOVE_TOOL),
+        _pack_schema(PACK_REMOVE_TOOL),
+        _prepare_pack_remove,
+        _execute_pack_remove,
         gate_lookup_name=lambda args: "skill_manage"),
     "browser_control": Tool(
         "browser_control",
@@ -9660,6 +9992,10 @@ TOOL_GROUPS = (
       # enum. It also HAS to be in a group: test_short_tool_list.py fails on a
       # tool that is in neither the core nor exactly one group.
       PLUGIN_LIST_TOOL, PLUGIN_SWITCH_TOOL, SETUP_QUIZ_TOOL,
+      # Packs (2026-11-05): adding and removing a skill from a folder or .zip.
+      # Same group for the same reason - a group's members cost nothing extra in
+      # more_tools' own enum, so test_short_tool_list.py's pin does not move.
+      PACK_LIST_TOOL, PACK_INSPECT_TOOL, PACK_INSTALL_TOOL, PACK_REMOVE_TOOL,
       # Re-reading the self portrait (REFRESH_ABILITIES_TOOL, 2026-11-03)
       # shares this group for the same reason: it is a read of Jarvis's own
       # abilities and settings, and a group's members cost nothing extra in
@@ -9969,6 +10305,23 @@ TOOL_HINTS = {
     "plugin_switch": (r"\bplugins?\b", r"\bdrop[- ]?in\b",
                       r"\b(?:turn|switch|put)\b.*\bplugins?\b.*\b(?:on|off)\b",
                       r"\bplugins?\b.*\b(?:turn|switch|enable|disable)\b"),
+    # Packs (2026-11-05): "what skills have I got", "install the skill in
+    # C:\...\my-skill", "scan that pack", "remove my-skill". Narrow on purpose:
+    # a bare "skill" would pull these into every turn about a skill the owner
+    # already has, so each pattern names installing, removing, scanning or the
+    # pack word itself.
+    "pack_list": (r"\bpacks?\b", r"\bskills?\b.*\b(?:installed|have|got|list|"
+                  r"where.*(?:from|came))\b",
+                  r"\b(?:what|which)\b.*\bskills?\b"),
+    "pack_inspect": (r"\binspect\b.*\b(?:pack|skill)\b",
+                     r"\bscan\b.*\b(?:pack|skill|zip)\b",
+                     r"\b(?:pack|skill)\b.*\bsafe\b"),
+    "pack_install": (r"\binstall\b.*\b(?:pack|skill|zip)\b",
+                     r"\badd\b.*\b(?:pack|skill)\b.*\b(?:from|folder|zip)\b",
+                     r"\b(?:pack|skill)\b.*\binstall\b"),
+    "pack_remove": (r"\bremove\b.*\b(?:pack|skill)\b",
+                    r"\b(?:uninstall|delete)\b.*\b(?:pack|skill)\b",
+                    r"\b(?:pack|skill)\b.*\bremove\b"),
     # The conversation-scoped web-search approval (GRANT_TOOL, 2026-11-01). Its
     # own words, narrow on purpose: a plain "search the web" must NOT pull the
     # grant in (that would offer the model a card the owner never asked for),
@@ -16561,6 +16914,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # from a lookup key. The OFF half never reaches the gate at all (see the
         # sentinel branch below), so stopping can never wait for a person.
         action_name = PLUGIN_TOGGLE_ACTION
+    if name in (PACK_INSTALL_TOOL, PACK_REMOVE_TOOL):
+        # Packs (2026-11-05): the SAME existing action as the two plugin tools
+        # and the Skills screen - installing a skill is a change to what runs on
+        # this PC, and `modify_own_code` already ships at tier "ask". The install
+        # half raises its one card inside `jarvis_skills.install()`; the remove
+        # half goes through the generic gate below under this same action.
+        action_name = PACK_TOGGLE_ACTION
     if name == "send_email":
         action_name = SEND_EMAIL_ACTION
     if name == "draft_email":
@@ -16723,6 +17083,51 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                                f"nobody was asked."}
             say_step("tool_refused", name)
             ran = False
+        convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                      "content": _tool_content(result)})
+        steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),
+                      "outcome": "no card needed" if ran else "refused"})
+        return
+
+    if name in (PACK_LIST_TOOL, PACK_INSPECT_TOOL, PACK_INSTALL_TOOL) and isinstance(
+            state, (_PacksAnswer, _PacksReady)):
+        # PACKS (2026-11-05). Three of the four tools are answered here, before
+        # the generic gate:
+        #   * pack_list and pack_inspect change nothing, so there is nothing to
+        #     approve - a card for either would ask the owner to approve nothing;
+        #   * an install that the scan REFUSED comes back as a `_PacksAnswer`
+        #     too, in the plain words that say why, and never becomes a card;
+        #   * a clean install comes back as `_PacksReady`, and the ONE card is
+        #     raised by `jarvis_skills.install()` INSIDE `install_pack` - the
+        #     same card the Skills screen raises, with the scan report on it.
+        #     Raising the generic card here as well would ask the same question
+        #     twice under the same action, which is the double-ask this project
+        #     refuses. The card count is still taken, so CARD_LIMIT sees it.
+        if isinstance(state, _PacksAnswer):
+            result = dict(state.payload)
+            say_step("tool_started", name)
+            say_step("tool_finished", name, ok=bool(result.get("ok")))
+            ran = bool(result.get("ok"))
+        else:
+            limit = _card_limit(watch, name)
+            if watch.cards >= limit:
+                result = {"ok": False, "installed": False,
+                          "error": CARD_LIMIT_ERROR.format(n=limit)}
+                say_step("tool_refused", name)
+                ran = False
+            else:
+                out.set_status("approval")
+                try:
+                    result = _execute_pack_install(args, state)
+                except Exception as exc:            # noqa: BLE001 - the install
+                    result = {"ok": False, "installed": False,
+                              "error": f"{type(exc).__name__}: {exc}"}
+                out.set_status("thinking")
+                if result.get("asked"):
+                    watch.cards += 1
+                say_step("tool_started", name)
+                say_step("tool_finished", name, ok=bool(result.get("ok")))
+                ran = bool(result.get("ok"))
         convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                       "content": _tool_content(result)})
         steps.append({"tool": name, "ran": ran, "ok": bool(result.get("ok")),

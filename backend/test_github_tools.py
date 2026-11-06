@@ -538,7 +538,16 @@ def t_there_is_no_merging_pushing_committing_or_deleting_tool():
     forbidden = re.compile(
         r"merge|push|commit|delete|remove|close|write_file|edit_file|"
         r"create_branch|force_push", re.I)
-    offenders = sorted(n for n in AG.TOOLS if forbidden.search(n))
+    # `pack_remove` is the ONE tool whose name matches and is not GitHub's: the
+    # pack manager's removal deletes exactly the files its own ledger recorded
+    # (`jarvis-packs.json`) after ONE `modify_own_code` card, and it holds no
+    # repository, branch or remote at all (`backend/jarvis_packs.py`, the
+    # JARVIS-API section 197 doors). It is exempted HERE rather than renamed,
+    # because "remove" is the honest word for it, and the two checks below still
+    # hold it - and every GitHub tool - to the rule this section is about.
+    NOT_GITHUB_BY_NAME = {"pack_remove"}
+    offenders = sorted(n for n in AG.TOOLS
+                       if forbidden.search(n) and n not in NOT_GITHUB_BY_NAME)
     check("the registered tool list has no merge/push/commit/delete/close tool",
           not offenders, offenders)
     github_offenders = sorted(n for n in AG.TOOLS

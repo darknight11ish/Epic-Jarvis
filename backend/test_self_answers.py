@@ -21,7 +21,7 @@ WHAT THIS PROVES (2026-11-04, the self-awareness audit's gap 4):
     own refresh. No typed list, and no 136 the old counts() used to emit.
   - THE ANSWER FOLLOWS A REAL SETTINGS FILE. A one-tool [tools].enabled is
     written through JARVIS_FRAMEWORK_TOML, and "what tools do you have" must
-    say ONE switched on - not a constant, and not the shipped 15.
+    say ONE switched on - not a constant, and not the shipped 18.
   - ALL FOUR ARE READ-ONLY. "cancel that" must not be able to undo a question,
     and a question must not clear a pending card; each name is in
     jarvis_quick.READ_ONLY_INTENTS.
@@ -161,25 +161,29 @@ def all_four_are_read_only():
 
 
 def tools_answer_is_the_registry_and_the_live_file():
-    # 60, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
+    # 63, not the 51 this read on main: the six on-demand GitHub tools (2026-11-03,
     # GitHub "Read + actions") are in jarvis_agent.TOOLS and ship switched OFF,
-    # hands-free then added send_text_message (on by default, 14), and the
-# approval-policy tool added approval_policy (on by default, so enabled is 15)
-    # and the product check added product_check (off). The answer is still read
-    # from the registry and the settings file, never typed.
+    # hands-free then added send_text_message (on by default), the product check
+    # added product_check (off), and the four pack tools (2026-11-05) ship ON, so
+    # enabled is 18. The answer is still read from the registry and the settings
+    # file, never typed.
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 60,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 63,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
-          inv["enabled"] == 15, str(inv["enabled"]))
+          inv["enabled"] == 18, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "60 tools" in reply, reply[:120])
-    check("it names the switched-on count", "15 of them are switched on" in reply,
+    check("it names the registered count", "63 tools" in reply, reply[:120])
+    check("it names the switched-on count", "18 of them are switched on" in reply,
           reply[:160])
+    # The list is capped at about fourteen names plus "and N more", so the
+    # two named here are ones a fresh install really shows. "Web search"
+    # fell past the cap when the four pack tools joined the shipped list
+    # (2026-11-05), which is the cap working, not the answer losing it.
     check("it names a REAL tool in plain words",
-          "Calculator" in reply and "Web search" in reply, reply[:200])
+          "Calculator" in reply and "drop-in plugins" in reply, reply[:200])
     check("it never repeats the old 136 as a tool count", "136 tools" not in reply)
     # ONE TRUTH: the chat answer, /api/self and the refresh sentence agree.
     c = SP.counts(SP.build(refresh=True))
@@ -207,8 +211,8 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 59 are not switched on",
-              bool(reply) and "other 59 are built in but not switched on" in reply,
+        check("... and says the other 62 are not switched on",
+              bool(reply) and "other 62 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:

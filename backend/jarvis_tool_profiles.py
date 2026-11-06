@@ -139,6 +139,7 @@ REA               = "backend/jarvis_rea.py"
 APPROVAL_POLICY   = "backend/jarvis_approval_policy.py"
 OWNER_CHECK       = "backend/jarvis_owner_check.py"
 BASE_GATE         = "jarvis-backend/jarvis_gate.py"
+PACKS             = "backend/jarvis_packs.py"
 
 #: One entry per name in `jarvis_agent.TOOLS` (52 tools on this branch), in the
 #: same order that dict declares them. Every field is prose for a beginner
@@ -501,6 +502,121 @@ PROFILES: dict = {
         "tier": "always-available",
         "enable_hint": "Always available - it is in the shipped `[tools].enabled` list.",
         "sources": [AGENT, PLUGINS, REBUILT_FRAMEWORK],
+    },
+
+    "pack_list": {
+        "id": "pack_list",
+        "title": "List the skill packs on this PC",
+        "what": "Lists every skill pack the ledger knows, with the kind, the "
+                "version, where it came from, the hash of what it wrote, and "
+                "whether it is installed, turned off or removed - plus a skill "
+                "that is on disk with no record, named rather than hidden.",
+        "gives": [
+            "See what skill packs are installed and where each one came from",
+            "Know whether a pack is installed, turned off or already removed",
+            "Spot a skill that was added some other way, so its source is unknown",
+        ],
+        "touches": "files",
+        "limits": [
+            "Read-only, so it raises no approval card",
+            "It reports the ledger and the folders - it cannot install, "
+            "download, repair or turn on a pack",
+            "A pack whose folder was deleted shows as missing, never as working",
+        ],
+        "combines": {
+            "pack_inspect": "See it here, then inspect what it would change.",
+            "pack_remove": "See it here, then remove that one pack.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Always available - it is in the shipped `[tools].enabled` list.",
+        "sources": [AGENT, PACKS, REBUILT_FRAMEWORK],
+    },
+
+    "pack_inspect": {
+        "id": "pack_inspect",
+        "title": "Scan one pack before installing it",
+        "what": "Runs the full pre-install scan on ONE folder or .zip and answers "
+                "what it is, what it would change, whether it is safe, and whether "
+                "it will work here: every file and its fingerprint, instructions "
+                "or code, a name clash, the licence, and the prompt cost.",
+        "gives": [
+            "Read the whole scan report before deciding anything",
+            "Find out that a pack carries code, and be told in one sentence",
+            "See the hash, the licence and the number of prompt tokens it costs",
+        ],
+        "touches": "files",
+        "limits": [
+            "It writes nothing at all and raises no card - it is a look, not an install",
+            "The scan reduces risk; it does not sandbox anything and never proves "
+            "who wrote the pack",
+            "Phase 1 scans prompt-only skills; a pack with code is refused, not "
+            "smoke-tested",
+        ],
+        "combines": {
+            "pack_install": "Inspect first to read the report, then install the "
+                            "same path behind its own one card.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Always available - it is in the shipped `[tools].enabled` list.",
+        "sources": [AGENT, PACKS],
+    },
+
+    "pack_install": {
+        "id": "pack_install",
+        "title": "Install one skill pack",
+        "what": "Installs ONE prompt-only skill from a folder or a .zip on this "
+                "PC. It scans first and refuses a pack that carries code in plain "
+                "words; a clean one raises one approval card showing the whole "
+                "scan, and the files land only after that yes.",
+        "gives": [
+            "Add a skill from a folder or a .zip, after reading the full scan",
+            "Have every file it writes recorded, so removal can be complete",
+            "Know that nothing is turned on: the pack is off until its own card",
+        ],
+        "touches": "files",
+        "limits": [
+            "One pack per call, and only a folder or .zip path - never a git "
+            "repository, a URL or a marketplace",
+            "Installing is one `modify_own_code` card; a pack the scan refuses "
+            "never becomes a card at all",
+            "Nothing is enabled by installing it - it is moved to `skills-off` "
+            "straight afterwards",
+        ],
+        "combines": {
+            "pack_inspect": "Read the report first, then install the same path.",
+            "pack_list": "Install, then list to see its hash and its state.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Always available - it is in the shipped `[tools].enabled` list.",
+        "sources": [AGENT, PACKS, REBUILT_FRAMEWORK],
+    },
+
+    "pack_remove": {
+        "id": "pack_remove",
+        "title": "Remove one skill pack",
+        "what": "Removes ONE skill pack by the name the list shows. It raises one "
+                "approval card naming exactly the files the ledger recorded, then "
+                "deletes exactly those; a file the pack did not write is kept and "
+                "named, and a pack the ledger does not know is refused.",
+        "gives": [
+            "Remove a pack completely, with a record of what went",
+            "Keep a file you made beside it, and be told it was kept",
+            "Stop the model being offered the skill at once",
+        ],
+        "touches": "files",
+        "limits": [
+            "One pack per call, and it only ever deletes files its own ledger "
+            "recorded - never a guess from a name pattern",
+            "It refuses when the ledger has no record, rather than deleting "
+            "something it cannot prove it wrote",
+            "Nothing needs restarting for a skill; a code pack would say so",
+        ],
+        "combines": {
+            "pack_list": "List first to get the exact name and its state.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Always available - it is in the shipped `[tools].enabled` list.",
+        "sources": [AGENT, PACKS],
     },
 
     "browser_control": {
@@ -2328,20 +2444,21 @@ FAMILIES: dict = {
         "title": "Jarvis about itself, and what it may not touch",
         "what": "Explaining its own features and quiz, reporting what it is made of "
                 "and what is installed, reading old conversations, listing and "
-                "switching plugins, changing one of its own settings, and the "
-                "\"Protected from Jarvis\" list.",
+                "switching plugins, adding and removing skill packs, changing one "
+                "of its own settings, and the \"Protected from Jarvis\" list.",
         "tools": ["plugin_list", "plugin_switch", "change_setting", "feature_guide",
                   "setup_quiz", "refresh_abilities", "self_portrait",
                   "conversation_find", "conversation_open", "protect_from_jarvis",
-                  "approval_policy"],
+                  "pack_list", "pack_inspect", "pack_install", "pack_remove", "approval_policy"],
         "impact": "It is what lets the owner change Jarvis by talking to Jarvis: to "
                   "understand a feature, find the setting, switch it, and see the "
                   "difference - and to look back at what was said last month. The "
                   "protection half is the counterweight: the owner can fence off a "
                   "folder or a program, and every other family asks that one check "
                   "before it reads or acts.",
-        "limits": ["Almost all of it is read-only and raises no card; the two writes "
-                   "are a plugin switch and a protection entry",
+        "limits": ["Almost all of it is read-only and raises no card; the writes "
+                   "are a plugin switch, a pack install or removal, and a "
+                   "protection entry",
                    "It reports only what is written down in the real registries - it "
                    "cannot name a screen the apps do not have",
                    "Clearing a conversation is not in here: it is a route and a "
