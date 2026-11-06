@@ -4396,6 +4396,114 @@ def t_the_wave6_entries_agree_with_the_real_patches():
         shutil.rmtree(root, ignore_errors=True)
 
 
+#: The live `jarvis_skills.py` shape the packs patch was cut against (measured on
+#: the owner's live file, 2026-11-06): the six-line pre-image it inserts between,
+#: present exactly once there, and none of the 17 lines the patch adds. The file
+#: only has to be the right SHAPE and compile - it is a stand-in, not the real one.
+PACKS_LIVE_SKILLS = '''"""a live skills stand-in: the shape of the owner's file, none of the patch"""
+
+
+def load(name: str, mark_use: bool = True) -> dict:
+    """The full body, for a skill the agent has decided is relevant."""
+    try:
+        dest = _safe_dest(name)
+    except SkillError as exc:
+        return {"ok": False, "reason": str(exc)}
+    if not (dest / "SKILL.md").is_file():
+        return {"ok": False, "reason": f"no skill called {name}"}
+
+    ix = _read_index()
+    row = ix.get(name, {})
+    try:
+        skill = parse_skill(dest, trust=row.get("trust", "third_party"))
+    except SkillError as exc:
+        return {"ok": False, "reason": f"{name} no longer parses: {exc}"}
+    return {"name": name}
+'''
+
+
+def t_the_packs_tamper_patch_is_carried_by_its_hunk():
+    """packs-tamper-on-load.patch -> jarvis_skills.py, one of the five HUD-patched
+    base files, and it had NO `DELTA_TABLE` rule at all.
+
+    Wave 3 added this patch (2026-11-05) and the measured effect on the deploy was
+    the whole dry run refusing (`.dsh-scratch/WAVE6-RUNBOOK-2026-11-05-REV3/
+    RUNBOOK-REV3.md` Appendix D): `state=absent`, `delta_table_rule=False`,
+    `HUD DELTAS - REFUSED (nothing has been written)`, exit 2. The rule is the
+    patch's own ONE hunk - a pure insertion - plus three measured-absent probes.
+    This proves (a) with no rule the plan refuses with that exact sentence, (b)
+    with it the 17 added lines land between the "no skill called" return and
+    `ix = _read_index()`, and (c) a second plan is the idempotent no-op. It reads
+    the REAL patch bytes when this ref has them, and prints SKIPPED (never "ok")
+    when it does not.
+    """
+    name = "packs-tamper-on-load.patch"
+    target = "jarvis_skills.py"
+    if not (REPO / "backend" / name).is_file():
+        print(f"SKIPPED  t_the_packs_tamper_patch_is_carried_by_its_hunk - "
+              f"backend/{name} is not in this ref. This test did NOT run, and it "
+              f"did NOT pass.")
+        return
+    root = tmpdir()
+    try:
+        raw = patch_text(name).decode("utf-8")
+        files = R.parse_patch_files(raw)
+        added = files[target]["added"]
+        pre = R.patch_pre_image(raw, target)
+        hunks = R.patch_hunks(raw, target)
+        entry = (R.DELTA_TABLE.get(name) or {}).get(target) or {}
+        probes = tuple(entry.get("probes") or ())
+        check("the DELTA_TABLE entry exists with probes and hunks=True",
+              bool(probes) and entry.get("hunks") is True, entry)
+        check("the patch is ONE hunk and a pure insertion of 17 lines",
+              len(hunks) == 1 and not files[target]["removed"]
+              and len(added) == 17, (len(hunks), len(added), files[target]["removed"]))
+        check("every probe is one of the patch's ADDED lines, none is pre-image text",
+              all(any(str(p) in str(a) for a in added) for p in probes)
+              and all(str(p) not in pre for p in probes), probes)
+        live = make_base_live(root, "packs", {target: PACKS_LIVE_SKILLS})
+        fixture = (live / target).read_text(encoding="utf-8")
+        check("the fixture holds the hunk's pre-image EXACTLY once",
+              fixture.count("\n".join(hunks[0]["old"])) == 1)
+        check("no probe is in the live-shaped fixture (measured absent, 2026-11-06)",
+              all(str(p) not in fixture for p in probes), probes)
+
+        # (a) The measured defect, reproduced: absent + no rule -> refused.
+        _d0, _s0, refusals0 = R.plan_deltas(
+            live, [name], show=lambda repo, ref, p: raw.encode("utf-8"),
+            repo=REPO, state_patches=[], table={})
+        check("with NO entry the plan REFUSES with 'no insertion rule' (Appendix D)",
+              len(refusals0) == 1 and "no insertion rule" in refusals0[0], refusals0)
+
+        # (b) With the entry: one insert, the patch's own bytes in the patch's place.
+        deltas, staged, refusals = R.plan_deltas(
+            live, [name], show=lambda repo, ref, p: raw.encode("utf-8"),
+            repo=REPO, state_patches=[])
+        check("with the entry the plan is ONE insert and NO refusal",
+              refusals == [] and [(d.file, d.status) for d in deltas]
+              == [(target, "insert")], (refusals, deltas))
+        out = staged.get(target, "")
+        check("... all three probes are now in the staged file",
+              all(str(p) in out for p in probes), probes)
+        return_at = out.index(
+            'return {"ok": False, "reason": f"no skill called {name}"}')
+        check("... the block lands between that return and `ix = _read_index()`",
+              return_at < out.index(probes[0]) < out.index("    ix = _read_index()"))
+        check("... and the staged file still compiles", R.rehearse(staged) == [])
+
+        # (c) Idempotent: a live file that already carries the block plans nothing.
+        (live / target).write_bytes(out.encode("utf-8"))
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [name], show=lambda repo, ref, p: raw.encode("utf-8"),
+            repo=REPO, state_patches=[])
+        check("a live file WITH the block plans nothing (idempotent)",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"],
+              (again, staged2, refusals2))
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def main():
     for fn in (t_the_lists_parse_from_apply_patches,
                t_the_gate_guards_are_carried_as_literal_deltas,
@@ -4412,6 +4520,7 @@ def main():
                t_the_wave6_patch_regions_are_carried_not_false_greened,
                t_the_call_notes_risk_row_is_carried_to_the_live_gate,
                t_the_wave6_entries_agree_with_the_real_patches,
+               t_the_packs_tamper_patch_is_carried_by_its_hunk,
                t_private_chat_delta_is_carried_as_its_patch_hunks,
                t_a_private_chat_hunk_that_shifted_is_refused,
                t_the_list_parser_refuses_rather_than_reading_nothing,
