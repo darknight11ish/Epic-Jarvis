@@ -77,6 +77,39 @@ class PrivateAloudContractTest {
                 screenAloud = flag("screen_aloud"),
             )
             assertEquals(name, c["read"]!!.jsonPrimitive.boolean, got)
+            // The same case through the reason-first entry: `mayRead` is
+            // `refusal == NONE`, so the decision and the words it leads to
+            // cannot drift apart (the memory reason has its own sentence
+            // since 2026-11-05).
+            val refused = PrivateAloud.refusal(
+                privateAloud = flag("private_aloud"),
+                questionPrivate = flag("question_private"),
+                route = PrivateAloud.route(header),
+                toolRan = PrivateAloud.toolRan(start, now),
+                toolsKnown = PrivateAloud.toolsKnown(start, now),
+                memoryAloud = flag("memory_aloud"),
+                sensitiveAloud = flag("sensitive_aloud"),
+                screenRead = PrivateAloud.screenRead(start, now),
+                screenAloud = flag("screen_aloud"),
+            )
+            assertEquals("$name (refusal)", c["read"]!!.jsonPrimitive.boolean,
+                refused == PrivateAloud.Refusal.NONE)
+            // The shared table never carries the phone's own setting: its
+            // cases are the PC's answer alone, so they must all still be
+            // refused/allowed exactly as the table says with it OFF.
+            assertEquals("$name (phone setting off)", refused == PrivateAloud.Refusal.NONE,
+                PrivateAloud.mayRead(
+                    privateAloud = flag("private_aloud"),
+                    questionPrivate = flag("question_private"),
+                    route = PrivateAloud.route(header),
+                    toolRan = PrivateAloud.toolRan(start, now),
+                    toolsKnown = PrivateAloud.toolsKnown(start, now),
+                    memoryAloud = flag("memory_aloud"),
+                    sensitiveAloud = flag("sensitive_aloud"),
+                    screenRead = PrivateAloud.screenRead(start, now),
+                    screenAloud = flag("screen_aloud"),
+                    phoneMemoryAloud = false,
+                ))
             // The same case through the Heard-based entry the voice loop uses:
             // the real reply decoded, missing fields at Heard's own defaults.
             val decoded = JarvisJson.decodeFromJsonElement(com.jarvis.client.net.Heard.serializer(), heard)

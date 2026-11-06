@@ -377,18 +377,23 @@ object JarvisRuntime {
      *
      * A separate flag, not a null [handsfree]: "we have not asked" and "this
      * desktop cannot" are two different facts and only one of them is the
-     * owner's answer. Every surface that draws the switch or the status word
-     * reads [handsfreeLine], which uses [com.jarvis.client.net.Handsfree.NOT_HERE_SHORT]
-     * for this case.
+     * owner's answer. The Settings row reads it to print
+     * [com.jarvis.client.net.Handsfree.NOT_HERE] where the switch would be;
+     * Home's status row deliberately says NOTHING for it ([handsfreeLine]).
      */
     private val _handsfreeMissing = MutableStateFlow(false)
     val handsfreeMissing: StateFlow<Boolean> = _handsfreeMissing.asStateFlow()
 
     /**
-     * Home's one-line state (armed / not available on this PC / nothing), or
-     * null when there is nothing worth saying. The words are
-     * [com.jarvis.client.net.Handsfree.oneLine]'s, so the line and the rule that
-     * decides it cannot drift.
+     * Home's one-line state (armed, or nothing), or null when there is
+     * nothing worth saying. The words are
+     * [com.jarvis.client.net.Handsfree.oneLine]'s, so the line and the rule
+     * that decides it cannot drift.
+     *
+     * A PC that answered 404, or that says `available: false`, gets no line
+     * here at all (the owner's report of 2026-11-05: "Hands-free: not on this
+     * PC" in that row read as if the mode were on). The honest sentence is in
+     * Settings, Voice, where the switch would be.
      */
     val handsfreeLine: StateFlow<String?> =
         combine(_handsfree, _handsfreeMissing) { read, missing ->
@@ -1084,6 +1089,12 @@ object JarvisRuntime {
             // "Play a short sound when I finish speaking" (Checks), read
             // each time the "I heard you" sound would play.
             heardSoundOn = { clientSettings.heardSound.value },
+            // "Read out answers that use what Jarvis remembers" (Settings,
+            // Voice) - the owner's setting of 2026-11-05, this phone's own
+            // and OFF by default. Read per sentence, so a switch changed
+            // mid-answer applies at the next sentence, and only ever used for
+            // a mic-press question asked while the phone was unlocked.
+            memoryAloudOn = { clientSettings.readMemoriesAloud.value },
             // Where the owner cut a spoken answer off: sent once, with the
             // next question (typed or spoken), as `interrupted`.
             onCutOff = { said -> chatSession.cutOff.cut(said, android.os.SystemClock.elapsedRealtime()) },

@@ -84,6 +84,7 @@ import com.jarvis.client.net.UpdateCheck
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import com.jarvis.client.platform.ApprovalKey
 import com.jarvis.client.platform.CrashLog
+import com.jarvis.client.platform.DeviceSecure
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.LocalNetworkPermission
 import com.jarvis.client.platform.PictureEncoder
@@ -1108,6 +1109,10 @@ class MainActivity : FragmentActivity() {
         val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
         val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
+        // The owner's own setting of 2026-11-05, this phone's and off by
+        // default: may a mic-press question on an unlocked phone read out an
+        // answer that uses what Jarvis remembers? (voice.MemoryAloud.)
+        val memoryAloudOn by JarvisRuntime.settings.readMemoriesAloud.collectAsState()
         // THE ONE VOICE-CHECK SETTING (2026-11-03): the rule is the PC's
         // (jarvis_live.voice_check_needed); this reads its answer over the
         // existing Live route, so the switch shows the PC's value and never a
@@ -1201,6 +1206,12 @@ class MainActivity : FragmentActivity() {
             // And whether the "I heard you" sound plays.
             heardSound = heardSoundOn,
             onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
+            // The owner's 2026-11-05 setting: read out an answer that uses
+            // what Jarvis remembers, on this phone's own mic press, while it
+            // was unlocked. Off by default and this phone's alone - nothing
+            // is sent to the PC to change.
+            memoryAloud = memoryAloudOn,
+            onMemoryAloud = { on -> JarvisRuntime.settings.setReadMemoriesAloud(on) },
             // The owner's 2026-11-03 switch. Asked on arrival like the wake
             // word's own state: a stale answer would show the wrong thing.
             voiceCheck = voiceCheckOn,
@@ -4815,14 +4826,25 @@ class MainActivity : FragmentActivity() {
      * Opens the microphone, asking for permission first if it has not been
      * granted — and then starting the capture, so the hold that triggered the
      * dialog is not wasted.
+     *
+     * THE UNLOCK STATE IS READ HERE, ONCE (the owner's setting of 2026-11-05:
+     * "read them aloud on my unlocked phone"). `DeviceSecure.isLocked` answers
+     * "was the phone locked at the moment of the press", and that answer is
+     * carried with THIS question - never re-read when the answer arrives, so a
+     * phone that locks while Jarvis thinks does not lose the permission he gave
+     * by pressing. When permission has to be asked first, the state is still
+     * read at the press and handed to the capture when it really starts: the
+     * press is the act, the dialog is only Android asking.
      */
     private fun beginVoice() {
         val voice = JarvisRuntime.voice
+        // `isLocked` fails as LOCKED: a phone that cannot say stays silent.
+        val unlockedAtPress = !DeviceSecure.isLocked(this)
         if (voice.recorder.hasPermission()) {
-            voice.begin()
+            voice.begin(unlockedAtPress = unlockedAtPress)
             return
         }
-        micGrantedCallback = { voice.begin() }
+        micGrantedCallback = { voice.begin(unlockedAtPress = unlockedAtPress) }
         micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 

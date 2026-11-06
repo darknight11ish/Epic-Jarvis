@@ -59,8 +59,27 @@ class PrivateAloudTest {
 
     private val live = PrivateAloud.Watch(runs = 4, drops = 1, live = true)
 
-    private fun may(h: Heard, route: String?, now: PrivateAloud.Watch = live) =
-        PrivateAloud.mayRead(h, PrivateAloud.route(route), live, now)
+    /**
+     * The rule with the phone's 2026-11-05 setting and the two facts captured
+     * at the mic press, all OFF unless a test says otherwise - which is the
+     * shipped default.
+     */
+    private fun may(
+        h: Heard,
+        route: String?,
+        now: PrivateAloud.Watch = live,
+        phoneMemoryAloud: Boolean = false,
+        talkButton: Boolean = false,
+        unlockedAtPress: Boolean = false,
+    ) = PrivateAloud.mayRead(
+        h,
+        PrivateAloud.route(route),
+        live,
+        now,
+        phoneMemoryAloud = phoneMemoryAloud,
+        talkButton = talkButton,
+        unlockedAtPress = unlockedAtPress,
+    )
 
     @Test
     fun `the real reply carries both fields`() {
@@ -266,5 +285,174 @@ class PrivateAloudTest {
         assertEquals(PrivateAloud.SILENT_ROUTE, PrivateAloud.route("not json"))
         assertEquals(PrivateAloud.SILENT_ROUTE, PrivateAloud.route(""))
         assertEquals("It's on your screen.", PrivateAloud.ON_SCREEN)
+    }
+
+    // --------------- the phone's remembered-facts setting (owner, 2026-11-05) --
+
+    @Test
+    fun `the phone's memory setting is off by default, and needs the talk button and an unlocked press`() {
+        // The shipped default, said in code: OFF.
+        assertFalse(PrivateAloud.MEMORY_ALOUD_DEFAULT)
+        val h = heard("quick_message")
+        assertEquals("quick_message", h.mode)
+        // The PC's reply for this clip: memory_aloud false because the talk
+        // button runs no voice check, whatever the PC's own setting says.
+        assertFalse(h.memoryAloud)
+        val facts = header("plain", injected = 3, sensitive = 0)
+        // Off: the answer that used 3 remembered facts stays on screen.
+        assertFalse(may(h, facts))
+        // The setting alone is NOT enough...
+        assertFalse(may(h, facts, phoneMemoryAloud = true))
+        // ...nor the setting plus an unlocked phone on some other path...
+        assertFalse(may(h, facts, phoneMemoryAloud = true, unlockedAtPress = true))
+        // ...nor the setting plus the talk button on a phone that was locked
+        // when he pressed it...
+        assertFalse(may(h, facts, phoneMemoryAloud = true, talkButton = true))
+        // ...all three hold, and it is read aloud.
+        assertTrue(
+            may(h, facts, phoneMemoryAloud = true, talkButton = true, unlockedAtPress = true),
+        )
+        // A second answer with no remembered facts is unaffected either way.
+        assertTrue(may(h, header("plain"), phoneMemoryAloud = true, talkButton = true, unlockedAtPress = true))
+    }
+
+    @Test
+    fun `the phone's memory setting never reads a sensitive saved fact, and fails closed without the count`() {
+        val h = heard("quick_message")
+        val setting = true
+        // One of the three facts is sensitive: on screen.
+        assertFalse(
+            may(h, header("plain", injected = 3, sensitive = 1), phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true),
+        )
+        // A PC that does not say which facts were sensitive: every one counts
+        // as possibly sensitive - on screen.
+        assertFalse(
+            may(h, header("plain", injected = 3), phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true),
+        )
+        assertEquals(
+            PrivateAloud.Refusal.SENSITIVE,
+            PrivateAloud.refusal(
+                privateAloud = false, questionPrivate = false,
+                route = PrivateAloud.route(header("plain", injected = 3, sensitive = 1)),
+                toolRan = false, toolsKnown = true,
+                phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `a private question or the router's private gate still keeps it on screen`() {
+        val h = heard("quick_message")
+        val setting = true
+        // The PC's own words were about something private.
+        assertFalse(
+            may(heard("private_question"), header("plain", injected = 3, sensitive = 0), phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true),
+        )
+        // The router's gate.
+        assertFalse(
+            may(h, header("private", injected = 3, sensitive = 0), phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true),
+        )
+    }
+
+    @Test
+    fun `a private tool or a stream that could not say still keeps it on screen`() {
+        val h = heard("quick_message")
+        val facts = header("plain", injected = 3, sensitive = 0)
+        val setting = true
+        // A private tool ran while the answer was written.
+        assertFalse(
+            may(h, facts, live.copy(runs = 5, privateRuns = 5), phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true),
+        )
+        // The stream dropped, or is not live now: unknown counts as a tool.
+        assertFalse(
+            may(h, facts, live.copy(drops = 2), phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true),
+        )
+        assertFalse(
+            may(h, facts, live.copy(live = false), phoneMemoryAloud = setting, talkButton = true, unlockedAtPress = true),
+        )
+    }
+
+    @Test
+    fun `the phone's setting keeps an answer about the screen on screen`() {
+        // The PC's own `screen_aloud` for a talk-button clip is true, so the
+        // screen rule by itself would let this through. The owner's condition
+        // list of 2026-11-05 says the memory setting does not buy a screen
+        // answer: no screen read.
+        assertEquals(
+            PrivateAloud.Refusal.MEMORY,
+            PrivateAloud.refusal(
+                privateAloud = false, questionPrivate = false,
+                route = PrivateAloud.route(header("plain", injected = 3, sensitive = 0)),
+                toolRan = false, toolsKnown = true,
+                screenRead = true, screenAloud = true,
+                phoneMemoryAloud = true, talkButton = true, unlockedAtPress = true,
+            ),
+        )
+        // ...while a memory answer that read nothing on screen still is.
+        assertTrue(
+            may(
+                heard("quick_message"),
+                header("plain", injected = 3, sensitive = 0),
+                live,
+                phoneMemoryAloud = true,
+                talkButton = true,
+                unlockedAtPress = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `the phone's setting never covers hey Jarvis or Jarvis Live - only the talk button`() {
+        val facts = header("plain", injected = 3, sensitive = 0)
+        // Neither path is a mic press, so the turn carries talkButton = false
+        // and the setting cannot lift the memory rule for it - even on, and
+        // even on a phone that was unlocked.
+        assertFalse(
+            may(heard("quick_message"), facts, phoneMemoryAloud = true, talkButton = false, unlockedAtPress = true),
+        )
+        // The caller only ever sets talkButton when BOTH the request's source
+        // is the talk button AND the PC's own reply says `quick_message`; a
+        // wake-word or Live reply carries another mode, so neither can be
+        // mistaken for the press.
+        assertEquals("quick_message", PrivateAloud.QUICK_MESSAGE)
+        assertEquals("owner", heard("plain_question").mode)
+        assertTrue(heard("quick_message").mode == PrivateAloud.QUICK_MESSAGE)
+    }
+
+    @Test
+    fun `the memory refusal has its own words and every other refusal keeps the one line`() {
+        assertEquals("That answer used things I remember, so it's on your screen.", PrivateAloud.MEMORY_ON_SCREEN)
+        assertTrue(PrivateAloud.MEMORY_ON_SCREEN != PrivateAloud.ON_SCREEN)
+        assertEquals(PrivateAloud.MEMORY_ON_SCREEN, PrivateAloud.refusalLine(PrivateAloud.Refusal.MEMORY))
+        for (other in PrivateAloud.Refusal.entries) {
+            if (other == PrivateAloud.Refusal.MEMORY) continue
+            assertEquals(other.name, PrivateAloud.ON_SCREEN, PrivateAloud.refusalLine(other))
+        }
+        // It is not a card line and never takes the desktop's fixed line's
+        // place: `CardVoice.isCardLine` and the shared `on_screen` are
+        // untouched (the fixed-line contract tests).
+        assertFalse(com.jarvis.client.voice.CardVoice.isCardLine(PrivateAloud.MEMORY_ON_SCREEN))
+        assertFalse(com.jarvis.client.voice.CardVoice.isCardLine(PrivateAloud.ON_SCREEN))
+        assertEquals(PrivateAloud.ON_SCREEN, com.jarvis.client.voice.ReadAloud.ON_SCREEN)
+    }
+
+    @Test
+    fun `the phone's setting never speaks a case the shared table keeps on screen`() {
+        // The setting is a switch, not a rule change: with it OFF (the
+        // shipped default) every remembered-fact case behaves exactly as the
+        // shared table says.
+        assertFalse(may(heard("quick_message"), header("plain", injected = 2, sensitive = 0)))
+        assertFalse(may(heard("memory_on_screen"), header("plain", injected = 2, sensitive = 0)))
+        // And a sensitive fact is still on screen with every other door open.
+        assertFalse(
+            may(
+                heard("quick_message"),
+                header("plain", injected = 2, sensitive = 1),
+                live,
+                phoneMemoryAloud = true,
+                talkButton = true,
+                unlockedAtPress = true,
+            ),
+        )
     }
 }

@@ -4060,6 +4060,32 @@ for a question that came by VOICE and reply `private_aloud: false`:
    true only when the owner allowed it), and steps 2-4 keep its answer on
    screen.
 
+**One phone-only exception, the owner's choice of 2026-11-05.** The phone's
+talk button deliberately runs no voice check (his request of 2026-11-02), so
+the PC answers `memory_aloud: false` for every mic-press question - the PC
+cannot be the authority for that one path. He chose a setting on the PHONE
+instead: *"the phone may read aloud an answer that uses what Jarvis remembers,
+on its own talk button while it is unlocked, off by default; sensitive saved
+facts and private tools still stay on screen."* So the phone may lift step 2's
+remembered-facts refusal, and only it, when ALL of these hold: the setting is
+on (`data/ClientSettings.readMemoriesAloud`, default off); the question came
+from the mic press (request `source=push_to_talk` and reply
+`mode="quick_message"` - the PC's own `_QuickMessage`, so never "hey Jarvis"
+and never `source=live`); the phone was unlocked AT THE PRESS (the keyguard is
+read once, then, and never re-read); `injected_facts` is above 0 and
+`injected_sensitive` is 0 (missing still fails closed); the stream was live at
+the question and is live now; no private tool ran; no screen read; the
+question is not private; and the route has no `gate: "private"`. Steps 3 and
+3b are unchanged and come first, so a sensitive saved fact still stays on
+screen. `memory_aloud` from the PC is untouched and still enough on its own.
+The desktop has no matching switch on purpose (`docs/ARCHITECTURE.md` §8), and
+no route, field or PC setting is added. **The refusal words are honest too:**
+when step 2's remembered-facts rule is the ONLY reason the answer stays on
+screen, the phone says "That answer used things I remember, so it's on your
+screen." (`PrivateAloud.MEMORY_ON_SCREEN`); every other refusal keeps the one
+fixed line, and neither the desktop's `PRIVATE_LINE` nor the shared table's
+`on_screen` changed.
+
 **Said plainly about `memory_aloud`:** a remembered fact can be about
 something sensitive (health, money) while the question is not ("what
 should I have for dinner?"). Step 3 keeps such an answer on screen by

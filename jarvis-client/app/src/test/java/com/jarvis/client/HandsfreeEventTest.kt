@@ -435,21 +435,25 @@ class HandsfreeEventTest {
     // -------------------------------------------------------------- words ----
 
     @Test
-    fun `one line for Home says armed, or that this PC does not have it, or nothing`() {
+    fun `one line for Home says armed, and nothing at all for off or a PC without it`() {
         assertEquals(
             Handsfree.ARMED_SHORT,
             Handsfree.oneLine(Handsfree.Read(available = true, enabled = true), missing = false),
         )
-        // A PC that answered 404: the one sentence, on every surface.
-        assertEquals(Handsfree.NOT_HERE_SHORT, Handsfree.oneLine(null, missing = true))
-        // The PC says it is off: nothing to say, because nothing is wrong.
+        // A PC that answered 404: NOTHING on Home's status row. The honest
+        // sentence is in Settings, where the switch would be (the owner's
+        // report of 2026-11-05: "Hands-free: not on this PC" read as if the
+        // mode were on).
+        assertNull(Handsfree.oneLine(null, missing = true))
+        // Not asked yet, or the PC says it is off: nothing to say either.
         assertNull(Handsfree.oneLine(Handsfree.Read(available = true, enabled = false), missing = false))
         assertNull(Handsfree.oneLine(null, missing = false))
-        // Available:false in words is the same answer as a 404.
-        assertEquals(
-            Handsfree.NOT_HERE_SHORT,
-            Handsfree.oneLine(Handsfree.Read(available = false, enabled = false), missing = false),
-        )
+        // Available:false in words is the same answer as a 404 - nothing here.
+        assertNull(Handsfree.oneLine(Handsfree.Read(available = false, enabled = false), missing = false))
+        // Even a stale "enabled" with available:false may not arm the row.
+        assertNull(Handsfree.oneLine(Handsfree.Read(available = false, enabled = true), missing = false))
+        // The Settings sentence is unchanged and still says it plainly.
+        assertEquals("Hands-free is not available on this PC yet.", Handsfree.NOT_HERE)
     }
 
     @Test

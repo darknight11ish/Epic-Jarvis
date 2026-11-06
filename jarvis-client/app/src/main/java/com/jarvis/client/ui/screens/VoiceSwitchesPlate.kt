@@ -65,6 +65,14 @@ internal fun WakeWordSwitchesCard(
     onOneMoment: ((Boolean) -> Unit)? = null,
     heardSound: Boolean? = null,
     onHeardSound: ((Boolean) -> Unit)? = null,
+    /**
+     * "Read out answers that use what Jarvis remembers" - the owner's setting
+     * of 2026-11-05, on THIS phone only and OFF by default. Null only in a
+     * preview/test that does not own the setting; the real screen always
+     * passes it.
+     */
+    memoryAloud: Boolean? = null,
+    onMemoryAloud: ((Boolean) -> Unit)? = null,
     /** "Check my voice on my locked phone" (2026-11-03): null = the PC has not answered. */
     voiceCheck: Boolean? = null,
     onVoiceCheck: ((Boolean) -> Unit)? = null,
@@ -278,6 +286,45 @@ internal fun WakeWordSwitchesCard(
                     color = chrome.textMid,
                 )
             }
+        }
+
+        // THE OWNER'S OWN SETTING OF 2026-11-05, and this phone's alone. The
+        // PC's `memory_aloud` can never be true for a mic press (the talk
+        // button runs no voice check, his request of 2026-11-02), so an answer
+        // that used what Jarvis remembers always stayed on screen - even on
+        // his unlocked phone. He chose this switch for it. OFF by default, and
+        // the row says so; it covers only the mic on this phone while it is
+        // unlocked, and every sensitive/private rule still holds.
+        if (memoryAloud != null && onMemoryAloud != null) {
+            Gap(12)
+            Text(
+                com.jarvis.client.voice.MemoryAloud.NAME,
+                style = MaterialTheme.typography.labelLarge,
+                color = chrome.textHi,
+            )
+            Gap(4)
+            Text(
+                com.jarvis.client.voice.MemoryAloud.describe(memoryAloud),
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+            )
+            Gap(6)
+            Secondary(
+                text = if (memoryAloud) {
+                    com.jarvis.client.voice.MemoryAloud.TURN_OFF
+                } else {
+                    com.jarvis.client.voice.MemoryAloud.TURN_ON
+                },
+                enabled = true,
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { onMemoryAloud(!memoryAloud) },
+            )
+            Gap(4)
+            Text(
+                com.jarvis.client.voice.MemoryAloud.NOTE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
         }
 
         // Beside "One moment", and like it about any spoken question (the
