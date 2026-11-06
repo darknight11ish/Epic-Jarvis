@@ -508,6 +508,92 @@ BENCH_ROUTES_NEW_FILE = "hud-bench-routes-new.txt"
 BENCH_RUN_OLD_FILE = "hud-bench-run-old.txt"
 BENCH_RUN_NEW_FILE = "hud-bench-run-new.txt"
 
+#: The four 2026-11-04/05 wave-6 patches that write a patched base file, and the
+#: `call_notes` risk row that has NO patch of its own at all. All five were measured
+#: on a COPY of the owner's live folder, 2026-11-05
+#: (`.dsh-scratch/DEPLOY-WAVE-2026-11-04/wave6-run-2026-11-05/DRYRUN-REHEARSAL-CORE.md`
+#: sections 5, 6 and 10a; the readings are repeated in each entry's comment below).
+#:
+#: WHY THEY NEED ENTRIES AT ALL, and it is the DEF-035 shape a third time. Without a
+#: table entry `patch_presence` falls back to "at least ONE of the patch's added lines
+#: that is absent from its own pre-image is present". Every one of these patches adds a
+#: `# ----------` separator line and `_RISK.update({`, and jarvis_hud.py's install
+#: block ends with `token_ok=_token_ok, read_body=_read_body))`. Those lines are ALREADY
+#: in the live files from unrelated, long-deployed code - 24 occurrences of the
+#: separator and one `_RISK.update({` in the live gate, 47 occurrences of the install
+#: tail in the live HUD - so one match called all four patches PRESENT. The rehearsal's
+#: dry run printed `to insert: none` while `reseal_live_install.py` counted `0/53`,
+#: `0/31`, `0/27` and `0/13` applied rows in the same folder, i.e. FOUR features about to
+#: ship with their gate/HUD regions missing.
+#:
+#: Each entry's probes are one line from EVERY `update` block the patch adds (two for
+#: github-tools, three each for handsfree and product-check) or from the install block
+#: (history-purge), so only a file carrying the whole post-image counts as present, and
+#: none of them exists in the live files today (measured: 0 occurrences each).
+GITHUB_TOOLS_PROBES = (
+    '#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions',
+    '    "github_list": "github_inspect",',
+    '    "github_comment": ("no", "outbound",',
+)
+HANDSFREE_PROBES = (
+    '    "send_text_message": "send_text_message",',
+    '    "send_text_message",  # jarvis_handsfree.py acts only on tier "ask"',
+    '    "handsfree_enable": ("no", "local",',
+)
+
+#: product-check.patch cannot be carried by its own hunk, and the reason is measured
+#: rather than preferred: its hunk's three context lines are ONE SPACE short of the real
+#: file (`           print(f"  {r['id']} ...")` against live's 12-space copy), so the
+#: hunk's pre-image appears 0 times in a copy of the owner's live `jarvis_gate.py`
+#: (2026-11-05) and `git apply --check` fails on it there - the patch cannot be replayed
+#: by `apply-patches.ps1` either. So the entry is an ANCHOR insert instead: the patch's
+#: own 40 added lines go in front of web-search-grant.patch's block header, which is
+#: exactly where the stack puts them (both file lines appear exactly once in the live
+#: gate and once in the published base). The two-line anchor is deliberate: the bare
+#: `# ----------` separator under it is one of the generic lines that false-greened
+#: these patches, so it may never be an anchor on its own.
+PRODUCT_CHECK_PROBES = (
+    '#   The product check\'s gate rows (jarvis_product_check.py, 2026-11-04)',
+    '    "product_check": "product_check",',
+    '    "product_check",  # jarvis_product_check.py acts only on tier "ask"',
+)
+PRODUCT_CHECK_ANCHOR = (
+    "# --------------------------------------------------------------------------\n"
+    "#   Two risk rows for the conversation-scoped web-search approval"
+)
+HISTORY_PURGE_PROBES = (
+    "        import jarvis_history_purge",
+    "        print(jarvis_history_purge.install(Handler, origin_ok=_origin_ok,",
+    '        print(f"  purge      NOT ON ({type(exc).__name__}) - clearing old '
+    'chats by date is off")',
+)
+
+#: `record_call` (jarvis_call_notes.py, the owner's request of 2026-11-04) HAS a `_RISK`
+#: row, and jarvis_call_notes.py:207-214 says so: it was added 2026-11-05 by the privacy
+#: audit's D8 fix, because without it `risk_for()` fell back to `_UNKNOWN_RISK` and the
+#: approval card told the owner the action was "able to leave this PC" - false, the audio
+#: never leaves the machine. On the owner's live install that row reaches NOTHING:
+#: measured 2026-11-05, the live `jarvis_gate.py` holds 0 occurrences of `record_call`,
+#: none of the 177 patches in `$PATCHES` carries it, and the only copy in the repository
+#: is `jarvis-backend/jarvis_gate.py` (the published base, which the deploy NEVER copies
+#: over live). So the same card would still say the wrong sentence after wave 6.
+#:
+#: A LITERAL DELTA is the honest carrier, and the tool's own docstring names the class:
+#: a fix that lives in the published base files but in NO `.patch` of its own. The block
+#: is the base's own text (the 13 comment lines and the row, byte for byte from
+#: `jarvis-backend/jarvis_gate.py`), and it is inserted inside the live gate's
+#: `_RISK.update({ ... })` block at the end of the file - the live file's own comment
+#: there says why rows live at the end, and `_RISK.update` runs at import, before any
+#: `check()`, so the gate sees the row exactly as if it sat inside the `_RISK` literal.
+#: THE ANCHOR is the first line of the comment above the NEXT row (`revoke_web_search_grant`),
+#: so the new comment stays attached to the new row and no existing comment is split.
+#: Measured on the live copy: that anchor appears exactly once, and the block and the row
+#: appear 0 times (once each in the published base, where the probe makes a fresh install
+#: a no-op).
+RECORD_CALL_FILE = "gate-record-call.txt"
+RECORD_CALL_ANCHOR = (
+    '    # The instant stop, under its own action and tier line "auto": no card, and')
+
 #: The data-driven HUD-delta table. Each entry says, for one patch and one patched file:
 #:   probes: distinctive post-image lines; ALL must be in the live file to count as present
 #:   or_probes: a second set that proves presence when a LATER patch in the stack
@@ -1175,6 +1261,76 @@ DELTA_TABLE = {
                  "probes": ('        if route in ("/api/bench/run", '
                             '"/api/bench/cancel"):',)},
             ),
+        },
+    },
+    # ==========================================================================
+    # WAVE 6 (2026-11-04/05): the four patches that write a patched base file, plus
+    # the `call_notes` risk row that no patch carries. Measured on a COPY of the
+    # owner's live folder, 2026-11-05 - the numbers and the false-green mechanism
+    # are in the block comment above GITHUB_TOOLS_PROBES. Without these five rules
+    # the wave-6 rehearsal planned `to insert: none` while four features' gate/HUD
+    # regions were provably missing (DEF-035 for the third time).
+    # ==========================================================================
+    # github-tools.patch -> jarvis_gate.py: ONE hunk, a pure insertion between the
+    # end of `review()` and the `if __name__` block, so `"hunks": True` carries the
+    # patch's own 65 added lines exactly where the stack puts them. Its six-line
+    # pre-image appears EXACTLY ONCE in a copy of the live gate, so the location is
+    # proved, not guessed; the block is a module-level `_TOOL_ACTIONS.update` plus a
+    # `_RISK.update`, and both names already exist in the live file (line 1103 and
+    # 484), so the insert runs at import like the patch intends.
+    "github-tools.patch": {
+        "jarvis_gate.py": {
+            "probes": GITHUB_TOOLS_PROBES,
+            "hunks": True,
+        },
+    },
+    # handsfree.patch -> jarvis_gate.py: ONE hunk, a pure insertion at the end of the
+    # `if a.pending:` loop, so `"hunks": True` again. Its three-line pre-image
+    # (`print(f"  {r['id']} ...")`, `sys.exit(0)`, `sys.exit(review(a.days))`) appears
+    # EXACTLY ONCE in the live gate, and the insert leaves `if __name__`'s block
+    # dedented and the file compilable (the staged text is rehearsed with py_compile
+    # before anything is written). Its three update blocks add `send_text_message` and
+    # `handsfree_enable` to `_TOOL_ACTIONS`, `_NO_RULE_FROM_DENIAL` and `_RISK` - all
+    # three names exist in the live file today, so nothing dangles.
+    "handsfree.patch": {
+        "jarvis_gate.py": {
+            "probes": HANDSFREE_PROBES,
+            "hunks": True,
+        },
+    },
+    # product-check.patch -> jarvis_gate.py: its OWN hunk cannot be replayed (the
+    # measured three-space context, see PRODUCT_CHECK_ANCHOR above), so the patch's 40
+    # added lines are inserted in front of web-search-grant.patch's block header. That
+    # is the position the stack gives it, and the block's own comment says so.
+    "product-check.patch": {
+        "jarvis_gate.py": {
+            "probes": PRODUCT_CHECK_PROBES,
+            "anchor": PRODUCT_CHECK_ANCHOR,
+        },
+    },
+    # history-purge.patch -> jarvis_hud.py: ONE hunk inserting the install block after
+    # the `forget` block's failure prints and before sky.patch's comment, so
+    # `"hunks": True`. Its six-line pre-image appears EXACTLY ONCE in a copy of the live
+    # HUD. The probes name the import, the install call and its own failure line - NOT
+    # `token_ok=_token_ok, read_body=_read_body))`, which occurs 47 times in the live
+    # HUD from every other install block and is one of the lines that false-greened
+    # this patch in the first place.
+    "history-purge.patch": {
+        "jarvis_hud.py": {
+            "probes": HISTORY_PURGE_PROBES,
+            "hunks": True,
+        },
+    },
+    # The `call_notes` risk row, a LITERAL delta: no `.patch` carries it, and the
+    # published base (which the deploy never copies over live) is its only other home.
+    # See RECORD_CALL_FILE above for the measurement and the anchor. The probe is the
+    # row's own opening - present once the block lands, which makes a second deploy a
+    # no-op and a fresh install (whose base gate already holds the row) a no-op too.
+    "call-notes-risk.patch": {
+        "jarvis_gate.py": {
+            "probes": ('    "record_call": ("yes", "local",',),
+            "file": RECORD_CALL_FILE,
+            "anchor": RECORD_CALL_ANCHOR,
         },
     },
 }
