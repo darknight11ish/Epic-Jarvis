@@ -107,6 +107,16 @@ TOOL_NAMES = {
     "control_phone": "Phone control",
     "browser_control": "Browser control",
     "github_search": "GitHub research",
+    # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
+    # 2026-11-03: "Read + actions"). Every one asks you first, and none of them
+    # can merge, push, commit, delete or close anything.
+    "github_list": "Listing your GitHub repositories, pull requests, issues or runs "
+                   "(one card each)",
+    "github_read_file": "Reading one file in a GitHub repository (one card each)",
+    "github_ci_status": "Checking how CI went on GitHub (one card each)",
+    "github_comment": "Posting a comment on GitHub (one card each)",
+    "github_open_issue": "Opening a GitHub issue (one card each)",
+    "github_rerun_workflow": "Running a GitHub workflow again (one card each)",
     "web_search": "Web search",
     "read_web_page": "Reading one web page out loud (one card each)",
     "protect_from_jarvis": "Protecting a folder, file or program from Jarvis (one card each)",
@@ -144,6 +154,10 @@ TOOL_NAMES = {
     # reach page lists every tool the model can offer, so this one has plain
     # words too. It SENDS (outbound) - one file, one card, ten minutes.
     "send_file_to_phone": "Sending one file from your PC to your phone (one card each)",
+    # Text one contact (2026-11-04, hands-free mode). It SENDS a real message
+    # in the owner's name from the owner's own number - one card each, and a
+    # sent text cannot be unsent.
+    "send_text_message": "Sending one text message from your phone (one card each)",
     # The goals and their progress (2026-11-02). No card on any of them: a goal
     # and a progress line are the owner's own words in the owner's own store,
     # the same shape as the to-do list above. Nothing here deletes anything.
@@ -190,6 +204,13 @@ TOOL_NAMES = {
     "plugin_list": "Listing Jarvis's drop-in plugins and why one is off (read-only)",
     "plugin_switch": "Switching ONE of Jarvis's own drop-in plugins on (one card) "
                      "or off (instant); it takes effect the next time Jarvis starts",
+    # The product check (2026-11-04, the owner's choice "wire the existing
+    # product check"): ONE Amazon product page read in the owner's own
+    # signed-in browser, behind one PC-only card. Listed here because
+    # test_reach.py requires every tool to have plain words for the page.
+    "product_check": "Checking one Amazon product page's reviews for sponsored-review "
+                     "patterns (one page, one PC-only card, read-only; off unless you "
+                     "switch it on)",
     # What Jarvis is made of, and the owner's own old conversations (2026-11-03;
     # jarvis_self_portrait.py). test_reach.py requires plain words for every
     # tool; the two conversation reads change nothing and the clear is ONE card
@@ -1069,6 +1090,45 @@ _shell = _control("shell_exec", "shell", "Commands on this PC",
                   "Can run a command on this PC after you say yes to that exact command.")
 
 
+def _call_recording(ctx: Ctx) -> dict:
+    """Recording a phone call (jarvis_call_notes.py, 2026-11-04): the phone's own
+    microphone, into this PC.
+
+    It is a way out in exactly one sense - it reaches the PHONE, the device that
+    holds the microphone - and no further: the audio is kept in this PC's
+    settings folder, the words are made here, and the note is written through
+    the notes editor's own card. The switch is read from the module, never
+    copied, so this row and the routes cannot disagree.
+    """
+    name = "Call recording (your phone's microphone)"
+    try:
+        import jarvis_call_notes as C
+    except Exception:                                       # noqa: BLE001
+        return _row("call_recording", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have call recording yet - run "
+                    "apply-patches.ps1.")
+    try:
+        on = C.enabled()
+    except Exception:                                       # noqa: BLE001
+        on = False
+    if not on:
+        return _row("call_recording", name, "off", "", ASK_NA,
+                    "Off. Turning it on is a hand edit of [call_recording] enabled in the "
+                    "settings file on this PC - there is no in-app switch, the same shape "
+                    "GitHub research and shell commands use.")
+    tier, words = asks("record_call", ctx)
+    if tier == "never":
+        return _row("call_recording", name, "blocked",
+                    "your phone's microphone, into this PC", words,
+                    "Switched on, but your settings say never, so nothing is recorded.")
+    return _row("call_recording", name, "on",
+                "your phone's microphone, into this PC", words,
+                "Records a call through the phone's microphone with the call on speaker "
+                "(Android does not let an app record the call's own audio). The audio is "
+                "kept in this PC's settings folder and transcribed here; the note is "
+                "written through the notes editor's own card. Nothing is sent anywhere.")
+
+
 def _browser_engine_status() -> dict:
     try:
         import jarvis_browser_engine as BE
@@ -1534,6 +1594,7 @@ KINDS = (
     ("chatbot_api", _chatbot_api),
     ("support_chat", _support_chat),
     ("phone_control", _phone),
+    ("call_recording", _call_recording),
     ("shell", _shell),
     ("plugins", _plugins),
     ("second_card", _second_card),

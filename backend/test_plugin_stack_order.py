@@ -64,6 +64,50 @@ decision the old record was waiting for.
 WHAT IT CANNOT SEE. Only four of the 28 folders' READMEs state a position at
 all, so (5) covers those four. The others say nothing, which is not a pass and
 not a failure - it is printed as a coverage line so the number is never assumed.
+
+THE SAME SHAPE RECURRED ON 2026-11-05, and was resolved the same way.
+`history-purge.patch` (PR #1170) sits at index 170 - between `bench.patch` and
+`plugin-loader.patch`, which must stay last - so `history-purge`'s number was
+fixed at 170 the moment the patch existed, and `protected-items` held the
+hand-numbered 170 as well. Again the patch side cannot move, so the
+hand-numbered side did: `protected-items` 170 -> 171, `send-file` 171 -> 172,
+`skill-menu` 172 -> 173, `watch-decisions` 173 -> 174, each README that states
+a position renumbered with it. The loader's real sequence before this was the
+tie at 170 broken by folder name - `history-purge` then `protected-items` - and
+it is the same sequence now with the tie gone, so, as in 2026-10-16, no shipped
+feature's load order changed: only the labels did.
+
+THE 2026-11-05 WAVE (six PRs landed as one integration branch) produced the same
+shape a third time, and it is recorded here because the same decision was made.
+Four folders had each chosen `stack_order` 173 - "the first free slot at the
+end" - and `skill-menu` still held 173 too; separately, `history-purge`'s number
+is fixed by its patch index, which is NOW 173 (three patches landed before it in
+`$PATCHES` after the paragraph above was written, so that PR's own "index 170"
+is history, not the current number). The patch side again could not move: the
+four hand-numbered newcomers took the next four free slots in the order their
+names had already decided - `call-notes` 174, `handsfree` 175, `product-check`
+176, `skill-menu` 177 - and `watch-decisions` moved 174 -> 178 to stay after
+them. Every folder keeps its position except `history-purge`, which now loads
+first of that group instead of third; the five features share no route, switch
+or handler, so nothing about what loads changed - only the labels did, as on
+2026-10-16 and in the paragraph above.
+
+AND THEN THE PATCH SIDE MOVED AFTER ALL, later the same day, which is why the
+number above is now history too. `history-purge.patch` could not stay between
+`bench.patch` and `plugin-loader.patch`: `backend/test_phone_app_allowlist.py`
+pins `phone-apps.patch` -> `bench.patch` -> `plugin-loader.patch` as the last
+three entries, so a patch written after phone-apps could not sit between them.
+There was no free slot next to the loader either - 171, 172 and 174 are
+protected-items', send-file's and call-notes' hand numbers - so the patch moved
+to index 170, the first free number after `forget-range.patch`, whose install
+block its hunk follows. `history-purge`'s folder therefore reads 170 (one
+number, no collision: nothing else holds 170, and 173 is now unused), and the
+other 53 folders keep theirs. Its loader POSITION is what changed for the first
+time in these three records: it now loads just after `notes-edit` (169) instead
+of just before `call-notes` (174). The two features share no route, switch,
+handler or module, so what loads and in what order relative to one another is
+unchanged - only where this one starts, which is the honest label for a patch
+that really did move.
 """
 from __future__ import annotations
 

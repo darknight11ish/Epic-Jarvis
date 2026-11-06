@@ -660,8 +660,23 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
     check("... with only the patches written after this one between it and "
           "the loader",
           "phone-apps.patch" in order
-          and order[order.index("phone-apps.patch") + 1] == "bench.patch",
+          and order[order.index("phone-apps.patch") + 1] == "bench.patch"
+          and order.index("bench.patch") + 1 == order.index("plugin-loader.patch"),
           order[-3:])
+    # handsfree.patch (2026-11-04, hands-free mode) is NOT appended after this
+    # patch. Its three `jarvis_gate.py` rows are ONE end-of-file hunk, and it is
+    # applied BEFORE web-search-grant.patch so unknown-risk-approvable.patch
+    # stays the LAST patch that writes jarvis_gate.py - the ordering
+    # backend/test_gate_unknown_risk.py pins with no whitelist. So what this
+    # suite checks is that it is in the stack at all, and on the right side of
+    # web-search-grant.patch, and that it adds nothing between this patch and
+    # the loader.
+    check("handsfree.patch is in the stack, on the near side of "
+          "web-search-grant.patch, and adds nothing after this patch",
+          "handsfree.patch" in order
+          and order.index("handsfree.patch") + 1 == order.index("web-search-grant.patch")
+          and order.index("handsfree.patch") < order.index("phone-apps.patch"),
+          order[-5:])
     patch = (HERE / "phone-apps.patch").read_text(encoding="utf-8")
     check("the patch touches jarvis_hud.py only - no jarvis_gate.py hunk, "
           "because the mapping ships in the gate base",

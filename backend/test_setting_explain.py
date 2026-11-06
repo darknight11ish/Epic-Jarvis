@@ -180,8 +180,11 @@ def t_the_counts_and_the_readers_are_the_registrys_own():
 
     Thirty-seven on the same day: the "Personalize Jarvis" reminder
     (`pc_setup_notification`, Wave B), whose reader is `_read_notify
-    ("notif_setup")` in this table."""
-    check("37 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 37,
+    ("notif_setup")` in this table.
+
+    Thirty-eight on 2026-11-04: `handsfree`, hands-free mode's own switch
+    (JARVIS-API section 191), whose reader is `_read_handsfree` in this table."""
+    check("38 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 38,
           len(R.BOOL_SETTINGS))
     check("10 CHOICE_SETTINGS", len(R.CHOICE_SETTINGS) == 10, len(R.CHOICE_SETTINGS))
     check("1 NUMBER_SETTINGS", len(R.NUMBER_SETTINGS) == 1, len(R.NUMBER_SETTINGS))

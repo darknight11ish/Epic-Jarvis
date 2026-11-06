@@ -278,6 +278,35 @@ CLASSIFICATION = {
     # settings MIRROR, not a second editor, and it grows no catalogue
     # (ARCHITECTURE section 8, and the row in its one-sided-on-purpose table).
     # The read-only POST /api/antislop/audit is in BACKEND_ONLY below.
+    # Hands-free mode (2026-11-04; JARVIS-API section 191; backend
+    # jarvis_handsfree.py, plugins/ready/handsfree). GET reads the switch, the
+    # answer window, the closed vocabulary and whether a phone can take a text;
+    # POST is the switch itself: OFF at once and cardless, ON one ask-tier card
+    # (`handsfree_enable`) through the ordinary approval path. BOTH apps call
+    # this one route - the owner asked for the switch "from chat, Jarvis Live,
+    # or Settings" - so it is ported. Desktop: Settings, Hands-free mode
+    # (src-tauri/src/handsfree.rs get_handsfree/set_handsfree, settings window
+    # only, drawn by src/handsfree-settings.js). Phone: net/Handsfree.kt's
+    # lenient read, JarvisRuntime.refreshHandsfree/setHandsfree, drawn by
+    # ui/screens/HandsfreeSection.kt and Home's status line. The phone's answer
+    # clip (/api/handsfree/answer) and its own word on a text it sent
+    # (/api/phone/result) stay PHONE-ONLY below: the phone is the ears and the
+    # SMS hand, and a client never transcribes (CLAUDE.md).
+    "/api/handsfree": ("ported", "Hands-free mode's one switch (2026-11-04; "
+                       "JARVIS-API section 191; jarvis_handsfree.py, "
+                       "plugins/ready/handsfree). GET is a read of the switch, the "
+                       "60-second answer window, the closed yes/no vocabulary, "
+                       "whether a voice print is enrolled, whether a phone can take "
+                       "a text, and the newest read-out; POST {\"enabled\": bool} "
+                       "turns it OFF at once and cardless, and ON through ONE "
+                       "ask-tier card (`handsfree_enable`, a risky approval) that a "
+                       "person answers - this route never decides that card. Desktop: "
+                       "Settings, Hands-free mode (src-tauri/src/handsfree.rs "
+                       "get_handsfree/set_handsfree, settings window only, drawn by "
+                       "src/handsfree-settings.js). Phone: net/Handsfree.kt's "
+                       "lenient read, JarvisRuntime.refreshHandsfree/setHandsfree, "
+                       "drawn by ui/screens/HandsfreeSection.kt and Home's status "
+                       "line. The answer and result routes are PHONE-ONLY below."),
     "/api/antislop": ("ported", "The Anti-Slop filter (2026-10-28; JARVIS-API section 159; backend jarvis_antislop.py, vendoring the MIT-licensed miqdadbadjuber/anti-slop ruleset). GET reads the whole state (enabled, mode, scopes, dials, show_delivery_gate_on_ui_tasks); POST is ONE change at once, with no approval card either way and no model call - it filters the wording of an answer, opens no way out of the PC, reads no folder and takes no action. OFF costs 0 prompt tokens and rewrites nothing. Desktop: Settings, How Jarvis talks, Anti-Slop filter (src-tauri/src/antislop.rs get_antislop/set_antislop, settings window only; the card is src/antislop-settings.js + src/antislop.js). Phone: Settings, How Jarvis talks (net/Antislop.kt, ui/screens/AntislopPlate.kt, JarvisRuntime setAntislop/setAntislopMode), the master switch, the During/After mode and the em-dash box - the three scopes, the Delivery Gate switch and the dials are the desktop card on purpose (ARCHITECTURE section 8). The read-only POST /api/antislop/audit is in BACKEND_ONLY below."),
     # The Jarvis-owned local calendar's four routes are declared ONCE, at the END
     # of this table (search `/api/calendar`): `planned`, because the phone calls
@@ -947,23 +976,17 @@ PHONE_ONLY = {
     # can approve a file or extend its ten minutes.
     "/api/files/send": ("phone-only", "The files the owner already approved for this phone (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172): name, folder, size, MIME type and seconds left, never a path. A file appears only after the PC's own ONE send_file_to_phone card was approved, and only the phone has any use for it - the file's destination is the phone. Phone: net/SendFile.kt and ui/screens/SendFilePlate.kt (the Settings row, and a small block inside Coming up so a waiting file is noticed), JarvisRuntime.sendFiles. Desktop: nothing to draw, by design - the bytes leave the PC for the phone (docs/ARCHITECTURE.md section 8)."),
     "/api/files/download": ("phone-only", "ONE approved file's bytes, base64 in JSON, by opaque id only - never a path, and the answer carries none (the owner's ask of 2026-10-31; Gemini Q7; docs/JARVIS-API.md section 172). Ten minutes and one download; a second fetch is the PC's own 404 sentence. Phone: ui/screens/SendFilePlate.kt's View (FileProvider + ACTION_VIEW) and Save to Downloads (MediaStore.Downloads), JarvisRuntime.downloadFile. Desktop: nothing to draw - the phone is the destination (docs/ARCHITECTURE.md section 8)."),
-    # Hands-free (the owner's request of 2026-11-04; the phone lane of the PC's
-    # frozen contract, docs/JARVIS-API.md section 186; net/Handsfree.kt,
+    # Hands-free's two phone-facing routes (the owner's request of 2026-11-04;
+    # docs/JARVIS-API.md section 191; net/Handsfree.kt,
     # service/HandsfreeService.kt, voice/MicOwner.kt). PHONE-ONLY because the
-    # phone IS the mouth, the ears and the SMS hand: it plays the PC's own WAV
-    # out of its speaker, records the answer clip (the phone never transcribes -
-    # a client may not, CLAUDE.md), and sends the text message, because a
-    # Windows PC has no phone's microphone, speaker or SMS service. The PC keeps
-    # the authority: it transcribes, checks the owner's voice print and decides.
-    #
-    # The desktop calls the FIRST of these when its own lane lands (it has a
-    # hands-free setting too, per the owner's "from chat, Jarvis Live, or
-    # Settings"), and the frozen contract gives that single path BOTH the read
-    # and the switch. The moment the desktop calls it, rule 6 fails here and it
-    # moves to CLASSIFICATION as "ported" - the right change then, and this note
-    # says so rather than leaving it to be rediscovered.
-    "/api/handsfree": ("phone-only", "The hands-free state AND its switch (the owner's request of 2026-11-04; docs/JARVIS-API.md section 186): GET reads whether this PC has the mode armed, the 60-second answer window, the closed yes/no vocabulary, whether a voice print is enrolled, whether a phone can take a text, and the newest read-out; POST {\"enabled\": bool} turns it OFF at once and cardless, or ON through ONE ask-tier card. One path for both verbs - the contract has no separate /enabled route. Phone: net/Handsfree.kt's lenient read, JarvisRuntime.refreshHandsfree/setHandsfree, drawn by ui/screens/HandsfreeSection.kt and Home's status line. Desktop: none on this tree - the desktop lane of the same contract owns its own surface, and the day it calls this the entry becomes \"ported\" (ARCHITECTURE.md section 8)."),
-    "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state, say} (the owner's request of 2026-11-04; docs/JARVIS-API.md section 186). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV inside the PC's own answer window (a minute at most), clip-capped at the PC's 30 seconds, and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
+    # phone IS the ears and the SMS hand: it records the answer clip (the phone
+    # never transcribes - a client may not, CLAUDE.md), and it sends the text
+    # message, because a Windows PC has no phone's microphone or SMS service.
+    # The PC keeps the authority: it transcribes, checks the owner's voice print
+    # and decides. The THIRD route, /api/handsfree (the state AND its switch), is
+    # called by BOTH apps now that the desktop's own half landed, so it is in
+    # CLASSIFICATION above as `ported`.
+    "/api/handsfree/answer": ("phone-only", "ONE recorded answer to a card, base64 in JSON: {card_id, data_b64, sample_rate} -> {ok, heard, decision, card_state, say} (the owner's request of 2026-11-04; docs/JARVIS-API.md section 191). Phone-only by the project's own rule that a client never does speech-to-text: the phone records a 16 kHz mono WAV inside the PC's own answer window (a minute at most), clip-capped at the PC's 30 seconds, and the PC transcribes it, checks the owner's voice print and decides. Phone: handsfree/HandsfreeClip.kt, handsfree/HandsfreeFlow.kt, service/HandsfreeService.kt, JarvisRuntime.api.answerHandsfree. Desktop: it is the one deciding, so it has nothing to upload (ARCHITECTURE.md section 8)."),
     "/api/phone/result": ("phone-only", "What happened to a `phone_command` this phone carried out: {id, ok, receipt, why}, where `receipt` is Android's own SMS RESULT_* and `why` is the refusal in plain words (the owner's request of 2026-11-04). Phone: service/HandsfreeService.kt posts it for EVERY command, including the ones it refused and the ones of a kind it does not know, so the PC can tell \"not sent\" from \"still working\". A PC has no phone to command, so the desktop never calls it (ARCHITECTURE.md section 8)."),
 
     # Recording a phone call (the owner's request of 2026-11-04). The audio
@@ -1161,6 +1184,30 @@ BACKEND_ONLY = {
     "/api/bench/run/{id}": "How one benchmark run is going, and its numbers when it is done (`state`, `step`, `of`, `partial`, `result`) - JARVIS-API section 185, jarvis_bench.py. The read a screen polls while a run is going; no app polls it yet (phase 2 desktop, phase 5 phone). When a screen lands it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/cancel": "Stopping the benchmark run in flight (JARVIS-API section 185; jarvis_bench.py): the repeat already running is NOT killed, because a request cut off mid-answer leaves Ollama's counters unusable, and the run row says PARTIAL. No app calls it yet - the Cancel button is phase 2 on the desktop and phase 5 on the phone - and when one does it goes on BOTH apps (ARCHITECTURE section 8).",
     "/api/bench/history": "The benchmark's OWN history, newest first, from `bench.jsonl` - never `/api/history` and never the chat history (JARVIS-API section 185; jarvis_bench.py). Filters are exact matches on the stored model/lane/preset names. The separate History window is phase 3 on the desktop and phase 5 on the phone, so no window reads it yet; when one does it goes on BOTH apps, and the DELETE beside it arrives with that window because phase 1 has no delete (ARCHITECTURE section 8).",
+    # Call recording's READ route (2026-11-04, JARVIS-API section 188;
+    # jarvis_call_notes.py). The three POST routes beside it are `phone-only`
+    # in the phone lane's own pull request, because the phone holds the
+    # microphone; this one is the PC's, and this module refuses any other
+    # device through jarvis_owner_check.from_this_pc before it answers.
+    "/api/call/recording": "The list of recorded calls - date, duration, note path, status and speaker list, never the transcript text (JARVIS-API section 188; jarvis_call_notes.py). Read-only AND PC-ONLY: it names the owner's recordings and the vault paths they were filed to, which is a PC surface, and the phone has no use for it (the audio comes FROM the phone). No app calls it yet - there is no recordings screen on either app - so the PC's own list is the only reader; ARCHITECTURE section 8 and docs/CALL-RECORDING.md say why.",
+    # Call recording's DELETE route (added 2026-11-05, the privacy audit's D4;
+    # JARVIS-API section 188.1; jarvis_call_notes.py). Post, not DELETE, for
+    # the reason section 112 records about the goals store. PC-ONLY, and it
+    # refuses any other device through jarvis_owner_check.from_this_pc BEFORE
+    # the body is read; ONE delete_call_recording card at tier ask, no bulk
+    # form. No app calls it yet: there is no recordings screen on either app,
+    # and this route is the PC surface a desktop screen would call - the phone
+    # deliberately gets none (the delete happens on the phone for the phone's
+    # own unsent copy). ARCHITECTURE section 8 and docs/CALL-RECORDING.md
+    # section 7 (the retention policy) say why.
+    "/api/call/recording/delete": "Deleting ONE recorded call from this PC (2026-11-05, the 2026-11-05 privacy audit's D4; JARVIS-API section 188.1; jarvis_call_notes.py). It removes that session's whole folder - audio.pcm, audio.wav, transcript.md, receipt.json and any part-*.wav - which is also its row in the list route, behind ONE delete_call_recording approval card at tier ask; deleting audio cannot be undone. PC-ONLY: it refuses any device but this PC through jarvis_owner_check.from_this_pc before the body is read, and the Obsidian note is a separate document that stays. It answers 202 while its card waits, 409 while the recording is still being captured or transcribed, and 404 for an id that is not one of ours. No app calls it yet - there is no recordings screen on either app, and the desktop screen it belongs behind is the named follow-up (ARCHITECTURE section 8); docs/CALL-RECORDING.md section 7 is the retention policy that names it as the only route that deletes.",
+    # The product check's ONE route (2026-11-04, the owner's choice "wire the
+    # existing product check"). PC-ONLY by design: the browser window and the
+    # signed-in profile it reads with are on this PC, so a phone caller gets 403
+    # before the body is read - this is the one route that must NOT go on both
+    # apps, and the report screen it feeds is the named follow-up lane. The
+    # chat tool is the door that works today, on the PC.
+    "/api/product/check": "The product check's report endpoint (JARVIS-API section 192; jarvis_product_check.py, installed by plugins/ready/product-check). POST one Amazon product address -> ONE PC-only approval card -> the engine's reasons report. It reads the page in the owner's own signed-in browser window on THIS PC, so it is refused from any other device (403 pc_only) by design, not ported: ARCHITECTURE section 8's one-sided table records why. No app screen calls it yet - the report is delivered in the chat answer today, and the desktop/phone report screen is the named follow-up - so when one lands it is DESKTOP-ONLY and must NOT be treated as a parity miss.",
 }
 
 _BLOCK = re.compile(r"/\*.*?\*/", re.S)

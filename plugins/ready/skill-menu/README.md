@@ -12,8 +12,10 @@ folder (or run `scripts\add-plugin.ps1 -Name skill-menu`) and restart Jarvis.
 
 - Module the loader calls: `jarvis_skill_menu.install()` (takes the core's Handler)
 - The patch this replaces: none - this is not a feature that used to be a patch
-- Position in the loader's order: **172**, the first free slot after every
-  catalogued folder (`send-file` is the highest, at 171), so its five routes are
+- Position in the loader's order: **177**, the first free slot after every
+  catalogued folder (`send-file` is the highest generated one, at 172) and after
+  the three folders that landed with the 2026-11-05 wave (`call-notes` 174,
+  `handsfree` 175, `product-check` 176), so its five routes are
   checked after that stack rather than in the middle of somebody else's.
 
 The module itself is one of the ones this repository ships

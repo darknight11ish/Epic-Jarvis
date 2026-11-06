@@ -82,6 +82,15 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     # The surface-aware lane (2026-10-31): one card-words pin in its own new
     # suite; recorded as debt, not approval, and may only go down.
     "backend/test_surface.py": 1,
+    # The GitHub tools (2026-11-03): three pins, measured with `--measure` on
+    # this tree, recorded as debt rather than approval. Two read
+    # `backend/jarvis_github.py` as text - its import set (no private module may
+    # be imported) and the `token_target()` call - and one greps
+    # `backend/jarvis_agent.py` for the branch that answers "connect GitHub" when
+    # no token is saved. They are static proofs about code that is awkward to
+    # drive any other way; the ratchet only turns DOWN, so a later pass should
+    # turn them into behaviour checks and lower this to 0.
+    "backend/test_github_tools.py": 3,
     # The nine wave-2 honesty lanes (2026-11-01): their new suites were written
     # with a few source-text pins (a card-words string, a route name) rather
     # than behaviour checks; measured with `--measure` on the merged bundle and
@@ -107,11 +116,18 @@ SOURCE_PIN_CEILING: dict[str, int] = {
     "backend/test_antislop.py": 8,
     "backend/test_account_secrets.py": 1,
     # "backend/test_file_to_phone.py" (2026-10-31, the send-file-to-phone
-    # slice): a NEW suite may only have zero pins. It has 11, measured here
-    # with `--measure`: source-text pins on the card's words, the route's
-    # no-path rule and the records. Recorded as debt, not approval - the
-    # ratchet only turns down.
-    "backend/test_file_to_phone.py": 11,
+    # slice): a NEW suite may only have zero pins. It had 11, measured with
+    # `--measure`: source-text pins on the card's words, the route's no-path
+    # rule and the records. Recorded as debt, not approval - the ratchet only
+    # turns down.
+    # LOWERED 2026-11-04, 11 -> 9, for PR #1169: the one pin that read
+    # `prompt = plan_text if name == SEND_FILE_TOOL` was the exact source text
+    # that branch changed (the line now covers handsfree's send_text_message
+    # too, and the pin went red with no behaviour change). It is now a REAL
+    # _one_call with only the gate replaced: the prompt the checker receives IS
+    # the plan text it is also given, and is not `_gate_prompt`'s line. Two pins
+    # (a `src` read and its two comparisons on lines 402/404) became behaviour.
+    "backend/test_file_to_phone.py": 9,
     # 2026-11-05 (folder restrictions by plain chat, #1166): its new suite keeps
     # two source-text pins on the dead "protection_change" branch it replaced -
     # the branch must stay gone, and its broken offered-test (a gate action name

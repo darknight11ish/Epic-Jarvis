@@ -7,12 +7,14 @@ FIXTURE HTML ONLY. Nothing in this suite opens a browser, starts a driver,
 fetches a URL or writes a file: the capture seam takes an injected driver and
 these tests inject fakes over hand-written pages. The real browser profile, the
 one-time owner login and a real Amazon read are NOT-TESTABLE in this container
-and are reported as such; `real_driver()` is proved to refuse rather than
-pretend.
+and are reported as such; the real driver is proved to be built WITHOUT fetching
+anything, to use the browser module's public read seam, and to refuse a
+read-only address before that seam is called.
 
 The suite also proves the module's four states (product page, owner login,
-challenge, not a product page), every refusal path, no network, no storage, and
-an AST scan of the module's own source for forbidden imports/calls.
+challenge, not a product page), the read-only address policy, every refusal
+path, no network, no storage, and an AST scan of the module's own source for
+forbidden imports/calls.
 """
 from __future__ import annotations
 
@@ -200,17 +202,113 @@ def t_owner_login_seam():
     check("an object without a login flow still asks the owner", raised2 is not None)
 
 
-def t_real_driver_refuses_with_not_testable_note():
+def t_real_driver_is_a_read_only_browser_session_driver():
+    driver = CAP.real_driver()
+    check("the real driver is built without fetching or opening anything",
+          hasattr(driver, "get_html") and callable(driver.get_html)
+          and hasattr(driver, "open_owner_login")
+          and callable(driver.open_owner_login))
+    check("... and it is bound to the product-check session's persistent page",
+          getattr(CAP.real_driver(), "session", "") == CAP.PRODUCT_SESSION
+          == "product-check")
+    # A fake reader/opener is the tests' own injection point: the REAL browser
+    # is never called here, and the read-only policy is refused BEFORE either.
+    calls = []
+
+    def reader(session, url):
+        calls.append(("read", session, url))
+        return PRODUCT_PAGE
+
+    def opener(session, url):
+        calls.append(("login", session, url))
+        return url
+
+    fake = CAP.browser_driver(reader=reader, opener=opener)
+    html = fake.get_html("https://www.amazon.com/dp/B0TEST0001")
+    check("the driver hands the browser's own HTML back unchanged", html == PRODUCT_PAGE)
+    check("... through the documented read seam with the session and the URL",
+          calls == [("read", "product-check", "https://www.amazon.com/dp/B0TEST0001")],
+          calls)
+    fake.open_owner_login()
+    check("the login seam opens the sign-in page for the owner, typing nothing",
+          calls[-1] == ("login", "product-check", CAP.SIGNIN_URL), calls)
+    calls.clear()
+    for bad in ("https://www.amazon.com/gp/cart/view.html",
+                "https://www.amazon.com/checkout/entry",
+                "https://www.amazon.com/gp/your-account/order-history"):
+        try:
+            fake.get_html(bad)
+            raised = None
+        except CAP.CaptureUnavailable as exc:
+            raised = exc
+        check(f"the driver refuses {bad.split('amazon.com')[1]} before any read "
+              f"({bad})", raised is not None and not calls,
+              (str(raised), calls))
+    calls.clear()
     try:
-        CAP.real_driver()
+        fake.get_html("not an address")
         raised = None
     except CAP.CaptureUnavailable as exc:
         raised = exc
-    check("the real driver raises CaptureUnavailable instead of pretending",
-          isinstance(raised, CAP.CaptureUnavailable), raised)
-    message = str(raised or "").lower()
-    check("... and its message says the real capture driver is not built",
-          "not built" in message and "no public" in message, message)
+    check("the driver refuses a non-address before any read",
+          raised is not None and not calls, (str(raised), calls))
+
+
+def t_the_read_only_address_policy_is_before_anything_else():
+    for url in ("https://www.amazon.com/gp/cart/view.html",
+                "https://www.amazon.com/checkout/entry",
+                "https://www.amazon.com/gp/buy/",
+                "https://www.amazon.com/gp/your-account/order-history",
+                "https://www.amazon.com/gp/css/order-history",
+                "https://www.amazon.com/account",
+                "https://www.amazon.com/payment",
+                "https://www.amazon.com/gp/wallet",
+                "https://www.amazon.com/ap/signin?openid.return_to=x"):
+        why = CAP.readonly_problem(url)
+        check(f"a read-only address is refused BEFORE a card: {url.split('amazon.com')[1]}",
+              bool(why) and "cart, checkout, order, account, payment or sign-in" in why,
+              why)
+    # A product page whose own slug CONTAINS one of those words is still fine:
+    # the policy reads WHOLE path segments, never a substring.
+    for url in ("https://www.amazon.com/Some-Order-Book/dp/B0TEST0001",
+                "https://www.amazon.com/Cartoon-History/dp/B0TEST0001/ref=cm_cr_arp",
+                "https://www.amazon.com/dp/B0TEST0001?th=1&psc=1"):
+        check(f"a product page is not refused for a word in its slug: {url.split('amazon.com')[1]}",
+              CAP.readonly_problem(url) == "", CAP.readonly_problem(url))
+    check("capture_page refuses a read-only address with no driver and no card",
+          CAP.readonly_problem("https://www.amazon.com/gp/cart/view.html") != "")
+    try:
+        CAP.capture_page("https://www.amazon.com/gp/cart/view.html",
+                         driver=FakeDriver(PRODUCT_PAGE))
+        raised = None
+    except CAP.CaptureUnavailable as exc:
+        raised = exc
+    check("... and the fake driver was never asked for a page",
+          isinstance(raised, CAP.CaptureUnavailable)
+          and "cart, checkout, order" in str(raised), raised)
+
+
+def t_the_product_address_policy_is_amazon_only():
+    good = ["https://www.amazon.com/dp/B0TEST0001",
+            "https://www.amazon.co.uk/gp/product/B0TEST0001",
+            "https://smile.amazon.com/dp/B0TEST0001"]
+    bad = ["https://example.com/dp/B0TEST0001",
+           "https://www.amazon.com/s?k=widget",
+           "https://www.amazon.com/Some-Product",
+           "https://amazon.evil.example/dp/B0TEST0001",
+           "not an address",
+           "https://user:pass@www.amazon.com/dp/B0TEST0001"]
+    check("real Amazon product addresses pass the shape check",
+          all(CAP.product_address_problem(u) == "" for u in good),
+          [CAP.product_address_problem(u) for u in good])
+    problems = [CAP.product_address_problem(u) for u in bad]
+    check("a non-Amazon address, a search page, a page without an ASIN, a lookalike "
+          "host, junk, and an address carrying credentials are all refused",
+          all(problems), problems)
+    check("the lookalike host is refused for the host, not by luck",
+          "not an Amazon product address" in
+          CAP.product_address_problem("https://amazon.evil.example/dp/B0TEST0001"),
+          CAP.product_address_problem("https://amazon.evil.example/dp/B0TEST0001"))
 
 
 def t_module_has_no_network_or_storage():
@@ -247,15 +345,36 @@ def t_module_has_no_network_or_storage():
 def t_source_imports_and_calls_are_clean():
     source = inspect.getsource(CAP)
     tree = ast.parse(source)
-    roots = set()
+
+    def roots_of(nodes):
+        roots = set()
+        for node in nodes:
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    roots.add(alias.name.split(".")[0])
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                roots.add(node.module.split(".")[0])
+        return roots
+
+    # TOP-LEVEL imports only: importing the capture module must never import
+    # the browser (or Playwright). The real driver imports the browser module
+    # LAZILY, inside the method that is about to open a window - so a machine
+    # without Playwright can still import and classify fixture HTML.
+    top = roots_of(tree.body)
+    check("the module's top-level imports are only the read half (plus __future__)",
+          top == {"__future__", "jarvis_product_read"}, sorted(top))
+    nested = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                roots.add(alias.name.split(".")[0])
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            roots.add(node.module.split(".")[0])
-    check("the module imports only the read half (plus __future__)",
-          roots == {"__future__", "jarvis_product_read"}, sorted(roots))
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for inner in ast.walk(node):
+                if isinstance(inner, (ast.Import, ast.ImportFrom)):
+                    nested |= roots_of([inner])
+    roots = top | nested
+    check("the browser module is imported lazily, inside the real driver's own "
+          "methods, and nowhere else",
+          "jarvis_browser_control" in nested and "jarvis_browser_control" not in top
+          and "jarvis_browser_control" not in roots_of(tree.body),
+          sorted(nested))
     forbidden_roots = {"socket", "urllib", "http", "requests", "subprocess", "os",
                        "pathlib", "playwright", "selenium", "webbrowser"}
     check("it imports no network, browser, storage or process module",
@@ -287,7 +406,9 @@ TESTS = (
     t_capture_with_a_fake_driver,
     t_capture_refuses_honestly,
     t_owner_login_seam,
-    t_real_driver_refuses_with_not_testable_note,
+    t_real_driver_is_a_read_only_browser_session_driver,
+    t_the_read_only_address_policy_is_before_anything_else,
+    t_the_product_address_policy_is_amazon_only,
     t_module_has_no_network_or_storage,
     t_source_imports_and_calls_are_clean,
     t_classify_is_stateless,

@@ -191,6 +191,7 @@ voices.patch	voices/15d1300.patch	15d1300e6f10b21b724535bb9ca761388700d761	2026-
 voices.patch	voices/1262208.patch	126220810bc58273cd6196d6a8fbce1b538655de	2026-09-26T19:47:59Z	Grow "What did I miss?" and add a built-in-voice-choice setting
 voices.patch	voices/ca53319.patch	ca5331976dca4cfaa937bb04b690306707d0a70d	2026-09-26T07:41:16Z	Voice upgrades: the bake-off, Pocket TTS and a newer "hey Jarvis" built but off, and the speaking speed in both apps
 voices.patch	voices/ca3f625.patch	ca3f62575069f0b741ace3645b33729f9c2c7d9c	2026-09-24T08:14:23Z	Custom voices, backend: jarvis_voices.py, voices.patch, and the better voice
+web-search-grant.patch	web-search-grant/890c42c.patch	890c42c776d083691d7cc04e9f7f117444a0129e	2026-11-02T10:46:59-08:00	feat(web-search): one card, once, lets a conversation search the web without asking (#1074)
 web-search-switch.patch	web-search-switch/236ba22.patch	236ba22118bf640403d8572c23bca580a6bde245	2026-09-30T06:54:43Z	Settings audit 2026-09-30: email switch fix, web search on/off, jump list, voice switches in Voice
 web-search.patch	web-search/dcfdbaf.patch	dcfdbafdf25c0944179e6103990326786c11de38	2026-09-25T06:49:40Z	Web search: Brave back as the fifth option, and its line says it can cost money
 web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d09	2026-09-25T06:33:24Z	Web search: Exa replaces Brave (SearXNG, DuckDuckGo, Exa, Tavily)

@@ -19,7 +19,7 @@ import org.junit.Test
  * "I didn't catch that" on a real phone - is the COLLECTION: that a partial
  * read lands in the right place, that the 30-second cap truncates at the
  * boundary rather than overshooting (the PC refuses a longer clip rather than
- * truncating it, JARVIS-API section 186.5), and that a clip too short to be a
+ * truncating it, JARVIS-API section 191.5), and that a clip too short to be a
  * word is refused BEFORE it costs a round trip.
  */
 class HandsfreeClipTest {
@@ -64,7 +64,7 @@ class HandsfreeClipTest {
 
     @Test
     fun `the clamp is the PC's 30 seconds, whatever window the caller asks for`() {
-        // Section 186.5: a clip over 30 s is REFUSED, never truncated - so the
+        // Section 191.5: a clip over 30 s is REFUSED, never truncated - so the
         // collector must never hold more, even if the answer window is a minute.
         assertEquals(30f, HandsfreeClip.MAX_WINDOW_SECONDS, 0.0001f)
         assertEquals(Handsfree.MAX_CLIP_SEC, HandsfreeClip.MAX_WINDOW_SECONDS.toInt())

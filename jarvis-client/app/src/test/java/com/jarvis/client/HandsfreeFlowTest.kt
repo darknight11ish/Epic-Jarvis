@@ -18,7 +18,7 @@ import org.junit.Test
  * `the_microphone_is_open_only_inside_a_handled_card` below.
  *
  * The window is the PC's, not this app's: `handsfree_card`'s `expires_in_sec`
- * is how long a spoken ANSWER is open (docs/JARVIS-API.md section 186.4), so a
+ * is how long a spoken ANSWER is open (docs/JARVIS-API.md section 191.4), so a
  * card that says 60 gets 60 seconds and one that says 30 gets 30 - and a card
  * that says nothing falls back to the read's `window_sec`, then to the
  * contract's minute. The clock is a parameter everywhere, so a minute costs no

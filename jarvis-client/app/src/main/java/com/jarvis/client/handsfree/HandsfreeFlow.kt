@@ -24,7 +24,7 @@ import com.jarvis.client.net.Handsfree
  *
  * THE WINDOW IS THE PC'S, NOT THIS APP'S. `handsfree_card`'s `expires_in_sec`
  * is how long a spoken answer is open - the PC's 60 seconds, or the card's own
- * countdown when that is shorter (docs/JARVIS-API.md section 186.4) - so
+ * countdown when that is shorter (docs/JARVIS-API.md section 191.4) - so
  * [Listening.until] is that deadline, measured from the card's arrival. The old
  * shape treated the value as the CARD's deadline and opened a fixed ten-second
  * window of its own; the contract says it is the answer window, and a phone
@@ -139,7 +139,7 @@ class HandsfreeFlow(private val defaultWindowMs: Long = WINDOW_MS) {
      * over each other, and the PC's own contract raises one card at a time.
      *
      * @param fallbackSec the answer window to use when the card itself carried
-     *   no `expires_in_sec` (the read's `window_sec`, section 186.2).
+     *   no `expires_in_sec` (the read's `window_sec`, section 191.2).
      */
     fun onCard(
         card: Handsfree.Card,
@@ -198,7 +198,7 @@ class HandsfreeFlow(private val defaultWindowMs: Long = WINDOW_MS) {
     /**
      * The PC answered the clip.
      *
-     * THREE SHAPES, and only three (docs/JARVIS-API.md section 186.5):
+     * THREE SHAPES, and only three (docs/JARVIS-API.md section 191.5):
      *
      *  - `approved` / `denied` - the card is decided;
      *  - `again` - the PC heard words it could not place in its closed
@@ -301,7 +301,7 @@ class HandsfreeFlow(private val defaultWindowMs: Long = WINDOW_MS) {
     companion object {
         /**
          * The answer window used when a card carries no `expires_in_sec`: the
-         * PC's own 60 seconds (docs/JARVIS-API.md section 186.4). Not this
+         * PC's own 60 seconds (docs/JARVIS-API.md section 191.4). Not this
          * app's number - the contract's - which is why it is a minute and not
          * the ten seconds the first draft listened for.
          */

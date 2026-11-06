@@ -1,0 +1,7 @@
+{
+  "name": "product-check",
+  "summary": "check ONE Amazon product page for sponsored-review and incentive patterns: one PC-only card, a read-only read in the owner's own signed-in browser, and the offline engine's reasons report - sample caveat first, counts and examples, every set-aside review with its reasons, never a trust score and never a per-review fake/real verdict.",
+  "module": "jarvis_product_check",
+  "install": "handler",
+  "stack_order": 176
+}
