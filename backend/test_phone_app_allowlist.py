@@ -657,11 +657,30 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
     # patch appended after it (bench.patch, 2026-11-04) legitimately sits
     # between them - the rule that matters is that the loader is last and that
     # nothing but a patch written after this one is after this one.
+    # packs-tamper-on-load.patch (2026-11-05) is the second such patch: it is
+    # last of the core patches, immediately before the loader, and its one hunk
+    # is in jarvis_skills.py - no gate row and no HUD route at all.
     check("... with only the patches written after this one between it and "
           "the loader",
           "phone-apps.patch" in order
-          and order[order.index("phone-apps.patch") + 1] == "bench.patch",
+          and order[order.index("phone-apps.patch") + 1] == "bench.patch"
+          and order[order.index("bench.patch") + 1:]
+          == ["packs-tamper-on-load.patch", "plugin-loader.patch"],
           order[-3:])
+    # handsfree.patch (2026-11-04, hands-free mode) is NOT appended after this
+    # patch. Its three `jarvis_gate.py` rows are ONE end-of-file hunk, and it is
+    # applied BEFORE web-search-grant.patch so unknown-risk-approvable.patch
+    # stays the LAST patch that writes jarvis_gate.py - the ordering
+    # backend/test_gate_unknown_risk.py pins with no whitelist. So what this
+    # suite checks is that it is in the stack at all, and on the right side of
+    # web-search-grant.patch, and that it adds nothing between this patch and
+    # the loader.
+    check("handsfree.patch is in the stack, on the near side of "
+          "web-search-grant.patch, and adds nothing after this patch",
+          "handsfree.patch" in order
+          and order.index("handsfree.patch") + 1 == order.index("web-search-grant.patch")
+          and order.index("handsfree.patch") < order.index("phone-apps.patch"),
+          order[-5:])
     patch = (HERE / "phone-apps.patch").read_text(encoding="utf-8")
     check("the patch touches jarvis_hud.py only - no jarvis_gate.py hunk, "
           "because the mapping ships in the gate base",

@@ -696,6 +696,30 @@ def t_the_patch_and_the_lists():
              # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
              # rewrites nothing this patch wrote.
              "bench.patch",
+             # history-purge.patch (2026-11-04, clearing old chats by date):
+             # ONE added install block in jarvis_hud.py, right after
+             # forget-range.patch's own block, and no hunk in jarvis_gate.py at
+             # all - every rule is in the shipped jarvis_history_purge.py. It
+             # rewrites nothing this patch wrote.
+             "history-purge.patch",
+             # packs-tamper-on-load.patch (2026-11-05, the pack manager's immutable
+             # manifest) is appended last of the core patches, immediately before
+             # plugin-loader.patch: ONE hunk, and it is in jarvis_skills.py - it
+             # touches neither jarvis_gate.py nor jarvis_hud.py - so it rewrites
+             # nothing this patch wrote.
+             "packs-tamper-on-load.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It adds one _TOOL_ACTIONS line, its own action's _RISK row at the
+             # end of jarvis_gate.py, and a _NO_RULE_FROM_DENIAL union - no line
+             # referee.patch wrote.
+             "product-check.patch",
              # secret-handoff.patch (2026-10-26): ONE added install block in
              # jarvis_hud.py, on setup.patch own last printed lines, and no
              # hunk in jarvis_gate.py - so it rewrites nothing referee.patch wrote.
@@ -933,7 +957,10 @@ def t_the_patch_and_the_lists():
              # appended after this patch, immediately before
              # unknown-risk-approvable.patch - it adds no tier row and no `_RISK`
              # row, so it rewrites nothing referee.patch wrote.
-             "gate-tool-actions-gap.patch"}
+             "gate-tool-actions-gap.patch",
+# github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+# everything these patches wrote, so it rewrites none of their lines.
+             "github-tools.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

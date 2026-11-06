@@ -14,7 +14,7 @@ folder into the backend's `jarvis_plugins\` folder (or run
 - The module itself is one of the ones this repository already ships
   (`backend/jarvis_protection.py`), copied into the backend by
   `scripts/apply-patches.ps1` exactly as before. This folder does not change it.
-- Position in the loader order: 170 (after `android-builder`). There is no
+- Position in the loader order: 171 (after `history-purge`). There is no
   patch behind it: this feature was born as a folder.
 
 ## The routes

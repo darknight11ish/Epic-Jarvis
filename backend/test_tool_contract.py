@@ -82,8 +82,9 @@ BASE = REPO / "jarvis-backend" / "jarvis-framework.toml"
 #: `jarvis_agent.enabled_tools_for_turn()` with the shipped template copied in.
 FULL_ENABLED = [
     "calculator", "change_setting", "conversation_find", "conversation_open",
-    "feature_guide", "memory_search", "my_files", "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
-    "plugin_list", "plugin_switch", "refresh_abilities", "self_portrait",
+    "feature_guide", "memory_search", "my_files", "pack_inspect", "pack_install",
+    "pack_list", "pack_remove", "phone_apps", "plugin_list", "plugin_switch",
+    "refresh_abilities", "self_portrait", "send_text_message",
     "web_search",
 ]
 
@@ -138,7 +139,15 @@ CATALOGUE = [
     "conversation_find", "conversation_open",
     "create_joplin_note",
     "draft_email",
-    "email_check", "feature_guide", "file_read", "github_search",
+    "email_check", "feature_guide", "file_read",
+    # Your own GitHub, on demand (2026-11-03, the owner's "Read + actions").
+    # None of the six is in FULL_ENABLED or OFFERED_FRESH: like `github_search`
+    # they ship SWITCHED OFF, because each one sends the owner's GitHub token
+    # out and the tools are useless until a token is saved anyway. They are in
+    # the catalogue so the next tool added has to be looked at here too.
+    "github_ci_status", "github_comment", "github_list", "github_open_issue",
+    "github_read_file", "github_rerun_workflow",
+    "github_search",
     "goal_add", "goal_done", "goal_progress", "goals_list",
     "home_control", "home_read", "memory_search", "my_files", "my_spending",
     "notes_search",
@@ -146,7 +155,13 @@ CATALOGUE = [
     # action skill_list; install raises its one card inside jarvis_skills.install;
     # remove raises one card naming exactly the files in the pack ledger.
     "pack_inspect", "pack_install", "pack_list", "pack_remove",
-    "phone_apps", "plugin_list", "plugin_switch", "propose_plan",
+    "phone_apps", "plugin_list", "plugin_switch",
+    # The product check (2026-11-04, the owner's choice "wire the existing
+    # product check"): ONE Amazon product page, one PC-only card, tier "ask".
+    # NOT in FULL_ENABLED - `[product_check] enabled = false` ships, and the
+    # tool is not even offered while it is off - and not in a cloud or
+    # private-turn allow-list (both are empty by design).
+    "product_check", "propose_plan",
     "protect_from_jarvis", "rea_investigate",
     "read_web_page",
     # Re-read Jarvis's own abilities (2026-11-03, the owner's ask to "refresh
@@ -159,6 +174,13 @@ CATALOGUE = [
     "retirement_whatif", "run_data_script",
     "self_portrait",
     "send_email", "send_file_to_phone",
+    # Texting a contact (2026-11-04, hands-free mode): a REAL message from the
+    # owner's own phone, in their name, which cannot be unsent. In the shipped
+    # template's list but withheld from every turn until the mode is on
+    # (`offered_tools`), so it is not in FULL_ENABLED; it is here because a
+    # cloud or private turn must never be offered it, and this list is where
+    # that decision is recorded.
+    "send_text_message",
     "set_reminder",
     "set_timer", "setup_quiz", "shell_exec", "stop_web_search_approval", "tidy_inbox",
     "todo_add", "todo_done",

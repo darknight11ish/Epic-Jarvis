@@ -112,6 +112,30 @@ def t_the_patch_is_registered_last():
              # no gate list, no tier row, no _RISK row and no _TOOL_ACTIONS line, so it
              # rewrites nothing this patch wrote.
              "bench.patch",
+             # history-purge.patch (2026-11-04, clearing old chats by date):
+             # ONE added install block in jarvis_hud.py, right after
+             # forget-range.patch's own block, and no hunk in jarvis_gate.py at
+             # all - every rule is in the shipped jarvis_history_purge.py. It
+             # rewrites nothing this patch wrote.
+             "history-purge.patch",
+             # packs-tamper-on-load.patch (2026-11-05, the pack manager's immutable
+             # manifest) is appended last of the core patches, immediately before
+             # plugin-loader.patch: ONE hunk, and it is in jarvis_skills.py - it
+             # touches neither jarvis_gate.py nor jarvis_hud.py - so it rewrites
+             # nothing this patch wrote.
+             "packs-tamper-on-load.patch",
+            # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+            # patch, immediately before plugin-loader.patch: THREE hunks, all in
+            # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+            # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+            # rows this patch wrote, and it rewrites none of its lines.
+            "handsfree.patch",
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It adds one _TOOL_ACTIONS line, its own action's _RISK row at the
+             # end of jarvis_gate.py (after the rows this patch removes), and a
+             # _NO_RULE_FROM_DENIAL union - it rewrites none of the stale rows.
+             "product-check.patch",
              # reminder-actions.patch (2026-10-27): two hunks in jarvis_gate.py
              # only - a `_NO_RULE_FROM_DENIAL` line and a `_RISK` row - both
              # ADDED after the rows this patch removes, and it rewrites neither.
@@ -344,7 +368,10 @@ def t_the_patch_is_registered_last():
              # _SAFE_KEYS and three audit writers after _audit. It adds lines and
              # rewrites none of this patch's, which the later_rewriting() half
              # proves.
-             "web-search-grant.patch"}
+             "web-search-grant.patch",
+# github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+# everything these patches wrote, so it rewrites none of their lines.
+             "github-tools.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

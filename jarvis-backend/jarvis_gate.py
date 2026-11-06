@@ -304,6 +304,28 @@ _RISK: dict[str, tuple[str, str, str]] = {
 
     # additive writes to things you own
     "create_logseq_page":     ("yes", "local", "delete it and it is gone"),
+    # call recording (jarvis_call_notes.py, the owner's request of 2026-11-04;
+    # docs/CALL-RECORDING.md and JARVIS-API section 186). ONE card per call,
+    # before any of the phone's audio is kept. It CHANGES NOTHING on this PC and
+    # nothing leaves it: the audio is written into this PC's own settings folder
+    # (under <config dir>/call-recordings), transcribed here by the local model,
+    # and the words go into ONE new note through the notes editor's own card.
+    # The recording can be deleted again on this PC - POST
+    # /api/call/recording/delete, behind its own delete_call_recording card - so
+    # "yes", and "local" because not one byte is sent anywhere. Measured before
+    # this row: the gate had no entry for the name, so `risk_for()` fell back to
+    # _UNKNOWN_RISK and the card told the owner the action was "able to leave
+    # this PC", which was false (the 2026-11-05 privacy audit, D8). The tier
+    # stays "ask" in [autonomy.tiers] - the row does not loosen it.
+    "record_call": ("yes", "local", "records one phone call's audio into this PC's own settings folder, turns it into words on this PC, and files it as one new note through the notes editor's own card; nothing is sent anywhere, and deleting the recording again is a card of its own on this PC"),
+    # Deleting one recorded call (jarvis_call_notes.py's POST
+    # /api/call/recording/delete, added 2026-11-05 by the privacy audit's D4).
+    # "no": the audio, the transcript and the receipt are gone and there is no
+    # Undo - the Obsidian note is a separate document and stays. "local": not
+    # one byte is sent anywhere. Its route is PC-only and ALWAYS asks: it
+    # refuses a verdict that was not an answered "ask" card, so a loosened
+    # [autonomy] unknown_action_tier cannot turn a deletion card-free.
+    "delete_call_recording": ("no", "local", "deletes one recorded call from this PC - its audio, its transcript and its receipt, which is also its row in the list of recordings; the Obsidian note it was filed into is a separate document and stays; nothing is sent anywhere, and it cannot be undone"),
 
     # the ones that are reversible in one step, on purpose
     "switch_model":  ("yes", "local", "rollback is one tap, which is why rollback is tier auto"),
@@ -2671,6 +2693,71 @@ def review(days: int = 7) -> int:
     print()
     return 0
 
+# --------------------------------------------------------------------------
+#   github-tools.patch (2026-11-03) - the six GitHub tools, and four actions
+# --------------------------------------------------------------------------
+# The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
+# open pull requests, issues, CI status, one file) and take three small ACTIONS
+# (comment, open an issue, re-run a workflow) - each action behind its own card
+# - and it may never merge, push, commit, delete or close.
+#
+# WHY IT SITS HERE, IN THE MIDDLE OF THE FILE, AND NOT AT THE END OF IT: two
+# measured reasons, and the second is a break this patch caused before it moved.
+#
+#   * The end of this file is `web-search-grant.patch`'s own block, and its last
+#     hunk ends at EOF. `git apply -R` needs that hunk's whole post-image (three
+#     context lines plus the block) to be contiguous AND to end at the last byte
+#     of the file, so anything inserted after those three context lines makes
+#     the reversal fail - which is what happened when this patch first appended
+#     its block after it (backend/test_web_search_grant.py caught it), and the
+#     published base could no longer be reversed and re-applied byte for byte.
+#   * `unknown-risk-approvable.patch` has to stay the LAST writer of
+#     jarvis_gate.py so its own reversal cannot be disturbed
+#     (backend/test_gate_unknown_risk.py enforces it, with no whitelist), so a
+#     new gate patch must sit before it. This one sits immediately after
+#     `web-search-grant.patch`.
+#
+# It anchors on the owner's own text - the end of `review()` and the opening of
+# the `if __name__` block, which no patch writes - so backend/_stack.py's walk
+# materialises those five lines instead of reading them. That is the honest case
+# its RATCHET records, and `no-expiry-cards.patch`, `no-deadline-cards.patch` and
+# `unknown-risk-approvable.patch` pay exactly the same one.
+#
+# Both `.update` calls run at import, before any `check()`.
+#
+# WHY NOT REUSE `github_read`: that action is the scheduled look a "tell me
+# when" GitHub watch makes, and it is `"auto"` in the shipped settings so a look
+# every ten minutes is not a card every ten minutes. These tools are looks ON
+# DEMAND, at a moment the model chose, each one sending the owner's GitHub
+# token out - so they are their own action, `github_inspect`, at `"ask"`. They
+# are also in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still asks.
+_TOOL_ACTIONS.update({
+    # `action_for_tool` needs these, or every one of the six answers
+    # "unclassified_tool": fail-safe (that asks too), but the card would not be
+    # the card the tool raises, and the Reach page would call it unclassified.
+    "github_list": "github_inspect",
+    "github_read_file": "github_inspect",
+    "github_ci_status": "github_inspect",
+    "github_comment": "github_comment",
+    "github_open_issue": "github_open_issue",
+    "github_rerun_workflow": "github_rerun_workflow",
+})
+_RISK.update({
+    # Reading only. Reversible "yes" and reach "outbound" is the same pair
+    # `github_read`, `page_read` and `news_read` already carry: nothing on
+    # GitHub changes, but the request leaves this PC, so it is never "local".
+    "github_inspect": ("yes", "outbound", "reads your own GitHub through the token saved on this PC, on a fixed api.github.com address; nothing on GitHub changes"),
+    # Posting in the owner's name. "no" for the same reason `send_email` is:
+    # Jarvis cannot edit or withdraw a comment once GitHub has it.
+    "github_comment": ("no", "outbound", "posts a comment on GitHub in your name; Jarvis cannot edit or withdraw it afterwards"),
+    "github_open_issue": ("no", "outbound", "opens a new issue on GitHub in your name; Jarvis cannot close, edit or delete it afterwards"),
+    # "no", NOT "yes": a re-run changes nothing in the repository by itself, but
+    # a workflow is free to deploy, publish or post notifications, and a run that
+    # has started cannot be taken back. Calling that reversible would be a
+    # promise this file cannot keep.
+    "github_rerun_workflow": ("no", "outbound", "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back"),
+})
+
 
 if __name__ == "__main__":
     import argparse
@@ -2717,4 +2804,87 @@ _RISK.update({
     # forced to "ask", which for a revocation would mean raising a card to STOP
     # what the owner just asked to stop.
     "revoke_web_search_grant": ("yes", "local", "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on"),
+})
+
+
+# --------------------------------------------------------------------------
+#   The hands-free mode's gate rows (jarvis_handsfree.py, 2026-11-04)
+# --------------------------------------------------------------------------
+# THEY ARE HERE, AT THE END OF THE FILE, and not inside the three tables:
+# almost every line of `_RISK`, `_TOOL_ACTIONS` and `_NO_RULE_FROM_DENIAL` is
+# some earlier patch's hunk context, and the end of this file belongs to no
+# hunk. handsfree.patch is applied BEFORE web-search-grant.patch - it has to
+# be, because unknown-risk-approvable.patch must stay the LAST patch that
+# writes jarvis_gate.py (backend/test_gate_unknown_risk.py pins that with no
+# whitelist) and web-search-grant.patch must stay immediately before it. So
+# this block is the file's end when its own hunk runs, and web-search-grant's
+# block is then inserted ABOVE it. The updates run at import, so the gate sees
+# the rows exactly as if they sat inside the literals.
+_TOOL_ACTIONS.update({
+    # handsfree.patch (jarvis_handsfree.py, 2026-11-04). The tool's own name
+    # IS its action, the same shape send_file_to_phone above uses, and its
+    # tier line is in [autonomy.tiers] in both shipped settings copies. It is
+    # offered only while hands-free mode is on, and it refuses before any card
+    # when the mode is off or no phone is paired.
+    "send_text_message": "send_text_message",
+})
+# A denied text, like a denied hands-free switch, answers that ONE card.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "send_text_message",  # jarvis_handsfree.py acts only on tier "ask": ONE card per text, naming the contact and the exact message; a denial answers that one card (handsfree.patch)
+    "handsfree_enable",  # jarvis_handsfree.py acts only on tier "ask": ONE card to turn hands-free mode on; a denial answers that one card and must not become a standing rule (handsfree.patch)
+}
+_RISK.update({
+    # handsfree.patch (jarvis_handsfree.py, 2026-11-04: the owner's "a handfree
+    # setting ... i want jarvis to be able to write text messages to contacts
+    # for me"). ONE card per text, naming the contact and the exact message,
+    # and nothing leaves this PC until that card is approved. A text cannot be
+    # unsent or edited once it has gone, and the phone's own contact list is
+    # what turns a NAME into a number - so the card shows a name and this PC
+    # never holds a number: "no" and "outbound", a risky approval.
+    "send_text_message": ("no", "outbound", "sends one text message from your phone to the contact named on the card, word for word as the card shows it; a sent text cannot be unsent or edited, and your phone's own contacts decide who that name is"),
+    # The hands-free switch itself (handsfree.patch). ON changes what an
+    # approval needs from then on - a spoken yes may answer a card, including
+    # the cards that would otherwise wait for Windows Hello or the phone's
+    # fingerprint - so it is the loosening direction and gets the heaviest
+    # card this table has. OFF takes the power away again, instantly.
+    "handsfree_enable": ("no", "local", "turns on hands-free mode, where a spoken yes answers an approval card - including the cards that would otherwise wait for Windows Hello or your phone's fingerprint; while it is on, a recording of your voice or a person in the room could answer one, and what it allowed may already have happened by the time you turn it off, which is instant"),
+})
+
+# --------------------------------------------------------------------------
+#   The product check's gate rows (jarvis_product_check.py, 2026-11-04)
+# --------------------------------------------------------------------------
+# THEY ARE HERE, AT THE END OF THE FILE, for the reason the block above gives:
+# almost every line inside `_RISK`, `_TOOL_ACTIONS` and `_NO_RULE_FROM_DENIAL`
+# is some earlier patch's hunk context, and the end of this file belongs to no
+# hunk. product-check.patch is applied BEFORE web-search-grant.patch - it has
+# to be, because unknown-risk-approvable.patch must stay the LAST patch that
+# writes jarvis_gate.py (backend/test_gate_unknown_risk.py pins that with no
+# whitelist) and web-search-grant.patch must stay immediately before it. So
+# this block is the file's end when its own hunk runs, and web-search-grant's
+# block is then inserted ABOVE it. All three updates run at import, so the gate
+# sees the rows exactly as if they sat inside the literals.
+_TOOL_ACTIONS.update({
+    # jarvis_agent.py's product_check tool, under the action name
+    # jarvis_agent.PRODUCT_CHECK_ACTION. Its own name IS the action, and
+    # `product_check = "ask"` ships in both settings copies; without this line
+    # action_for_tool() answers "unclassified_tool" - the Reach page calls it
+    # unclassified and the card is never the one the tool raises, the same gap
+    # gate-tool-actions-gap.patch fixed above.
+    "product_check": "product_check",
+})
+# A denial of a product-page read is about THAT page, never a standing rule.
+_NO_RULE_FROM_DENIAL = _NO_RULE_FROM_DENIAL | {
+    "product_check",  # jarvis_product_check.py acts only on tier "ask": ONE PC-only card per Amazon product page, read once in the owner's own signed-in browser; a denial is about that one page, not a standing rule (product-check.patch)
+}
+_RISK.update({
+    # product-check.patch (jarvis_product_check.py, 2026-11-04; the owner's
+    # choice "wire the existing product check"). ONE card per Amazon product
+    # page, showing the address in full and raised BEFORE the browser is
+    # opened. The page is read in the owner's own signed-in browser window -
+    # the request is to Amazon from this PC's own address, and it cannot be
+    # taken back - so "outbound". It changes nothing: the read is one page,
+    # read-only, and no cart, order, sign-in, click or typing is possible from
+    # it, so "yes": there is nothing to undo. The card is PC-only (the window
+    # and the sign-in are here) and always asks a person.
+    "product_check": ("yes", "outbound", "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored"),
 })

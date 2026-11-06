@@ -1222,6 +1222,29 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.handsfree",
+    "title": "Hands-free mode",
+    "about": "Read your approval cards out and answer one with a spoken yes or no.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "hands-free mode",
+      "hands free",
+      "handsfree",
+      "hands-free settings",
+      "the hands-free page"
+    ]
+  },
+  {
     "id": "settings.media-index",
     "title": "Searchable recordings and videos",
     "about": "Keep readable words from the recordings and videos in your listed folders, so you can search them - until you delete them.",
@@ -3050,6 +3073,11 @@ export const ALIASES = {
   "gpus": "group.graphics-cards",
   "graphics card": "group.graphics-cards",
   "graphics cards": "group.graphics-cards",
+  "hands free": "settings.handsfree",
+  "hands-free mode": "settings.handsfree",
+  "hands-free page": "settings.handsfree",
+  "hands-free settings": "settings.handsfree",
+  "handsfree": "settings.handsfree",
   "hang and crash notes": "settings.crash-notes",
   "hardware": "settings.hardware",
   "hardware and models": "settings.hardware",

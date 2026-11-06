@@ -610,11 +610,59 @@ RATCHET = {
     #: position 164 to that patch's 163.
     #:
     #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 59 and
+    #: `by_patch` names `handsfree.patch: 1` and `web-search-grant.patch: 3`
+    #: (18 lines; both pinned by tools/check_patch_original_text.py - see the
+    #: 2026-11-04 note below for why web-search fell from 4 hunks to 3).
+    #: backend/test_web_search_grant.py
+    #: applies the patch to the published base and reverses it byte for byte. A
+    #: ratchet: it may still only go down.
+    #:
+    #: 60, RAISED from 59 on 2026-11-03 for `github-tools.patch`, and this is the
+    #: honest case rather than drift. Its first version appended its two `.update`
+    #: blocks at the very END of `jarvis_gate.py` and also read 60 - but that
+    #: placement broke two other things: `unknown-risk-approvable.patch` runs
+    #: earlier and materialises its own hunks at EOF, so the later patch invented
+    #: the three lines it anchored on and re-added `revoke_web_search_grant` to
+    #: `_RISK` (its last row wins; backend/test_gate_risk_words.py caught the
+    #: duplicate), and appending after `web-search-grant.patch`'s block broke that
+    #: patch's own reversal out of the published base (`git apply -R` needs its
+    #: post-image to end at EOF; backend/test_web_search_grant.py caught it). The
+    #: patch now sits immediately after `web-search-grant.patch` and BEFORE the
+    #: `if __name__` block, anchoring on the end of `review()` and the `if
+    #: __name__` opening - the owner's own text, which no patch in this walk
+    #: writes. That costs this walk one hunk / 6 lines, which is why the pin moves
+    #: to 60; `tools/check_patch_original_text.py`'s PIN records the same patch at
+    #: (1, 6), and backend/test_github_tools.py reverses the patch out of the
+    #: published base and applies it forward again byte for byte. A ratchet: it
+    #: may still only go down.
+    #: Measured, not argued: `stand_in("jarvis_gate.py", stats=...)` reads 60.
     #: `by_patch` names `web-search-grant.patch: 4` (21 lines in all, pinned by
     #: tools/check_patch_original_text.py). backend/test_web_search_grant.py
     #: applies the patch to the published base and reverses it byte for byte. A
     #: ratchet: it may still only go down.
-    "jarvis_gate.py": 59,
+    #:
+    #: 2026-11-04, RAISED from 59 for `product-check.patch`: ONE hunk, 3 lines,
+    #: and honest rather than drift - its context is the `if __name__` tail at
+    #: the end of the owner's file, the same owner-only text web-search-grant.
+    #: patch's own end-of-file hunk already reads, and no earlier patch in the
+    #: stack writes a line of it. The patch has to sit BEFORE that one so
+    #: unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
+    #:
+    #: 2026-11-05, RAISED from 60 to 61 for `handsfree.patch`, and it is the
+    #: same honest shape as the line above: handsfree appends its rows at the
+    #: END of the owner's file, at the SAME anchor product-check.patch uses, and
+    #: both have to sit before web-search-grant.patch so
+    #: unknown-risk-approvable.patch stays the last writer of jarvis_gate.py.
+    #: Two patches cannot both be the end of the file, so whichever is applied
+    #: second reads three lines only the owner's PC holds and materialises them
+    #: - `by_patch` names BOTH (`product-check.patch: 1`, `handsfree.patch: 1`),
+    #: which is 59 + 1 + 1 = 61. Measured, not argued: `stand_in(
+    #: "jarvis_gate.py", stats=...)` reads 61. Putting the two in the only other
+    #: order (handsfree first) measures the same 61 - the cost is the shared
+    #: anchor, not the order - and backend/test_phone_app_allowlist.py pins
+    #: handsfree immediately before web-search-grant.patch, so this is the one
+    #: order that satisfies both. A ratchet: it may still only go down.
+    "jarvis_gate.py": 61,
     #: 12, RAISED from 9 on 2026-10-28 for `learning-extract-reason.patch`
     #: (DEF-017), and ALL THREE hunks are honest rather than drift - the walk
     #: reads 12 and names it at 3. Its subject is `jarvis_extract._local_llm`'s

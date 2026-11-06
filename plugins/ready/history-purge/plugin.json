@@ -1,0 +1,8 @@
+{
+  "name": "history-purge",
+  "summary": "clear old chats (and the facts they taught) for a date range, after a card, TWO separate yeses and a Windows Hello / fingerprint ticket. This is the one route pair in Jarvis that deletes in bulk and c",
+  "module": "jarvis_history_purge",
+  "install": "handler",
+  "replaces_patch": "history-purge.patch",
+  "stack_order": 170
+}

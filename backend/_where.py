@@ -361,6 +361,12 @@ SHIPPED = (
     # jarvis_price_radar.py installs it (lazily, switch on) as its F2 sources.
     "jarvis_price_sources.py",
     "jarvis_voices.py", "jarvis_f5_worker.py",
+    # the VoiceStudio sidecar CLIENT: HTTP to 127.0.0.1:11439 only, stdlib
+    # plus this repository's proxy-free opener. No AGPL code, no route, no
+    # import of its program, no weights; OFF by default behind
+    # [voicestudio] enabled = false. Nothing calls it yet - the speaking
+    # voice is the next slice (docs/VOICESTUDIO.md).
+    "jarvis_voicestudio.py",
     # which Kokoro voice pack is installed, its voices by name, the pinned
     # v1.0 download: jarvis_voices.py imports it (no patch)
     "jarvis_kokoro.py",
@@ -1463,6 +1469,20 @@ SHIPPED = (
     # doors - the same jarvis_models.switch_to and jarvis_presets.apply_from_body
     # the Models page and the preset card already use. Shipped whole, no route.
     "jarvis_model_knowledge.py",
+    # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
+    # the owner's decision: "Read + actions"; JARVIS-API section 185). Fixed
+    # api.github.com addresses only - there is no arbitrary-URL path at all -
+    # the token in the request header and never in a result, and every read and
+    # every action asks a person first. No code write of any kind: it cannot
+    # merge, push, commit, delete or close anything.
+    # It sits above the ORDER MATTERS note on purpose: jarvis_phone_apps.py must
+    # stay last (and so never scanned), and this one must carry a trailing comma
+    # or tools/check_zero_jargon.py would not read it - a new user-facing module
+    # that the jargon ratchet never measured would be the worse deal. Placing it
+    # here also keeps the list clear of the entries other branches append at the
+    # bottom, so two PRs adding a module do not fight over the same lines. The
+    # same entry, in the same position, is in $SHIPPED in apply-patches.ps1.
+    "jarvis_github.py",
     # ORDER MATTERS TO ONE READER: tools/check_zero_jargon.py walks this tuple
     # and only matches an entry that ends with a comma, so the LAST entry is
     # never scanned. jarvis_phone_apps.py therefore stays last: appending
@@ -1517,6 +1537,36 @@ SHIPPED = (
     # no network, no elevation. The same entry is at the end of $SHIPPED in
     # scripts/apply-patches.ps1.
     "jarvis_storage_health.py",
+
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04; the owner's own
+    # request: "record a call if I tell it a keyword 'record call' ... transcribe
+    # it, put a date and identify the speakers ... store all of it in a new
+    # obsidian note labeled with the date and time"). The phone records through
+    # its microphone with the call on speaker (Android reserves the call's own
+    # audio stream), uploads 16 kHz mono PCM in order, and this PC makes the
+    # WAV, transcribes it with the EXISTING sherpa-onnx reader, labels who spoke
+    # from the owner's own voice print plus clustering, and creates ONE new
+    # Obsidian note named for the date and time through the notes editor's own
+    # create path. OFF BY DEFAULT ([call_recording] enabled = false); starting
+    # is ONE `record_call` card. Its routes (start, chunk, finish, the PC-only
+    # list and the PC-only delete) come from its own install(),
+    # called by plugins/ready/call-notes - no patch. Its suite is
+    # backend/test_call_notes.py. The same entry, in the same position, is in
+    # $SHIPPED in scripts/apply-patches.ps1. It sits BEFORE jarvis_bench.py
+    # because backend/test_bench.py pins that entry as the last one.
+    "jarvis_call_notes.py",
+    # Clear old chats by date (jarvis_history_purge.py, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). A preview, two separate yeses and a platform
+    # ticket; pinned chats kept unless asked for; the facts those chats taught
+    # erased by their recorded provenance; every deletion in
+    # ~/.openjarvis/purge-audit.jsonl. `history-purge.patch` is the install
+    # block that reaches it. Standard library only, local only, no model.
+    # The same entry is just after `jarvis_storage_health.py` in
+    # scripts/apply-patches.ps1's $SHIPPED, which keeps `jarvis_bench.py` LAST.
+    "jarvis_history_purge.py",
     # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
     # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
     # conversation about any of its tools). ONE entry per name in
@@ -1546,8 +1596,7 @@ SHIPPED = (
     # re-announces on startup - the fix for the restart card loss.
     "jarvis_watch_policy.py",
     "jarvis_watch_ci.py",
-    "jarvis_outbox.py",
-    # Per-source independence evidence (jarvis_source_independence.py,
+    "jarvis_outbox.py",    # Per-source independence evidence (jarvis_source_independence.py,
     # 2026-11-04; the owner's clickable-card answer to "filter out products
     # that have been sponsored"): ONE supplied page -> disclosure wording,
     # affiliate and tracking links, urgency wording, a closed per-source
@@ -1560,6 +1609,39 @@ SHIPPED = (
     # before. It sits before the last entry on purpose: the zero-jargon
     # checker never scans an entry with no trailing comma.
     "jarvis_source_independence.py",
+    # Hands-free mode (jarvis_handsfree.py, 2026-11-04; the owner's own
+    # request): `[handsfree] enabled` OFF by default, one ask-tier card to turn
+    # it on and an instant, cardless OFF; every waiting approval card read out
+    # to the phone as a `handsfree_card` event carrying the card's own notice
+    # words; ONE card answered from one spoken clip - verified against the
+    # owner's voice print BEFORE any words are made, decided only by a closed
+    # yes/no vocabulary inside a 60-second window, through the same
+    # `jarvis_gate.decide()` a touch-approve uses; and one approved text
+    # message handed to the phone (`phone_command`), which resolves the contact
+    # and sends it - this PC never stores a number and never claims a text was
+    # sent until the phone says so. Its routes come from the drop-in folder
+    # `plugins/ready/handsfree` (its own install()), so it adds no patch to
+    # `jarvis_hud.py`; the gate's own rows are `backend/handsfree.patch`.
+    # Standard library only, no network, no audio device: the clip arrives in
+    # the request body. The same entry is at the end of $SHIPPED in
+    # scripts/apply-patches.ps1.
+    "jarvis_handsfree.py",
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the
+    # owner's choice "wire the existing product check"): the ONE model tool,
+    # the ONE PC-only route POST /api/product/check, the card's words and the
+    # plain-words answer, over the engine/read/capture modules that shipped
+    # unwired on 2026-10-25/26. OFF by default ([product_check] enabled =
+    # false in both settings copies); the tool is not even offered while it is
+    # off. Its routes come from its own install(), called by the drop-in folder
+    # plugins/ready/product-check; product-check.patch is the gate's
+    # _TOOL_ACTIONS/_RISK rows for the action, and the browser read is the
+    # public read_page_html seam in jarvis_browser_control.py. Nothing about a
+    # page is stored; the report has no trust score and no per-review verdict.
+    # It sits BEFORE jarvis_bench.py on purpose: that entry is the LAST one,
+    # where a new module is appended, so a new module goes above it. The same
+    # entry, in the same position, is in scripts/apply-patches.ps1's $SHIPPED
+    # list.
+    "jarvis_product_check.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

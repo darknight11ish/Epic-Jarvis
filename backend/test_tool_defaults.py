@@ -103,7 +103,13 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
                    # this PC's local model. `conversation_clear` stays OUT: an AI
                    # must never have an autonomous tool to wipe a transcript.
                    "self_portrait", "conversation_find", "conversation_open",
-                   "refresh_abilities"]
+                   "refresh_abilities",
+                   # Hands-free mode's text tool (2026-11-04, JARVIS-API section
+                   # 186): in the list so turning the mode on needs no settings
+                   # edit; withheld from every turn until the mode is on
+                   # (jarvis_agent.offered_tools), so OFFERED_NO_FOLDER is
+                   # unchanged and a fresh install offers exactly what it did.
+                   "send_text_message"]
 
 #: What a fresh PC (no folder listed) is offered, in `jarvis_agent.TOOLS`
 #: order - `offered_tools` returns TOOLS order, never the file's order.
@@ -220,7 +226,7 @@ def t_a_fresh_install_offers_the_defaults():
     os.environ["JARVIS_FRAMEWORK_TOML"] = str(settings)
     try:
         enabled = AG.enabled_tools_for_turn()
-        check("a fresh install's turn reads the thirteen-name enabled set",
+        check("a fresh install's turn reads the fourteen-name enabled set",
               enabled == set(DEFAULT_ENABLED), enabled)
         offered = AG.offered_tools(enabled)
         check("...and the model is offered the local defaults, plus the grant ask "

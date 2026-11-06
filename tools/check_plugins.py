@@ -282,7 +282,7 @@ def main() -> int:
         # touches jarvis_gate.py (uncensored-optins.patch does) would
         # otherwise be read as if its first block were the HUD one.
         def hud_hunks(name: str):
-            """(added, lands_after) for this patch's jarvis_hud.py half.
+            """(added, lands_after, start) for this patch's jarvis_hud.py half.
 
             `lands_after` is the LAST leading context line before a batch of
             added lines: a patch may add non-chain hunks (the active-lane
@@ -291,11 +291,26 @@ def main() -> int:
             says what the next patch anchors on. Reading only the first hunk's
             context made presets.patch look like it landed after the module
             top rather than after model-lanes.patch's block.
+
+            `start` is the first jarvis_hud.py hunk's own `@@ -N` number: the
+            block's position in the OWNER'S file, which is what decides which
+            block ends up LAST - and the hook anchors on the last block in the
+            FILE, not on the last patch in the list. THOSE TWO STOPPED AGREEING
+            ON 2026-11-05: history-purge.patch had to move earlier in $PATCHES
+            (backend/test_phone_app_allowlist.py pins phone-apps.patch ->
+            bench.patch -> plugin-loader.patch as the last three), while its
+            install block lands beside forget-range.patch's, thousands of lines
+            above the end. The hunk's own line number is the file order, read
+            from the patch text rather than inferred from the list.
             """
-            added, lead, in_hud, done = [], [], False, False
+            added, lead, in_hud, done, start = [], [], False, False, None
+            chain_start = None
             for line in (BACKEND / name).read_text(encoding="utf-8").splitlines():
                 if line.startswith("@@"):
                     done = False
+                    if in_hud:
+                        m = re.search(r"@@ -(\d+)", line)
+                        start = int(m.group(1)) if m else start
                     continue
                 if line.startswith(("---", "+++")):
                     if line.startswith("+++"):
@@ -306,25 +321,44 @@ def main() -> int:
                 if line.startswith("+"):
                     added.append(line[1:])
                     done = True
+                    if chain_start is None and ".install(Handler" in line:
+                        chain_start = start
                 elif not done and line.startswith(" ") and line.strip():
                     lead.append(line[1:])
-            return added, (lead[-1] if lead else "")
+            return added, (lead[-1] if lead else ""), chain_start
 
         writers = {}
         for name in listed[:listed.index("plugin-loader.patch")]:
-            added, line_above = hud_hunks(name)
+            added, line_above, start = hud_hunks(name)
             if any(".install(Handler" in l for l in added):
-                writers[name] = (added, line_above)
+                writers[name] = (added, line_above, start)
         written = {n: v[0] for n, v in writers.items()}
-        above = None
-        for name in reversed(list(writers)):
-            line_above = writers[name][1]
-            if line_above and any(line_above in written[other]
-                                  for other in writers if other != name):
-                above = name
+        # The LAST install block in the file, BEFORE the hook's own position:
+        # the writer whose block sits deepest in the owner's jarvis_hud.py
+        # without landing after the hook. model-recommendations.patch is one of
+        # those - its block starts at line 6871, seven lines BELOW the hook's
+        # own 6864, so it lands after the loader call and is not what the loader
+        # anchors on. Comparing the numbers is what tells the two apart, and the
+        # numbers come from the patches, not from the list order.
+        hook_start = None
+        for line in text.splitlines():
+            if line.startswith("@@"):
+                m = re.search(r"@@ -(\d+)", line)
+                hook_start = int(m.group(1)) if m else None
                 break
+        above = None
+        if hook_start is not None:
+            before = {n: v for n, v in writers.items()
+                      if v[2] is not None and v[2] < hook_start}
+            if before:
+                above = max(before, key=lambda n: before[n][2])
         check("hook: an install block is what it anchors on", above is not None)
         if above:
+            check(f"hook: {above} is the deepest install block before it",
+                  any(writers[above][1] in written[other]
+                      for other in writers if other != above),
+                  "the block it anchors on is appended to another install "
+                  "block's own lines, so the hook is the END of the chain")
             above_text = (BACKEND / above).read_text(encoding="utf-8")
             above_added = [l[1:] for l in above_text.splitlines()
                            if l.startswith("+") and not l.startswith("+++")]

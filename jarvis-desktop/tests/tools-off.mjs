@@ -6,13 +6,13 @@
  *
  * What must hold:
  * - every tool the model can be offered is drawn with an ON switch, the raw
- *   Tier C set and the everyday helpers included (52 at 2026-11-05);
- * - a name this PC does not know, or one of the three whose own switch decides
+ *   Tier C set and the everyday helpers included (59 at 2026-11-05, 48 before);
+ * - a name this PC does not know, or one of the four whose own switch decides
  *   it, is still listed when it is ON, with its real state and the PC's own
  *   plain reason, and that row is an OFF switch only;
  * - after OFF such a row STAYS and says OFF - it is not silently gone;
  * - Rust sends OFF for any real tool name and refuses ON only for a name it
- *   does not know (or one of the three, with the PC's own sentence);
+ *   does not know (or one of the four, with the PC's own sentence);
  * - a PC with nothing else ON sends no `extra`, and the page is unchanged.
  *
  * Runs on plain Node, no browser and no Playwright: the page's pure functions
@@ -56,7 +56,8 @@ check("every formerly locked tool is a switch row with an ON switch", () => {
       `${id} can be switched on from the PC: ${JSON.stringify(tv)}`);
     assert.ok(TOOLS_SWITCHABLE.includes(id), `${id} is in the switchable list`);
   }
-  assert.equal(view.tools.items.length, 52, "52 switches, every tool the model can be offered");
+  assert.equal(view.tools.items.length, 59,
+    "59 switches, every tool the model can be offered (six GitHub tools, send_text_message and four pack tools since 2026-11-05)");
 });
 
 check("the fixture really carries the name this PC does not know", () => {
@@ -69,7 +70,7 @@ check("the fixture really carries the name this PC does not know", () => {
   assert.ok(rows.every((r) => r.why.length > 20), "it carries the PC's plain reason");
   assert.ok(rows.every((r) => r.title && r.title !== r.id),
     "it is drawn with its human label, never the raw id");
-  assert.equal(view.tools.items.length, 52, "the switch rows are unchanged");
+  assert.equal(view.tools.items.length, 59, "the switch rows are unchanged");
   assert.ok(TOOLS_SWITCHABLE.includes("web_search"));
   assert.ok(!TOOLS_SWITCHABLE.includes("plugin_scan"));
 });
@@ -101,7 +102,7 @@ check("a PC with nothing else ON sends no extra and draws no extra rows", () => 
   const view = readAsksFirst(C.pc_shipped);
   assert.deepEqual(view.tools.extra, [], "no extra rows");
   assert.deepEqual(extraToolsView(view.tools), [], "nothing is drawn for them");
-  assert.equal(view.tools.items.length, 52);
+  assert.equal(view.tools.items.length, 59);
 });
 
 check("the page draws the extra rows and sends OFF through the same verb", () => {
@@ -131,7 +132,7 @@ check("Rust refuses ON only for a name the PC does not know, and sends every OFF
     "only the ON direction is refused before it is sent");
   assert.match(rust, /TOOLS_NO_SWITCH\.iter\(\)\.find/,
     "a known tool with no switch of its own gets its own sentence, not 'does not know'");
-  assert.match(rust, /pub\(crate\) const TOOLS_NO_SWITCH: \[\(&str, &str\); 3\]/);
+  assert.match(rust, /pub\(crate\) const TOOLS_NO_SWITCH: \[\(&str, &str\); 4\]/);
   assert.doesNotMatch(rust, /TOOLS_TOML_ONLY_NOTE/,
     "the old 'not offered in-app by this slice' refusal is gone");
   // The Rust test names the new rule so it cannot be silently dropped.

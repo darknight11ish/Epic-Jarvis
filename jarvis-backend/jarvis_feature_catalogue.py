@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 175 rows from features/features.json.
+The owner's feature list, as data: 178 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 fdf606fa406e4106e180ba544d7c1e74ca74e5e1ef3a1ad54a6c5bc9d1198b3f); the apps' Features pages read their own
+`features/features.json` (sha256 175f8d8304e7303a1f2f2fbb6e596814e0fe11892dfaeb21151b2eab571dac79); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "fdf606fa406e4106e180ba544d7c1e74ca74e5e1ef3a1ad54a6c5bc9d1198b3f"
+SOURCE_SHA256 = "175f8d8304e7303a1f2f2fbb6e596814e0fe11892dfaeb21151b2eab571dac79"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -992,6 +992,19 @@ FEATURES = (
         "covers": [],
     },
     {
+        "id": "product-check",
+        "group": "Money and health",
+        "title": "Check a product's reviews",
+        "what": "A read-only product check: give Jarvis one Amazon product link and it reads that page in your own signed-in browser, then reports what the reviews themselves show - Verified Purchase and Vine badges, incentive wording, near-duplicate text, review-date bursts, the rating shape, generic prose and reviews that do not match the product - with counts, examples and every review set aside and why.",
+        "where": "Ask in chat - \"check this product for sponsored reviews: <Amazon link>\", \"product check this: <Amazon link>\", \"is the product check on?\". It is off by default; turning it on is the settings file's own line, [product_check] enabled = true in jarvis-framework.toml - there is no in-app switch and no chat approval card for that switch yet. The PC also answers POST /api/product/check with the same report.",
+        "asks": "ONE card naming the product page, on the PC only: \"Read this product page in your own browser session? Read-only; nothing is bought or added to a cart.\" A cart, checkout, order, account, payment or sign-in address is refused before any card, and a non-Amazon address is refused too.",
+        "limit": "Off by default. Amazon only, and it reads the sample Amazon chose to show - never all of the reviews, so the report's caveat comes first. It never buys, orders, adds to a cart, signs in, types or clicks, solves a CAPTCHA, follows a link or stores the page; it says plainly what it could not check. There is no trust score and no fake/real verdict for any review - the report is evidence, counts and reasons.",
+        "surface": "desktop",
+        "surface_reason": "The visible browser window it reads in, and the sign-in that window keeps, are on the PC, so the card can only be approved there; the phone has no tool, no switch and no report screen for the product check yet (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["product check", "check a product", "sponsored reviews", "fake reviews", "unbiased product research", "product research"],
+        "covers": [],
+    },
+    {
         "id": "home-status",
         "group": "Home",
         "title": "Ask how the house is",
@@ -1253,6 +1266,18 @@ FEATURES = (
         "surface": "both",
         "aliases": ["phone app allow-list", "phone apps", "apps on my phone", "which apps can you open on my phone", "add an app to my phone", "remove an app from my phone"],
         "covers": ["phone-extras"],
+    },
+    {
+        "id": "call-recording",
+        "group": "Phone",
+        "title": "Record a phone call and file it as a note",
+        "what": "Say \"record call\" and your phone records the call through its microphone with the call on speaker; this PC transcribes it, labels who spoke, and writes a new Obsidian note named for the date and time.",
+        "where": "Off by default; there is no in-app switch. Add [call_recording] enabled = true with a text editor to the settings file (jarvis-framework.toml), then say \"record call\" on the phone.",
+        "asks": "Off until you turn it on in the settings file. Starting a recording raises one approval card (record_call, tier ask) unless you set that line to auto yourself, and the note itself is written through the notes editor's own card.",
+        "limit": "The phone cannot capture the call's own audio stream - Android reserves it for the system dialer - so it records through the microphone with the call on speaker, and the other person is heard through the speaker, so the words are less clear than a system recorder's would be. English only, no cloud: the transcription and the speaker labels are made on this PC. A line is the reader's own ten-second window, so two people talking inside one window get one label; with no speaker model or no trained voice, every line says Speaker.",
+        "surface": "both",
+        "aliases": ["record call", "call recording", "record a call"],
+        "covers": [],
     },
     {
         "id": "appearance",
@@ -1597,7 +1622,7 @@ FEATURES = (
         "what": "Every way Jarvis can reach something outside itself, and whether it is on right now.",
         "where": "Settings, What Jarvis can reach.",
         "asks": "No card - it only reads the PC's own settings and the live state of each way out.",
-        "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The three whose own switch decides them say which switch: the data and maths sandbox, and Web search for the two conversation tools.",
+        "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The four whose own switch decides them say which switch: the data and maths sandbox, Web search for the two conversation tools, and the product check, by the line [product_check] enabled = true.",
         "surface": "both",
         "aliases": ["what jarvis can reach"],
         "covers": ["settings.reach", "documents-and-search"],
@@ -1857,6 +1882,19 @@ FEATURES = (
         "covers": ["model-page"],
     },
     {
+        "id": "voicestudio",
+        "group": "The PC itself",
+        "title": "A second voice program (VoiceStudio)",
+        "what": "A separate program on this PC that can speak in its own voices. Jarvis can ask it for one sentence over a loopback address on this PC and gets a sound file back; nothing else is sent.",
+        "where": "Off by default and not connected to the voice Jarvis answers in yet. The switch is [voicestudio] enabled in the settings file (there is no screen yet), the program is started by hand with tools\\voicestudio_sidecar.ps1 -Start, and tools\\measure_voicestudio.py re-reports what it costs.",
+        "asks": "No card in this slice: nothing starts by itself, no boot task and no service is made, and the sentence never leaves this PC.",
+        "limit": "Off by default. It needs about 1.95 GB of the 8 GB graphics card, and beside Jarvis's own models the machine had 382 MiB free at its peak - so it is started only when it is needed and never kept loaded beside them. The two model licences are personal, non-commercial use only, and they must be accepted once, by you, in VoiceStudio's own terms before it will speak at all.",
+        "surface": "desktop",
+        "surface_reason": "The program runs on this PC and is started by a PowerShell script on this PC. The phone has no switch for it, and a phone that could start a program on the PC would be a new power.",
+        "aliases": ["voicestudio", "voice studio", "the second voice program"],
+        "covers": [],
+    },
+    {
         "id": "approvals",
         "group": "Safety",
         "title": "Approval cards",
@@ -1865,7 +1903,7 @@ FEATURES = (
         "asks": "Nothing runs until you decide. There is no approve-all anywhere. Approving a risky card asks for Windows Hello on the PC, or your screen lock on the phone.",
         "limit": "Four cards wait for you instead of expiring after 15 minutes - pairing a device, unretiring a shared key, registering a phone's approval key, and restoring a backup. On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
         "surface": "both",
-        "covers": ["safety.approvals", "settings.approval-cards", "settings.protection", "asks-first", "phone-approvals"],
+        "covers": ["safety.approvals", "settings.approval-cards", "settings.protection", "asks-first", "phone-approvals", "settings.handsfree"],
     },
     {
         "id": "what-asks-first",
@@ -1874,7 +1912,7 @@ FEATURES = (
         "what": "Every action Jarvis can take and whether it asks you first, in plain words.",
         "where": "Settings, What asks first - in both apps.",
         "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch for EVERY tool the AI can be offered since 2026-11-04 - the raw ones and the everyday helpers included - PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
-        "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the three whose own switch decides them (the data and maths sandbox, and the two web-search conversation tools) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
+        "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the four whose own switch decides them (the data and maths sandbox, the two web-search conversation tools, and the product check) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
         "surface": "both",
         "covers": ["settings.asks-first", "asks-first", "home-devices", "money-and-health"],
     },

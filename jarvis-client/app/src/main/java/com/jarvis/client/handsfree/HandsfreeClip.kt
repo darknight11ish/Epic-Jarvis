@@ -17,7 +17,7 @@ import java.util.Base64
  * or nothing if nothing was heard. It is also started and stopped from a
  * service rather than from a press.
  *
- * THE CAP IS THE PC's, NOT THIS APP'S. docs/JARVIS-API.md section 186.5 refuses
+ * THE CAP IS THE PC's, NOT THIS APP'S. docs/JARVIS-API.md section 191.5 refuses
  * a clip longer than 30 seconds rather than truncating it, so however long the
  * answer window is, at most [MAX_WINDOW_SECONDS] of audio is ever collected:
  * a longer clip would be a refusal for a reason the owner did nothing wrong in.
@@ -102,7 +102,7 @@ class HandsfreeClip(
     companion object {
         /**
          * The longest clip the PC will take, in seconds: docs/JARVIS-API.md
-         * section 186.5's `MAX_SECONDS`. A longer one is refused, never
+         * section 191.5's `MAX_SECONDS`. A longer one is refused, never
          * truncated, so the collector stops here whatever the answer window is.
          * `HandsfreeClipTest` pins it to [com.jarvis.client.net.Handsfree.MAX_CLIP_SEC],
          * so the two copies of the PC's number cannot drift.

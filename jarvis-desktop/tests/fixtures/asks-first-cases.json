@@ -593,6 +593,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -609,6 +618,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -829,6 +874,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -980,6 +1052,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -1075,6 +1156,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -1447,9 +1537,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -1849,6 +1946,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -1870,21 +1975,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -2493,6 +2648,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -2509,6 +2673,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -2729,6 +2929,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -2880,6 +3107,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -2975,6 +3211,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -3347,9 +3592,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -3749,6 +4001,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -3770,21 +4030,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -4389,6 +4699,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -4405,6 +4724,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -4625,6 +4980,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -4775,6 +5157,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -4870,6 +5261,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -5242,9 +5642,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -5644,6 +6051,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -5665,21 +6080,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -6279,6 +6744,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -6295,6 +6769,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -6515,6 +7025,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -6665,6 +7202,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -6760,6 +7306,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -7132,9 +7687,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -7534,6 +8096,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -7555,21 +8125,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -8174,6 +8794,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -8190,6 +8819,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -8410,6 +9075,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -8560,6 +9252,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -8655,6 +9356,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -9042,9 +9752,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -9444,6 +10161,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -9465,21 +10190,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -10084,6 +10859,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -10100,6 +10884,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -10320,6 +11140,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -10470,6 +11317,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -10565,6 +11421,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -10947,9 +11812,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -11349,6 +12221,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -11370,21 +12250,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -11984,6 +12914,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -12000,6 +12939,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -12220,6 +13195,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -12370,6 +13372,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -12465,6 +13476,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -12837,9 +13857,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -13239,6 +14266,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -13260,21 +14295,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -13887,6 +14972,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -13903,6 +14997,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -14123,6 +15253,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -14274,6 +15431,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -14369,6 +15535,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -14741,9 +15916,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -15143,6 +16325,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -15164,21 +16354,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -15783,6 +17023,15 @@
        "title": "Read a web page out loud"
       },
       {
+       "action": "product_check",
+       "fixed": false,
+       "id": "product_check",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a product page in your own browser"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -15799,6 +17048,42 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "github_inspect",
+       "fixed": false,
+       "id": "github_inspect",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read your GitHub"
+      },
+      {
+       "action": "github_comment",
+       "fixed": false,
+       "id": "github_comment",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Post a comment on GitHub"
+      },
+      {
+       "action": "github_open_issue",
+       "fixed": false,
+       "id": "github_open_issue",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Open an issue on GitHub"
+      },
+      {
+       "action": "github_rerun_workflow",
+       "fixed": false,
+       "id": "github_rerun_workflow",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run a GitHub workflow again"
       },
       {
        "action": "support_chat",
@@ -16019,6 +17304,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Put that app on your phone"
+      },
+      {
+       "action": "record_call",
+       "fixed": false,
+       "id": "record_call",
+       "note": "It records the phone's microphone with the call on speaker (Android does not let an app record the call's own audio), keeps the audio on this PC, transcribes it here, and writes ONE new note through the notes editor's own card. Nothing leaves this PC, every recording stays until you remove it, and the feature itself is off until the settings file says on - there is no app switch for turning it on.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Record a call"
+      },
+      {
+       "action": "delete_call_recording",
+       "fixed": false,
+       "id": "delete_call_recording",
+       "note": "It removes ONE recording's own folder on this PC - the audio, the transcript and the row you see in the list - and it cannot be undone. The note it wrote in your vault is a document of its own and is NOT deleted here; the answer names it so you know what is left. It works with the feature switched off, because removing something only ever narrows what Jarvis keeps.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete a recorded call"
+      },
+      {
+       "action": "send_text_message",
+       "fixed": false,
+       "id": "send_text_message",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a text message from your phone"
       }
      ],
      "title": "This PC and your phone"
@@ -16169,6 +17481,15 @@
        "note": "Your own key or words, on this PC only. \"Watch with me\" shows a \"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps you exclude, and Stop or \"stop everything\" ends it at once. What it reads counts as outside text and is never saved. Taking an app off the \"Never look at\" list asks with a card.",
        "says": "Does it without asking",
        "title": "Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")"
+      },
+      {
+       "action": "handsfree_enable",
+       "fixed": false,
+       "id": "handsfree_enable",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on hands-free mode"
       }
      ],
      "title": "Talking with Jarvis"
@@ -16264,6 +17585,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete one conversation from this PC"
+      },
+      {
+       "action": "history_purge",
+       "fixed": false,
+       "id": "history_purge",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Delete the chats from the days you chose, and the facts they taught"
       },
       {
        "action": "storage_cleanup",
@@ -16636,9 +17966,16 @@
        "pack_inspect",
        "pack_install",
        "pack_remove",
+       "send_text_message",
        "refresh_abilities",
        "self_portrait",
-       "setup_quiz"
+       "setup_quiz",
+       "github_list",
+       "github_read_file",
+       "github_ci_status",
+       "github_comment",
+       "github_open_issue",
+       "github_rerun_workflow"
       ],
       "title": "Jarvis's own tools"
      }
@@ -17038,6 +18375,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "send_text_message",
+      "last": null,
+      "on": false,
+      "title": "Sending one text message from your phone (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "refresh_abilities",
       "last": null,
       "on": false,
@@ -17059,21 +18404,71 @@
       "on": false,
       "title": "Explaining your Personalize Jarvis quiz and staging a choice in it (read-only; you press Apply on the PC)",
       "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_list",
+      "last": null,
+      "on": false,
+      "title": "Listing your GitHub repositories, pull requests, issues or runs (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_read_file",
+      "last": null,
+      "on": false,
+      "title": "Reading one file in a GitHub repository (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_ci_status",
+      "last": null,
+      "on": false,
+      "title": "Checking how CI went on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_comment",
+      "last": null,
+      "on": false,
+      "title": "Posting a comment on GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_open_issue",
+      "last": null,
+      "on": false,
+      "title": "Opening a GitHub issue (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_rerun_workflow",
+      "last": null,
+      "on": false,
+      "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
      }
     ],
     "label": "Let the AI use this",
     "not_switchable": {
      "ids": [
       "run_data_script",
+      "product_check",
       "approve_web_search_for_conversation",
       "stop_web_search_approval"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -17168,9 +18563,16 @@
   "pack_inspect",
   "pack_install",
   "pack_remove",
+  "send_text_message",
   "refresh_abilities",
   "self_portrait",
-  "setup_quiz"
+  "setup_quiz",
+  "github_list",
+  "github_read_file",
+  "github_ci_status",
+  "github_comment",
+  "github_open_issue",
+  "github_rerun_workflow"
  ],
  "words": {
   "detail": "Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. \"Ask me first\" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.",
@@ -17190,6 +18592,7 @@
   "missing": "Your PC's Jarvis cannot show what asks first yet - run apply-patches.ps1 on the PC.",
   "no_switch_note": {
    "approve_web_search_for_conversation": "This one rides with Web search: with Web search offered, the AI is offered this too, and without it this tool could not search anyway. It has no switch of its own, so nothing was changed here.",
+   "product_check": "The product check has its own switch: the line [product_check] enabled = true in jarvis-framework.toml. That line is what offers this tool, so a line in [tools].enabled would change nothing. Nothing was changed here.",
    "run_data_script": "The data and maths sandbox has its own switch: Settings, Data sandbox (or the sandbox row on the What asks first page). That switch is what offers this tool, so a line in [tools].enabled would change nothing. Nothing was changed here.",
    "stop_web_search_approval": "This one rides with Web search: with Web search offered, the AI is offered this too. It has no switch of its own, so nothing was changed here."
   },
@@ -17208,7 +18611,7 @@
   "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
   "tools_label": "Let the AI use this",
   "tools_not_on_list": "This PC does not know a tool by that name, so nothing was changed.",
-  "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, and the two conversation web-search tools ride with Web search. Each is named above; turning on its real switch offers it.",
+  "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it.",
   "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }

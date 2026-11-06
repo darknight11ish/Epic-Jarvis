@@ -1929,6 +1929,41 @@ $PATCHES = @(
     # jarvis_agent.py offers still resolves to no real gate action in CI,
     # where jarvis_gate.py itself cannot be imported.
     'gate-tool-actions-gap.patch'
+    # The product check's gate rows (product-check.patch, 2026-11-04; the
+    # owner's choice "wire the existing product check"). ONE `_TOOL_ACTIONS`
+    # entry and, at the end of the file, the action's `_RISK` row and its "a
+    # denial is not a standing rule" entry, in ONE `_TOOL_ACTIONS.update` /
+    # `_NO_RULE_FROM_DENIAL` / `_RISK.update` block. It touches jarvis_gate.py
+    # only: the module itself is a drop-in (plugins/ready/product-check) and
+    # its tier line is in both shipped settings copies.
+    #
+    # IT IS APPLIED BEFORE web-search-grant.patch, and that is measured rather
+    # than chosen: unknown-risk-approvable.patch must stay the LAST patch that
+    # writes jarvis_gate.py (backend/test_gate_unknown_risk.py pins it with no
+    # whitelist) and web-search-grant.patch must stay immediately before it
+    # (backend/test_web_search_grant.py pins that), so a new writer can only go
+    # earlier. Its rows sit at the END OF THE FILE, the one place no earlier
+    # patch's hunk reaches; web-search-grant.patch's own end-of-file block is
+    # then inserted above it, exactly as the published base has them.
+    #
+    # IT COMES BEFORE handsfree.patch, and that order is pinned, not chosen
+    # (2026-11-05): backend/test_phone_app_allowlist.py requires handsfree.patch
+    # to be the patch IMMEDIATELY before web-search-grant.patch, so the other
+    # new end-of-file writer can only sit on the near side of it. Both append
+    # at the same end-of-file anchor, so whichever is applied second has to
+    # materialise a pre-image - measured at 61 hunks for jarvis_gate.py, which
+    # is why backend/_stack.py's RATCHET moved 60 -> 61 and says so there.
+    'product-check.patch'
+    # handsfree.patch (2026-11-04) - hands-free mode's gate rows, and nothing
+    # else: TWO `_RISK` rows (`send_text_message`, `handsfree_enable`), ONE
+    # `_TOOL_ACTIONS` line, and TWO `_NO_RULE_FROM_DENIAL` lines, in ONE
+    # `_TOOL_ACTIONS.update` / `_NO_RULE_FROM_DENIAL` / `_RISK.update` block at
+    # the END OF THE FILE. The routes come from the drop-in folder
+    # plugins/ready/handsfree and the logic lives in the shipped
+    # jarvis_handsfree.py. It is applied immediately before
+    # web-search-grant.patch - backend/test_phone_app_allowlist.py pins that
+    # adjacency, and it is the reason product-check.patch sits above it.
+    'handsfree.patch'
     # "You have full approval to search the web in this conversation" (the
     # owner's ask of 2026-11-01; docs/JARVIS-API.md section 175). ONE card,
     # once, that stands in for the `search_the_web` card for the rest of ONE
@@ -1968,6 +2003,44 @@ $PATCHES = @(
     # backend/test_web_search_grant.py rehearses it against
     # jarvis-backend/jarvis_gate.py: apply, reverse, byte for byte.
     'web-search-grant.patch'
+    # github-tools.patch (2026-11-03) - the four gate actions the six GitHub
+    # tools are decided under. The owner's decision: "Read + actions" - Jarvis
+    # may read his GitHub (repositories, open pull requests, issues, CI status,
+    # one file) and may comment, open an issue and re-run a workflow, each one
+    # behind its own card; it may never merge, push, commit, delete or close.
+    #
+    # ONE hunk, immediately AFTER web-search-grant.patch and ABOVE the
+    # `if __name__` block: `_TOOL_ACTIONS.update` with the six tool names (or
+    # `action_for_tool` answers "unclassified_tool"), and `_RISK.update` with
+    # the four actions.
+    #
+    # WHY THERE, AND NOT AT THE END OF THE FILE (moved there and back 2026-11-03,
+    # measured rather than chosen):
+    #   * web-search-grant.patch's last hunk ends at EOF, and `git apply -R`
+    #     needs its whole post-image to be contiguous and to end at the last
+    #     byte - anything inserted after its three context lines makes the
+    #     reversal fail (backend/test_web_search_grant.py said so), and the
+    #     published base could no longer be reversed and re-applied byte for
+    #     byte.
+    #   * unknown-risk-approvable.patch must stay the LAST writer of
+    #     jarvis_gate.py so its own reversal cannot be disturbed
+    #     (backend/test_gate_unknown_risk.py enforces it, with no whitelist), so
+    #     a new gate patch has to sit before it. This one sits between the two.
+    #
+    # It anchors on the owner's own text (the end of `review()` and the opening
+    # of the `if __name__` block), which no patch writes, so
+    # backend/_stack.py's walk materialises those six lines - recorded in that
+    # file's RATCHET (59 -> 60) and in tools/check_patch_original_text.py's PIN.
+    #
+    # WHY IT NEEDS A PATCH AT ALL: jarvis_gate.py is not in $SHIPPED, so a fresh
+    # base never reaches the owner's own gate - only a patch does (the gap
+    # backend/test_gate_tool_actions.py exists to catch). Every test that
+    # enumerates "the patches written after me" has had its name added there
+    # (test_devices.py, test_gate_risk_rows.py, test_gate_touches.py,
+    # test_referee.py, test_screen_attach.py, test_hud_manual_lane_gate.py).
+    # backend/test_github_tools.py rehearses it against
+    # jarvis-backend/jarvis_gate.py: reverse, apply, byte for byte.
+    'github-tools.patch'
     # unknown-risk-approvable.patch (2026-10-30, Gemini's Q2 ruling:
     # .dsh-scratch/UNKNOWN-RISK-2026-10-30/REPORT.md). An action the gate has
     # no risk row for is no longer a dead end: it is given the worst case
@@ -2025,6 +2098,38 @@ $PATCHES = @(
     # backend/test_jobs.py rehearses this patch against
     # jarvis-backend/jarvis_hud.py: apply, reverse, byte for byte.
     'jobs-routes.patch'
+    # Clearing old chats by date (history-purge.patch, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). FIVE hunks and NO route branches in jarvis_hud.py:
+    # ONE install block, right after forget-range.patch's own, that wraps
+    # Handler for the three routes (POST /api/history/purge/preview, /confirm
+    # and /cancel - every rule is in the shipped jarvis_history_purge.py); and
+    # FOUR rows in jarvis_gate.py that give the action its tier ("ask", only
+    # ever "ask"), its words, and the two-press guard's category - the action
+    # raises no card of its own (its two yeses and the platform ticket are
+    # stricter than one), so those rows are what keep it honest for anything
+    # that reads the gate's tables.
+    #
+    # WHY IT IS HERE AND NOT NEXT TO THE LOADER (moved 2026-11-05). It was
+    # appended immediately before plugin-loader.patch, which put it between
+    # bench.patch and the loader - and backend/test_phone_app_allowlist.py pins
+    # phone-apps.patch -> bench.patch -> plugin-loader.patch as the last three,
+    # so that suite went red on the combined tree. Its jarvis_hud.py hunk sits
+    # far above the loader's own anchor (the loader anchors on
+    # secret-handoff.patch's block, which is what it still does), so its PLACE
+    # IN THE LIST never mattered to the loader - only the last three did. It
+    # goes here, before phone-apps.patch, because it is the first free index
+    # after forget-range.patch (whose install block it follows) that collides
+    # with no drop-in folder's number: its own folder's stack_order IS the
+    # patch index, and 170 is free, while 171 protected-items, 172 send-file
+    # and 174 call-notes keep their hand numbers. The stack walk still invents
+    # no line of the owner's original file. Every patch that enumerates "the
+    # patches written after me" has had its name added there (test_devices.py,
+    # test_gate_risk_rows.py, test_gate_touches.py, test_referee.py,
+    # test_screen_attach.py, test_hud_manual_lane_gate.py).
+    'history-purge.patch'
     # A skill's ONE install card can now carry a line the caller wrote
     # (`jarvis_skills.install(..., note=...)`), and the card is only a card on
     # the tiers where a person really answers: `jarvis_gate.check` returns
@@ -2149,6 +2254,7 @@ $SHIPPED = @(
     'jarvis_price_sources.py'    # price radar F2: local SearXNG price mentions + dual-persona steering probe (no route yet)
     'jarvis_voices.py'           # voices.patch: custom voices (ZipVoice on the processor); jarvis_speech.say() asks it first
     'jarvis_f5_worker.py'        # the better voice (F5-TTS) as its own program on the second card; jarvis_voices.py starts it
+    'jarvis_voicestudio.py'      # the VoiceStudio sidecar CLIENT: HTTP to 127.0.0.1:11439 only, stdlib plus this repository's proxy-free opener. No AGPL code, no route, no import of its program, no weights; OFF by default ([voicestudio] enabled = false) and nothing calls it yet - the speaking voice is the next slice. docs/VOICESTUDIO.md
     'jarvis_kokoro.py'           # which Kokoro voice pack is installed (v0.19 or v1.0), its voices BY NAME, the pinned v1.0 download; jarvis_voices.py imports it, no patch. Upgrade: backend\README.md "Upgrade the voice pack to Kokoro v1.0"
     'jarvis_bakeoff.py'          # the voice upgrades' bake-off: the owner runs it by hand (py -3 jarvis_bakeoff.py); nothing imports it
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
@@ -2814,6 +2920,18 @@ $SHIPPED = @(
     # 2026-10-31): shipped whole, no patch; reads the model/preset and the
     # measured rows, and asks the EXISTING switch/apply cards.
     'jarvis_model_knowledge.py'
+    # Reading the owner's own GitHub, and three small actions on it (2026-11-03,
+    # the owner's decision: "Read + actions"; JARVIS-API section 185). Fixed
+    # api.github.com addresses only, the token in the header and never in a
+    # result; every read and every action asks a person first, and it cannot
+    # merge, push, commit, delete or close. github-tools.patch gives the gate
+    # its four actions. It sits above the ORDER MATTERS note on purpose:
+    # jarvis_phone_apps.py must stay last (and so never scanned), and this one
+    # is read by the jargon ratchet as the new user-facing module it is. Placing
+    # it here also keeps the list clear of the bottom, where other branches
+    # append, so two PRs adding a module do not fight over the same lines. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_github.py'
     # ORDER MATTERS TO ONE READER: backend/_where.py's list is read by
     # tools/check_zero_jargon.py, which only matches a comma-terminated entry,
     # so jarvis_phone_apps.py stays LAST - appending after it would newly
@@ -2870,6 +2988,34 @@ $SHIPPED = @(
     # Standard library only, no network. The same entry, in the same position,
     # is in backend/_where.py's SHIPPED list.
     'jarvis_storage_health.py'
+
+    # Recording a phone call (jarvis_call_notes.py, 2026-11-04; the owner's own
+    # request: "record a call if I tell it a keyword 'record call' ... transcribe
+    # it, put a date and identify the speakers ... store all of it in a new
+    # obsidian note labeled with the date and time"). The phone records through
+    # its microphone with the call on speaker (Android reserves the call's own
+    # audio stream), uploads 16 kHz mono PCM in order, and this PC makes the WAV,
+    # transcribes it with the existing sherpa-onnx reader, labels who spoke from
+    # the owner's own voice print plus clustering, and creates ONE new Obsidian
+    # note named for the date and time through the notes editor's own create
+    # path. OFF BY DEFAULT ([call_recording] enabled = false); starting is ONE
+    # record_call card. Four routes from its own install(), called by
+    # plugins/ready/call-notes - no patch. The same entry, in the same position,
+    # is in backend/_where.py's SHIPPED list. It sits BEFORE jarvis_bench.py
+    # because backend/test_bench.py pins that entry as the last one.
+    'jarvis_call_notes.py'
+    # Clear old chats by date (jarvis_history_purge.py, 2026-11-04; the owner's
+    # own request: "how long does it take for you to clear old chats if i
+    # batched a lot of them together?", then "clear the ones i don't have
+    # pinned ... including facts ... a card ... double confirmation ... windows
+    # pin or fingerprint"). A preview, two separate yeses and a platform
+    # ticket; pinned chats kept unless asked for; the facts those chats taught
+    # erased by their recorded provenance; every deletion in
+    # ~/.openjarvis/purge-audit.jsonl. `history-purge.patch` is the install
+    # block that reaches it. Standard library only, local only, no model. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list,
+    # and `jarvis_bench.py` stays LAST in both.
+    'jarvis_history_purge.py'
     # Every tool's full, code-verified dossier (jarvis_tool_profiles.py,
     # 2026-11-04; the owner's ask: Jarvis should be able to hold a full detailed
     # conversation about any of its tools). One entry per name in
@@ -2886,8 +3032,7 @@ $SHIPPED = @(
     # in its dispatch tuple.
     'jarvis_watch_policy.py'     # Stage one of the two-stage gate, and it is PURE: the seven REQUIRED checks vs the two informational ones, one batch per (pr, head_sha), the settle rules, the closed reason codes. Imports nothing from Jarvis - no disk, no network, no model - so "filtered events never reach the costly stage" is structural. Imported by jarvis_watch_ci.py; no route of its own
     'jarvis_watch_ci.py'         # The watch_pr_checks job body: polls ONE pull request through gh, folds the seven checks into one thread, writes a decision row (observe) or notifies (active), and holds the decisions ring buffer + watch-receipts.json so twenty polls of one commit alert once. Starts no polling of its own - a job created through POST /api/jobs is the only caller. Its install() answers GET /api/watch/decisions, so the owner can read what it would have said before promoting it from observe to active
-    'jarvis_outbox.py'           # What Jarvis still owes the owner, written down BEFORE it is said: a deterministic (kind, key) outbox in outbox.json (temp file, fsync, rename) for parked approval cards, job-completion notices and CI notices. jarvis_jobs.py re-announces whatever is still owed on startup, which is what closes the restart card loss; settled entries are pruned, an owed one never is. Approves nothing, widens nothing, writes one file
-    # Per-source independence evidence (jarvis_source_independence.py,
+    'jarvis_outbox.py'           # What Jarvis still owes the owner, written down BEFORE it is said: a deterministic (kind, key) outbox in outbox.json (temp file, fsync, rename) for parked approval cards, job-completion notices and CI notices. jarvis_jobs.py re-announces whatever is still owed on startup, which is what closes the restart card loss; settled entries are pruned, an owed one never is. Approves nothing, widens nothing, writes one file    # Per-source independence evidence (jarvis_source_independence.py,
     # 2026-11-04; the owner's clickable-card answer to "filter out products
     # that have been sponsored"). ONE supplied page -> disclosure wording,
     # affiliate and tracking links, urgency wording, a closed per-source
@@ -2900,6 +3045,29 @@ $SHIPPED = @(
     # before. The same entry, in the same position, is in
     # backend/_where.py's SHIPPED list.
     'jarvis_source_independence.py'
+    # Hands-free mode (jarvis_handsfree.py, 2026-11-04; the owner's own
+    # request): the `[handsfree] enabled` switch, the card read-out, the one
+    # spoken answer through the existing gate decision, and the text message
+    # handed to the phone. Its routes come from the drop-in folder
+    # plugins/ready/handsfree (the module's own install()), so it adds no patch
+    # to jarvis_hud.py; the gate's own rows are backend/handsfree.patch. The
+    # same entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_handsfree.py'
+    # The product check WIRED (jarvis_product_check.py, 2026-11-04; the
+    # owner's choice "wire the existing product check"): the ONE model tool,
+    # the ONE PC-only route POST /api/product/check, the card's words and the
+    # plain-words answer, over the engine/read/capture modules that shipped
+    # unwired on 2026-10-25/26. OFF by default ([product_check] enabled =
+    # false in both settings copies), and the tool is not even offered while it
+    # is off. Its route comes from its own install(), called by the drop-in
+    # folder plugins\ready\product-check; product-check.patch is the gate's
+    # _TOOL_ACTIONS/_RISK rows for the action, and the browser read is the
+    # public read_page_html seam in jarvis_browser_control.py. Nothing about a
+    # page is stored; the report has no trust score and no per-review verdict.
+    # It sits BEFORE jarvis_bench.py on purpose: that entry is the LAST one,
+    # where a new module is appended, so a new module goes above it. The same
+    # entry, in the same position, is in backend/_where.py's SHIPPED list.
+    'jarvis_product_check.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

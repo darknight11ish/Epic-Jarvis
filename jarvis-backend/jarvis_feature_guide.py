@@ -384,6 +384,16 @@ def _read_prompt_coach():
     return M.enabled() is True
 
 
+def _read_handsfree():
+    """Hands-free mode's one switch (2026-11-04, jarvis_handsfree.py).
+
+    Read from the module itself, never from a copy of the rule: `enabled()`
+    fails to OFF, so a settings file that cannot be read can never teach this
+    answer that the mode is on."""
+    import jarvis_handsfree as M
+    return M.enabled() is True
+
+
 def _read_antislop():
     """The Anti-Slop filter's master switch (2026-10-28).
 
@@ -586,6 +596,7 @@ STATE_READERS = {
     "learn_paraphrase": lambda: _read_auto_learn("auto_paraphrase"),
     "lights_without_card": _read_lights_without_card,
     "prompt_coach": _read_prompt_coach,
+    "handsfree": _read_handsfree,
     "antislop": _read_antislop,
     "jarvis_calendar": _read_jarvis_calendar,
     "ask_before_every_search": lambda: _read_search("ask_every_time"),
@@ -2631,6 +2642,11 @@ NO_COMMAND_REASON = {
     "docker-containers": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "card-summary": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "receipts": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    # The VoiceStudio client ships before its surface: no typed command and
+    # no Settings control yet, because the speaking-voice wiring and its
+    # one-card switch are the named next slice (docs/VOICESTUDIO.md). Its
+    # switch today is the settings-file line [voicestudio] enabled.
+    "voicestudio": ("not-a-setting", "The VoiceStudio client has no typed command and no Settings control yet: the speaking-voice wiring and its one-card switch are the named next slice.", "none-needed"),
     "search-audio-video": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "notion-import": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "vault-organizer": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
@@ -2780,6 +2796,12 @@ NO_COMMAND_REASON = {
     # (control_phone is opt-in in [tools].enabled, and the model switch is the
     # models row's).
     "phone-apps": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # Recording a call (2026-11-04): an action the phone starts and this PC
+    # finishes - there is no in-app switch to turn on (it is a hand edit of
+    # [call_recording] enabled, the same shape github_search and shell_exec
+    # use), and every rule it has is carried by its own approval card and by
+    # the two chat sentences. Hence not-a-setting, not a missing control.
+    "call-recording": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "model-knowledge": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     # The price radar has a switch, but it is the settings file's own
     # `[price_radar] enabled` line, not a registered BoolSetting, and it has no
@@ -2802,6 +2824,14 @@ NO_COMMAND_REASON = {
     # nowhere: this file is another lane's, and this is the smallest touch that
     # lets a new feature row exist (the checker below fails a silent omission).
     "reminder-asks": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The product check WIRED (2026-11-04, the owner's choice "wire the
+    # existing product check"): the feature is ONE chat request and ONE report,
+    # and its on/off door is the settings file's own `[product_check] enabled`
+    # line, not a registered BoolSetting (there is no in-app switch and no card
+    # for the switch yet). So the ROW is the read/behaviour, and the switch it
+    # does have is named in its own `where`/`limit`. Appended at the end of the
+    # dict for the same crossing-safety reason reminder-asks gives.
+    "product-check": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,

@@ -280,8 +280,22 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,600 tokens)", short <= 1600,
+    check("the short list stays small (pinned: at most 1,635 tokens)", short <= 1635,
           str(short))
+    # Pinned 1,600 -> 1,635 on 2026-11-05 (the combined six-PR tree), and the two
+    # causes are both measured with this module's own estimate_tokens rule rather
+    # than argued: the short list reads 1,615, where it read 1,579 when the
+    # 2026-11-02 pin was set. The 36 tokens are 14 for the new `send_text`
+    # group (handsfree: `send_text_message`, its own name and one line, in the
+    # text of more_tools' schema) and 22 for the `github` group's own line
+    # growing from "search GitHub for a library" to "search GitHub for a
+    # library, or read your own GitHub and act on it" (github-tools, 2026-11-03)
+    # - the short list carries more_tools' whole schema, so a longer group line
+    # is paid twice. Measured by removing the group and re-measuring: 1,601 with
+    # `send_text` taken out. 1,635 leaves 20 tokens spare, the same headroom the
+    # 2026-11-02 pin used (1,579 measured, 1,600 pinned, 21 spare). The cost is
+    # still paid only with `[tools] short_list = true`, which ships OFF, and
+    # `send_text_message` is offered only while hands-free mode is on.
     # Pinned 1,560 -> 1,600 on 2026-11-02, by the same rule: the goals tools
     # (goals_list, goal_add, goal_progress, goal_done; jarvis_goals.py,
     # JARVIS-API section 182) get their own group rather than joining "timers"
@@ -365,9 +379,20 @@ def t_what_it_saves():
     # with it 411 - so the old 395 had 8 tokens spare and the group needs 24.
     # 425 leaves 14. The same alternative was turned down for the same reason:
     # a wider group's own line would be untrue.
-    check("more_tools itself stays small (at most 425 tokens)",
+    # Pinned 425 -> 460 on 2026-11-05 (the combined six-PR tree), and both
+    # causes are the ones the short-list note above measures: the `send_text`
+    # group costs this card 14 (measured: 433 with it taken out, 447 with it),
+    # and the `github` group's longer own line costs the other 22 - "search
+    # GitHub for a library" became "search GitHub for a library, or read your
+    # own GitHub and act on it" with github-tools on 2026-11-03, after the 411
+    # in the note below was measured. 447 + the same 14 tokens of headroom the
+    # 2026-11-02 pin used = 461; the pin is 460, which leaves 13. The
+    # alternative - folding `send_text_message` into the existing `send_email`
+    # group - was turned down for the reason this note keeps giving: that
+    # group's line says "send an email", and a text message is not one.
+    check("more_tools itself stays small (at most 460 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 425)
+          <= 460)
 
 
 if __name__ == "__main__":

@@ -180,13 +180,40 @@ def t_the_patch_and_the_base():
              # has no hunk in jarvis_hud.py at all.
              "skill-install-note.patch",
              "phone-apps.patch",
+             # github-tools.patch (2026-11-03): ONE hunk in jarvis_gate.py, after
+             # everything these patches wrote, so it rewrites none of their lines.
+             "github-tools.patch",
              # bench.patch (2026-11-04, the self-benchmark) is appended after
              # this patch, immediately before plugin-loader.patch: TWO hunks,
              # both in jarvis_hud.py (the GET /api/bench routes and the POST
              # /api/bench routes), anchored inside hardware.patch's own added
              # blocks. It touches no gate list, no tier row and no _RISK row, so
              # it rewrites nothing this patch wrote.
-             "bench.patch"}
+             "bench.patch",
+             # history-purge.patch (2026-11-04, clearing old chats by date):
+             # ONE added install block in jarvis_hud.py, right after
+             # forget-range.patch's own block, and no hunk in jarvis_gate.py at
+             # all - every rule is in the shipped jarvis_history_purge.py. It
+             # rewrites nothing this patch wrote.
+             "history-purge.patch",
+             # packs-tamper-on-load.patch (2026-11-05, the pack manager's immutable
+             # manifest) is appended last of the core patches, immediately before
+             # plugin-loader.patch: ONE hunk, and it is in jarvis_skills.py - it
+             # touches neither jarvis_gate.py nor jarvis_hud.py - so it rewrites
+             # nothing this patch wrote.
+             "packs-tamper-on-load.patch",
+             # handsfree.patch (2026-11-04, hands-free mode) is appended after this
+             # patch, immediately before plugin-loader.patch: THREE hunks, all in
+             # jarvis_gate.py - two `_RISK` rows, one `_TOOL_ACTIONS` line, and two
+             # `_NO_RULE_FROM_DENIAL` lines. Every one of them is ADDED after the
+             # rows this patch wrote, and it rewrites none of its lines.
+             "handsfree.patch",
+             # product-check.patch (2026-11-04, the product check's wiring) is
+             # appended after this patch, immediately before plugin-loader.patch.
+             # It touches jarvis_gate.py only (one _TOOL_ACTIONS line, its own
+             # action's _RISK row at the end of the file, and a
+             # _NO_RULE_FROM_DENIAL union) - no line this patch wrote.
+             "product-check.patch"}
     check("... and it is the last code patch, bar the ones written after it, "
           "immediately before the loader",
           "f01-manual-lane-gate.patch" in names

@@ -91,7 +91,10 @@ gate-touches.patch	gate-touches/f550503.patch	f550503a69e992885eeab1b8fb2f2d47c1
 gate-touches.patch	gate-touches/50dfe75.patch	50dfe75109ebaf94d0bd729a4c314b25b36e39d1	2026-10-12T16:57:47-07:00	fix(gate): the gate reads the whole tool arguments, not the first 1500 (DEF-003) (#345)
 gate-touches.patch	gate-touches/81e1128.patch	81e1128ad5beab8198943aaec2fd994c81683328	2026-10-11T01:19:53-07:00	fix(gate): read the arguments of a cut tool-call line
 gate-touches.patch	gate-touches/0f244f7.patch	0f244f7b04ecbea8640b5440943242991113a7af	2026-10-11T00:19:59-07:00	the gate reads what an action touches, not the words on its card (#249)
+github-tools.patch	github-tools/72f6847.patch	72f68473885ee7844bca1eb43855a5dcb4050000	2026-11-03T16:39:39-08:00	feat(github): read your own GitHub, and three small actions on it - one card each, never merge or push
 goals.patch	goals/d68f7b2.patch	d68f7b240737ac081d91b26c85410738520d8f42	2026-09-27T23:29:50Z	Backend: Goals - a plan the owner edits, one card per acting step
+handsfree.patch	handsfree/8c3490d.patch	8c3490d834b8e11a2b93ba0629a866de99d3d641	2026-11-05T03:19:26-08:00	fix(handsfree): the gate rows go where no other patch reads, and every red suite is answered
+handsfree.patch	handsfree/ced61a2.patch	ced61a23f7b691acade485e9b5d86f416b2b54d3	2026-11-04T16:56:58-08:00	feat(handsfree): read every card out, answer one by voice, and text a contact
 hud-request-gate.patch	hud-request-gate/af2adbb.patch	af2adbbbe5281363e88dc09b61375482b6869e3e	2026-10-18T22:07:57-07:00	fix(hud): header deadline, bounded concurrency and a token-failure gate without touching a route
 inbox-tidy.patch	inbox-tidy/d8d7911.patch	d8d7911ced71029756efc677cd6f883416561c84	2026-09-29T07:42:51Z	inbox-tidy.patch: its first hunk's context now ends at apps-in-projects' own line
 inbox-tidy.patch	inbox-tidy/98a5310.patch	98a5310e72ffb101536da6fc16ae983d89f8cf46	2026-09-29T07:27:30Z	Merge origin/main (PR #27: audit fixes, signed approvals, apps in projects) into the working branch
@@ -130,6 +133,7 @@ plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder
 presets.patch	presets/aac88d6.patch	aac88d6a69734b65f69cfe717b949b7669f463e8	2026-10-19T16:06:15-07:00	fix(presets): re-anchor the patch on the applied HUD shape
 presets.patch	presets/41c9069.patch	41c906981c399944d236123b1bdd3e5f7a2786e9	2026-10-19T13:45:56-07:00	feat(presets): lane-aware single-approval apply with rollback
+product-check.patch	product-check/96b1f1d.patch	96b1f1d306e7654712c3b44d90818687f4d79a1a	2026-11-04T17:32:48-08:00	feat(product): wire the existing product check - one card, one read-only page, one report
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
 prompt-coach.patch	prompt-coach/f56e6ab.patch	f56e6abc597daa98e826022584f6fe9b2c3fcba9	2026-10-08T20:47:48-07:00	the two things CI caught that this machine could not
 prompt-coach.patch	prompt-coach/54ed3dc.patch	54ed3dc1566ccb824ad38921a110c83503db3e54	2026-10-08T18:39:20-07:00	prompt coach: the patch, generated from the real jarvis_hud.py
@@ -191,6 +195,7 @@ voices.patch	voices/15d1300.patch	15d1300e6f10b21b724535bb9ca761388700d761	2026-
 voices.patch	voices/1262208.patch	126220810bc58273cd6196d6a8fbce1b538655de	2026-09-26T19:47:59Z	Grow "What did I miss?" and add a built-in-voice-choice setting
 voices.patch	voices/ca53319.patch	ca5331976dca4cfaa937bb04b690306707d0a70d	2026-09-26T07:41:16Z	Voice upgrades: the bake-off, Pocket TTS and a newer "hey Jarvis" built but off, and the speaking speed in both apps
 voices.patch	voices/ca3f625.patch	ca3f62575069f0b741ace3645b33729f9c2c7d9c	2026-09-24T08:14:23Z	Custom voices, backend: jarvis_voices.py, voices.patch, and the better voice
+web-search-grant.patch	web-search-grant/890c42c.patch	890c42c776d083691d7cc04e9f7f117444a0129e	2026-11-02T10:46:59-08:00	feat(web-search): one card, once, lets a conversation search the web without asking (#1074)
 web-search-switch.patch	web-search-switch/236ba22.patch	236ba22118bf640403d8572c23bca580a6bde245	2026-09-30T06:54:43Z	Settings audit 2026-09-30: email switch fix, web search on/off, jump list, voice switches in Voice
 web-search.patch	web-search/dcfdbaf.patch	dcfdbafdf25c0944179e6103990326786c11de38	2026-09-25T06:49:40Z	Web search: Brave back as the fifth option, and its line says it can cost money
 web-search.patch	web-search/7c82046.patch	7c820464c4b614c3305ce54d126772b7e6e09d09	2026-09-25T06:33:24Z	Web search: Exa replaces Brave (SearXNG, DuckDuckGo, Exa, Tavily)

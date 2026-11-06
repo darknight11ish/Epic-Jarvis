@@ -51,7 +51,7 @@ __all__ = [
 #:                      that is: the two web-search approval tools).
 #:   switchable       - a real in-app switch on Settings, What asks first,
 #:                      "Let the AI use this" (jarvis_asks_first.
-#:                      TOOLS_SWITCHABLE: 48 of the 51 tools at 2026-11-04).
+#:                      TOOLS_SWITCHABLE: 49 of the 52 tools at 2026-11-04).
 #:                      Off until the owner turns it on.
 #:   off-by-default   - jarvis_asks_first.NOT_A_SWITCH: its own module switch
 #:                      (or the tool it rides with) ships OFF and decides
@@ -61,7 +61,7 @@ __all__ = [
 #: `[tools].enabled` by hand" WAS a real class until 2026-11-04, and the owner
 #: reversed it: every tool the model can be offered now has a switch on the
 #: Tools page, so a profile claiming otherwise would be false. `switchable`
-#: therefore no longer means "the only switchable one": the 13 tools that are
+#: therefore no longer means "the only switchable one": the 14 tools that are
 #: already in the shipped list are `always-available` (no action needed, and
 #: they can be switched OFF from the page), and `rea_investigate` is
 #: `off-by-default` because its own `[rea] enabled` ships false and outranks the
@@ -86,8 +86,10 @@ CONTEXT_LIMIT = 1200
 #: plain table rather than prose repeated beside each profile's user-facing
 #: words. A profile's `sources` list holds these names, not the paths.
 AGENT             = "backend/jarvis_agent.py"
+GITHUB            = "backend/jarvis_github.py"
 REBUILT_FRAMEWORK = "backend/rebuilt/jarvis-framework.toml"
 ASKS_FIRST        = "backend/jarvis_asks_first.py"
+HANDSFREE         = "backend/jarvis_handsfree.py"
 REBUILT_MEMORY    = "backend/rebuilt/jarvis_memory.py"
 PAST              = "backend/jarvis_past.py"
 AUTO_LEARN        = "backend/jarvis_auto_learn.py"
@@ -101,6 +103,7 @@ PHONE_APPS        = "backend/jarvis_phone_apps.py"
 PLUGINS           = "backend/jarvis_plugins.py"
 BROWSER_CONTROL   = "backend/jarvis_browser_control.py"
 BROWSER_ENGINE    = "backend/jarvis_browser_engine.py"
+PRODUCT_CHECK     = "backend/jarvis_product_check.py"
 SECOND_CARD       = "backend/jarvis_second_card.py"
 RESEARCH          = "backend/jarvis_research.py"
 SEARCH            = "backend/jarvis_search.py"
@@ -690,6 +693,187 @@ PROFILES: dict = {
         "sources": [AGENT, RESEARCH, ASKS_FIRST, REBUILT_FRAMEWORK],
     },
 
+    # The six on-demand GitHub tools (2026-11-03, the owner's "Read + actions"
+    # decision). They are ONE family of six, not six entries in other families,
+    # because together they are "your own GitHub": three reads that ask every
+    # time (a read still sends the owner's token to api.github.com) and three
+    # actions that each raise their own card. The tier is `switchable`: every
+    # one is in `jarvis_asks_first.TOOLS_SWITCHABLE` and none is in the
+    # shipped `[tools].enabled` list.
+    "github_list": {
+        "id": "github_list",
+        "title": "List your own GitHub: repositories, pull requests, issues or runs",
+        "what": "Lists ONE fixed thing on GitHub: your repositories, a "
+                "repository's open pull requests, its open issues, or its "
+                "recent workflow runs. Read-only and carded: every read asks "
+                "you first, and nothing on GitHub can change.",
+        "gives": [
+            "See your repositories, newest updated first",
+            "See the open pull requests on one repository you name",
+            "See its open issues, or its recent workflow runs",
+        ],
+        "touches": "network service",
+        "limits": [
+            "Reads only - it cannot write, merge, push, close or delete "
+            "anything",
+            "A read sends your GitHub token to api.github.com, so it asks "
+            "every time",
+            "Not in the shipped [tools].enabled list: turn it on in Settings",
+        ],
+        "combines": {
+            "github_read_file": "github_list finds the path; github_read_file "
+                                "reads that one file.",
+            "github_ci_status": "github_list shows the runs; github_ci_status "
+                                "says how the newest one went.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_read_file": {
+        "id": "github_read_file",
+        "title": "Read one file from your own GitHub",
+        "what": "Reads ONE file's text from a repository the saved token can "
+                "see, at an optional branch or commit. GitHub sends the file "
+                "in base64 and Jarvis decodes it, so what comes back is the "
+                "file's text, capped at 40,000 characters.",
+        "gives": [
+            "Read one source file, README or config from a repository",
+            "Read it at a branch or a commit you name",
+            "See the file's own text, never GitHub's JSON envelope",
+        ],
+        "touches": "network service",
+        "limits": [
+            "One file per call, cut at 40,000 characters with a marker",
+            "A directory, or a file too big for this read, gets a sentence "
+            "instead of text",
+            "Reads only - it cannot edit, commit or write a file",
+        ],
+        "combines": {
+            "github_list": "github_list names the repository and path; "
+                           "github_read_file reads the file.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_ci_status": {
+        "id": "github_ci_status",
+        "title": "How CI went, from your own GitHub",
+        "what": "Reports the newest workflow run for a repository and branch, "
+                "or for a pull request whose head commit is read first: still "
+                "going, passed, failed or cancelled. It asks before every read "
+                "and starts nothing.",
+        "gives": [
+            "See the newest run's status and conclusion",
+            "Check the checks on one pull request",
+            "Know that GitHub keeps the failing log, not Jarvis",
+        ],
+        "touches": "network service",
+        "limits": [
+            "It never reads the failing log itself - GitHub keeps it",
+            "One read per call, and it asks every single time",
+            "Reads only - a re-run is the separate github_rerun_workflow "
+            "action",
+        ],
+        "combines": {
+            "github_rerun_workflow": "github_ci_status says a run failed; "
+                                     "github_rerun_workflow asks to run it "
+                                     "again.",
+            "github_list": "github_list shows the runs; github_ci_status says "
+                           "how the newest went.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_comment": {
+        "id": "github_comment",
+        "title": "Post one comment on your own GitHub",
+        "what": "Posts ONE comment on a GitHub issue or pull request, exactly "
+                "as written, in your name. The whole text is shown on one card "
+                "first and nothing is posted without your yes.",
+        "gives": [
+            "Reply on an issue or a pull request in your own words",
+            "See the whole comment on the card before it is posted",
+            "Know it was posted, or get a plain sentence saying why not",
+        ],
+        "touches": "network service",
+        "limits": [
+            "One comment per call, at most 2,000 characters",
+            "It cannot edit or take a comment back once posted",
+            "Never merges, pushes, commits, closes or deletes anything",
+        ],
+        "combines": {
+            "github_list": "github_list finds the issue or pull request "
+                           "number; github_comment posts the reply.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_open_issue": {
+        "id": "github_open_issue",
+        "title": "Open one issue on your own GitHub",
+        "what": "Opens ONE new issue on a repository, with a title and an "
+                "optional body, in your name. The title and body are shown on "
+                "one card first, and it cannot close or edit the issue later.",
+        "gives": [
+            "File a bug or a task as a GitHub issue",
+            "See the whole title and body on the card first",
+            "Know it was opened, or get a plain sentence saying why not",
+        ],
+        "touches": "network service",
+        "limits": [
+            "One issue per call, with a 2,000-character body cap",
+            "It cannot close, edit or delete the issue afterwards",
+            "Never merges, pushes, commits, closes or deletes anything",
+        ],
+        "combines": {
+            "github_ci_status": "github_ci_status shows a failing run; "
+                                "github_open_issue files what it found.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
+    "github_rerun_workflow": {
+        "id": "github_rerun_workflow",
+        "title": "Ask GitHub to run one workflow again",
+        "what": "Asks GitHub to run an existing workflow run AGAIN, with the "
+                "same code and settings it ran with before. It shows which run "
+                "on a card first, changes no code and no setting.",
+        "gives": [
+            "Re-run a failed or flaky workflow without a push",
+            "See which run will start again on the card first",
+            "Know GitHub accepted it, or get a plain sentence saying why not",
+        ],
+        "touches": "network service",
+        "limits": [
+            "It re-runs a run GitHub already has - it cannot start a new one",
+            "A run that has started cannot be taken back",
+            "It never merges, pushes, commits, closes or deletes anything",
+        ],
+        "combines": {
+            "github_ci_status": "github_ci_status says a run failed; "
+                                "github_rerun_workflow asks to run it again.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
+                       "in-app switch).",
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
     "web_search": {
         "id": "web_search",
         "title": "Search the public web",
@@ -761,6 +945,45 @@ PROFILES: dict = {
                        "and powerful\" (it is an in-app switch). Every fetch still "
                        "raises its own card (tier \"ask\").",
         "sources": [AGENT, READPAGE, ASKS_FIRST, REBUILT_FRAMEWORK],
+    },
+
+    "product_check": {
+        "id": "product_check",
+        "title": "Check one Amazon product page for sponsored reviews",
+        "what": "Reads ONE Amazon product page in the owner's own visible, "
+                "signed-in browser window, after ONE PC-only card, and returns "
+                "the engine's reasons report in plain words: the sample caveat, "
+                "the listing facts, the eight signals with their counts and "
+                "examples, every set-aside review with its reason, and what could "
+                "not be checked.",
+        "gives": [
+            "See the patterns behind a listing's reviews, in plain words",
+            "See every review set aside, and why it still counts in the numbers",
+            "Know what could not be checked instead of a confident verdict",
+        ],
+        "touches": "network service, screen",
+        "limits": [
+            "One Amazon product page per card, read-only: nothing is bought, "
+            "added to a cart, ordered, signed in to or typed",
+            "No trust score and no per-review fake/real verdict - a number there "
+            "would be false precision the measured evidence does not support",
+            "A CAPTCHA is never solved and never retried: the owner is asked to "
+            "open the page themselves",
+            "Nothing is stored - the report lives in the answer and nowhere else",
+        ],
+        "combines": {
+            "browser_control": "The check uses the browser module's own read "
+                               "seam for one visible, signed-in page.",
+            "web_search": "Search finds a listing when the owner has no link; the "
+                          "product check reads the one page they name.",
+        },
+        "tier": "off-by-default",
+        "enable_hint": "Off by default: it is switched on by one line in the "
+                       "settings file on this PC (there is no Settings row for it "
+                       "yet). Every check still raises its own card, and only this "
+                       "PC may approve it.",
+        "sources": [AGENT, PRODUCT_CHECK, BROWSER_CONTROL, ASKS_FIRST,
+                    REBUILT_FRAMEWORK],
     },
 
     "calendar_read": {
@@ -1010,6 +1233,41 @@ PROFILES: dict = {
         "tier": "switchable",
         "enable_hint": "Turn on \"send a file to the phone\" in Settings.",
         "sources": [AGENT, SEND_FILE, ASKS_FIRST],
+    },
+
+    "send_text_message": {
+        "id": "send_text_message",
+        "title": "Text a contact for me",
+        "what": "Asks the owner's paired phone to send one text message to a "
+                "contact, after ONE approval card that prints the contact and the "
+                "whole message. The PC composes and asks; the phone looks the "
+                "contact up in its own contacts and does the sending.",
+        "gives": [
+            "Send a short message without picking the phone up",
+            "See the exact contact and the exact words on the card first",
+            "Have the phone report back whether its own send worked",
+        ],
+        "touches": "phone",
+        "limits": [
+            "Only while hands-free mode is on: with it off the model is not "
+            "offered the tool at all, and the card would promise a send that "
+            "cannot happen",
+            "One contact and one message per card; the PC never reports it as "
+            "sent - only the phone's own result does, and a reconnect is said "
+            "as a reconnect, not as a send",
+            "No number is ever typed, guessed or stored: the phone resolves the "
+            "name in its own contacts, and a name it cannot find is reported as "
+            "failed",
+        ],
+        "combines": {
+            "phone_apps": "Listing which apps Jarvis may open comes first; then "
+                          "one approved message is handed to the phone's own SMS "
+                          "app.",
+        },
+        "tier": "always-available",
+        "enable_hint": "It is in the shipped [tools].enabled list, and hands-free "
+                       "mode must be on for the model to be offered it.",
+        "sources": [AGENT, HANDSFREE, ASKS_FIRST],
     },
 
     "protect_from_jarvis": {
@@ -1603,7 +1861,7 @@ PROFILES: dict = {
         "id": "feature_guide",
         "title": "Explain one of Jarvis's features",
         "what": "Answers \"what is this feature?\", \"where is it?\" and \"is it "
-                "on?\" from the owner's own feature list - 175 rows in 9 groups, "
+                "on?\" from the owner's own feature list - 178 rows in 9 groups, "
                 "turned into a shipped module - rather than from a guess. The "
                 "counts in this sentence are checked against that module by the "
                 "suite, so they cannot go stale here.",
@@ -1983,9 +2241,10 @@ FAMILIES: dict = {
     "web": {
         "title": "The web - searching it and reading it",
         "what": "Searching the public web through the provider the owner chose, "
-                "reading the words of one page they named, and the two tools that "
-                "grant and withdraw a conversation's search approval.",
-        "tools": ["web_search", "read_web_page",
+                "reading the words of one page they named, checking one Amazon "
+                "product listing for sponsored-review patterns, and the two tools "
+                "that grant and withdraw a conversation's search approval.",
+        "tools": ["web_search", "read_web_page", "product_check",
                   "approve_web_search_for_conversation",
                   "stop_web_search_approval"],
         "impact": "It lets Jarvis answer something it cannot know from the PC - a "
@@ -2026,9 +2285,11 @@ FAMILIES: dict = {
     "home-and-phone": {
         "title": "Your home and your phone",
         "what": "Reading and changing Home Assistant devices, driving the paired "
-                "Android phone with individual adb commands, and managing the list "
-                "of apps Jarvis may open there.",
-        "tools": ["home_read", "home_control", "control_phone", "phone_apps"],
+                "Android phone with individual adb commands, managing the list of "
+                "apps Jarvis may open there, and sending one text message from the "
+                "phone after the owner approves one card.",
+        "tools": ["home_read", "home_control", "control_phone", "phone_apps",
+                  "send_text_message"],
         "impact": "It extends Jarvis past the PC into the two places the owner "
                   "actually lives: the house and the phone in their pocket. Asking "
                   "whether the back door is locked, turning a light off, or opening "
@@ -2119,18 +2380,26 @@ FAMILIES: dict = {
     "coding": {
         "title": "Coding, development and inspecting a program",
         "what": "Checking GitHub for an existing library before building one, "
-                "running a real command on this PC, planning several steps as one "
-                "card, and statically inspecting a program, APK, capture or database.",
-        "tools": ["github_search", "shell_exec", "propose_plan", "rea_investigate"],
+                "reading your own repositories, pull requests, issues, CI and "
+                "files, running a real command on this PC, planning several "
+                "steps as one card, and statically inspecting a program, APK, "
+                "capture or database.",
+        "tools": ["github_search", "shell_exec", "propose_plan", "rea_investigate",
+                  "github_list", "github_read_file", "github_ci_status",
+                  "github_comment", "github_open_issue", "github_rerun_workflow"],
         "impact": "This is the family the owner uses to actually build things with "
                   "Jarvis: it answers \"has someone already built this?\" with a "
                   "graded verdict, runs the installer or the build, and can inspect "
                   "a binary or an APK to see what it is made of. The plan card is "
                   "what makes a multi-step job approvable in one read instead of ten "
-                  "separate clicks.",
+                  "separate clicks. It also reads your own GitHub on demand - "
+                  "repositories, pull requests, issues, CI and one file - and can "
+                  "post one comment, open one issue or re-run one workflow, each "
+                  "behind its own card; it can never merge, push or delete.",
         "limits": ["Every way out of the PC here is carded: shell commands always "
-                   "ask, GitHub research needs an approved plan, and a plan's risky "
-                   "step asks again",
+                   "ask, GitHub research needs an approved plan, a look at your "
+                   "own GitHub asks every time, and each of its three actions has "
+                   "its own card",
                    "REA refuses live process capture, device changes and debugger "
                    "sessions by name, and the plan module ships off until a "
                    "measured evaluation passes",
