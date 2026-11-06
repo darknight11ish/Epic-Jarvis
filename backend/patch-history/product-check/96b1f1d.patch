@@ -1,0 +1,30 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -1063,3 +1063,10 @@ _TOOL_ACTIONS: dict[str, str] = {
+     "approve_web_search_for_conversation": "grant_web_search_conversation",
+     "stop_web_search_approval": "revoke_web_search_grant",
++    # product-check.patch (2026-11-04): jarvis_agent.py's product_check tool,
++    # under the action name jarvis_agent.PRODUCT_CHECK_ACTION. Its own name IS
++    # the action, and `product_check = "ask"` ships in both settings copies;
++    # without this line action_for_tool() answers "unclassified_tool" - the
++    # Reach page calls it unclassified and the card is never the one the tool
++    # raises, the same gap gate-tool-actions-gap.patch fixed above.
++    "product_check": "product_check",
+ }
+@@ -1444,2 +1444,3 @@ _NO_RULE_FROM_DENIAL = frozenset({
+     "raise_attention_budget",  # jarvis_arbiter.py acts only on tier "ask": ONE card per raise of the number of times a day Jarvis may speak up unasked; a lowering, and moving the hour the brief arrives, apply at once, and a denial must not become a standing rule either (attention-settings.patch; the row itself added by gate-raise-rows.patch)
++    "product_check",  # jarvis_product_check.py acts only on tier "ask": ONE PC-only card per Amazon product page, read once in the owner's own signed-in browser; a denial is about that one page, not a standing rule (product-check.patch)
+     "read_web_page",  # jarvis_readpage.py acts only on tier "ask": ONE card per address the owner hands over; one GET of that one page, its words read out as outside text (readpage.patch)
+@@ -2719,2 +2719,12 @@ _RISK.update({
+     "revoke_web_search_grant": ("yes", "local", "stops the web-search approval for this chat at once; nothing is sent anywhere, nothing else changes, and every search asks you again from the next one on"),
++    # product-check.patch (jarvis_product_check.py, 2026-11-04; the owner's
++    # choice "wire the existing product check"). ONE card per Amazon product
++    # page, showing the address in full and raised BEFORE the browser is
++    # opened. The page is read in the owner's own signed-in browser window -
++    # the request is to Amazon from this PC's own address, and it cannot be
++    # taken back - so "outbound". It changes nothing: the read is one page,
++    # read-only, and no cart, order, sign-in, click or typing is possible from
++    # it, so "yes": there is nothing to undo. The card is PC-only (the window
++    # and the sign-in are here) and always asks a person.
++    "product_check": ("yes", "outbound", "opens ONE Amazon product page in your own signed-in browser window and reads it, so Amazon sees this PC's address and the request cannot be taken back; the read is one page, read-only, with no click, typing, cart, order or sign-out, nothing is bought or added to a cart, the page's words are outside text - never learned, never acted on - and nothing about the page is stored"),
+ })
