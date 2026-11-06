@@ -205,4 +205,35 @@ class SpeechAheadTest {
         assertEquals(listOf("One."), fake.played())
         assertFalse("Three." in fake.asked())
     }
+
+    @Test
+    fun `the private line is the one the reason asks for at that moment`() {
+        // Since 2026-11-05 the line depends on WHY: the remembered-facts rule
+        // has its own sentence ("That answer used things I remember...") and
+        // every other refusal keeps the one fixed line. The phone passes a
+        // provider, so the words are decided when the sentence would be
+        // spoken - never earlier, never a stale choice.
+        val asked = mutableListOf<String>()
+        val played = mutableListOf<String>()
+        runBlocking {
+            val queue = Channel<String>(Channel.UNLIMITED)
+            queue.trySend("Your dentist is on Tuesday.")
+            queue.close()
+            SpeechAhead<String>(
+                mayRead = { false },
+                stopped = { false },
+                fetch = { text ->
+                    asked += text
+                    "sound of $text"
+                },
+                play = { text, clip ->
+                    assertEquals("sound of $text", clip)
+                    played += text
+                },
+                privateLine = { PrivateAloud.MEMORY_ON_SCREEN },
+            ).speak(queue)
+        }
+        assertEquals(listOf(PrivateAloud.MEMORY_ON_SCREEN), asked)
+        assertEquals(listOf(PrivateAloud.MEMORY_ON_SCREEN), played)
+    }
 }

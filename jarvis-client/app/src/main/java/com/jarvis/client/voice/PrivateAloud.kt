@@ -23,8 +23,10 @@ import kotlinx.serialization.json.doubleOrNull
  *
  *  1. the PC did not mark the question private (`question_private`);
  *  2. the chat answer's `X-Jarvis-Route` header has no `gate: "private"`,
- *     and - only when `memory_aloud` is false - no `injected_facts` above 0
- *     (remembered facts went into it);
+ *     and - only when [memoryMayRead] is false - no `injected_facts` above 0
+ *     (remembered facts went into it). [memoryMayRead] is the PC's
+ *     `memory_aloud`, OR the phone's own setting of 2026-11-05 read under
+ *     the three facts below;
  *  2b. and, whatever `private_aloud` and `memory_aloud` say, no SENSITIVE
  *     saved fact went into it (`injected_sensitive` above 0 - or missing
  *     while `injected_facts` is above 0, which fails closed) unless the
@@ -47,10 +49,37 @@ import kotlinx.serialization.json.doubleOrNull
  *     on screen", with a voice setting to allow it (`hands_free_screen` on
  *     the Voice check screen). Missing counts as false.
  *
- * Otherwise it says one fixed line, [ON_SCREEN], and the answer stays on
- * the screen as always. The phone's voice answers are spoken sentence by
- * sentence as they arrive, so the rule is asked again before EVERY
- * sentence: a tool that starts halfway through stops the reading there.
+ * Otherwise it says one line, [ON_SCREEN] - or, when the remembered-facts
+ * rule is the ONLY reason, [MEMORY_ON_SCREEN], which says what happened
+ * (2026-11-05) - and the answer stays on the screen as always. The phone's
+ * voice answers are spoken sentence by sentence as they arrive, so the rule
+ * is asked again before EVERY sentence: a tool that starts halfway through
+ * stops the reading there.
+ *
+ * THE PHONE'S OWN PROMISE, THE OWNER'S CHOICE OF 2026-11-05. The talk
+ * button deliberately runs no voice check (the owner's request of
+ * 2026-11-02), so the PC's `memory_aloud` is ALWAYS false for it
+ * (`jarvis_speech._QuickMessage`) and an answer that uses what Jarvis
+ * remembers was always kept on screen - even on his own unlocked phone, with
+ * his own setting on the PC saying memories may be read aloud. He chose a
+ * setting ON THE PHONE for exactly that case: "read them aloud on my
+ * unlocked phone", off by default ([MEMORY_ALOUD_DEFAULT]). It lifts ONLY the
+ * remembered-facts refusal, and only when ALL of these hold:
+ *
+ *  - the question came from the phone's talk button ([talkButton] - the mic
+ *    press; not the wake word, not Jarvis Live);
+ *  - the phone was UNLOCKED at the moment of that press ([unlockedAtPress],
+ *    captured then and never re-read: the owner's own instruction);
+ *  - the answer used at least one remembered fact (`injected_facts` above 0)
+ *    and NO sensitive one (`injected_sensitive` 0 - the fail-closed count
+ *    above still refuses);
+ *  - nothing else was private: not the question, not the router's gate, no
+ *    screen read kept on screen, no private tool, the stream live throughout.
+ *
+ * The setting is a promise this phone makes about its own button; it is
+ * never a new default and it never reaches "hey Jarvis" or Live. Every other
+ * rule keeps its place, which is why this is one branch of the same `when`
+ * and not a second rule.
  *
  * Known gap, said plainly (the same one the API doc names): the PC cannot
  * yet label a finished answer as private, and the header is sent before the
@@ -62,6 +91,70 @@ object PrivateAloud {
 
     /** What is said instead of a private answer. */
     const val ON_SCREEN = "It's on your screen."
+
+    /**
+     * What is said instead of an answer that used what Jarvis remembers, when
+     * the ONLY reason it stays on screen is that rule (the refusal words of
+     * 2026-11-05). A sentence that says what happened, rather than the bare
+     * [ON_SCREEN]: the owner heard a memory answer kept on screen with no
+     * explanation, and "It's on your screen." does not say why.
+     *
+     * Not a card line, not a shared line, and it never replaces [ON_SCREEN]:
+     * the shared table (`contract/private-aloud-cases.json`, `on_screen`)
+     * and the desktop's `private-speech.js` are untouched.
+     */
+    const val MEMORY_ON_SCREEN = "That answer used things I remember, so it's on your screen."
+
+    /**
+     * The utterance reply's `mode` for the phone's mic press
+     * (`jarvis_speech._QuickMessage`): the ONE clip that deliberately runs no
+     * voice check (the owner's request of 2026-11-02). The phone's memory
+     * setting of 2026-11-05 applies to that press and to nothing else, so
+     * both the request's `source` and this word must agree.
+     */
+    const val QUICK_MESSAGE = "quick_message"
+
+    /**
+     * The phone setting's default, written down where the rule reads it: OFF.
+     * The owner's choice of 2026-11-05 was "a setting", not a new default, and
+     * `MemoryAloud.describe(false)` says so on the row too.
+     */
+    const val MEMORY_ALOUD_DEFAULT = false
+
+    /**
+     * Why an answer may not be read aloud, in the order the rules are asked.
+     * [NONE] is the only value that may be spoken; every other one keeps the
+     * answer on screen, and [MEMORY] is the one with its own words
+     * ([MEMORY_ON_SCREEN]).
+     */
+    enum class Refusal {
+        /** Nothing private: the answer may be read aloud. */
+        NONE,
+
+        /** A sensitive saved fact went into it and the owner did not allow those. */
+        SENSITIVE,
+
+        /** The screen (or, in Live, the camera) was read and this clip may not say it. */
+        SCREEN,
+
+        /** The PC's own words asked about something private. */
+        QUESTION_PRIVATE,
+
+        /** The router's own `gate: "private"`. */
+        PRIVATE_GATE,
+
+        /** It used what Jarvis remembers, and that is kept on screen. */
+        MEMORY,
+
+        /** A PRIVATE tool ran while it was written. */
+        TOOL,
+
+        /** The event stream could not say whether a tool ran. */
+        TOOLS_UNKNOWN,
+
+        /** No `X-Jarvis-Route` header has arrived yet: nothing is known. */
+        NO_ROUTE,
+    }
 
     /**
      * What the chat answer's `X-Jarvis-Route` header says about privacy.
@@ -223,19 +316,99 @@ object PrivateAloud {
      * @param screenAloud the utterance reply's `screen_aloud` (false when
      *   missing): false for "Hey Jarvis" under "Only trust the talk button"
      *   unless the owner allowed answers about the screen aloud
+     * @param phoneMemoryAloud the PHONE's own setting of 2026-11-05
+     *   (`data/ClientSettings.readMemoriesAloud`, [MEMORY_ALOUD_DEFAULT]) -
+     *   never a new default, and only ever consulted with the two facts below
+     * @param talkButton this question came from the phone's mic press (not
+     *   "hey Jarvis", not Jarvis Live)
+     * @param unlockedAtPress the phone was unlocked AT THE PRESS (captured
+     *   then, never re-read later)
      */
-    fun mayRead(heard: com.jarvis.client.net.Heard, route: Route?, start: Watch, now: Watch): Boolean =
-        mayRead(
-            heard.privateAloud, heard.questionPrivate, route, toolRan(start, now), toolsKnown(start, now),
-            memoryAloud = heard.memoryAloud,
-            sensitiveAloud = heard.sensitiveAloud,
-            screenRead = screenRead(start, now),
-            screenAloud = heard.screenAloud,
-        )
+    fun mayRead(
+        heard: com.jarvis.client.net.Heard,
+        route: Route?,
+        start: Watch,
+        now: Watch,
+        phoneMemoryAloud: Boolean = false,
+        talkButton: Boolean = false,
+        unlockedAtPress: Boolean = false,
+    ): Boolean = mayRead(
+        heard.privateAloud, heard.questionPrivate, route, toolRan(start, now), toolsKnown(start, now),
+        memoryAloud = heard.memoryAloud,
+        sensitiveAloud = heard.sensitiveAloud,
+        screenRead = screenRead(start, now),
+        screenAloud = heard.screenAloud,
+        phoneMemoryAloud = phoneMemoryAloud,
+        talkButton = talkButton,
+        unlockedAtPress = unlockedAtPress,
+    )
 
     /** Whether saved facts about a sensitive topic went into this answer ([route]'s fail-closed count). */
     fun usesSensitive(route: Route): Boolean = route.injectedSensitive > 0
 
+    /**
+     * Whether an answer that used remembered facts may be read aloud for this
+     * clip. The PC's own answer (`memory_aloud`) is enough on its own, exactly
+     * as before. The phone's setting is the ONLY other way, and it needs all
+     * three facts of its own - the setting on, the talk button, unlocked at
+     * the press - and no screen read.
+     */
+    fun memoryMayRead(
+        memoryAloud: Boolean,
+        phoneMemoryAloud: Boolean,
+        talkButton: Boolean,
+        unlockedAtPress: Boolean,
+        screenRead: Boolean,
+    ): Boolean = memoryAloud || (phoneMemoryAloud && talkButton && unlockedAtPress && !screenRead)
+
+    /**
+     * The whole rule, asked in order, answering WHY an answer stays on screen.
+     * [mayRead] is this compared with [Refusal.NONE], so the decision and the
+     * words said about it cannot drift apart.
+     */
+    fun refusal(
+        privateAloud: Boolean,
+        questionPrivate: Boolean,
+        route: Route?,
+        toolRan: Boolean,
+        toolsKnown: Boolean,
+        memoryAloud: Boolean = false,
+        sensitiveAloud: Boolean = false,
+        screenRead: Boolean = false,
+        screenAloud: Boolean = false,
+        phoneMemoryAloud: Boolean = false,
+        talkButton: Boolean = false,
+        unlockedAtPress: Boolean = false,
+    ): Refusal = when {
+        // Before the header, nothing is known - and nothing has arrived to read.
+        route == null -> Refusal.NO_ROUTE
+        // Sensitive saved facts stay on screen (the owner's decision,
+        // 2026-09-24) unless the owner chose to hear them - even under
+        // "voice check is enough" or "read aloud" for memories.
+        usesSensitive(route) && !sensitiveAloud -> Refusal.SENSITIVE
+        // An answer about the screen stays on screen unless the PC said
+        // `screen_aloud` for this clip - false for "Hey Jarvis" under "Only
+        // trust the talk button" unless the owner allowed it (the owner's
+        // decision, 2026-09-28). Before "voice check is enough", so nothing
+        // below lets it through.
+        screenRead && !screenAloud -> Refusal.SCREEN
+        // The owner chose "voice check is enough", and this voice passed it.
+        privateAloud -> Refusal.NONE
+        questionPrivate -> Refusal.QUESTION_PRIVATE
+        route.privateGate -> Refusal.PRIVATE_GATE
+        route.injectedFacts > 0 && !memoryMayRead(
+            memoryAloud = memoryAloud,
+            phoneMemoryAloud = phoneMemoryAloud,
+            talkButton = talkButton,
+            unlockedAtPress = unlockedAtPress,
+            screenRead = screenRead,
+        ) -> Refusal.MEMORY
+        toolRan -> Refusal.TOOL
+        !toolsKnown -> Refusal.TOOLS_UNKNOWN
+        else -> Refusal.NONE
+    }
+
+    /** May the answer be read aloud? [refusal] == [Refusal.NONE], in one place. */
     fun mayRead(
         privateAloud: Boolean,
         questionPrivate: Boolean,
@@ -246,26 +419,30 @@ object PrivateAloud {
         sensitiveAloud: Boolean = false,
         screenRead: Boolean = false,
         screenAloud: Boolean = false,
-    ): Boolean = when {
-        // Before the header, nothing is known - and nothing has arrived to read.
-        route == null -> false
-        // Sensitive saved facts stay on screen (the owner's decision,
-        // 2026-09-24) unless the owner chose to hear them - even under
-        // "voice check is enough" or "read aloud" for memories.
-        usesSensitive(route) && !sensitiveAloud -> false
-        // An answer about the screen stays on screen unless the PC said
-        // `screen_aloud` for this clip - false for "Hey Jarvis" under "Only
-        // trust the talk button" unless the owner allowed it (the owner's
-        // decision, 2026-09-28). Before "voice check is enough", so nothing
-        // below lets it through.
-        screenRead && !screenAloud -> false
-        // The owner chose "voice check is enough", and this voice passed it.
-        privateAloud -> true
-        questionPrivate -> false
-        route.privateGate -> false
-        route.injectedFacts > 0 && !memoryAloud -> false
-        toolRan -> false
-        !toolsKnown -> false
-        else -> true
-    }
+        phoneMemoryAloud: Boolean = false,
+        talkButton: Boolean = false,
+        unlockedAtPress: Boolean = false,
+    ): Boolean = refusal(
+        privateAloud = privateAloud,
+        questionPrivate = questionPrivate,
+        route = route,
+        toolRan = toolRan,
+        toolsKnown = toolsKnown,
+        memoryAloud = memoryAloud,
+        sensitiveAloud = sensitiveAloud,
+        screenRead = screenRead,
+        screenAloud = screenAloud,
+        phoneMemoryAloud = phoneMemoryAloud,
+        talkButton = talkButton,
+        unlockedAtPress = unlockedAtPress,
+    ) == Refusal.NONE
+
+    /**
+     * The one line said instead of the answer: [MEMORY_ON_SCREEN] when the
+     * memory rule is the ONLY reason, and [ON_SCREEN] for every other refusal
+     * (the other refusals keep their existing wording, the owner's instruction
+     * of 2026-11-05).
+     */
+    fun refusalLine(refusal: Refusal): String =
+        if (refusal == Refusal.MEMORY) MEMORY_ON_SCREEN else ON_SCREEN
 }

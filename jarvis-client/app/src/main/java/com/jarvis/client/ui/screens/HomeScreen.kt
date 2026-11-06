@@ -2038,8 +2038,11 @@ private fun StatusLine(
     val modelDown = com.jarvis.client.ModelWords.isDown(state.status?.ollama)
     // Hands-free (the owner's request, 2026-11-04): the one-line state, where
     // the app already says whether anything is wrong - "Hands-free" while the
-    // PC has it armed, "Hands-free: not on this PC" when the PC answered 404,
-    // and nothing at all while it is simply off. Never a second dot and never a
+    // PC has it armed, and NOTHING otherwise. A PC without the feature (404,
+    // or `available: false`) draws nothing here at all: "Hands-free: not on
+    // this PC" read as if the mode were on (the owner's report, 2026-11-05),
+    // and the honest sentence lives in Settings, Voice, where the switch
+    // would be (net/Handsfree.kt `NOT_HERE`). Never a second dot and never a
     // colour of its own: it is one more fact about a link that is already drawn.
     val handsfreeLine by com.jarvis.client.JarvisRuntime.handsfreeLine.collectAsState()
 

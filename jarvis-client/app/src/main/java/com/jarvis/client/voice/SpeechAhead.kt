@@ -24,7 +24,7 @@ import kotlinx.coroutines.coroutineScope
  *    [PrivateAloud.mayRead] with the tool watch as it is at that moment):
  *    before the sound is asked for, and again right before it is PLAYED. A
  *    tool can start, or the event stream drop, while the sound is being made;
- *    then that sound is thrown away unplayed and the one fixed line
+ *    then that sound is thrown away unplayed, the one line for the reason
  *    ([privateLine]) is said instead, once, and nothing more of the answer.
  *  - **"Stop" wins** ([stopped], the turn's own `silenced` flag): nothing is
  *    asked for after it, and a sound that arrives after it is never played.
@@ -42,8 +42,14 @@ class SpeechAhead<C>(
     private val fetch: suspend (String) -> C,
     /** Plays one sentence's sound, returning once it has finished (or was stopped). */
     private val play: suspend (String, C) -> Unit,
-    /** What is said instead of a private answer. */
-    private val privateLine: String = PrivateAloud.ON_SCREEN,
+    /**
+     * What is said instead of an answer that may not be read aloud. A
+     * provider, not a string, because the sentence depends on WHY at the
+     * moment it is said: the remembered-facts rule has its own words since
+     * 2026-11-05 ([PrivateAloud.refusalLine]), and every other refusal keeps
+     * the one fixed line.
+     */
+    private val privateLine: () -> String = { PrivateAloud.ON_SCREEN },
     /**
      * A line in Jarvis's own fixed words - "I need your OK for that..."
      * ([CardVoice]) - never the answer's: said whatever the private-answer
@@ -110,14 +116,18 @@ class SpeechAhead<C>(
         val sentence = sentences.receiveCatching().getOrNull() ?: return null
         if (stopped()) return null
         if (fixedLine(sentence)) return Line(sentence, fetch(sentence), isPrivateLine = false, fixed = true)
-        if (!mayRead()) return Line(privateLine, fetch(privateLine), isPrivateLine = true)
+        if (!mayRead()) {
+            val line = privateLine()
+            return Line(line, fetch(line), isPrivateLine = true)
+        }
         return Line(sentence, fetch(sentence), isPrivateLine = false)
     }
 
     private suspend fun sayPrivateLine() {
         if (stopped()) return
-        val clip = fetch(privateLine)
+        val line = privateLine()
+        val clip = fetch(line)
         if (stopped()) return
-        play(privateLine, clip)
+        play(line, clip)
     }
 }

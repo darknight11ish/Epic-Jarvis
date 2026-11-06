@@ -66,6 +66,14 @@ class VoiceSession(
      */
     private val heardSoundOn: () -> Boolean = { false },
     /**
+     * "Read out answers that use what Jarvis remembers" on this phone
+     * (ClientSettings, [MemoryAloud]). OFF unless the owner turned it on, and
+     * read when a sentence is about to be spoken, so a switch changed
+     * mid-answer applies at the next sentence. Only ever consulted for a
+     * talk-button question the phone was unlocked for ([PrivateAloud]).
+     */
+    private val memoryAloudOn: () -> Boolean = { PrivateAloud.MEMORY_ALOUD_DEFAULT },
+    /**
      * The owner cut the spoken answer off while [String] was the last
      * sentence they heard (the runtime hands it to ChatSession's `cutOff`,
      * for the next question - docs/JARVIS-API.md section 17, 6).
@@ -554,6 +562,21 @@ class VoiceSession(
 
         /** The reply has made a sound: a second thought no longer joins the question. */
         @Volatile var sounded = false
+
+        /**
+         * This question came from the phone's own talk button - the mic press,
+         * not "hey Jarvis" and not Jarvis Live. Set by [deliver] from the
+         * request's `source`; only the talk button can ever be true.
+         */
+        @Volatile var talkButton = false
+
+        /**
+         * The phone was UNLOCKED at the moment the owner pressed the mic. Read
+         * ONCE, at the press ([begin]), and never re-read: the owner's own
+         * instruction of 2026-11-05. An answer that arrives after the phone
+         * locks still counts as asked on an unlocked phone.
+         */
+        @Volatile var unlockedAtPress = false
     }
 
     private var current: Turn? = null
@@ -1024,8 +1047,12 @@ class VoiceSession(
      * @param source `push_to_talk` or `wake_word`. The server refuses a
      *   wake-word capture while the wake word is switched off, and says so —
      *   which is why this is passed through rather than assumed.
+     * @param unlockedAtPress the phone was unlocked at the moment of the press
+     *   (`KeyguardManager.isDeviceLocked`, read by the caller THERE and never
+     *   again). Only the talk button is a press at all, so only this path uses
+     *   it; "hey Jarvis" and Jarvis Live pass nothing and it stays false.
      */
-    fun begin(source: String = JarvisApi.SOURCE_PUSH_TO_TALK) {
+    fun begin(source: String = JarvisApi.SOURCE_PUSH_TO_TALK, unlockedAtPress: Boolean = false) {
         // Jarvis Live has the microphone - even while it is closed for a
         // pause: the talk button does not open a second recorder beside it
         // (the Live audit, fit 3). The PC's own words, as on the PC.
@@ -1049,6 +1076,9 @@ class VoiceSession(
         // flag. Clearing it told a recorder that had already been asked to stop
         // to carry on. See [Turn].
         val turn = Turn()
+        // The one fact captured at the press, carried on the turn it belongs
+        // to and never re-read later (the owner's instruction of 2026-11-05).
+        turn.unlockedAtPress = unlockedAtPress
         current = turn
         // A "Try it" clip playing stops before the microphone opens.
         turnStarting()
@@ -1215,6 +1245,16 @@ class VoiceSession(
             return null
         }
         val heard = (result as ApiResult.Ok).value
+
+        // The phone's mic press, and nothing else: BOTH the request's own
+        // `source` and the PC's `mode` must say this clip was the talk
+        // button's quick message (`_QuickMessage` - the one clip that runs no
+        // voice check). "hey Jarvis" and Jarvis Live reach here with their own
+        // sources and can never be mistaken for it, and a PC that does not
+        // say "quick_message" leaves the owner's memory setting of 2026-11-05
+        // doing nothing - the conservative direction.
+        turn.talkButton = source == JarvisApi.SOURCE_PUSH_TO_TALK &&
+            heard.mode == PrivateAloud.QUICK_MESSAGE
 
         // Jarvis Live: "let's talk", "move it here?", and anything on a Live
         // clip that is not a question to answer go to the runtime.
@@ -1387,19 +1427,46 @@ class VoiceSession(
         // asks whether this answer may be read aloud (PrivateAloud) - before
         // asking for its sound, and again right before playing it, because a
         // tool can start while the sound is being made. The first time it
-        // may not, that sound is dropped, the one fixed line is said
-        // instead, and nothing more of this answer is read - it stays on the
-        // screen as always. "Stop" ([Turn.silenced]) drops a sound made
-        // ahead, too, and so does cancelling this job.
+        // may not, that sound is dropped, the one line for the REASON is said
+        // instead ([PrivateAloud.refusalLine]: the remembered-facts rule has
+        // its own sentence since 2026-11-05, every other refusal keeps "It's
+        // on your screen."), and nothing more of this answer is read - it
+        // stays on the screen as always. "Stop" ([Turn.silenced]) drops a
+        // sound made ahead, too, and so does cancelling this job.
+        //
+        // One refusal read per ask, from ONE tool watch, so the decision and
+        // the words come from the same facts: the watch is read once per
+        // sentence and past it to every part of the rule.
+        val refusalNow: () -> PrivateAloud.Refusal = {
+            val now = toolWatch()
+            PrivateAloud.refusal(
+                privateAloud = heard.privateAloud,
+                questionPrivate = heard.questionPrivate,
+                route = route.get(),
+                toolRan = PrivateAloud.toolRan(asked, now),
+                toolsKnown = PrivateAloud.toolsKnown(asked, now),
+                memoryAloud = heard.memoryAloud,
+                sensitiveAloud = heard.sensitiveAloud,
+                screenRead = PrivateAloud.screenRead(asked, now),
+                screenAloud = heard.screenAloud,
+                // The owner's 2026-11-05 setting, and the two facts captured
+                // at the press. Off, not a talk-button question, or a locked
+                // phone at the press all leave the rule exactly as it was.
+                phoneMemoryAloud = memoryAloudOn(),
+                talkButton = turn.talkButton,
+                unlockedAtPress = turn.unlockedAtPress,
+            )
+        }
         val drainJob = scope.launch {
             SpeechAhead<ApiResult<SaidAloud>>(
-                mayRead = { PrivateAloud.mayRead(heard, route.get(), asked, toolWatch()) },
+                mayRead = { refusalNow() == PrivateAloud.Refusal.NONE },
                 stopped = { turn.silenced },
                 fetch = { sentence -> api.say(sentence) },
                 play = { sentence, said -> playClip(turn, sentence, said) },
                 // "I need your OK for that..." and how the card ended: fixed
                 // words, said whatever the private-answer rule says.
                 fixedLine = { line -> CardVoice.isCardLine(line) },
+                privateLine = { PrivateAloud.refusalLine(refusalNow()) },
             ).speak(queue)
         }
 

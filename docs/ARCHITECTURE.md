@@ -2781,6 +2781,34 @@ backend routes, in both directions; the rest are listed here only.
   and unloosenable (`jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`), and the
   vault is chosen from what the PC already validated, which is the same
   "choose among what exists" shape `/api/models/switch` set on 2026-09-18.
+- **Reading a remembered answer aloud on the phone's own mic press is the
+  phone's setting, and that is one-sided on purpose** (2026-11-05; the owner's
+  choice: *"the phone may read aloud an answer that uses what Jarvis remembers,
+  on its own talk button while it is unlocked, off by default; sensitive saved
+  facts and private tools still stay on screen"*). The talk button deliberately
+  runs no voice check (the owner's request of 2026-11-02), so the PC answers
+  `memory_aloud: false` for every mic-press question whatever its own settings
+  say (`jarvis_speech._QuickMessage`). The PC therefore CANNOT be the authority
+  for this one case, and the phone's own setting is: Settings, Voice, "Read out
+  answers that use what Jarvis remembers". It is saved on the phone
+  (`data/ClientSettings.readMemoriesAloud`) and never sent to the PC; it is OFF
+  by default; it covers only the mic press on this phone, and only when the
+  phone was unlocked at that press (the keyguard is read once, at the press,
+  and never again); and it lifts ONLY the remembered-facts refusal - a
+  sensitive saved fact, a private question, the router's private gate, a
+  private tool and an answer about the screen all still keep the answer on
+  screen. There is no desktop switch and none is wanted: the PC's own
+  `memory_aloud` (its setting AND a real voice check) still decides what the
+  PC reads, and a desktop switch here would be a second control for a button
+  the desktop does not have. The phone's refusals also have honest words now:
+  when the remembered-facts rule is the only reason it says "That answer used
+  things I remember, so it's on your screen."
+  (`voice/PrivateAloud.kt` `MEMORY_ON_SCREEN`), while every other refusal keeps
+  the one fixed line. That one sentence is the PHONE's: the desktop's bar and
+  HUD still draw and say the shared "It's on your screen." for a memory answer
+  they keep on screen, which is the shared table's word and is left exactly as
+  it is (`contract/private-aloud-cases.json` is untouched). No route is added,
+  so `tools/check_parity.py` classifies nothing new.
 
 - **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
   is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
@@ -2811,9 +2839,11 @@ backend routes, in both directions; the rest are listed here only.
   record
   describes what exists, and a route written into it before its code would be
   the one kind of fiction this project keeps out of that file. So the feature is
-  INERT until the PC half lands: every surface shows the contract's own 404
-  sentence ("Hands-free is not available on this PC yet."), no microphone is
-  opened, and nothing claims a mode that cannot be on. The phone was built
+  INERT until the PC half lands: the Settings row shows the contract's own 404
+  sentence ("Hands-free is not available on this PC yet."), Home's status row
+  shows NOTHING for it (the owner's report of 2026-11-05: a short "not on this
+  PC" line there read as if the mode were on), no microphone is opened, and
+  nothing claims a mode that cannot be on. The phone was built
   against the FROZEN contract, whose four shapes are written down in
   `jarvis-client`'s `net/Handsfree.kt` header, and the PC half's own pull
   request owns `JARVIS-API.md` section 186 for them. Nothing else about the
