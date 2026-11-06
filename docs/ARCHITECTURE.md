@@ -2842,7 +2842,7 @@ backend routes, in both directions; the rest are listed here only.
   `BACKEND_ONLY` here, so no undecided drift is hidden while both land.
 - **A document can be sent from the phone; the phone's screen is the next lane,
   and the desktop deliberately gets none** (2026-11-05; `backend/jarvis_upload.py`,
-  `plugins/ready/upload/`, JARVIS-API §188). This slice is the **backend half**
+  `plugins/ready/upload/`, JARVIS-API §196). This slice is the **backend half**
   of the owner's ask - "upload any documents through the jarvis app and have it
   be fully processed as if I was uploading it to the jarvis desktop" - and it is
   split that way on purpose rather than by accident of time. The three routes
