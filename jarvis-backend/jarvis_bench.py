@@ -1281,17 +1281,31 @@ def normalise_controls(raw: dict, *, block_count=None,
     out["lane"] = lane
 
     # -- num_gpu: the one genuinely continuous control -------------------
+    # "ALL OF THEM" IS block_count + 1, NOT block_count. Ollama's num_gpu
+    # counts the layers kept on the graphics card, and the OUTPUT layer is
+    # offloadable too. Measured on this PC, 2026-11-06, on the live 11436
+    # lane with qwen3.5:9b (block_count 32): num_gpu=32 loaded size 6.13 GB
+    # of which size_vram 5.12 GB - 83.6% on card - while num_gpu=33, 34, 40
+    # and 99 all loaded 5.49 of 5.49 GB, i.e. 100%. So a run that asks for
+    # "all layers" has to ask for block_count + 1, or the 100% baseline this
+    # benchmark exists to compare against is unreachable by design. An
+    # explicit larger value is clamped to that same number: the control
+    # cannot usefully go past every layer, but it must be able to reach them.
+    # The slider the owner sees keeps its range - this is the RESOLVED
+    # request, not the control.
     want = raw.get("num_gpu", out["num_gpu"])
+    every = block_count + 1 if block_count else None
     if want is None:
-        want = block_count
+        want = every
     n = _int(want)
     if n is None:
-        n = _int(block_count)
+        n = every
     if n is not None:
-        if block_count and n > block_count:
+        if every is not None and n > every:
             notes.append(f"num_gpu {n} is more layers than the model has "
-                         f"({block_count}): using {block_count}")
-            n = block_count
+                         f"({block_count}) plus its output layer: requesting "
+                         f"all {every} layers (every layer on the card)")
+            n = every
         if n < 0:
             notes.append("num_gpu cannot be negative: using 0 (processor only)")
             n = 0
@@ -1376,61 +1390,140 @@ class Refusal(Exception):
         self.body = dict({"error": error}, **extra)
 
 
-#: The flag a caller can set the instant it starts an answer. Exact,
-#: in-process, and free.
-_IN_CHAT = {"on": False, "since": 0.0}
+#: How many /api/chat requests in THIS process are streaming an answer right
+#: now. A COUNT, not a flag: two clients can ask at once (the desktop and the
+#: phone), and the answer is only over when the last one ends. Set and cleared
+#: by jarvis_hud's turn guard (`activity-turn-guard.patch`) on every way out of
+#: the handler, so a turn that ends down any path - answered, quick-answered,
+#: raised, client gone - cannot leave it stuck.
+_IN_CHAT = {"depth": 0, "since": 0.0}
 _IN_CHAT_LOCK = threading.Lock()
+
+#: The words `jarvis_power.in_flight()` uses for its activity branch. They are
+#: the only busy words it can return, which is how this module knows which of
+#: its reasons came from the HUD's activity mark.
+_ACTIVITY_BUSY = ("thinking", "speaking", "working")
+
+#: Fallback only: the lease itself lives in jarvis_events, so power, bench and
+#: the status route share one definition. Used when the installed
+#: jarvis_events predates clear_if_stale() - and the safe answer then is the
+#: old refusal, never a guessed unlock.
+ACTIVITY_STALE_SECONDS = 300.0
 
 
 def note_answer_start() -> None:
     """Record that an answer is streaming RIGHT NOW (DESIGN.md section 2's
     signal (a)).
 
-    It is exact and costs nothing. What makes it enough rather than merely
-    available is that `answer_streaming()` ALSO asks
-    `jarvis_power_switch._busy_reason()`, which reads the HUD's own activity
-    state - `_activity("speaking")` when the first chunk goes out,
-    `_activity("working")` during a tool call, `_activity("idle")` at the end -
-    the same signal both apps already show the owner. So this refusal is wired
-    to the real chat path without a patch hunk inside the chat handler, which
-    is where a second, coarser guard could only disagree with what he sees.
+    It is exact and costs nothing, and it is set by the one place every
+    /api/chat request passes through (jarvis_hud's turn guard), so it covers
+    the quick answers and the failed turns too - not only the ones that reach
+    the answer path's own `finally`. Counted, so a second client asking at the
+    same time cannot clear it early. `answer_streaming()` refuses on this alone
+    while the activity mark is fresh; the stale-mark lease is the second
+    opinion, and the owner's ruling of 2026-11-06 says a mark with no progress
+    for five minutes must be cleared rather than block the benchmark all day.
     """
     with _IN_CHAT_LOCK:
-        _IN_CHAT.update(on=True, since=time.time())
+        if int(_IN_CHAT["depth"]) <= 0:
+            _IN_CHAT["since"] = time.time()
+        _IN_CHAT["depth"] = int(_IN_CHAT["depth"]) + 1
 
 
 def note_answer_end() -> None:
-    """Record that the answer has finished, or failed. Idempotent."""
+    """One answer finished, or failed. Idempotent: never below zero."""
     with _IN_CHAT_LOCK:
-        _IN_CHAT.update(on=False, since=0.0)
+        _IN_CHAT["depth"] = max(0, int(_IN_CHAT["depth"]) - 1)
+        if _IN_CHAT["depth"] == 0:
+            _IN_CHAT["since"] = 0.0
+
+
+def _busy_activity() -> dict:
+    """(state, age in seconds, was just cleared) for the HUD's activity mark.
+
+    The clear is `jarvis_events.clear_if_stale()` - the owner's 2026-11-06
+    ruling: a busy mark with no progress for ACTIVITY_STALE_SECONDS is a
+    leftover, so it is auto-cleared (once, with a structured warning) and the
+    benchmark may proceed. The OTHER reasons in_flight can return - a Live
+    conversation, another conversation, a waiting approval card, a running
+    task - are untouched: only the activity lease is cleared here.
+    """
+    try:
+        import jarvis_events  # type: ignore
+        try:
+            marked = jarvis_events.clear_if_stale()
+        except AttributeError:
+            marked = None
+        mark = jarvis_events.activity() or {}
+        state = str(mark.get("state") or "").strip().lower()
+        try:
+            age = jarvis_events.activity_age()
+        except AttributeError:
+            at = float(mark.get("at") or 0.0)
+            age = max(0.0, time.time() - at) if at > 0 else None
+    except Exception:
+        return {"state": "", "age_s": None, "cleared": None}
+    return {"state": state,
+            "age_s": None if age is None else round(float(age), 1),
+            "cleared": marked if marked else None}
+
+
+def _answer_hold() -> dict:
+    """The one 409 row's answer, with the two facts a stuck turn is read by.
+
+    Returns {"sentence", "busy_reason", "activity_age_s"}; `sentence` is None
+    when nothing is answering. This is what `answer_streaming()` keeps for
+    existing callers and what `check_job()` puts in the refusal BODY, so a
+    refused benchmark can be read without any source: the reason the model was
+    held, and how old that claim is (the ruling's diagnosability half).
+    """
+    out = {"sentence": None, "busy_reason": None, "activity_age_s": None}
+    mark = _busy_activity()
+    out["activity_age_s"] = mark["age_s"]
+    with _IN_CHAT_LOCK:
+        on = int(_IN_CHAT.get("depth") or 0) > 0
+    if mark["cleared"] is not None:
+        # A leftover mark was just cleared; the bus logged one warning for it,
+        # and a refusal must not be invented from something no longer true.
+        return out
+    if on:
+        out["sentence"] = ANSWER_STREAMING
+        out["busy_reason"] = (f"Jarvis is {mark['state']} right now"
+                              if mark["state"] else "a chat turn is in flight")
+        return out
+    try:
+        import jarvis_power_switch  # type: ignore
+        held = jarvis_power_switch._busy_reason()
+    except Exception:
+        return out
+    if not held:
+        return out
+    out["busy_reason"] = str(held)
+    low = str(held).lower()
+    out["sentence"] = (ANSWER_STREAMING if any(w in low for w in _ACTIVITY_BUSY)
+                       else f"Jarvis is busy ({held}). Measuring now would "
+                            "time the queue, not the model.")
+    return out
 
 
 def answer_streaming() -> Optional[str]:
     """The 409 sentence when something is answering right now, or None.
 
-    Two sources, most exact first:
-      1. `_IN_CHAT`, set by `note_answer_start()`.
-      2. `jarvis_power_switch._busy_reason()` - the shipped signal: the HUD's
-         activity state, a Live conversation, or a waiting approval card.
+    Three sources, most exact first:
+      1. `_IN_CHAT` - a /api/chat request in THIS process is in flight. Exact,
+         and every way out of the handler clears it (the HUD's turn guard).
+      2. the HUD's activity mark, through
+         `jarvis_power_switch._busy_reason()`. It auto-clears a busy mark with
+         no progress for `jarvis_events.ACTIVITY_STALE_SECONDS` - measured
+         2026-11-06: a quick-answered chat turn left "thinking" behind and the
+         benchmark refused for over four hours until the backend restarted.
+      3. any other busy reason (a Live conversation, a waiting approval card)
+         is named in the refusal as it always was.
     A guard that cannot tell must not invent a refusal, so anything that
-    raises answers None.
+    raises answers None. `check_job()` uses `_answer_hold()`, which is this
+    answer plus the reason and age carried in the 409 body.
     """
-    with _IN_CHAT_LOCK:
-        on = _IN_CHAT["on"]
-    if on:
-        return ANSWER_STREAMING
-    try:
-        import jarvis_power_switch  # type: ignore
-        held = jarvis_power_switch._busy_reason()
-    except Exception:
-        return None
-    if not held:
-        return None
-    low = str(held).lower()
-    if any(w in low for w in ("answering", "speaking", "thinking", "working")):
-        return ANSWER_STREAMING
-    return (f"Jarvis is busy ({held}). Measuring now would time the queue, "
-            "not the model.")
+    return _answer_hold()["sentence"]
 
 
 def read_standby() -> bool:
@@ -1490,10 +1583,20 @@ def check_job(body: dict, *, model: str = "", lane: str = "",
     if (running or _current_run)() is not None:
         raise Refusal(409, ALREADY_RUNNING)
 
-    # 2. an answer is streaming right now
-    sentence = (busy or answer_streaming)()
+    # 2. an answer is streaming right now - and the refusal carries the reason
+    #    and the age of the claim, so a stuck mark is visible in the 409 body
+    #    itself (the owner's ruling of 2026-11-06: the benchmark must be able
+    #    to say why it is refusing without anyone reading this file).
+    if busy is not None:
+        sentence, details = busy(), {}
+    else:
+        hold = _answer_hold()
+        sentence = hold["sentence"]
+        details = ({"busy_reason": hold["busy_reason"],
+                    "activity_age_s": hold["activity_age_s"]}
+                   if sentence else {})
     if sentence:
-        raise Refusal(409, sentence)
+        raise Refusal(409, sentence, **details)
 
     # 3. Jarvis is on standby
     if (standby or read_standby)():
@@ -2236,10 +2339,11 @@ def _describe_one(run: dict) -> str:
 # ==========================================================================
 
 def _reset_for_tests() -> None:
-    """Forget the in-memory run map and the answer flag. Tests only."""
+    """Forget the in-memory run map and the answer count. Tests only."""
     with _RUNS_LOCK:
         _RUNS.clear()
-    note_answer_end()
+    with _IN_CHAT_LOCK:
+        _IN_CHAT.update(depth=0, since=0.0)
 
 
 def lane_pins() -> dict:

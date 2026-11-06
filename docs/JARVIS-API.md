@@ -33662,6 +33662,29 @@ of the three, because it used to sit in both the text-field and the enum table
 and the text-field branch won ("everyday lane" was stored as "everyday lan").
 
 
+**ALL LAYERS MEANS EVERY LAYER, AND THE REFUSAL NAMES WHAT HELD IT (2026-11-06).**
+Two measured corrections from the same morning. (1) `num_gpu` counts the layers
+kept on the graphics card and the OUTPUT layer is offloadable too, so "all of
+them" is `block_count + 1`, not `block_count`: measured on the live 11436 lane
+with qwen3.5:9b (block_count 32), `num_gpu: 32` loaded 5.12 GB of 6.13 GB
+(83.6% on card) while 33, 34, 40 and 99 all loaded 5.49 GB of 5.49 GB (100%).
+A `null`/omitted `num_gpu` now resolves to `block_count + 1`, and an explicit
+larger value is clamped to the same number with a note saying every layer is
+requested - so a 100% on-card baseline is reachable at all. The control the
+screen draws keeps its range, and the stored rows are unchanged. (2) A finished
+chat turn could leave the event bus saying "thinking" (a `jarvis_quick`
+fast-path answer returned before `/api/chat`'s own idle write), and
+`POST /api/bench/run` then refused with "Jarvis is answering" for over four
+hours - the only cure was a restart. The activity mark now has a five-minute
+lease: a busy state with no progress (no streamed chunk, no tool step) for
+`jarvis_events.ACTIVITY_STALE_SECONDS` is auto-cleared with ONE structured
+warning, every `/api/chat` exit resets it in a `finally`, and the boot sequence
+resets it explicitly. The 409 body gains `busy_reason` and `activity_age_s`, and
+`GET /api/status` gains `activity`, `activity_age_s` and `busy_reason` - all
+additive, so a client that ignores them behaves exactly as before, and a stuck
+turn is visible from the API instead of from the source.
+
+
 ## 186. Watchers that earn the right to interrupt: `observe` mode, one batch per pull request, and the durable outbox (added 2026-11-04)
 
 A watcher that speaks about everything gets muted. That is the whole of this

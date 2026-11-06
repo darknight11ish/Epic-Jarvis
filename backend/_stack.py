@@ -334,7 +334,22 @@ RATCHET = {
     #: against `jarvis-backend/jarvis_hud.py` (apply, reverse, byte for byte,
     #: and the applied file compiled - backend/test_jobs.py re-runs it). A
     #: ratchet: it may still only go down.
-    "jarvis_hud.py": 68,
+    #:
+    #: RAISED 2026-11-06, 68 -> 72, for `activity-turn-guard.patch` - the last
+    #: core patch, immediately before plugin-loader.patch. FOUR of its six
+    #: hunks read the owner's own jarvis_hud.py and no earlier patch writes
+    #: any of them: the /api/status payload's latch lines, the `def do_POST`
+    #: it wraps, the boot block's pump lines, and the cloud relay's chunk
+    #: loop. The other two (the `_activity_*` helpers and the local stream_out
+    #: lambda) anchor on text earlier patches already wrote and cost nothing -
+    #: measured, not argued, by backend/test_installed_stand_in.py and pinned
+    #: per patch in tools/check_patch_original_text.py (4 hunks / 24 lines).
+    #: Honest rather than drift: those four blocks exist only in the owner's
+    #: file, and the patch is what stops a finished chat turn leaving the
+    #: benchmark refusing for hours. backend/test_jobs.py proves the same
+    #: published-base apply/reverse on the job routes; this patch is driven
+    #: against the stack's own text by backend/test_activity_turn_guard.py.
+    "jarvis_hud.py": 72,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

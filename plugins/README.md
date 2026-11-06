@@ -14,7 +14,7 @@ you drop in and take out.
   - **29** replace a patch, and are generated from it;
   - **26** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
-- **147 core patches**, which still go on through
+- **148 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 There is no third kind. Every folder under [`ready/`](ready/) is in one of the
@@ -247,6 +247,7 @@ stack's order and cannot be moved into a folder.
 | `phone-apps.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `bench.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `packs-tamper-on-load.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
+| `activity-turn-guard.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one

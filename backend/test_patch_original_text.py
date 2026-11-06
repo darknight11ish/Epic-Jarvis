@@ -184,8 +184,14 @@ def t_the_late_patches_are_pinned_and_not_new():
     # writes, and it sits last of the core patches, immediately before
     # plugin-loader.patch. Measured, not chosen: the walk (and
     # `tools/check_patch_original_text.py`'s own run) prints 28.
-    check("the twenty-eight exceptions the tool's docstring names are the "
-          "twenty-eight the walk finds", len(late) == 28,
+    # 2026-11-06: TWENTY-NINE. activity-turn-guard.patch sits immediately before
+    # plugin-loader.patch and FOUR of its six hunks read the owner's own
+    # jarvis_hud.py (the /api/status payload's latch lines, the `def do_POST` it
+    # wraps, the boot block's pump lines and the cloud relay's chunk loop); its
+    # other two anchor on text earlier patches wrote and cost nothing. The walk
+    # prints 29, and backend/_stack.py's jarvis_hud.py RATCHET moves 68 -> 72.
+    check("the twenty-nine exceptions the tool's docstring names are the "
+          "twenty-nine the walk finds", len(late) == 29,
           f"the walk found {len(late)}: {late}")
 
 

@@ -665,7 +665,8 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
           "phone-apps.patch" in order
           and order[order.index("phone-apps.patch") + 1] == "bench.patch"
           and order[order.index("bench.patch") + 1:]
-          == ["packs-tamper-on-load.patch", "plugin-loader.patch"],
+          == ["packs-tamper-on-load.patch", "activity-turn-guard.patch",
+              "plugin-loader.patch"],
           order[-3:])
     # handsfree.patch (2026-11-04, hands-free mode) is NOT appended after this
     # patch. Its three `jarvis_gate.py` rows are ONE end-of-file hunk, and it is

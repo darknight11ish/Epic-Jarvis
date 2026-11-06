@@ -1,0 +1,156 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1533,6 +1533,56 @@ def _activity_as_told(state: str, detail: str = "") -> None:
+         pass
+ 
+ 
++def _activity_status() -> dict:
++    """What /api/status says Jarvis is doing, and how long since progress.
++
++    activity-turn-guard.patch (2026-11-06): read-only and additive. The age is
++    the diagnostic half - "thinking" written four hours ago is the leftover
++    this patch exists for, and the next time something leaves one behind a
++    status call says so without reading this file. `age_s` is None when the
++    bus cannot be read, and the state word is "" then, never a guess.
++    """
++    try:
++        import jarvis_events
++        mark = jarvis_events.activity() or {}
++        age = jarvis_events.activity_age()
++        state = str(mark.get("state") or "")
++    except Exception:
++        return {"state": "", "age_s": None}
++    return {"state": state,
++            "age_s": None if age is None else round(float(age), 1)}
++
++
++def _activity_touch() -> None:
++    """One sign of progress from a streamed chunk: keep the mark fresh.
++
++    activity-turn-guard.patch (2026-11-06): jarvis_events.touch_activity()
++    stamps the mark without announcing anything, and is called for every chunk
++    the local answering loop and the cloud relay write - so a real long turn
++    can never look like the five-minute-old leftover the stale lease clears.
++    """
++    try:
++        import jarvis_events
++        jarvis_events.touch_activity()
++    except Exception:
++        pass
++
++
++def _busy_reason_for_status():
++    """Why the model is held right now, or None - for /api/status.
++
++    The same plain sentence the benchmark's 409 body carries. Reading it also
++    runs jarvis_power.in_flight(), which clears a stale activity mark, so a
++    status poll can heal a stuck mark as well as show it (read-only: no
++    setting, card or permission is touched).
++    """
++    try:
++        import jarvis_power
++        return jarvis_power.in_flight()
++    except Exception:
++        return None
++
++
+ def _abort(resp) -> None:
+     """Kill an upstream response now, rather than closing it politely.
+ 
+@@ -3937,6 +3987,16 @@ class Handler(BaseHTTPRequestHandler):
+                 "tools": len((cfg.get("tools") or {}).get("enabled") or []),
+                 "taint_latched": latch["taint_latched"],
+                 "rush_latched": latch["rush_latched"],
++                # activity-turn-guard.patch (2026-11-06): READ-ONLY, additive,
++                # and deliberately the same words as /api/version's `activity`,
++                # so a client that ignores both behaves exactly as before (the
++                # desktop's own connect-time fallback already looks for
++                # `status.activity`). The age and the hold reason are the
++                # diagnostic half: a busy state that has not moved for hours is
++                # the leftover the benchmark used to mistake for a live turn.
++                "activity": str(_activity_status().get("state") or ""),
++                "activity_age_s": _activity_status().get("age_s"),
++                "busy_reason": _busy_reason_for_status(),
+             })
+ 
+         return self._send(404, {"error": "not found"})
+@@ -3944,6 +4004,44 @@ class Handler(BaseHTTPRequestHandler):
+     # -- POST --------------------------------------------------------------
+ 
+     def do_POST(self):
++        """Run one POST. A /api/chat turn cannot leave "thinking" behind.
++
++        activity-turn-guard.patch (2026-11-06): every OTHER exit from a chat
++        turn already reports "idle" (the `finally` round the answer path), but
++        that block starts a long way DOWN the handler: a turn answered by the
++        quick fast path returns before it, and anything that raises while the
++        lane, the memory and the payload are being chosen never reaches it -
++        so the mark stayed on "thinking" for ever. Measured 2026-11-06: the
++        benchmark then refused with "Jarvis is answering" for over four hours,
++        and only restarting the desktop app (and with it this backend) cleared
++        it. This wrapper is the one place every /api/chat request passes
++        through and every way out of it returns to, so the mark is cleared
++        here - and jarvis_bench's exact in-process "an answer is streaming"
++        count is set and cleared on the same path, so a real turn still
++        refuses the benchmark however long it runs.
++
++        A busy mark is not trusted forever on its own: jarvis_events clears
++        one that shows no progress for five minutes (`clear_if_stale`), and
++        the heartbeats below keep a REAL turn's mark fresh.
++        """
++        if self.path.split("?", 1)[0] != "/api/chat":
++            return self._do_post()
++        try:
++            import jarvis_bench
++            jarvis_bench.note_answer_start()
++        except Exception:
++            pass
++        try:
++            return self._do_post()
++        finally:
++            try:
++                import jarvis_bench
++                jarvis_bench.note_answer_end()
++            except Exception:
++                pass
++            _activity("idle")
++
++    def _do_post(self):
+         self._headers_sent = False
+         route = self.path.split("?", 1)[0]
+ 
+@@ -6236,6 +6334,7 @@ class Handler(BaseHTTPRequestHandler):
+                         enabled_tools=jarvis_agent.enabled_tools_for_turn(cfg),
+                         stream_out=lambda chunk: (self.wfile.write(chunk),
+                                                    self.wfile.flush(),
++                                                   _activity_touch(),
+                                                    _speed.feed(chunk)
+                                                    if _speed is not None else None),
+                         # chat-stream.patch: what the app asked for (stream,
+@@ -6440,6 +6539,11 @@ class Handler(BaseHTTPRequestHandler):
+                             chunk = _read(1024)
+                             if not chunk:
+                                 break
++                            # activity-turn-guard.patch (2026-11-06): bytes are
++                            # moving, so this turn is alive - the stale lease
++                            # must never clear a mark that a real answer keeps
++                            # refreshing.
++                            _activity_touch()
+                             # reasoning-fallback: what the reader withholds is
+                             # not dropped - close(), below, writes it. The
+                             # meter is fed the SERVICE's own bytes, in the same
+@@ -7319,6 +7423,14 @@ def main() -> None:
+     # is what kept that safe; it should never have been load-bearing.
+     try:
+         import jarvis_events as _ev
++        # activity-turn-guard.patch (2026-11-06): a restart already clears the
++        # in-memory activity mark; this makes that reset explicit rather than
++        # incidental, so a process that somehow starts with an old mark cannot
++        # leave the benchmark refusing for hours before anyone notices.
++        try:
++            _ev.reset_activity()
++        except Exception:
++            pass
+         _PUMP = _ev.Pump(engine=_ENGINE)
+         _PUMP.start()
+         print(f"  events     pump on, {len(_ev.POLLERS)} pollers every {_ev.POLL_SECONDS:g}s")
