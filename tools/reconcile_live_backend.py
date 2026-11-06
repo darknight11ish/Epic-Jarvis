@@ -106,6 +106,23 @@ WHAT IT DOES, IN ORDER (see --help and the summary it prints)
        entries, because `gate-touches.patch` is already in the live patch list and
        its new hunks would otherwise be reported ALREADY_PRESENT and never deploy).
 
+    2b. RELEASE MARKERS (VERSION and the backend's beside-files). The live backend
+        reads two files beside itself without importing them - `requirements.lock`
+        and `quiz_grader_cases.json` (the BESIDE table in
+        `tools/gen_base_from_backend.py`) - and neither is in `$SHIPPED`, so step 1
+        cannot carry them. They are copied here from `--ref:backend/<name>` by
+        bytes, and reported on their own `BESIDE:` lines. The shared release
+        marker is `VERSION`, the file the in-app updater writes and the desktop
+        HUD compares against: its value is the installed desktop exe's
+        `FileVersion` (read-only, overridable with `JARVIS_DESKTOP_EXE`), NEVER
+        this repository's root `VERSION` (that one says 0.2.0 and is not the
+        release). A missing exe is reported as `VERSION: skipped (no installed
+        desktop)` and guessed at nowhere. These copies are deliberately kept OUT
+        of the `wrote N` count and out of `PLANNED CHANGES`, so the runbook's
+        formula (to add + to update + the distinct files among the inserts) stays
+        true; their own lines carry what changed. A dry run prints
+        `VERSION: would write ...` / `BESIDE: would write ...` and writes nothing.
+
     3. REHEARSAL. Every staged Python file is compiled with `py_compile` before any live
        file is touched. If compilation fails, nothing is written.
 
@@ -137,8 +154,14 @@ WHAT IT DOES NOT DO
     * It never copies `jarvis-backend/*` over live and has no code path that reads it.
     * It never writes a token, prints one, or puts one in the report.
     * It does not restart Jarvis; restart after it and read the start-up banner.
-    * It does not handle the non-Python "beside-files" (requirements.lock etc.) that
-      apply-patches.ps1 carries; the $SHIPPED list is the contract this tool follows.
+    * It carries only the two backend beside-files named in `BESIDE_DEPLOY_FILES`
+      (`requirements.lock`, `quiz_grader_cases.json`). It deliberately NEVER
+      touches `jarvis-framework.toml` (the OWNER'S settings - a deploy must not
+      overwrite his choices), `_where.py` (derived: the base's copy plus
+      `BASE_WHERE_TRAILER`, and it already arrives through `$SHIPPED`),
+      `jarvis-visual-spec.json` (re-taken from the live folder; this repository
+      holds no copy to compare against) or `jarvis-desktop/src-tauri/Cargo.lock`
+      (the desktop's lockfile, not the backend's).
 
 USAGE
     py -3 tools/reconcile_live_backend.py --backend-path "<live backend>"            # dry run
@@ -191,6 +214,28 @@ from typing import Callable, Iterable, Optional
 #: The five patched base files: the live copies are newer, so they are never replaced.
 PATCHED_FILES = ("jarvis_hud.py", "jarvis_gate.py", "jarvis_extract.py",
                  "jarvis_models.py", "jarvis_skills.py")
+
+#: The installed desktop app - the source of the shared release marker. Its
+#: `FileVersion` is what the in-app updater writes into the live `VERSION` file
+#: beside the backend, and what the desktop HUD compares itself against; when the
+#: deploy leaves `VERSION` behind, the HUD says "MISMATCH: the backend 0.2.421,
+#: but this HUD expects 0.2.433" (measured 2026-11-06, wave 6). The repository
+#: root's own `VERSION` is a different thing (a 0.2.0 project-format marker) and
+#: is NEVER the value deployed. `JARVIS_DESKTOP_EXE` overrides the path for a
+#: test or a non-default install; a missing file is reported, never guessed at.
+DEFAULT_DESKTOP_EXE = Path(
+    r"C:\Users\pcadmin\AppData\Local\Jarvis Desktop\jarvis-desktop.exe")
+DESKTOP_EXE_ENV = "JARVIS_DESKTOP_EXE"
+
+#: The backend beside-files that are NOT in `$SHIPPED`, so step 1 cannot carry
+#: them (the authority is the BESIDE table in `tools/gen_base_from_backend.py`).
+#: `quotes_corpus.json` is deliberately absent: wave 3 put it IN `$SHIPPED`, so
+#: step 1 already carries it. The four BESIDE entries this list must never grow
+#: to include are excluded in the module docstring and named at
+#: `plan_release_files`: the owner's `jarvis-framework.toml`, the derived
+#: `_where.py`, the live-only `jarvis-visual-spec.json`, and the desktop's
+#: `Cargo.lock`.
+BESIDE_DEPLOY_FILES = ("requirements.lock", "quiz_grader_cases.json")
 
 #: Where the stack puts the setup block: before the plugin-loader block, which is LAST.
 PLUGIN_LOADER_MARKER = "    # plugin-loader.patch (this branch)."
@@ -1462,10 +1507,21 @@ class DeltaAction:
 
 
 @dataclass
+class ReleaseAction:
+    """One file beside the backend: the shared VERSION, or a BESIDE file."""
+    name: str               # "VERSION" | "requirements.lock" | ...
+    status: str             # "write" | "unchanged" | "skip"
+    blob: Optional[bytes] = None
+    old: str = ""           # VERSION only: what the live file held
+    detail: str = ""        # skip reason ("no installed desktop")
+
+
+@dataclass
 class Plan:
     shipped: list = field(default_factory=list)
     deltas: list = field(default_factory=list)
     staged: dict = field(default_factory=dict)   # file -> new text, only for changed files
+    release: list = field(default_factory=list)  # VERSION + BESIDE, reported apart
     refusals: list = field(default_factory=list)
     pycache: list = field(default_factory=list)
     plugins_missing: list = field(default_factory=list)
@@ -2725,9 +2781,138 @@ def _summ(out, label, items, limit=12):
         out(f"      ... and {len(items) - limit} more")
 
 
+# ---------------------------------------------------------------------------
+#   Release markers: the shared VERSION and the backend's beside-files
+# ---------------------------------------------------------------------------
+
+def desktop_exe_path(override=None) -> Path:
+    """An explicit override, else JARVIS_DESKTOP_EXE, else the installed default."""
+    if override:
+        return Path(override)
+    env = os.environ.get(DESKTOP_EXE_ENV, "").strip()
+    return Path(env) if env else DEFAULT_DESKTOP_EXE
+
+
+def read_desktop_version(path) -> Optional[str]:
+    """The installed desktop's FileVersion, read-only, or None when it is not there.
+
+    This is the value the in-app updater writes into the live `VERSION`, so it is
+    the same value the desktop HUD compares against. Windows only; on any other
+    host, or when the file/field is absent, it returns None and the caller reports
+    `VERSION: skipped (no installed desktop)` rather than guessing."""
+    path = Path(path)
+    if os.name != "nt" or not path.is_file():
+        return None
+    exe = _powershell()
+    if not exe:
+        return None
+    quoted = str(path).replace("'", "''")
+    script = f"(Get-Item -LiteralPath '{quoted}').VersionInfo.FileVersion"
+    try:
+        proc = subprocess.run([exe, "-NoProfile", "-NonInteractive", "-Command", script],
+                              capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    value = (proc.stdout or "").strip()
+    return value or None
+
+
+def plan_release_files(repo: Path, ref: str, live: Path, *, desktop_exe=None,
+                       version_reader: Optional[Callable] = None,
+                       show: Optional[Callable] = None) -> list:
+    """Plan the VERSION marker and the non-`$SHIPPED` beside-files. Never guesses.
+
+    The VERSION value comes ONLY from the installed desktop's FileVersion. The
+    repository's own root `VERSION` (0.2.0) is a different marker and is never
+    read. The beside bytes come from `--ref:backend/<name>`, the same ref every
+    shipped module comes from, so a deploy cannot mix two trees.
+
+    WHY THE OTHER BESIDE ENTRIES ARE NOT HERE, one line each:
+      * `jarvis-framework.toml` - the OWNER'S settings; the base carries a
+        TEMPLATE, and a deploy must not overwrite his choices.
+      * `_where.py` - derived: the base's copy plus `BASE_WHERE_TRAILER`, and it
+        already arrives through `$SHIPPED`; copying it here would drop the trailer.
+      * `jarvis-visual-spec.json` - re-taken from the owner's live folder, so this
+        repository holds no copy to compare against.
+      * `jarvis-desktop/src-tauri/Cargo.lock` - the desktop's lockfile, not the
+        backend's; this tool deploys a backend folder."""
+    show = show or git_show
+    read_version = version_reader or read_desktop_version
+    actions = []
+    version = read_version(desktop_exe_path(desktop_exe))
+    version = str(version).strip() if version else ""
+    target = Path(live) / "VERSION"
+    if not version:
+        actions.append(ReleaseAction("VERSION", "skip", detail="no installed desktop"))
+    else:
+        old = ""
+        if target.is_file():
+            old = target.read_text(encoding="utf-8", errors="replace").strip()
+        if old == version:
+            actions.append(ReleaseAction("VERSION", "unchanged", old=old))
+        else:
+            # No trailing newline: the updater's file and the HUD's read are the
+            # bare version, and the owner's live file is 7 bytes for "0.2.433".
+            actions.append(ReleaseAction("VERSION", "write",
+                                         version.encode("utf-8"), old=old))
+    for name in BESIDE_DEPLOY_FILES:
+        blob = show(repo, ref, name)
+        target = Path(live) / name
+        if target.is_file() and target.read_bytes() == blob:
+            actions.append(ReleaseAction(name, "unchanged"))
+        else:
+            actions.append(ReleaseAction(name, "write", blob))
+    return actions
+
+
+def release_lines(actions: Iterable[ReleaseAction], *, done: bool = False) -> list:
+    """The separately-reported lines; `done` says a real apply finished the writes."""
+    lines = []
+    for action in actions:
+        if action.name == "VERSION":
+            if action.status == "skip":
+                lines.append(f"VERSION: skipped ({action.detail})")
+            elif action.status == "unchanged":
+                lines.append(f"VERSION: unchanged {action.old}")
+            elif done:
+                lines.append(f"VERSION: wrote {action.blob.decode('utf-8')} "
+                             f"(was {action.old or 'nothing'}, from the installed desktop)")
+            else:
+                lines.append(f"VERSION: would write {action.blob.decode('utf-8')} "
+                             f"(now {action.old or 'nothing'})")
+        elif action.status == "unchanged":
+            lines.append(f"BESIDE: unchanged {action.name}")
+        elif done:
+            lines.append(f"BESIDE: wrote {action.name}")
+        else:
+            lines.append(f"BESIDE: would write {action.name}")
+    return lines
+
+
+def apply_release_files(actions: Iterable[ReleaseAction], live: Path,
+                        backup: Backup, *, write: bool = True) -> list:
+    """Write the planned release markers, backing up every overwritten byte."""
+    written = []
+    for action in actions:
+        if action.status != "write":
+            continue
+        target = Path(live) / action.name
+        if not write:
+            written.append(action.name)
+            continue
+        if target.exists():
+            backup.save(target)
+        else:
+            backup.record_new(target)
+        target.write_bytes(action.blob or b"")
+        written.append(action.name)
+    return written
+
+
 def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origin/main",
                skip_plugins: bool = False, base_url: str = "",
                allow_worktree_mismatch: bool = False,
+               desktop_exe=None, version_reader: Optional[Callable] = None,
                show: Optional[Callable] = None, out: Optional[Callable] = None,
                resolve_shas: Optional[Callable] = None,
                probe_client: Optional[Callable] = None,
@@ -2838,6 +3023,24 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         for line in blocked:
             out(f"  {line}")
 
+    # 2b. Plan the release markers (the shared VERSION and the non-$SHIPPED
+    #     beside-files). Reported apart from `wrote N` and PLANNED CHANGES so the
+    #     runbook's formula (to add + to update + the distinct files among the
+    #     inserts) stays true. The dry run says "would write" and writes nothing;
+    #     an apply reports after the writes.
+    try:
+        plan.release = plan_release_files(repo, ref, live, desktop_exe=desktop_exe,
+                                          version_reader=version_reader, show=show)
+    except Refused as exc:
+        out(f"REFUSED: {exc}")
+        return 2
+    release_writes = [a for a in plan.release if a.status == "write"]
+    if not apply:
+        out("")
+        out("RELEASE MARKERS (VERSION and beside-files; NOT counted in `wrote N`):")
+        for line in release_lines(plan.release):
+            out(line)
+
     # 3. Rehearse before anything is swapped.
     errors = rehearse(staged)
     if errors:
@@ -2874,10 +3077,11 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     # 5. Write: shipped bytes, then the staged HUD files. The backup folder and
     # its journal are created and PRINTED before the first live write, so a
     # failure half-way through always has a named recovery point.
-    has_writes = bool(adds or updates or inserts or plan.pycache
+    has_writes = bool(adds or updates or inserts or plan.pycache or release_writes
                       or (not skip_plugins and plan.plugins_missing))
     backup = Backup(live, stamp=stamp)
     written = []
+    released = []
     try:
         if has_writes:
             backup.start()
@@ -2886,6 +3090,7 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
             out("BACKUP: nothing to overwrite or add; no backup folder needed")
         written += apply_shipped(plan.shipped, live, backup, write=True)
         written += apply_deltas(staged, live, backup, write=True)
+        released = apply_release_files(plan.release, live, backup, write=True)
     except OSError as exc:
         out(f"FAIL  writing the backend: {exc}")
         if has_writes:
@@ -2898,6 +3103,10 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
         return 2
 
     # 6. Purge stale bytecode (backed up first when this is a real apply).
+    out("")
+    out("RELEASE MARKERS (VERSION and beside-files; NOT counted in `wrote N`):")
+    for line in release_lines(plan.release, done=True):
+        out(line)
     purged = purge_pycache(live, backup if has_writes else None)
     out(f"PYCACHE: purged {len(purged)} stale .pyc file(s)")
 
@@ -2945,6 +3154,8 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
             if written:
                 out(f"        wrote {len(written)} file(s); full write, partial deploy "
                     f"verification")
+            if released:
+                out(f"        release markers: {len(released)} written (not in `wrote N`)")
             out("        Restart Jarvis, re-check, or run --rollback <the backup folder> "
                 "to put the files back.")
         else:
@@ -2954,6 +3165,9 @@ def run_deploy(repo: Path, live: Path, *, apply: bool = False, ref: str = "origi
     out("RESULT: PASS - backend reconciled; restart Jarvis and read the start-up banner.")
     if written:
         out(f"        wrote {len(written)} file(s); backup in {backup.root}")
+    elif released:
+        out("        no backend file changed (already current); the release markers "
+            "above were written")
     else:
         out("        no file changed (already current)")
     return 0
