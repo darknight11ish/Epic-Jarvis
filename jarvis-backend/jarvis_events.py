@@ -47,6 +47,7 @@ WHAT WENT WRONG HERE BEFORE, so it is not reintroduced:
 from __future__ import annotations
 
 import json
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -372,7 +373,22 @@ BUS = Bus()
 #   Activity
 # --------------------------------------------------------------------------
 
-_ACTIVITY = {"state": "idle", "detail": "", "at": time.time()}
+_ACTIVITY = {"state": "idle", "detail": "", "at": time.time(),
+             "updated_at_mono": time.monotonic()}
+
+#: The states that mean something is being answered or done. The same three
+#: words `jarvis_power._BUSY_ACTIVITY` holds; this module is where the stale
+#: lease is defined, so the list has to live here too.
+_ACTIVITY_BUSY = ("thinking", "speaking", "working")
+
+#: A busy mark that has shown NO PROGRESS for this many seconds is a leftover,
+#: not a live turn: every token, every tool step and every state change
+#: refreshes `updated_at_mono`, so five quiet minutes with a busy state means
+#: the turn that wrote it is gone (or never started). The owner's ruling of
+#: 2026-11-06 (after /api/bench/run refused for over four hours on a mark a
+#: quick-answered chat turn left behind): auto-clear it, say so in one
+#: structured warning, and let the benchmark proceed.
+ACTIVITY_STALE_SECONDS = 300.0
 
 #: The activity line goes to PAIRED APPS (the phone's event stream and the HUD
 #: over the same bus), so it is an egress surface like a notification. A step's
@@ -420,9 +436,14 @@ def set_activity(state: str, detail: str = "") -> None:
     The DETAIL is scrubbed and capped by _safe_activity_detail before it is
     stored, because this line leaves the PC over the event bus (audit DATA D7,
     2026-10-18). A scrubber that cannot run means no detail, never raw text.
+
+    Two stamps are kept: `at` (wall clock, what a person reads) and
+    `updated_at_mono` (monotonic, what the stale-mark lease below measures).
+    Monotonic because a clock correction must never make a live mark look
+    five minutes old.
     """
     _ACTIVITY.update({"state": str(state), "detail": _safe_activity_detail(detail),
-                      "at": time.time()})
+                      "at": time.time(), "updated_at_mono": time.monotonic()})
     BUS.note("activity", {"state": _ACTIVITY["state"],
                           "detail": _ACTIVITY["detail"]}, "activity",
              announce_first=True)
@@ -430,6 +451,93 @@ def set_activity(state: str, detail: str = "") -> None:
 
 def activity() -> dict:
     return dict(_ACTIVITY)
+
+
+def touch_activity() -> None:
+    """One sign of progress: stamp the mark, leave what it says alone.
+
+    Called for every streamed chunk and every tool step (jarvis_hud's turn
+    wrapper), so a REAL turn keeps `updated_at_mono` fresh no matter how long
+    it runs. It sends no event - the state word has not changed, and the
+    doorbell is for changes - which is what makes it safe to call once per
+    token.
+    """
+    _ACTIVITY["updated_at_mono"] = time.monotonic()
+    _ACTIVITY["at"] = time.time()
+
+
+def activity_age() -> Optional[float]:
+    """Seconds since the mark last changed or last showed progress - or None.
+
+    None means the age cannot be known (a mark with no stamp, an older copy of
+    this module): a caller must then do exactly what it did before this
+    existed, never read "unknown" as either fresh or stale.
+    """
+    try:
+        mono = _ACTIVITY.get("updated_at_mono")
+        if mono is not None:
+            return max(0.0, time.monotonic() - float(mono))
+        at = float(_ACTIVITY.get("at") or 0.0)
+    except (TypeError, ValueError):
+        return None
+    if at <= 0:
+        return None
+    return max(0.0, time.time() - at)
+
+
+def clear_if_stale(max_age: float = ACTIVITY_STALE_SECONDS) -> Optional[dict]:
+    """Auto-clear a busy mark that has shown no progress for `max_age` seconds.
+
+    Returns {"state", "detail", "age_s"} when it cleared one, else None (the
+    state is not busy, the mark is fresh, or its age cannot be read - and
+    "unknown" is never cleared, because that would be inventing a stale mark).
+
+    The clear goes through set_activity("idle"), so the doorbell fires and
+    every client stops showing the leftover. ONE structured warning is printed
+    (and audited where jarvis_framework is importable) because this is a
+    defect in whatever left the mark behind, not a routine event - the next
+    stuck turn is visible in the log with the state and the age, instead of
+    needing this file read.
+
+    Called by jarvis_power.in_flight() (so standby is not held by a leftover)
+    and by jarvis_bench.answer_streaming() (so the benchmark may proceed).
+    """
+    state = str(_ACTIVITY.get("state") or "").strip().lower()
+    if state not in _ACTIVITY_BUSY:
+        return None
+    age = activity_age()
+    if age is None or age <= max_age:
+        return None
+    cleared = {"state": state, "detail": str(_ACTIVITY.get("detail") or ""),
+               "age_s": round(age, 1)}
+    try:
+        print(f"  ! activity  STALE {state!r} cleared after {age:.0f}s with no "
+              f"progress (limit {max_age:g}s) - a turn ended without reporting "
+              f"idle", file=sys.stderr)
+    except Exception:
+        pass
+    try:
+        import jarvis_framework
+        jarvis_framework.audit_log("activity.stale", {
+            "state": cleared["state"], "age_s": cleared["age_s"],
+            "limit_s": float(max_age)})
+    except Exception:
+        pass
+    set_activity("idle")
+    return cleared
+
+
+def reset_activity() -> None:
+    """Clear the activity mark at boot: a new process owns no old turn.
+
+    A restart already resets it - _ACTIVITY is an in-memory dict - and
+    jarvis_hud's boot sequence calls this to make that explicit rather than
+    incidental, so a process that somehow starts with an old mark (a future
+    state store, a test harness, a half-written shutdown) cannot leave the
+    benchmark refusing for hours. It goes through set_activity, so a change is
+    announced like every other one and the doorbell stays honest.
+    """
+    set_activity("idle")
 
 
 # --------------------------------------------------------------------------

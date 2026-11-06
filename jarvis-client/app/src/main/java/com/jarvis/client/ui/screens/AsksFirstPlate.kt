@@ -17,6 +17,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.AsksFirst
 import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
@@ -179,6 +180,19 @@ internal fun AsksFirstSection(canAct: Boolean) {
                     v.tools?.let { t ->
                         Gap(14)
                         Text(t.label, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+                        // "New — currently off" (the owner's ruling of
+                        // 2026-11-06, Q7): the tools this build offers that the
+                        // owner's own settings file does not name yet. One
+                        // subtle pill at the TOP of the tools card, then the
+                        // names - a signpost only. The phone cannot turn one
+                        // on (that is a PC-only card with Windows Hello), and
+                        // no card is raised or popped up by this line.
+                        t.newOff?.takeIf { it.titles.isNotEmpty() }?.let { no ->
+                            Gap(6)
+                            Pill(no.label, color = chrome.warnInk)
+                            Text(no.titles.joinToString(", "),
+                                style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        }
                         Text(t.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         Text(AsksFirst.TOOLS_PC_ONLY, style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid)

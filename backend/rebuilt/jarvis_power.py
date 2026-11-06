@@ -328,10 +328,15 @@ def in_flight(include_tasks: bool = True) -> Optional[str]:
         own between turns, and the model it is using would disappear under it.
         `include_tasks=False` skips this one branch, for `jarvis_power_switch`,
         which keeps its own task check and every word of it.
-      * `jarvis_events.activity()` - the HUD sets "thinking" when a turn starts
-        (jarvis_hud.py:4754), "speaking"/"working" while it runs and "idle" when
-        it ends (:5717). That is the same signal both apps show the owner, so a
-        guard built on it cannot disagree with what he can see.
+      * `jarvis_events.activity()` - the HUD sets "thinking" when a turn starts,
+        "speaking"/"working" while it runs and "idle" when it ends. That is the
+        same signal both apps show the owner, so a guard built on it cannot
+        disagree with what he can see. A busy mark that has shown no progress
+        for `jarvis_events.ACTIVITY_STALE_SECONDS` is a LEFTOVER from a turn
+        that ended without clearing it (the owner's ruling of 2026-11-06), so
+        it is auto-cleared here - the one definition of "stale" lives in
+        jarvis_events - and this branch then sees "idle". A leftover must not
+        hold standby for hours either.
       * a Live conversation - `jarvis_chatbot`'s session, in the states the
         routes themselves treat as live, plus the comparison and support lanes,
         whose own `live()` predicates are the ones the routes already refuse a
@@ -350,6 +355,12 @@ def in_flight(include_tasks: bool = True) -> Optional[str]:
             pass
     try:
         import jarvis_events
+        # The one definition of "a stale busy mark" and the one place that
+        # clears it: a clear here is announced, audited and logged once.
+        try:
+            jarvis_events.clear_if_stale()
+        except AttributeError:
+            pass                      # an older jarvis_events: nothing to do
         state = str((jarvis_events.activity() or {}).get("state") or "").strip().lower()
         if state in _BUSY_ACTIVITY:
             return f"Jarvis is {state} right now"

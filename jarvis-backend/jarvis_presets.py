@@ -944,7 +944,13 @@ def cloud_escalate(*, on, gate_check=None) -> tuple:
                          "escalate": {"on": False, "why": escalate_why()}}
         words = _escalate_card_text()
         verdict = (gate_check or _gate)(
-            CLOUD_ACTION, {"text": words},
+            # The card's detail carries the two keys the gate's card payload
+            # reads for the "what it costs" line (2026-11-06, Hermes borrow
+            # #7): this card can spend money on the chosen cloud service, and
+            # the service is named so the line can find its ledger. `text` stays
+            # the card's own words, unchanged.
+            CLOUD_ACTION, {"text": words, "costs_money": "cloud",
+                           "pid": cloud_chosen()},
             "let hard questions go to the cloud without asking first")
         if not getattr(verdict, "allowed", False):
             return 200, {"ok": False, "on": now, "changed": False, "card": True,

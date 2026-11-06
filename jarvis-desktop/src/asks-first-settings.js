@@ -163,6 +163,21 @@ function paintTools() {
   }
   const parts = [node("h3", "subhead", TOOLS_LABEL),
     node("p", "note", tools.detail || TOOLS_DETAIL)];
+  // Q7 (2026-11-06): "New — currently off", at the TOP of the tools card. The
+  // PC computes the list (tools enabled in the shipped template or added in
+  // this build, and absent from the owner's own [tools].enabled); this draws
+  // it as one subtle pill and nothing else. It is a signpost, not a control:
+  // every tool named here has its switch below, and turning one on is still
+  // its own approval card plus Windows Hello. Nothing pops up, and there is no
+  // startup notification - the owner's ruling says this stays inside Settings.
+  if (tools.newOff && tools.newOff.items.length) {
+    const line = node("p", "af-new-off");
+    line.title = tools.newOff.why || "";
+    line.append(node("span", "af-new-off-pill", tools.newOff.label));
+    line.append(node("span", "af-new-off-names",
+      tools.newOff.items.map((i) => i.title || i.id).join(", ")));
+    parts.push(line);
+  }
   for (const group of toolGroupsView(tools)) {
     const box = node("div", "af-group");
     box.append(node("h4", "subhead", group.title));
