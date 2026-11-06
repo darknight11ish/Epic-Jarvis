@@ -35055,6 +35055,8 @@ owner's PC, and this document says so rather than implying otherwise.
 
 ## 198. Chat can read a note: one note's text, a which-one list, or the honest no (added 2026-11-05)
 
+*Numbering note, 2026-11-05: this section was written as 188; the call-recording section (2026-11-04) already held 188 when this branch merged main, so this one is 198, leaving 196 and 197 to the sections landing ahead of it in the merge train. The words below are unchanged.*
+
 The owner asked chat to read a note and was told "Chat does not read note text
 today". Named reads had already been real since 2026-10-31; the shapes that still
 reached the refusal were the unworded ones ("what do my notes say about milk",
