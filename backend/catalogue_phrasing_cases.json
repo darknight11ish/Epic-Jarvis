@@ -1,0 +1,1106 @@
+{
+ "measured_on": "2026-11-06",
+ "what": "The owner's measured questions for the feature catalogue, and the one row each one names. The assistant denied these features in three live passes because the question did not share a name word with the row.",
+ "sources": [
+  ".dsh-scratch/SELF-AWARENESS-2026-11-06/results.json (pass 1)",
+  ".dsh-scratch/SELF-AWARENESS-TEST2-2026-11-06/results2.json (pass 2)",
+  ".dsh-scratch/SELF-AWARENESS-TEST3-2026-11-06/results3-reviewed.json (pass 3)"
+ ],
+ "how": "The test takes the question shape off (the same shapes the capability matcher takes off before it looks a feature up) and asks the guide's own finder which row the owner's words name. `expect` is null only where the measured question names no row, and then `fall_through` says why.",
+ "cases": [
+  {
+   "section": "sweep",
+   "probe": "sweep-typing",
+   "question": "Do you have a feature that lets you type a question and Jarvis answers in the box? One sentence.",
+   "expect": "typing"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-spoken-style",
+   "question": "Do you have a feature called \"Short answers to spoken questions\"? One sentence.",
+   "expect": "spoken-style"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-voice-training",
+   "question": "Do you have a feature that lets Jarvis learn what you sound like, so it only listens to you? One sentence.",
+   "expect": "voice-training"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-voice-check",
+   "question": "Do you have a feature that lets you choose whether a voice turn is trusted like the talk button or asks more of you? One sentence.",
+   "expect": "voice-check"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-custom-voices",
+   "question": "Do you have a feature that lets you pick Jarvis's voice, hear a sample of it, and can add voices of your own? One sentence.",
+   "expect": "custom-voices"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-manner",
+   "question": "Do you have a feature called \"How Jarvis talks\"? One sentence.",
+   "expect": "manner"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-write-like-me",
+   "question": "Do you have a feature called \"Write like me\"? One sentence.",
+   "expect": "write-like-me"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-anti-slop",
+   "question": "Do you have a feature called \"Anti-Slop filter\"? One sentence.",
+   "expect": "anti-slop"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-interrupt",
+   "question": "Do you have a feature that lets you cut in by talking, instead of waiting for the answer to finish? One sentence.",
+   "expect": "interrupt"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-live",
+   "question": "Do you have a feature called \"Jarvis Live\"? One sentence.",
+   "expect": "live"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-live-extras",
+   "question": "Do you have a feature called \"The extras around Live\"? One sentence.",
+   "expect": "live-extras"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-talk-to-type",
+   "question": "Do you have a feature that lets you hold a key, speak, and Jarvis types what you said into the program in front? One sentence.",
+   "expect": "talk-to-type"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-chat-thread",
+   "question": "Do you have a feature called \"The whole conversation, and carrying it on\"? One sentence.",
+   "expect": "chat-thread"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-private-chat",
+   "question": "Do you have a feature called \"Private chat\"? One sentence.",
+   "expect": "private-chat"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-coming-up",
+   "question": "Do you have a feature called \"Timers, alarms, reminders and lists\"? One sentence.",
+   "expect": "coming-up"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-reminder-asks",
+   "question": "Do you have a feature called \"A reminder that asks you a question\"? One sentence.",
+   "expect": "reminder-asks"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-today",
+   "question": "Do you have a feature called \"Today\"? One sentence.",
+   "expect": "today"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-jobs",
+   "question": "Do you have a feature called \"Background jobs\"? One sentence.",
+   "expect": "jobs"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-now",
+   "question": "Do you have a feature called \"What Jarvis is doing right now\"? One sentence.",
+   "expect": "now"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-attention-budget",
+   "question": "Do you have a feature called \"How much Jarvis may interrupt you\"? One sentence.",
+   "expect": "attention-budget"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-focus",
+   "question": "Do you have a feature called \"Focus session\"? One sentence.",
+   "expect": "focus"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-media-transport",
+   "question": "Do you have a feature called \"Play or pause what is on this PC\"? One sentence.",
+   "expect": "media-transport"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-memory-tab",
+   "question": "Do you have a feature called \"The Memory tab\"? One sentence.",
+   "expect": "memory-tab"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-memory-waiting",
+   "question": "Do you have a feature called \"Facts waiting for your yes\"? One sentence.",
+   "expect": "memory-waiting"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-memory-known",
+   "question": "Do you have a feature called \"What Jarvis knows about you\"? One sentence.",
+   "expect": "memory-known"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-memory-people",
+   "question": "Do you have a feature called \"People and things\"? One sentence.",
+   "expect": "memory-people"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-people-dossier",
+   "question": "Do you have a feature called \"Person dossier\"? One sentence.",
+   "expect": "people-dossier"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-between-us",
+   "question": "Do you have a feature called \"Between us\"? One sentence.",
+   "expect": "between-us"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-memory-learning",
+   "question": "Do you have a feature called \"The learning switches\"? One sentence.",
+   "expect": "memory-learning"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-wiki",
+   "question": "Do you have a feature called \"The wiki Jarvis builds\"? One sentence.",
+   "expect": "wiki"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-deep-questions",
+   "question": "Do you have a feature called \"Deep questions\"? One sentence.",
+   "expect": "deep-questions"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-memory-as-of",
+   "question": "Do you have a feature called \"What did I believe on this date?\"? One sentence.",
+   "expect": "memory-as-of"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-history",
+   "question": "Do you have a feature called \"Your past chats\"? One sentence.",
+   "expect": "history"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-forget-range",
+   "question": "Do you have a feature called \"Forget a time frame\"? One sentence.",
+   "expect": "forget-range"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-media-read",
+   "question": "Do you have a feature called \"Read the words in a recording or video\"? One sentence.",
+   "expect": "media-read"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-places",
+   "question": "Do you have a feature called \"Where did I put things\"? One sentence.",
+   "expect": "places"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-photo-reminder",
+   "question": "Do you have a feature called \"Photo to reminder\"? One sentence.",
+   "expect": "photo-reminder"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-live-camera",
+   "question": "Do you have a feature called \"Show Jarvis the camera in Live\"? One sentence.",
+   "expect": "live-camera"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-pictures",
+   "question": "Do you have a feature called \"Ask for a picture, and keep it\"? One sentence.",
+   "expect": "pictures"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-search-audio-video",
+   "question": "Do you have a feature called \"Search what was said in audio and video\"? One sentence.",
+   "expect": "search-audio-video"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-notes-write",
+   "question": "Do you have a feature that lets Jarvis write a note into Obsidian, Logseq or Joplin? One sentence.",
+   "expect": "notes-write"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-tutorials",
+   "question": "Do you have a feature called \"Tutorials and the FAQ\"? One sentence.",
+   "expect": "tutorials"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-pc-help",
+   "question": "Do you have a feature called \"PC help\"? One sentence.",
+   "expect": "pc-help"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-chatbot",
+   "question": "Do you have a feature called \"Talk to a chatbot for me\"? One sentence.",
+   "expect": "chatbot"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-support",
+   "question": "Do you have a feature that lets Jarvis run a customer-support chat on your behalf and brings back what they offered? One sentence.",
+   "expect": "support"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-projects",
+   "question": "Do you have a feature called \"Projects\"? One sentence.",
+   "expect": "projects"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-goals",
+   "question": "Do you have a feature called \"Goals\"? One sentence.",
+   "expect": "goals"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-progress",
+   "question": "Do you have a feature called \"Progress\"? One sentence.",
+   "expect": "progress"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-chatbot-money",
+   "question": "Do you have a feature called \"Chatbot keys and a monthly money limit\"? One sentence.",
+   "expect": "chatbot-money"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-sensitive-facts",
+   "question": "Do you have a feature called \"Health and money facts wait for your yes\"? One sentence.",
+   "expect": "sensitive-facts"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-product-check",
+   "question": "Do you have a feature called \"Check a product's reviews\"? One sentence.",
+   "expect": "product-check"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-home-status",
+   "question": "Do you have a feature called \"Ask how the house is\"? One sentence.",
+   "expect": "home-status"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-locks",
+   "question": "Do you have a feature that lets Jarvis work these, but never quietly? One sentence.",
+   "expect": null,
+   "fall_through": "The measured question says 'these' and never names the row; with nothing before it in the sentence, no alias can honestly name one feature. The row's own words are 'Locks, doors, alarms and covers'."
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-jarvis-calendar",
+   "question": "Do you have a feature called \"Jarvis Calendar\"? One sentence.",
+   "expect": "jarvis-calendar"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-weather-sky",
+   "question": "Do you have a feature called \"Weather and the sky behind the animals\"? One sentence.",
+   "expect": "weather-sky"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-inbox-tidy",
+   "question": "Do you have a feature called \"Tidy the inbox by voice\"? One sentence.",
+   "expect": "inbox-tidy"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-news-and-page-watches",
+   "question": "Do you have a feature called \"News headlines, and pages that change\"? One sentence.",
+   "expect": "news-and-page-watches"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-phone-floating",
+   "question": "Do you have a feature called \"Floating Jarvis\"? One sentence.",
+   "expect": "phone-floating"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-phone-pip",
+   "question": "Do you have a feature called \"Picture-in-picture\"? One sentence.",
+   "expect": "phone-pip"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-phone-screen-rate",
+   "question": "Do you have a feature called \"Screen refresh rate\"? One sentence.",
+   "expect": "phone-screen-rate"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-also-on-phone",
+   "question": "Do you have a feature called \"Also on my phone\"? One sentence.",
+   "expect": "also-on-phone"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-find-phone",
+   "question": "Do you have a feature that lets Jarvis make your phone ring, to help you find it? One sentence.",
+   "expect": "find-phone"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-phone-limits",
+   "question": "Do you have a feature called \"What the phone deliberately does not do\"? One sentence.",
+   "expect": "phone-limits"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-phone-apps",
+   "question": "Do you have a feature called \"Open an app on your phone\"? One sentence.",
+   "expect": "phone-apps"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-appearance",
+   "question": "Do you have a feature called \"Appearance\"? One sentence.",
+   "expect": "appearance"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-crash-notes",
+   "question": "Do you have a feature called \"Hang and crash notes\"? One sentence.",
+   "expect": "crash-notes"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-faces",
+   "question": "Do you have a feature called \"Choose Jarvis's face\"? One sentence.",
+   "expect": "faces"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-animal-options",
+   "question": "Do you have a feature called \"Animal options\"? One sentence.",
+   "expect": "animal-options"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-first-run",
+   "question": "Do you have a feature called \"Set up Jarvis\"? One sentence.",
+   "expect": "first-run"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-setup-questionnaire",
+   "question": "Do you have a feature called \"First-time setup questionnaire\"? One sentence.",
+   "expect": "setup-questionnaire"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-menu-visibility",
+   "question": "Do you have a feature called \"Show or hide menus\"? One sentence.",
+   "expect": "menu-visibility"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-shortcuts",
+   "question": "Do you have a feature called \"Keyboard shortcuts\"? One sentence.",
+   "expect": "shortcuts"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-models",
+   "question": "Do you have a feature called \"Models\"? One sentence.",
+   "expect": "models"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-compute",
+   "question": "Do you have a feature called \"Compute\"? One sentence.",
+   "expect": "compute"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-model-memory",
+   "question": "Do you have a feature called \"Memory on the Model page\"? One sentence.",
+   "expect": "model-memory"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-notifications",
+   "question": "Do you have a feature called \"Notifications\"? One sentence.",
+   "expect": "notifications"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-start-jarvis",
+   "question": "Do you have a feature called \"Starting Jarvis for you\"? One sentence.",
+   "expect": "start-jarvis"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-work-tab",
+   "question": "Do you have a feature called \"The Work tab\"? One sentence.",
+   "expect": "work-tab"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-job-list",
+   "question": "Do you have a feature called \"Jobs that keep going after the chat ends\"? One sentence.",
+   "expect": "job-list"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-hardware",
+   "question": "Do you have a feature called \"Hardware and models\"? One sentence.",
+   "expect": "hardware"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-focus-presets",
+   "question": "Do you have a feature called \"Focus presets\"? One sentence.",
+   "expect": "focus-presets"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-big-model",
+   "question": "Do you have a feature called \"The big model (slow)\"? One sentence.",
+   "expect": "big-model"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-tool-updates",
+   "question": "Do you have a feature called \"Check for tool updates\"? One sentence.",
+   "expect": "tool-updates"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-settings-file",
+   "question": "Do you have a feature called \"The settings file, the logs and starting with Windows\"? One sentence.",
+   "expect": "settings-file"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-backend-supports",
+   "question": "Do you have a feature called \"What this backend supports\"? One sentence.",
+   "expect": "backend-supports"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-about",
+   "question": "Do you have a feature called \"About Jarvis\"? One sentence.",
+   "expect": "about"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-hud-window",
+   "question": "Do you have a feature called \"The big HUD window\"? One sentence.",
+   "expect": "hud-window"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-accounts",
+   "question": "Do you have a feature called \"Accounts and keys\"? One sentence.",
+   "expect": "accounts"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-undo",
+   "question": "Do you have a feature called \"Undo\"? One sentence.",
+   "expect": "undo"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-past-approvals",
+   "question": "Do you have a feature called \"Activity: cards you already decided\"? One sentence.",
+   "expect": "past-approvals"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-limits",
+   "question": "Do you have a feature called \"Limits and frequency\"? One sentence.",
+   "expect": "limits"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-settings-by-asking",
+   "question": "Do you have a feature called \"Change a setting by asking, in any words\"? One sentence.",
+   "expect": "settings-by-asking"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-start-the-model-lane",
+   "question": "Do you have a feature called \"Start the local model when it is not running\"? One sentence.",
+   "expect": "start-the-model-lane"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-restart-the-model-lane",
+   "question": "Do you have a feature called \"Jarvis starts the local model again by itself when it dies\"? One sentence.",
+   "expect": "restart-the-model-lane"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-clipboard-time-machine",
+   "question": "Do you have a feature called \"Clipboard history, and three one-press cleanups for what you copy\"? One sentence.",
+   "expect": "clipboard-time-machine"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-file-history",
+   "question": "Do you have a feature that lets Jarvis keep a copy of a file before it changes one, so you can see exactly what changed and put a version back? One sentence.",
+   "expect": "file-history"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-reminder-actions",
+   "question": "Do you have a feature called \"A reminder that opens something, or asks to do one task\"? One sentence.",
+   "expect": "reminder-actions"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-thinking-levels",
+   "question": "Do you have a feature called \"Thinking levels\"? One sentence.",
+   "expect": "thinking-levels"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-calculator",
+   "question": "Do you have a feature that lets Jarvis doe arithmetic accurately instead of a language model guessing the sum? One sentence.",
+   "expect": null,
+   "fall_through": "The measured question has a typo ('doe arithmetic'); the row's own word 'arithmetic' is already one of its aliases, and the strict finder needs every word the question says."
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-open-programs",
+   "question": "Do you have a feature called \"Open a program or Windows panel by name\"? One sentence.",
+   "expect": "open-programs"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-github-research",
+   "question": "Do you have a feature called \"Find and grade a library on GitHub\"? One sentence.",
+   "expect": "github-research"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-read-web-page",
+   "question": "Do you have a feature called \"Read one web page out loud\"? One sentence.",
+   "expect": "read-web-page"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-reverse-engineering",
+   "question": "Do you have a feature called \"Inspect a program or app statically\"? One sentence.",
+   "expect": "reverse-engineering"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-voicestudio",
+   "question": "Do you have a feature called \"A second voice program (VoiceStudio)\"? One sentence.",
+   "expect": "voicestudio"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-approvals",
+   "question": "Do you have a feature called \"Approval cards\"? One sentence.",
+   "expect": "approvals"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-app-lock",
+   "question": "Do you have a feature called \"Lock Jarvis, and hide what it remembers\"? One sentence.",
+   "expect": "app-lock"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-captcha-handoff",
+   "question": "Do you have a feature called \"Hand a captcha to your phone (\"Solve it here\")\"? One sentence.",
+   "expect": "captcha-handoff"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-stale-link",
+   "question": "Do you have a feature that lets Jarvis stop acting, and says so, rather than guessing? One sentence.",
+   "expect": "stale-link"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-stop-everything",
+   "question": "Do you have a feature called \"Stop everything\"? One sentence.",
+   "expect": "stop-everything"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-outside-text",
+   "question": "Do you have a feature called \"Jarvis marks what it read from outside\"? One sentence.",
+   "expect": "outside-text"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-settings-entry",
+   "question": "Do you have a feature called \"Settings itself\"? One sentence.",
+   "expect": "settings-entry"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-data-sandbox",
+   "question": "Do you have a feature called \"Small Python scripts for sums and averages\"? One sentence.",
+   "expect": "data-sandbox"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-protected-items",
+   "question": "Do you have a feature called \"Protected from Jarvis\"? One sentence.",
+   "expect": "protected-items"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-propose-plan",
+   "question": "Do you have a feature called \"A short plan of several steps, one card\"? One sentence.",
+   "expect": "propose-plan"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-card-summary",
+   "question": "Do you have a feature called \"A short card, then Explain more\"? One sentence.",
+   "expect": "card-summary"
+  },
+  {
+   "section": "sweep",
+   "probe": "sweep-receipts",
+   "question": "Do you have a feature called \"A receipt for every change\"? One sentence.",
+   "expect": "receipts"
+  },
+  {
+   "section": "trap",
+   "probe": "trap-upload-phone",
+   "question": "Can I upload documents from my phone through the app and have you process them?",
+   "expect": "document-from-phone"
+  },
+  {
+   "section": "trap",
+   "probe": "trap-notion-phone",
+   "question": "Can I import a Notion export from my phone?",
+   "expect": "notion-import"
+  },
+  {
+   "section": "trap",
+   "probe": "trap-file-phone-pc",
+   "question": "Can I send a file from my phone to my PC?",
+   "expect": "document-from-phone"
+  },
+  {
+   "section": "trap",
+   "probe": "trap-notion-phone-vault",
+   "question": "Can I import a Notion export from my phone into my vault?",
+   "expect": "notion-import"
+  },
+  {
+   "section": "trap",
+   "probe": "trap-notion-android-jarvis",
+   "question": "Can I open my Notion notes in the Android app and send them to the main Jarvis?",
+   "expect": "notion-import"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-notion-import",
+   "question": "Do you have a feature that turns a Notion export into an Obsidian vault?",
+   "expect": "notion-import"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-folders",
+   "question": "Do you have a feature that lets me choose which folders on my PC you may look in?",
+   "expect": "folders"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-documents",
+   "question": "Do you have a feature that reads a PDF or a Word file and answers questions about it?",
+   "expect": "documents"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-file-from-pc",
+   "question": "Do you have a feature that sends one file from my PC to my phone?",
+   "expect": "file-from-pc"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-vault-organizer",
+   "question": "Do you have a feature that tidies up an Obsidian vault with tags and Maps of Content?",
+   "expect": "vault-organizer"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-history-search",
+   "question": "Do you have a feature that searches my own past chats?",
+   "expect": "history-search"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-widgets",
+   "question": "Do you have a feature that draws small widgets I describe on my desktop or phone?",
+   "expect": "widgets"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-talk-button",
+   "question": "Do you have a feature where I hold a button, speak, and let go?",
+   "expect": "talk-button"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-memory-saved",
+   "question": "Do you have a feature that saves everyday facts about me automatically?",
+   "expect": "memory-saved"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-galaxy",
+   "question": "Do you have a feature that draws a map of everything you know about me?",
+   "expect": "galaxy"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-look-at-this",
+   "question": "Do you have a feature that looks at the window in front of me once and answers about it?",
+   "expect": "look-at-this"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-picture-mode",
+   "question": "Do you have a feature that lets you read the picture of my screen, not only its words?",
+   "expect": "picture-mode"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-crisis-help",
+   "question": "Do you have a feature that answers with crisis help lines if a message sounds like a crisis?",
+   "expect": "crisis-help"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-spending",
+   "question": "Do you have a feature that adds up a bank export into a small spending table?",
+   "expect": "spending"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-email-send",
+   "question": "Do you have a feature that writes an email and sends it once I say yes?",
+   "expect": "email-send"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-lights",
+   "question": "Do you have a feature that switches the lights, plugs and fans I name?",
+   "expect": "lights"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-phone-notifications",
+   "question": "Do you have a feature that reads the notifications of apps I choose on my phone?",
+   "expect": "phone-notifications"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-phone-watch",
+   "question": "Do you have a feature that shows your notifications on my smartwatch?",
+   "expect": "phone-watch"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-updates",
+   "question": "Do you have a feature that tells me when a newer build of this app exists and installs it?",
+   "expect": "updates"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-second-card",
+   "question": "Do you have a feature that puts extra work on my second graphics card?",
+   "expect": "second-card"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-cloud-escalation",
+   "question": "Do you have a feature that sends a hard question to DeepSeek after I say yes?",
+   "expect": "cloud-escalation"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-skills",
+   "question": "Do you have a feature that installs extra skills with a scan verdict?",
+   "expect": "skills"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-plugin-switch",
+   "question": "Do you have a feature that turns one of your drop-in plugins on or off when I ask in chat?",
+   "expect": "plugin-switch"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-what-asks-first",
+   "question": "Do you have a feature that lists every action you can take and whether it asks me first?",
+   "expect": "what-asks-first"
+  },
+  {
+   "section": "pass1",
+   "probe": "avail-shell-commands",
+   "question": "Do you have a feature that runs one shell command on my PC?",
+   "expect": "shell-commands"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-read-aloud",
+   "question": "Do you have a feature that reads your answers aloud in the voice I chose? Answer in one sentence.",
+   "expect": "read-aloud"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-temporary-chat",
+   "question": "Do you have a feature that starts a chat where nothing is kept and nothing I saved is used? Answer in one sentence.",
+   "expect": "temporary-chat"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-briefing",
+   "question": "Do you have a feature that gives me a morning briefing? Answer in one sentence.",
+   "expect": "briefing"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-import-chats",
+   "question": "Do you have a feature that imports a chat export from ChatGPT, Claude, Gemini or DeepSeek? Answer in one sentence.",
+   "expect": "import-chats"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-chat-tags",
+   "question": "Do you have a feature that lets me tag my chats and suggests tags overnight? Answer in one sentence.",
+   "expect": "chat-tags"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-pinned-facts",
+   "question": "Do you have a feature that keeps a fact always in mind? Answer in one sentence.",
+   "expect": "pinned-facts"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-topics",
+   "question": "Do you have a feature that sorts what it remembers into topics? Answer in one sentence.",
+   "expect": "topics"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-quiz",
+   "question": "Do you have a feature that quizzes me on a text? Answer in one sentence.",
+   "expect": "quiz"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-watch-with-me",
+   "question": "Do you have a feature that watches my screen with me and comments on it? Answer in one sentence.",
+   "expect": "watch-with-me"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-notes-editor",
+   "question": "Do you have a feature that creates and customizes my notes? Answer in one sentence.",
+   "expect": "notes-editor"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-web-search",
+   "question": "Do you have a feature that searches the web for me? Answer in one sentence.",
+   "expect": "web-search"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-browser-engine",
+   "question": "Do you have a feature that runs a browser without a window? Answer in one sentence.",
+   "expect": "browser-engine"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-github-watchlist",
+   "question": "Do you have a feature that tells me what is new on GitHub? Answer in one sentence.",
+   "expect": "github-watchlist"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-decks",
+   "question": "Do you have a feature that asks me my saved study questions again on a schedule? Answer in one sentence.",
+   "expect": "decks"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-retirement",
+   "question": "Do you have a feature that runs a retirement what-if from numbers I type in? Answer in one sentence.",
+   "expect": "retirement"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-price-radar",
+   "question": "Do you have a feature that tracks flight prices and a price history? Answer in one sentence.",
+   "expect": "price-radar"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-mood-log",
+   "question": "Do you have a feature that keeps a mood log? Answer in one sentence.",
+   "expect": "mood-log"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-parking",
+   "question": "Do you have a feature that works out what a parking stay costs and finds free parking? Answer in one sentence.",
+   "expect": "parking"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-habit-checkins",
+   "question": "Do you have a feature that nudges me to do a habit and records that I did it? Answer in one sentence.",
+   "expect": "habit-checkins"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-email-read",
+   "question": "Do you have a feature that reads my email? Answer in one sentence.",
+   "expect": "email-read"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-email-drafts",
+   "question": "Do you have a feature that saves a draft of a reply to my Drafts folder? Answer in one sentence.",
+   "expect": "email-drafts"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-calendar",
+   "question": "Do you have a feature that reads my own calendar? Answer in one sentence.",
+   "expect": "calendar"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-connection",
+   "question": "Do you have a feature that pairs my phone with you and shows the connection state? Answer in one sentence.",
+   "expect": "connection"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-devices",
+   "question": "Do you have a feature that lists the devices connected to it? Answer in one sentence.",
+   "expect": "devices"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-phone-tiles",
+   "question": "Do you have a feature that adds a Quick Settings tile on my phone to start or end Live? Answer in one sentence.",
+   "expect": "phone-tiles"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-call-recording",
+   "question": "Do you have a feature that records a phone call and files it as a note? Answer in one sentence.",
+   "expect": "call-recording"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-computer-control",
+   "question": "Do you have a feature that clicks and types in another program for me? Answer in one sentence.",
+   "expect": "computer-control"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-browser-control",
+   "question": "Do you have a feature that drives one browser tab for me? Answer in one sentence.",
+   "expect": "browser-control"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-docker-containers",
+   "question": "Do you have a feature that manages Docker containers? Answer in one sentence.",
+   "expect": "docker-containers"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-android-builder",
+   "question": "Do you have a feature that builds the Android app in a project task? Answer in one sentence.",
+   "expect": "android-builder"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-model-knowledge",
+   "question": "Do you have a feature that tells me which model is answering? Answer in one sentence.",
+   "expect": "model-knowledge"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-backup",
+   "question": "Do you have a feature that makes one locked backup file into a folder I pick? Answer in one sentence.",
+   "expect": "backup"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-reach",
+   "question": "Do you have a feature that lists every way it can reach something outside itself and whether it is on? Answer in one sentence.",
+   "expect": "reach"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-trust",
+   "question": "Do you have a feature that shows content risk and the audit chain? Answer in one sentence.",
+   "expect": "trust"
+  },
+  {
+   "section": "pass2",
+   "probe": "avail-rush-latch",
+   "question": "Do you have a feature that warns me when text tried to rush me? Answer in one sentence.",
+   "expect": "rush-latch"
+  },
+  {
+   "section": "trap",
+   "probe": "rerun-notion-verbatim",
+   "question": "Can I open and import my Notion notes as a markdown file and can you process it in the Android app and send it to the main Jarvis?",
+   "expect": "notion-import"
+  }
+ ]
+}
