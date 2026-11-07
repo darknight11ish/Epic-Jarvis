@@ -14451,15 +14451,31 @@ _NOTION_JUST_IMPORT = re.compile(
 #: "no app has a button for it yet" said the opposite of what the phone can do
 #: - corrected 2026-11-06. No Notion login, no sync, no edit on Notion's side.
 NOTION_WORDS = (
+    "A downloaded Notion export (Markdown & CSV .zip) is what this door takes. "
     "I cannot log into Notion, but I do have a Notion import. In Notion: Settings, "
-    "Export all workspace content, as Markdown & CSV, then save the .zip. On this PC: "
-    "Settings, Folders Jarvis may look in, then under Bring in a Notion export pick a "
-    "folder from the list and press Choose the .zip… - I unpack it into a NEW folder "
-    "there that I can read and search, and nothing in Notion is changed. The vault "
-    "converter also has a phone door: on the phone, Settings, Folders Jarvis may look "
-    "in, then Bring in a Notion export - pick one of the vaults this PC has already "
-    "checked, pick the .zip, read the free preview, then press Bring it in. The vault "
-    "is written after one card on the PC, and an Undo takes it back off.")
+    "Export all workspace content, as Markdown & CSV, then save the .zip. On this "
+    "PC: Settings, Folders Jarvis may look in, then Bring in a Notion export - pick "
+    "a listed folder and press Choose the .zip…: I unpack it into a NEW folder there "
+    "that I can read and search, and nothing in Notion is changed. The .zip must be "
+    "inside one of those folders: if it is in Downloads, add Downloads there first "
+    "(one card) or move it into a listed one. The vault converter also has a phone "
+    "door: on the phone, Settings, Folders Jarvis may look in, then Bring in a "
+    "Notion export - pick a vault, pick the .zip, read the free preview, then Bring "
+    "it in. The vault is written after one card on the PC, and an Undo takes it "
+    "back off.")
+
+#: A file or download the owner wants turned into an Obsidian note, WITHOUT
+#: naming Notion: what this PC can really do (read a file in a listed folder;
+#: writing the note raises one card), and the pointer to the Notion door when
+#: that is what the download turns out to be. Never the model's "I cannot
+#: process files" (the owner's phone finding, 2026-11-07).
+FILE_TO_OBSIDIAN_WORDS = (
+    "I can read a file or folder this PC may look in - put the download in a "
+    "folder under Settings, Folders Jarvis may look in, or tell me the folder. "
+    "Reading the Markdown changes nothing. Turning it into an Obsidian note "
+    "writes a file, so that raises one card first and an Undo takes it back "
+    "off. If the download is your Notion export (Markdown & CSV, a .zip), say "
+    "\"import my Notion export\" and I will give the exact Notion and Bring-in steps.")
 
 #: The same steps for "import my Notion export" on its own: the .zip is picked
 #: with this PC's own file picker, so the one honest thing to say is where.
@@ -14467,7 +14483,9 @@ NOTION_PICK_WORDS = (
     "Picking the .zip needs this PC's own file picker, so it is two taps there: "
     "Settings, Folders Jarvis may look in, then under Bring in a Notion export pick a "
     "folder from the list and press Choose the .zip… - I unpack it into a NEW folder "
-    "in that folder and change nothing in Notion.")
+    "in that folder and change nothing in Notion. The .zip must be inside one of the "
+    "folders on that list: if it is in Downloads, add Downloads there first (one card) "
+    "or move the .zip into a listed folder.")
 
 
 def _notion(s: str) -> Optional[Intent]:
@@ -14479,6 +14497,36 @@ def _notion(s: str) -> Optional[Intent]:
         return Intent("notion_export")
     if _NOTION_JUST_IMPORT.fullmatch(s):
         return Intent("notion_export", {"step": "import"})
+
+    # THE PHONE FINDING (2026-11-07): the owner asked, in one voice message,
+    # "Can you process a download into Obsidian Notes? It's the Markdown Notes
+    # from my Notion export." Two sentences and the word "download" meant the
+    # old grammar missed it and the model answered "I don't have a direct tool
+    # to convert a file into an Obsidian note", which is false about this PC.
+    # The same message names Notion, so the deterministic Notion answer is the
+    # right one; the extra-condition guard keeps the pinned near-miss
+    # ("... tomorrow") with the model.
+    if "notion" in s:
+        if re.fullmatch(
+                r"(?:(?:it(?:'s|\s+is)|these\s+are|this\s+is)\s+)?"
+                r"(?:(?:the|my|our)\s+)?markdown\s+(?:notes?|files?)\s+"
+                r"from\s+(?:(?:my|the|our)\s+)?notion\s+export", s):
+            return Intent("notion_export", {"step": "import"})
+        if (re.search(r"\b(?:process|import|convert|bring|load|add|put|turn|make)\b", s)
+                and re.search(r"\b(?:download|file|files|zip|markdown|folder)\b", s)
+                and re.search(r"\b(?:obsidian|vault)\b", s)
+                and not re.search(r"\b(?:tomorrow|tonight|next\s+week|"
+                                  r"at\s+\d|in\s+\d+\s+(?:hours?|minutes?))\b", s)):
+            return Intent("notion_export")
+    # Not a Notion sentence: a file/download -> Obsidian request still gets a
+    # true answer (read it; writing raises one card) instead of the model.
+    if ("notion" not in s
+            and re.search(r"\b(?:process|import|convert|bring|load|add|put|turn|"
+                          r"make|save)\b", s)
+            and re.search(r"\b(?:download|file|files|zip|markdown|folder|notes?)\b", s)
+            and re.search(r"\b(?:obsidian|my\s+obsidian|an?\s+obsidian\s+(?:note|vault))\b", s)
+            and not re.search(r"\b(?:tomorrow|tonight|next\s+week|at\s+\d)\b", s)):
+        return Intent("file_to_obsidian_help")
     return None
 
 
@@ -19219,6 +19267,15 @@ def _open(s: str) -> Optional[Intent]:
     return Intent("open_app", {"opened": opened})
 
 
+def _run_file_to_obsidian() -> Result:
+    """A file/download -> Obsidian request that does not name Notion.
+
+    Read-only words: what this PC can read, that writing the note raises one
+    card, and the pointer to the Notion door when that is what it is.
+    """
+    return Result(FILE_TO_OBSIDIAN_WORDS, "file_to_obsidian_help")
+
+
 def _run_notion(f: dict) -> Result:
     """"Can you process all my Notion notes into Obsidian?", and "import my
     Notion export" on its own (2026-10-28). Fixed text, from the constants
@@ -23731,6 +23788,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # import button on this PC and the converter's half that has no button
         # yet. Nothing is read and nothing is imported.
         return _run_notion(f)
+    if n == "file_to_obsidian_help":
+        # A file/download -> Obsidian ask that does not name Notion (the owner's
+        # phone finding, 2026-11-07): fixed words, reads nothing, writes nothing.
+        return _run_file_to_obsidian()
     if n == "connect_account":
         # "connect my calendar" / "set up github" (2026-10-28): ONE card whose
         # values are typed on this PC and saved into Credential Manager, then
@@ -24282,6 +24343,10 @@ _PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plu
 #: code answers from its own state may be listed here.
 _PRIVATE_DETERMINISTIC_READS = frozenset({
     "repo_watch_list",
+    # The Notion/file answers are fixed local words, so a private chat gets
+    # them from this PC too rather than handing them to a model that would
+    # deny the import exists (the owner's phone finding, 2026-11-07).
+    "notion_export", "file_to_obsidian_help",
     # Wave 8.2 (2026-11-07): the same rule one step further. The model cannot
     # know this PC's preset, benchmark rows, switch states or change journal,
     # so a private chat answers these from the local code, never the model.
@@ -24433,7 +24498,7 @@ READ_ONLY_INTENTS = frozenset({
     # "can you process all my Notion notes into Obsidian?" (2026-10-28): a
     # fixed answer that reads nothing and imports nothing, so it must not
     # clear what "cancel that" would take back.
-    "notion_export",
+    "notion_export", "file_to_obsidian_help",
     # "find cheap parking near ..." (2026-10-30): it calls two public map
     # services and a local cache, opens no card and changes nothing, so it must
     # not clear what "cancel that" would take back.
