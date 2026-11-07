@@ -8,7 +8,10 @@
     "asks": "No card to just talk.",
     "limit": "The answer comes from a model running on your own PC, so a long answer can take a while.",
     "surface": "both",
-    "covers": []
+    "covers": [],
+    "aliases": [
+      "type a question and jarvis answers in the box"
+    ]
   },
   {
     "id": "prompt-coach",
@@ -45,7 +48,10 @@
       "talk button",
       "hold"
     ],
-    "lesson_id": "phone-talking"
+    "lesson_id": "phone-talking",
+    "aliases": [
+      "i hold a button, speak, and let go"
+    ]
   },
   {
     "id": "wake-word",
@@ -86,7 +92,10 @@
       "aloud",
       "read out"
     ],
-    "lesson_id": "talking"
+    "lesson_id": "talking",
+    "aliases": [
+      "reads your answers aloud in the voice i chose"
+    ]
   },
   {
     "id": "spoken-style",
@@ -124,7 +133,10 @@
     "gate": [
       "better_voice_enable"
     ],
-    "lesson_id": "how-it-talks"
+    "lesson_id": "how-it-talks",
+    "aliases": [
+      "learn what you sound like, so it only listens to you"
+    ]
   },
   {
     "id": "voice-check",
@@ -146,7 +158,10 @@
     "gate": [
       "lower_the_voice_check_bar"
     ],
-    "lesson_id": "how-it-talks"
+    "lesson_id": "how-it-talks",
+    "aliases": [
+      "choose whether a voice turn is trusted like the talk button or asks more of you"
+    ]
   },
   {
     "id": "custom-voices",
@@ -168,7 +183,10 @@
       "better_voice_enable",
       "change_own_config"
     ],
-    "lesson_id": "how-it-talks"
+    "lesson_id": "how-it-talks",
+    "aliases": [
+      "pick jarvis's voice, hear a sample of it, and add voices of your own"
+    ]
   },
   {
     "id": "manner",
@@ -235,7 +253,10 @@
     "asks": "No card.",
     "limit": "About two seconds of what you say is checked for your voice only, and is never written down.",
     "surface": "both",
-    "covers": []
+    "covers": [],
+    "aliases": [
+      "cut in by talking, instead of waiting for the answer to finish"
+    ]
   },
   {
     "id": "live",
@@ -291,7 +312,8 @@
     "surface_reason": "The PC types what you say into the program in front, using a key you hold there; a phone must not turn speech into words, so it has no such key to hold (the row's own limit).",
     "aliases": [
       "dictation",
-      "talk to type"
+      "talk to type",
+      "hold a key, speak, and jarvis types what you said into the program in front"
     ],
     "covers": [
       "how-it-talks"
@@ -334,7 +356,8 @@
     "surface": "both",
     "aliases": [
       "incognito",
-      "incognito chat"
+      "incognito chat",
+      "starts a chat where nothing is kept and nothing i saved is used"
     ],
     "covers": []
   },
@@ -361,7 +384,8 @@
     "surface": "both",
     "aliases": [
       "search history",
-      "search what was said"
+      "search what was said",
+      "searches my own past chats"
     ],
     "covers": []
   },
@@ -375,7 +399,8 @@
     "limit": "Shows the count and the senders of new email unless you choose the count only.",
     "surface": "both",
     "aliases": [
-      "morning briefing"
+      "morning briefing",
+      "gives me a morning briefing"
     ],
     "covers": [
       "brain.work.briefing",
@@ -469,7 +494,10 @@
       "widget",
       "describe"
     ],
-    "lesson_id": "home-overview"
+    "lesson_id": "home-overview",
+    "aliases": [
+      "draws small widgets i describe on my desktop or phone"
+    ]
   },
   {
     "id": "jobs",
@@ -614,7 +642,10 @@
       "saved",
       "facts"
     ],
-    "lesson_id": "memory"
+    "lesson_id": "memory",
+    "aliases": [
+      "saves everyday facts about me automatically"
+    ]
   },
   {
     "id": "memory-waiting",
@@ -741,7 +772,10 @@
     "must_mention": [
       "topic"
     ],
-    "lesson_id": "memory-lists"
+    "lesson_id": "memory-lists",
+    "aliases": [
+      "sorts what it remembers into topics"
+    ]
   },
   {
     "id": "memory-learning",
@@ -847,7 +881,10 @@
       "bring in old chats",
       "export"
     ],
-    "lesson_id": "memory-lists"
+    "lesson_id": "memory-lists",
+    "aliases": [
+      "imports a chat export from chatgpt, claude, gemini or deepseek"
+    ]
   },
   {
     "id": "history",
@@ -895,7 +932,10 @@
       "chat_tags_suggest_on",
       "chat_card_pin"
     ],
-    "lesson_id": "memory-lists"
+    "lesson_id": "memory-lists",
+    "aliases": [
+      "tag my chats and suggests tags overnight"
+    ]
   },
   {
     "id": "forget-range",
@@ -936,7 +976,10 @@
     "must_mention": [
       "galaxy"
     ],
-    "lesson_id": "memory-lists"
+    "lesson_id": "memory-lists",
+    "aliases": [
+      "draws a map of everything you know about me"
+    ]
   },
   {
     "id": "media-read",
@@ -994,7 +1037,10 @@
     "must_mention": [
       "look at this"
     ],
-    "lesson_id": "screens-and-pictures"
+    "lesson_id": "screens-and-pictures",
+    "aliases": [
+      "looks at the window in front of me once and answers about it"
+    ]
   },
   {
     "id": "watch-with-me",
@@ -1011,7 +1057,10 @@
     "must_mention": [
       "watch with me"
     ],
-    "lesson_id": "screens-and-pictures"
+    "lesson_id": "screens-and-pictures",
+    "aliases": [
+      "watches my screen with me and comments on it"
+    ]
   },
   {
     "id": "picture-mode",
@@ -1031,7 +1080,10 @@
     "gate": [
       "change_own_config"
     ],
-    "lesson_id": "screens-and-pictures"
+    "lesson_id": "screens-and-pictures",
+    "aliases": [
+      "read the picture of my screen, not only its words"
+    ]
   },
   {
     "id": "photo-reminder",
@@ -1074,6 +1126,9 @@
     "covers": [
       "brain.work.quiz",
       "brain.work.quiz.youtube"
+    ],
+    "aliases": [
+      "quizzes me on a text"
     ]
   },
   {
@@ -1133,6 +1188,9 @@
     "surface": "both",
     "covers": [
       "brain.work.decks"
+    ],
+    "aliases": [
+      "asks me my saved study questions again on a schedule"
     ]
   },
   {
@@ -1150,7 +1208,10 @@
     "must_mention": [
       "note"
     ],
-    "lesson_id": "notes-and-wiki"
+    "lesson_id": "notes-and-wiki",
+    "aliases": [
+      "write a note into obsidian, logseq or joplin"
+    ]
   },
   {
     "id": "notes-editor",
@@ -1167,7 +1228,8 @@
       "vault editor",
       "customize a note",
       "create a note",
-      "notes toolbar"
+      "notes toolbar",
+      "creates and customizes my notes"
     ],
     "covers": [
       "notes-editor",
@@ -1203,7 +1265,10 @@
     "gate": [
       "change_own_config"
     ],
-    "lesson_id": "documents-and-search"
+    "lesson_id": "documents-and-search",
+    "aliases": [
+      "choose which folders on my pc you may look in"
+    ]
   },
   {
     "id": "documents",
@@ -1216,7 +1281,8 @@
     "surface": "both",
     "aliases": [
       "ask about a pdf",
-      "ask about a document"
+      "ask about a document",
+      "reads a pdf or a word file and answers questions about it"
     ],
     "covers": [
       "documents-and-search"
@@ -1291,6 +1357,9 @@
     ],
     "gate": [
       "change_own_config"
+    ],
+    "aliases": [
+      "runs a browser without a window"
     ]
   },
   {
@@ -1311,7 +1380,10 @@
     "gate": [
       "change_own_config"
     ],
-    "lesson_id": "work-and-attention"
+    "lesson_id": "work-and-attention",
+    "aliases": [
+      "tells me what is new on github"
+    ]
   },
   {
     "id": "chatbot",
@@ -1346,7 +1418,8 @@
     "surface": "both",
     "aliases": [
       "customer support",
-      "support chat"
+      "support chat",
+      "run a customer support chat on your behalf and bring back what they offered"
     ],
     "covers": [
       "brain.work.support"
@@ -1430,7 +1503,8 @@
       "send a file to my phone",
       "send file to phone",
       "file to phone",
-      "send a file to the phone"
+      "send a file to the phone",
+      "sends one file from my pc to my phone"
     ],
     "covers": [
       "file-from-pc",
@@ -1461,7 +1535,9 @@
       "upload a file from my phone",
       "send a file from my phone",
       "document from phone",
-      "upload a document from my phone"
+      "upload a document from my phone",
+      "upload documents from my phone through the app and have you process them",
+      "send a file from my phone to my pc"
     ],
     "covers": [],
     "gate": [
@@ -1486,7 +1562,12 @@
       "import my notion notes",
       "import my notion notes as markdown",
       "import my notion notes as a markdown file",
-      "process my notion notes in the android app"
+      "process my notion notes in the android app",
+      "turns a notion export into an obsidian vault",
+      "open and process my notion notes as a markdown file in the android app and send them to the main jarvis",
+      "import a notion export from my phone",
+      "import a notion export from my phone into my vault",
+      "open my notion notes in the android app and send them to the main jarvis"
     ],
     "must_mention": [
       "notion",
@@ -1510,7 +1591,8 @@
       "vault-organizer"
     ],
     "aliases": [
-      "vault organizer"
+      "vault organizer",
+      "tidies up an obsidian vault with tags and maps of content"
     ],
     "must_mention": [
       "vault",
@@ -1539,7 +1621,10 @@
       "spending",
       "summaries"
     ],
-    "lesson_id": "money-and-health"
+    "lesson_id": "money-and-health",
+    "aliases": [
+      "adds up a bank export into a small spending table"
+    ]
   },
   {
     "id": "retirement",
@@ -1558,7 +1643,10 @@
       "retirement",
       "what-if"
     ],
-    "lesson_id": "money-and-health"
+    "lesson_id": "money-and-health",
+    "aliases": [
+      "runs a retirement what-if from numbers i type in"
+    ]
   },
   {
     "id": "chatbot-money",
@@ -1620,7 +1708,10 @@
       "crisis",
       "helplines"
     ],
-    "lesson_id": "money-and-health"
+    "lesson_id": "money-and-health",
+    "aliases": [
+      "answers with crisis help lines if a message sounds like a crisis"
+    ]
   },
   {
     "id": "parking",
@@ -1636,7 +1727,8 @@
     ],
     "aliases": [
       "parking costs",
-      "free parking"
+      "free parking",
+      "works out what a parking stay costs and finds free parking"
     ],
     "must_mention": [
       "parking",
@@ -1657,7 +1749,8 @@
       "airfare",
       "flight cost",
       "flight price",
-      "price history for flights"
+      "price history for flights",
+      "tracks flight prices and a price history"
     ],
     "covers": [
       "money-and-health"
@@ -1678,7 +1771,8 @@
       "habit tracker",
       "habit check-in",
       "habit check-ins",
-      "track a habit"
+      "track a habit",
+      "nudges me to do a habit and records that i did it"
     ]
   },
   {
@@ -1695,7 +1789,8 @@
       "mood tracker",
       "mood log",
       "mood journal",
-      "mood diary"
+      "mood diary",
+      "keeps a mood log"
     ]
   },
   {
@@ -1762,7 +1857,10 @@
     "gate": [
       "change_own_config"
     ],
-    "lesson_id": "home-devices"
+    "lesson_id": "home-devices",
+    "aliases": [
+      "switches the lights, plugs and fans i name"
+    ]
   },
   {
     "id": "locks",
@@ -1881,7 +1979,10 @@
     "gate": [
       "send_email"
     ],
-    "lesson_id": "home-calendar-email"
+    "lesson_id": "home-calendar-email",
+    "aliases": [
+      "writes an email and sends it once i say yes"
+    ]
   },
   {
     "id": "email-drafts",
@@ -1899,7 +2000,10 @@
     "gate": [
       "draft_email"
     ],
-    "lesson_id": "home-calendar-email"
+    "lesson_id": "home-calendar-email",
+    "aliases": [
+      "saves a draft of a reply to my drafts folder"
+    ]
   },
   {
     "id": "inbox-tidy",
@@ -1961,7 +2065,10 @@
     "gate": [
       "pair_device"
     ],
-    "lesson_id": "phone-pairing"
+    "lesson_id": "phone-pairing",
+    "aliases": [
+      "pairs my phone with you and shows the connection state"
+    ]
   },
   {
     "id": "devices",
@@ -1984,7 +2091,10 @@
     "gate": [
       "unretire_shared_key"
     ],
-    "lesson_id": "phone-pairing"
+    "lesson_id": "phone-pairing",
+    "aliases": [
+      "lists the devices connected to it"
+    ]
   },
   {
     "id": "phone-notifications",
@@ -2007,7 +2117,10 @@
     "gate": [
       "change_own_config"
     ],
-    "lesson_id": "phone-notifications"
+    "lesson_id": "phone-notifications",
+    "aliases": [
+      "reads the notifications of apps i choose on my phone"
+    ]
   },
   {
     "id": "phone-watch",
@@ -2029,7 +2142,10 @@
     "gate": [
       "change_own_config"
     ],
-    "lesson_id": "phone-extras"
+    "lesson_id": "phone-extras",
+    "aliases": [
+      "shows your notifications on my smartwatch"
+    ]
   },
   {
     "id": "phone-floating",
@@ -2089,7 +2205,10 @@
       "tiles",
       "quick"
     ],
-    "lesson_id": "phone-extras"
+    "lesson_id": "phone-extras",
+    "aliases": [
+      "adds a quick settings tile on my phone to start or end live"
+    ]
   },
   {
     "id": "phone-screen-rate",
@@ -2142,7 +2261,10 @@
     "must_mention": [
       "ring my phone"
     ],
-    "lesson_id": "home-overview"
+    "lesson_id": "home-overview",
+    "aliases": [
+      "make your phone ring, to help you find it"
+    ]
   },
   {
     "id": "phone-limits",
@@ -2443,6 +2565,9 @@
     "lesson_id": "model-page",
     "gate": [
       "modify_own_code"
+    ],
+    "aliases": [
+      "installs extra skills with a scan verdict"
     ]
   },
   {
@@ -2598,7 +2723,8 @@
       "cloud api",
       "deepseek api",
       "escalate to the cloud",
-      "try the cloud model"
+      "try the cloud model",
+      "sends a hard question to deepseek after i say yes"
     ],
     "covers": []
   },
@@ -2626,7 +2752,10 @@
     "gate": [
       "change_own_config"
     ],
-    "lesson_id": "hardware"
+    "lesson_id": "hardware",
+    "aliases": [
+      "puts extra work on my second graphics card"
+    ]
   },
   {
     "id": "big-model",
@@ -2663,7 +2792,10 @@
       "settings.updates",
       "limits-and-notes"
     ],
-    "lesson_id": "limits-and-notes"
+    "lesson_id": "limits-and-notes",
+    "aliases": [
+      "tells me when a newer build of this app exists and installs it"
+    ]
   },
   {
     "id": "tool-updates",
@@ -2768,7 +2900,8 @@
     "limit": "Locked with a recovery code only you have, shown once - lose the code and the backup is useless, and Jarvis cannot recover it. The phone shows the code and will not write the file until you tick that you have saved it, so an unfinished run leaves your PC untouched. Jarvis cannot prove from the phone that a backup opens: only the code opens one, and codes are only typed on the PC. Each new backup deletes the oldest of the last few kept, so making many pushes older copies out. Erased facts stay in older backups until they age out.",
     "surface": "both",
     "aliases": [
-      "backups"
+      "backups",
+      "makes one locked backup file into a folder i pick"
     ],
     "covers": [
       "settings.backup",
@@ -2814,7 +2947,8 @@
     "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The four whose own switch decides them say which switch: the data and maths sandbox, Web search for the two conversation tools, and the product check, by the line [product_check] enabled = true.",
     "surface": "both",
     "aliases": [
-      "what jarvis can reach"
+      "what jarvis can reach",
+      "lists every way it can reach something outside itself and whether it is on"
     ],
     "covers": [
       "settings.reach",
@@ -2970,7 +3104,8 @@
     "surface_reason": "The copies are files on this PC, and a phone has no page for them (the row's own limit).",
     "aliases": [
       "file history",
-      "version history"
+      "version history",
+      "keep a copy of a file before it changes one, so you can see exactly what changed and put a version back"
     ],
     "covers": [
       "guardian_history"
@@ -3148,7 +3283,8 @@
     ],
     "aliases": [
       "shell command",
-      "command line"
+      "command line",
+      "runs one shell command on my pc"
     ],
     "must_mention": [
       "shell",
@@ -3240,7 +3376,8 @@
     ],
     "aliases": [
       "docker",
-      "containers"
+      "containers",
+      "manages docker containers"
     ],
     "must_mention": [
       "container",
@@ -3263,7 +3400,8 @@
       "which model is answering",
       "what model is answering",
       "what ai model",
-      "the model you are running"
+      "the model you are running",
+      "tells me which model is answering"
     ],
     "covers": [
       "model-page"
@@ -3341,7 +3479,10 @@
       "loosen_what_asks_first",
       "enable_reading_tool"
     ],
-    "lesson_id": "asks-first"
+    "lesson_id": "asks-first",
+    "aliases": [
+      "lists every action you can take and whether it asks me first"
+    ]
   },
   {
     "id": "app-lock",
@@ -3392,7 +3533,10 @@
       "safety.stale-link",
       "when-something-is-wrong"
     ],
-    "lesson_id": "when-something-is-wrong"
+    "lesson_id": "when-something-is-wrong",
+    "aliases": [
+      "stop acting and says so rather than guessing"
+    ]
   },
   {
     "id": "stop-everything",
@@ -3434,7 +3578,10 @@
       "audit",
       "records"
     ],
-    "lesson_id": "records"
+    "lesson_id": "records",
+    "aliases": [
+      "shows content risk and the audit chain"
+    ]
   },
   {
     "id": "rush-latch",
@@ -3449,7 +3596,10 @@
       "brain.trust.rush-latch",
       "when-something-is-wrong"
     ],
-    "lesson_id": "when-something-is-wrong"
+    "lesson_id": "when-something-is-wrong",
+    "aliases": [
+      "warns me when text tried to rush me"
+    ]
   },
   {
     "id": "outside-text",
@@ -3623,7 +3773,8 @@
     "aliases": [
       "plugins",
       "drop-in plugins",
-      "plugin list"
+      "plugin list",
+      "turns one of your drop-in plugins on or off when i ask in chat"
     ],
     "gate": [
       "modify_own_code"
