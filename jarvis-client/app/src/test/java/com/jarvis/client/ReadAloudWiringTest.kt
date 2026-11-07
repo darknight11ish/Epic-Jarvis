@@ -1,5 +1,8 @@
 package com.jarvis.client
 
+import com.jarvis.client.voice.MemoryAloud
+import com.jarvis.client.voice.PrivateAloud
+import com.jarvis.client.voice.ReadAloud
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -184,6 +187,125 @@ class ReadAloudWiringTest {
         assertTrue(
             "the refused answer's one sentence is not in the read path",
             runtime.contains("ReadAloud.ON_SCREEN"),
+        )
+    }
+
+    // ------------- the owner's own okay (his decision of 2026-11-06) --------
+
+    @Test
+    fun `the typed path hands the phone's memory switch to the facts`() {
+        val send = body(runtime, "suspend fun sendTypedChat(")
+        assertTrue(
+            "the typed answer's facts do not carry the phone's own memory setting",
+            send.contains("phoneMemoryAloud = settings.readMemoriesAloud.value"),
+        )
+        // The facts are built with the live lock, and the one-off is drawn
+        // against THE SAME read - never a second one that could disagree.
+        assertTrue(
+            "the answer's lock snapshot does not refresh the one-off's drawing",
+            send.contains("_readAloudUnlocked.value = !facts.locked"),
+        )
+    }
+
+    @Test
+    fun `the one-off action is drawn only where the rule allows it, and reads once`() {
+        val home = source("ui/screens/HomeScreen.kt")
+        assertTrue(
+            "the one-off action is not drawn at all",
+            home.contains("offer.oneOffLabel(readAloudUnlocked)"),
+        )
+        assertTrue(
+            "the one-off action does not go through the runtime",
+            home.contains("readAloudLastAnswer(oneOff = true)"),
+        )
+        assertTrue(
+            "the one-off action is drawn without the lock the runtime refreshed",
+            home.contains("JarvisRuntime.readAloudUnlocked.collectAsState()"),
+        )
+        // It is the REFUSAL STRIP's control: it sits with the withheld
+        // sentence, never in place of Read aloud on a readable answer.
+        val withheldAt = home.indexOf("offer.withheld")
+        val oneOffAt = home.indexOf("offer.oneOffLabel(readAloudUnlocked)")
+        assertTrue("the one-off is not on the refusal strip", withheldAt > 0 && oneOffAt > withheldAt)
+        // No auto-speak: the runtime has the one function and never starts a
+        // read by itself - both calls are the owner's own taps in the UI.
+        assertEquals(
+            "the runtime starts a read on its own",
+            1,
+            runtime.split("readAloudLastAnswer(").size - 1,
+        )
+        // The tap asks the live questions again, and each hard refusal wins.
+        val read = body(runtime, "suspend fun readAloudLastAnswer(oneOff: Boolean = false)")
+        assertTrue("the one-off path does not ask the live lock", read.contains("readAloudLockedNow()"))
+        assertTrue("a locked tap is not refused", read.contains("ReadAloud.LOCKED"))
+        assertTrue("the one-off path does not ask the live link", read.contains("readAloudStaleNow()"))
+        assertTrue("a stale tap is not refused", read.contains("ReadAloud.OFFLINE"))
+        assertTrue(
+            "the one-off is not limited to a memory-only or screen-only refusal",
+            read.contains("offer.facts.oneOffAt(unlockedNow = true)"),
+        )
+        // Nothing about it is stored afterwards: no setting, no flow, no field.
+        assertFalse("the one-off became a stored grant", runtime.contains("oneOff.value"))
+        assertFalse("the one-off became a setting", runtime.contains("setOneOff"))
+        assertFalse("a new route was invented for the one-off", runtime.contains("/api/voice/oneoff"))
+    }
+
+    @Test
+    fun `the lock the one-off is drawn against is refreshed by the screen and the tap`() {
+        val activity = source("MainActivity.kt")
+        assertEquals(
+            "the screen does not refresh the lock on the way in and out",
+            2,
+            activity.split("JarvisRuntime.refreshReadAloudUnlocked()").size - 1,
+        )
+        val read = body(runtime, "suspend fun readAloudLastAnswer(oneOff: Boolean = false)")
+        assertTrue(
+            "the tap does not refresh the drawing's lock",
+            read.contains("_readAloudUnlocked.value = !lockedNow"),
+        )
+        assertTrue(
+            "a lock found during a read does not clear the drawing's lock",
+            runtime.contains("_readAloudUnlocked.value = false"),
+        )
+    }
+
+    @Test
+    fun `the memory refusal still says what happened, and names the switch`() {
+        // The owner's report of 2026-11-06: "it said it was on my screen ...
+        // even though it's okay to read these ones out loud". A memory-only
+        // block must still say what happened, on both paths, with the switch
+        // named while it is OFF.
+        assertEquals(
+            "the two memory sentences have drifted apart",
+            ReadAloud.MEMORY_ON_SCREEN,
+            PrivateAloud.MEMORY_ON_SCREEN,
+        )
+        assertEquals(
+            "the two switch hints have drifted apart",
+            ReadAloud.MEMORY_SWITCH_HINT,
+            PrivateAloud.MEMORY_SWITCH_HINT,
+        )
+        assertTrue(
+            "the hint does not name the button on the settings row",
+            MemoryAloud.TURN_ON in ReadAloud.MEMORY_SWITCH_HINT,
+        )
+        assertEquals("Read them out", MemoryAloud.TURN_ON)
+        // The strip says the memory sentence (ReadAloud.Facts.withheld), and
+        // the voice path passes the live switch into its line so the hint is
+        // said only while it is OFF.
+        val voice = source("voice/VoiceSession.kt")
+        assertTrue(
+            "the voice path's memory line does not know the phone's setting",
+            voice.contains("PrivateAloud.refusalLine(refusalNow(), memoryAloudOn())"),
+        )
+        val readAloud = source("voice/ReadAloud.kt")
+        assertTrue(
+            "the typed strip no longer says the memory sentence",
+            readAloud.contains("MEMORY_ON_SCREEN"),
+        )
+        assertTrue(
+            "the refusal strip stopped drawing the one sentence",
+            source("ui/screens/HomeScreen.kt").contains("offer.withheld"),
         )
     }
 

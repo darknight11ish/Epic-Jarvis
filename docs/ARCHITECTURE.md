@@ -2924,12 +2924,14 @@ backend routes, in both directions; the rest are listed here only.
   for this one case, and the phone's own setting is: Settings, Voice, "Read out
   answers that use what Jarvis remembers". It is saved on the phone
   (`data/ClientSettings.readMemoriesAloud`) and never sent to the PC; it is OFF
-  by default; it covers only the mic press on this phone, and only when the
+  by default; it covers the mic press on this phone (and, since the owner's
+  decision of 2026-11-06, a typed answer read aloud on it), and only when the
   phone was unlocked at that press (the keyguard is read once, at the press,
   and never again); and it lifts ONLY the remembered-facts refusal - a
   sensitive saved fact, a private question, the router's private gate, a
-  private tool and an answer about the screen all still keep the answer on
-  screen. There is no desktop switch and none is wanted: the PC's own
+  private tool and a screen read on the VOICE path all still keep the answer on
+  screen (the typed path's own one-off is the next bullet). There is no desktop
+  switch and none is wanted: the PC's own
   `memory_aloud` (its setting AND a real voice check) still decides what the
   PC reads, and a desktop switch here would be a second control for a button
   the desktop does not have. The phone's refusals also have honest words now:
@@ -2941,6 +2943,32 @@ backend routes, in both directions; the rest are listed here only.
   they keep on screen, which is the shared table's word and is left exactly as
   it is (`contract/private-aloud-cases.json` is untouched). No route is added,
   so `tools/check_parity.py` classifies nothing new.
+
+- **The phone's one-off "Read it aloud anyway", and its memory switch covering
+  typed answers, are the phone's, and that is one-sided on purpose** (2026-11-06;
+  the owner's report: *"my Android jarvis app was still not reading different
+  things out loud because it said it was on my screen and because it's from
+  jarvis's memories even though it's okay to read these ones out loud"*). The
+  typed "Read aloud" path had no setting of its own at all: a typed answer
+  carries only `X-Jarvis-Route` (`gate`, `injected_facts`, `injected_sensitive`)
+  and no `memory_aloud`, so an answer that used what Jarvis remembers was
+  refused with the bare line however his PC was set. The owner's 2026-11-05
+  phone switch now covers that path too, under the same three facts (this phone,
+  unlocked, nothing else private), and a one-off "Read it aloud anyway" action
+  on the refusal strip covers exactly two refusals - remembered NON-sensitive
+  facts, or a screen read - for one answer, once, on his tap, while the phone is
+  unlocked and the link is live; it is never drawn for a sensitive fact, a
+  private tool, a stale link or a locked phone, and nothing is stored afterwards
+  (`voice/ReadAloud.kt` `Facts.oneOffAt`, `Offer.oneOffLabel`). **The desktop is
+  deliberately not changed:** its HUD per-answer speaker and typed read-aloud
+  keep their own `private-speech.js` path and its PC settings, the PC's
+  `memory_aloud` (setting AND a voice check) still decides what the PC says, and
+  the shared `contract/private-aloud-cases.json` table is untouched - the phone's
+  one-off is not a rule any desktop surface follows, so it is not ported. The
+  memory sentence and its "Read them out" switch hint are the phone's words on
+  both of its own paths; the desktop's bar and HUD still say the shared
+  "It's on your screen." No route, field, card or PC setting is added, so
+  `tools/check_parity.py` classifies nothing new.
 
 - **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
   is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free
@@ -4244,7 +4272,7 @@ are deliberate and recorded rather than left to be discovered:
 | The Jarvis Live Quick Settings tile, the headset button in Live, and the 10-minute "Live ended - Resume" notification (the Jarvis Live extras), 2026-09-28 | Phone things: a tile lives in Android's pulled-down shade, a headset button reaches a phone's media session, and a notification is how a phone in a pocket offers Resume. The PC has the tray row and the Live hotkey (the desktop table) and its badge shows "Resume Live" for 15 seconds, in the Jarvis bar until the 10 minutes are up. |
 | Preferring a Bluetooth headset's microphone in Live, and saying which microphone is in use (the Jarvis Live extras), 2026-09-28 | On the phone Jarvis picks the microphone (Android's communication device; no Bluetooth permission). On the PC Windows picks it - Live opens the default microphone, both the plain and the echo-cancelled way (`aec.rs`) - so a Bluetooth headset is used when Windows makes it the default, and the Voice settings already say which microphone that is. Choosing a different microphone on the PC is a larger change to both capture paths, not made here. |
 | "Talk about this in Live" in Android's Share sheet (the Jarvis Live extras), 2026-09-28 | A Share sheet is Android's. The text is outside text exactly as a share to Home is (`provenance: "shared"`, JARVIS-API §18); the PC's quickbar already takes clipboard text with its own "clipboard" tag, in Live as anywhere. |
-| **Sending a document from the phone, and bringing a Notion export in from the phone** (`POST /api/upload/begin` / `/chunk` / `/finish`, `GET /api/notion/vaults`, `POST /api/notion/phone-import`; the owner's ask of 2026-11-05; `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`; `phone-only` in `tools/check_parity.py`) | Written with the phone's half. **The desktop needs no upload screen**: a file already goes into a folder Jarvis looks in with Windows' own copy or drag-and-drop, and the PC's Notion import is its Windows picker plus the two path-taking routes (`/api/notion/preview`, `/api/notion/import`), which stay PC-only and unchanged. The phone has no way to name a path on the PC, so its document door takes a folder path ONLY as `GET /api/folders` returned it (never free text) and its Notion door takes an uploaded `.zip` id plus a vault id the PC offered - it cannot create a grant and cannot type a vault. The PC's ONE card is unchanged in either case (`receive_uploaded_document` for a document, `import_notion_export` for a Notion import): nothing lands before the owner says yes, and both phone buttons are held on a stale link. Nothing is kept on the phone (the file is streamed in 1 MiB chunks and dropped), and a PC without the routes answers 404, which the screen says in its own words and sends nothing for. A desktop screen on the two new no-path routes is a named follow-up, not a rule for the phone to wait for. |
+| **Sending a document from the phone, and bringing a Notion export in from the phone** (`POST /api/upload/begin` / `/chunk` / `/finish`, `GET /api/notion/vaults`, `POST /api/notion/phone-import`; the owner's ask of 2026-11-05; `.dsh-scratch/DOC-INTAKE-DESIGN-2026-11-05/DESIGN.md`; `phone-only` in `tools/check_parity.py`) | Written with the phone's half. **The desktop needs no upload screen**: a file already goes into a folder Jarvis looks in with Windows' own copy or drag-and-drop, and the PC's Notion import is its Windows picker plus the two path-taking routes (`/api/notion/preview`, `/api/notion/import`), which stay PC-only and unchanged. The phone has no way to name a path on the PC, so its document door takes a folder path ONLY as `GET /api/folders` returned it (never free text) and its Notion door takes an uploaded `.zip` id plus a vault id the PC offered - it cannot create a grant and cannot type a vault. The PC's ONE card is unchanged in either case (`receive_uploaded_document` for a document, `import_notion_export` for a Notion import): nothing lands before the owner says yes, and both phone buttons are held on a stale link. Nothing is kept on the phone (the file is streamed in 1 MiB chunks and dropped), and a PC without the routes answers 404, which the screen says in its own words and sends nothing for. A desktop screen on the two new no-path routes is a named follow-up, not a rule for the phone to wait for. **The feature list says `both` apps for both abilities, and that is not a contradiction of this row (2026-11-06):** the phone's half is the two buttons above; on the PC the same ability is reached the way it always was - copy a file into a listed folder, and the Notion plugin's own preview and import - so no PC screen is promised and none is missing. `features/features.json` rows `document-from-phone` and `notion-import` carry `surface: "both"`, and this sentence is the record that a person checked that claim: the catalogue checker can only check a `surface`'s shape, not its truth. |
 
 **The fading-card radar and the "Mark my answer" button were phone-only in
 slice 22B (2026-10-17) and are on BOTH apps since 2026-10-21.** The two PC

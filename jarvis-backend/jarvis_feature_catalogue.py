@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 178 rows from features/features.json.
+The owner's feature list, as data: 179 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 175f8d8304e7303a1f2f2fbb6e596814e0fe11892dfaeb21151b2eab571dac79); the apps' Features pages read their own
+`features/features.json` (sha256 16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "175f8d8304e7303a1f2f2fbb6e596814e0fe11892dfaeb21151b2eab571dac79"
+SOURCE_SHA256 = "16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -30,6 +30,7 @@ FEATURES = (
         "asks": "No card to just talk.",
         "limit": "The answer comes from a model running on your own PC, so a long answer can take a while.",
         "surface": "both",
+        "aliases": ["type a question and jarvis answers in the box"],
         "covers": [],
     },
     {
@@ -52,6 +53,7 @@ FEATURES = (
         "asks": "No card. On the PC, what you said is checked as your voice first. On the phone's talk button the voice is not checked - a press is your act, like typing (2026-11-02).",
         "limit": "The phone needs your voice trained before it offers the button, and the PC able to turn speech into words.",
         "surface": "both",
+        "aliases": ["i hold a button, speak, and let go"],
         "covers": ["phone-talking"],
     },
     {
@@ -74,6 +76,7 @@ FEATURES = (
         "asks": "No card to read aloud; an answer that used a sensitive fact stays on screen unless you allow it in Settings.",
         "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
         "surface": "both",
+        "aliases": ["reads your answers aloud in the voice i chose"],
         "covers": ["talking", "how-it-talks"],
     },
     {
@@ -96,6 +99,7 @@ FEATURES = (
         "asks": "One approval card before your voice is learned. The recordings are deleted either way.",
         "limit": "Nothing is learned until you approve it.",
         "surface": "both",
+        "aliases": ["learn what you sound like, so it only listens to you"],
         "covers": ["how-it-talks"],
     },
     {
@@ -107,6 +111,7 @@ FEATURES = (
         "asks": "A stricter choice is instant; a looser one raises an approval card.",
         "limit": "It cannot tell a recording or a copy from your real voice.",
         "surface": "both",
+        "aliases": ["choose whether a voice turn is trusted like the talk button or asks more of you"],
         "covers": ["entry.voice-check", "how-it-talks"],
     },
     {
@@ -118,6 +123,7 @@ FEATURES = (
         "asks": "Adding a custom voice raises a card; going back to the built-in voice is instant.",
         "limit": "The voice pack is a 350 MB download on the PC, checksum-pinned.",
         "surface": "both",
+        "aliases": ["pick jarvis's voice, hear a sample of it, and add voices of your own"],
         "covers": ["settings.voices", "how-it-talks"],
     },
     {
@@ -165,6 +171,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "About two seconds of what you say is checked for your voice only, and is never written down.",
         "surface": "both",
+        "aliases": ["cut in by talking, instead of waiting for the answer to finish"],
         "covers": [],
     },
     {
@@ -200,7 +207,7 @@ FEATURES = (
         "limit": "On the PC only - a client must not turn speech into words. It waits while Jarvis Live is on.",
         "surface": "desktop",
         "surface_reason": "The PC types what you say into the program in front, using a key you hold there; a phone must not turn speech into words, so it has no such key to hold (the row's own limit).",
-        "aliases": ["dictation", "talk to type"],
+        "aliases": ["dictation", "talk to type", "hold a key, speak, and jarvis types what you said into the program in front"],
         "covers": ["how-it-talks"],
     },
     {
@@ -224,7 +231,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "Only on a PC that has it. It also learns nothing from what you say there - no fact is saved, even with a \"Remember:\".",
         "surface": "both",
-        "aliases": ["incognito", "incognito chat"],
+        "aliases": ["incognito", "incognito chat", "starts a chat where nothing is kept and nothing i saved is used"],
         "covers": [],
     },
     {
@@ -248,7 +255,7 @@ FEATURES = (
         "asks": "No card - it is shown on screen only, and never handed to the AI.",
         "limit": "Hidden while the private lists are hidden.",
         "surface": "both",
-        "aliases": ["search history", "search what was said"],
+        "aliases": ["search history", "search what was said", "searches my own past chats"],
         "covers": [],
     },
     {
@@ -260,7 +267,7 @@ FEATURES = (
         "asks": "Setting one up repeats, so it raises one card. \"Brief me now\" raises none.",
         "limit": "Shows the count and the senders of new email unless you choose the count only.",
         "surface": "both",
-        "aliases": ["morning briefing"],
+        "aliases": ["morning briefing", "gives me a morning briefing"],
         "covers": ["brain.work.briefing", "settings.briefing-settings", "work-and-attention"],
     },
     {
@@ -306,6 +313,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "A widget's tile actions are a fixed set, its arrangement is one of four fixed ones, and nothing a widget shows is ever turned into an instruction.",
         "surface": "both",
+        "aliases": ["draws small widgets i describe on my desktop or phone"],
         "covers": ["brain.work.widgets", "home-overview"],
     },
     {
@@ -385,6 +393,7 @@ FEATURES = (
         "asks": "Everyday facts save with no card. Health, money, passwords and account numbers wait for your yes.",
         "limit": "Only your own words count - never a web page, an email, a document or tool output.",
         "surface": "both",
+        "aliases": ["saves everyday facts about me automatically"],
         "covers": ["brain.memory.auto", "memory", "settings.learning"],
     },
     {
@@ -464,6 +473,7 @@ FEATURES = (
         "asks": "The PC raises the only cards here; every change is held while the connection is catching up.",
         "limit": "A topic changes what Jarvis learns; the PC raises the cards and every change waits while the connection catches up.",
         "surface": "both",
+        "aliases": ["sorts what it remembers into topics"],
         "covers": ["brain.memory.topics", "memory-lists"],
     },
     {
@@ -520,6 +530,7 @@ FEATURES = (
         "asks": "It only proposes: every fact it finds waits for its own yes.",
         "limit": "Imported text is outside text - it is never learned from.",
         "surface": "both",
+        "aliases": ["imports a chat export from chatgpt, claude, gemini or deepseek"],
         "covers": ["brain.memory.history-import", "memory-lists"],
     },
     {
@@ -542,6 +553,7 @@ FEATURES = (
         "asks": "Tagging a chat yourself needs no card. Turning the overnight suggestions on raises one card, and every tag it suggests is one more - a suggestion is filed only if you tap it.",
         "limit": "Tags hide with the private lists.",
         "surface": "both",
+        "aliases": ["tag my chats and suggests tags overnight"],
         "covers": ["brain.history.tags", "brain.history.tag-suggestions", "memory-lists"],
     },
     {
@@ -564,6 +576,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "Drawn from the same memory lists, so it hides with them. On a PC that cannot draw 3D - or with reduced motion on - each look is drawn flat instead, in the same shapes. Three of the looks would like details the PC does not send (a saved thing's topic, its date and its safety ring), so the Nebula, DNA helix and Radar dome work those out from what kind of thing each name is; the Radar dome's three rings are kinds of thing, not a claim about safety. The phone's picture is read-only - no add, edit, merge or drag - and the names it leaves out stay in the list below.",
         "surface": "both",
+        "aliases": ["draws a map of everything you know about me"],
         "covers": ["brain.tab.galaxy", "memory-lists"],
     },
     {
@@ -599,6 +612,7 @@ FEATURES = (
         "asks": "No card. The picture is never saved; the question and the answer are kept like any other chat.",
         "limit": "Passwords, keys and card numbers are painted solid black first, and if Jarvis's own window is in front - or the cleaner cannot check the picture - none is attached and Jarvis says why. With one graphics card it reads the screen's words; picture mode can read the picture too, slowly, and is off by default.",
         "surface": "both",
+        "aliases": ["looks at the window in front of me once and answers about it"],
         "covers": ["settings.screen-look", "screens-and-pictures"],
     },
     {
@@ -610,6 +624,7 @@ FEATURES = (
         "asks": "Starting is held while the connection is catching up or App lock would ask; stopping never is.",
         "limit": "A visible \"Jarvis is watching\" sign shows the whole time. It pauses on password fields and on the apps you exclude (banking), and nothing is saved.",
         "surface": "both",
+        "aliases": ["watches my screen with me and comments on it"],
         "covers": ["screens-and-pictures"],
     },
     {
@@ -621,6 +636,7 @@ FEATURES = (
         "asks": "Turning it on raises one card on the PC; turning it off is instant.",
         "limit": "Off by default, slow, and it runs on the processor rather than the graphics card.",
         "surface": "both",
+        "aliases": ["read the picture of my screen, not only its words"],
         "covers": ["screens-and-pictures"],
     },
     {
@@ -655,6 +671,7 @@ FEATURES = (
         "asks": "No card, and nothing is saved.",
         "limit": "A YouTube quiz sends the link once (one card) and keeps it nowhere.",
         "surface": "both",
+        "aliases": ["quizzes me on a text"],
         "covers": ["brain.work.quiz", "brain.work.quiz.youtube"],
     },
     {
@@ -690,6 +707,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "The words hide with the private lists.",
         "surface": "both",
+        "aliases": ["asks me my saved study questions again on a schedule"],
         "covers": ["brain.work.decks"],
     },
     {
@@ -701,6 +719,7 @@ FEATURES = (
         "asks": "No card normally. In a turn where Jarvis has read an email, a page or a file, writing a note raises one.",
         "limit": "Only the note apps this PC is set up for. The quick-note key opens the bar ready to file; it does not save by itself, and the phone has no keyboard shortcuts. With App lock on, adding a note to a running task needs an unlock first.",
         "surface": "both",
+        "aliases": ["write a note into obsidian, logseq or joplin"],
         "covers": ["notes-and-wiki"],
     },
     {
@@ -712,7 +731,7 @@ FEATURES = (
         "asks": "Reading and searching ask nothing. Creating a BRAND-NEW note from your own typed or spoken words in the HUD asks no card at all (it is additive, and one Undo removes exactly the new file; after a turn that read outside text, or from a background job, it still asks its one card); adding to it, changing one line, renaming or moving it, or saving a template raises ONE approval card; denying it changes nothing.",
         "limit": "Obsidian vault only, one note per request; no deleting a note or a line, no bulk edits, no moving outside the vault, no folder renames and no cloud sync. A note change waits while the turn has read outside text.",
         "surface": "both",
-        "aliases": ["notes editor", "the notes editor", "vault editor", "customize a note", "create a note", "notes toolbar"],
+        "aliases": ["notes editor", "the notes editor", "vault editor", "customize a note", "create a note", "notes toolbar", "creates and customizes my notes"],
         "covers": ["notes-editor", "notes-customization", "notes-rename-move"],
     },
     {
@@ -724,6 +743,7 @@ FEATURES = (
         "asks": "Adding a folder goes through the Windows picker and raises one card; removing one is instant.",
         "limit": "A Notion export goes into a folder Jarvis searches; imported notes are outside text and are never learned as facts.",
         "surface": "both",
+        "aliases": ["choose which folders on my pc you may look in"],
         "covers": ["settings.folders", "documents-and-search"],
     },
     {
@@ -735,7 +755,7 @@ FEATURES = (
         "asks": "Reading needs no card. Writing a note back after reading it raises one, as any note write after outside text does.",
         "limit": "Only files in a folder Jarvis may look in; text from a document is outside text and is never learned as a fact.",
         "surface": "both",
-        "aliases": ["ask about a pdf", "ask about a document"],
+        "aliases": ["ask about a pdf", "ask about a document", "reads a pdf or a word file and answers questions about it"],
         "covers": ["documents-and-search"],
     },
     {
@@ -780,6 +800,7 @@ FEATURES = (
         "asks": "Turning it on raises one card on the PC; turning it off is instant.",
         "limit": "Only on the PC; the phone can only read what the PC sends back.",
         "surface": "both",
+        "aliases": ["runs a browser without a window"],
         "covers": ["settings.browser-engine"],
     },
     {
@@ -791,6 +812,7 @@ FEATURES = (
         "asks": "Adding a topic raises one card.",
         "limit": "It never comes to find you - you ask. A repository page is text from a stranger: it is scanned first, and a flagged one is listed with the reason instead of being handed to a model.",
         "surface": "both",
+        "aliases": ["tells me what is new on github"],
         "covers": ["brain.tab.watch", "brain.watch.watchlist", "work-and-attention", "limits-and-notes"],
     },
     {
@@ -813,7 +835,7 @@ FEATURES = (
         "asks": "One card before the chat lists exactly which personal details Jarvis may give. Every offer (refund, cancellation, change) gets its own card. If the agent asks whether they are talking to a bot, Jarvis never claims to be human - it hands that question to you.",
         "limit": "Jarvis writes in your name, at human speed. Identity checks - card digits, security questions, codes - are always handed to you. The transcript can be exported as a file that is not encrypted.",
         "surface": "both",
-        "aliases": ["customer support", "support chat"],
+        "aliases": ["customer support", "support chat", "run a customer support chat on your behalf and bring back what they offered"],
         "covers": ["brain.work.support"],
     },
     {
@@ -858,20 +880,31 @@ FEATURES = (
         "asks": "One approval card per file, naming the exact filename, folder and size. The phone can fetch it once, within ten minutes.",
         "limit": "One file per card, at most 10 MiB, ten minutes and one download, and only inside Folders Jarvis may look in. Nothing about the file is kept on the phone.",
         "surface": "both",
-        "aliases": ["send a file to my phone", "send file to phone", "file to phone", "send a file to the phone"],
+        "aliases": ["send a file to my phone", "send file to phone", "file to phone", "send a file to the phone", "sends one file from my pc to my phone"],
         "covers": ["file-from-pc", "files", "settings.files"],
+    },
+    {
+        "id": "document-from-phone",
+        "group": "Notes and files",
+        "title": "Send a document from your phone",
+        "what": "You pick one document on the phone and it lands on this PC, in a folder Jarvis may look in.",
+        "where": "On the phone: Settings, Folders Jarvis may look in, then Send a document. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
+        "asks": "One approval card on the PC before anything lands, naming the file, its size and the folder. While it waits the phone says \"Sent to your PC - approve the card on your PC\"; a no, a timeout or a dropped link writes nothing.",
+        "limit": "One file at a time, up to 50 MB, and only the kinds Jarvis can read: PDF, Word, Excel, PowerPoint, text, Markdown (both .md and .markdown) and CSV. It never adds a folder grant - it only uses a folder you already gave. The phone keeps no copy, nothing is run or opened, and both phone buttons are held while the link is catching up.",
+        "surface": "both",
+        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone", "upload documents from my phone through the app and have you process them", "send a file from my phone to my pc"],
+        "covers": [],
     },
     {
         "id": "notion-import",
         "group": "Notes and files",
         "title": "Import a Notion export into an Obsidian vault",
         "what": "Turn a Notion export into an Obsidian vault: ids off names, properties as frontmatter, one card, Undo.",
-        "where": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
+        "where": "In Notion: Settings > Export all workspace content, as Markdown & CSV, then save the .zip it makes. On the phone: Settings, Folders Jarvis may look in, then Bring in a Notion export - pick one of the vaults this PC has already checked, pick the .zip, read the free preview, then press Bring it in. On the PC: the Notion import plugin's own preview and import, which write into the vault after the same one card. The phone only ever picks a vault from that checked list; it cannot type a path.",
         "asks": "Preview is free; the import raises one card and keeps an Undo.",
-        "limit": "One export at a time into one vault; it does not create a Notion workspace and does not delete the source export.",
-        "surface": "desktop",
-        "surface_reason": "The import writes into an Obsidian vault on this PC; the phone has no Notion-import screen.",
-        "aliases": ["notion import", "import a notion export"],
+        "limit": "One export at a time into one vault; it does not create a Notion workspace and does not delete the source export. The vault writing is the PC's: the phone cannot type a path, add a folder or choose anything this PC did not offer it.",
+        "surface": "both",
+        "aliases": ["notion import", "import a notion export", "import my notion notes", "import my notion notes as markdown", "import my notion notes as a markdown file", "process my notion notes in the android app", "turns a notion export into an obsidian vault", "open and process my notion notes as a markdown file in the android app and send them to the main jarvis", "import a notion export from my phone", "import a notion export from my phone into my vault", "open my notion notes in the android app and send them to the main jarvis"],
         "covers": ["notion-import"],
     },
     {
@@ -884,7 +917,7 @@ FEATURES = (
         "limit": "Off by default and PC-only; no per-note mode outside the selection you name; one vault this PC is set up for. It never deletes a note, and one Undo puts the whole batch back.",
         "surface": "desktop",
         "surface_reason": "The vault is on this PC, so the organizer is PC-only; the phone has no vault-organizer screen.",
-        "aliases": ["vault organizer"],
+        "aliases": ["vault organizer", "tidies up an obsidian vault with tags and maps of content"],
         "covers": ["vault-organizer"],
     },
     {
@@ -896,6 +929,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "Plain code on the PC adds it up - no model sees the numbers, and the phone only shows what the PC sends.",
         "surface": "both",
+        "aliases": ["adds up a bank export into a small spending table"],
         "covers": ["settings.spending", "money-and-health"],
     },
     {
@@ -907,6 +941,7 @@ FEATURES = (
         "asks": "No card, and nothing is saved.",
         "limit": "Nothing is asked or sent while the private lists are hidden or App lock is on.",
         "surface": "both",
+        "aliases": ["runs a retirement what-if from numbers i type in"],
         "covers": ["brain.work.retirement", "money-and-health"],
     },
     {
@@ -941,6 +976,7 @@ FEATURES = (
         "asks": "No card.",
         "limit": "A crisis question and its answer are never learned from and never counted, and do not stay in the thread. The chat is still kept in History, called \"A difficult moment\".",
         "surface": "both",
+        "aliases": ["answers with crisis help lines if a message sounds like a crisis"],
         "covers": ["safety.crisis-help", "money-and-health", "when-something-is-wrong"],
     },
     {
@@ -952,7 +988,7 @@ FEATURES = (
         "asks": "A cost answer raises no card; it reads the calendar's next event with a place, and never writes to the calendar.",
         "limit": "Uses public parking data for the address; a private car park or a tariff it cannot read is said plainly, never guessed.",
         "surface": "both",
-        "aliases": ["parking costs", "free parking"],
+        "aliases": ["parking costs", "free parking", "works out what a parking stay costs and finds free parking"],
         "covers": ["parking"],
     },
     {
@@ -964,7 +1000,7 @@ FEATURES = (
         "asks": "A lookup asks nothing: the radar is read-only. Turning it on is a hand edit of the settings file today, with no card; turning it off is immediate.",
         "limit": "Off by default, so nothing is searched until it is on. Google Flights' public page is unofficial and experimental, so it can change or break; a failed read says so and no price is invented. It never books, holds a seat, adds to a cart or checks out - there is no such code path.",
         "surface": "both",
-        "aliases": ["airfare", "flight cost", "flight price", "price history for flights"],
+        "aliases": ["airfare", "flight cost", "flight price", "price history for flights", "tracks flight prices and a price history"],
         "covers": ["money-and-health"],
     },
     {
@@ -976,7 +1012,7 @@ FEATURES = (
         "asks": "No card for logging: a new habit and a tick are the cardless plain_repeat class, and stopping is immediate.",
         "limit": "No score, streak, percentage or chart of judgement anywhere in it - the record is one row per habit per day, and stopping keeps every row.",
         "surface": "both",
-        "aliases": ["habit tracker", "habit check-in", "habit check-ins", "track a habit"],
+        "aliases": ["habit tracker", "habit check-in", "habit check-ins", "track a habit", "nudges me to do a habit and records that i did it"],
         "covers": [],
     },
     {
@@ -988,7 +1024,7 @@ FEATURES = (
         "asks": "No card for logging: a mood entry is personal logging, like ticking a to-do.",
         "limit": "One row per day, and a second entry that day replaces the first. It is excluded from learning entirely - mood data never becomes a fact, by construction rather than by a card - and it is never the crisis path.",
         "surface": "both",
-        "aliases": ["mood tracker", "mood log", "mood journal", "mood diary"],
+        "aliases": ["mood tracker", "mood log", "mood journal", "mood diary", "keeps a mood log"],
         "covers": [],
     },
     {
@@ -1024,6 +1060,7 @@ FEATURES = (
         "asks": "Off by default. Turning it on raises one card; turning it off is instant, and it never applies in a turn that has read outside text.",
         "limit": "Locks, doors, alarms and covers are never covered by it.",
         "surface": "both",
+        "aliases": ["switches the lights, plugs and fans i name"],
         "covers": ["home-devices"],
     },
     {
@@ -1091,6 +1128,7 @@ FEATURES = (
         "asks": "One card per email, showing the exact recipients, subject and full text, decided by tapping. Never an \"always allow\".",
         "limit": "The card says plainly when the conversation has read outside text. Sending is a named way out of the PC.",
         "surface": "both",
+        "aliases": ["writes an email and sends it once i say yes"],
         "covers": ["settings.email-sending", "home-calendar-email"],
     },
     {
@@ -1103,6 +1141,7 @@ FEATURES = (
         "limit": "Writes only to your own Drafts folder after one card; it never sends anything.",
         "surface": "desktop",
         "surface_reason": "A draft is written into your mail account's Drafts folder by the PC's backend after the card is answered on the PC; the phone has no Drafts card.",
+        "aliases": ["saves a draft of a reply to my drafts folder"],
         "covers": ["home-calendar-email"],
     },
     {
@@ -1136,6 +1175,7 @@ FEATURES = (
         "asks": "Pairing by QR code or a short typed code is confirmed by one card on the PC before any key is handed over.",
         "limit": "Only your own networks are accepted: this PC, the home network, Tailscale and NordVPN Meshnet. A public tunnel is refused, with a plain message saying why.",
         "surface": "both",
+        "aliases": ["pairs my phone with you and shows the connection state"],
         "covers": ["settings.connection", "entry.checks", "phone-pairing", "brain", "limits-and-notes"],
     },
     {
@@ -1147,6 +1187,7 @@ FEATURES = (
         "asks": "Removing a lost phone is instant, and so is retiring the old shared key. Bringing a retired key back raises one card.",
         "limit": "This one can never be hidden, so a lost phone can always be removed.",
         "surface": "both",
+        "aliases": ["lists the devices connected to it"],
         "covers": ["settings.devices", "phone-pairing", "home-overview"],
     },
     {
@@ -1159,6 +1200,7 @@ FEATURES = (
         "limit": "Only the apps you choose, never banking. One-time codes are hidden before anything reaches the model, and it never makes Jarvis act. Never text messages, and Jarvis never replies or sends.",
         "surface": "phone",
         "surface_reason": "A Windows desktop has no equivalent to \"which app posted a notification, and what did it say\": NotificationListenerService is an Android concept (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["reads the notifications of apps i choose on my phone"],
         "covers": ["settings.phone-notify", "phone-notifications"],
     },
     {
@@ -1171,6 +1213,7 @@ FEATURES = (
         "limit": "Watch notifications follow the phone's own apps; every kind is off until you allow it, and the PC's notifications never go to the watch.",
         "surface": "phone",
         "surface_reason": "A smartwatch pairs with a phone, never with a Windows PC - there is nothing on the desktop for this to mean (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["shows your notifications on my smartwatch"],
         "covers": ["settings.watch-notify", "phone-extras"],
     },
     {
@@ -1207,6 +1250,7 @@ FEATURES = (
         "limit": "The tile never approves anything.",
         "surface": "phone",
         "surface_reason": "Quick Settings tiles are an Android panel, and Windows has no equivalent a program can fill with its own buttons (docs/ARCHITECTURE.md section 8).",
+        "aliases": ["adds a quick settings tile on my phone to start or end live"],
         "covers": ["settings.quick-tiles", "phone-extras", "phone-live"],
     },
     {
@@ -1241,6 +1285,7 @@ FEATURES = (
         "asks": "No card - your own words only, and it is answered without the AI model.",
         "limit": "The phone rings on the alarm channel, so it rings even on silent. It stops from the phone or after its time runs out.",
         "surface": "both",
+        "aliases": ["make your phone ring, to help you find it"],
         "covers": ["home-overview"],
     },
     {
@@ -1404,6 +1449,7 @@ FEATURES = (
         "asks": "Installing or removing one is its own decision.",
         "limit": "A skill cannot run anything - it is a folder of instructions Jarvis reads. Installing, turning one on and editing happen ONLY on the PC, through the scanner and ONE approval card, and a skill the scanner refuses is never installed at all. A skill that ships a scripts/ folder says so and never runs it. Every load is checked again, and a skill whose file changed since you approved it is scanned again first.",
         "surface": "both",
+        "aliases": ["installs extra skills with a scan verdict"],
         "covers": ["skills", "brain.model.skills", "model-page", "settings.skills-menu"],
     },
     {
@@ -1496,7 +1542,7 @@ FEATURES = (
         "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
         "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
         "surface": "both",
-        "aliases": ["cloud", "cloud api", "deepseek api", "escalate to the cloud", "try the cloud model"],
+        "aliases": ["cloud", "cloud api", "deepseek api", "escalate to the cloud", "try the cloud model", "sends a hard question to deepseek after i say yes"],
         "covers": [],
     },
     {
@@ -1508,6 +1554,7 @@ FEATURES = (
         "asks": "Turning a switch on raises one card; turning it off is instant. Pinning everyday chat raises its own card.",
         "limit": "The card is installed, but its features are not measured - every switch stays off until you turn it on.",
         "surface": "both",
+        "aliases": ["puts extra work on my second graphics card"],
         "covers": ["settings.second-card", "settings.second-card.study-helper", "settings.second-card.referee", "settings.second-card.third-card", "settings.second-card.chat-card", "hardware", "model-page"],
     },
     {
@@ -1530,6 +1577,7 @@ FEATURES = (
         "asks": "Nothing installs by itself - you press to install, then to restart.",
         "limit": "Each app checks its own release page; installing never starts by itself, and a version it cannot read is said plainly.",
         "surface": "both",
+        "aliases": ["tells me when a newer build of this app exists and installs it"],
         "covers": ["settings.updates", "limits-and-notes"],
     },
     {
@@ -1600,7 +1648,7 @@ FEATURES = (
         "asks": "Setting the folder raises one card. Restoring is one card that always needs Windows Hello. Asking for a backup from the phone raises nothing: the file is written only once you say you have saved the recovery code the phone shows you.",
         "limit": "Locked with a recovery code only you have, shown once - lose the code and the backup is useless, and Jarvis cannot recover it. The phone shows the code and will not write the file until you tick that you have saved it, so an unfinished run leaves your PC untouched. Jarvis cannot prove from the phone that a backup opens: only the code opens one, and codes are only typed on the PC. Each new backup deletes the oldest of the last few kept, so making many pushes older copies out. Erased facts stay in older backups until they age out.",
         "surface": "both",
-        "aliases": ["backups"],
+        "aliases": ["backups", "makes one locked backup file into a folder i pick"],
         "covers": ["settings.backup", "backups"],
     },
     {
@@ -1624,7 +1672,7 @@ FEATURES = (
         "asks": "No card - it only reads the PC's own settings and the live state of each way out.",
         "limit": "Read-only, and it changes nothing. Every tool the AI model can be offered is switched on in Settings, What asks first since 2026-11-04 - the raw shell, computer and browser control, web-page reading, account connection and REA included. The four whose own switch decides them say which switch: the data and maths sandbox, Web search for the two conversation tools, and the product check, by the line [product_check] enabled = true.",
         "surface": "both",
-        "aliases": ["what jarvis can reach"],
+        "aliases": ["what jarvis can reach", "lists every way it can reach something outside itself and whether it is on"],
         "covers": ["settings.reach", "documents-and-search"],
     },
     {
@@ -1720,7 +1768,7 @@ FEATURES = (
         "limit": "This PC only: the copies are files on this PC, and a phone has no page for them.",
         "surface": "desktop",
         "surface_reason": "The copies are files on this PC, and a phone has no page for them (the row's own limit).",
-        "aliases": ["file history", "version history"],
+        "aliases": ["file history", "version history", "keep a copy of a file before it changes one, so you can see exactly what changed and put a version back"],
         "covers": ["guardian_history"],
     },
     {
@@ -1817,7 +1865,7 @@ FEATURES = (
         "asks": "Off until it is switched on; one approved call per command.",
         "limit": "Off by default; one command and its own output, nothing interactive - it can change files, so keep it off unless you need it.",
         "surface": "both",
-        "aliases": ["shell command", "command line"],
+        "aliases": ["shell command", "command line", "runs one shell command on my pc"],
         "covers": ["shell-commands"],
     },
     {
@@ -1866,7 +1914,7 @@ FEATURES = (
         "limit": "Only the containers Jarvis itself ships; it never pulls a new image.",
         "surface": "desktop",
         "surface_reason": "Docker runs on this PC only; the phone has no Docker screen.",
-        "aliases": ["docker", "containers"],
+        "aliases": ["docker", "containers", "manages docker containers"],
         "covers": ["docker-containers"],
     },
     {
@@ -1878,7 +1926,7 @@ FEATURES = (
         "asks": "Answering asks nothing. Applying a preset or switching a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it.",
         "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed is only stated when this PC measured it; the phone still has no list of models to browse.",
         "surface": "both",
-        "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running"],
+        "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running", "tells me which model is answering"],
         "covers": ["model-page"],
     },
     {
@@ -1914,6 +1962,7 @@ FEATURES = (
         "asks": "A \"make stricter\" switch is instant. Loosening one action is PC-only and costs one card plus Windows Hello. Offering a tool to the AI model is a separate one-tool switch for EVERY tool the AI can be offered since 2026-11-04 - the raw ones and the everyday helpers included - PC-only, with ONE card plus Windows Hello each; turning it off is instant.",
         "limit": "Every tool the AI model can be offered has a switch in-app since 2026-11-04; the four whose own switch decides them (the data and maths sandbox, the two web-search conversation tools, and the product check) say so and are turned on from their own switch. Nothing switches two tools at once, and the phone is read-only.",
         "surface": "both",
+        "aliases": ["lists every action you can take and whether it asks me first"],
         "covers": ["settings.asks-first", "asks-first", "home-devices", "money-and-health"],
     },
     {
@@ -1947,6 +1996,7 @@ FEATURES = (
         "asks": "Nothing is decided while the stream is stale - refusing is never held, approving can be.",
         "limit": "This is deliberate: acting on a stale picture of the world is how the wrong thing gets approved.",
         "surface": "both",
+        "aliases": ["stop acting and says so rather than guessing"],
         "covers": ["safety.stale-link", "when-something-is-wrong"],
     },
     {
@@ -1969,6 +2019,7 @@ FEATURES = (
         "asks": "No card - it only reads.",
         "limit": "It holds what is waiting on you, so it can never be hidden. The full content-risk list is on the desktop only.",
         "surface": "both",
+        "aliases": ["shows content risk and the audit chain"],
         "covers": ["brain.tab.trust", "brain.trust.ledger", "brain.trust.content-risk", "records", "when-something-is-wrong"],
     },
     {
@@ -1980,6 +2031,7 @@ FEATURES = (
         "asks": "Nothing to press - it is a warning.",
         "limit": "No control clears it, and it is never hidden.",
         "surface": "both",
+        "aliases": ["warns me when text tried to rush me"],
         "covers": ["brain.trust.rush-latch", "when-something-is-wrong"],
     },
     {
@@ -2074,7 +2126,7 @@ FEATURES = (
         "asks": "Listing raises no card. Turning one on raises ONE card (modify_own_code), because a plugin is program code that runs inside Jarvis at start-up; turning one off is immediate and needs no card.",
         "limit": "One plugin per call, by a name Jarvis lists. A change lands the next time Jarvis starts - Jarvis cannot restart itself - so the copy running now keeps going until then. No plugin folder is ever deleted, moved or edited, and a plugin switched off inside its own plugin.json is a hand edit, not a chat toggle.",
         "surface": "both",
-        "aliases": ["plugins", "drop-in plugins", "plugin list"],
+        "aliases": ["plugins", "drop-in plugins", "plugin list", "turns one of your drop-in plugins on or off when i ask in chat"],
         "covers": [],
     },
 )

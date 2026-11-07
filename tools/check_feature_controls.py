@@ -493,15 +493,22 @@ def main(argv=None):
     # speaking-voice wiring is the named next slice). 103 + 2 -> 105
     # Command-Only, 176 + 2 -> 178 features. Measured from the contract, not
     # chosen.
+    # 2026-11-06 (the phone doors' catalogue fix): "Send a document from your
+    # phone" joined as one Command-Only row - the phone's door and the PC's ONE
+    # card are the whole feature, and there is no switch to turn on or off, so
+    # it could not be a Switchable row. 105 + 1 -> 106 Command-Only, 178 + 1 ->
+    # 179 features. The notion-import row's surface moved desktop -> both in the
+    # same change, which moves no label: a "both" Command-Only row is still one
+    # Command-Only row. Measured from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 105, LAB_ALWAYS: 12,
+        LAB_COMMAND: 106, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/105/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/106/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
-           "contract label_counts must be 43/2/16/105/12; got %r" % (contract.get("label_counts"),))
+           "contract label_counts must be 43/2/16/106/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME
     # five strings (it may not silently reword them), and the matrix must say
     # so; classification counts are derived here, never copied from it.

@@ -7125,6 +7125,34 @@ and the shipped TOML's `import_notion_export = "ask"` tier, the folder import
 driven end to end on a real zip in a temp folder, and the answer held to
 promising nothing it cannot keep.
 
+**2026-11-06: the phone's own Notion door exists, and the catalogue finally
+says so.** The sentence above was written on 2026-10-28, when the vault
+converter had "no app has a button for it yet". The phone got one on
+2026-11-05 (`jarvis-client/.../net/NotionImport.kt`: "Bring in a Notion
+export", under Settings, Folders Jarvis may look in; `GET /api/notion/vaults`
+and `POST /api/notion/phone-import`, section 152), and the same day the phone
+grew a second door for documents ("Send a document",
+`POST /api/upload/begin|chunk|finish`, section 196). Neither door got a feature
+row: `features/features.json` still called the Notion import desktop-only with
+the reason "the phone has no Notion-import screen", and had no row at all for a
+document from the phone. So the next time the owner asked - "Can I import my
+Notion notes as a markdown file, process it in the Android app and send it to
+the main Jarvis?" - the model denied what the phone and this PC both had, which
+is the same failure as 2026-10-27 one section up. The catalogue now carries
+both: "Send a document from your phone" is a new row, "Import a Notion export
+into an Obsidian vault" is on BOTH apps and names the phone's button, and the
+fixed Notion answer no longer says no app has a button. Proven by
+`backend/test_feature_answers.py` (the owner's sentence and his words resolve
+to the rows, and the guide answers quote them), `backend/test_notion_answer.py`
+(the phone door named, and read out of the phone's own source), and
+`jarvis-client/.../FeatureDirectoryTest.kt` (both doors in the phone's
+directory). The rule it leaves behind - a new entry point updates its catalogue
+row in the same pull request - is
+`decisions.d/2026-11-06-new-door-updates-the-catalogue-row.md`. The re-ask after
+the next backend deploy: *"What is Send a document from your phone?"* and
+*"What is Import a Notion export into an Obsidian vault?"* answer from the list
+with no model.
+
 ### 21.13 "Can you connect to my calendar?" (added 2026-10-28)
 
 The owner asked exactly that in the HUD chat on 2026-10-28 and Jarvis answered

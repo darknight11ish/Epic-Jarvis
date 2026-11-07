@@ -13,12 +13,17 @@ package com.jarvis.client.voice
  *
  * What it does NOT do, and this is the half that matters:
  *  - it is OFF until he turns it on ([PrivateAloud.MEMORY_ALOUD_DEFAULT]); it
- *    is a promise this phone makes about its own button, never a new default;
+ *    is a promise this phone makes about its own button and its own "Read
+ *    aloud" tap, never a new default;
  *  - it only ever covers the talk button on THIS phone while it was unlocked
- *    when he pressed it - not "hey Jarvis", not Jarvis Live;
+ *    when he pressed it, or a TYPED answer read aloud on this phone while it is
+ *    unlocked (the owner's decision of 2026-11-06) - not "hey Jarvis", not
+ *    Jarvis Live;
  *  - a sensitive saved fact, an answer about his screen and a private tool
- *    still always stay on screen (`PrivateAloud`). Nothing about the
- *    2026-09-24 sensitive-fact rule is loosened;
+ *    still always stay on screen (`PrivateAloud`); the one exception the owner
+ *    makes himself, per answer, is the one-off "Read it aloud anyway" action
+ *    (`ReadAloud.ANYWAY`), which is his own tap and not this setting. Nothing
+ *    about the 2026-09-24 sensitive-fact rule is loosened;
  *  - it uses the existing `/api/voice/say` and the existing answer. There is
  *    no new route, no new field and no PC setting: the desktop has no
  *    matching switch on purpose (`docs/ARCHITECTURE.md` section 8).
@@ -39,12 +44,15 @@ object MemoryAloud {
      */
     fun describe(on: Boolean): String = if (on) {
         "On, on this phone: when you press the mic while it is unlocked, an answer that " +
-            "uses what Jarvis remembers is read out. A sensitive saved fact, a private tool " +
-            "and an answer about your screen still stay on your screen."
+            "uses what Jarvis remembers is read out. The same goes for a typed answer when " +
+            "you tap Read aloud on this unlocked phone. A sensitive saved fact and a private " +
+            "tool still stay on your screen; an answer about your screen is read out only " +
+            "when you tap Read it aloud anyway."
     } else {
-        "Off by default: an answer that uses what Jarvis remembers stays on your screen. " +
-            "Turning it on covers only the mic on this phone while it is unlocked - not " +
-            "\"hey Jarvis\", and not Jarvis Live."
+        "Off by default: an answer that uses what Jarvis remembers stays on your screen, and " +
+            "says so. Turning it on covers the mic and the Read aloud control on this phone " +
+            "while it is unlocked - not \"hey Jarvis\", and not Jarvis Live. A sensitive saved " +
+            "fact and a private tool still stay on your screen."
     }
 
     /**
@@ -53,8 +61,8 @@ object MemoryAloud {
      * row changes nothing there.
      */
     const val NOTE =
-        "This phone's own setting. Your PC has its own rule for what it reads out, and " +
-            "turning this on changes nothing on the PC."
+        "This phone's own setting, for its mic and its Read aloud control. Your PC has its " +
+            "own rule for what it reads out, and turning this on changes nothing on the PC."
 
     /** The button that turns it on. */
     const val TURN_ON = "Read them out"
