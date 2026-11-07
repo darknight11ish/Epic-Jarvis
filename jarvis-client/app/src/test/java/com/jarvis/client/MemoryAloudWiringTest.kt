@@ -109,7 +109,13 @@ class MemoryAloudWiringTest {
         // The rule is asked once per sentence, through the reason: the
         // decision and the line said about it come from the same read.
         assertTrue(voice, "mayRead = { refusalNow() == PrivateAloud.Refusal.NONE }" in voice)
-        assertTrue(voice, "privateLine = { PrivateAloud.refusalLine(refusalNow()) }" in voice)
+        // The line knows the phone's own memory setting (the owner's decision
+        // of 2026-11-06): a remembered-facts refusal names "Read them out" while
+        // that switch is OFF, and says only the sentence while it is on.
+        assertTrue(
+            voice,
+            "privateLine = { PrivateAloud.refusalLine(refusalNow(), memoryAloudOn()) }" in voice,
+        )
         // All three facts of the setting reach the rule.
         assertTrue(voice, "phoneMemoryAloud = memoryAloudOn()" in voice)
         assertTrue(voice, "talkButton = turn.talkButton" in voice)

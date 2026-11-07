@@ -1532,7 +1532,12 @@ class VoiceSession(
                 // "I need your OK for that..." and how the card ended: fixed
                 // words, said whatever the private-answer rule says.
                 fixedLine = { line -> CardVoice.isCardLine(line) },
-                privateLine = { PrivateAloud.refusalLine(refusalNow()) },
+                // The reason's own words. The phone's memory setting goes with
+                // them (the owner's decision of 2026-11-06): when that switch is
+                // OFF, the remembered-facts line also names it ("Read them out"
+                // in Voice settings), so a refusal he can fix does not read as a
+                // dead end. Every other refusal keeps the one fixed sentence.
+                privateLine = { PrivateAloud.refusalLine(refusalNow(), memoryAloudOn()) },
             ).speak(queue)
         }
 

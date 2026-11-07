@@ -81,6 +81,18 @@ import kotlinx.serialization.json.doubleOrNull
  * rule keeps its place, which is why this is one branch of the same `when`
  * and not a second rule.
  *
+ * AND ON A TYPED ANSWER, SINCE THE OWNER'S DECISION OF 2026-11-06. The same
+ * phone setting now covers a TYPED answer read aloud on this unlocked phone
+ * (`ReadAloud.Facts.phoneMemoryAloud`), under the same rule: only
+ * remembered NON-sensitive facts, and only when nothing else is private. This
+ * object is unchanged by that - the typed path has its own ladder because it
+ * has no `Heard` reply - but the one switch now means one thing on both
+ * paths, which is why the sentence it speaks ([MEMORY_ON_SCREEN]) is the same
+ * sentence the typed strip shows. The other half of that day's decision, the
+ * one-off "Read it aloud anyway" action, lives in `ReadAloud` too: it never
+ * reaches this voice ladder, so an answer spoken sentence by sentence can
+ * still never override anything.
+ *
  * Known gap, said plainly (the same one the API doc names): the PC cannot
  * yet label a finished answer as private, and the header is sent before the
  * model starts. This is the phone's best information until it can.
@@ -104,6 +116,21 @@ object PrivateAloud {
      * and the desktop's `private-speech.js` are untouched.
      */
     const val MEMORY_ON_SCREEN = "That answer used things I remember, so it's on your screen."
+
+    /**
+     * Names the phone's own switch, and nothing more: the words on its button
+     * ("Read them out", [MemoryAloud.TURN_ON]) and where it lives. Said after
+     * [MEMORY_ON_SCREEN] when the remembered-facts rule is the only reason AND
+     * the phone setting is off - the owner's own report of 2026-11-06 was the
+     * bare "It's on your screen." about an answer he expected to hear. Never a
+     * reason beyond the one the first sentence gives, never the answer, never a
+     * fact.
+     *
+     * The typed path keeps its own literal of the same words
+     * (`ReadAloud.MEMORY_SWITCH_HINT`) for the same off-device reason as
+     * [ON_SCREEN]; `ReadAloudWiringTest` pins that the two agree.
+     */
+    const val MEMORY_SWITCH_HINT = "To hear these every time, turn on \"Read them out\" in Voice settings."
 
     /**
      * The utterance reply's `mode` for the phone's mic press
@@ -445,4 +472,17 @@ object PrivateAloud {
      */
     fun refusalLine(refusal: Refusal): String =
         if (refusal == Refusal.MEMORY) MEMORY_ON_SCREEN else ON_SCREEN
+
+    /**
+     * The same line with the phone's memory setting in hand: when a
+     * remembered-facts refusal is the reason AND the switch that would fix it is
+     * OFF, the sentence names the switch after the one that says what happened
+     * ([MEMORY_SWITCH_HINT]). Never for any other refusal, and never when the
+     * switch is already on (then "turn it on" would be wrong). The first
+     * sentence is unchanged, so the words the owner already knows still lead.
+     */
+    fun refusalLine(refusal: Refusal, phoneMemoryAloud: Boolean): String {
+        val line = refusalLine(refusal)
+        return if (refusal == Refusal.MEMORY && !phoneMemoryAloud) "$line $MEMORY_SWITCH_HINT" else line
+    }
 }
