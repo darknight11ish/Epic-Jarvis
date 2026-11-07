@@ -1050,3 +1050,267 @@ it can be checked. The one measured performance anchor — 59.8 tok/s for Llama
 3.1 8B Q4_K_M on a 2080 Super — came second-hand and is not independently
 confirmed. **Nothing here was benchmarked on your machine.** The verification
 step exists for that reason.
+
+## The 11434 lane is pinned to the headless 2080 SUPER, measured (2026-11-07)
+
+**The owner's ruling.** Two Ollama servers run on this PC, and both were on the
+RTX 2060: the everyday lane on **11436** (`qwen3.5:9b`, 196,608, pinned to the
+2060 by its own logon task) and **Ollama's own server on 11434** (`qwen3:8b`,
+16,384, started by the Ollama desktop tray app - not by anything in this
+repository). Their two load plans add up to **15,512 MiB on a 12,288 MiB card**,
+so the Windows driver paged part of a model out to system RAM while the headless
+2080 SUPER sat at **0 MiB of 8,192**. The ruling is to pin **11434 to the
+headless RTX 2080 SUPER (UUID `GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313`, never
+an index)**, so the 2060 carries the everyday 9B alone and the headless card
+carries the small models alone.
+
+### What starts each server, measured 2026-11-07
+
+| Port | Started by | Exact evidence |
+|---|---|---|
+| **11434** | the **Ollama desktop app** (outside this repository) | `cmd.exe /C "ollama app.exe"` -> `ollama app.exe` -> `ollama.exe serve`, no `CUDA_VISIBLE_DEVICES`; its `llama-server` ran `--split-mode none --main-gpu 0` |
+| **11436** | Windows logon task `Jarvis Ollama - Everyday model (RTX 2060)` | `powershell -NoProfile -File %LOCALAPPDATA%\JarvisOllama\start-lane.ps1 -Lane main -Port 11436 -GpuUuid GPU-1ba04124-... -ContextLength 196608`; that script sets `CUDA_VISIBLE_DEVICES=<uuid>` and `OLLAMA_VULKAN=0` itself |
+| **11435** | logon task `Jarvis Ollama - Coding model (RTX 2080 Super)`, not running at the time | `start-lane.ps1 -Lane coding -Port 11435 -GpuUuid GPU-e4283ff2-...` (the display 2080 SUPER) |
+
+`start-lane.ps1` and both tasks live in `%LOCALAPPDATA%\JarvisOllama` and Task
+Scheduler - **outside this repository** - so no change here can move the 11434
+server. The change that actually needs making is a **logon task that starts that
+app with the two settings for its own process tree only**, so nothing is written
+to the owner's global environment; the exact deploy steps are below.
+
+### What was measured
+
+**`ollama ps` cannot see this spill and must not be believed for it.** On
+2026-11-07 both servers reported `size == size_vram` and "100% GPU" while the
+card was full: that number is Ollama's load **plan**, not what the card is
+holding. The real check is Windows' own per-process GPU memory counters
+(`\GPU Process Memory(*)\Dedicated Usage`), summed across a process's adapter
+instances, against the model's `/api/ps` `size`:
+
+```powershell
+$s = Get-Counter '\GPU Process Memory(*)\Dedicated Usage' -SampleInterval 1 -MaxSamples 1; foreach ($proc in 18280, 12268) { '{0}: {1:N0} MiB in VRAM' -f $proc, ((($s.CounterSamples | Where-Object { $_.Path -like "*pid_${proc}_*" }) | Measure-Object CookedValue -Sum).Sum / 1MB) }
+```
+
+Measured this way, before the pin - both servers on the 2060:
+
+| | 11434 (`qwen3:8b`, ctx 16,384) | 11436 (`qwen3.5:9b`, ctx 196,608) |
+|---|---|---|
+| load plan (`/api/ps` size) | 6,111 MiB | 9,401 MiB |
+| really in VRAM | 6,248 MiB | **5,545 MiB** |
+| paged out to system RAM | 0 (fully resident) | **3,856 MiB (3.77 GiB)** |
+| `ollama ps` said | 100% GPU, 0 spill | 100% GPU, 0 spill |
+
+The card itself read **11,805-11,997 of 12,288 MiB**, and both `llama-server`
+pids were on `GPU-1ba04124-...` (`nvidia-smi --query-compute-apps`). The
+15,512 MiB of load plan on a 12,288 MiB card means **at least 3,224 MiB can
+never be resident**; the measured shortfall is larger because the CUDA contexts
+take memory too.
+
+**The after state, measured on a throwaway server** - port **11451**, the same
+`ollama serve` binary with `CUDA_VISIBLE_DEVICES=GPU-1f7e38f5-...` and
+`OLLAMA_VULKAN=0`, so no live lane was restarted:
+
+| | 11434 lane, pinned to the headless card |
+|---|---|
+| card | headless RTX 2080 SUPER (idx 1), **6,141 of 8,192 MiB** |
+| model | `qwen3:8b`, ctx 16,384 |
+| load plan / really in VRAM | 5,991 MiB / **6,142 MiB - fully resident, 0 paged out** |
+| placement proof | new pid on `GPU-1f7e38f5-...`; server log `found 1 CUDA devices` (RTX 2080 SUPER), `projected to use 5990 MiB ... leaves 1124 MiB free`, `successfully fit params to free device memory` |
+| warm generation | **66.38 tok/s cold, then 71.17 / 69.21 / 70.68 warm** (128-token calls) |
+| the same model on the shared 2060 (before) | **50.39 / 50.70 tok/s** |
+
+After the pin the 2060 is left with the everyday 9B alone - 9,401 MiB of plan on
+a 12,288 MiB card - so it is fully resident as well; the three-GPU sweep the
+same night measured that model alone on the 2060 at 9.18 GiB and 42.01 tok/s
+with zero spill (row `everyday_2060_196608`), and the alone-on-the-2060 state
+after the pin was **not** re-measured here because that needs the live lane
+restarted. The throwaway server was killed: the headless card went back to
+0 MiB and both live lanes still held their models.
+
+### Applying it at deploy time (the Lead/owner runs it)
+
+**Recommended: Option C - a logon task that starts the tray app with the two
+settings for that process tree only.** Nothing is written to the owner's user
+environment, which matters on this PC: other CUDA software already starts at
+login (LM Studio is in the owner's own `Run` list with `--run-as-service`), and
+a global `CUDA_VISIBLE_DEVICES` would hide two of the three cards from every one
+of them - a side effect the ruling did not ask for. The measured result is the
+same as the throwaway row above: the tray app's server sees exactly one card and
+the model is fully resident.
+
+**What the deploy creates.** Three things, applied in this order:
+
+1. The wrapper file `%LOCALAPPDATA%\JarvisOllama\start-ollama-app.cmd` (one
+   command line; ASCII, no repository file):
+
+   ```powershell
+   Set-Content -Path "$env:LOCALAPPDATA\JarvisOllama\start-ollama-app.cmd" -Encoding ascii -Value '@echo off','set "CUDA_VISIBLE_DEVICES=GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313"','set "OLLAMA_VULKAN=0"','start "" "C:\Users\pcadmin\AppData\Local\Programs\Ollama\ollama app.exe"'
+   ```
+
+   `OLLAMA_VULKAN=0` is not optional: without it CUDA hides the card and Ollama
+   loads the model on another one through Vulkan (measured on this PC,
+   2026-10-10; `start-lane.ps1`'s own header records it). Only these two
+   variables are set - no PATH rewrite and no user-scope write.
+
+2. Disable the tray app's **own** autostart shortcut, so the task and the old
+   shortcut cannot start two instances. It is
+   `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk`, and it
+   points straight at `ollama app.exe` with no arguments. Rename it, do not
+   delete it - Windows only runs `.lnk` files from that folder:
+
+   ```powershell
+   Rename-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk" "Ollama.lnk.disabled-2026-11-07"
+   ```
+
+3. Create the logon task, mirroring the principal, logon trigger and settings of
+   the two lane tasks this PC already runs (`InteractiveToken` for the owner, a
+   logon trigger for `MARIOSBEASTDESK\pcadmin`), with the wrapper as its only
+   action:
+
+   ```powershell
+   $src=Get-ScheduledTask -TaskName 'Jarvis Ollama - Everyday model (RTX 2060)'; Register-ScheduledTask -TaskName 'Jarvis Ollama - App pinned to the headless card (RTX 2080 Super)' -Action (New-ScheduledTaskAction -Execute 'C:\WINDOWS\System32\cmd.exe' -Argument '/c "C:\Users\pcadmin\AppData\Local\JarvisOllama\start-ollama-app.cmd"') -Trigger $src.Triggers -Principal $src.Principal -Settings $src.Settings -Description 'Starts the Ollama tray app with CUDA_VISIBLE_DEVICES and OLLAMA_VULKAN set for that process tree only, so port 11434 runs on the headless RTX 2080 SUPER. Nothing is written to the user environment; the 11436 and 11435 lane tasks are untouched.' -Force
+   ```
+
+   The equivalent XML action is exactly
+   `<Command>C:\WINDOWS\System32\cmd.exe</Command><Arguments>/c "C:\Users\pcadmin\AppData\Local\JarvisOllama\start-ollama-app.cmd"</Arguments>`,
+   with `<Principals>`, `<Triggers>` and `<Settings>` copied from
+   `Jarvis Ollama - Everyday model (RTX 2060)`'s own exported XML. The two lane
+   tasks are **not** edited.
+
+**Taking effect now, without waiting for the next logon** - this restart is the
+one live-process action, and the order matters:
+
+```powershell
+taskkill /IM "ollama app.exe" /T /F; Start-Sleep 2; schtasks /run /tn "Jarvis Ollama - App pinned to the headless card (RTX 2080 Super)"; Start-Sleep 8; nvidia-smi --query-gpu=index,uuid,memory.used --format=csv
+```
+
+Or just log off and back on; the task fires at logon.
+
+**Verify, and do not use `ollama ps` for it.** The 11434 server only holds a
+model after something asks it to load one, so check after a chat or preset load.
+
+1. The tray app's own server log records the effective environment, so the pin
+   is readable there:
+
+   ```powershell
+   Select-String -Path "$env:LOCALAPPDATA\Ollama\server.log" -Pattern 'overrode visible devices' | Select-Object -Last 1
+   ```
+
+   It must name `CUDA_VISIBLE_DEVICES=GPU-1f7e38f5-...`. **The baseline taken
+   before the change had no such line, and its `server config` env map showed
+   `CUDA_VISIBLE_DEVICES:` empty** - which is how the current 2060 placement is
+   explained. Its `inference compute` lines should collapse to exactly one card:
+   `pci_id=0000:05:00.0`, `NVIDIA GeForce RTX 2080 SUPER`, 8.0 GiB.
+
+2. Which process is on which card:
+
+   ```powershell
+   nvidia-smi --query-compute-apps=gpu_uuid,pid --format=csv
+   ```
+
+   The 11434 `llama-server` pid must be on `GPU-1f7e38f5-...` and the 11436 pid
+   on `GPU-1ba04124-...`.
+
+3. The real residency check (§ "What was measured"), never `ollama ps`: the
+   `\GPU Process Memory(*)\Dedicated Usage` sum for the 11434 `llama-server`
+   must be at least its `/api/ps` `size`, and the 2060's used memory must fall by
+   about 6 GB. `ollama ps` reporting "100% GPU" is exactly what this page's
+   measurement already proved can be true while pages are paged out to RAM.
+
+**How the environment distinction was verified before this was written.** The
+live tray app was not touched. Two harmless probes used the same shape the task
+uses (`cmd.exe` sets the two variables, then launches):
+
+- A child started that way saw `CUDA_VISIBLE_DEVICES=GPU-1f7e38f5-...` and
+  `OLLAMA_VULKAN=0`, while a sibling process started outside the wrapper saw
+  neither, and the per-user registry values stayed empty before and after.
+- An `ollama serve` started through the same `cmd` wrapper on the throwaway
+  port 11451 came up with `user overrode visible devices
+  CUDA_VISIBLE_DEVICES=GPU-1f7e38f5-...`, its `llama-server` landed on
+  `GPU-1f7e38f5-...` (`--query-compute-apps`), the card read **6,141 of
+  8,192 MiB**, and the model was **fully resident** (6,142 MiB in VRAM against a
+  5,991 MiB plan, **69.38 tok/s**). It was then killed: the card returned to
+  0 MiB, port 11451 closed, and the live lanes still held `qwen3:8b` and
+  `qwen3.5:9b`.
+
+**Rollback** is three commands and no registry edit to undo:
+
+```powershell
+Unregister-ScheduledTask -TaskName 'Jarvis Ollama - App pinned to the headless card (RTX 2080 Super)' -Confirm:$false; Rename-Item "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\Ollama.lnk.disabled-2026-11-07" "Ollama.lnk"; taskkill /IM "ollama app.exe" /T /F; Start-Sleep 2; Start-Process "C:\Users\pcadmin\AppData\Local\Programs\Ollama\ollama app.exe"
+```
+
+Leaving the wrapper file behind is harmless; delete it after the rollback if
+wanted.
+
+### Measured, but NOT recommended: Option A, the per-user variables
+
+Before Option C was chosen, the same pin was measured the easy way: set the two
+variables **for the whole owner user** and relaunch the tray app. It works and it
+produced the after-table numbers above (66-71 tok/s, fully resident) - the reason
+it is not the deploy step is not that it fails, it is that the variable is
+inherited by **every CUDA process the owner starts afterwards**, not only
+Ollama. On this PC that already includes other CUDA software the owner runs at
+login, and any future Jarvis child that forgets to set its own card would
+silently see one card of three. This is kept for the record and for reproducing
+the measurement. **Do not deploy it.**
+
+The A steps as they were measured (kept for reproduction only, not for deploy):
+
+1. Set the card **by UUID, never an index**, and make the pin real -
+   `OLLAMA_VULKAN=0` is not optional: without it CUDA hides the card and Ollama
+   loads the model on another one through Vulkan (measured on this PC,
+   2026-10-10; `start-lane.ps1`'s own header records it):
+
+   ```powershell
+   [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES','GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313','User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN','0','User')
+   ```
+
+2. Quit the tray app and start it again - its server reads these when it starts.
+   The whole step, including the relaunch, is one command line:
+
+   ```powershell
+   $o='C:\Users\pcadmin\AppData\Local\Programs\Ollama'; [Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES','GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313','User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN','0','User'); $env:CUDA_VISIBLE_DEVICES='GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313'; $env:OLLAMA_VULKAN='0'; taskkill /IM "ollama app.exe" /T /F; Start-Sleep 2; $env:PATH="$o;$env:PATH"; Start-Process "$o\ollama app.exe"; Start-Sleep 8; nvidia-smi --query-gpu=index,uuid,memory.used --format=csv
+   ```
+
+3. Verify. The 11434 server only holds a model after something asks it to load
+   one, so check after a chat or preset load:
+
+   ```powershell
+   nvidia-smi --query-gpu=index,uuid,memory.used,memory.total --format=csv; nvidia-smi --query-compute-apps=gpu_uuid,pid --format=csv; $env:OLLAMA_HOST='127.0.0.1:11434'; ollama ps
+   ```
+
+   Pass when the 11434 `llama-server` pid is on `GPU-1f7e38f5-...`, the 2060's
+   used memory no longer includes a second model, and the residency check above
+   shows the model's plan no larger than what the process holds.
+
+### The other alternative: a task-owned 11434 lane (measured)
+
+**If the lane should be task-owned instead of tray-app-owned:**
+the SAME `start-lane.ps1` can run a second lane on 11434 pinned to the headless
+card - measured on 2026-11-07 from a copy of the live script on port 11451
+(`-Lane main -Port 11451 -GpuUuid GPU-1f7e38f5-... -ContextLength 16384`): the
+port answered, the model was fully resident on the headless card (6,126 MiB in
+VRAM against a 5,991 MiB plan), and the log landed in `<script root>\logs\main.log`.
+Two things make that a bigger change than it looks: (a) `-Lane` accepts only
+`main`/`coding`, so a new lane name needs a one-word edit to the outside-repo
+script, and reusing `main` makes both lanes write the same log; (b) the script's
+first step is "if the port already answers, exit leaving it alone", so the
+**Ollama tray app must not run at all** (autostart off, quit), which removes the
+owner's Ollama app UI. The task action would be `powershell.exe -WindowStyle
+Hidden -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass -File
+"C:\Users\pcadmin\AppData\Local\JarvisOllama\start-lane.ps1" -Lane fast -Port
+11434 -GpuUuid GPU-1f7e38f5-3447-97fc-0c13-c8c7eaf83313 -ContextLength 16384`
+with an at-logon trigger; this page records it as the available alternative, not
+as the recommended step.
+
+### What it does not do
+
+**It does not** move the **Fast preset**, which runs
+`qwen3.5:4b` on the Coding lane (11435, the *display* 2080 SUPER); that lane is
+unchanged. It cannot give 11434 models bigger than 8 GiB - those belong on the
+2060's lane. The recommended task-scoped route leaves every other CUDA program
+on this PC alone; only the old Option A route would have changed the user's
+global environment, and Jarvis's own Ollama children are unaffected either way
+because each sets its own card (the everyday lane by UUID, the pooled Coding
+lane by removing the variable so it sees all cards, the picture reader by `-1`).
+Rollback is the three commands above, not a registry edit.
