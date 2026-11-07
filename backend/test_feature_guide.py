@@ -574,7 +574,7 @@ def t_switching_uses_the_real_setter_and_reports_its_outcome():
             dataclasses.replace(b, set=lambda on, **kw: calls.append(on) or Out(
                 False, "That did not work - the browser setting could not be saved."))
             if b.key == "headless_browser" else b for b in R.BOOL_SETTINGS)
-        out = say(match("turn off browser engine"))
+        out = say(match("turn on browser engine"))   # a CHANGE, so the real setter runs
         check("a setter that did not work is repeated as it said it, never as success",
               out is not None and out.reply == ("That did not work - the browser setting "
                                                 "could not be saved.")

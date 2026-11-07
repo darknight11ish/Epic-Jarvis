@@ -411,3 +411,51 @@ running Jarvis, not a reset. If nothing changed, it says exactly that.
   section 8 ("One-sided on purpose").
 - The owner's own decision, dated:
   `decisions.d/2026-11-03-self-portrait-imported-and-clear-one-card.md`.
+
+## Measured self-knowledge coverage (2026-11-07)
+
+The feature self-awareness audit of 2026-11-07 drove **85 sequential chat
+probes** against the live backend (0.2.437): 41 answered by the no-model fast
+path, 44 by `qwen3.5:9b`, one approval card raised and never approved. It
+measured the failure this page exists to prevent: when no fixed answer
+existed, the model **denied live abilities** ("I can't change the rules about
+which actions need approval cards", "I don't keep a global history of your
+chats", "Spending limits aren't a feature I have", "I can't directly detect
+when websites change", "No, old approval cards don't disappear on their own")
+and invented others ("I haven't changed"; a made-up cost-line meaning).
+
+The four worst families now have a **deterministic, read-only answer** from
+`jarvis_feature_guide.SELF_FACTS`, reached through `jarvis_quick.match` before
+any model turn: approval policy, watches and the CI watcher, spending limits,
+and chat history. Their bounded digests travel in the `self_portrait` tool
+result, so the model discusses what is really there. With them:
+
+- **"What changed in your last update?"** is answered from
+  `jarvis_recent_changes.py`, generated from `CHANGELOG.md` and the newest
+  `changelog.d/` fragments by `tools/gen_recent_changes.py --check`, plus the
+  PC's own `VERSION` - never "I haven't changed" and never an invented list.
+- **"Can you explain any setting?"** / **"what is X set to?"** reach the
+  existing explain door (`find_explain_setting` / `explain_setting_words`) for
+  every one of the 37 switches, 10 named choices and the one number setting.
+- **"Where do I change the face size / standby hours / attention budget /
+  spending / notification styles?"** answers with the real place from
+  `jarvis_feature_guide.PLACES`, not a guessed Settings card.
+- **Heritage (owner's Q4 ruling):** "what makes you different?" and "what did
+  you borrow from Muse / Dots / OpenMuse / Hermes?" are fixed answers read from
+  `jarvis_feature_guide.HERITAGE`, derived from `docs/COMPETITORS-*`,
+  `docs/ABOUT-JARVIS.md` section 2 and the 2026-11-05/06 Hermes rows.
+- **Two-part capability questions (owner's Q3 ruling):** "can you search old
+  chats and read my email?" concatenates every catalogue row it really names,
+  in the owner's order, up to three, newline-joined - never only the first and
+  never the model.
+
+Two wording bugs are fixed with it: scoped Anti-Slop never claims "on" while
+the filter's own switch is off, and a toggle that asks for the value a switch
+already has says "already on/off" and writes no receipt.
+
+The whole bundle is proved by `backend/test_self_knowledge_honesty.py` (9 checks,
+including the generator's `--check` and the named borrows), and the existing
+suites that own each door (`test_feature_guide.py`, `test_self_answers.py`,
+`test_setting_explain.py`, `test_antislop.py`) are extended in the same
+branch. Record: `changelog.d/2026-11-07-self-knowledge-honesty.md`,
+`decisions.d/2026-11-07-self-knowledge-honesty.md`.

@@ -4276,6 +4276,25 @@ def _run_self_portrait(args: dict) -> dict:
         live = SP.live_settings_digest()
     except Exception:                       # noqa: BLE001 - the rest still answers
         live = {"available": False}
+    # The self-knowledge facts and the newest changes (2026-11-07): bounded
+    # strings from shipped modules, so the model discusses what is really there
+    # instead of inventing a limit ("I have no spending limits").
+    try:
+        import jarvis_feature_guide as _FG
+        self_knowledge = {family: _FG.self_fact(family).get("digest") or ""
+                          for family in _FG.SELF_FACT_IDS}
+    except Exception:                       # noqa: BLE001 - an older PC
+        self_knowledge = {}
+    try:
+        import jarvis_recent_changes as _RC
+        recent_changes = _RC.answer(limit=2)
+    except Exception:                       # noqa: BLE001 - an older PC
+        recent_changes = ""
+    try:
+        import jarvis_feature_guide as _FGH
+        heritage = _FGH.heritage_digests()
+    except Exception:                       # noqa: BLE001 - an older PC
+        heritage = {}
     version = got.get("version") or {}
     return {"ok": True,
             "schema": got.get("schema"),
@@ -4284,6 +4303,9 @@ def _run_self_portrait(args: dict) -> dict:
                         "started_at": version.get("started_at")},
             "counts": counts,
             "live_settings": live,
+            "self_knowledge": self_knowledge,
+            "recent_changes": recent_changes,
+            "heritage": heritage,
             "stores": stores,
             "ability_groups": [g.get("group") for g in
                                (got.get("asks_first") or {}).get("groups") or ()],

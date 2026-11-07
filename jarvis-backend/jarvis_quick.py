@@ -1834,7 +1834,31 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _settings_help(s)
     if got is not None:
         return got
+    # "Can you explain any setting?" and "what is X set to?" (2026-11-07) -
+    # the general shapes the model was answering with a false denial while the
+    # named explain door already existed.
+    got = _settings_explain_all(s)
+    if got is not None:
+        return got
+    got = _setting_set_to(s)
+    if got is not None:
+        return got
+    got = _settings_where_intent(s)
+    if got is not None:
+        return got
+    got = _self_knowledge(s)
+    if got is not None:
+        return got
+    got = _heritage(s)
+    if got is not None:
+        return got
     got = _settings_adjust(s)
+    if got is not None:
+        return got
+    # "What changed in your last update?" (2026-11-07): read from the shipped
+    # record digest, BEFORE the update checker - that one answers whether an
+    # update is AVAILABLE, never what the newest changes were.
+    got = _recent_changes(s)
     if got is not None:
         return got
     # --- "is there an update?", "what changed in the update?", "update Jarvis"
@@ -5165,6 +5189,255 @@ def _settings_help(s: str) -> Optional[Intent]:
         return Intent("settings_help")
     return None
 
+#: "Can you explain any setting?" / "how do I find out what a setting is set
+#: to?" (2026-11-07, the feature self-awareness audit). The NAMED explain door
+#: already existed (`find_explain_setting`); these are the GENERAL shapes the
+#: model was answering with "I don't have a tool to query my full state" while
+#: the door was there. Read-only: the runner lists the real counts and the
+#: exact shape, and changes nothing.
+_SETTINGS_EXPLAIN_ALL = re.compile(
+    r"(?:can|could|would)\s+you\s+explain\s+(?:any|a|the|your|my)\s+"
+    r"(?:of\s+your\s+|of\s+the\s+)?settings?(?:\s+.*)?"
+    r"|explain\s+(?:to\s+me\s+)?(?:your|the|any)\s+settings?(?:\s+.*)?"
+    r"|how\s+do\s+i\s+(?:find\s+out|see|check)\s+what\s+"
+    r"(?:a|one\s+of\s+your|the)\s+settings?\s+(?:is\s+)?(?:currently\s+)?"
+    r"(?:set\s+to|at)(?:\s+.*)?")
+
+
+def _settings_explain_all(s: str) -> Optional[Intent]:
+    if _SETTINGS_EXPLAIN_ALL.fullmatch(s):
+        return Intent("settings_explain_all")
+    return None
+
+
+#: "What is <setting> set to?" (2026-11-07). The options-understanding audit
+#: measured 0 of 48 settings matching this ordinary shape, so it reached the
+#: model, which said it had no way to read a value. The subject is resolved by
+#: the SAME registry matcher every other explain question uses and answered by
+#: `_run_setting_explain` - one wording, one source, never a guessed value.
+_SETTING_SET_TO = re.compile(
+    r"what(?:'s|\s+is)\s+(?:the\s+|my\s+)?(.+?)\s+set\s+to(?:\s+right\s+now)?"
+    r"|what(?:'s|\s+is)\s+(?:the\s+)?(?:current\s+)?value\s+of\s+(?:the\s+|my\s+)?(.+)"
+    r"|what\s+is\s+(?:the\s+|my\s+)?(.+?)\s+currently\s+set\s+to")
+
+
+def _setting_set_to(s: str) -> Optional[Intent]:
+    m = _SETTING_SET_TO.fullmatch(s)
+    if not m:
+        return None
+    target = (m.group(1) or m.group(2) or m.group(3) or "").strip()
+    if not target:
+        return None
+    return _setting_guide_intent(target)
+
+
+#: The four self-knowledge families (2026-11-07): the live audit measured the
+#: model denying each of these although the capability is live on this PC. The
+#: fixed sentences live in `jarvis_feature_guide.SELF_FACTS`; nothing is read
+#: or changed here, and the shapes are closed-world (an ordinary request that
+#: merely mentions a watch or spending still reaches its own feature).
+_SELF_KNOWLEDGE = (
+    ("approval_policy", re.compile(
+        r"(?:(?:can|could)\s+you\s+)?change\s+(?:what|which)\s+"
+        r"(?:needs|requires|gets)\s+an?\s+approval\s+card(?:\s+.*)?"
+        r"|(?:(?:can|could)\s+you\s+)?change\s+(?:the\s+)?approval\s+"
+        r"(?:policy|rules?)(?:\s+.*)?"
+        r"|(?:can|could)\s+(?:something|an?\s+action)\s+need\s+"
+        r"(?:a\s+)?second\s+yes(?:\s+.*)?"
+        r"|can\s+i\s+change\s+(?:what|which)\s+(?:needs|requires)\s+"
+        r"an?\s+approval\s+card(?:\s+.*)?")),
+    ("watches_ci", re.compile(
+        r"do\s+you\s+have\s+(?:any\s+)?(?:watches|page\s+watches|website\s+watches|"
+        r"monitors?)(?:\s+.*)?"
+        r"|can\s+you\s+(?:watch|monitor|track)\s+(?:a\s+)?(?:website|web\s+page|page|"
+        r"github\s+actions|my\s+github\s+actions)(?:\s+.*)?"
+        r"|can\s+you\s+tell\s+me\s+when\s+(?:a\s+|the\s+)?(?:website|web\s+page|page)\s+"
+        r"changes?(?:\s+.*)?")),
+    ("spending_limits", re.compile(
+        r"do\s+you\s+have\s+(?:any\s+)?spending\s+limits?(?:\s+.*)?"
+        r"|are\s+there\s+spending\s+limits?(?:\s+.*)?"
+        r"|can\s+you\s+set\s+(?:a\s+)?spending\s+limits?(?:\s+.*)?"
+        r"|can\s+you\s+(?:limit|cap)\s+(?:my\s+)?spending(?:\s+.*)?")),
+    ("chat_history", re.compile(
+        r"do\s+you\s+(?:keep|save|store)\s+(?:a\s+)?(?:chat|conversation)\s+"
+        r"histor(?:y|ies)(?:[\s,;]+.*)?"
+        r"|do\s+you\s+have\s+(?:a\s+)?chat\s+histor(?:y|ies)(?:[\s,;]+.*)?"
+        r"|is\s+(?:my\s+)?chat\s+history\s+(?:kept|saved|on|stored)(?:[\s,;]+.*)?"
+        r"|how\s+long\s+do\s+you\s+keep\s+(?:my\s+)?(?:chat|conversation)\s+"
+        r"histor(?:y|ies)(?:[\s,;]+.*)?"))
+)
+
+
+def _self_knowledge(s: str) -> Optional[Intent]:
+    for family, rx in _SELF_KNOWLEDGE:
+        if rx.fullmatch(s):
+            return Intent("self_knowledge", {"family": family})
+    return None
+
+
+#: "What changed in your last update?" / "what's new in you?" (2026-11-07).
+#: The live audit measured this answered by the model with "I haven't changed"
+#: or an invented list, while the newest changelog bullets sat in the record.
+#: The answer is read from the shipped `jarvis_recent_changes` module, which
+#: carries those bullets (the live folder has no CHANGELOG.md to read).
+_RECENT_CHANGES = re.compile(
+    r"what\s+(?:has\s+)?changed\s+(?:in|with)\s+(?:your\s+)?"
+    r"(?:last|latest|newest|most\s+recent)\s+(?:update|version|release)(?:\s+.*)?"
+    r"|what(?:'s|\s+is)\s+new\s+(?:in\s+)?(?:you|your\s+(?:last|latest|newest)\s+"
+    r"(?:update|version|release))(?:\s+.*)?"
+    r"|what(?:'s|\s+is)\s+new\s+in\s+(?:the\s+)?(?:latest|newest|last)\s+"
+    r"(?:update|version|release)(?:\s+.*)?"
+    r"|what\s+changed\s+in\s+your\s+last\s+update(?:\s+.*)?"
+    r"|what\s+(?:did|have)\s+you\s+(?:just\s+)?(?:change|update|add)(?:\s+.*)?"
+    r"|what\s+are\s+your\s+(?:newest|latest|most\s+recent)\s+features?(?:\s+.*)?"
+    r"|what(?:'s|\s+is)\s+new\s+in\s+you(?:\s+.*)?")
+
+
+def _recent_changes(s: str) -> Optional[Intent]:
+    if _RECENT_CHANGES.fullmatch(s):
+        return Intent("recent_changes")
+    return None
+
+
+#: "Where do I change the face size?" / "open spending limits" (2026-11-07,
+#: F14). These functions have no Settings card of their own (or the card is
+#: elsewhere), so the ordinary open-this-section path cannot answer. The words
+#: come from `jarvis_feature_guide.PLACES`, written from the project's record;
+#: an unknown target returns None and falls through exactly as before.
+_WHERE_PLACE = re.compile(
+    r"(?:where|how)\s+(?:do|can)\s+i\s+(?:change|set|find|edit|adjust|open)\s+"
+    r"(?:the\s+|my\s+|a\s+)?(.+?)"
+    r"|where\s+(?:is|are)\s+(?:the\s+|my\s+)?(.+?)\s+(?:set|changed|found)"
+    r"|open\s+(?:the\s+)?(.+?)")
+
+
+def _settings_where_intent(s: str) -> Optional[Intent]:
+    m = _WHERE_PLACE.fullmatch(s)
+    if not m:
+        return None
+    target = (m.group(1) or m.group(2) or "").strip()
+    if not target:
+        return None
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return None
+    if not G.place_for(target):
+        return None
+    return Intent("settings_where", {"words": target})
+
+
+#: What makes Jarvis different, and what it borrowed from whom (owner's Q4
+#: ruling, 2026-11-07). Both halves are read-only fixed sentences from
+#: `jarvis_feature_guide.HERITAGE`, derived from the project's own record
+#: (docs/COMPETITORS-*, docs/ABOUT-JARVIS.md section 2, the Hermes rows) - the
+#: audit measured a model answer denying the lineage outright ("I don't borrow
+#: features from Muse or ChatGPT Dots"), which is the Muse failure mode.
+_DIFFERENT = re.compile(
+    r"what\s+makes\s+you\s+different(?:\s+from\s+(?:chatgpt|other\s+"
+    r"(?:ai\s+)?(?:assistants?|programs?|agents?)|the\s+others?))?(?:\s+.*)?"
+    r"|why\s+are\s+you\s+different(?:\s+from\s+(?:chatgpt|other\s+assistants?))?"
+    r"|what\s+(?:is|makes)\s+(?:you|jarvis)\s+(?:special|unique|stand\s+out)(?:\s+.*)?"
+    r"|what\s+features?\s+do\s+other\s+(?:assistants?|programs?|agents?)\s+not\s+have(?:\s+.*)?"
+    r"|what\s+can\s+you\s+do\s+that\s+(?:chatgpt|other\s+(?:assistants?|programs?))\s+"
+    r"can(?:no|')?t(?:\s+.*)?"
+    r"|which\s+(?:smart\s+)?features?\s+(?:do\s+)?others?\s+(?:do\s+)?not\s+have(?:\s+.*)?")
+_BORROWED = re.compile(
+    r"what\s+(?:did\s+you\s+(?:borrow|take|steal|copy|learn)|have\s+you\s+(?:borrowed|"
+    r"taken|copied))\s+(?:from|off)(?:\s+.*)?"
+    r"|what\s+did\s+you\s+borrow(?:\s+.*)?"
+    r"|which\s+(?:ideas|features?)\s+did\s+you\s+(?:borrow|take|copy)(?:\s+.*)?"
+    r"|where\s+did\s+(?:your|the)\s+(?:features?|ideas?)\s+come\s+from(?:\s+.*)?"
+    r"|what\s+did\s+you\s+take\s+from\s+(?:muse|chatgpt|chatgpt\s+dots|openmuse|hermes|"
+    r"other\s+(?:products?|assistants?|competitors?))(?:\s+.*)?"
+    r"|what\s+(?:was|is)\s+borrowed\s+from\s+(?:muse|chatgpt|dots|openmuse|hermes)(?:\s+.*)?"
+    r"|what\s+inspired\s+you(?:\s+.*)?")
+_HERITAGE_BOTH = re.compile(
+    r"(?:tell|show)\s+me\s+(?:about\s+)?your\s+(?:heritage|lineage|borrowings?)(?:\s+.*)?"
+    r"|what\s+is\s+your\s+(?:heritage|lineage)(?:\s+.*)?"
+    r"|what\s+did\s+you\s+borrow\s+and\s+what\s+makes\s+you\s+different(?:\s+.*)?"
+    r"|what\s+makes\s+you\s+different\s+and\s+what\s+did\s+you\s+borrow(?:\s+.*)?")
+
+
+def _heritage(s: str) -> Optional[Intent]:
+    if _HERITAGE_BOTH.fullmatch(s):
+        return Intent("heritage", {"part": "both"})
+    if _BORROWED.fullmatch(s):
+        return Intent("heritage", {"part": "lineage"})
+    if _DIFFERENT.fullmatch(s):
+        return Intent("heritage", {"part": "differentiators"})
+    return None
+
+
+#: A TWO-PART capability question (owner's Q3 ruling, 2026-11-07): "search old
+#: chats AND keep new ones private" used to answer one half or reach the model.
+#: Each part is resolved through the SAME catalogue resolver the single-part
+#: answer uses; the answer concatenates every row that really matched, in the
+#: owner's order, at most three, newline-separated. A part that matches no row
+#: is dropped - never invented - and fewer than two rows falls back to the
+#: single answer exactly as before.
+_CAP_SPLIT = re.compile(r"\s+(?:and|plus|also)\s+")
+#: Words that describe the question rather than name a thing, removed before a
+#: two-part question's halves are ranked against the catalogue.
+_CAP_PART_SKIP = frozenset({
+    "a", "an", "the", "my", "your", "our", "his", "her", "its", "and", "or",
+    "of", "to", "for", "in", "on", "with", "that", "this", "these", "those",
+    "it", "can", "could", "do", "does", "you", "jarvis", "i", "me", "we",
+    "is", "are", "will", "would", "should", "about", "any", "some", "also",
+    "plus", "both", "then", "them",
+})
+
+
+def _cap_part_row(part: str):
+    """The one catalogue row a question half clearly names, or None.
+
+    Deliberately a DIFFERENT rule from `_cap_resolve` (which needs a question
+    shape and a named phrase): a half of a two-part question is a noun phrase,
+    so the same index is ranked by shared tokens and only a clear best row
+    (score >= 3) is taken. No row means the half is dropped, never invented."""
+    index = _cap_index()
+    words = set()
+    for w in re.findall(r"[a-z0-9]+", str(part or "").lower()):
+        if w in _CAP_PART_SKIP or len(w) < 2:
+            continue
+        # One crude singular, the same matching-only rule the guide uses:
+        # "old chats" must reach the row whose own words say "chat".
+        if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        words.add(w)
+    if not index or not words:
+        return None
+    best, best_score = None, 0
+    for item in index:
+        score = (3 * len(words & set(item["name"]))
+                 + len(words & set(item["what"])))
+        if score > best_score:
+            best, best_score = item["row"], score
+    return best if best_score >= 3 else None
+
+
+def _cap_multi_question(raw) -> list:
+    text = " ".join(str(raw or "").lower().rstrip(" ?!.").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[ ,:]+", "", text)
+    parts = [p.strip() for p in _CAP_SPLIT.split(text) if p.strip()]
+    if not (2 <= len(parts) <= 3):
+        return []
+    rows, seen = [], set()
+    for part in parts:
+        row = (_cap_resolve("can you " + part)
+               or _cap_resolve(part)
+               or _cap_part_row(part))
+        if row is None:
+            continue
+        rid = str(row.get("id") or "")
+        if not rid or rid in seen:
+            continue
+        seen.add(rid)
+        rows.append(row)
+        if len(rows) >= 3:
+            break
+    return rows if len(rows) >= 2 else []
+
 
 #: The plain on/off settings (jarvis_settings_registry.BOOL_SETTINGS): "turn
 #: on background learning", "switch off lights without asking", "enable
@@ -6726,13 +6999,19 @@ def _cap_question(raw) -> Optional[Intent]:
     sentence. The answer is the row's own `what` and `where`, plus its `asks`
     when the question asks about a card or the row is off until switched on.
     """
+    text = " ".join(str(raw or "").lower().split())
+    ask = bool(_CAP_ASKS_ABOUT_A_CARD.search(text))
+    # Q3 (2026-11-07): a TWO-part question gets every row it really names, in
+    # the owner's order, up to three - never only the first and never the model.
+    rows = _cap_multi_question(raw)
+    if rows:
+        return Intent("capability_answer",
+                      {"ids": [str(r.get("id") or "") for r in rows], "ask": ask})
     row = _cap_resolve(raw)
     if row is None:
         return None
-    text = " ".join(str(raw or "").lower().split())
     return Intent("capability_answer",
-                  {"id": str(row.get("id") or ""),
-                   "ask": bool(_CAP_ASKS_ABOUT_A_CARD.search(text))})
+                  {"id": str(row.get("id") or ""), "ask": ask})
 
 
 def _cap_safety_question(raw) -> Optional[Intent]:
@@ -6857,6 +7136,20 @@ def _run_capability_answer(f: dict) -> "Result":
     index = _cap_index()
     if not index:
         return None
+    # Q3 (2026-11-07): every row a two-part question named, newline-joined.
+    ids = [str(rid) for rid in (f.get("ids") or ()) if str(rid or "")]
+    if ids:
+        parts = []
+        for row_id in ids[:3]:
+            row = next((item["row"] for item in index
+                        if str(item["row"].get("id") or "") == row_id), None)
+            if row is not None:
+                parts.append(_capability_words(
+                    row, ask=bool(f.get("ask")),
+                    verdict=str(f.get("verdict") or "")))
+        if not parts:
+            return None
+        return Result("\n".join(parts), "capability_answer")
     row_id = str(f.get("id") or "")
     row = next((item["row"] for item in index
                 if str(item["row"].get("id") or "") == row_id), None)
@@ -19927,6 +20220,104 @@ def _run_settings_help() -> Result:
     return Result(R.changeable_words(), "settings_help")
 
 
+def _run_settings_explain_all() -> Result:
+    """The general "explain your settings" answer (2026-11-07).
+
+    Read-only: it names the REAL counts from the registry and the shape every
+    named explain answer has, then points at the list. It never claims a value
+    it did not read - the value comes from `_run_setting_explain` when the
+    owner names one setting."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result(SETTINGS_MISSING, "settings_explain_all")
+    switches = len(R.BOOL_SETTINGS)
+    choices = len(R.CHOICE_SETTINGS)
+    numbers = len(R.NUMBER_SETTINGS)
+    return Result(
+        f"I can explain any of the {switches} switches, {choices} named choices and "
+        f"{numbers} number setting on this PC. Ask about one by name - "
+        f"\"what is the anti-slop mode set to?\" or \"explain the focus preset\" - "
+        f"and I will say what it is set to right now, where it lives on both apps, "
+        f"and the exact phrase that changes it, for example \"turn off quiet hours\" "
+        f"or \"set the personality to advocate\". A change that loosens a rule still "
+        f"raises one approval card first. Say \"what can I change?\" for the list of "
+        f"everything you can change by asking.",
+        "settings_explain_all")
+
+
+def _run_self_knowledge(f: dict) -> Result:
+    """One bounded, read-only self-fact (approval policy, watches, spending,
+    chat history) - the four families the live audit measured the model
+    denying. The words are `jarvis_feature_guide.SELF_FACTS`; nothing here
+    reads state or changes anything."""
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "self_knowledge")
+    words = G.self_fact_words(str(f.get("family") or ""))
+    if not words:
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "self_knowledge")
+    return Result(words, "self_knowledge")
+
+
+def _run_settings_where(f: dict) -> Result:
+    """Where ONE off-list function really lives (F14, 2026-11-07). Read-only:
+    the words are `jarvis_feature_guide.PLACES`, written from the project's own
+    record, so "where do I change the face size" cannot be sent to a place that
+    does not exist."""
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "settings_where")
+    place = G.place_for(f.get("words") or "")
+    if not place:
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "settings_where")
+    return Result(str(place.get("words") or ""), "settings_where")
+
+
+def _run_recent_changes() -> Result:
+    """"What changed in your last update?" from the SHIPPED record digest.
+
+    `jarvis_recent_changes.py` is generated at build time from CHANGELOG.md and
+    the newest changelog.d fragments because the live backend folder has no
+    CHANGELOG.md to read at runtime. Read-only: it names the version and the
+    newest real bullets, and says so plainly when the record is missing."""
+    try:
+        import jarvis_recent_changes as RC
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("The newest changes are not written down beside the program on "
+                      "this PC, so I will not guess.", "recent_changes")
+    return Result(RC.answer(), "recent_changes")
+
+
+def _run_heritage(f: dict) -> Result:
+    """What makes Jarvis different, and what it borrowed from whom (Q4).
+
+    Read-only: the words are `jarvis_feature_guide.HERITAGE`, derived from the
+    project's own record. It never invents a borrow and never denies one that
+    is on the record; "both" joins the two halves in order."""
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("That is not written down beside the program on this PC, so I "
+                      "will not guess.", "heritage")
+    part = str(f.get("part") or "both")
+    if part == "both":
+        words = "\n\n".join(w for w in (G.heritage_words("differentiators"),
+                                          G.heritage_words("lineage")) if w)
+    else:
+        words = G.heritage_words(part)
+    if not words:
+        return Result("That is not written down beside the program on this PC, so I "
+                      "will not guess.", "heritage")
+    return Result(words, "heritage")
+
+
 def _run_menu_visibility(f: dict) -> Result:
     """"Hide the finance menu": no state here, no gate, no model. The reply is the
     same for every device; the route field tells each app what to apply."""
@@ -20419,6 +20810,17 @@ def _run_settings_bool(f: dict, peer, local, live: bool = False,
     setting = next((b for b in R.BOOL_SETTINGS if b.key == f["key"]), None)
     if setting is None:
         return Result(SETTINGS_MISSING, "settings_bool")
+    # A turn that asks for the value the switch ALREADY has is not a change:
+    # say so and write no receipt (2026-11-07, F13). The live audit measured
+    # "turn off anti-slop" when it was already off answering as if it had just
+    # been switched, and writing a before=false/after=false receipt whose undo
+    # could take back a later real change.
+    current = R.current_value(setting)
+    want_word = (getattr(setting, "on_word", "on") if f["on"]
+                 else getattr(setting, "off_word", "off"))
+    if current == want_word:
+        return Result(f"{_setting_label(setting)} is already {want_word}. "
+                      f"Nothing was changed.", "settings_bool")
     before = _setting_before(setting, f)
     # Read BEFORE the setter runs: a setting whose own module records its own
     # receipt (the Anti-Slop filter does) must not end up with two. The id that
@@ -20636,6 +21038,18 @@ def _run_settings_antislop_scope(f: dict, peer, local,
     name = str(f.get("scope") or "")
     want = bool(f.get("on"))
     before = R.antislop_scope_now(name)
+    # The FILTER's own switch decides whether any scope is doing anything. Read
+    # before the write so the answer cannot say "on" while the filter is off
+    # (the live audit's H6: "Anti-Slop on for code" with `enabled` false).
+    filter_on = _antislop_read_back("enabled")
+    if before is want:
+        if want and filter_on is not True:
+            return Result(f"The Anti-Slop filter itself is still off, so nothing is "
+                          f"being filtered yet; the {name} scope was already on for "
+                          f"when you turn the filter on. Nothing was changed.",
+                          "settings_antislop_scope")
+        return Result(f"Anti-slop is already {'on' if want else 'off'} for {name}. "
+                      f"Nothing was changed.", "settings_antislop_scope")
     since = _newest_receipt_id()
     out = R.set_antislop_scope(name, want, peer=peer, local=local)
     said = str(getattr(out, "said", "") or "").strip()
@@ -20667,7 +21081,16 @@ def _run_settings_antislop_scope(f: dict, peer, local,
                          for s in others)
     except Exception:
         also = ""
-    if also:
+    if filter_on is not True:
+        # Never claim the filter turned on when its own switch stayed off.
+        if want:
+            said = (f"The Anti-Slop filter itself is still off, so nothing is being "
+                    f"filtered yet. I set the {name} scope for when you turn the "
+                    f"filter on.")
+        else:
+            said = (f"The Anti-Slop filter is off, and the {name} scope is off too. "
+                    + (f"The other scopes are unchanged ({also})." if also else ""))
+    elif also:
         said = ((said + " ") if said else "") + f"The other scopes are unchanged ({also})."
     return Result(said, "settings_antislop_scope")
 
@@ -21636,6 +22059,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_open(f)
     if n == "settings_help":
         return _run_settings_help()
+    if n == "settings_explain_all":
+        return _run_settings_explain_all()
+    if n == "self_knowledge":
+        return _run_self_knowledge(f)
+    if n == "settings_where":
+        return _run_settings_where(f)
+    if n == "recent_changes":
+        return _run_recent_changes()
+    if n == "heritage":
+        return _run_heritage(f)
     if n == "menu_visibility":
         return _run_menu_visibility(f)
     if n == "settings_bool":
@@ -22535,6 +22968,11 @@ READ_ONLY_INTENTS = frozenset({
     # change nothing, so neither may take back what "cancel that" would undo.
     "two_entity_answer", "focus_presets",
     "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
+    # Self-knowledge answers (2026-11-07): all four read fixed words or the
+    # shipped record and write nothing, so "cancel that" must not lose its
+    # record to them.
+    "recent_changes", "self_knowledge", "settings_explain_all", "settings_where",
+    "heritage",
     "settings_browser_mode_bad",
     # Reading the Anti-Slop filter (2026-10-28): "is anti-slop on?" changes
     # nothing, so "cancel that" must not lose its record to it. Its change and
