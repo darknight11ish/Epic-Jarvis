@@ -33984,7 +33984,7 @@ Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
   `repo`, `freq` and `url` fields are for reading the log later. These rows are
   written by the same store this route already serves, so no new route was
   added: `GET /api/watch/repos` does not exist, and the watch itself is
-  controlled from chat or Live (`backend/test_watch_repos.py`).
+  controlled from chat or Live (`backend/test_watch_repos.py`). The repeating half is the SCHEDULER's, not a new route either: starting a watch calls `Scheduler.add_repeat` for the scheduler kind `repo_watch`, so the row appears in the existing schedule list (`GET /api/schedule`), its ONE `schedule_repeat` card is the approval, and `DELETE`-equivalent scheduler act removes it with the watch.
 - `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
   `notification:<id>`, `repo:<name>`.
 - `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule

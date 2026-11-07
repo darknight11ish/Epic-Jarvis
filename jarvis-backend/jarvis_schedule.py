@@ -937,7 +937,8 @@ KINDS: dict = {}
 #: files nothing by itself.
 KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
                 "jarvis_next_time", "jarvis_tidy", "jarvis_today", "jarvis_decks",
-                "jarvis_topics", "jarvis_referee", "jarvis_tag_suggest", "jarvis_quotes")
+                "jarvis_topics", "jarvis_referee", "jarvis_tag_suggest", "jarvis_quotes",
+                "jarvis_watch")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,

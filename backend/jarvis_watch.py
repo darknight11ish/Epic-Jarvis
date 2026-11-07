@@ -755,6 +755,10 @@ def register_job() -> bool:
         jarvis_jobs.register("watch_repos", repo_handler)
     except Exception:
         pass
+    # The repeating half: the scheduler's own kind for this watcher, so the
+    # job that keeps checking is created by `add_repeat` - the same call the
+    # older "tell me when" GitHub watch makes, with the same one card.
+    _register_schedule_kind()
     return True
 
 
@@ -903,9 +907,9 @@ def watch_repo(full_name=None, *, frequency="daily", events=None,
             prev = old["frequency"]
             remember = (prev if prev != "off" else old["prev_frequency"] or "daily")
             c.execute("UPDATE repo_watches SET frequency=?, events=?,"
-                      " prev_frequency=? WHERE full_name=?",
+                      " prev_frequency=?, mode=? WHERE full_name=?",
                       (freq, json.dumps(ev), remember if freq != "off" else
-                       old["prev_frequency"], name))
+                       old["prev_frequency"], mode, name))
     _audit("watch.repo_watch_set", {"repo": name, "frequency": freq,
                                     "events": ev, "mode": mode,
                                     "new": old is None})
@@ -1455,6 +1459,299 @@ def repo_status() -> dict:
         "frequencies": list(REPO_FREQUENCIES),
         "event_kinds": list(REPO_EVENTS),
     }
+
+
+
+# --------------------------------------------------------------------------
+#   HOW A WATCH ACTUALLY POLLS: the scheduler kind (2026-11-07)
+# --------------------------------------------------------------------------
+# A Long Fuse job (`register_job` below) is ONE run. The thing that REPEATS on
+# this PC is the scheduler (`jarvis_schedule.py`), and that is exactly how the
+# older "tell me when CI fails on ..." GitHub watch stays alive: a kind added
+# with `jarvis_schedule.register_kind`, a job row created by `add_repeat` only
+# after ONE `schedule_repeat` approval card, and an `on_fire(job_id)` callback
+# that runs every N minutes. The per-repository watcher uses that SAME path -
+# its own kind name and payload, the same card, the same approval queue, the
+# same "deleting it is immediate" - so "watch X daily" really polls, with no
+# new permission model and no second approval door.
+#
+# WHY `silent=True`: this kind's own on_fire does the telling (through
+# `jarvis_arbiter`, low priority, can_defer), so the scheduler must NOT also
+# announce that the watch "went off". WHY `leaves=True`: a look leaves this PC
+# for api.github.com, and the card says so. WHY `first_now=True`: the first
+# look is due the moment the card is approved, so the baseline is taken then.
+KIND = "repo_watch"
+NOUN = "repository watch"
+LOCK_SCREEN = "Jarvis: a GitHub repository watch cannot look right now."
+#: How often a watch may look, in minutes. Ten is the same floor the older
+#: GitHub "tell me when" watch uses; each look is conditional, so an unchanged
+#: repository costs no rate-limit point.
+POLL_MINUTES = 10
+POLL_MAX_MINUTES = 24 * 60
+POLL_DEFAULT_MINUTES = POLL_MINUTES
+
+
+def repo_rule(rule, now: float) -> dict:
+    """This kind's own rule check (register_kind(check=...)): every N minutes,
+    from a start, with the repository and what to follow. The generic rule
+    check refuses minutes outright, so no other kind can look this often."""
+    if not isinstance(rule, dict):
+        raise ValueError("a repository watch needs what to watch")
+    watch = rule.get("watch")
+    if not isinstance(watch, dict):
+        raise ValueError("a repository watch needs the repository")
+    follow = str(watch.get("follow") or "").strip()[:120]
+    if not follow and not watch.get("repo"):
+        raise ValueError("a repository watch needs the repository")
+    n = rule.get("minutes", POLL_DEFAULT_MINUTES)
+    if not isinstance(n, int) or isinstance(n, bool):
+        raise ValueError("how often is a whole number of minutes")
+    if n < POLL_MINUTES:
+        raise ValueError("the most often it can look is every "
+                         f"{POLL_MINUTES} minutes")
+    if n > POLL_MAX_MINUTES:
+        raise ValueError("the least often it can look is every day")
+    start = rule.get("start")
+    if not isinstance(start, (int, float)) or isinstance(start, bool):
+        start = now
+    if follow:
+        return {"every": "minutes", "minutes": int(n), "start": float(start),
+                "watch": {"follow": follow,
+                          "frequency": _frequency(watch.get("frequency")),
+                          "events": []}}
+    name = _repo_name(watch.get("repo") or REPO_DEFAULT)
+    if not name:
+        raise ValueError("a repository is written owner/name, like "
+                         f"{REPO_DEFAULT}")
+    return {"every": "minutes", "minutes": int(n), "start": float(start),
+            "watch": {"repo": name, "frequency": _frequency(watch.get("frequency")),
+                      "events": _events(watch.get("events"))}}
+
+
+def repo_words(name: str, events=None, *, follow: bool = False) -> str:
+    """The row's words in Coming up: the owner's own subject, never a token."""
+    if follow:
+        return f"new repositories for topic {name}"
+    evs = _events(events)
+    parts = ", ".join(REPO_EVENT_WORDS.get(e, e) for e in evs)
+    return f"{name} on GitHub ({parts})"
+
+
+def repo_card(rule, text: str, now: float) -> str:
+    """The ONE approval card's words. It says exactly what is looked at, how
+    often, where each look goes and what is kept - the same shape the older
+    GitHub "tell me when" card uses."""
+    w = rule.get("watch") or {}
+    follow = str(w.get("follow") or "")
+    name = w.get("repo") or REPO_DEFAULT
+    freq = _frequency(w.get("frequency"))
+    evs = _events(w.get("events"))
+    parts = ", ".join(REPO_EVENT_WORDS.get(e, e) for e in evs)
+    subject = (f"Topic: {follow} (each repository that appears in it for the "
+               "first time is reported once)" if follow else f"Repository: {name}")
+    lines = [
+        ("Follow a GitHub topic's new repositories." if follow
+         else "Watch a GitHub repository."),
+        "",
+        subject,
+        f"What is followed: {parts}",
+        f"How often it looks: every {rule.get('minutes', POLL_MINUTES)} minutes",
+        f"When it tells you: {REPO_FREQUENCY_WORDS.get(freq, freq)}",
+        "",
+        "Each look is ONE conditional read of api.github.com. A repository that "
+        "has not changed answers \"not modified\", which costs no GitHub "
+        "rate-limit points. Public repositories need no token; if you connected "
+        "one it is used for higher limits and private repositories, and it is "
+        "never shown, written down or logged.",
+        "",
+        "Nothing on GitHub is changed, and no personal data is sent. Ordinary "
+        "notifications cannot ring or interrupt you. What it would tell you is "
+        "always readable at GET /api/watch/decisions, and stopping, pausing or "
+        "deleting it is immediate from either app.",
+        "",
+        "If you say no: nothing is set up.",
+    ]
+    return "\n".join(lines)
+
+
+def repo_on_fire(job_id: str) -> dict:
+    """One look, on the scheduler's own thread, after the owner approved the
+    repeating job. The approved job IS the yes, so the first fire makes the
+    watch active; nothing here raises into the scheduler loop."""
+    out = {"ok": False}
+    try:
+        import jarvis_schedule as S
+        sched = S.get()
+        job = sched.job(job_id)
+    except Exception:
+        return out
+    if not job:
+        return out            # deleted while it fired: nothing to do
+    w = {}
+    try:
+        extra = sched.extra(job_id)
+        w = extra.get("watch") if isinstance(extra.get("watch"), dict) else {}
+    except Exception:
+        w = {}
+    follow = str(w.get("follow") or "").strip()
+    freq = _frequency(w.get("frequency"))
+    evs = _events(w.get("events"))
+    try:
+        if follow:
+            follow_new(follow, frequency=freq, mode="active")
+            set_follow_mode(follow, "active")
+        else:
+            name = _repo_name(w.get("repo") or "") or REPO_DEFAULT
+            watch_repo(name, frequency=freq, events=evs, mode="active")
+        # The scheduler's OWN clock: a job that fired on the fake clock in a
+        # test must look on that clock too, not on wall time.
+        fired_at = sched.now()
+        out = poll_repos(now=fired_at)
+        out["digest"] = deliver_digest(now=fired_at)
+        out["ok"] = True
+    except Exception as exc:                            # noqa: BLE001
+        out["error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+def repo_jobs(sched=None) -> list:
+    """The scheduler's own rows for this kind, with the payload read back from
+    the kind's OWN `extra` state. Read only; the scheduler remains the owner
+    of the row, and its public view withholds `rule["watch"]` on purpose (a
+    "tell me when" watch can carry someone's name there)."""
+    try:
+        import jarvis_schedule as S
+        sched = sched or S.get()
+        rows = [j for j in sched.listed() if j.get("kind") == KIND]
+    except Exception:
+        return []
+    out = []
+    for job in rows:
+        try:
+            extra = sched.extra(job.get("id"))
+        except Exception:
+            extra = {}
+        payload = extra.get("watch") if isinstance(extra.get("watch"), dict) else {}
+        out.append({"id": job.get("id"), "state": job.get("state"),
+                    "repo": _repo_name(payload.get("repo") or ""),
+                    "follow": str(payload.get("follow") or "").strip(),
+                    "frequency": _frequency(payload.get("frequency")),
+                    "events": _events(payload.get("events")),
+                    "minutes": extra.get("minutes") or POLL_MINUTES,
+                    "payload": payload})
+    return out
+
+
+def ensure_repo_watch_job(repo, frequency="daily", events=None, *, sched=None,
+                          follow=False) -> dict:
+    """Create the repeating job that makes a watch poll - ONCE per repository.
+
+    This is the same call the older GitHub "tell me when" watch makes
+    (`Scheduler.add_repeat`): it creates the row in `waiting`, raises the ONE
+    `schedule_repeat` card itself, and the row starts firing only after the
+    owner's yes. Nothing here raises a second card or approves anything.
+    """
+    _init()
+    if follow:
+        name = str(repo or "").strip()[:120]
+        if not name:
+            return {"ok": False, "reason": "Say which topic to follow."}
+    else:
+        name = _repo_name(repo or REPO_DEFAULT)
+        if not name:
+            return {"ok": False, "reason": ("A repository is written owner/name, like "
+                                            f"{REPO_DEFAULT}.")}
+    for job in repo_jobs(sched):
+        if (job["follow"] == name) if follow else (job["repo"] == name):
+            return {"ok": True, "repo": name, "job": job["id"],
+                    "state": job["state"], "existing": True}
+    freq = _frequency(frequency)
+    evs = [] if follow else _events(events)
+    try:
+        import jarvis_schedule as S
+        sched = sched or S.get()
+    except Exception:
+        return {"ok": False, "reason": ("Your PC's Jarvis cannot repeat a check yet - "
+                                        "run apply-patches.ps1 on the PC.")}
+    payload = ({"follow": name, "frequency": freq, "events": []} if follow else
+               {"repo": name, "frequency": freq, "events": evs})
+    try:
+        view = sched.add_repeat(
+            KIND,
+            {"every": "minutes", "minutes": POLL_MINUTES, "watch": payload},
+            text=repo_words(name, evs, follow=follow), source="quick")
+        # The kind's own small state, through the scheduler's documented
+        # door for exactly this: what to look at, read back on every fire.
+        jid = (view or {}).get("id")
+        if jid:
+            try:
+                sched.set_extra(jid, {"watch": payload, "minutes": POLL_MINUTES})
+            except Exception:
+                pass
+    except (ValueError, OverflowError) as exc:
+        return {"ok": False, "reason": str(exc).rstrip(".") + "."}
+    except Exception as exc:                            # noqa: BLE001
+        return {"ok": False, "reason": f"{type(exc).__name__}: {exc}"}
+    return {"ok": True, "repo": name, "job": view.get("id"),
+            "state": view.get("state"), "existing": False}
+
+
+def stop_repo_watch_jobs(repo, *, sched=None, follow=False) -> int:
+    """Delete the scheduler's rows for one repository (or one followed topic).
+    Removing is instant and needs no card, exactly like deleting any other
+    repeating job."""
+    name = str(repo or "").strip()[:120] if follow else _repo_name(repo or "")
+    n = 0
+    try:
+        import jarvis_schedule as S
+        sched = sched or S.get()
+    except Exception:
+        return 0
+    for job in repo_jobs(sched):
+        if name and ((job["follow"] == name) if follow else (job["repo"] == name)):
+            try:
+                sched.delete(job["id"])
+                n += 1
+            except Exception:
+                pass
+    return n
+
+
+def _sentence(text: str) -> str:
+    text = str(text or "").strip()
+    return text[:1].upper() + text[1:] if text else text
+
+
+def _register_schedule_kind() -> bool:
+    """Register the kind with the ONE scheduler, from import and again from
+    `register_job()`. Idempotent: register_kind overwrites its own name.
+
+    It has to happen at IMPORT time for a job that already exists: the
+    scheduler imports the modules named in `KIND_MODULES` before its loop
+    first runs, so `jarvis_watch` is in that tuple and a watch set up before
+    the PC restarted still finds its on_fire. The `register_job()` call is the
+    second, harmless door for every path that imports the module later.
+    """
+    try:
+        import jarvis_schedule as S
+        S.register_kind(
+            KIND, NOUN, LOCK_SCREEN, has_text=True, owner_listed=True,
+            repeatable=True, silent=True, first_now=True, leaves=True,
+            what=("check a GitHub repository for new releases, commits, issues, "
+                  "pull requests and CI changes, and tell the owner at the "
+                  "cadence they chose"),
+            check=repo_rule, card=repo_card, on_fire=repo_on_fire,
+            about=("Checks api.github.com for one repository the owner named. "
+                   "Reads only; nothing on GitHub changes. Every look is "
+                   "conditional, so an unchanged repository costs no rate-limit "
+                   "point, and the log is GET /api/watch/decisions."),
+        )
+        return True
+    except Exception:
+        return False
+
+
+_register_schedule_kind()
 
 
 if __name__ == "__main__":                                # pragma: no cover
