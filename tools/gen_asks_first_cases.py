@@ -39,7 +39,7 @@ COPIES = (DESKTOP, PHONE)
 
 #: The shipped tiers (backend/rebuilt/jarvis-framework.toml), for the cases.
 SHIPPED = {
-    "web_research": "auto", "read_calendar": "auto", "calendar_read": "auto",
+    "web_research": "ask", "read_calendar": "auto", "calendar_read": "auto",
     "email_read": "auto", "notes_search": "auto", "home_read": "auto", "home_control": "ask",
     "read_files_readonly": "auto", "draft_email": "ask", "send_email": "ask",
     "edit_calendar_event": "ask", "delete_calendar_event": "ask", "delete_file": "ask",

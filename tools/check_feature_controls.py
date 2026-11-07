@@ -500,13 +500,19 @@ def main(argv=None):
     # 179 features. The notion-import row's surface moved desktop -> both in the
     # same change, which moves no label: a "both" Command-Only row is still one
     # Command-Only row. Measured from the contract, not chosen.
+    # 2026-11-07 (GitHub self-knowledge): "Read and act on your own GitHub"
+    # joined as ONE Command-Only row - the six on-demand tools each have their
+    # own switch on Settings, "What asks first", so the FEATURE has no single
+    # switch to read; the row is the ability plus the three carded actions and
+    # the never-list. 106 + 1 -> 107 Command-Only, 179 + 1 -> 180 features.
+    # Measured from the contract, not chosen.
     expected_label_counts = {
         LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
-        LAB_COMMAND: 106, LAB_ALWAYS: 12,
+        LAB_COMMAND: 107, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
     c.need(actual_label_counts == expected_label_counts,
-           "owner-approved label counts must be 43/2/16/106/12; got %r" % (dict(actual_label_counts),))
+           "owner-approved label counts must be 43/2/16/107/12; got %r" % (dict(actual_label_counts),))
     c.need(contract.get("label_counts") == expected_label_counts,
            "contract label_counts must be 43/2/16/106/12; got %r" % (contract.get("label_counts"),))
     # If the backend's command-side source is present it must carry the SAME

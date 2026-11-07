@@ -825,6 +825,92 @@ def surface_words(row: dict) -> str:
 #: else - "planned", "not-a-setting" - really has no on/off to report.
 _HAS_A_CONTROL = frozenset({"switch", "adjust", "open-only"})
 
+#: THE AI-TOOL SWITCH PLACE, and the rows whose own `where` names it. Since the
+#: owner's decision of 2026-11-04 every tool the AI model can be offered has its
+#: own switch on Settings, "What asks first", under "Let the AI use this"
+#: (jarvis_asks_first.tools_status). That is NOT a BoolSetting, so `covers`
+#: cannot name it and `feature_switches()` cannot see it - and the answer said
+#: "The feature list names no on/off switch for it" DIRECTLY beside a `where`
+#: that says "switch it on" (measured 2026-11-07, the four-way contradiction in
+#: the github-research answer). These rows are read from the same page the apps
+#: draw instead: `TOOL_SWITCHES` is the rows where the exact tool is known, so
+#: the live state can be read; a row that only names the place still gets an
+#: honest sentence, never the "no switch" falsehood.
+TOOL_SWITCH_PLACE = "let the ai use this"
+TOOL_SWITCHES = {
+    # The GitHub research tool (jarvis_agent TOOLS "github_search"; its switch
+    # title is "GitHub research" in jarvis_asks_first.tools_status).
+    "github-research": ("github_search",),
+    # The six on-demand tools: one switch each, all off by default.
+    "connected-github": ("github_list", "github_read_file", "github_ci_status",
+                         "github_comment", "github_open_issue",
+                         "github_rerun_workflow"),
+}
+
+
+def _names_tool_switch(row: dict) -> bool:
+    """Does this row's own `where` say it is switched on in that page?"""
+    if not row:
+        return False
+    if str(row.get("id") or "") in TOOL_SWITCHES:
+        return True
+    return TOOL_SWITCH_PLACE in str(row.get("where") or "").lower()
+
+
+def _tool_switch_rows(row: dict) -> list:
+    """[{"key","label","state"}] for a row switched on by AI-tool switches.
+
+    Read from `jarvis_asks_first.tools_status()` - the same read the Settings
+    page and both apps use - so the state is never typed here. A module that is
+    missing or does not answer leaves `state` None and the sentence says so.
+    """
+    keys = TOOL_SWITCHES.get(str((row or {}).get("id") or "")) or ()
+    if not keys:
+        return []
+    labels, states = {}, {}
+    try:
+        import jarvis_asks_first as AF
+        view = AF.tools_status(here=False)
+        for item in view.get("items") or ():
+            key = str((item or {}).get("id") or "")
+            labels[key] = str(item.get("title") or key)
+            states[key] = item.get("on")
+    except Exception:                       # noqa: BLE001 - older PC: read nothing
+        labels, states = {}, {}
+    out = []
+    for key in keys:
+        state = states.get(key)
+        out.append({"key": key, "label": labels.get(key, str(key)),
+                    "state": state if isinstance(state, bool) else None})
+    return out
+
+
+def _tool_switch_words(row: dict) -> str:
+    """The honest switch sentence for a row switched on by AI-tool switches.
+
+    One known switch says its name and live state; several say each one; a row
+    whose tool is not recorded says the place and that it cannot read which
+    tool it is - never "there is no switch", which the row's own `where`
+    contradicts.
+    """
+    if not _names_tool_switch(row):
+        return ""
+    place = ('Settings, What asks first, under "Let the AI use this"')
+    switches = _tool_switch_rows(row)
+    known = [s for s in switches if isinstance(s["state"], bool)]
+    if len(switches) == 1 and len(known) == 1:
+        return (f'Its own switch is "{switches[0]["label"]}" in {place}; right now '
+                f'it is {ON_WORD if known[0]["state"] else OFF_WORD}.')
+    if switches and known:
+        said = ", ".join(f'"{s["label"]}" is {ON_WORD if s["state"] else OFF_WORD}'
+                         for s in known)
+        return f'Its own switches are in {place}: {said} right now.'
+    if switches:
+        return (f'Its own switches are in {place}; I could not read their live '
+                f'state, so I will not say whether they are on.')
+    return (f'Its own switch is in {place}; the feature list does not record which '
+            f'tool it is, so I could not read its state from chat.')
+
 
 def _no_switch_words(row: dict) -> str:
     """What to say when `feature_switches(row)` named no readable switch.
@@ -845,6 +931,11 @@ def _no_switch_words(row: dict) -> str:
     """
     mine = _matrix_row(row) or {}
     status = str(mine.get("status") or "")
+    tool_words = _tool_switch_words(row)
+    if tool_words:
+        # A row the AI-tool switch page really does hold: the "no switch"
+        # sentence would contradict the row's own `where` (2026-11-07).
+        return tool_words
     if status not in _HAS_A_CONTROL:
         return ("The feature list names no on/off switch for it, so there is no "
                 "state for me to read.")
@@ -1058,6 +1149,13 @@ def change_words(row: dict) -> str:
     if label == LABEL_PC_ONLY:
         return (f"It is changed at {settings_path_words(row)} on this PC; the phone "
                 f"says so rather than pretending it changed.")
+    tool_words = _tool_switch_words(row)
+    if tool_words:
+        # The state sentence is in `_state_clause` just above this call; this
+        # half says how to CHANGE it, and repeats no state claim.
+        return ('To change it, use its own switch in Settings, What asks first, '
+                'under "Let the AI use this". ' + _example_words(row)
+                + f" It is listed at {settings_path_words(row)}.")
     return ("It runs when you ask and has no switch of its own. "
             + _example_words(row)
             + f" It is listed at {settings_path_words(row)}.")
@@ -2418,6 +2516,23 @@ def state(words) -> dict:
         row = got["row"]
         rows = _switch_state_rows(row)
         if not rows:
+            # A row switched on by an AI-tool switch (2026-11-07): its state is
+            # read from the same page the apps draw, never from a BoolSetting,
+            # and never reported as "no switch" (its own `where` says it has one).
+            tool = _tool_switch_rows(row)
+            if _names_tool_switch(row):
+                known = [s for s in tool if isinstance(s["state"], bool)]
+                value = None
+                if known and len({s["state"] for s in known}) == 1:
+                    value = known[0]["state"]
+                if len(tool) == 1 and len(known) == 1:
+                    words = (f"\"{row['title']}\" is "
+                             f"{ON_WORD if value else OFF_WORD} right now "
+                             f"({tool[0]['label']}).")
+                else:
+                    words = f"{row['title']}: {_tool_switch_words(row)}"
+                return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                        "state": value, "switches": tool, "words": words}
             has_control = (str((_matrix_row(row) or {}).get("status") or "")
                            in _HAS_A_CONTROL)
             words = (f"{row['title']}: {_no_switch_words(row)}" if has_control else
@@ -2487,6 +2602,20 @@ def how_to(words, on: bool) -> dict:
         base = (f"{row['title']}. Where: {str(row.get('where') or '').strip()} "
                 f"Does it ask first? {str(row.get('asks') or '').strip()}")
         if not rows:
+            # A row switched on by an AI-tool switch (2026-11-07): there is no
+            # fixed typed sentence - the switch is the page's own control - so
+            # the answer names that switch and its live state instead of
+            # claiming "nothing to turn on or off".
+            tool = _tool_switch_rows(row)
+            if _names_tool_switch(row):
+                labels = "; ".join(f'"{s["label"]}"' for s in tool)
+                tail = ('To change it, use its own switch in Settings, What asks '
+                        'first, under "Let the AI use this"'
+                        + (f': {labels}.' if labels else '.')
+                        + ' There is no fixed sentence for it. '
+                        + _tool_switch_words(row))
+                return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                        "switches": tool, "words": (base + " " + tail)}
             # An ability with no switch is not a dead end: say which kind it is
             # and how to use it, in the same words the "turn on <ability>"
             # phrase already gives (2026-10-26). A row that DOES have a control
@@ -2721,6 +2850,12 @@ NO_COMMAND_REASON = {
     "tutorials": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
     "pc-help": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "github-watchlist": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The connected-GitHub surface (2026-11-07, the owner's 2026-11-03 "Read +
+    # actions" decision finally given its catalogue row). The six TOOLS each
+    # have their own switch on Settings, What asks first - no ONE switch belongs
+    # to the feature itself, so the row is an ability with three carded actions
+    # and no boolean of its own.
+    "connected-github": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "chatbot": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "support": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "projects": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),

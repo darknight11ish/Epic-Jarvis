@@ -34939,7 +34939,7 @@ Without a saved token every one of the six answers in plain words - *"Jarvis has
 
 ### 190.4 What Jarvis will never do with GitHub
 
-**No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing.
+**No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing. **The refusal is deterministic now (2026-11-07):** "can you merge a pull request?" is answered by the `github_self` chat intent (§190.8) from `NEVER_WORDS`, and the answer says out loud that there is no merge action and no merge card, even with approval - the model used to answer "no" and then offer a merge card that does not exist.
 
 ### 190.5 The wording, the token and the failures
 
@@ -34947,7 +34947,7 @@ The card prints the **literal address** of every request and, for a comment or a
 
 ### 190.6 Switching it on
 
-All six ship **SWITCHED OFF** - they are not in `[tools].enabled`, exactly like `github_search`. Add `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` to that list, and save a token by saying "connect GitHub". The Reach page shows each one as off with the line that turns it on until then.
+All six ship **SWITCHED OFF**. Settings, **What asks first**, under **"Let the AI use this"** (group **"Jarvis's own tools"**) holds **one switch per tool** - `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` - and turning one ON from the PC is one card plus Windows Hello while OFF is instant from either app (`POST /api/asks_first/tools`; the owner's decision of 2026-11-04). Adding the name to `[tools].enabled` by hand still works and is what the switch writes. The Reach page lists each one as off until then. The same page has the switches for `github_search` (GitHub research) and every other reading tool.
 
 `backend/github-tools.patch` gives `jarvis_gate.py` the four actions and the six `_TOOL_ACTIONS` entries - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
 
@@ -34959,6 +34959,17 @@ writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
 those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
 
 **One-sided on purpose:** there is no screen for this in either app, and `tools/check_parity.py` is unchanged because no route was added. The ability is in both apps' chats (the tools run on this PC, and either app's chat is the same turn); a GitHub screen would be deep configuration, and `docs/ARCHITECTURE.md` §8 carries the reason.
+### 190.8 Asking about it in chat, and the catalogue row (2026-11-07)
+
+The tool-capability audit of 2026-11-07 drove these questions through the live chat and found the model answering them: it denied having a public repository, offered a merge card that does not exist, said nothing was needed to read the owner's repos, and answered "how do I disconnect it?" with "you haven't told me what 'it' is yet". The surface was built; the self-knowledge was not. Two things fix that, and both are model-free:
+
+* **`features/features.json` has ONE `connected-github` row** - id `connected-github`, title "Read and act on your own GitHub" - naming the six tools, `github_search`, the scheduled `watch_github` job, the three carded actions and the never-list, with `gate` = the four real `ask` actions. It is the row the Features pages, the Feature Guide and the deterministic capability answer all read, so "what can you do with my GitHub?" now names the connected surface instead of only the two 2026-09-30 research features.
+* **Two read-only chat intents in `jarvis_quick.py`:**
+  * `github_self` (shapes `repo`, `ci`, `tools`, `needs`, `never`, `merge`, `asks`, `action`) answers "what is your GitHub repository?" / "where does your code live?" with **`darknight11ish/Epic-Jarvis`**, reads `jarvis_github.connected()` for the token state, lists the six tools plus `github_search` and `watch_github`, answers "what do you need before you can read my repos?" (a token + the tools switched on), "what can't you do on GitHub?" (the never-list), the four `ask` rows from `jarvis_asks_first.view()`, and refuses merge/push/commit/close/delete/approve with `NEVER_WORDS` + "there is no merge action and no merge card".
+  * `accounts_answer` (shapes `list`, `abilities`, `disconnect`) is the door `jarvis_accounts.sentence()` / `state_words()` never had: "what accounts do I have?", "what abilities does my GitHub connection have?" and "how do I disconnect my GitHub?" (the row's own `remove` sentence) are answered from the same values `GET /api/accounts` serves. `probe=False` - no socket is opened by a chat answer.
+
+`GET /api/accounts`'s GitHub row is corrected in the same change: six abilities (the three reads sharing `github_inspect`, plus `github_comment`, `github_open_issue`, `github_rerun_workflow`, and the existing `github_read`/`research_authenticated` watch pair), with its limit saying "Read AND act, each with its own card", and the truthful never-list. `test_github_self_knowledge.py` holds all of it; `test_self_answers.py` and `test_feature_guide.py` hold the chat and guide cases.
+
 ## 191. Hands-free mode: every card read out, one spoken answer, and a text message the phone sends (2026-11-04)
 
 The owner's own request of 2026-11-04:

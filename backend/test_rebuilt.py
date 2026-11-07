@@ -113,14 +113,20 @@ import jarvis_initiative as IN     # noqa: E402
 class Framework(unittest.TestCase):
 
     def test_the_surviving_assertion(self):
-        """test_jobs.py:253 asserts this exact thing, and it is the only
-        behaviour of action_tier that is KNOWN rather than inferred:
+        """`test_jobs.py:253` used to assert this exact thing (the only
+        behaviour of action_tier that was KNOWN rather than inferred):
 
             self.assertEqual(fw.action_tier("web_research"), "auto")
+
+        It was "auto" then, with jarvis_agent.NEEDS_A_PERSON as the belt that
+        still made the github_search tool ask. The shipped line is "ask" since
+        2026-11-07, so the recovered value is the same fact the file now
+        states; this still proves jarvis_framework reads the shipped file
+        rather than falling back.
         """
         if _CONFIG is None:
             self.skipTest("jarvis-framework.toml not found; " + explain())
-        self.assertEqual(FW.action_tier("web_research"), "auto")
+        self.assertEqual(FW.action_tier("web_research"), "ask")
 
     def test_an_unclassified_action_fails_closed(self):
         """jarvis-framework.toml's own words: "an action nobody classified is

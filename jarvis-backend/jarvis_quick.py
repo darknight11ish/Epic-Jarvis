@@ -1754,6 +1754,22 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- GitHub, and the accounts list (2026-11-07) ---------------------------
+    # The audit of 2026-11-07 drove 24 live GitHub questions: every one that was
+    # not "connect"/"is it connected" fell to the model, which invented a merge
+    # card, denied its own public repository, and answered "how do I disconnect
+    # it?" with "you haven't told me what 'it' is yet". These two read the
+    # modules that own the facts (jarvis_github, jarvis_accounts) with no model.
+    # After `_self_answers` so the older self-questions keep their own words,
+    # and before the settings/connect grammar so "how do I disconnect my
+    # GitHub" is answered rather than read as a setting.
+    got = _self_github(s)
+    if got is not None:
+        return got
+    got = _self_accounts(s)
+    if got is not None:
+        return got
+
     # --- the twelve pair rules (2026-11-04) ----------------------------------
     # A sentence that names TWO things and asks what they do together. Before
     # the settings grammar on purpose: "does web search use ask before every
@@ -11137,6 +11153,246 @@ def _self_answers(s: str) -> Optional[Intent]:
 
 
 # --------------------------------------------------------------------------
+#   GitHub as Jarvis's own makeup, and what it may never do (2026-11-07)
+#
+# THE MEASURED GAP (audit `.dsh-scratch/TOOL-CAPABILITY-AUDIT-2026-11-07/`,
+# 2026-11-07, live 0.2.437). Every GitHub question that is not "connect" or
+# "is it connected" fell to the local model, and the model invented answers:
+# "what is your GitHub repository?" -> "I don't have a public GitHub
+# repository" (false: darknight11ish/Epic-Jarvis is public and the updater
+# downloads its releases from it); "can you merge a pull request?" -> a MERGE
+# APPROVAL CARD was invented ("I can propose the merge to you now"), while
+# jarvis_github.NEVER has merge in it and no merge action, card or endpoint
+# exists anywhere; "how do I disconnect it?" -> "you haven't told me what 'it'
+# is yet", while the true careful sentence already sits in
+# jarvis_accounts.state_words("github").
+#
+# WHAT THIS BLOCK DOES. Whole-sentence shapes only, answered from the modules
+# that own each fact, at answer time: jarvis_github.connected() for the token,
+# jarvis_github.NEVER_WORDS for the never-list, jarvis_accounts.state_words()
+# for the connect/disconnect facts (the same answer /api/accounts serves), and
+# jarvis_asks_first.view() for which GitHub actions ask. Read-only: no card, no
+# network, no model and nothing written - all four names are in
+# READ_ONLY_INTENTS. A near miss still goes to the model exactly as before.
+
+#: The owner's own repository - the public page this app's releases are
+#: downloaded from (jarvis_quick.UPDATE_MANIFEST_URL and
+#: jarvis_tool_updates' GitHub addresses live under the same owner).
+GITHUB_REPO = "darknight11ish/Epic-Jarvis"
+
+GITHUB_MISSING = ("Your PC's Jarvis has no GitHub module yet - run "
+                  "apply-patches.ps1 on the PC.")
+
+#: One fixed sentence, so "what is your repository", "where does your code
+#: live" and "what is your GitHub" cannot say three different things.
+GITHUB_OWN_REPO_WORDS = (
+    f"My source code is the public repository {GITHUB_REPO} - that is where this "
+    f"app's own releases come from. This PC runs its own installed copy of it. "
+    f"Your own repositories are separate from mine and need your token.")
+
+_GITHUB_OWN_REPO = re.compile(
+    r"(?:what|which)\s+(?:is|are)\s+(?:your|jarvis'?s?)\s+"
+    r"(?:github\s+)?(?:repo|repository|source\s*code|code\s*base|codebase)\s*\??"
+    r"|(?:what|which)\s+(?:github\s+)?(?:repo|repository)\s+(?:are\s+you|is\s+jarvis)"
+    r"\s+(?:in|using|from)\s*\??"
+    r"|where\s+(?:does|do|is)\s+(?:your|jarvis'?s?)\s+"
+    r"(?:code|source\s*code|repo|repository)\s+(?:live|sit|reside|come\s+from|stored?)\s*\??"
+    r"|where\s+is\s+(?:your|jarvis'?s?)\s+(?:github\s+)?(?:repo|repository)\s*\??"
+    r"|do\s+you\s+have\s+(?:a|your\s+own)\s+github\s+(?:repo|repository|page)\s*\??")
+
+#: A GitHub thing, and a verb that would CHANGE it. Both must be present for
+#: the never-list to answer, so "close the window" and "delete a file" keep
+#: their own paths; "merge" counts on its own because only code is merged.
+_GITHUB_THING = re.compile(
+    r"\b(?:github|pull\s*requests?|prs?|issues?|repos?(?:itory|itories)?|"
+    r"commits?|branches?|workflows?)\b")
+_GITHUB_CHANGE_VERB = re.compile(
+    r"\b(?:merge|push|commit|close|delete|remove|approve)\b")
+_GITHUB_ASK_LEAD = re.compile(
+    r"^(?:(?:hey\s+|ok\s+|okay\s+)?jarvis[,:]?\s+)?"
+    r"(?:(?:can|could|would|will|do|did|have|are)\s+(?:you|jarvis)\b"
+    r"|(?:please\s+)?(?:merge|push|commit|close|delete|remove|approve)\b)")
+
+#: Asking for one of the three real ACTIONS, so the answer can say "one card".
+_GITHUB_ACTION_ASK = re.compile(
+    r"\b(?:comment|commenting)\b.*\b(?:issue|pull\s*request|pr)\b"
+    r"|\b(?:open|opening|create|creating|file|filing)\b.*\bissues?\b"
+    r"|\b(?:re-?run|rerun|re-running|run\s+again|start\s+again)\b.*\bworkflows?\b")
+
+_GITHUB_NEEDS = re.compile(
+    r"what\s+(?:do\s+you|does\s+jarvis|would\s+you)\s+need\s+(?:before\s+)?"
+    r"(?:(?:you|jarvis)\s+(?:can|could)\s+)?(?:to\s+)?"
+    r"(?:read|access|see|look\s+at|check)\s+(?:my\s+|the\s+)?"
+    r"(?:github\s+)?(?:repos?|repositories?|pull\s*requests?|issues?|code)\b.*"
+    r"|what\s+(?:do\s+i|must\s+i|should\s+i)\s+(?:need\s+)?(?:to\s+)?(?:give|set\s+up|do)"
+    r"\s+(?:you\s+)?(?:for|to)\s+(?:read\s+my\s+github|use\s+github|access\s+my\s+github|github)\b.*"
+    r"|what\s+does\s+(?:reading|accessing)\s+my\s+github\s+(?:need|require)\b.*")
+
+_GITHUB_CANT = re.compile(
+    r"what\s+(?:can'?t|cannot|can\s+not|won'?t|will\s+not)\s+(?:you|jarvis)\s+do"
+    r"\s+(?:on|with|to)\s+(?:my\s+|the\s+)?github\b.*"
+    r"|what\s+(?:are\s+)?(?:your|jarvis'?s?)\s+(?:github\s+)?limits?\s+(?:on\s+github)?\s*\??$")
+
+_GITHUB_TOOLS_QUESTION = re.compile(
+    r"what\s+github\s+(?:tools|features|abilities)\s+"
+    r"(?:do\s+you|does\s+jarvis|have\s+you|are\s+you)\s+"
+    r"(?:have|got|use|using|offer|offered)\b.*"
+    r"|what\s+github\s+tools\s+(?:can\s+you\s+use|are\s+you\s+using|do\s+you\s+use)\b.*"
+    r"|do\s+you\s+have\s+(?:a\s+)?(?:feature|tool|ability|way)\s+(?:that\s+)?"
+    r"(?:can\s+)?(?:reads?|access(?:es)?|look\s+at|see)\s+(?:my\s+|the\s+)?github\b.*"
+    r"|what\s+github\s+(?:things?|stuff)\s+can\s+you\s+do\b.*"
+    # "what tools do you have for GitHub?" - the word order the model tool
+    # inventory uses; still requires GITHUB, so "what features do you have"
+    # (the catalogue's own groups answer) is never taken by this.
+    r"|what\s+(?:tools|features|abilities)\s+(?:do\s+you|have\s+you)\s+"
+    r"(?:have|got)\s+(?:for|on|about|to\s+use\s+(?:for|on))\s+github\b.*")
+
+_GITHUB_OWN_CI = re.compile(
+    r"what(?:'s|\s+is|\s+are)\s+(?:your|jarvis'?s?)\s+ci"
+    r"(?:\s+(?:status|doing|like))?\s*\??$"
+    r"|how\s+is\s+(?:your|jarvis'?s?)\s+ci\b.*"
+    r"|is\s+(?:your|jarvis'?s?)\s+ci\s+(?:green|passing|failing|red)\s*\??$")
+
+_GITHUB_ASKS = re.compile(
+    r"what\s+asks?\s+(?:you\s+)?(?:first\s+)?before\s+github\s+acts?\s*\??$"
+    r"|what\s+asks?\s+before\s+github\s+acts?\s*\??$"
+    r"|what\s+(?:github\s+)?(?:actions|things)\s+ask\s+(?:you\s+)?first\b.*"
+    r"|which\s+(?:github\s+)?(?:tools|actions)\s+ask\s+(?:you\s+)?first\b.*")
+
+
+def _github_module():
+    """jarvis_github when this PC has it, else None."""
+    try:
+        import jarvis_github as GH
+        return GH
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+def _github_state_words() -> str:
+    """Whether a token is saved, said in plain words, from jarvis_github."""
+    GH = _github_module()
+    if GH is None:
+        return GITHUB_MISSING
+    try:
+        connected = bool(GH.connected())
+    except Exception:                       # noqa: BLE001 - unreadable is unknown
+        return ("I could not read whether a GitHub token is saved on this PC, so I "
+                "will not say whether it is connected.")
+    if connected:
+        return ("A GitHub token is saved on this PC, so your GitHub is connected. "
+                "Say \"connect my GitHub\" to replace it.")
+    return ("Your GitHub is not connected yet: no token is saved on this PC. Say "
+            "\"connect my GitHub\" and one card appears for a personal access token, "
+            "typed on that card and never in chat.")
+
+
+def _github_never_words() -> str:
+    """The module's own refusal sentence, or a fixed fallback without it."""
+    GH = _github_module()
+    if GH is not None:
+        try:
+            return str(GH.never_words() or "").strip()
+        except Exception:                   # noqa: BLE001 - fall through to words
+            pass
+    return ("Jarvis cannot merge, push, commit, delete or close anything on GitHub - "
+            "it can read your GitHub, comment, open an issue and re-run a workflow, "
+            "and nothing else.")
+
+
+def _self_github(s: str) -> Optional[Intent]:
+    """GitHub questions answered from the real surface, never by the model.
+
+    Whole-sentence shapes only, in the order a person would be surprised to
+    see them interchanged. A sentence this does not claim keeps its old path.
+    """
+    if _GITHUB_OWN_REPO.fullmatch(s):
+        return Intent("github_self", {"shape": "repo"})
+    if _GITHUB_OWN_CI.fullmatch(s):
+        return Intent("github_self", {"shape": "ci"})
+    if _GITHUB_ASKS.fullmatch(s):
+        return Intent("github_self", {"shape": "asks"})
+    if _GITHUB_NEEDS.fullmatch(s):
+        return Intent("github_self", {"shape": "needs"})
+    if _GITHUB_CANT.fullmatch(s):
+        return Intent("github_self", {"shape": "never"})
+    if _GITHUB_TOOLS_QUESTION.fullmatch(s):
+        return Intent("github_self", {"shape": "tools"})
+    # A request to DO one of the never-list things, or to ask whether it can.
+    # `token`/`account` are excluded: "delete my GitHub token" is a disconnect
+    # question and belongs to the accounts answer below, not to this refusal.
+    if (_GITHUB_ASK_LEAD.match(s) and _GITHUB_CHANGE_VERB.search(s)
+            and (_GITHUB_THING.search(s) or "merge" in s)
+            and not re.search(r"\b(?:token|account|connection|link)\b", s)):
+        return Intent("github_self", {"shape": "merge"})
+    if _GITHUB_ACTION_ASK.search(s) and re.match(
+            r"^(?:(?:can|could|would|will|do)\s+(?:you|jarvis)\b|"
+            r"(?:please\s+)?(?:comment|open|create|file|re-?run|rerun)\b)", s):
+        return Intent("github_self", {"shape": "action"})
+    return None
+
+
+#: The account-shaped questions, answered from jarvis_accounts - the same
+#: module GET /api/accounts serves. Before 2026-11-07 `state_words()` and the
+#: whole-list `sentence()` had NO caller at all: the answer to "is my GitHub
+#: connected / how do I disconnect it / what can it do" was written and live at
+#: /api/accounts, and no door in either app reached it (the audit's BLOCKER 3).
+#: "is my GitHub connected?" keeps its older connect_account answer, which runs
+#: a real test; these shapes are the ones that had nothing.
+_ACCOUNTS_LIST = re.compile(
+    r"what\s+accounts?\s+(?:do\s+(?:i|you|we)\s+have|are\s+(?:connected|set\s*up|linked)"
+    r"|have\s+(?:you|i)\s+got|does\s+jarvis\s+have|can\s+you\s+see)\s*\??"
+    r"|which\s+accounts?\s+(?:do\s+(?:i|you)\s+have|are\s+(?:connected|set\s*up|linked))\s*\??"
+    r"|what\s+accounts?\s+are\s+connected\s*\??$")
+_ACCOUNTS_ABILITIES = re.compile(
+    r"what\s+(?:abilities|permissions|rights|access)\s+(?:does|do|has|have|can)\s+"
+    r"(?:my|the|your)\s+[\w -]{2,40}?(?:\s+(?:connection|account|link|token))?\s+"
+    r"(?:have|do|give|allow|let)\b.*"
+    r"|what\s+can\s+you\s+do\s+with\s+(?:my|the)\s+[\w -]{2,30}?"
+    r"\s+(?:account|connection|link)\b.*"
+    r"|what\s+(?:does|do)\s+(?:my|the)\s+[\w -]{2,30}?\s+(?:account|connection|link)\s+"
+    r"(?:let|allow)\s+you\s+do\b.*")
+_ACCOUNT_DISCONNECT = re.compile(
+    r"how\s+(?:do|can|could|would)\s+(?:i|you)\s+(?:please\s+)?"
+    r"(?:disconnect|remove|unlink|revoke|delete|forget)\s+(?:my|the|this)\s+[\w -]{2,40}$"
+    r"|(?:can|could|will|would)\s+(?:you|jarvis)\s+(?:please\s+)?"
+    r"(?:disconnect|remove|unlink|revoke|delete|forget)\s+(?:my|the|this)\s+[\w -]{2,40}$"
+    r"|(?:disconnect|remove|unlink|revoke|delete|forget)\s+(?:my|the)\s+[\w -]{2,40}$")
+
+
+def _accounts_module():
+    try:
+        import jarvis_accounts as ACC
+        return ACC
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+ACCOUNTS_MISSING = ("Your PC's Jarvis cannot read its accounts list yet - run "
+                    "apply-patches.ps1 on the PC.")
+
+
+def _self_accounts(s: str) -> Optional[Intent]:
+    """The accounts list, one account's abilities, and how one is disconnected."""
+    ACC = _accounts_module()
+    if ACC is None:
+        return None
+    if _ACCOUNTS_LIST.fullmatch(s):
+        return Intent("accounts_answer", {"shape": "list"})
+    if _ACCOUNT_DISCONNECT.fullmatch(s):
+        account = ACC.account_from_words(s)
+        if account:
+            return Intent("accounts_answer", {"shape": "disconnect", "account": account})
+        return None
+    if _ACCOUNTS_ABILITIES.fullmatch(s):
+        account = ACC.account_from_words(s)
+        if account:
+            return Intent("accounts_answer", {"shape": "abilities", "account": account})
+        return None
+    return None
+
+
+# --------------------------------------------------------------------------
 #   Jarvis's own measured facts, and its hard safety rules (2026-11-06)
 # --------------------------------------------------------------------------
 #
@@ -12052,7 +12308,11 @@ _UPDATE_ASK = re.compile(
     r"|(?:any|new)\s+updates?"
     r"|(?:is|are)\s+(?:the\s+)?jarvis(?:\s+app)?\s+up\s+to\s+date"
     r"|(?:do|does)\s+(?:i|jarvis)\s+need\s+(?:an?\s+)?update"
-    r"|what(?:'s|s| is)\s+the\s+(?:latest|newest)\s+(?:version|release)"
+    # "the", "your", "its" and "Jarvis's" all ask the same question. Measured
+    # 2026-11-07: "what's the latest release?" was answered exactly, while
+    # "what's your latest release?" fell to the model, which said it had no
+    # version number at all - one pronoun away from the answer that exists.
+    r"|what(?:'s|s| is)\s+(?:the|your|its|jarvis'?s?)\s+(?:latest|newest)\s+(?:version|release)"
     r"(?:\s+of\s+jarvis)?"
     r"|what\s+version\s+(?:of\s+jarvis\s+)?(?:am\s+i|is\s+jarvis)\s+(?:on|running)"
     r"|check\s+for\s+(?:an?\s+|any\s+)?(?:new\s+)?updates?"
@@ -17585,6 +17845,128 @@ def _run_connected(intent: Intent) -> Result:
                   "the AI model.", intent.name)
 
 
+#: The six on-demand tools, named EXACTLY as jarvis_agent.TOOLS registers them,
+#: plus the research tool and the scheduled watch body - so the inventory
+#: answer names the whole real GitHub surface and nothing invented.
+GITHUB_TOOLS_WORDS = (
+    "Six tools for your own GitHub: github_list (your repositories, a "
+    "repository's pull requests, issues or workflow runs), github_read_file (one "
+    "file), github_ci_status (the newest workflow run), github_comment (one "
+    "comment), github_open_issue (one new issue) and github_rerun_workflow (run an "
+    "existing workflow again). Plus github_search, which researches a library on "
+    "GitHub, and the scheduled watch_github job behind \"tell me when\" GitHub "
+    "checks.")
+
+
+def _github_asks_words() -> str:
+    """Which GitHub actions ask first, from the asks-first page's own rows."""
+    try:
+        import jarvis_asks_first as AF
+        view = AF.view(here=False)
+    except Exception:                       # noqa: BLE001 - older PC
+        return ("Four actions ask you first every time: reading your GitHub, "
+                "commenting, opening an issue and re-running a workflow.")
+    wanted = ("github_inspect", "github_comment", "github_open_issue",
+              "github_rerun_workflow")
+    got = []
+    for group in view.get("groups") or ():
+        for row in group.get("rows") or ():
+            rid = str((row or {}).get("id") or "")
+            if rid in wanted:
+                got.append(str(row.get("title") or rid))
+    if not got:
+        return ("Four actions ask you first every time: reading your GitHub, "
+                "commenting, opening an issue and re-running a workflow.")
+    return ("These GitHub actions ask you first every time: " + _self_list(got)
+            + ". The reads ask too, because a read sends your token to "
+              "api.github.com. That cannot be loosened from an app.")
+
+
+def _run_github_self(f: dict) -> Result:
+    """The GitHub questions the model used to invent answers to (2026-11-07).
+
+    Every sentence is built from a module that owns the fact at answer time:
+    `jarvis_github.connected()`, `jarvis_github.never_words()`,
+    `jarvis_asks_first.view()` and the fixed repository constant shared with
+    the updater. No model, no card, no network, no write.
+    """
+    shape = str(f.get("shape") or "")
+    state = _github_state_words()
+    never = _github_never_words()
+    if shape == "repo":
+        return Result(GITHUB_OWN_REPO_WORDS, "github_self")
+    if shape == "ci":
+        return Result(
+            "My own CI runs on GitHub Actions in " + GITHUB_REPO + ". " + state
+            + " The github_ci_status tool can read a repository's newest workflow "
+              "run once a token is saved and the GitHub tools are switched on; "
+              "neither app has a separate CI screen.", "github_self")
+    if shape == "never":
+        return Result(never + " " + state, "github_self")
+    if shape == "merge":
+        return Result(
+            "No. " + never + " There is no merge action and no merge card at all - "
+            "approving a card cannot create one, because merging was never built. "
+            "A pull request is merged on GitHub itself, by you.", "github_self")
+    if shape == "tools":
+        return Result(
+            GITHUB_TOOLS_WORDS + " All of them are off by default: each has its own "
+            "switch in Settings, What asks first, under \"Let the AI use this\" "
+            "(group \"Jarvis's own tools\"). " + state, "github_self")
+    if shape == "needs":
+        return Result(
+            "Two things. First a GitHub personal access token, saved on this PC by "
+            "the one \"connect my GitHub\" card - it is typed on the card and never "
+            "in chat. Second, the GitHub tools switched on in Settings, What asks "
+            "first, under \"Let the AI use this\"; each has its own switch and they "
+            "all ship off. " + state, "github_self")
+    if shape == "asks":
+        return Result(_github_asks_words() + " " + state, "github_self")
+    if shape == "action":
+        return Result(
+            "Yes - each one waits for its own approval card showing exactly what "
+            "will be posted or re-run. Commenting, opening an issue and re-running "
+            "a workflow are the only three things Jarvis can change on GitHub, and "
+            "nothing happens until you decide that card. Three reads work the same "
+            "way: listing your repositories, pull requests, issues or workflow runs, "
+            "reading one file, and checking the newest CI run - each asks first too, "
+            "because a read sends your token out. " + state, "github_self")
+    return Result(never + " " + state, "github_self")
+
+
+def _run_accounts_answer(f: dict) -> Result:
+    """The accounts list, its abilities and its removal - from jarvis_accounts.
+
+    This is the door that did not exist before 2026-11-07: `sentence()`,
+    `state_words()` and `ability` rows were live at GET /api/accounts and no
+    route, intent or app reached them (the audit's BLOCKER 3).
+    """
+    ACC = _accounts_module()
+    if ACC is None:
+        return Result(ACCOUNTS_MISSING, "accounts_answer")
+    shape = str(f.get("shape") or "")
+    if shape == "list":
+        return Result(str(ACC.sentence() or "").strip() or ACCOUNTS_MISSING,
+                      "accounts_answer")
+    account = str(f.get("account") or "")
+    words = str(ACC.state_words(account) or "").strip()
+    if not words:
+        return Result(ACCOUNTS_MISSING, "accounts_answer")
+    if shape == "disconnect":
+        # Lead with the removal sentence, because that is the question asked -
+        # it is the same text /api/accounts serves as the row's `remove`.
+        row = ACC.state_of(account) or {}
+        remove = str(row.get("remove") or "").strip()
+        if remove:
+            said = (f"{str(row.get('name') or account).strip()} - to disconnect it: "
+                    f"{remove}")
+            change = str(row.get("change") or "").strip()
+            if change:
+                said += f" (It is connected this way: {change}.)"
+            return Result(said, "accounts_answer")
+    return Result(words, "accounts_answer")
+
+
 def _run_self_refresh(intent: Intent) -> Result:
     """"Refresh your abilities" - the self portrait's own refresh, said.
 
@@ -21438,6 +21820,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_tools_asking(intent)
     if n == "connected_list":
         return _run_connected(intent)
+    if n == "github_self":
+        return _run_github_self(f)
+    if n == "accounts_answer":
+        return _run_accounts_answer(f)
     if n == "self_refresh":
         return _run_self_refresh(intent)
     # The six subsystems that only the model answered before (2026-11-04).
@@ -22129,6 +22515,10 @@ READ_ONLY_INTENTS = frozenset({
     # changing or restarting anything - so none may take back what "cancel
     # that" would undo.
     "tools_inventory", "tools_asking", "connected_list", "self_refresh",
+    # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
+    # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
+    # page) and raises no card, so none may take away what "cancel that" undoes.
+    "github_self", "accounts_answer",
     # The six subsystems that only the model answered (2026-11-04): each reads
     # a real state - the preset/hardware readers, the speed record, the memory
     # store, the disk reader, the two schedulers - and changes nothing, so none

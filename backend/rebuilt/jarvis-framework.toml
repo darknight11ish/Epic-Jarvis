@@ -87,7 +87,14 @@ approval_timeout_seconds = 900
 # stopping one gives it less, so it is instant. Both go through the gate either way.
 docker_service_start = "ask"
 docker_service_stop = "auto"
-web_research              = "auto"
+# A model-chosen GitHub research search (`github_search`): egress with the
+# owner's own search words, and `jarvis_agent.NEEDS_A_PERSON` already refuses
+# to run that tool unless a person said yes. It shipped "auto" while that belt
+# was the only guard, so the "What asks first" page showed "Always asks" beside
+# a tier of "auto" and a developer diagnostic (measured live 2026-11-07), and
+# the file disagreed with the behaviour. "ask" is what the code really does, so
+# the file, the page and the code now say one thing.
+web_research              = "ask"
 read_calendar             = "auto"
 # The five tools of backend/README.md "What each one needs in jarvis_gate.py
 # and jarvis-framework.toml" (2026-09-26: they were missing here, and a
