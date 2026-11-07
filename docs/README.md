@@ -1,6 +1,6 @@
 # The documents, and which ones are current
 
-There are **416 markdown documents** here, adding up to about **11.9 MB**. Neither
+There are **417 markdown documents** here, adding up to about **11.9 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-11-04
 with the two lines below, run from the top of the repository - so run them again
