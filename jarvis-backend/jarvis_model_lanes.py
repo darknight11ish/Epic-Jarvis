@@ -307,8 +307,12 @@ POOLED_PORT = 11450
 #: and 2, 83.8 tokens a second warm after a 900-word prompt, cold load 31.6 s.
 #: 32,768 tokens was measured in the same sweep too: 84.9 tok/s at 15.1 GiB and a
 #: 10.9 s cold load - 1.3 % faster and 1.07 GiB smaller, but 16,384 fewer tokens
-#: of window. The owner's Q2 ruling asks for the largest window that stays above
-#: 75 tok/s, so 49,152 is what this lane asks for and the spill allowance is ZERO.
+#: of window. The Q2 ruling named TWO windows, 49,152 and 65,536; 65,536 measured
+#: 59.06 tok/s (below the 75 tok/s bar), so 49,152 is the larger of the named
+#: windows that clears it. (98,304 also measured 88.69 tok/s with zero spill but
+#: was outside the ruling's windows; it is recorded, not chosen.) The spill
+#: allowance is ZERO and the child env asks for the same q8_0 KV cache the
+#: measurement and the two live lanes use.
 #: NOT claimed: that the third card removed the old 323.5 MiB two-card spill. The
 #: two-card control in tonight's sweep also measured zero spill (at 14.84 GiB)
 #: and the difference from the 2026-11-03 record is not explained; that record is

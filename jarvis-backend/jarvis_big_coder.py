@@ -11,8 +11,11 @@ Its cost is the whole reason it is a MODE and not a model: its GPU-resident
 footprint is 14,813 MiB at the smallest context tested, against an 8,192 MiB
 card, so it needs the whole pool and cannot sit beside anything. Measured for
 it on 2026-11-07 with all three cards: zero CPU spill at 49,152 tokens,
-83.8 tokens a second warm after a 900-word prompt, cold load 31.6 s - against
-60.6 tokens a second and a 69.6 s cold load on two cards at 32,768 tokens
+83.8 tokens a second after a 900-word prompt, cold load 31.6 s. The same-night
+two-card control (same q8_0 cache, 32,768 tokens) read 60.6 tokens a second and a
+69.6 s cold load; the 2026-11-03 shipped record used the default f16 cache and
+read 80.4 at 36.0 s, so it is not a like-for-like baseline and the gain over
+today's lane is small - the wider zero-spill window is the change
 (`docs/MEASURED-2026-11-07-THREE-GPU.md`).
 
 THE OWNER'S DECISION, WHICH THIS FILE IMPLEMENTS AND DOES NOT RE-LITIGATE
@@ -419,6 +422,18 @@ def _child_env(port: int) -> dict:
     env["OLLAMA_HOST"] = f"127.0.0.1:{int(port)}"
     env["OLLAMA_NO_CLOUD"] = "1"
     env["OLLAMA_SCHED_SPREAD"] = "1"
+    # The rest of the environment the 2026-11-07 measurement ran with, so
+    # the loaded model really stays until the owner stops it (the card says
+    # exactly that) instead of unloading after Ollama's 5-minute default:
+    env["OLLAMA_KEEP_ALIVE"] = "-1"
+    env["OLLAMA_NUM_PARALLEL"] = "1"
+    env["OLLAMA_MAX_LOADED_MODELS"] = "1"
+    # The KV cache format the measurements used, and the same one the two live
+    # lane servers run (start-lane.ps1): q8_0. Measured on this PC 2026-11-07 at
+    # 49,152 tokens across three cards: q8_0 = 16.17 GiB, the default f16 =
+    # 18.07 GiB, both with zero spill, so the window fits either way - q8_0 is
+    # chosen because it leaves 1.9 GiB more room on the 8 GB cards.
+    env["OLLAMA_KV_CACHE_TYPE"] = "q8_0"
     return env
 
 
@@ -645,18 +660,24 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     lane can never quietly come up at a different window than it asked for.
 
     `allow_spill` is a byte count of spill the CALLER has measured and accepts
-    for its own measured rung. `None` - the default - keeps this function's
-    exact original rule: ANY spill at all is refused, and every caller that
-    does not pass an allowance still gets that rule. The number is a
-    measurement, never a guess: a caller that passes it must be able to point
-    at the measurement that produced it (the Coding preset's pooled lane
-    passes 352 MiB for the 323.5 MiB measured at 32,768 tokens on 2026-11-03,
-    `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s 2026-11-03 amendment). It is
-    one number for one window, not a general "spill is fine" switch: a load
-    that spills past it, or that does not say how much it spilled, is still
-    refused and unloaded.
+    for its own measured rung. `None` - the default - and `0` both keep this
+    function's exact original rule: ANY spill at all is refused, and every
+    caller that does not pass a positive allowance still gets that rule. A
+    positive number must be a measurement the caller can point at;
+    `jarvis_model_lanes` passes 0 since 2026-11-07, because the three-card
+    window loaded with zero spill (`docs/MEASURED-2026-11-07-THREE-GPU.md`).
     """
     ctx_wanted = int(num_ctx or NUM_CTX)
+    # A PC with fewer cards than this window was measured on is refused
+    # BEFORE anything is loaded: the words already say it will not start,
+    # and a load attempted anyway would spill or fail with a worse message.
+    cards = cards_in_pc()
+    if cards is not None and len(cards) < NEEDS_CARDS:
+        return {"ok": False,
+                "why": (f"{MODEL} needs all {NEEDS_CARDS} graphics cards at "
+                        f"{ctx_wanted:,} tokens, and this PC has {len(cards)}; "
+                        "nothing was loaded."),
+                "proof": []}
     url = url_for(port)
     if not load(url, MODEL, ctx_wanted):
         return {"ok": False, "why": f"the three-card Ollama on port {port} did not load "
@@ -670,6 +691,9 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     ctx = row.get("context_length")
     proof = [f"port {port}: {MODEL} ctx={ctx} size={row.get('size')} "
              f"size_vram={row.get('size_vram')} spill={spill}"]
+    # allow_spill=None (every caller except the pooled lane) and
+    # allow_spill=0 (the pooled lane since 2026-11-07) mean the same thing:
+    # NO spill is accepted; a positive number is a measured allowance.
     allowed = int(allow_spill or 0)
     if spill is None or spill > allowed:
         unload(url, MODEL)
@@ -680,7 +704,7 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
                     f"not be checked" if allow_spill is not None else
                     f"this caller accepts no spill, so it could not be proved to fit") +
                    ", and it was unloaded again")
-        elif allow_spill is not None:
+        elif allow_spill:
             why = (f"{MODEL} loaded with {spill} B of spill, over the {allowed} B "
                    f"measured allowance for {ctx_wanted} tokens - it needs the whole three-card pool, "
                    f"and this machine gave it less video memory than that measurement, "

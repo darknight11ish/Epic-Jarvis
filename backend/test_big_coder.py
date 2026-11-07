@@ -760,6 +760,8 @@ def t_the_both_cards_server_is_the_one_this_mode_owns():
     check("OLLAMA_VULKAN=0 is set, so CUDA is really used", env.get("OLLAMA_VULKAN") == "0")
     check("OLLAMA_SCHED_SPREAD=1 is set, so the third card is really filled",
           env.get("OLLAMA_SCHED_SPREAD") == "1")
+    check("the KV cache format is the measured one, q8_0 (the lanes use it too)",
+          env.get("OLLAMA_KV_CACHE_TYPE") == "q8_0", env.get("OLLAMA_KV_CACHE_TYPE"))
     check("it listens on loopback only", env.get("OLLAMA_HOST") == f"127.0.0.1:{B.BIG_PORT}")
     check("and it may never reach the cloud", env.get("OLLAMA_NO_CLOUD") == "1")
 

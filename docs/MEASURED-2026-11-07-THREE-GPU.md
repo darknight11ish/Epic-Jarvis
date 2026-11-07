@@ -118,8 +118,13 @@ at 0 - so the third card is not a label here, it is a third of the model.
 
 ### Coding - moved to all three cards
 
-**83.82 against 60.58 tokens a second** - about **38% faster** on the same
-model - and the **cold load fell from 69.611 s to 31.561 s**, 2.2 times faster.
+**83.82 against 60.58 tokens a second** - about **38% faster** than the
+same-night two-card control, which ran the same q8_0 cache at 32,768 tokens. It
+is **not** 38% faster than the 2026-11-03 shipped record: that ran the default
+f16 cache and read 80.36 tok/s at a 36.0 s cold load, so the like-for-like gain
+over today's lane is small - the change is the wider window (49,152 against
+32,768) at zero spill. The cold load is 31.561 s against the control's 69.611 s
+(and 36.0 s in the older record).
 The measured memory is **16.17 GiB with zero spill** on three cards at the
 49,152-token window. The per-card split leaves the headless card with
 **3,321 MiB free** (4,871 of its 8,192 MiB used), the 2060 with 4,830 free and
@@ -129,8 +134,10 @@ two-card load is so slow; it is also 33.6 s slower than the 36.0 s the
 recorded rather than explained.
 
 **The window: 49,152 is what ships, and 32,768 is the measured alternative.**
-Both rows ran, and both clear the ruling's bar of "the largest window above
-75 tok/s":
+The Q2 ruling named two windows, 49,152 and 65,536; 65,536 measured 59.06 tok/s
+(below the 75 tok/s bar), so 49,152 is the larger named window that clears it.
+98,304 also loaded with zero spill and read 88.69 tok/s, but it was outside the
+ruling's windows and is recorded rather than chosen:
 
 - **49,152 is chosen:** **83.82 tok/s at 16.17 GiB**, zero spill, cold load
   **31.561 s**. Against 32,768 it is 1.3 % slower and costs 1.07 GiB more video
@@ -225,15 +232,21 @@ unchanged and is not re-claimed here.
 - **One repeat per config, no thermal control, no counterbalancing.** Runs were
   serial and in the matrix's own order, so no row is corrected for a warm card
   or a cold one.
-- **The two-card control does not match the 2026-11-03 record, and this page
-  does not hide it.** That record says 32,768 loaded at **16,513.7 MiB with
-  323.5 MiB spilled** and a 36.0 s cold load through the shipped path; tonight's
-  two-card control read **14.84 GiB (15,194 MiB) with zero spill and a 69.611 s
-  cold load** on the same window and the same q8_0 cache. **This sweep does not
-  explain the difference** - it is 1.3 GiB less memory and 33.6 s more load
-  time, which is not a small measurement error. The 323.5 MiB stays in the
-  record as history rather than being deleted, and the claim this page makes is
-  the one it measured: **zero spill on three cards**.
+- **The two-card control does not match the 2026-11-03 record, and the reason is
+  measured rather than hidden.** That record says 32,768 loaded at
+  **16,513.7 MiB with 323.5 MiB spilled** and a 36.0 s cold load through the
+  shipped path; tonight's two-card control read **14.84 GiB (15,194 MiB) with
+  zero spill and a 69.611 s cold load** on the same window. The reason is the
+  **KV cache format**: the 2026-11-03 run used the server's default f16 cache,
+  while every row here set OLLAMA_KV_CACHE_TYPE=q8_0 (the format the matrix
+  documents above). Measured directly after that finding, at the same
+  49,152-token window on three cards: **q8_0 16.17 GiB, f16 18.07 GiB, both
+  zero spill** (kv-check.json in this audit folder) - so the ~1.9 GiB
+  difference is the cache, not a mystery. The 323.5 MiB stays in the record as
+  history rather than being deleted, and the claim this page makes is the one
+  it measured: **zero spill on three cards**. The shipped pooled server now
+  sets OLLAMA_KV_CACHE_TYPE=q8_0 itself, matching this measurement and the
+  two live lanes.
 - **No third-card-only lane was started through the product.** The headless
   card was measured on its own (`fast_headless_16384`,
   `qwenvl8b_headless_16384`), but no logon task, lane object or route was
