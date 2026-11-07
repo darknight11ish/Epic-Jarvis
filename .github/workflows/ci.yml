@@ -1711,7 +1711,15 @@ jobs:
       run:
         working-directory: jarvis-desktop/src-tauri
     steps:
+      # FULL HISTORY (architect ruling Q4, 2026-11-07): the claims step runs
+      # test_self_code.py, whose generator rebuilds the self-code map's recent
+      # history from git commits. A shallow checkout can only skip that, and
+      # the claims checker counts a skip as not-a-pass - which is why this
+      # informational job was red on main while the required backend job (full
+      # history) was green. The history costs seconds; the claim stays strong.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable branch
         with:
           toolchain: stable
