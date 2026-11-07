@@ -49,8 +49,12 @@ WHAT THIS SUITE CHECKS
      and the two upload-documents sentences resolve to it, but these two name
      a generic "file" and no door word, so the matcher declines rather than
      guessing);
-  2. the 25 availability questions from the measured run, each of which must
-     now resolve to its own row - and the answer must quote that row's words;
+  2. the 25 availability questions from the measured run: the 19 that name a
+     row must resolve to it and quote its words, and the 6 that name none must
+     keep falling through - the measured reach is pinned, never silently
+     widened. (Four moved from the decline list to the resolved one on
+     2026-11-06, when PR #1208 added the owner's own measured words as
+     aliases; the six left decline for the same reason they always did.)
   3. the 4 dangerous inversions, each with the verdict and the row it must use;
   4. the crisis misroute: the measured sentence must be the Crisis help row,
      never `reminder_sound`, and a real distress sentence must not be claimed;
@@ -129,25 +133,28 @@ TRAPS = (
      "notion-import"),
 )
 
-#: The measured questions the matcher DECLINES, on purpose: no row is NAMED in
-#: them (a row's own name words do not appear), so the model answers exactly as
-#: it did before. Kept as a list so the suite pins today's reach honestly and a
-#: future improvement shows up as a test change, never a silent one.
+#: The measured questions the matcher DECLINES, on purpose: no row's own name
+#: words appear in them, so the model answers exactly as it did before. Kept as
+#: a list so the suite pins today's reach honestly and a future improvement
+#: shows up as a test change, never a silent one.
+#:
+#: FOUR LEFT THIS LIST on 2026-11-06. PR #1208 added the owner's measured words
+#: to `features/features.json` as aliases - "searches my own past chats" on
+#: history-search, "i hold a button, speak, and let go" on talk-button, "looks at
+#: the window in front of me once and answers about it" on look-at-this, and
+#: "read the picture of my screen, not only its words" on picture-mode - so those
+#: four now name their row and are asserted in AVAILABILITY below instead of
+#: here. #1208's own fixture agrees: `backend/catalogue_phrasing_cases.json`
+#: records each of those four measured questions with that same `expect` row.
+#: The six availability sentences and one how-to sentence left below still
+#: share no row's own name words, so they still fall through.
 FALLS_THROUGH = frozenset({
     "Do you have a feature that reads a PDF or a Word file and answers "
     "questions about it? Answer in one sentence.",
-    "Do you have a feature that searches my own past chats? Answer in one "
-    "sentence.",
-    "Do you have a feature where I hold a button, speak, and let go? Answer "
-    "in one sentence.",
     "Do you have a feature that saves everyday facts about me automatically? "
     "Answer in one sentence.",
     "Do you have a feature that draws a map of everything you know about me? "
     "Answer in one sentence.",
-    "Do you have a feature that looks at the window in front of me once and "
-    "answers about it? Answer in one sentence.",
-    "Do you have a feature that lets you read the picture of my screen, not "
-    "only its words? Answer in one sentence.",
     "Do you have a feature that shows your notifications on my smartwatch? "
     "Answer in one sentence.",
     "Do you have a feature that tells me when a newer build of this app "
@@ -402,8 +409,12 @@ def t_the_measured_availability_questions():
         res, intent = _answer(sentence)
         label = sentence[:52] + ("..." if len(sentence) > 52 else "")
         if sentence in FALLS_THROUGH:
-            check(f"availability never claims a different row: {label}",
-                  _row_of(intent) != row_id, _row_of(intent))
+            # "Declined" means NO catalogue row is claimed: the sentence names
+            # no feature, so any row here would be a guess. (The old check said
+            # `!= row_id`, which let a wrong-row guess through while failing the
+            # right row - exactly backwards from its own name.)
+            check(f"availability falls through, naming no row: {label}",
+                  _row_of(intent) is None, _row_of(intent))
             continue
         check(f"availability resolves to its row: {label}",
               _row_of(intent) == row_id,
@@ -425,8 +436,8 @@ def t_the_measured_howto_questions():
         res, intent = _answer(sentence)
         label = sentence[:52] + ("..." if len(sentence) > 52 else "")
         if sentence in FALLS_THROUGH:
-            check(f"how-to keeps its old answer, never this row: {label}",
-                  _row_of(intent) != row_id, _row_of(intent))
+            check(f"how-to keeps its old answer, naming no catalogue row: "
+                  f"{label}", _row_of(intent) is None, _row_of(intent))
             continue
         check(f"how-to resolves to its row: {label}", _row_of(intent) == row_id,
               f"{_row_of(intent)} != {row_id}")
