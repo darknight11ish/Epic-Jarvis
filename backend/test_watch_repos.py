@@ -50,6 +50,7 @@ require_shipped("jarvis_watch.py", "jarvis_watch_ci.py", "jarvis_quick.py")
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-watch-repos-"))
 os.environ["JARVIS_WATCH_DB"] = str(_TMP / "watch.db")
+os.environ["JARVIS_SCHEDULE_DB"] = str(_TMP / "schedule.db")
 os.environ["JARVIS_WATCH_CI_DIR"] = str(_TMP / "watch-ci")
 os.environ.pop("JARVIS_GITHUB_TOKEN", None)
 os.environ.pop("GITHUB_TOKEN", None)
@@ -66,6 +67,7 @@ fw.audit_log = lambda *a, **k: None
 fw.action_tier = lambda action: "ask"
 sys.modules["jarvis_framework"] = fw
 
+import jarvis_schedule as S  # noqa: E402
 import jarvis_watch as W  # noqa: E402
 import jarvis_watch_ci as WC  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
@@ -80,6 +82,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def _raises(fn, exc, word=""):
+    try:
+        fn()
+    except exc as e:
+        return word.lower() in str(e).lower()
+    return False
 
 
 def fresh():
@@ -100,6 +110,51 @@ def _reset():
 
 
 W._reset = _reset
+
+
+class Clock:
+    def __init__(self, t):
+        self.t = float(t)
+
+    def __call__(self):
+        return self.t
+
+
+class Verdict:
+    def __init__(self, allowed, outcome=None):
+        self.allowed = allowed
+        self.tier = "ask"
+        self.outcome = outcome if outcome is not None else (
+            "approved" if allowed else "denied")
+
+
+class WatchWorld:
+    """A real Scheduler with a hand-moved clock, a gate that answers, and a
+    synchronous spawn - so a card is answered inside the call, as the tests
+    for the older "tell me when" GitHub watch already do. GitHub is the fake
+    above (patched onto the module), so no socket opens."""
+
+    def __init__(self, t, *, answer="approved"):
+        self.clock = Clock(t)
+        self.cards = []
+        self.answer = answer
+        self.gh = FakeGitHub()
+        d = fresh()
+        self.d = d
+        self.s = S.Scheduler(d / "schedule.db", clock=self.clock,
+                             gate=self.gate, tier_of=lambda a: "ask",
+                             spawn=lambda fn: fn(),
+                             publish=lambda k, dd: None)
+        S._SCHED = self.s
+        W._default_gh = self.gh
+        W._deliver = lambda *a, **k: True
+        W._reset_deliver = True
+
+    def gate(self, action, detail, prompt):
+        self.cards.append((action, detail, prompt))
+        if self.answer == "approved":
+            return Verdict(True, "approved")
+        return Verdict(False, self.answer)
 
 
 class FakeGitHub:
@@ -487,104 +542,186 @@ def t_the_sentences_chat_and_live_understand():
     W.DB_PATH = old
 
 
-class _Verdict:
-    def __init__(self, allowed):
-        self.allowed = allowed
-
-
-class Gate:
-    """A gate that records the card and, when asked to, WAITS before answering
-    - so the test can look at the watch while the card is still open."""
-
-    def __init__(self, allow=True, blocking=False):
-        self.calls = []
-        self.allow = allow
-        self.blocking = blocking
-        self.answered = threading.Event()
-        self.release = threading.Event()
-
-    def __call__(self, action, detail, prompt=""):
-        self.calls.append((action, detail, prompt))
-        if self.blocking:
-            self.release.wait(3.0)
-            self.answered.set()
-        return _Verdict(self.allow)
-
-
-def t_starting_a_watch_raises_one_card_through_the_gate():
-    d = fresh()
-    g = world()
-    gate = Gate(allow=True, blocking=True)
-    Q._gate_module = lambda: types.SimpleNamespace(check=gate)
-    res = Q.answer("watch darknight11ish/Epic-Jarvis instantly", now=T0)
-    check("the runner answers in words", res is not None and "card" in res.reply,
-          res and res.reply)
-    for _ in range(300):
-        import time
-        if W.repo_watches():
-            break
-        time.sleep(0.01)
-    check("the watch exists in observe mode while the card is still open",
-          W.repo_watches() and W.repo_watches()[0]["mode"] == "observe",
-          W.repo_watches())
-    for _ in range(300):
-        import time
-        if gate.calls:
-            break
-        time.sleep(0.01)
-    check("ONE card was raised, through the gate", len(gate.calls) == 1, gate.calls)
-    action, detail, prompt = gate.calls[0]
-    check("the card uses the gate's existing repeating-watch action",
+def t_starting_a_watch_creates_the_job_that_polls_after_the_card():
+    w = WatchWorld(T0)
+    res = Q.answer("watch darknight11ish/Epic-Jarvis instantly", sched=w.s, now=T0)
+    check("the runner answers in words and names the card",
+          res is not None and "card" in res.reply, res and res.reply)
+    check("ONE card was raised, through the scheduler's own path",
+          len(w.cards) == 1, w.cards)
+    action, detail, prompt = w.cards[0]
+    check("the card is the gate's existing repeating-watch action",
           action == "schedule_repeat", action)
-    check("the prompt says exactly what is watched and that nothing rings",
-          DEFAULT in prompt and "no" in prompt.lower() and
-          "ring" in prompt.lower(), prompt)
-    gate.release.set()
-    for _ in range(300):
-        import time
-        if W.repo_watches() and W.repo_watches()[0]["mode"] == "active":
-            break
-        time.sleep(0.01)
-    check("a yes makes the watch active", W.repo_watches()[0]["mode"] == "active",
-          W.repo_watches())
-    # A declined card changes nothing.
-    fresh()
-    gate2 = Gate(allow=False)
-    Q._gate_module = lambda: types.SimpleNamespace(check=gate2)
-    Q.answer("watch darknight11ish/Epic-Jarvis daily", now=T0)
-    for _ in range(100):
-        import time
-        if gate2.calls:
-            break
-        time.sleep(0.01)
-    import time as _t
-    _t.sleep(0.05)
-    check("a no leaves the watch in observe mode",
+    check("the card says exactly what is watched and that nothing rings",
+          DEFAULT in str(detail.get("text") or "") + " " + prompt
+          and "ring" in prompt.lower(), (detail, prompt))
+    jobs = W.repo_jobs(w.s)
+    check("a repeating job row now EXISTS for the repository",
+          len(jobs) == 1 and jobs[0]["repo"] == DEFAULT, jobs)
+    check("... due to fire at once (first_now)", jobs[0]["state"] == "active", jobs)
+    check("... every ten minutes, the existing GitHub watch's floor",
+          jobs[0]["minutes"] == W.POLL_MINUTES, jobs)
+    check("before the first fire the watch is still observe only",
           W.repo_watches()[0]["mode"] == "observe", W.repo_watches())
+    w.gh.set(f"/repos/{DEFAULT}", repo_body())
+    w.gh.set(f"/repos/{DEFAULT}/releases?per_page=10", [release(1, "v1")])
+    w.s.tick(now=T0)
+    check("the approved job's fire made the watch active",
+          W.repo_watches()[0]["mode"] == "active", W.repo_watches())
+    check("... and it really looked (baseline)", W.repo_watches()[0]["last_polled"] == T0,
+          W.repo_watches())
+    w.gh.set(f"/repos/{DEFAULT}/releases?per_page=10",
+             [release(2, "v2"), release(1, "v1")])
+    w.clock.t = T0 + 601
+    w.s.tick(now=T0 + 601)
+    rows = WC.default_store().decisions(50)
+    check("a later fire records/delivers the new release",
+          any(r.get("reason_code") == "repo_instant_due" for r in rows), rows[:2])
+    check("... and never twice: a third fire changes nothing",
+          (w.gh.set(f"/repos/{DEFAULT}/releases?per_page=10",
+                    [release(2, "v2"), release(1, "v1")]),
+           w.clock.__setattr__("t", T0 + 1202), w.s.tick(now=T0 + 1202),
+           any(r.get("reason_code") == "repo_instant_due"
+               for r in WC.default_store().decisions(50)))[-1])
+
+
+def t_a_no_on_the_card_sets_up_nothing():
+    w = WatchWorld(T0, answer="denied")
+    Q.answer("watch darknight11ish/Epic-Jarvis daily", sched=w.s, now=T0)
+    check("a no leaves no repeating job", W.repo_jobs(w.s) == [], W.repo_jobs(w.s))
+    check("... the watch is not active", W.repo_watches()[0]["mode"] == "observe",
+          W.repo_watches())
+    w.s.tick(now=T0 + 601)
+    check("... and nothing was polled", W.repo_watches()[0]["last_polled"] is None,
+          W.repo_watches())
+
+
+def t_watching_twice_raises_one_card_and_keeps_one_job():
+    w = WatchWorld(T0)
+    Q.answer("watch darknight11ish/Epic-Jarvis daily", sched=w.s, now=T0)
+    Q.answer("watch darknight11ish/Epic-Jarvis weekly", sched=w.s, now=T0)
+    check("the second sentence adds no second card", len(w.cards) == 1, w.cards)
+    check("... and no second polling job", len(W.repo_jobs(w.s)) == 1,
+          W.repo_jobs(w.s))
+    check("... but it does change the cadence",
+          [x for x in W.repo_watches() if x["full_name"] == DEFAULT][0]["frequency"]
+          == "weekly")
+
+
+def t_forget_takes_the_polling_job_with_it():
+    w = WatchWorld(T0)
+    Q.answer("watch darknight11ish/Epic-Jarvis daily", sched=w.s, now=T0)
+    check("there is a job to delete", len(W.repo_jobs(w.s)) == 1)
+    res = Q.answer("forget darknight11ish/Epic-Jarvis", sched=w.s, now=T0)
+    check("forgetting says it deleted the check", "deleted" in res.reply, res.reply)
+    check("forget leaves no polling job", W.repo_jobs(w.s) == [], W.repo_jobs(w.s))
+    check("forget leaves no watch", W.repo_watches() == [])
+
+
+def t_follow_new_gets_its_own_polling_job():
+    w = WatchWorld(T0)
+    Q.answer("follow new repos for topic mcp", sched=w.s, now=T0)
+    jobs = W.repo_jobs(w.s)
+    check("a followed topic gets a repeating job",
+          len(jobs) == 1 and jobs[0]["follow"] == "mcp", jobs)
+    check("... whose payload carries the topic and the cadence",
+          jobs[0]["payload"].get("follow") == "mcp"
+          and jobs[0]["minutes"] == W.POLL_MINUTES, jobs)
+
+
+def t_the_registered_poll_body_is_callable_with_its_payload():
+    fake = types.ModuleType("jarvis_jobs")
+    registered = {}
+
+    def register(name, fn, readonly=False):
+        registered[name] = fn
+        return fn
+    fake.register = register
+    fake.handlers = lambda: list(registered)
+    old = sys.modules.get("jarvis_jobs")
+    sys.modules["jarvis_jobs"] = fake
+    try:
+        W.register_job()
+        check("register_job registers the watch_repos body by name",
+              "watch_repos" in registered, list(registered))
+        w = WatchWorld(T0)
+        W.watch_repo(DEFAULT, frequency="daily", mode="active")
+        w.gh.set(f"/repos/{DEFAULT}", repo_body())
+        w.gh.set(f"/repos/{DEFAULT}/releases?per_page=10", [release(1, "v1")])
+
+        class Ctx:
+            def __init__(self):
+                self.required, self.progressed = [], []
+
+            def require(self, action):
+                self.required.append(action)
+
+            def progress(self, text):
+                self.progressed.append(text)
+        ctx = Ctx()
+        out = registered["watch_repos"](ctx, {})
+        check("the body asks for github_read (one-shot allow, no standing rule)",
+              ctx.required == ["github_read"], ctx.required)
+        check("the body polls its payload and returns counts",
+              isinstance(out, dict) and out.get("checked") == 1
+              and "new" in out and "digest" in out, out)
+        check("... so the rows the job writes are the decisions log",
+              W.repo_watches()[0]["last_polled"] is not None, W.repo_watches())
+    finally:
+        if old is not None:
+            sys.modules["jarvis_jobs"] = old
+        else:
+            sys.modules.pop("jarvis_jobs", None)
+
+
+def t_the_rule_and_the_card_words():
+    r = W.repo_rule({"every": "minutes", "watch": {"repo": DEFAULT,
+                                                   "frequency": "weekly"}}, T0)
+    check("the rule: ten minutes, the owner's cadence, all parts",
+          r["minutes"] == W.POLL_MINUTES and r["every"] == "minutes"
+          and r["watch"]["frequency"] == "weekly" and len(r["watch"]["events"]) == 5, r)
+    check("too often is refused with words",
+          _raises(lambda: W.repo_rule({"every": "minutes", "minutes": 1,
+                                       "watch": {"repo": DEFAULT}}, T0),
+                  ValueError, "10 minutes"))
+    check("too rarely is refused with words",
+          _raises(lambda: W.repo_rule({"every": "minutes", "minutes": 2000,
+                                       "watch": {"repo": DEFAULT}}, T0),
+                  ValueError, "every day"))
+    check("a bad repository is refused, not guessed",
+          _raises(lambda: W.repo_rule({"every": "minutes",
+                                       "watch": {"repo": "not a repo"}}, T0),
+                  ValueError, "owner/name"))
+    card = W.repo_card(r, "", T0)
+    check("the card names the repository, the cadence and the parts",
+          DEFAULT in card and "10 minutes" in card and "weekly" in card, card)
+    check("... and says the two things that matter: no change on GitHub and no ring",
+          "Nothing on GitHub is changed" in card and "ring" in card, card)
+    check("a fired job that no longer exists cannot raise",
+          W.repo_on_fire("no-such-job").get("ok") is False)
 
 
 def t_the_runners_other_sentences():
-    fresh()
-    world()
-    gate = Gate(allow=True)
-    Q._gate_module = lambda: types.SimpleNamespace(check=gate)
-    res = Q.answer("watch darknight11ish/Epic-Jarvis daily", now=T0)
+    w = WatchWorld(T0)
+    Q.answer("watch darknight11ish/Epic-Jarvis daily", sched=w.s, now=T0)
+    res = Q.answer("stop telling me about darknight11ish/Epic-Jarvis",
+                   sched=w.s, now=T0)
     check("stop talking is instant and needs no card",
-          "pull-only" in Q.answer("stop telling me about darknight11ish/Epic-Jarvis",
-                                  now=T0).reply)
-    check("resume says the cadence", "daily" in Q.answer(
-        "resume watching darknight11ish/Epic-Jarvis", now=T0).reply)
+          "pull-only" in res.reply, res and res.reply)
+    res = Q.answer("resume watching darknight11ish/Epic-Jarvis", sched=w.s, now=T0)
+    check("resume says the cadence", "daily" in res.reply, res and res.reply)
+    res = Q.answer("tell me daily about darknight11ish/Epic-Jarvis",
+                   sched=w.s, now=T0)
     check("a cadence change on an existing watch is instant",
-          "daily" in Q.answer("tell me daily about darknight11ish/Epic-Jarvis",
-                              now=T0).reply)
-    check("forget says what it forgot", "forgot" in Q.answer(
-        "forget darknight11ish/Epic-Jarvis", now=T0).reply)
-    listed = Q._run_repo_watch(Q.Intent("repo_watch_list"), T0).reply
+          "daily" in res.reply, res and res.reply)
+    res = Q.answer("forget darknight11ish/Epic-Jarvis", sched=w.s, now=T0)
+    check("forget says what it forgot", "forgot" in res.reply, res and res.reply)
+    listed = Q._run_repo_watch(Q.Intent("repo_watch_list"), w.s, T0).reply
     check("list reads the store (it was just forgotten)",
           "not watching any repository" in listed, listed)
     check("follow new without a topic asks which",
-          "topic" in Q.answer("follow new", now=T0).reply.lower())
-    check("a bad stream of words is not claimed by the runner",
+          "topic" in Q.answer("follow new", sched=w.s, now=T0).reply.lower())
+    check("a watch sentence answered by the runner is not None",
           res is not None)
 
 

@@ -4356,11 +4356,19 @@ def _read_link_intent(text, s: str,
     return Intent("read_link", {"url": url, "words": low})
 
 
-def _run_repo_watch(intent: Intent, now: float) -> Result:
-    """The per-repository watcher (2026-11-07). Starting or re-activating one
-    raises ONE approval card through the same gate every card goes through;
-    stopping, resuming and changing the cadence are instant, like every other
-    stop and every other cadence change. Nothing here approves anything."""
+def _run_repo_watch(intent: Intent, sched, now: float) -> Result:
+    """The per-repository watcher (2026-11-07).
+
+    STARTING A WATCH CREATES THE THING THAT POLLS. The quick path does not
+    raise a card of its own: it calls `jarvis_watch.ensure_repo_watch_job`,
+    which is `Scheduler.add_repeat` - the same call the older "tell me when
+    CI fails on ..." GitHub watch makes - and THAT creates the repeating job
+    row in `waiting` and raises the ONE `schedule_repeat` card. Nothing is
+    polled before the owner's yes; on the first fire the approved job makes
+    the watch active and looks. Stopping, resuming and changing the cadence
+    are instant, like every other stop and every other cadence change.
+    Nothing here approves anything.
+    """
     n = intent.name
     try:
         import jarvis_watch as W
@@ -4372,25 +4380,40 @@ def _run_repo_watch(intent: Intent, now: float) -> Result:
     # it cannot accidentally fall through to starting a watch.
     action = "list" if n == "repo_watch_list" else str(f.get("action") or "watch")
     target = str(f.get("repo") or "") or W.REPO_DEFAULT
+    polling = {j["id"]: j for j in W.repo_jobs(sched)}
     if action == "list":
         st = W.repo_status()
         if not st["watched"] and not st["followed"]:
             return Result("You are not watching any repository yet. Say \"watch "
                           f"{W.REPO_DEFAULT}\" to start.", n)
+        checks = {}
+        for job in polling.values():
+            checks[job["repo"] or job["follow"]] = job
         bits = []
         for w in st["watched"][:8]:
-            mode = "observe mode - records only" if w["mode"] != "active" else "tells you"
-            bits.append(f"{w['repo']} - {w['frequency_words']}, {', '.join(w['events'])}, "
-                        f"{mode}")
+            job = checks.get(w["repo"]) or {}
+            mode = ("tells you" if w["mode"] == "active" else
+                    "observe mode - records only")
+            when = ("waiting for your yes" if job.get("state") == "waiting"
+                    else "checking every ten minutes" if job else
+                    "not polling yet")
+            bits.append(f"{w['repo']} - {w['frequency_words']}, "
+                        f"{', '.join(w['events'])}, {mode}, {when}")
         for t in st["followed"][:5]:
+            job = checks.get(t["topic"]) or {}
+            when = ("waiting for your yes" if job.get("state") == "waiting"
+                    else "checking every ten minutes" if job else "not polling yet")
             bits.append(f"new repositories for topic {t['topic']} - "
-                        f"{W.REPO_FREQUENCY_WORDS.get(t['frequency'], t['frequency'])}")
+                        f"{W.REPO_FREQUENCY_WORDS.get(t['frequency'], t['frequency'])}, "
+                        f"{when}")
         return Result("You are watching: " + "; ".join(bits) + ".", n)
     if action == "follow_stop":
-        r = W.stop_follow(f.get("topic") or "")
+        topic = str(f.get("topic") or "")
+        r = W.stop_follow(topic)
+        W.stop_repo_watch_jobs(topic, sched=sched, follow=True)
         if not r.get("ok"):
             return Result(f"I was not following new repositories for "
-                          f"{f.get('topic') or 'that topic'}.", n)
+                          f"{topic or 'that topic'}.", n)
         return Result(f"Stopped following new repositories for {r['topic']}.", n)
     if action == "follow_new":
         topic = str(f.get("topic") or "").strip()
@@ -4400,14 +4423,19 @@ def _run_repo_watch(intent: Intent, now: float) -> Result:
         r = W.follow_new(topic, frequency=freq)
         if not r.get("ok"):
             return Result(str(r.get("reason") or "I could not start that."), n)
-        if r.get("new"):
-            _repo_watch_card(r["topic"], r["frequency"], ["new_repo"], follow=True)
+        job = W.ensure_repo_watch_job(topic, freq, [], sched=sched, follow=True)
         said = (f"Following new repositories for topic {topic}, "
                 f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
-        if r.get("new"):
-            said += " One card is waiting for your yes - approve it and I will tell you."
+        if not job.get("ok"):
+            return Result(said + " " + str(job.get("reason") or "").strip(), n)
+        if job.get("existing"):
+            said += (" It is already being checked"
+                     + (" - the approval card is still waiting for your yes."
+                        if job.get("state") == "waiting" else " every ten minutes."))
         else:
-            said += " It was already being followed."
+            said += (" One card is waiting for your yes - the same approval card "
+                     "every repeating watch uses. Approve it and it starts "
+                     "checking every ten minutes.")
         return Result(said, n)
     if action == "stop_talking":
         r = W.set_repo_frequency(target, "off")
@@ -4418,25 +4446,36 @@ def _run_repo_watch(intent: Intent, now: float) -> Result:
                       "again.", n)
     if action == "forget":
         r = W.stop_repo(target)
+        W.stop_repo_watch_jobs(target, sched=sched)
         if not r.get("ok"):
             return Result(f"I was not watching {target}.", n)
-        return Result(f"Stopped watching {r['repo']} and forgot what I recorded about "
-                      "it.", n)
+        return Result(f"Stopped watching {r['repo']}, deleted the check that was "
+                      "polling it, and forgot what I recorded.", n)
     if action == "resume":
         r = W.resume_repo(target)
         if not r.get("ok"):
             return Result(f"I was not watching {target}. Say \"watch {target}\" to "
                           "start.", n)
-        return Result(f"Telling you about {r['repo']} again - "
-                      f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.", n)
+        job = W.ensure_repo_watch_job(r["repo"], r["frequency"], None, sched=sched)
+        said = (f"Telling you about {r['repo']} again - "
+                f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
+        if job.get("ok") and not job.get("existing"):
+            said += (" One card is waiting for your yes - approve it and it starts "
+                     "checking again.")
+        return Result(said, n)
     if action == "frequency":
         freq = str(f.get("frequency") or "")
         if not freq:
             return Result("How often? Say daily, weekly, or instantly.", n)
         r = W.set_repo_frequency(target, freq)
         if r.get("ok"):
-            return Result(f"{r['repo']} now goes {W.REPO_FREQUENCY_WORDS.get(freq, freq)}.",
-                          n)
+            job = W.ensure_repo_watch_job(r["repo"], freq, None, sched=sched)
+            said = (f"{r['repo']} now goes "
+                    f"{W.REPO_FREQUENCY_WORDS.get(freq, freq)}.")
+            if job.get("ok") and not job.get("existing"):
+                said += (" It was not polling, so one card is waiting for your yes "
+                         "- approve it and it starts.")
+            return Result(said, n)
         # Not watching it yet: a cadence sentence about a repository IS a
         # request to watch it, and that request carries its own card.
         target = target or W.REPO_DEFAULT
@@ -4445,22 +4484,23 @@ def _run_repo_watch(intent: Intent, now: float) -> Result:
     r = W.watch_repo(target, frequency=freq, events=events)
     if not r.get("ok"):
         return Result(str(r.get("reason") or "I could not start that."), n)
-    if r.get("new"):
-        carded = _repo_watch_card(r["repo"], r["frequency"], r["events"])
-    else:
-        carded = False
+    job = W.ensure_repo_watch_job(r["repo"], r["frequency"], r["events"],
+                                  sched=sched)
     said = (f"Watching {r['repo']} for {_repo_events_words(r['events'])}, "
             f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
-    if r.get("mode") == "active":
-        said += " It is allowed to tell you, and it can never ring or interrupt."
-    else:
-        said += " It is in observe mode: it records what it would tell you and says "
-        said += "nothing yet."
-        if carded:
-            said += " One card is waiting for your yes - approve it and it starts."
+    if not job.get("ok"):
+        return Result(said + " " + str(job.get("reason") or "").strip(), n)
+    if job.get("existing"):
+        if job.get("state") == "waiting":
+            said += (" Its approval card is still waiting for your yes - approve it "
+                     "and it starts checking every ten minutes.")
         else:
-            said += (" Say \"start telling me about it\" to raise the card that lets "
-                     "it speak.")
+            said += (" It is already checking every ten minutes, and the observer "
+                     "log records what it finds at GET /api/watch/decisions.")
+    else:
+        said += (" One card is waiting for your yes - the same approval card every "
+                 "repeating watch uses. Approve it and it starts checking every ten "
+                 "minutes, and it can never ring or interrupt you.")
     return Result(said, n)
 
 
@@ -4472,72 +4512,6 @@ def _repo_events_words(events: list) -> str:
     if len(got) == 1:
         return got[0]
     return ", ".join(got[:-1]) + " and " + got[-1]
-
-
-def _repo_watch_card(target: str, frequency: str, events: list,
-                     *, follow: bool = False) -> bool:
-    """ONE approval card, raised in the turn the watch is set up in, through
-    `jarvis_gate.check` - the same gate every card goes through. The card's
-    action is `schedule_repeat`, the gate's existing action for setting up a
-    repeating watcher, because this IS one: no new gate action, no new tier,
-    no standing rule. Only a yes makes the watch active; a decline, a timeout
-    or an unreadable gate leaves it in observe mode, which changes nothing."""
-    what = (f"follow new repositories for topic {target}" if follow else
-            f"watch {target} for {_repo_events_words(events)}")
-    detail = {
-        "text": f"{what.capitalize()}, {_freq_words(frequency)}.",
-        "what": (f"poll api.github.com for {what} and tell the owner "
-                 f"{_freq_words(frequency)}; nothing on GitHub changes and no "
-                 f"personal data leaves this PC"),
-        "leaves_this_pc": True,
-    }
-    prompt = (
-        f"Jarvis wants to start watching {target} on GitHub"
-        + (f" - new repositories for that topic" if follow else
-           f" for {_repo_events_words(events)}")
-        + f". It will check api.github.com {_poll_words(frequency)} and tell you "
-          f"{_freq_words(frequency)}. A check of an unchanged repository costs no "
-          f"GitHub rate-limit points. Nothing on GitHub is changed, no personal "
-          f"data is sent, and nothing here can ring or interrupt you. If you say "
-          f"no, it stays in observe mode and records only."
-    )
-
-    def _ask() -> None:
-        try:
-            verdict = _gate_module().check("schedule_repeat", detail, prompt=prompt)
-        except Exception:
-            return
-        try:
-            if getattr(verdict, "allowed", False):
-                if follow:
-                    W = __import__("jarvis_watch")
-                    W.set_follow_mode(target, "active")
-                else:
-                    W = __import__("jarvis_watch")
-                    W.set_repo_mode(target, "active")
-        except Exception:
-            return
-
-    try:
-        threading.Thread(target=_ask, name="jarvis-repo-watch-card",
-                         daemon=True).start()
-        return True
-    except Exception:
-        return False
-
-
-def _freq_words(frequency: str) -> str:
-    return {"instant": "as soon as something happens",
-            "daily": "in the daily digest",
-            "weekly": "in the weekly digest",
-            "off": "only when you ask"}.get(frequency, "in the daily digest")
-
-
-def _poll_words(frequency: str) -> str:
-    return {"instant": "every ten minutes",
-            "daily": "through the day",
-            "weekly": "through the week",
-            "off": "only when you ask"}.get(frequency, "through the day")
 
 
 def _run_tellme(intent: Intent, sched, now: float) -> Result:
@@ -22984,8 +22958,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_tellme(intent, sched, now)
     if n.startswith("repo_watch"):
         # The per-repository watcher (2026-11-07): its own store, its own
-        # cadence, and the one card that lets it speak.
-        return _run_repo_watch(intent, now)
+        # cadence, and the scheduler's own repeating job + one card.
+        return _run_repo_watch(intent, sched, now)
     if n == "project_log":
         return _run_project_log(f, now)
     if n.startswith("focus_"):
