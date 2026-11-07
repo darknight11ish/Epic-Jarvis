@@ -5,6 +5,7 @@ import com.jarvis.client.net.FeatureSearch
 import com.jarvis.client.net.JarvisJson
 import java.io.File
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
@@ -133,6 +134,48 @@ class FeatureDirectoryTest {
         assertEquals(contractCount("Always On"), always.size)
         assertTrue("Always On may not own a switch", always.all { it.switchKeys.isEmpty() })
         assertTrue("Always On is never a toggle", always.none { it.isToggle })
+    }
+
+    @Test
+    fun `the phone's document and Notion doors are in the directory`() {
+        // 2026-11-06: the two doors the phone grew on 2026-11-05 were missing
+        // from the feature list, so Jarvis told the owner it could not import a
+        // document from the phone at all. The generated directory must carry
+        // them, and the Notion row must say BOTH apps (its old desktop-only
+        // words said the phone had no Notion-import screen - false).
+        val document = rows.firstOrNull { it.id == "document-from-phone" }
+        assertTrue("the phone's document door is not in the directory", document != null)
+        if (document != null) {
+            assertEquals("Send a document from your phone", document.name)
+            assertEquals("both", document.surface)
+            assertTrue("the document row must be Command-Only",
+                document.label.startsWith("Command-Only"))
+            assertTrue("the document door is not a switch", !document.isToggle)
+            assertTrue("the document row must offer no phone switch",
+                document.switchKeys.isEmpty())
+            assertTrue("the row does not name the phone's own button: ${document.why}",
+                document.why.contains("Send a document"))
+            assertTrue("the row does not say where the file lands: ${document.why}",
+                document.why.contains("From my phone"))
+            assertTrue("the row does not name the phone's Settings row: ${document.why}",
+                document.why.contains("Folders Jarvis may look in"))
+        }
+        val notion = rows.firstOrNull { it.id == "notion-import" }
+        assertTrue("the Notion row is missing from the directory", notion != null)
+        if (notion != null) {
+            assertEquals("the Notion door is on BOTH apps now", "both", notion.surface)
+            assertTrue("the Notion row must name the phone's Bring in a Notion export door: ${notion.why}",
+                notion.why.contains("Bring in a Notion export"))
+            assertFalse("a both-apps row must not be prefixed as the PC's own place",
+                notion.why.startsWith("On your PC: "))
+        }
+        // The contract the directory is generated from says the same thing, so
+        // a regeneration cannot quietly put the stale words back.
+        val features = contract["features"]!!.jsonArray
+        val contractNotion = features.first { it.jsonObject["id"]!!.jsonPrimitive.content == "notion-import" }
+        assertEquals("both", contractNotion.jsonObject["surface"]!!.jsonPrimitive.content)
+        val contractDocument = features.first { it.jsonObject["id"]!!.jsonPrimitive.content == "document-from-phone" }
+        assertEquals("both", contractDocument.jsonObject["surface"]!!.jsonPrimitive.content)
     }
 
     @Test

@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 178 rows from features/features.json.
+The owner's feature list, as data: 179 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 175f8d8304e7303a1f2f2fbb6e596814e0fe11892dfaeb21151b2eab571dac79); the apps' Features pages read their own
+`features/features.json` (sha256 86658621e6e0b1650dc0c0e1bc34859c9ef16dfd4cc970a1eee8f7b24c0f7dd6); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "175f8d8304e7303a1f2f2fbb6e596814e0fe11892dfaeb21151b2eab571dac79"
+SOURCE_SHA256 = "86658621e6e0b1650dc0c0e1bc34859c9ef16dfd4cc970a1eee8f7b24c0f7dd6"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -862,16 +862,27 @@ FEATURES = (
         "covers": ["file-from-pc", "files", "settings.files"],
     },
     {
+        "id": "document-from-phone",
+        "group": "Notes and files",
+        "title": "Send a document from your phone",
+        "what": "You pick one document on the phone and it lands on this PC, in a folder Jarvis may look in.",
+        "where": "On the phone: Settings, Folders Jarvis may look in, then Send a document. Pick a PDF, Word, Excel, PowerPoint, text, Markdown or CSV file, then pick one of the folders this PC already lists; it goes into a new folder called \"From my phone\" inside it. On the PC there is nothing to set up - putting a file into a folder Jarvis may look in is the same thing with Windows' own copy.",
+        "asks": "One approval card on the PC before anything lands, naming the file, its size and the folder. While it waits the phone says \"Sent to your PC - approve the card on your PC\"; a no, a timeout or a dropped link writes nothing.",
+        "limit": "One file at a time, up to 50 MB, and only the kinds Jarvis can read: PDF, Word, Excel, PowerPoint, text, Markdown (both .md and .markdown) and CSV. It never adds a folder grant - it only uses a folder you already gave. The phone keeps no copy, nothing is run or opened, and both phone buttons are held while the link is catching up.",
+        "surface": "both",
+        "aliases": ["send a document from my phone", "upload a file from my phone", "send a file from my phone", "document from phone", "upload a document from my phone"],
+        "covers": [],
+    },
+    {
         "id": "notion-import",
         "group": "Notes and files",
         "title": "Import a Notion export into an Obsidian vault",
         "what": "Turn a Notion export into an Obsidian vault: ids off names, properties as frontmatter, one card, Undo.",
-        "where": "Notion import plugin; preview and import routes /api/notion/preview and /api/notion/import, writing into the vault.",
+        "where": "In Notion: Settings > Export all workspace content, as Markdown & CSV, then save the .zip it makes. On the phone: Settings, Folders Jarvis may look in, then Bring in a Notion export - pick one of the vaults this PC has already checked, pick the .zip, read the free preview, then press Bring it in. On the PC: the Notion import plugin's own preview and import, which write into the vault after the same one card. The phone only ever picks a vault from that checked list; it cannot type a path.",
         "asks": "Preview is free; the import raises one card and keeps an Undo.",
-        "limit": "One export at a time into one vault; it does not create a Notion workspace and does not delete the source export.",
-        "surface": "desktop",
-        "surface_reason": "The import writes into an Obsidian vault on this PC; the phone has no Notion-import screen.",
-        "aliases": ["notion import", "import a notion export"],
+        "limit": "One export at a time into one vault; it does not create a Notion workspace and does not delete the source export. The vault writing is the PC's: the phone cannot type a path, add a folder or choose anything this PC did not offer it.",
+        "surface": "both",
+        "aliases": ["notion import", "import a notion export", "import my notion notes", "import my notion notes as markdown", "import my notion notes as a markdown file", "process my notion notes in the android app"],
         "covers": ["notion-import"],
     },
     {

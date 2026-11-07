@@ -389,6 +389,13 @@ LESSON_EXEMPT = {
     # the read does before it happens. There is no screen yet to teach, and a
     # lesson would paraphrase the report the owner is already holding.
     "product-check": "the one card and the report are the whole feature, and the report itself says what every count and set-aside reason means; a lesson would repeat the answer the owner is already reading",
+    # Added with the row (2026-11-06, the phone doors' catalogue fix). The door
+    # is ONE button under Settings, Folders Jarvis may look in, and that
+    # button's own sentence (Upload.DETAIL on the phone) already says where the
+    # file goes; the PC's ONE card then names the file, its size and the folder.
+    # A lesson would repeat the button and the card, and the phone has no
+    # tutorial page for it to live on yet.
+    "document-from-phone": "the door explains itself: the button's own sentence says the file goes into a folder Jarvis may look in, into a new folder called From my phone, and the PC's ONE card names the file, its size and the folder; a lesson would repeat the button and the card",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

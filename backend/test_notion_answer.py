@@ -17,25 +17,33 @@ and Jarvis answered:
 Every sentence of that is wrong about this PC. `jarvis_documents.import_notion`
 unzips a Notion export into a NEW folder in a folder the owner listed (PC only,
 no card), and `jarvis_notion_obsidian.py` turns that export into an Obsidian
-vault (`/api/notion/import`, PC only, ONE card). The model can drive neither:
-it is offered no Notion tool, and the guide it may ask mentions the folder
-import only inside the `folders` row - asking it for "notion export" answers
-"I do not have a feature called ..." - and has no row at all for the converter.
-So it answered the only way it could. The fix is a fixed answer in
+vault (`/api/notion/import`, PC only, ONE card). The model could drive neither:
+it was offered no Notion tool, and the guide it may ask mentioned the folder
+import only inside the `folders` row and had no row for the converter. So it
+answered the only way it could. The fix is a fixed answer in
 `jarvis_quick.py`, and this suite is what holds it to the truth:
+
+**2026-11-06: the answer's last claim went stale and was corrected here.** It
+used to end "no app has a button for it yet". That was true on 2026-10-28 and
+false from 2026-11-05, when the phone grew the "Bring in a Notion export" door
+(`jarvis-client/.../net/NotionImport.kt`, `GET /api/notion/vaults` and
+`POST /api/notion/phone-import`, JARVIS-API section 152) - the same ONE
+`import_notion_export` card and Undo. The answer now names the phone door, and
+this suite reads the phone's own source to prove the button is real.
 
   1. the owner's exact sentence, and close phrasings, are answered without the
      model, and a sentence with one more condition ("... tomorrow at 5") is not;
   2. near misses keep their own answer - "open Notion" still opens the app, a
      reminder that mentions Notion is still a reminder;
   3. every step it names is real: the export steps are `NOTION_DETAIL`'s, the
-     import heading is `NOTION_TITLE`, the route is `jarvis_notion_obsidian`'s
-     own `PATHS`, and the shipped TOML really asks on a card for it;
+     import heading is `NOTION_TITLE`, the routes are `jarvis_notion_obsidian`'s
+     own `PATHS`, the phone door is the phone app's own `NotionImport` constants,
+     and the shipped TOML really asks on a card for it;
   4. the folder import really does write a NEW folder (driven end to end on a
      real zip in a temp folder - never the owner's list, never Notion);
   5. it promises nothing it cannot keep: no "I imported", no sync, no login,
-     and it says out loud that nothing on Notion's side is changed and that the
-     vault converter has no button in either app yet;
+     and it says out loud that nothing on Notion's side is changed - and it no
+     longer claims no app has a button, because the phone has one;
   6. it changes nothing itself: no card, no scheduler write, and the "cancel
      that" record is left alone (it is in READ_ONLY_INTENTS).
 
@@ -110,15 +118,22 @@ OWNER_SAID = "can you process all of my notion notes into obsidian?"
 #: answer here, so the test looks for the promise of Notion ACCESS, not the word.
 BAD_CLAIM = "cannot directly access or process files from Notion"
 
-#: Steps the answer must name, each tied to the real thing below.
+#: Steps the answer must name, each tied to the real thing below. The last two
+#: are the 2026-11-06 correction: the phone door exists and must be named, and
+#: the old "no app has a button for it yet" claim must be gone for good.
 WANTED = (
     "I cannot log into Notion",
     "Export all workspace content",
     "Markdown & CSV",
     "NEW folder",
     "nothing in Notion is changed",
-    "no app has a button for it yet",
+    "vault converter",
+    "phone door",
+    "one card",
 )
+#: The stale sentence the 2026-11-06 fix removed: false since the phone's
+#: "Bring in a Notion export" button landed on 2026-11-05.
+STALE_CLAIM = "no app has a button for it yet"
 
 #: What it must never say: this answer does not import anything, does not
 #: change anything on Notion's side and cannot reach the owner's account.
@@ -143,6 +158,8 @@ def t_the_owners_own_sentence_is_answered_without_the_model():
     for want in WANTED:
         check(f"... it says {want!r}", want in r.reply)
     check("... it does not repeat the model's false claim", BAD_CLAIM not in r.reply)
+    check("... and no longer says no app has a button (the phone has one since 2026-11-05)",
+          STALE_CLAIM not in r.reply)
     for bad in FORBIDDEN:
         check(f"... it does not say {bad!r}", bad not in r.reply)
     check("... and it is the same answer in the warm manner",
@@ -241,8 +258,11 @@ def t_every_step_the_answer_names_is_real():
           not [p for p in sig.parameters if p.lower() in ("token", "url", "account", "email")], str(sig))
 
     # 3. The vault converter is real, and it is the route the answer names.
-    check("jarvis_notion_obsidian really serves the route the answer names",
-          JNO.PATHS[1] == "/api/notion/import" and JNO.PATHS[1] in Q.NOTION_WORDS, JNO.PATHS)
+    check("jarvis_notion_obsidian really serves the two Notion routes",
+          JNO.PATHS[0].startswith("/api/notion/")
+          and JNO.PATHS[1] == "/api/notion/import", JNO.PATHS)
+    check("... and the answer names the vault converter in plain words",
+          "vault converter" in Q.NOTION_WORDS)
     check("... its gate action is its own", JNO.GATE_ACTION == "import_notion_export", JNO.GATE_ACTION)
     check("... and its card title is the one its module documents",
           "Notion export" in JNO.TITLE and "vault" in JNO.TITLE.lower(), JNO.TITLE)
@@ -290,11 +310,44 @@ def t_it_changes_nothing_and_keeps_cancel_that():
           r is not None and not r.made and not r.facts and r.open_settings is None)
 
 
+def t_the_phone_door_is_named_and_it_is_really_there():
+    """The correction, proved against the phone app's own source.
+
+    The answer used to end "no app has a button for it yet". On 2026-11-05 the
+    phone got the "Bring in a Notion export" door (the same ONE
+    `import_notion_export` card and Undo, through `GET /api/notion/vaults` and
+    `POST /api/notion/phone-import`). This reads the real Kotlin and the real
+    API doc, so the answer's claim is tied to the code that makes it true - the
+    same shape as every other step in this suite.
+    """
+    repo = Path(__file__).resolve().parent.parent
+    kt = (repo / "jarvis-client" / "app" / "src" / "main" / "java" / "com" /
+          "jarvis" / "client" / "net" / "NotionImport.kt").read_text(encoding="utf-8")
+    check("the phone's Notion door really exists (NotionImport.kt)",
+          "phone-import" in kt, kt[:120])
+    check("... it calls the PC's phone-import route",
+          'IMPORT_PATH = "/api/notion/phone-import"' in kt)
+    check("... and lists the vaults the PC offers",
+          'VAULTS_PATH = "/api/notion/vaults"' in kt)
+    check("... its own button title is the one the answer names",
+          'TITLE = "Bring in a Notion export"' in kt)
+    check("... the answer names that button",
+          "Bring in a Notion export" in Q.NOTION_WORDS)
+    check("... and says it is on the phone", "on the phone" in Q.NOTION_WORDS)
+    doc = (repo / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
+    for route in ("/api/notion/vaults", "/api/notion/phone-import"):
+        check(f"... the API doc records {route}", route in doc)
+    check("... and the answer never claims a deploy happened",
+          "deployed" not in Q.NOTION_WORDS.lower()
+          and "just landed" not in Q.NOTION_WORDS.lower())
+
+
 def main():
     for fn in (t_the_owners_own_sentence_is_answered_without_the_model,
                t_close_phrasings_and_the_follow_up,
                t_near_misses_keep_their_own_answer,
                t_every_step_the_answer_names_is_real,
+               t_the_phone_door_is_named_and_it_is_really_there,
                t_the_import_really_writes_a_new_folder,
                t_it_changes_nothing_and_keeps_cancel_that):
         print(f"\n--- {fn.__name__} ---")

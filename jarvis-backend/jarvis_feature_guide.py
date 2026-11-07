@@ -2649,6 +2649,12 @@ NO_COMMAND_REASON = {
     "voicestudio": ("not-a-setting", "The VoiceStudio client has no typed command and no Settings control yet: the speaking-voice wiring and its one-card switch are the named next slice.", "none-needed"),
     "search-audio-video": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "notion-import": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
+    # Joined 2026-11-06 with the row that catches the catalogue up to the two
+    # phone doors built on 2026-11-05: sending a document from the phone is an
+    # action with ONE card of its own, not a stored setting; there is no switch
+    # to turn on or off, and its Settings row is the folder list that already
+    # has its own row.
+    "document-from-phone": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     "vault-organizer": ("not-a-setting", "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.", "none-needed"),
     # The three planned Switchable rows (2026-10-23) still need an allowlist
     # reason for matrix_rows_without_reason(); their label stays Switchable and

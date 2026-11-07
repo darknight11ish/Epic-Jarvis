@@ -772,6 +772,156 @@ def t_settings_shaped_features_answer_from_their_own_rows():
           and "PC only" in (got.reply or ""), (got.reply or "")[:200])
 
 
+def t_the_phone_document_door_is_in_the_list_and_answers_from_it():
+    """2026-11-06: the door built on 2026-11-05 is now a catalogue row.
+
+    The owner asked whether he could send a document from his phone and Jarvis
+    said it could not - the capability was installed, the catalogue had no row
+    for it, and the model guessed. The row and its answer are pinned here: the
+    list carries it, its own words name the phone's button and where the file
+    lands, and the chat answer quotes every field without a model.
+    """
+    row = row_of("document-from-phone")
+    check("the catalogue has the phone's document door",
+          row["title"] == "Send a document from your phone", row.get("title"))
+    check("... in Notes and files, and on BOTH apps",
+          row["group"] == "Notes and files" and row["surface"] == "both",
+          (row.get("group"), row.get("surface")))
+    check("... its `where` names the phone's own button and Settings row",
+          "Send a document" in row["where"]
+          and "Folders Jarvis may look in" in row["where"], row["where"])
+    check("... and says where the file lands",
+          "From my phone" in row["where"], row["where"])
+    check("... its `limit` names the 50 MB cap and every readable kind",
+          "50 MB" in row["limit"] and all(k in row["limit"] for k in
+          ("PDF", "Word", "Excel", "PowerPoint", "Markdown", "CSV")),
+          row["limit"])
+    check("... says no folder grant is added, and nothing is run",
+          "folder grant" in row["limit"]
+          and "nothing is run or opened" in row["limit"], row["limit"])
+    check("... and carries the ONE card's real gate action",
+          row.get("gate") == ["receive_uploaded_document"], row.get("gate"))
+
+    got = ask("what is Send a document from your phone")
+    check("'what is Send a document from your phone?' is the fixed answer",
+          got is not None and got.intent == "feature_explain",
+          got.intent if got else "the model")
+    if got is not None:
+        reply = got.reply or ""
+        check("... quoting the row's own title, what, where, asks and limit",
+              says_row(reply, "document-from-phone",
+                       ("title", "what", "where", "asks", "limit")), reply[:500])
+        check("... and saying it is in both apps",
+              "It is in both apps" in reply, reply[-320:])
+        check("... never inventing an on/off switch for it",
+              "no switch of its own" in reply, reply[-320:])
+    detail = ask("how do I use Send a document from your phone")
+    check("'how do I use ...' is the guide's detail answer",
+          detail is not None and detail.intent == "feature_detail",
+          detail.intent if detail else "the model")
+    check("... repeating the phone's own button and folder list",
+          detail is not None and "Send a document" in (detail.reply or "")
+          and "Folders Jarvis may look in" in (detail.reply or ""),
+          (detail.reply or "")[:300])
+
+    # The wave that added the doors is NAMED, and this row does not pretend to
+    # be a deploy: the phone doors landed on 2026-11-05 and their own record is
+    # where the claim is anchored. This PR is the catalogue catching up.
+    door_record = REPO / "changelog.d" / "2026-11-05-phone-upload-phone.md"
+    check("the change that added the phone doors is on the record",
+          door_record.is_file(), str(door_record))
+    record = door_record.read_text(encoding="utf-8") if door_record.is_file() else ""
+    for want in ("Send a document", "Bring in a Notion export", "2026-11-05"):
+        check(f"... and that record names {want!r}", want in record, record[:220])
+    check("... and the row does not claim the doors are new in this change",
+          "new in 2026-11-06" not in row["what"].lower()
+          and "deployed" not in row["what"].lower()
+          and "just landed" not in row["what"].lower(), row["what"])
+
+
+def t_the_notion_row_is_on_both_apps_and_names_the_phone_door():
+    """2026-11-06: the row said desktop-only, and its reason said the phone had
+    no Notion-import screen - false since the phone's door landed 2026-11-05."""
+    row = row_of("notion-import")
+    check("the Notion row is no longer PC-only",
+          row["surface"] == "both", row.get("surface"))
+    check("... and carries no stale 'the phone has no screen' reason",
+          not row.get("surface_reason"), row.get("surface_reason"))
+    check("... its `where` names the phone's own door",
+          "Bring in a Notion export" in row["where"]
+          and "Folders Jarvis may look in" in row["where"], row["where"])
+    check("... keeps Notion's own export steps",
+          "Export all workspace content" in row["where"]
+          and "Markdown & CSV" in row["where"], row["where"])
+    check("... and the vault is the PC's own checked list, never a typed path",
+          "already checked" in row["where"]
+          and "cannot type a path" in row["where"], row["where"])
+    check("... preview is free, one card, Undo",
+          "Preview is free" in row["asks"] and "one card" in row["asks"]
+          and "Undo" in row["asks"], row["asks"])
+
+    got = ask("what is Import a Notion export into an Obsidian vault")
+    check("'what is Import a Notion export...' is the fixed answer",
+          got is not None and got.intent == "feature_explain",
+          got.intent if got else "the model")
+    if got is not None:
+        reply = got.reply or ""
+        check("... quoting the row's own fields",
+              says_row(reply, "notion-import",
+                       ("title", "what", "where", "asks", "limit")), reply[:500])
+        check("... saying it is in both apps now",
+              "It is in both apps" in reply, reply[-320:])
+        check("... naming the phone door in the answer",
+              "Bring in a Notion export" in reply, reply[:500])
+        check("... and keeping the PC-only note about the vault writing",
+              "The vault writing is the PC's" in reply, reply[:500])
+
+
+def t_the_owners_own_sentence_finds_the_two_doors():
+    """The real sentence that got the wrong answer, and the words he used.
+
+    Jarvis was asked "Can I import my Notion notes as a markdown file, process
+    it in the Android app and send it to the main Jarvis?" and said it could
+    not. The guide is what the model reads; here every phrasing the owner used
+    must resolve to the row that owns it, and the sentence itself must be a
+    capability answer that quotes the phone door rather than a denial.
+    """
+    said = ("Can I import my Notion notes as a markdown file, process it in "
+            "the Android app and send it to the main Jarvis?")
+    cases = {
+        "send a document from my phone": "document-from-phone",
+        "upload a file from my phone": "document-from-phone",
+        "send a file from my phone": "document-from-phone",
+        "import my notion notes": "notion-import",
+        "import my notion notes as markdown": "notion-import",
+        "import my notion notes as a markdown file": "notion-import",
+        "process my notion notes in the android app": "notion-import",
+    }
+    for phrase, fid in cases.items():
+        found = FG.find(phrase)
+        check(f"{phrase!r} names the {fid} row",
+              found.get("kind") == "feature"
+              and found["row"]["id"] == fid,
+              (found.get("kind"), found.get("row", {}).get("id")))
+        explained = FG.explain(phrase)
+        check(f"... and the guide explains it from that row",
+              explained.get("feature", {}).get("id") == fid,
+              explained.get("feature", {}).get("id"))
+    out = FG.capabilities(said)
+    named = [f["id"] for f in out.get("features", [])]
+    check("the owner's own sentence is not denied by the list",
+          out.get("kind") != "unknown"
+          and FG.CAPABILITY_NOT_A_FEATURE not in out.get("words", ""),
+          out.get("kind"))
+    check("... and it finds the Notion row first",
+          named[:1] == ["notion-import"], named)
+    words = out.get("words", "")
+    check("... quoting the phone door he can actually use",
+          "Bring in a Notion export" in words, words[:400])
+    check("... and pointing at the whole feature list",
+          "Everything Jarvis can do" in words, words[-300:])
+
+
 def main() -> int:
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
