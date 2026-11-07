@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "3b34570d1bf9a07fcfbad42d88874acf53ed8766",
- "built_at": "2026-11-07T15:25:29-08:00",
+ "ref": "98812b9fc412adc83b9cf0baa3022814ea15064e",
+ "built_at": "2026-11-07T15:37:10-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3771,6 +3771,7 @@
     "backend/test_focus.py",
     "backend/test_focus_brief.py",
     "backend/test_folder_restrictions.py",
+    "backend/test_folders_chat.py",
     "backend/test_forecast.py",
     "backend/test_forget_range.py",
     "backend/test_form_review.py",
@@ -4212,7 +4213,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 650,
+   "file_count": 651,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6126,6 +6127,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "98812b9fc412adc83b9cf0baa3022814ea15064e",
+   "date": "2026-11-07",
+   "subject": "feat(awareness): the folder list through chat - list it, and add one with the same card"
+  },
+  {
    "sha": "3b34570d1bf9a07fcfbad42d88874acf53ed8766",
    "date": "2026-11-07",
    "subject": "fix(notes): the Notion/file answers name the real steps - and the folder-list prerequisite"
@@ -6219,18 +6225,13 @@
    "sha": "e4c449ca68e85e0f45d3b4738eb45b233118040b",
    "date": "2026-11-07",
    "subject": "fix(cloud): the chosen provider answers, chat can see and switch it, and every switch answers about itself"
-  },
-  {
-   "sha": "e18861f85ea70573bc2d7a827275a81f844c4914",
-   "date": "2026-11-07",
-   "subject": "integration: cloud provider routing follows the choice + privacy backstop (Q1/Q7)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1377
+   "files": 1378
   },
   {
    "path": "jarvis-desktop/",
@@ -6344,8 +6345,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5467,
-  "covered": 5002,
+  "tracked_files": 5468,
+  "covered": 5003,
   "excluded": 465,
   "subsystems": 27
  },
