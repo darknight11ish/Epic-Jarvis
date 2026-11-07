@@ -26,6 +26,9 @@ re-taken", and nothing else:
         jarvis-framework.toml    from backend/rebuilt/  - the TEMPLATE, never the live file
         requirements.lock        from backend/
         quiz_grader_cases.json   from backend/
+        quotes_corpus.json       from backend/  - the quote list jarvis_quotes.py reads
+        jarvis-self-code.json    from backend/  - the map of its own code that
+                                 jarvis_self_code.py reads (2026-11-07)
         rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
         jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
         theme.css, fonts.css, the fourteen .js modules, sw.js and three.min.js,
@@ -151,6 +154,11 @@ BESIDE = (
     # a fresh copy of the base has to carry it or its first quote fails.
     ("quotes_corpus.json", "{repo}/backend/quotes_corpus.json",
      "jarvis_quotes.py reads it beside itself"),
+    # The self-code map (2026-11-07): jarvis_self_code.py reads it beside itself
+    # too, so a base without it answers every question about its own code with
+    # "the map was not installed with this build".
+    ("jarvis-self-code.json", "{repo}/backend/jarvis-self-code.json",
+     "jarvis_self_code.py reads it beside itself"),
     ("rust-crates.lock", "{repo}/jarvis-desktop/src-tauri/Cargo.lock",
      "jarvis_tool_updates.py reads it"),
     ("jarvis-visual-spec.json", "{source}/jarvis-visual-spec.json",

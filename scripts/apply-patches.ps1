@@ -3110,6 +3110,19 @@ $SHIPPED = @(
     # The corpus file jarvis_quotes.py reads at import (2026-11-05): a data file
     # shipped beside the module, so the base carries it too.
     'quotes_corpus.json'
+    # The self-code map (jarvis_self_code.py and jarvis-self-code.json,
+    # 2026-11-07; the owner's ask: "jarvis should understand every major part of
+    # its own code that can be viewed on the jarvis github main branch"). A
+    # READER shipped whole plus the JSON map beside it (BESIDE in
+    # tools/gen_base_from_backend.py), generated from the deployed tree by
+    # tools/gen_self_code_map.py. The reader reads that one file beside itself:
+    # no git, no network, no write, no model, no route and no gate action. The
+    # four chat intents are the shipped jarvis_quick.py's, so this adds no patch
+    # to jarvis_hud.py. The same two entries, in the same position, are in
+    # backend/_where.py's SHIPPED list. They sit BEFORE jarvis_bench.py, which
+    # stays LAST.
+    'jarvis_self_code.py'
+    'jarvis-self-code.json'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

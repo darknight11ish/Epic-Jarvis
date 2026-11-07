@@ -6372,3 +6372,52 @@ permission of any kind** - the safest feature is one that adds no way in. The
 suite is `backend/test_quotes.py` (74 checks) and the `quote` kind is in
 `contract/schedule-cases.json`, so the HUD, Coming up and the phone are compared
 on 32 cases each with no mismatch.
+
+---
+
+## 20. Knowing its own code — the self-code map (added 2026-11-07)
+
+**The gap.** Asked *"what is your own GitHub repository?"*, the live backend
+answered "I don't have a public GitHub repository of my own" — it did not know
+that the code it runs **is** the public `darknight11ish/Epic-Jarvis` repository.
+`jarvis_repomap.py` maps a folder the owner names, `jarvis_self_portrait.py`
+knows its version and tools, and the feature catalogue knows what features do;
+none of them knows which module implements which part of Jarvis.
+
+**What it is.** One generated JSON file beside the backend,
+`jarvis-self-code.json`, listing the five runtime parts in the order they fit
+(backend on this PC → the models in Ollama → the Tauri desktop shell → the
+Android client over a private network → the public repository with its CI and
+deploy pipeline), then one row per major part of the code: its purpose, every
+file it owns, the modules to start reading, the tests that prove it and the
+documents that describe it. It also carries the commit it was built from, that
+commit's date, the version, the newest twenty commit subjects and the repo's
+major directories. `tools/gen_self_code_map.py` writes it from the tree at the
+deploy's own commit; `backend/jarvis_self_code.py` (shipped whole, twin kept)
+only reads it beside itself — no git, no socket, no write, no model, and no code
+body. The map names code; it does not hold code and it runs nothing.
+
+**Completeness is checked, not claimed.** Every tracked file belongs to exactly
+one subsystem, from one table in the generator; the generator exits non-zero and
+names the paths when a file belongs to none or to two, and skips generated,
+binary and vendored files only through an explicitly named list whose counts it
+prints and stores. `--check` re-derives the document in memory and compares it
+byte for byte with the committed copy. `backend/test_self_code.py` proves both
+halves, the map's shape, the four answers, a miss, a missing map, and that the
+older self-answers keep their own sentences.
+
+**Where it is answered.** Four deterministic intents in `jarvis_quick.py`, with
+no model and no card: the overview ("what are your major parts", "what is your
+architecture"), a lookup ("where is the code for X", "what does X do" — the
+latter only when X is really in the map), the recent changes ("what changed on
+main") and the repository identity ("where do you live on github"). A subject
+the map does not know is answered "not in the map I was built with" plus the two
+nearest parts, never a guess. All four are in `READ_ONLY_INTENTS`.
+
+**Its honest limit, stated in every answer.** The map knows nothing newer than
+the deploy that installed it, so a question about code merged after that deploy
+is answered as unknown. Refreshing it is one command and a copy, described in
+`docs/SELF-CODE-MAP.md`, and `--check` fails when the committed map and the tree
+have drifted apart. It adds **no route, no model tool, no gate action, no reach
+row and no permission of any kind**.
+
