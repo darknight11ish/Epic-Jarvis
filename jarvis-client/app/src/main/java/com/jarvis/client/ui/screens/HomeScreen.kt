@@ -3909,6 +3909,10 @@ private fun Reply(
     // one and the facts allow speech. The refusal words are fixed elsewhere.
     val readAloudOffer by com.jarvis.client.JarvisRuntime.readAloud.collectAsState()
     val readingAloud by com.jarvis.client.JarvisRuntime.readingAloud.collectAsState()
+    // True while the phone was unlocked at the last live check. The one-off
+    // "Read it aloud anyway" action (the owner's decision of 2026-11-06) is
+    // drawn only against it, and the tap itself asks again in the runtime.
+    val readAloudUnlocked by com.jarvis.client.JarvisRuntime.readAloudUnlocked.collectAsState()
     val text = reply()
     // The per-message menu (the owner's request of 2026-10-27): opened from
     // the chevron on this answer's own "Jarvis" line, and closed by any row in
@@ -4209,17 +4213,43 @@ private fun Reply(
                             // A withheld read is not silence: when a privacy rule
                             // keeps this answer off the speaker, the ONE fixed
                             // sentence is shown where the control would have been
-                            // - never the answer, never a fact, and nothing
-                            // beyond that sentence (the Lead's ruling of
-                            // 2026-10-27: a control that silently does nothing is
-                            // worse, so there is no dead control here).
+                            // - never the answer, never a fact (the Lead's ruling
+                            // of 2026-10-27: a control that silently does nothing
+                            // is worse, so there is no dead control here).
                             // Locked/offline are not what this sentence says and
                             // draw nothing; see ReadAloud.Facts.withheld.
-                            Text(
-                                sentence,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.textMid,
-                            )
+                            //
+                            // BESIDE IT, HIS OWN ONE-OFF (the owner's decision of
+                            // 2026-11-06): when the ONLY blockers are remembered
+                            // non-sensitive facts or a screen read, and this phone
+                            // is unlocked now, one tap reads THIS answer once.
+                            // Nothing is stored afterwards - a second tap is a
+                            // second tap by him, never a remembered permission -
+                            // and it is never drawn for a sensitive fact, a
+                            // private tool, a stale link or a locked phone
+                            // (`oneOffLabel` is null for all of those), so it can
+                            // never become a general "read private things"
+                            // control. It is the only new door here: the voice
+                            // path keeps the PC's own screen setting untouched.
+                            Column {
+                                Text(
+                                    sentence,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textMid,
+                                )
+                                offer.oneOffLabel(readAloudUnlocked)?.let { label ->
+                                    Gap(2)
+                                    Quiet(label, color = chrome.textMid) {
+                                        scope.launch {
+                                            val said = com.jarvis.client.JarvisRuntime
+                                                .readAloudLastAnswer(oneOff = true)
+                                            if (said.isNotBlank()) {
+                                                com.jarvis.client.JarvisRuntime.setNotice(said)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

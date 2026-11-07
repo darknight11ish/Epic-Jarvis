@@ -1557,17 +1557,28 @@ class MainActivity : FragmentActivity() {
         DisposableEffect(Unit) {
             val activity = this@MainActivity
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
-                if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
-                    // A rotation stops and restarts the activity, and ON_STOP
-                    // fires for it (there is no `configChanges` on this
-                    // activity in AndroidManifest.xml). That is not "away":
-                    // the screen is still in front of the owner, so the read
-                    // carries on. The same test onStop() already uses for the
-                    // lock session. The Lead ruled 2026-10-27 that rotation must
-                    // NOT stop a read: a configuration change is not leaving.
-                    if (!activity.isChangingConfigurations) {
-                        JarvisRuntime.stopReadingAloud()
+                when (event) {
+                    androidx.lifecycle.Lifecycle.Event.ON_STOP -> {
+                        // A rotation stops and restarts the activity, and ON_STOP
+                        // fires for it (there is no `configChanges` on this
+                        // activity in AndroidManifest.xml). That is not "away":
+                        // the screen is still in front of the owner, so the read
+                        // carries on. The same test onStop() already uses for the
+                        // lock session. The Lead ruled 2026-10-27 that rotation must
+                        // NOT stop a read: a configuration change is not leaving.
+                        if (!activity.isChangingConfigurations) {
+                            JarvisRuntime.stopReadingAloud()
+                        }
+                        // The one-off "Read it aloud anyway" action (the owner's
+                        // decision of 2026-11-06) is drawn only while the phone
+                        // was unlocked at the last live check. Whatever stopped
+                        // this screen - the keyguard, HOME, another app - that
+                        // is not a moment to offer it; ON_START asks again.
+                        JarvisRuntime.refreshReadAloudUnlocked()
                     }
+                    androidx.lifecycle.Lifecycle.Event.ON_START ->
+                        JarvisRuntime.refreshReadAloudUnlocked()
+                    else -> Unit
                 }
             }
             activity.lifecycle.addObserver(observer)
