@@ -2150,11 +2150,23 @@ def point_at(pid: str, base_url: str) -> Preset:
 # `jarvis_router.cloud_lanes()` refuses any other name, so an older config that
 # still lists them cannot bring a second lane back. Every other non-local lane
 # falls to DEFAULT_LANE, with its own line saying so in the refusal words below.
+#
+# THE SERVICE IS THE OWNER'S CHOICE (2026-11-07). The table below is what a lane
+# means when NO cloud provider has been chosen in the Presets menu - the owner's
+# decision of 2026-10-06, DeepSeek. When one HAS been chosen (the file
+# `cloud-choice.json`, read by `jarvis_presets.cloud_chosen()`), `lane_service()`
+# sends to that service and its own model instead. That is the fix the
+# options-understanding audit called B1: before it, picking Mistral in the
+# Presets menu still sent the words to api.deepseek.com, while the Presets row,
+# the approval card and `/api/reach` all named Mistral. A lane name this table
+# does not know falls to DEFAULT_LANE only while no choice is recorded; with a
+# choice it goes to that same service, because this PC has ONE cloud service at
+# a time.
 CLOUD_LANES = {
-    # The owner's decision (2026-10-06) is that the service behind the cloud
-    # lane is DeepSeek. The model is this project's choice, not DeepSeek's: the
-    # cheapest and fastest current one. Change this line (or the
-    # [chatbot] deepseek_api_model line) to change it.
+    # The fallback when no provider is chosen: DeepSeek, the owner's decision of
+    # 2026-10-06. The model is this project's choice, not DeepSeek's: the
+    # cheapest and fastest current one. `lane_service()` replaces both with the
+    # chosen provider's own service and model as soon as one is recorded.
     "jarvis-escalate": ("deepseek_api", "deepseek-flash"),
 }
 
@@ -2173,6 +2185,35 @@ DEFAULT_LANE = ("deepseek_api", "deepseek-flash")
 LANE_ASSUMED_CHARS = 20_000
 
 
+def _chosen_service() -> tuple:
+    """(service id, model) for the provider chosen in the Presets menu, or ().
+
+    The id in `cloud-choice.json` IS one of this module's own `PRESETS` ids:
+    `jarvis_presets.apply_cloud()` writes a key of this table, and
+    `cloud_chosen()` refuses any name this module does not know. A short name
+    ("mistral") is accepted as well, so a hand-edited file can never name a
+    service this module does not have. The returned model is that preset's
+    default; `lane_service()` lets the owner's own `[chatbot] <id>_model` line
+    overrule it, exactly as it does for the fallback.
+
+    The import is LAZY and inside the call: `jarvis_presets` reads this module
+    back (its `_provider_ids()`), and this module stays importable in suites
+    that carry no presets module at all. The file is read on EVERY call and
+    never cached, so a new choice takes effect at once rather than at a restart.
+    Opens no socket and touches no key - only that one small JSON file.
+    """
+    try:
+        import jarvis_presets as P
+        pid = str(P.cloud_chosen() or "")
+    except Exception:                       # noqa: BLE001 - no presets module, no choice
+        return ()
+    if pid not in PRESETS:
+        pid = BY_SHORT.get(pid, "")
+    if not pid:
+        return ()
+    return pid, PRESETS[pid].model
+
+
 def _owner_model_set(pid: str) -> bool:
     """Whether the owner's own `[chatbot] <id>_model` line is set. This is
     what decides whether a cloud lane keeps the model its lane means
@@ -2186,10 +2227,23 @@ def _owner_model_set(pid: str) -> bool:
 
 
 def lane_service(lane: str) -> tuple:
-    """(service id, model) for a cloud lane name. Never raises, never reads
-    anything: this is the table above, the owner's own model line when it is
-    set, and nothing else."""
+    """(service id, model) for a cloud lane name. Never raises.
+
+    THE SERVICE IS THE OWNER'S CHOICE (2026-11-07). The Cloud row in the Presets
+    menu writes `cloud-choice.json`; this reads it on every call, so a hard
+    question goes to the provider the owner picked rather than to the one that
+    happened to be written into the table. Without a recorded choice the table
+    above is what a lane means, and the model is that preset's own default
+    unless the owner's `[chatbot] <id>_model` line is set - an explicit choice
+    always wins. A lane name the table does not know falls back the same way:
+    to the chosen service when one is recorded, else to DEFAULT_LANE's real
+    service.
+
+    Reads only that one small choice file; opens no socket and touches no key."""
     pid, model = CLOUD_LANES.get(str(lane or ""), DEFAULT_LANE)
+    chosen = _chosen_service()
+    if chosen:
+        pid, model = chosen
     if _owner_model_set(pid):
         try:
             chosen, problem = model_for(pid)
@@ -2214,8 +2268,8 @@ def cloud_lane(lane: str, *, chars: int = LANE_ASSUMED_CHARS, messages: int = 1)
     The returned dict: pid, model, host, url (that service's own completions
     address - https, its own pinned host), cap (the answer-length cap to
     send, 0 for none) and why ("" when it can be used). Opens no socket and
-    reads no message: only Credential Manager (whether a key is SAVED) and
-    the money file."""
+    reads no message: only the chosen-provider file (which service the lane
+    means), Credential Manager (whether a key is SAVED) and the money file."""
     pid, model = lane_service(lane)
     p = PRESETS[pid]
     chars, messages = max(0, int(chars)), max(1, int(messages))
@@ -2285,9 +2339,9 @@ def lane_state(lane: str) -> dict:
 
     The answer is remembered for this thread and read back by
     `last_lane_state()`, so the address and the key can never disagree, and no
-    caller has to pass the key around. Opens no socket: Windows Credential
-    Manager (whether a key is SAVED, then the key itself) and the money file
-    only."""
+    caller has to pass the key around. Opens no socket: the chosen-provider
+    file (which service the lane means), Windows Credential Manager (whether a
+    key is SAVED, then the key itself) and the money file only."""
     state = dict(NO_LANE_STATE)
     state["lane"] = str(lane or "")
     if state["lane"]:
@@ -2331,10 +2385,13 @@ def lane_status() -> dict:
             "ready": not why, "why": why,
             "money": money_view(pid),
         })
+    # The fallback is what an unknown lane name resolves to - `lane_service()`'s
+    # own answer - so it names the CHOSEN provider too, never a second service.
+    fallback_pid, fallback_model = lane_service("")
     return {"available": True, "lanes": lanes,
             "ready": [r["lane"] for r in lanes if r["ready"]],
-            "fallback_model": DEFAULT_LANE[1],
-            "default_pid": DEFAULT_LANE[0]}
+            "fallback_model": fallback_model,
+            "default_pid": fallback_pid}
 
 
 # ============================================================================

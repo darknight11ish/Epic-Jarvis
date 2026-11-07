@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "e3a1a7887060935e566d21409366cad1566382867efd63fcb0350b0f876b7bbe",
+  "source_sha256": "e6e114f62e24204a2d37d5622521cfacbddc1c3167bafcb96bacd1260abb4939",
   "feature_count": 180,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -2084,13 +2084,13 @@
     },
     {
       "id": "cloud-escalation",
-      "title": "Cloud (DeepSeek API)",
+      "title": "Cloud (an API service you choose)",
       "group": "The PC itself",
       "surface": "both",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "status": "not-a-setting",
       "label_note": "",
-      "example": "turn on Cloud (DeepSeek API)",
+      "example": "what is the cloud",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",

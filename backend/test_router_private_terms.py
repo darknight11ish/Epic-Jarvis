@@ -250,6 +250,72 @@ def t_health_medicine_and_pregnancy_words():
               repr(RT._PRIVATE.search(q)))
 
 
+def t_the_owner_can_be_found_by_identity_and_address_words():
+    """Q7 P0 (the owner's ruling, 2026-11-07): a home/street/mailing address
+    and a phone number are private the way a card number is - the backstop had
+    ssn, passport, routing number, credit card and "medical", but NO address
+    and NO phone number. The controls are the everyday technical words that
+    share the word "address", and a bare "phone", which must keep escalating:
+    a false match costs quality, but an address on a cloud model costs privacy."""
+    for q in ("what is my home address",
+              "my street address is 12 Elm Road",
+              "what's my mailing address",
+              "send it to my address",
+              "my phone number is the same",
+              "the postal address on file"):
+        check(f"{q!r} is private (Q7 identity/address words)", RT.is_private(q),
+              repr(RT._PRIVATE.search(q)))
+        d = RT.choose(q + PAD, local_model="local", lanes=LANES,
+                      budget=RT.Budget(path=None), owner_said_yes=True)
+        check(f"... and a long {q!r} stays on the local model",
+              d.lane == "local" and d.gate == "private", repr(d))
+    for q in ("what is the server's IP address",
+              "the web address of the docs",
+              "a memory address in the crash log",
+              "the address bar of the browser",
+              "how do I make a phone call on this PC",
+              "my phone is slow today"):
+        check(f"CONTROL: {q!r} is not private", not RT.is_private(q),
+              repr(RT._PRIVATE.search(q)))
+
+
+def t_diagnos_is_private_only_in_a_medical_context():
+    """Q7 P0 (the owner's ruling, 2026-11-07): the backstop matched
+    `\\bdiagnos\\w*`, so "diagnose this test failure" was kept on the local
+    model - a technical prompt that should be allowed to escalate normally.
+    WHAT DOES NOT CHANGE: the medical uses stay private - an explicit "medical
+    diagnosis", "diagnosed with <condition>", and the owner's or a family
+    member's possessive ("my diagnosis", "my son's diagnosis"). The health
+    words further down the list still catch a condition named without the word
+    "diagnosis" at all."""
+    for q in ("my medical diagnosis came back",
+              "I was diagnosed with ADHD last year",
+              "my diagnosis is still unclear",
+              "my son's diagnosis took months",
+              "what did the doctor say my diagnosis was"):
+        check(f"{q!r} is private (a medical context)", RT.is_private(q),
+              repr(RT._PRIVATE.search(q)))
+    for q in ("diagnose this test failure",
+              "diagnose why the CI job fails",
+              "the diagnostic logs are in the temp folder",
+              "run the diagnostics tool",
+              "how do I diagnose a memory leak",
+              "root-cause diagnosis of the crash"):
+        check(f"CONTROL: {q!r} is not private", not RT.is_private(q),
+              repr(RT._PRIVATE.search(q)))
+    technical = "diagnose this test failure" + PAD
+    d = RT.choose(technical, local_model="local", lanes=LANES,
+                  budget=RT.Budget(path=None), owner_said_yes=True)
+    check("... so a technical 'diagnose' prompt can escalate again (with the "
+          "owner's yes, every other gate passing)",
+          d.lane == LANES[0] and d.gate == "escalate", repr(d))
+    medical = "I was diagnosed with ADHD last year" + PAD
+    d = RT.choose(medical, local_model="local", lanes=LANES,
+                  budget=RT.Budget(path=None), owner_said_yes=True)
+    check("... while a medical 'diagnosed with' question still stays local",
+          d.lane == "local" and d.gate == "private", repr(d))
+
+
 def t_an_ollama_cloud_model_is_never_local():
     """Ollama runs "-cloud" models through 127.0.0.1 but answers on
     ollama.com. Set as the "local" model, memory used to be injected into
@@ -313,6 +379,8 @@ if __name__ == "__main__":
                t_the_hud_call_shape_still_works,
                t_distress_and_crisis_words_stay_local,
                t_health_medicine_and_pregnancy_words,
+               t_the_owner_can_be_found_by_identity_and_address_words,
+               t_diagnos_is_private_only_in_a_medical_context,
                t_an_ollama_cloud_model_is_never_local,
                t_a_turn_carrying_the_screen_stays_local):
         print(f"\n--- {fn.__name__} ---")
