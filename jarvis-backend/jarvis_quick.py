@@ -1564,6 +1564,17 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- its own code, from the map shipped beside the backend (2026-11-07) ---
+    # BEFORE "where did I put ...?", and that order is the fix rather than a
+    # preference: `_where_put` claims any sentence that begins "where is ...",
+    # so "where is the code for memory" was answered as a lost object. These
+    # three shapes name CODE explicitly, so no other answer loses a sentence to
+    # them. ("What does X do" is the fourth shape and runs later, after the
+    # feature guide, because that is the guide's own question shape.)
+    got = _self_code_intent(s)
+    if got is not None:
+        return got
+
     # --- "where did I put ...?" (jarvis_places.py, 2026-09-28) ----------------
     # A QUESTION only: "where is my passport?". The owner saying where a
     # thing is ("I put the spare key under the blue pot") is never ours - it
@@ -1907,6 +1918,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # focus session in psychology?" and "is my oven on?" fall through to the
     # model, never to a feature's facts. `test_feature_guide.py` pins both.
     got = _feature_guide(s, text)
+    if got is not None:
+        return got
+
+    # --- "what does <a part of my own code> do?" (2026-11-07) -----------------
+    # AFTER the feature guide, and the order is the rule: "what does X do" is
+    # the guide's own question shape ("what does the spoken-style feature do?"),
+    # so a real feature name must keep its answer. This claims the sentence only
+    # when X is a real part of the shipped self-code map - "what does my oven
+    # do" stays the model's, exactly as before.
+    got = _self_code_intent(s, does=True)
     if got is not None:
         return got
 
@@ -12216,6 +12237,167 @@ def _measured_question(s: str, raw: str) -> Optional[Intent]:
     return None
 
 
+# ---- its own code, from the shipped self-code map (2026-11-07) -------------
+#
+# THE GAP THIS CLOSES. Asked "what is your own GitHub repository?", the live
+# backend answered "I don't have a public GitHub repository of my own" - it had
+# no idea the code it runs IS a public repository. `jarvis_repomap.py` maps a
+# folder the owner names, `jarvis_self_portrait.py` knows its version and its
+# tools, and the feature catalogue knows what features DO; none of them knows
+# which module implements which part of Jarvis.
+#
+# WHERE THE ANSWER COMES FROM. One file beside the backend,
+# `jarvis-self-code.json`, generated from the repository tree by
+# `tools/gen_self_code_map.py` at the deploy's own commit and read by the
+# shipped `jarvis_self_code.py`. This block is only the grammar: it turns four
+# whole-sentence shapes into an intent, and the runner below asks that module.
+# No model, no card, no route, no write, and no code is read at answer time -
+# so these are in READ_ONLY_INTENTS.
+#
+# THE SHAPES ARE DELIBERATELY NARROW. "what does X do" fires ONLY when X is a
+# real part of the map (or a real module in it), because that shape is ordinary
+# English: "what does my oven do" must stay the model's. The three shapes that
+# say "code" out loud fire on any subject and answer "not in the map I was
+# built with" when it is missing - the map says what it does not know instead of
+# guessing. Those three run BEFORE `_where_put`, which otherwise takes any
+# "where is ..." sentence for a lost object, and before the feature guide and
+# the capability lane, so a fuzzy catalogue row can never claim a code question.
+# "What does X do" is the one exception: it runs AFTER the feature guide, because
+# that is the guide's own question shape and a real feature name must keep its
+# answer there.
+
+_SELF_CODE_OVERVIEW = re.compile(
+    r"(?:what|which)\s+are\s+(?:your|the|jarvis'?s?)\s+(?:major\s+|main\s+)?"
+    r"(?:parts|subsystems|components)\s*\??"
+    r"|what\s+are\s+the\s+(?:major\s+|main\s+)?parts\s+of\s+your\s+"
+    r"(?:code|codebase|source)\s*\??"
+    r"|what(?:'s|\s+is)\s+your\s+(?:architecture|code\s+structure|codebase|"
+    r"code\s+organi[sz]ation)\s*\??"
+    r"|how\s+(?:are\s+you|is\s+jarvis)\s+(?:built|put\s+together|structured|"
+    r"organi[sz]ed)\s*\??"
+    r"|how\s+is\s+your\s+code\s+(?:built|structured|organi[sz]ed)\s*\??")
+
+_SELF_CODE_DOES = re.compile(
+    r"what\s+does\s+(?:the\s+|your\s+|jarvis'?s?\s+)?(.+?)\s+do\s*\??")
+
+_SELF_CODE_WHERE = re.compile(
+    r"where\s+(?:is|are)\s+(?:the\s+|your\s+|jarvis'?s?\s+)?"
+    r"(?:code|source\s+code|source|module|file|files)\s+(?:for|of|that\s+"
+    r"(?:handles?|does?|runs?))\s+(.+?)\s*\??"
+    r"|where\s+(?:is|are)\s+(.+?)\s+(?:in|inside)\s+(?:your|the)\s+"
+    r"(?:code|codebase|source|repo|repository)\s*\??"
+    r"|which\s+part\s+of\s+(?:your|the)\s+(?:code|codebase|source|repo|"
+    r"repository)\s+(?:handles?|does?|is\s+for|runs?)\s+(.+?)\s*\??")
+
+_SELF_CODE_RECENT = re.compile(
+    r"what\s+(?:did|have)\s+you\s+(?:change|changed|ship|shipped|do)\s+"
+    r"(?:recently|lately)\s*\??"
+    r"|what\s+(?:changed|has\s+changed)\s+(?:recently|lately|on\s+main)\s*\??"
+    r"|what(?:'s|\s+is)\s+(?:new|changed|the\s+latest)\s+(?:on\s+main|in\s+"
+    r"(?:your|the)\s+(?:code|repo|repository))\s*\??"
+    r"|what\s+was\s+your\s+(?:last|latest|most\s+recent)\s+(?:release|change|"
+    r"deploy|update)\s*\??"
+    r"|what\s+did\s+you\s+(?:change|ship)\s+in\s+(?:the\s+)?(?:last|latest)\s+"
+    r"(?:release|deploy|update)\s*\??")
+
+_SELF_CODE_REPO = re.compile(
+    r"what(?:'s|\s+is)\s+your\s+(?:own\s+)?(?:github\s+)?(?:repository|repo|"
+    r"github(?:\s+(?:repository|repo|address|url|link))?)\s*\??"
+    r"|what(?:'s|\s+is)\s+your\s+github\s+(?:address|url|link)\s*\??"
+    r"|where\s+(?:is|are)\s+your\s+(?:code|source|repository|repo)\s+"
+    r"(?:on|at)\s+github\s*\??"
+    r"|where\s+do\s+you\s+live\s+on\s+github\s*\??"
+    r"|where\s+(?:is|are)\s+you\s+on\s+github\s*\??")
+
+#: The one- and two-word tail a code question may carry and not mean: "the
+#: memory SUBSYSTEM", "the gate MODULE". Stripped from the subject, so the
+#: lookup sees "memory" and "gate".
+_SELF_CODE_TAIL = re.compile(
+    r"\s+(?:part|parts|subsystem|subsystems|component|components|module|modules|"
+    r"section|sections|file|files|code|codebase|source)\s*$")
+_SELF_CODE_HEAD = re.compile(r"^(?:the|your|jarvis'?s?|jarvis)\s+")
+
+#: The reader once imported, or False when this build has none. None means "not
+#: asked yet" - see `_self_code_module` for why it is cached.
+_SELF_CODE_READER = None
+
+
+def _self_code_module():
+    """The shipped reader, or None on a PC the self-code map never reached.
+
+    Cached on purpose: this is called for a great many sentences that turn out
+    to be none of the four shapes, and on an unpatched PC a failed import would
+    otherwise be retried on every one of them.
+    """
+    global _SELF_CODE_READER
+    if _SELF_CODE_READER is None:
+        try:
+            import jarvis_self_code as SC
+            _SELF_CODE_READER = SC
+        except Exception:               # noqa: BLE001 - older PC: feature is off
+            _SELF_CODE_READER = False
+    return _SELF_CODE_READER or None
+
+
+def _self_code_topic(raw: str) -> str:
+    """The subject a code question names, cleaned, or "" when it is unusable.
+
+    The cleaning is small on purpose: articles and the "part/module" tail, and
+    nothing else. A subject longer than 60 characters is a sentence, not a
+    name, and is refused rather than half-matched.
+    """
+    topic = " ".join(str(raw or "").lower().split())
+    topic = topic.strip(" .,:;!?\"'")
+    for _ in range(2):
+        shorter = _SELF_CODE_TAIL.sub("", _SELF_CODE_HEAD.sub("", topic)).strip()
+        if shorter == topic:
+            break
+        topic = shorter
+    if not topic or len(topic) > 60 or not re.search(r"[a-z]", topic):
+        return ""
+    return topic
+
+
+def _self_code_intent(s: str, does: bool = False) -> Optional[Intent]:
+    """One of the four self-code questions, or None.
+
+    `s` is the tidied sentence. `does=True` asks for ONLY the "what does X do"
+    shape, which runs after the feature guide: that shape is the guide's own
+    question ("what does the spoken-style feature do?"), and a real feature name
+    must keep its answer. The other three shapes say "code" out loud and run
+    earlier, before "where did I put ...?" can take them for a lost object.
+
+    The module is imported lazily: on a PC that has not been patched the import
+    fails and every shape falls through to the model exactly as before, so an
+    older install is never answered with a sentence about code it cannot see.
+    """
+    if _self_code_module() is None:
+        return None
+    if does:
+        m = _SELF_CODE_DOES.fullmatch(s)
+        if not m:
+            return None
+        topic = _self_code_topic(m.group(1))
+        # ONLY a subject that really is a part of the map: "what does my oven
+        # do" is ordinary English and stays the model's, as it always was.
+        if topic and _self_code_module().resolve(topic) is not None:
+            return Intent("self_code_lookup", {"topic": topic})
+        return None
+    if _SELF_CODE_OVERVIEW.fullmatch(s):
+        return Intent("self_code_overview")
+    if _SELF_CODE_REPO.fullmatch(s):
+        return Intent("self_code_repo")
+    if _SELF_CODE_RECENT.fullmatch(s):
+        return Intent("self_code_recent")
+    m = _SELF_CODE_WHERE.fullmatch(s)
+    if m:
+        # Three alternatives, three groups; only the one that matched is set.
+        topic = _self_code_topic(m.group(1) or m.group(2) or m.group(3) or "")
+        if topic:
+            return Intent("self_code_lookup", {"topic": topic})
+    return None
+
+
 # ---- the live readers -----------------------------------------------------
 #
 # One reader per fact, and each is the module that OWNS it. Nothing here is
@@ -12590,6 +12772,38 @@ _MEASURED_SELF_WORDS = {
 def _run_measured_self(intent: Intent, sources: Optional[dict] = None) -> Result:
     builder = _MEASURED_SELF_WORDS[intent.name]
     return Result(builder(sources), intent.name)
+
+
+#: Said when the matcher fired but the reader is not in this build. It cannot
+#: normally happen (the matcher only fires when the module imports), and it is
+#: written down rather than left to an AttributeError on the one path that could.
+SELF_CODE_MISSING = ("This build of Jarvis cannot answer that about its own code yet "
+                     "- its backend carries no self-code reader. Run apply-patches.ps1 "
+                     "on the PC.")
+
+
+def _run_self_code(intent: Intent) -> Result:
+    """Answer one of the four self-code questions from the shipped map.
+
+    Every word comes from `jarvis_self_code`, which reads one JSON file beside
+    the backend and nothing else: no model, no card, no route, no write. The
+    module says plainly when the map was not installed with this build, and that
+    sentence is the answer - never a made-up one.
+    """
+    SC = _self_code_module()
+    if SC is None:
+        return Result(SELF_CODE_MISSING, intent.name)
+    if intent.name == "self_code_overview":
+        return Result(SC.overview(), intent.name)
+    if intent.name == "self_code_recent":
+        return Result(SC.recent(), intent.name)
+    if intent.name == "self_code_repo":
+        return Result(SC.self_repo(), intent.name)
+    return Result(SC.lookup(str(intent.f.get("topic") or "")), intent.name)
+
+
+_SELF_CODE_INTENTS = frozenset({"self_code_overview", "self_code_lookup",
+                                "self_code_recent", "self_code_repo"})
 
 
 def _run_self_setting_state(intent: Intent, sources: Optional[dict] = None) -> Optional[Result]:
@@ -22019,6 +22233,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_measured_self(intent)
     if n == "self_setting_state":
         return _run_self_setting_state(intent)
+    # Its own code, from the map shipped beside the backend (2026-11-07): four
+    # fixed answers with no model and no write, so they are listed in
+    # READ_ONLY_INTENTS too - a private chat hands them to its own gate.
+    if n in _SELF_CODE_INTENTS:
+        return _run_self_code(intent)
     # The local calendar's own read, and the honest answers for abilities that
     # are off, built only in the apps, or not built at all (2026-10-31, pass
     # 11). Both are fixed sentences that read the real state: no model, no
@@ -23007,6 +23226,11 @@ READ_ONLY_INTENTS = frozenset({
     # backend, writes nothing, calls no model and raises no card - so it must
     # not take away what "cancel that" would undo.
     "quote_now", "quote_list",
+    # Its own code (2026-11-07): the four answers read `jarvis-self-code.json`
+    # beside the backend - a generated file, no code executed, no card, no
+    # route, no model, nothing written - so none may clear "cancel that".
+    "self_code_overview", "self_code_lookup", "self_code_recent",
+    "self_code_repo",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
     # fixed answer that reads this PC's own settings and connects nothing, so it

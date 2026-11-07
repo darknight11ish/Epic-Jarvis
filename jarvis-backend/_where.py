@@ -1696,6 +1696,16 @@ SHIPPED = (
     # published base carry it too. It is NOT a module; it is in this list
     # because _where.SHIPPED is everything apply-patches.ps1 puts in the folder.
     "quotes_corpus.json",
+    # The self-code map (2026-11-07): the reader for the generated map of this
+    # repository's own code, and the map itself - a data file shipped beside the
+    # module exactly as quotes_corpus.json is shipped beside jarvis_quotes.py.
+    # `tools/gen_self_code_map.py` writes the JSON from the deployed tree; the
+    # reader only reads it beside itself (no git, no socket, no write, no model),
+    # so there is nothing to patch and no route to add. The same two entries, in
+    # the same position, are at the end of $SHIPPED in scripts/apply-patches.ps1.
+    # They sit BEFORE jarvis_bench.py, which stays LAST.
+    "jarvis_self_code.py",
+    "jarvis-self-code.json",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate
