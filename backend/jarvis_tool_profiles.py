@@ -123,6 +123,7 @@ RETIREMENT        = "backend/jarvis_retirement.py"
 HOME              = "backend/jarvis_home.py"
 NOTE_CAPTURE      = "backend/jarvis_note_capture.py"
 PLAN              = "backend/jarvis_plan.py"
+PRESETS           = "backend/jarvis_presets.py"
 TOOL_EVAL         = "tools/tool_eval/ollama_tool_eval.py"
 SCHEDULE          = "backend/jarvis_schedule.py"
 QUICK             = "backend/jarvis_quick.py"
@@ -1859,6 +1860,45 @@ PROFILES: dict = {
         "sources": [AGENT, SETTINGS_REGISTRY, REBUILT_FRAMEWORK],
     },
 
+    "cloud_escalation": {
+        "id": "cloud_escalation",
+        "title": "Turn the standing cloud escalation switch on or off",
+        "what": "The Presets menu's Cloud row has one switch under it: \"escalate "
+                "to the cloud when the work is too complex\". This tool is the same "
+                "switch, reached by asking in chat instead of clicking. The switch "
+                "itself lives in `jarvis_presets.py` and this tool decides nothing "
+                "about it - the module owns the tier, the words on the card and the "
+                "file it writes.",
+        "gives": [
+            "Turn the standing cloud switch on or off by talking",
+            "Raise the same ONE card the Presets menu raises, without opening it",
+            "Hear why it cannot be turned on when no cloud service is chosen",
+        ],
+        "touches": "settings",
+        "limits": [
+            "Turning it ON is ONE `change_own_config` card, and nothing is written "
+            "before that yes; turning it OFF is instant and needs no card",
+            "With no cloud service chosen it refuses in words BEFORE any card, and "
+            "names the Cloud row in the Presets menu - a card for a switch that "
+            "could not work would be a lie",
+            "It never sends anything to a cloud service by itself - it only moves the "
+            "standing switch, and every privacy gate still runs in front of a cloud "
+            "turn - and a turn shaped by outside text changes nothing here",
+            "It rides along with \"Change one of Jarvis's own settings\" rather "
+            "than being a switch of its own, because it is the only door in chat to "
+            "this PRESETS row (see jarvis_agent.RIDES_WITH_SETTINGS)",
+        ],
+        "combines": {
+            "change_setting": "Change another setting, then this one - one card each.",
+            "feature_guide": "Find out what cloud escalation is, then ask for it.",
+        },
+        "tier": "always-available",
+        "enable_hint": "Always available wherever the setting tool is - it rides "
+                       "with \"Change one of Jarvis's own settings\", and the switch "
+                       "it moves is the Presets menu's Cloud row.",
+        "sources": [AGENT, PRESETS],
+    },
+
     "feature_guide": {
         "id": "feature_guide",
         "title": "Explain one of Jarvis's features",
@@ -2446,7 +2486,8 @@ FAMILIES: dict = {
                 "and what is installed, reading old conversations, listing and "
                 "switching plugins, adding and removing skill packs, changing one "
                 "of its own settings, and the \"Protected from Jarvis\" list.",
-        "tools": ["plugin_list", "plugin_switch", "change_setting", "feature_guide",
+        "tools": ["plugin_list", "plugin_switch", "change_setting",
+                  "cloud_escalation", "feature_guide",
                   "setup_quiz", "refresh_abilities", "self_portrait",
                   "conversation_find", "conversation_open", "protect_from_jarvis",
                   "pack_list", "pack_inspect", "pack_install", "pack_remove", "approval_policy"],

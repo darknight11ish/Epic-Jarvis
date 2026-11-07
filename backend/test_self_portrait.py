@@ -280,16 +280,17 @@ def tool_counts_are_the_real_tools():
     """
     import jarvis_agent as A
     import jarvis_asks_first as AF
-    # 64 / 148, not the 51 / 136 this read on main: the six on-demand GitHub tools
+    # 65 / 148, not the 51 / 136 this read on main: the six on-demand GitHub tools
     # (2026-11-03, GitHub "Read + actions") are in jarvis_agent.TOOLS and ship
     # switched OFF, hands-free added send_text_message (on by default, 13 -> 14),
-    # the product check added product_check (off), and the four pack tools
-    # (2026-11-05) ship ON, so the registered count moves by twelve and the
-    # asks-first rows grow with them. Both numbers are still read from the
-    # registries, never typed.
+    # the product check added product_check (off), the four pack tools (2026-11-05)
+    # ship ON, and the cloud-escalation door (2026-11-06) rides with change_setting
+    # rather than adding a switch of its own - so the registered count is 65, the
+    # enabled count stays 19, and the asks-first rows are unchanged at 148. Both
+    # numbers are still read from the registries, never typed.
     inv = SP.tool_inventory()
     check("the registered count is jarvis_agent.TOOLS' own length",
-          inv["registered"] == len(A.TOOLS) == 64, str(inv["registered"]))
+          inv["registered"] == len(A.TOOLS) == 65, str(inv["registered"]))
     check("the enabled count is the settings file's own list",
           inv["enabled"] == len(AF.tools_enabled_set()) == 19,
           f"{inv['enabled']} vs {len(AF.tools_enabled_set())}")
@@ -299,18 +300,18 @@ def tool_counts_are_the_real_tools():
     c = SP.counts(SP.build(refresh=True))
     check("counts()['tools'] is the enabled tool count, not the asks-first rows",
           c["tools"] == 19 and c["tools"] == c["tools_enabled"]
-          and c["tools_registered"] == 64 and c["asks_first_rows"] > 100, str(c))
+          and c["tools_registered"] == 65 and c["asks_first_rows"] > 100, str(c))
     check("the old number kept its true name and its true size",
           c["asks_first_rows"]
           == sum(len(g["rows"]) for g in SP.asks_first()["groups"]))
     counted = A._run_self_portrait({})
     check("the model tool's dict carries both true counts, never 136",
           counted["counts"]["tools"] == 19
-          and counted["counts"]["tools_registered"] == 64
+          and counted["counts"]["tools_registered"] == 65
           and counted["counts"]["asks_first_rows"] > 100, str(counted["counts"]))
     said = SP.refresh_sentence({}, c)
     check("the refresh sentence names tools as tools, not as ask-first actions",
-          "64 tools (19 switched on in your settings)" in said
+          "65 tools (19 switched on in your settings)" in said
           and f"{c['asks_first_rows']} ask-first actions" in said, said)
     # THE SETTINGS FILE IS THE SOURCE. Write a one-tool [tools].enabled into
     # the file the reader really opens, clear the caches, and watch both

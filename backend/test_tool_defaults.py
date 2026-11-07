@@ -135,7 +135,12 @@ DEFAULT_ENABLED = ["web_search", "change_setting", "feature_guide",
 OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                      "plugin_switch", "pack_list", "pack_inspect", "pack_install",
                      "pack_remove", "web_search",
-                     "change_setting", "feature_guide",
+                     "change_setting",
+                     # The standing cloud escalation switch (2026-11-06): it
+                     # rides with change_setting and is not a [tools].enabled
+                     # name, so it is not in DEFAULT_ENABLED - offered wherever
+                     # change_setting is. See jarvis_agent.RIDES_WITH_SETTINGS.
+                     "cloud_escalation", "feature_guide",
                      "refresh_abilities", "self_portrait",
                      "conversation_find", "conversation_open",
                      "approval_policy",
@@ -146,7 +151,8 @@ OFFERED_NO_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
 OFFERED_WITH_FOLDER = ["calculator", "memory_search", "phone_apps", "plugin_list",
                        "plugin_switch", "pack_list", "pack_inspect", "pack_install",
                        "pack_remove", "web_search",
-                       "my_files", "change_setting", "feature_guide",
+                       "my_files", "change_setting",
+                       "cloud_escalation", "feature_guide",
                        "refresh_abilities", "self_portrait",
                        "conversation_find", "conversation_open",
                        "approval_policy",

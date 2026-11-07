@@ -143,6 +143,7 @@ TOOL_NAMES = {
     # "What asks" for this one is decided per setting, by the setting's own
     # rule - the row says so in words rather than claiming the tool's own
     # action name (SETTINGS_GATE_ACTION) is the whole truth.
+    "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
     "change_setting": "Changing one of Jarvis's own settings when you ask (only a "
                       "loosening, or a switch that reads more, asks first)",
     # FEATURE_GUIDE_TOOL (2026-10-20): read-only, always no card - it lists and

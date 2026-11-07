@@ -111,7 +111,8 @@ PRIVATE_CHAT_ALLOWED = []
 #: and are offered like any other enabled tool - `conversation_clear` is not a
 #: tool at all, so it cannot appear here.
 OFFERED_FRESH = [
-    "approval_policy", "approve_web_search_for_conversation", "calculator", "change_setting",
+    "approval_policy", "approve_web_search_for_conversation", "calculator",
+    "change_setting", "cloud_escalation",
     "conversation_find", "conversation_open", "feature_guide", "memory_search",
     "pack_inspect", "pack_install", "pack_list", "pack_remove", "phone_apps",
     "plugin_list", "plugin_switch", "refresh_abilities",
@@ -131,7 +132,15 @@ CATALOGUE = [
     "append_logseq_journal", "append_obsidian_daily",
     "approval_policy",
     "approve_web_search_for_conversation", "browser_control",
-    "calculator", "calendar_read", "change_setting", "coming_up",
+    "calculator", "calendar_read", "change_setting",
+    # The standing cloud escalation switch (2026-11-06, the 0-of-6 action-card
+    # run): the only door in chat to the PRESETS menu's Cloud row. Like the
+    # web-search ask and its stop, `[tools].enabled` never names it - it rides
+    # with `change_setting` (jarvis_agent.RIDES_WITH_SETTINGS) - so it is NOT in
+    # FULL_ENABLED and IS in OFFERED_FRESH. Its ONE `change_own_config` card is
+    # raised inside jarvis_presets.cloud_escalate(), the same call the Presets
+    # menu makes.
+    "cloud_escalation", "coming_up",
     "connect_account", "control_computer", "control_phone",
     # Reading one of the owner's own kept conversations (2026-11-03: "pull up
     # any old conversation"). Both are read-only under `skill_list`. Clearing is

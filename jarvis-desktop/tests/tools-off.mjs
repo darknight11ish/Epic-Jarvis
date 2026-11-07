@@ -7,12 +7,12 @@
  * What must hold:
  * - every tool the model can be offered is drawn with an ON switch, the raw
  *   Tier C set and the everyday helpers included (60 at 2026-11-05, 48 before);
- * - a name this PC does not know, or one of the four whose own switch decides
+ * - a name this PC does not know, or one of the five whose own switch decides
  *   it, is still listed when it is ON, with its real state and the PC's own
  *   plain reason, and that row is an OFF switch only;
  * - after OFF such a row STAYS and says OFF - it is not silently gone;
  * - Rust sends OFF for any real tool name and refuses ON only for a name it
- *   does not know (or one of the four, with the PC's own sentence);
+ *   does not know (or one of the five, with the PC's own sentence);
  * - a PC with nothing else ON sends no `extra`, and the page is unchanged.
  *
  * Runs on plain Node, no browser and no Playwright: the page's pure functions
@@ -132,7 +132,7 @@ check("Rust refuses ON only for a name the PC does not know, and sends every OFF
     "only the ON direction is refused before it is sent");
   assert.match(rust, /TOOLS_NO_SWITCH\.iter\(\)\.find/,
     "a known tool with no switch of its own gets its own sentence, not 'does not know'");
-  assert.match(rust, /pub\(crate\) const TOOLS_NO_SWITCH: \[\(&str, &str\); 4\]/);
+  assert.match(rust, /pub\(crate\) const TOOLS_NO_SWITCH: \[\(&str, &str\); 5\]/);
   assert.doesNotMatch(rust, /TOOLS_TOML_ONLY_NOTE/,
     "the old 'not offered in-app by this slice' refusal is gone");
   // The Rust test names the new rule so it cannot be silently dropped.

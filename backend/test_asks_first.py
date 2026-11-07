@@ -868,21 +868,22 @@ def t_offering_a_tool_is_a_different_thing_from_loosening():
     # the 2026-10-31 tiered ruling is gone - EVERY tool the AI model can be
     # offered is switchable from the Tools page now, 60 of them since the four
     # pack tools (2026-11-05) joined the six on-demand GitHub tools and
-    # hands-free's send_text_message (48 at 2026-11-04), and the only
-    # four that are not are the ones whose own switch decides them.
+    # hands-free's send_text_message (48 at 2026-11-04), and the only ones that
+    # are not are the ones whose own switch (or another tool) decides them.
     check("every tool the model can be offered is switchable in-app, 60 at 2026-11-05",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
           and len(AF.TOOLS_SWITCHABLE) == 60 and "calendar_read" in AF.TIER_A)
-    check("the tier lists plus the four exceptions ARE the model's own tool list",
+    check("the tier lists plus the exceptions ARE the model's own tool list",
           set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH) == set(AG.TOOLS),
           sorted(set(AG.TOOLS) ^ (set(AF.TOOLS_SWITCHABLE) | set(AF.NOT_A_SWITCH))))
-    check("the four exceptions are the sandbox, the product check and the two "
-          "web-search grant tools",
+    check("the exceptions are the sandbox, the product check, the two "
+          "web-search grant tools and the cloud escalation switch",
           set(AF.NOT_A_SWITCH) == {"run_data_script", "product_check"}
-          | set(AG.GRANT_ASK_TOOLS),
+          | set(AG.GRANT_ASK_TOOLS) | set(AG.RIDES_WITH_SETTINGS)
+          and AF.CLOUD_RIDES_WITH_SETTINGS == AG.RIDES_WITH_SETTINGS,
           AF.NOT_A_SWITCH)
     check("no row is both switchable and an exception",
           not set(AF.TOOLS_SWITCHABLE) & set(AF.NOT_A_SWITCH))

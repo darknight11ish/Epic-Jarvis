@@ -1450,22 +1450,45 @@
   "type": "function",
   "function": {
    "name": "change_setting",
-   "description": "Call this tool when the owner asks you to change one of Jarvis's own settings, in any words - do not ask first, just call it. Examples: \"turn on humour\", \"switch the prompt coach off\", \"enable web search\", \"turn on quiet hours\". \"setting\" is their words for it, e.g. \"humour\"; \"value\" is on or off, or a named choice such as \"faster\". Its own result says what happened: a loosening waits for one approval card, cosmetic ones at once; never say a setting changed when it did not.",
+   "description": "Call this tool when the owner asks you to change one of Jarvis's own settings, in any words - do not ask first, just call it. Examples: \"turn on humour\", \"switch the prompt coach off\", \"enable web search\", \"turn on quiet hours\". \"setting\" is their words for it; \"value\" is on or off, or a named choice such as \"faster\". Its own result says what happened: a loosening waits for one approval card, cosmetic ones at once, and you never change it yourself; never say a setting changed when it did not.",
    "parameters": {
     "type": "object",
     "properties": {
      "setting": {
       "type": "string",
-      "description": "the setting, in the owner's own words"
+      "description": "the setting's name, in the owner's words"
      },
      "value": {
       "type": "string",
-      "description": "on or off for a switch; for a setting with named choices, the choice itself (e.g. faster, normal, headless)"
+      "description": "on or off, or the setting's own named choice"
      }
     },
     "required": [
      "setting",
      "value"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "cloud_escalation",
+   "description": "Turn the standing cloud escalation switch on or off. Call this tool when the owner asks to turn cloud escalation on or off, in any words - \"let hard questions go to the cloud\", \"escalate to the cloud when it is too complex\" - do not ask first, just call it. \"on\" raises ONE approval card and nothing is sent before that yes; \"off\" is instant and needs no card. With no cloud service chosen it refuses in words and raises nothing, naming the Cloud row in the Presets menu. Its own result is what happened: never say cloud escalation is on before a tool result says so.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "on",
+       "off"
+      ],
+      "description": "on raises ONE approval card; off is instant"
+     }
+    },
+    "required": [
+     "action"
     ]
    }
   }

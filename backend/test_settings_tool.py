@@ -194,8 +194,13 @@ def run_tool(setting, value, watch=None, table=None):
 def t_the_tool_exists_and_is_offered_only_when_enabled():
     check("change_setting is a tool", AG.SETTINGS_TOOL in AG.TOOLS)
     check("it is offered when [tools].enabled names it",
-          AG.offered_tools({AG.SETTINGS_TOOL}) == [AG.SETTINGS_TOOL],
+          AG.offered_tools({AG.SETTINGS_TOOL}) == [AG.SETTINGS_TOOL,
+                                                   AG.ESCALATION_TOOL],
           repr(AG.offered_tools({AG.SETTINGS_TOOL})))
+    check("...and the cloud escalation switch rides with it, which is the one "
+          "door in chat to a PRESETS row (2026-11-06)",
+          AG.ESCALATION_TOOL in AG.offered_tools({AG.SETTINGS_TOOL})
+          and AG.ESCALATION_TOOL not in AG.offered_tools({"calculator"}))
     check("it is NOT offered when nothing names it",
           AG.SETTINGS_TOOL not in AG.offered_tools({"calculator"}))
     fn = AG.TOOLS[AG.SETTINGS_TOOL].schema()["function"]

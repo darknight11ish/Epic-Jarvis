@@ -22,6 +22,12 @@ drift apart:
     added. Kept to the scheduler's nouns and anchored at the sentence start so
     instructions ("you can add a reminder by saying...") and other subjects
     are not claims.
+  - CLAIMS_DELEGATED (2026-11-06) - a claim that THIS PC or the phone was ASKED
+    to do something: "I have asked this PC to open listening when I say hey
+    Jarvis", the sentence the 2026-11-06 self-awareness run measured (row
+    `cons-wake-b`) while nothing was listening and no tool had run. Asking a
+    machine to change a setting is not an action any tool of ours performs, so
+    CLAIMS_DONE's verb list could not see it.
   - claims_done(text) - both patterns, read sentence by sentence and a
     little more carefully, because at run time a wrong hit adds a wrong line
     to a real answer. A question ("Should I set a reminder?"), an "if ..."
@@ -263,6 +269,13 @@ ACTING_TOOLS = frozenset({
     # so "I changed it so it no longer asks" must be corrected when only the
     # card was raised or nothing ran, exactly like any other setting write.
     "approval_policy",
+    # "cloud_escalation" (2026-11-06): turning the standing switch ON writes
+    # escalate-cloud.json after ONE change_own_config card, and turning it OFF
+    # is instant - either way it changes what the PC does with the owner's
+    # words, so "cloud escalation is on now" must be corrected when only the
+    # card was raised or the write failed. It was left in NEITHER set at first,
+    # which backend/test_smarter_answers.py catches on purpose.
+    "cloud_escalation",
     # Clearing a conversation is NOT a model tool: Gemini ruling 1 (2026-11-03)
     # keeps it route/app/fast-path only, behind its one card, so it is in
     # neither table here - the action still exists, the TOOL does not.
@@ -380,6 +393,21 @@ _PASSIVE_CLAIM = re.compile(
     r"(?P<verb>" + _CLAIM_VERB + r")\b"
     r"|^\s*all\s+set\s*[.!]*\s*$",
     re.I)
+#: A claim that this PC (or the phone) was ASKED to do something - "I have
+#: asked this PC to open listening when I say hey Jarvis" (the 2026-11-06
+#: self-awareness run, row `cons-wake-b`). CLAIMS_DONE needed one of its own
+#: verbs after "I've", and "asked" is not one: asking a machine to change a
+#: setting is not an action any tool of ours performs, so the sentence stood
+#: unchallenged while nothing had been asked and nothing was listening. Narrow
+#: on purpose: it names THIS machine or the phone as the one asked, and one of
+#: the actions a tool could take - a sentence about asking a PERSON ("I have
+#: asked Alex") or about remembering ("I have asked you before") cannot match.
+CLAIMS_DELEGATED = re.compile(
+    r"\b(?:i(?:'ve|\s+have|\s+just|\s+already)?\s+)?(?:asked|told|instructed)\s+"
+    r"(?:this|your|the)\s+(?:pc|computer|machine|phone|device|laptop)\b"
+    r"[^.!?\n]{0,60}?\b(?:to\s+)?(?:open|start|listen|turn|switch|enable|set|"
+    r"send|play|launch|run|show|read|wake|arm|lock)\b", re.I)
+
 #: How many words a subjectless confirmation may have. Longer than this is a
 #: sentence, not a confirmation, and the risk of reading a description as a
 #: claim goes up with every word.
@@ -418,19 +446,40 @@ def _passive_claim(sentence: str) -> bool:
     return bool(_PASSIVE_CLAIM.search(sentence))
 
 
+#: Any word that can open a CONDITION or a time clause. Used only for the
+#: delegated-claim half of `claims_done` below: a conditional clause excuses a
+#: sentence ("When I say it, ask this PC to open listening"), but it does not
+#: excuse a claim already made BEFORE it ("I have asked this PC to open
+#: listening when I say hey Jarvis" - the measured sentence).
+_CONDITIONAL_WORD = re.compile(
+    r"\b(?:if|once|when|whenever|unless|until|in case|whether|after|before)\b", re.I)
+
+
 def claims_done(text: str) -> bool:
     """True when `text` says, in some sentence, that an action was taken."""
     for m in _SENTENCE.finditer(text or ""):
         sentence = m.group(0).strip()
         if not sentence:
             continue
+        delegated = CLAIMS_DELEGATED.search(sentence)
         if not (CLAIMS_DONE.search(sentence)
                 or CLAIMS_SCHEDULE_DONE.search(sentence)
+                or delegated
                 or _passive_claim(sentence)):
             continue
-        if _NOT_A_CLAIM.search(sentence) or _EARLIER.search(sentence) \
-                or _memory_sentence(sentence):
+        if _EARLIER.search(sentence) or _memory_sentence(sentence):
             continue
+        if _NOT_A_CLAIM.search(sentence):
+            # The exclusion stands EXCEPT for a delegated claim that is made
+            # before the sentence's first conditional word. Without this,
+            # "I have asked this PC to open listening when i say hey jarvis"
+            # was excused by its own "when i" clause, which is the trigger the
+            # owner would say - not a condition on the claim.
+            if delegated is None:
+                continue
+            conditional = _CONDITIONAL_WORD.search(sentence)
+            if conditional is None or conditional.start() < delegated.start():
+                continue
         return True
     return False
 
