@@ -168,7 +168,7 @@ pub(crate) const TOOLS_SWITCHABLE: [&str; 60] = [
 /// ride with `web_search`. Refusing them with "this PC does not know that name"
 /// would be false, so the PC's own explanation is sent before the request is
 /// made.
-pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 4] = [
+pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 5] = [
     (
         "run_data_script",
         "The data and maths sandbox has its own switch: Settings, Data sandbox \
@@ -194,6 +194,12 @@ pub(crate) const TOOLS_NO_SWITCH: [(&str, &str); 4] = [
         "This one rides with Web search: with Web search offered, the AI is \
          offered this too. It has no switch of its own, so nothing was changed \
          here.",
+    ),
+    (
+        "cloud_escalation",
+        "This one is not a switch of its own: it rides with \"Change one of Jarvis's own settings\", \
+         and while that tool is offered the AI is offered this too. Its card is the Presets menu's \
+         Cloud row switch, so nothing was changed here.",
     ),
 ];
 
