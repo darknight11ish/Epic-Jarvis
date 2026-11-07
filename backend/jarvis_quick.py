@@ -19267,6 +19267,48 @@ def _open(s: str) -> Optional[Intent]:
     return Intent("open_app", {"opened": opened})
 
 
+def _run_folder_list() -> Result:
+    """"Which folders may you look in?" - read from jarvis_documents.folders()."""
+    try:
+        import jarvis_documents as D
+        items = list(D.folders())
+    except Exception:
+        return Result("I cannot read the folder list on this PC right now, so I will "
+                      "not guess which folders I may look in.", "folder_list")
+    if not items:
+        return Result(D.EMPTY + " Adding one is a PC step with one card: Settings, "
+                      + D.TITLE + " - or ask me to add a folder and I will raise the "
+                      "same card.", "folder_list")
+    return Result("You let me look in: " + "; ".join(items)
+                  + ". Adding a folder needs one card on the PC, and removing one is "
+                  "instant.", "folder_list")
+
+
+def _run_folder_add(f: dict, peer, local) -> Result:
+    """Add ONE folder through jarvis_documents.request_add - the route's own call."""
+    try:
+        import jarvis_documents as D
+    except Exception:
+        return Result("Folders Jarvis may look in is not installed on this PC, so I "
+                      "cannot add one.", "folder_add")
+    if f.get("ask"):
+        return Result("Which folder? Give me the full path, for example my downloads "
+                      "folder, or a path like C:/Users/you/Downloads.", "folder_add")
+    path = str(f.get("path") or "")
+    try:
+        code, out = D.request_add({"path": path}, peer=peer, local=local)
+    except Exception as exc:                       # noqa: BLE001 - said plainly
+        return Result(f"I could not add that folder ({type(exc).__name__}).", "folder_add")
+    out = out if isinstance(out, dict) else {}
+    said = str(out.get("message") or out.get("error") or "").strip()
+    if not said:
+        said = ("That folder is on its way to the list once you approve the card."
+                if out.get("waiting") else "I could not add that folder.")
+    if out.get("waiting") and "card" not in said.lower():
+        said += " Nothing is added until you approve the card."
+    return Result(said, "folder_add")
+
+
 def _run_file_to_obsidian() -> Result:
     """A file/download -> Obsidian request that does not name Notion.
 
@@ -23792,6 +23834,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # A file/download -> Obsidian ask that does not name Notion (the owner's
         # phone finding, 2026-11-07): fixed words, reads nothing, writes nothing.
         return _run_file_to_obsidian()
+    if n == "folder_list":
+        return _run_folder_list()
+    if n == "folder_add":
+        return _run_folder_add(f, peer, local)
     if n == "connect_account":
         # "connect my calendar" / "set up github" (2026-10-28): ONE card whose
         # values are typed on this PC and saved into Credential Manager, then
@@ -24346,7 +24392,7 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # The Notion/file answers are fixed local words, so a private chat gets
     # them from this PC too rather than handing them to a model that would
     # deny the import exists (the owner's phone finding, 2026-11-07).
-    "notion_export", "file_to_obsidian_help",
+    "notion_export", "file_to_obsidian_help", "folder_list",
     # Wave 8.2 (2026-11-07): the same rule one step further. The model cannot
     # know this PC's preset, benchmark rows, switch states or change journal,
     # so a private chat answers these from the local code, never the model.
@@ -24498,7 +24544,7 @@ READ_ONLY_INTENTS = frozenset({
     # "can you process all my Notion notes into Obsidian?" (2026-10-28): a
     # fixed answer that reads nothing and imports nothing, so it must not
     # clear what "cancel that" would take back.
-    "notion_export", "file_to_obsidian_help",
+    "notion_export", "file_to_obsidian_help", "folder_list",
     # "find cheap parking near ..." (2026-10-30): it calls two public map
     # services and a local cache, opens no card and changes nothing, so it must
     # not clear what "cancel that" would take back.
@@ -25770,6 +25816,52 @@ _AW_DESKTOP_ROW = re.compile(
 _AW_SETTING_READ = re.compile(
     r"what\s+is\s+(?:the\s+)?(?P<name>.+?)\s+set\s+to\s*", re.I)
 
+#: "Which folders may you look in?" - the read of jarvis_documents.folders().
+_AW_FOLDER_LIST = re.compile(
+    r"(?:(?:can|could|would)\s+you\s+|please\s+)?"
+    r"(?:which|what)\s+folders?\s+(?:may|can|do)\s+(?:you|jarvis)\s+"
+    r"(?:look\s+in|see|access|read)"
+    r"|(?:which|what)\s+folders?\s+are\s+(?:on\s+)?(?:the\s+)?(?:list|allowed)"
+    r"|list\s+(?:your|the)\s+folders?"
+    r"|what\s+folders\s+(?:have\s+you\s+got|do\s+you\s+have)", re.I)
+
+#: "Add my downloads folder to the folders Jarvis may look in" / "let Jarvis
+#: look in my downloads folder". The PATH is read from the raw sentence (the
+#: matching form is lowercased), and resolved by `_folder_path_from_words`.
+_AW_FOLDER_ADD = re.compile(
+    r"(?:(?:can|could|would)\s+you\s+|please\s+)?"
+    r"(?:add|allow)\s+(?P<p1>.+?)\s+to\s+(?:the\s+)?folders?\s+"
+    r"(?:jarvis\s+)?(?:may|can)\s+look\s+in"
+    r"|let\s+(?:jarvis\s+)?look\s+in\s+(?P<p2>.+?)"
+    r"|add\s+(?P<p3>.+?)\s+to\s+(?:your|the)\s+folders?\s+list", re.I)
+
+#: The Windows folders the owner means by their everyday names.
+_FOLDER_NAMES = {
+    "downloads": "~/Downloads", "download": "~/Downloads",
+    "documents": "~/Documents", "document": "~/Documents", "docs": "~/Documents",
+    "desktop": "~/Desktop", "pictures": "~/Pictures", "photos": "~/Pictures",
+    "music": "~/Music", "videos": "~/Videos", "video": "~/Videos",
+    "home": "~",
+}
+
+
+def _folder_path_from_words(words: str) -> str:
+    """The path the owner meant, or "" when it cannot be resolved safely."""
+    raw = " ".join(str(words or "").strip().strip('"').strip("'").split())
+    raw = re.sub(r"^(?:the|my|your)\s+", "", raw, flags=re.I)
+    raw = re.sub(r"\s+folder$", "", raw, flags=re.I).strip()
+    if not raw:
+        return ""
+    lowered = raw.lower()
+    if lowered in _FOLDER_NAMES:
+        return os.path.expanduser(_FOLDER_NAMES[lowered])
+    # An explicit path is taken as written when it looks like one; anything
+    # else is asked about rather than guessed.
+    if re.match(r"^[A-Za-z]:[\\/]", raw) or raw.startswith("~/") or raw.startswith("\\\\"):
+        return os.path.expanduser(raw)
+    return ""
+
+
 _AW_AREA = re.compile(
     r"what\s+else\s+(?:affects|touches|is\s+in)\s+(?:the\s+)?(?P<area>.+?)"
     r"(?:\s+area)?\s*"
@@ -26441,6 +26533,17 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
     low = str(s or "").strip()
     if not low or len(low) > 400:
         return None
+    raw = " ".join(str(text or "").strip().split())
+    if _AW_FOLDER_LIST.fullmatch(raw) or _AW_FOLDER_LIST.fullmatch(low):
+        return Intent("folder_list")
+    m = _AW_FOLDER_ADD.fullmatch(raw)
+    if m is not None:
+        words = (m.groupdict().get("p1") or m.groupdict().get("p2")
+                 or m.groupdict().get("p3") or "").strip()
+        target = _folder_path_from_words(words)
+        if target:
+            return Intent("folder_add", {"path": target})
+        return Intent("folder_add", {"ask": True, "words": words})
 
     if _AW_PRESET_CURRENT.fullmatch(low):
         return Intent("preset_current")

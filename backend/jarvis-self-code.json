@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "1f837d41f22dc1549a0ec1721c9e18362c94caf3",
- "built_at": "2026-11-07T12:48:07-08:00",
+ "ref": "3b34570d1bf9a07fcfbad42d88874acf53ed8766",
+ "built_at": "2026-11-07T15:25:29-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6126,6 +6126,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "3b34570d1bf9a07fcfbad42d88874acf53ed8766",
+   "date": "2026-11-07",
+   "subject": "fix(notes): the Notion/file answers name the real steps - and the folder-list prerequisite"
+  },
+  {
+   "sha": "819de11d4ebb6c23554edda4dda5b606ba6572e8",
+   "date": "2026-11-07",
+   "subject": "fix(records): quote the register's real row count in the About page"
+  },
+  {
+   "sha": "960702dcec3b65c49a2f8b704c10f70afab40fcd",
+   "date": "2026-11-07",
+   "subject": "fix(awareness): keep the journal and page answers side-effect free"
+  },
+  {
    "sha": "1f837d41f22dc1549a0ec1721c9e18362c94caf3",
    "date": "2026-11-07",
    "subject": "test(awareness): align the suites the new answers deliberately change"
@@ -6209,21 +6224,6 @@
    "sha": "e18861f85ea70573bc2d7a827275a81f844c4914",
    "date": "2026-11-07",
    "subject": "integration: cloud provider routing follows the choice + privacy backstop (Q1/Q7)"
-  },
-  {
-   "sha": "443e25de186042263abba29206369dd0b2331348",
-   "date": "2026-11-07",
-   "subject": "fix(cloud): the chosen provider answers, chat can see and switch it, and every switch answers about itself"
-  },
-  {
-   "sha": "83278a82331533e8c12df093ccca1d09892996e8",
-   "date": "2026-11-07",
-   "subject": "integration: docs/README count 416 -> 417 (one new doc in this wave: SELF-CODE-MAP.md; size intentionally untouched)"
-  },
-  {
-   "sha": "b3d440e1f329b112c31b647e0e91a7f74d10d7d0",
-   "date": "2026-11-07",
-   "subject": "integration: GitHub self-knowledge G1-G8 (Q6, LANE_SYSTEM untouched)"
   }
  ],
  "top_level": [

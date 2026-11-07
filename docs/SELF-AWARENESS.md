@@ -514,3 +514,27 @@ holds the read-only audit (`audit.py`), its 180 measured rows
 `changelog.d/2026-11-07-wave-8-2-full-self-awareness.md`,
 `decisions.d/2026-11-07-self-awareness-contract-and-change-journal.md`,
 claims C104/C105.
+
+## Wave 8.2 addendum (2026-11-07): the folder list through chat
+
+The one place the owner's words had no door was "Folders Jarvis may look in":
+he could not add a folder by asking, and could not ask which folders were
+allowed. Both now exist, through the module that already owns the list:
+
+- `folder_list`: "which folders may you look in?" / "list your folders" is
+  answered from `jarvis_documents.folders()` - no model, no card, read-only,
+  and answered in a private chat too, because the model cannot know the local
+  list.
+- `folder_add`: "add my downloads folder to the folders jarvis may look in",
+  "let jarvis look in my downloads folder", or an explicit path, calls
+  `jarvis_documents.request_add` - the SAME function the PC route uses, so the
+  same PC-only rule and the same ONE `add_folder` approval card apply. Nothing
+  is added until that card is approved; a phone ask gets the PC-only refusal;
+  an already-covered folder says so; an unresolvable name asks which folder
+  instead of guessing.
+
+This came from the owner's real Notion-import attempt: the .zip was in
+Downloads, which was not on the list (only Documents was), so the import
+refused. The Notion answer now names that prerequisite as well. Proof:
+`backend/test_folders_chat.py` (23 checks) and `backend/test_notion_answer.py`
+(95 checks), plus `test_folder_restrictions.py` unchanged at 99/0.
