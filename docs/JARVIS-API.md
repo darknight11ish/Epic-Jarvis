@@ -33971,7 +33971,20 @@ is a read). Origin and token checked exactly like every other route.
 Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
 `preview_text`; the rest is for reading the log later.
 
-- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`.
+- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`, `github-watch-repos` (the per-repository watcher, 2026-11-07).
+- A **per-repository watch** (2026-11-07) writes the same row shape with
+  `source` = `github-watch-repos` and `thread_key` `repo:<owner/name>` (or
+  `follow:<topic>` for a followed topic). Its `reason_code` is one of
+  `repo_new_release`, `repo_new_commit`, `repo_new_issue`, `repo_new_pr`,
+  `repo_ci_changed`, `repo_new_repo`, `repo_observe_shadow`,
+  `repo_frequency_off`, `repo_digest_due`, `repo_instant_due`,
+  `repo_baseline`, `repo_poll_skipped` or `repo_unauthenticated_public` - every
+  one of them a key of the same closed `WATCH_REASONS` set. `mode` is the
+  watch's cadence (`instant`, `daily`, `weekly`, `off`) or `observe`; the extra
+  `repo`, `freq` and `url` fields are for reading the log later. These rows are
+  written by the same store this route already serves, so no new route was
+  added: `GET /api/watch/repos` does not exist, and the watch itself is
+  controlled from chat or Live (`backend/test_watch_repos.py`).
 - `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
   `notification:<id>`, `repo:<name>`.
 - `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule

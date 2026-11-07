@@ -1454,6 +1454,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # internal key, and "can you turn on the lights?" never reached the real
     # home-control state. Specific shapes only - a generic feature question
     # still belongs to the feature list (#1030).
+    # --- "watch this repository on GitHub" (2026-11-07) -----------------
+    # BEFORE `_honest_early`, because its "watch a repo" door was the honest
+    # answer while this could not be done - and it CAN be done now. The door
+    # still owns "watch a pull request"/"watch this issue"; this matcher claims
+    # only a NAMED repository (or "my/your/that repo") plus an optional
+    # cadence and parts, so the two answers do not overlap.
+    got = _repo_watch(s, text, now)
+    if got is not None:
+        return got
+
     got = _honest_early(text, s)
     if got is not None:
         return got
@@ -1927,6 +1937,7 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _tellme(s, text, now)
     if got is not None:
         return got
+
 
     # --- "read this link" (2026-11-03) -----------------------------------------
     # AFTER `_tellme`, and that order is the rule, not a preference: "tell me
@@ -3855,6 +3866,189 @@ def _tellme_watches(what: str, original, f: dict) -> Optional[Intent]:
     return None
 
 
+# --------------------------------------------------------------------------
+#   "watch this repository on GitHub" - per-repo following, chat and Live
+#   (2026-11-07)
+# --------------------------------------------------------------------------
+# The owner: "i can tell jarvis what frequency of notifications or to stop or
+# follow new or any combination of these things through jarvis live and chat".
+# Live turns are the same /api/chat route with provenance "voice" + live true,
+# so ONE matcher here is the whole parity story: typing it and saying it reach
+# the same Intent, the same runner and the same jarvis_watch.py store.
+#
+# WHAT IS CLAIMED HERE, AND NOTHING ELSE. The sentences below are about a
+# NAMED repository or a followed topic. "tell me when CI fails on ..." is a
+# different, older watch (jarvis_tellme) and is matched first; "watch with me"
+# (jarvis_screen) is matched earlier still. A sentence this block does not
+# recognise whole goes to the model exactly as before.
+#
+# MOODS: `watch`, `stop_talking` (pull-only, kept), `forget`, `resume`,
+# `frequency`, `follow_new`, `follow_stop`, `list`. Only `list` reads; every
+# other one changes state, and starting (or re-activating) a watch is the one
+# that raises the approval card - in the RUNNER, through the same gate every
+# other card goes through.
+
+_OWNER_NAME = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}"
+_HOME_REPO = (r"(?:your\s+repo(?:sitory)?|my\s+repo(?:sitory)?|the\s+repo(?:sitory)?|"
+              r"this\s+repo(?:sitory)?|that\s+repo(?:sitory)?|"
+              r"epic[-\s]?jarvis|yours)")
+_REPO_SAID = rf"(?:(?P<full>{_OWNER_NAME})|(?P<home>{_HOME_REPO}))"
+_REPO_EVENT_WORD = re.compile(
+    r"\breleases?\b|\bcommits?\b|\bpushes?\b|\bissues?\b|\bpull\s*requests?\b|"
+    r"\bprs?\b|\bci\b|\bbuilds?\b|\bactions?\b|\bchecks?\b", re.I)
+_REPO_ALLOWED_TAIL = re.compile(
+    r"(?:\s*,?\s*(?:and\s+)?(?:for\s+|about\s+|with\s+|on\s+)?(?:new\s+|any\s+)?"
+    r"(?:releases?|commits?|pushes?|issues?|pull\s*requests?|prs?|ci|builds?|actions?|"
+    r"checks?))*"
+    r"(?:\s+(?:instantly|instant|straight\s+away|right\s+away|immediately|"
+    r"as\s+soon\s+as\s+(?:possible|something\s+happens|it\s+happens)|"
+    r"daily|every\s+day|once\s+a\s+day|each\s+day|weekly|every\s+week|"
+    r"once\s+a\s+week|each\s+week|off|paused?|pull[- ]only|"
+    r"only\s+when\s+i\s+ask|nothing))?", re.I)
+
+
+def _repo_frequency_of(text: str) -> str:
+    low = str(text or "").lower()
+    if re.search(r"instant|straight\s+away|right\s+away|immediately|"
+                 r"as\s+soon\s+as", low):
+        return "instant"
+    if re.search(r"\bweekly\b|every\s+week|once\s+a\s+week|each\s+week", low):
+        return "weekly"
+    if re.search(r"\bdaily\b|every\s+day|once\s+a\s+day|each\s+day", low):
+        return "daily"
+    if re.search(r"\boff\b|paused?|pull[- ]only|only\s+when\s+i\s+ask|nothing", low):
+        return "off"
+    return ""
+
+
+def _repo_events_of(text: str) -> list:
+    low = str(text or "").lower()
+    ev = []
+    if re.search(r"\breleases?\b", low):
+        ev.append("releases")
+    if re.search(r"\bcommits?\b|\bpushes?\b", low):
+        ev.append("commits")
+    if re.search(r"\bissues?\b", low):
+        ev.append("issues")
+    if re.search(r"\bpull\s*requests?\b|\bprs?\b", low):
+        ev.append("prs")
+    if re.search(r"\bci\b|\bbuilds?\b|\bactions?\b|\bchecks?\b", low):
+        ev.append("ci")
+    return ev
+
+
+def _repo_watch(s: str, original, now: float) -> Optional[Intent]:
+    """The 2026-11-07 per-repository watcher, in the owner's own words."""
+    low = s.strip()
+
+    # --- what am I watching? (read-only, so no card and no "cancel that") ---
+    if re.fullmatch(r"(?:what|which)\s+(?:repos(?:itories)?|github\s+things)\s+"
+                    r"(?:am\s+i|are\s+you|do\s+you)\s+(?:watching|following|tracking)"
+                    r"|what\s+am\s+i\s+(?:watching|following|tracking)(?:\s+on\s+github)?"
+                    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:repos(?:itories)?|watches)\s+"
+                    r"(?:you(?:'re|\s+are)\s+)?(?:watching|following|tracking)", low):
+        return Intent("repo_watch_list")
+
+    # --- follow a topic's NEW repositories ---------------------------------
+    m = re.fullmatch(
+        r"(?:please\s+)?(?:start\s+)?(?:follow|track|watch)\s+(?:the\s+)?new\s+"
+        r"(?:repos?(?:itories)?\s+)?(?:for|on|in|about)\s+(?:the\s+)?(?:topic\s+)?"
+        r"(?P<topic>.+?)(?:\s+(?P<freq>" + r"instantly|instant|daily|weekly|"
+        r"every\s+day|once\s+a\s+day|every\s+week|once\s+a\s+week))?", low)
+    if m:
+        topic = _restore(original, m.group("topic").strip(" \"'“”.,!?"))
+        return Intent("repo_watch", {"action": "follow_new", "topic": topic,
+                                     "frequency": _repo_frequency_of(m.group("freq") or "")})
+    if re.fullmatch(r"(?:please\s+)?(?:start\s+)?follow\s+(?:the\s+)?new(?:\s+repos?"
+                    r"(?:itories)?)?(?:\s+please)?", low):
+        return Intent("repo_watch", {"action": "follow_new", "topic": ""})
+    m = re.fullmatch(r"(?:please\s+)?(?:stop|quit|don'?t)\s+(?:following|tracking)\s+"
+                     r"(?:the\s+)?new\s+(?:repos?(?:itories)?\s+)?(?:for|on|in|about)\s+"
+                     r"(?:the\s+)?(?:topic\s+)?(?P<topic>.+)", low)
+    if m:
+        return Intent("repo_watch", {"action": "follow_stop",
+                                     "topic": _restore(original, m.group("topic").strip())})
+
+    # --- stop telling me / stop watching / forget --------------------------
+    m = re.fullmatch(r"(?:please\s+)?(?:stop|quit|don'?t)\s+(?:telling|notifying|"
+                     r"messaging|pinging|bothering)\s+me\s+(?:about|with|on)\s+"
+                     + _REPO_SAID + r"(?:\s+on\s+github)?", low + "")
+    if m:
+        return Intent("repo_watch", {"action": "stop_talking",
+                                     "repo": _repo_target(m, original)})
+    m = re.fullmatch(r"(?:please\s+)?(?:stop|quit|stop\s+watching|stop\s+following)\s+"
+                     r"(?:watching|following|tracking)\s+" + _REPO_SAID
+                     + r"(?:\s+on\s+github)?", low)
+    if m:
+        return Intent("repo_watch", {"action": "forget",
+                                     "repo": _repo_target(m, original)})
+    m = re.fullmatch(r"(?:please\s+)?(?:unfollow|forget)\s+" + _REPO_SAID
+                     + r"(?:\s+on\s+github)?", low)
+    if m:
+        return Intent("repo_watch", {"action": "forget",
+                                     "repo": _repo_target(m, original)})
+
+    # --- resume ------------------------------------------------------------
+    m = re.fullmatch(r"(?:please\s+)?(?:resume|restart|start)\s+(?:watching|following|"
+                     r"telling\s+me\s+about)\s+" + _REPO_SAID + r"(?:\s+again)?"
+                     r"(?:\s+on\s+github)?", low)
+    if m:
+        return Intent("repo_watch", {"action": "resume",
+                                     "repo": _repo_target(m, original)})
+
+    # --- "tell me daily about that repo" (a cadence, not a new subject) ----
+    m = re.fullmatch(r"(?:please\s+)?(?:tell|notify|message|ping)\s+me\s+"
+                     r"(?P<freq>daily|weekly|instantly|instant|every\s+day|every\s+week|"
+                     r"once\s+a\s+day|once\s+a\s+week|only\s+when\s+i\s+ask|"
+                     r"pull[- ]only|nothing|never)\s+(?:about|on|for)\s+" + _REPO_SAID, low)
+    if m:
+        return Intent("repo_watch", {"action": "frequency",
+                                     "repo": _repo_target(m, original),
+                                     "frequency": _repo_frequency_of(m.group("freq"))})
+
+    # --- follow/watch specific KINDS of thing on one repository ------------
+    # "follow new releases and issues on owner/repo": the parts come before
+    # the repository, the opposite order from the sentence below.
+    m = re.fullmatch(r"(?:please\s+)?(?:start\s+)?(?:follow|watch|track)\s+"
+                     r"(?P<events>(?:(?:new\s+)?(?:releases?|commits?|issues?|"
+                     r"pull\s*requests?|prs?|ci|builds?|checks?|actions?)"
+                     r"(?:\s*(?:,|and|&|\+)\s*)?)+)\s+(?:on|for|in)\s+" + _REPO_SAID
+                     + r"(?:\s+(?P<freq>" + r"instantly|instant|daily|weekly|"
+                     r"every\s+day|once\s+a\s+day|every\s+week|once\s+a\s+week))?", low)
+    if m:
+        return Intent("repo_watch", {
+            "action": "watch", "repo": _repo_target(m, original),
+            "frequency": _repo_frequency_of(m.group("freq") or ""),
+            "events": _repo_events_of(m.group("events") or ""),
+        })
+
+    # --- watch / track / follow one repository -----------------------------
+    m = re.fullmatch(r"(?:please\s+|hey\s+jarvis,?\s+)?(?:start\s+)?(?:watching|watch|"
+                     r"tracking|track|following|follow)\s+" + _REPO_SAID
+                     + r"(?P<tail>.*)", low)
+    if not m:
+        return None
+    tail = (m.group("tail") or "").strip()
+    tail = re.sub(r"\s+(?:on|in)\s+github$", "", tail, flags=re.I).strip()
+    if tail and not _REPO_ALLOWED_TAIL.fullmatch(" " + tail):
+        return None              # more sentence than this grammar owns: the model
+    return Intent("repo_watch", {
+        "action": "watch",
+        "repo": _repo_target(m, original),
+        "frequency": _repo_frequency_of(tail),
+        "events": _repo_events_of(tail),
+    })
+
+
+def _repo_target(m, original) -> str:
+    """The owner's `owner/name`, or "" when the sentence said "your repo" -
+    the runner resolves "" to jarvis_watch.REPO_DEFAULT."""
+    full = m.groupdict().get("full")
+    if full:
+        return _restore(original, full).strip()
+    return ""
+
+
 TELLME_MISSING = ("Your PC's Jarvis cannot do \"tell me when\" yet - run apply-patches.ps1 "
                   "on the PC.")
 
@@ -4083,6 +4277,190 @@ def _read_link_intent(text, s: str,
     if not _READ_LINK_VERB.search(low) and not _read_link_pasted(raw, url):
         return None              # pasted to talk about, not to read
     return Intent("read_link", {"url": url, "words": low})
+
+
+def _run_repo_watch(intent: Intent, now: float) -> Result:
+    """The per-repository watcher (2026-11-07). Starting or re-activating one
+    raises ONE approval card through the same gate every card goes through;
+    stopping, resuming and changing the cadence are instant, like every other
+    stop and every other cadence change. Nothing here approves anything."""
+    n = intent.name
+    try:
+        import jarvis_watch as W
+    except Exception:
+        return Result("Your PC's Jarvis cannot watch a repository yet - run "
+                      "apply-patches.ps1 on the PC.", n)
+    f = intent.f or {}
+    # The read-only list has no action of its own: its NAME is the action, so
+    # it cannot accidentally fall through to starting a watch.
+    action = "list" if n == "repo_watch_list" else str(f.get("action") or "watch")
+    target = str(f.get("repo") or "") or W.REPO_DEFAULT
+    if action == "list":
+        st = W.repo_status()
+        if not st["watched"] and not st["followed"]:
+            return Result("You are not watching any repository yet. Say \"watch "
+                          f"{W.REPO_DEFAULT}\" to start.", n)
+        bits = []
+        for w in st["watched"][:8]:
+            mode = "observe mode - records only" if w["mode"] != "active" else "tells you"
+            bits.append(f"{w['repo']} - {w['frequency_words']}, {', '.join(w['events'])}, "
+                        f"{mode}")
+        for t in st["followed"][:5]:
+            bits.append(f"new repositories for topic {t['topic']} - "
+                        f"{W.REPO_FREQUENCY_WORDS.get(t['frequency'], t['frequency'])}")
+        return Result("You are watching: " + "; ".join(bits) + ".", n)
+    if action == "follow_stop":
+        r = W.stop_follow(f.get("topic") or "")
+        if not r.get("ok"):
+            return Result(f"I was not following new repositories for "
+                          f"{f.get('topic') or 'that topic'}.", n)
+        return Result(f"Stopped following new repositories for {r['topic']}.", n)
+    if action == "follow_new":
+        topic = str(f.get("topic") or "").strip()
+        if not topic:
+            return Result("Which topic? Say it like \"follow new repos for topic mcp\".", n)
+        freq = str(f.get("frequency") or "daily")
+        r = W.follow_new(topic, frequency=freq)
+        if not r.get("ok"):
+            return Result(str(r.get("reason") or "I could not start that."), n)
+        if r.get("new"):
+            _repo_watch_card(r["topic"], r["frequency"], ["new_repo"], follow=True)
+        said = (f"Following new repositories for topic {topic}, "
+                f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
+        if r.get("new"):
+            said += " One card is waiting for your yes - approve it and I will tell you."
+        else:
+            said += " It was already being followed."
+        return Result(said, n)
+    if action == "stop_talking":
+        r = W.set_repo_frequency(target, "off")
+        if not r.get("ok"):
+            return Result(f"I was not watching {target}.", n)
+        return Result(f"{r['repo']} is pull-only now: I still record what is new and "
+                      "say nothing. Say \"resume watching it\" to start telling you "
+                      "again.", n)
+    if action == "forget":
+        r = W.stop_repo(target)
+        if not r.get("ok"):
+            return Result(f"I was not watching {target}.", n)
+        return Result(f"Stopped watching {r['repo']} and forgot what I recorded about "
+                      "it.", n)
+    if action == "resume":
+        r = W.resume_repo(target)
+        if not r.get("ok"):
+            return Result(f"I was not watching {target}. Say \"watch {target}\" to "
+                          "start.", n)
+        return Result(f"Telling you about {r['repo']} again - "
+                      f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.", n)
+    if action == "frequency":
+        freq = str(f.get("frequency") or "")
+        if not freq:
+            return Result("How often? Say daily, weekly, or instantly.", n)
+        r = W.set_repo_frequency(target, freq)
+        if r.get("ok"):
+            return Result(f"{r['repo']} now goes {W.REPO_FREQUENCY_WORDS.get(freq, freq)}.",
+                          n)
+        # Not watching it yet: a cadence sentence about a repository IS a
+        # request to watch it, and that request carries its own card.
+        target = target or W.REPO_DEFAULT
+    events = f.get("events") or None
+    freq = str(f.get("frequency") or "daily")
+    r = W.watch_repo(target, frequency=freq, events=events)
+    if not r.get("ok"):
+        return Result(str(r.get("reason") or "I could not start that."), n)
+    if r.get("new"):
+        carded = _repo_watch_card(r["repo"], r["frequency"], r["events"])
+    else:
+        carded = False
+    said = (f"Watching {r['repo']} for {_repo_events_words(r['events'])}, "
+            f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
+    if r.get("mode") == "active":
+        said += " It is allowed to tell you, and it can never ring or interrupt."
+    else:
+        said += " It is in observe mode: it records what it would tell you and says "
+        said += "nothing yet."
+        if carded:
+            said += " One card is waiting for your yes - approve it and it starts."
+        else:
+            said += (" Say \"start telling me about it\" to raise the card that lets "
+                     "it speak.")
+    return Result(said, n)
+
+
+def _repo_events_words(events: list) -> str:
+    names = {"releases": "new releases", "commits": "new commits",
+             "issues": "new issues", "prs": "new pull requests",
+             "ci": "CI state changes"}
+    got = [names.get(e, e) for e in (events or names)]
+    if len(got) == 1:
+        return got[0]
+    return ", ".join(got[:-1]) + " and " + got[-1]
+
+
+def _repo_watch_card(target: str, frequency: str, events: list,
+                     *, follow: bool = False) -> bool:
+    """ONE approval card, raised in the turn the watch is set up in, through
+    `jarvis_gate.check` - the same gate every card goes through. The card's
+    action is `schedule_repeat`, the gate's existing action for setting up a
+    repeating watcher, because this IS one: no new gate action, no new tier,
+    no standing rule. Only a yes makes the watch active; a decline, a timeout
+    or an unreadable gate leaves it in observe mode, which changes nothing."""
+    what = (f"follow new repositories for topic {target}" if follow else
+            f"watch {target} for {_repo_events_words(events)}")
+    detail = {
+        "text": f"{what.capitalize()}, {_freq_words(frequency)}.",
+        "what": (f"poll api.github.com for {what} and tell the owner "
+                 f"{_freq_words(frequency)}; nothing on GitHub changes and no "
+                 f"personal data leaves this PC"),
+        "leaves_this_pc": True,
+    }
+    prompt = (
+        f"Jarvis wants to start watching {target} on GitHub"
+        + (f" - new repositories for that topic" if follow else
+           f" for {_repo_events_words(events)}")
+        + f". It will check api.github.com {_poll_words(frequency)} and tell you "
+          f"{_freq_words(frequency)}. A check of an unchanged repository costs no "
+          f"GitHub rate-limit points. Nothing on GitHub is changed, no personal "
+          f"data is sent, and nothing here can ring or interrupt you. If you say "
+          f"no, it stays in observe mode and records only."
+    )
+
+    def _ask() -> None:
+        try:
+            verdict = _gate_module().check("schedule_repeat", detail, prompt=prompt)
+        except Exception:
+            return
+        try:
+            if getattr(verdict, "allowed", False):
+                if follow:
+                    W = __import__("jarvis_watch")
+                    W.set_follow_mode(target, "active")
+                else:
+                    W = __import__("jarvis_watch")
+                    W.set_repo_mode(target, "active")
+        except Exception:
+            return
+
+    try:
+        threading.Thread(target=_ask, name="jarvis-repo-watch-card",
+                         daemon=True).start()
+        return True
+    except Exception:
+        return False
+
+
+def _freq_words(frequency: str) -> str:
+    return {"instant": "as soon as something happens",
+            "daily": "in the daily digest",
+            "weekly": "in the weekly digest",
+            "off": "only when you ask"}.get(frequency, "in the daily digest")
+
+
+def _poll_words(frequency: str) -> str:
+    return {"instant": "every ten minutes",
+            "daily": "through the day",
+            "weekly": "through the week",
+            "off": "only when you ask"}.get(frequency, "through the day")
 
 
 def _run_tellme(intent: Intent, sched, now: float) -> Result:
@@ -21662,6 +22040,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_screen(intent, peer, local)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
+    if n.startswith("repo_watch"):
+        # The per-repository watcher (2026-11-07): its own store, its own
+        # cadence, and the one card that lets it speak.
+        return _run_repo_watch(intent, now)
     if n == "project_log":
         return _run_project_log(f, now)
     if n.startswith("focus_"):
@@ -22015,6 +22397,9 @@ _PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plu
 
 #: The reminders capability answers (2026-10-31): fixed words, no card.
 _REMINDER_INTENTS = frozenset({
+    # "what am I watching?" (2026-11-07) reads jarvis_watch.repo_status() and
+    # changes nothing, so it must not take away what "cancel that" would undo.
+    "repo_watch_list",
     "reminder_capability", "reminder_popup", "reminder_sound", "reminder_notify",
     "reminder_closed", "reminder_howto",
 })
