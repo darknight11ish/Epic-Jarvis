@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 179,
+  "feature_count": 180,
   "features": [
     {
       "id": "typing",
@@ -3691,6 +3691,57 @@
       "label_note": ""
     },
     {
+      "id": "connected-github",
+      "name": "Read and act on your own GitHub",
+      "group": "Notes and files",
+      "surface": "both",
+      "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Read and act on your own GitHub",
+        "turn_off": "turn off Read and act on your own GitHub",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+        "search": [
+          "Read and act on your own GitHub"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+        "search": [
+          "read and act on your own github"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Read and act on your own GitHub",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
+    },
+    {
       "id": "chatbot",
       "name": "Talk to a chatbot for me",
       "group": "Notes and files",
@@ -6972,7 +7023,7 @@
     },
     {
       "id": "cloud-escalation",
-      "name": "Cloud (DeepSeek API)",
+      "name": "Cloud (an API service you choose)",
       "group": "The PC itself",
       "surface": "both",
       "where": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
@@ -6988,7 +7039,7 @@
         "section": null,
         "location": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
         "search": [
-          "Cloud (DeepSeek API)"
+          "Cloud (an API service you choose)"
         ],
         "found": true
       },
@@ -6996,7 +7047,7 @@
         "section": null,
         "location": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
         "search": [
-          "cloud (deepseek api)"
+          "cloud (an api service you choose)"
         ],
         "found": false
       },
@@ -7005,7 +7056,7 @@
       "reason": "An action, a read or a behaviour rather than a stored setting: the Cloud row is a preset choice and the standing switch is on its own card; the cards and the fixed chat answers carry the rule, so there is no separate stored setting.",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "label_evidence": {
-        "example_phrase": "turn on Cloud (DeepSeek API)",
+        "example_phrase": "what is the cloud",
         "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
       },
       "command": {
@@ -14134,7 +14185,7 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 106,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 107,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 16,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,

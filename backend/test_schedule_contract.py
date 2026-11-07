@@ -575,8 +575,9 @@ def t_cross_surface_checker():
           phone["parse_error"])
     check("phone: status is enforced and every case matches the contract",
           phone["status"] == "enforced" and not phone["mismatches"], phone)
-    check("phone: it was compared on the same 32 shared cases as the desktop",
-          phone["cases"] == 32, phone["cases"])
+    check("phone: it was compared on the same shared cases as the desktop",
+          phone["cases"] == reports["hud"]["cases"] and phone["cases"] >= 32,
+          (phone["cases"], reports["hud"]["cases"]))
     check("the D-1 marker, the Goals-only kind and Phase-2 are notes, not failures",
           any("ready_for_review" in note for note in result["notes"])
           and any("goal_checkin" in note for note in result["notes"])

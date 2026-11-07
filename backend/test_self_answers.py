@@ -391,6 +391,59 @@ def the_two_settings_numbers_reconcile():
                ("switch", "choice", "number")]) == registry_rows)
 
 
+#: The GitHub questions the audit of 2026-11-07 measured as model guesses
+#: (`.dsh-scratch/TOOL-CAPABILITY-AUDIT-2026-11-07/chat_answers.json`). Each is
+#: the deterministic intent now; "how do I disconnect it?" with no noun is
+#: deliberately NOT here - a bare "it" is ambiguous and must keep the model.
+GITHUB_SELF_CASES = (
+    ("what is your GitHub repository?", "github_self", "darknight11ish/Epic-Jarvis"),
+    ("where does your code live?", "github_self", "darknight11ish/Epic-Jarvis"),
+    ("can you merge a pull request?", "github_self", "no merge card"),
+    ("did you merge that PR?", "github_self", "cannot merge"),
+    ("what can't you do on GitHub?", "github_self", "cannot merge"),
+    ("what do you need before you can read my repos?", "github_self",
+     "personal access token"),
+    ("what GitHub tools do you have?", "github_self", "github_rerun_workflow"),
+    ("can you comment on an issue?", "github_self", "approval card"),
+    ("what asks before GitHub acts?", "github_self", "ask you first"),
+    ("what accounts do I have?", "accounts_answer", "GitHub"),
+    ("what abilities does my GitHub connection have?", "accounts_answer",
+     "github comment"),
+    ("how do I disconnect my GitHub?", "accounts_answer",
+     "Windows Credential Manager"),
+)
+
+
+def the_github_questions_read_their_modules():
+    """The 2026-11-07 audit's false answers are deterministic, from the modules.
+
+    The merge one is the measured inversion this holds: the model answered
+    "no" and then offered "the system's card for it" - a card that does not
+    exist. The fixed answer comes from `jarvis_github.NEVER_WORDS` and says the
+    absence out loud.
+    """
+    for question, intent_name, needle in GITHUB_SELF_CASES:
+        got = Q.match(question)
+        check(f"{question!r} -> {intent_name}",
+              got is not None and got.name == intent_name,
+              got.name if got else None)
+        if got is None:
+            continue
+        try:
+            reply = Q.run(got, _Sched(), 0.0).reply
+        except Exception as exc:            # noqa: BLE001 - a real failure, named
+            check(f"{question!r} answers", False, f"{type(exc).__name__}: {exc}")
+            continue
+        check(f"{question!r} names {needle!r}", needle.lower() in reply.lower(),
+              reply[:300])
+        if "merge" in question.lower():
+            check(f"{question!r} invents no merge card or proposal",
+                  "propose the merge" not in reply.lower()
+                  and "no merge card" in reply.lower(), reply)
+    check("the two new GitHub intents are read-only",
+          {"github_self", "accounts_answer"} <= set(Q.READ_ONLY_INTENTS))
+
+
 # ---------------------------------------------------------------------------
 
 
@@ -407,6 +460,7 @@ def main() -> int:
         the_two_settings_numbers_reconcile()
         read_a_link_is_the_feature_it_names()
         the_focus_preset_is_a_real_setting()
+        the_github_questions_read_their_modules()
     except Exception:
         traceback.print_exc()
         FAILED.append("the suite itself raised")

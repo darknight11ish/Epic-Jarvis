@@ -352,7 +352,11 @@ _TAIL = re.compile(r"(?:[\s,]+(?:please|thanks|thank\s+you|jarvis|for\s+me))+$")
 
 def normalise(text) -> str:
     t = str(text or "")
+    # Spoken punctuation: the speech-to-text layer likes long dashes and curly
+    # quotes; the grammars are written with the plain forms (2026-11-07, the
+    # owner's Q2 ruling: ASR spelling must not decide a match).
     t = t.replace("’", "'").replace("‘", "'").replace("–", "-")
+    t = t.replace("—", "-").replace("‒", "-").replace("―", "-")
     t = t.lower().strip()
     t = re.sub(r"\ba\.\s?m\.?", "am", t)
     t = re.sub(r"\bp\.\s?m\.?", "pm", t)
@@ -360,7 +364,7 @@ def normalise(text) -> str:
     t = re.sub(r"[\s.!?]+$", "", t)
     t = _LEAD.sub("", t).strip()
     t = _TAIL.sub("", t).strip()
-    t = re.sub(r"[\s.!?,]+$", "", t)
+    t = re.sub(r"[\s.!?,;:]+$", "", t)
     # "to-do", "to do", "todo" - only where it names the list, never in
     # "remind me to do the laundry".
     t = re.sub(r"\b(my|the)\s+to-?\s?dos?\b", r"\1 todo", t)
@@ -413,11 +417,19 @@ _EXTRA_LEADS = (
     "do you think you could ",
     "do you think you can ",
     "i would like you to ",
+    "i would like to ",
     "i would love you to ",
+    "i'd like you to ",
+    "i'd like to ",
+    "i want you to ",
+    "i want to ",
+    "i need you to ",
+    "i need to ",
     "any chance you could ",
     "any chance you can ",
     "could you possibly ",
     "can you possibly ",
+    "go ahead and ",
     "possibly ",
     "be so kind as to ",
     "if you don't mind ",
@@ -426,10 +438,22 @@ _EXTRA_LEADS = (
     "could you ",
     "would you ",
     "will you ",
+    "okay so ",
+    "ok so ",
+    "alright ",
+    "all right ",
     "please ",
     "kindly ",
     "just ",
     "mind ",
+    # Spoken filler at the front of a dictated command (2026-11-07, the
+    # owner's Q2 ruling). These only ever strip a word that carries no
+    # command; a sentence that does not match after them still falls through
+    # to the model with the owner's ORIGINAL words.
+    "um ",
+    "uh ",
+    "erm ",
+    "hmm ",
 )
 
 #: "would you mind SETTING a timer" - a polite lead is followed by a gerund,
@@ -520,15 +544,40 @@ def normalize_spoken_command(text) -> str:
     """`text` tidied for the grammar: `normalise`'s own tidying, the polite
     lead-ins `normalise` does not strip, and the three safe number rewrites
     above. Idempotent (test_voice_reflex.py runs it twice on every sentence
-    it tests), and it NEVER changes which words the model is asked."""
+    it tests), and it NEVER changes which words the model is asked.
+
+    Spoken punctuation is flattened to spaces here and ONLY for matching
+    (2026-11-07, the owner's Q2 ruling): a dictated "um, turn on anti-slop"
+    or "JARVIS; go ahead and ..." carries commas and semicolons the grammars
+    do not spell out, and the words either side are unchanged. The model is
+    still asked the owner's original sentence, never this string."""
     t = normalise(text)
+    # Dictation punctuation is handled at the EDGES only (2026-11-07, the
+    # owner's Q2 ruling): a dictated "um, turn on anti-slop" or "JARVIS; go
+    # ahead and ..." carries commas the lead-in words do not spell out, so the
+    # lead loop below strips edge punctuation between leads. INTERNAL commas
+    # are deliberately kept: list and checklist grammars split on them, and
+    # flattening them turned "add Milk, eggs and bread" into one item and
+    # "Morning routine at 7: meds, keys, badge" into a different intent
+    # (caught on the merged wave-8 branch, 2026-11-07). The cloud-switch
+    # pronoun grammar can still read a comma-free clause because
+    # `_CLOUD_ESCALATION_PRONOUN` also matches the stated state.
+    t = re.sub(r"\s+", " ", t).strip()
     stripped = False
     changed = True
     while changed:
         changed = False
+        # Dictated punctuation sits between leads ("um, jarvis, ..."), so the
+        # edge is stripped before each lead is compared, and a lead may be
+        # followed by a comma or semicolon instead of a space.
+        t = t.lstrip(" ,;:")
+        if not t:
+            break
         for lead in _EXTRA_LEADS:
-            if t.startswith(lead):
-                t = normalise(t[len(lead):])
+            core = lead.rstrip()
+            if (t == core or t.startswith(lead)
+                    or t.startswith(core + ",") or t.startswith(core + ";")):
+                t = normalise(t[len(core):].lstrip(" ,;:"))
                 stripped = True
                 changed = True
                 break
@@ -1281,6 +1330,15 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- the cloud provider itself: see it, or change it (2026-11-07, Q1/B6) --
+    # The six services and which one is chosen. The change goes through the
+    # EXISTING one-card path (`jarvis_presets.apply_cloud`, one
+    # change_own_config card), so chat gains a door to the same control the
+    # Presets Cloud row uses - not a second way to change it.
+    got = _cloud_provider_prompt(s)
+    if got is not None:
+        return got
+
     # --- which app is this? (2026-11-01 field test) --------------------------
     # The desktop HUD answered "where am I talking from?" with "I don't have
     # access to your location data or GPS", and the phone answered it right
@@ -1393,6 +1451,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- "how do I add a key / a model / a second PC / Telegram?" (2026-11-07) --
+    # BEFORE the reminder capability family below, and that is the fix: its HOW
+    # shape claims EVERY "how do I add ..." sentence, so the owner asking for a
+    # Mistral key was told how to set a timer. This branch answers the real
+    # feature for those four nouns and returns None for every other such
+    # sentence, so a reminder how-to (and a shopping list) keeps its own answer.
+    got = _adding_howto_question(text)
+    if got is not None:
+        return got
+
     # --- timers, alarms and reminders, capability questions only (2026-10-31)
     # The owner asked "can you make a reminder for me" and the model said it
     # could not set a system alarm and could only note reminders in a calendar -
@@ -1454,6 +1522,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # internal key, and "can you turn on the lights?" never reached the real
     # home-control state. Specific shapes only - a generic feature question
     # still belongs to the feature list (#1030).
+    # --- "watch this repository on GitHub" (2026-11-07) -----------------
+    # BEFORE `_honest_early`, because its "watch a repo" door was the honest
+    # answer while this could not be done - and it CAN be done now. The door
+    # still owns "watch a pull request"/"watch this issue"; this matcher claims
+    # only a NAMED repository (or "my/your/that repo") plus an optional
+    # cadence and parts, so the two answers do not overlap.
+    got = _repo_watch(s, text, now)
+    if got is not None:
+        return got
+
     got = _honest_early(text, s)
     if got is not None:
         return got
@@ -1551,6 +1629,17 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # "how am I doing?" is that session's own status and stays that way. With
     # none running it used to fall to the model for 99 s and a web search.
     got = _wellbeing(s)
+    if got is not None:
+        return got
+
+    # --- its own code, from the map shipped beside the backend (2026-11-07) ---
+    # BEFORE "where did I put ...?", and that order is the fix rather than a
+    # preference: `_where_put` claims any sentence that begins "where is ...",
+    # so "where is the code for memory" was answered as a lost object. These
+    # three shapes name CODE explicitly, so no other answer loses a sentence to
+    # them. ("What does X do" is the fourth shape and runs later, after the
+    # feature guide, because that is the guide's own question shape.)
+    got = _self_code_intent(s)
     if got is not None:
         return got
 
@@ -1754,6 +1843,22 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- GitHub, and the accounts list (2026-11-07) ---------------------------
+    # The audit of 2026-11-07 drove 24 live GitHub questions: every one that was
+    # not "connect"/"is it connected" fell to the model, which invented a merge
+    # card, denied its own public repository, and answered "how do I disconnect
+    # it?" with "you haven't told me what 'it' is yet". These two read the
+    # modules that own the facts (jarvis_github, jarvis_accounts) with no model.
+    # After `_self_answers` so the older self-questions keep their own words,
+    # and before the settings/connect grammar so "how do I disconnect my
+    # GitHub" is answered rather than read as a setting.
+    got = _self_github(s)
+    if got is not None:
+        return got
+    got = _self_accounts(s)
+    if got is not None:
+        return got
+
     # --- the twelve pair rules (2026-11-04) ----------------------------------
     # A sentence that names TWO things and asks what they do together. Before
     # the settings grammar on purpose: "does web search use ask before every
@@ -1824,7 +1929,31 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _settings_help(s)
     if got is not None:
         return got
+    # "Can you explain any setting?" and "what is X set to?" (2026-11-07) -
+    # the general shapes the model was answering with a false denial while the
+    # named explain door already existed.
+    got = _settings_explain_all(s)
+    if got is not None:
+        return got
+    got = _setting_set_to(s)
+    if got is not None:
+        return got
+    got = _settings_where_intent(s)
+    if got is not None:
+        return got
+    got = _self_knowledge(s)
+    if got is not None:
+        return got
+    got = _heritage(s)
+    if got is not None:
+        return got
     got = _settings_adjust(s)
+    if got is not None:
+        return got
+    # "What changed in your last update?" (2026-11-07): read from the shipped
+    # record digest, BEFORE the update checker - that one answers whether an
+    # update is AVAILABLE, never what the newest changes were.
+    got = _recent_changes(s)
     if got is not None:
         return got
     # --- "is there an update?", "what changed in the update?", "update Jarvis"
@@ -1873,6 +2002,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # focus session in psychology?" and "is my oven on?" fall through to the
     # model, never to a feature's facts. `test_feature_guide.py` pins both.
     got = _feature_guide(s, text)
+    if got is not None:
+        return got
+
+    # --- "what does <a part of my own code> do?" (2026-11-07) -----------------
+    # AFTER the feature guide, and the order is the rule: "what does X do" is
+    # the guide's own question shape ("what does the spoken-style feature do?"),
+    # so a real feature name must keep its answer. This claims the sentence only
+    # when X is a real part of the shipped self-code map - "what does my oven
+    # do" stays the model's, exactly as before.
+    got = _self_code_intent(s, does=True)
     if got is not None:
         return got
 
@@ -1927,6 +2066,7 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _tellme(s, text, now)
     if got is not None:
         return got
+
 
     # --- "read this link" (2026-11-03) -----------------------------------------
     # AFTER `_tellme`, and that order is the rule, not a preference: "tell me
@@ -3855,6 +3995,189 @@ def _tellme_watches(what: str, original, f: dict) -> Optional[Intent]:
     return None
 
 
+# --------------------------------------------------------------------------
+#   "watch this repository on GitHub" - per-repo following, chat and Live
+#   (2026-11-07)
+# --------------------------------------------------------------------------
+# The owner: "i can tell jarvis what frequency of notifications or to stop or
+# follow new or any combination of these things through jarvis live and chat".
+# Live turns are the same /api/chat route with provenance "voice" + live true,
+# so ONE matcher here is the whole parity story: typing it and saying it reach
+# the same Intent, the same runner and the same jarvis_watch.py store.
+#
+# WHAT IS CLAIMED HERE, AND NOTHING ELSE. The sentences below are about a
+# NAMED repository or a followed topic. "tell me when CI fails on ..." is a
+# different, older watch (jarvis_tellme) and is matched first; "watch with me"
+# (jarvis_screen) is matched earlier still. A sentence this block does not
+# recognise whole goes to the model exactly as before.
+#
+# MOODS: `watch`, `stop_talking` (pull-only, kept), `forget`, `resume`,
+# `frequency`, `follow_new`, `follow_stop`, `list`. Only `list` reads; every
+# other one changes state, and starting (or re-activating) a watch is the one
+# that raises the approval card - in the RUNNER, through the same gate every
+# other card goes through.
+
+_OWNER_NAME = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}"
+_HOME_REPO = (r"(?:your\s+repo(?:sitory)?|my\s+repo(?:sitory)?|the\s+repo(?:sitory)?|"
+              r"this\s+repo(?:sitory)?|that\s+repo(?:sitory)?|"
+              r"epic[-\s]?jarvis|yours)")
+_REPO_SAID = rf"(?:(?P<full>{_OWNER_NAME})|(?P<home>{_HOME_REPO}))"
+_REPO_EVENT_WORD = re.compile(
+    r"\breleases?\b|\bcommits?\b|\bpushes?\b|\bissues?\b|\bpull\s*requests?\b|"
+    r"\bprs?\b|\bci\b|\bbuilds?\b|\bactions?\b|\bchecks?\b", re.I)
+_REPO_ALLOWED_TAIL = re.compile(
+    r"(?:\s*,?\s*(?:and\s+)?(?:for\s+|about\s+|with\s+|on\s+)?(?:new\s+|any\s+)?"
+    r"(?:releases?|commits?|pushes?|issues?|pull\s*requests?|prs?|ci|builds?|actions?|"
+    r"checks?))*"
+    r"(?:\s+(?:instantly|instant|straight\s+away|right\s+away|immediately|"
+    r"as\s+soon\s+as\s+(?:possible|something\s+happens|it\s+happens)|"
+    r"daily|every\s+day|once\s+a\s+day|each\s+day|weekly|every\s+week|"
+    r"once\s+a\s+week|each\s+week|off|paused?|pull[- ]only|"
+    r"only\s+when\s+i\s+ask|nothing))?", re.I)
+
+
+def _repo_frequency_of(text: str) -> str:
+    low = str(text or "").lower()
+    if re.search(r"instant|straight\s+away|right\s+away|immediately|"
+                 r"as\s+soon\s+as", low):
+        return "instant"
+    if re.search(r"\bweekly\b|every\s+week|once\s+a\s+week|each\s+week", low):
+        return "weekly"
+    if re.search(r"\bdaily\b|every\s+day|once\s+a\s+day|each\s+day", low):
+        return "daily"
+    if re.search(r"\boff\b|paused?|pull[- ]only|only\s+when\s+i\s+ask|nothing", low):
+        return "off"
+    return ""
+
+
+def _repo_events_of(text: str) -> list:
+    low = str(text or "").lower()
+    ev = []
+    if re.search(r"\breleases?\b", low):
+        ev.append("releases")
+    if re.search(r"\bcommits?\b|\bpushes?\b", low):
+        ev.append("commits")
+    if re.search(r"\bissues?\b", low):
+        ev.append("issues")
+    if re.search(r"\bpull\s*requests?\b|\bprs?\b", low):
+        ev.append("prs")
+    if re.search(r"\bci\b|\bbuilds?\b|\bactions?\b|\bchecks?\b", low):
+        ev.append("ci")
+    return ev
+
+
+def _repo_watch(s: str, original, now: float) -> Optional[Intent]:
+    """The 2026-11-07 per-repository watcher, in the owner's own words."""
+    low = s.strip()
+
+    # --- what am I watching? (read-only, so no card and no "cancel that") ---
+    if re.fullmatch(r"(?:what|which)\s+(?:repos(?:itories)?|github\s+things)\s+"
+                    r"(?:am\s+i|are\s+you|do\s+you)\s+(?:watching|following|tracking)"
+                    r"|what\s+am\s+i\s+(?:watching|following|tracking)(?:\s+on\s+github)?"
+                    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?(?:repos(?:itories)?|watches)\s+"
+                    r"(?:you(?:'re|\s+are)\s+)?(?:watching|following|tracking)", low):
+        return Intent("repo_watch_list")
+
+    # --- follow a topic's NEW repositories ---------------------------------
+    m = re.fullmatch(
+        r"(?:please\s+)?(?:start\s+)?(?:follow|track|watch)\s+(?:the\s+)?new\s+"
+        r"(?:repos?(?:itories)?\s+)?(?:for|on|in|about)\s+(?:the\s+)?(?:topic\s+)?"
+        r"(?P<topic>.+?)(?:\s+(?P<freq>" + r"instantly|instant|daily|weekly|"
+        r"every\s+day|once\s+a\s+day|every\s+week|once\s+a\s+week))?", low)
+    if m:
+        topic = _restore(original, m.group("topic").strip(" \"'“”.,!?"))
+        return Intent("repo_watch", {"action": "follow_new", "topic": topic,
+                                     "frequency": _repo_frequency_of(m.group("freq") or "")})
+    if re.fullmatch(r"(?:please\s+)?(?:start\s+)?follow\s+(?:the\s+)?new(?:\s+repos?"
+                    r"(?:itories)?)?(?:\s+please)?", low):
+        return Intent("repo_watch", {"action": "follow_new", "topic": ""})
+    m = re.fullmatch(r"(?:please\s+)?(?:stop|quit|don'?t)\s+(?:following|tracking)\s+"
+                     r"(?:the\s+)?new\s+(?:repos?(?:itories)?\s+)?(?:for|on|in|about)\s+"
+                     r"(?:the\s+)?(?:topic\s+)?(?P<topic>.+)", low)
+    if m:
+        return Intent("repo_watch", {"action": "follow_stop",
+                                     "topic": _restore(original, m.group("topic").strip())})
+
+    # --- stop telling me / stop watching / forget --------------------------
+    m = re.fullmatch(r"(?:please\s+)?(?:stop|quit|don'?t)\s+(?:telling|notifying|"
+                     r"messaging|pinging|bothering)\s+me\s+(?:about|with|on)\s+"
+                     + _REPO_SAID + r"(?:\s+on\s+github)?", low + "")
+    if m:
+        return Intent("repo_watch", {"action": "stop_talking",
+                                     "repo": _repo_target(m, original)})
+    m = re.fullmatch(r"(?:please\s+)?(?:stop|quit|stop\s+watching|stop\s+following)\s+"
+                     r"(?:watching|following|tracking)\s+" + _REPO_SAID
+                     + r"(?:\s+on\s+github)?", low)
+    if m:
+        return Intent("repo_watch", {"action": "forget",
+                                     "repo": _repo_target(m, original)})
+    m = re.fullmatch(r"(?:please\s+)?(?:unfollow|forget)\s+" + _REPO_SAID
+                     + r"(?:\s+on\s+github)?", low)
+    if m:
+        return Intent("repo_watch", {"action": "forget",
+                                     "repo": _repo_target(m, original)})
+
+    # --- resume ------------------------------------------------------------
+    m = re.fullmatch(r"(?:please\s+)?(?:resume|restart|start)\s+(?:watching|following|"
+                     r"telling\s+me\s+about)\s+" + _REPO_SAID + r"(?:\s+again)?"
+                     r"(?:\s+on\s+github)?", low)
+    if m:
+        return Intent("repo_watch", {"action": "resume",
+                                     "repo": _repo_target(m, original)})
+
+    # --- "tell me daily about that repo" (a cadence, not a new subject) ----
+    m = re.fullmatch(r"(?:please\s+)?(?:tell|notify|message|ping)\s+me\s+"
+                     r"(?P<freq>daily|weekly|instantly|instant|every\s+day|every\s+week|"
+                     r"once\s+a\s+day|once\s+a\s+week|only\s+when\s+i\s+ask|"
+                     r"pull[- ]only|nothing|never)\s+(?:about|on|for)\s+" + _REPO_SAID, low)
+    if m:
+        return Intent("repo_watch", {"action": "frequency",
+                                     "repo": _repo_target(m, original),
+                                     "frequency": _repo_frequency_of(m.group("freq"))})
+
+    # --- follow/watch specific KINDS of thing on one repository ------------
+    # "follow new releases and issues on owner/repo": the parts come before
+    # the repository, the opposite order from the sentence below.
+    m = re.fullmatch(r"(?:please\s+)?(?:start\s+)?(?:follow|watch|track)\s+"
+                     r"(?P<events>(?:(?:new\s+)?(?:releases?|commits?|issues?|"
+                     r"pull\s*requests?|prs?|ci|builds?|checks?|actions?)"
+                     r"(?:\s*(?:,|and|&|\+)\s*)?)+)\s+(?:on|for|in)\s+" + _REPO_SAID
+                     + r"(?:\s+(?P<freq>" + r"instantly|instant|daily|weekly|"
+                     r"every\s+day|once\s+a\s+day|every\s+week|once\s+a\s+week))?", low)
+    if m:
+        return Intent("repo_watch", {
+            "action": "watch", "repo": _repo_target(m, original),
+            "frequency": _repo_frequency_of(m.group("freq") or ""),
+            "events": _repo_events_of(m.group("events") or ""),
+        })
+
+    # --- watch / track / follow one repository -----------------------------
+    m = re.fullmatch(r"(?:please\s+|hey\s+jarvis,?\s+)?(?:start\s+)?(?:watching|watch|"
+                     r"tracking|track|following|follow)\s+" + _REPO_SAID
+                     + r"(?P<tail>.*)", low)
+    if not m:
+        return None
+    tail = (m.group("tail") or "").strip()
+    tail = re.sub(r"\s+(?:on|in)\s+github$", "", tail, flags=re.I).strip()
+    if tail and not _REPO_ALLOWED_TAIL.fullmatch(" " + tail):
+        return None              # more sentence than this grammar owns: the model
+    return Intent("repo_watch", {
+        "action": "watch",
+        "repo": _repo_target(m, original),
+        "frequency": _repo_frequency_of(tail),
+        "events": _repo_events_of(tail),
+    })
+
+
+def _repo_target(m, original) -> str:
+    """The owner's `owner/name`, or "" when the sentence said "your repo" -
+    the runner resolves "" to jarvis_watch.REPO_DEFAULT."""
+    full = m.groupdict().get("full")
+    if full:
+        return _restore(original, full).strip()
+    return ""
+
+
 TELLME_MISSING = ("Your PC's Jarvis cannot do \"tell me when\" yet - run apply-patches.ps1 "
                   "on the PC.")
 
@@ -4083,6 +4406,164 @@ def _read_link_intent(text, s: str,
     if not _READ_LINK_VERB.search(low) and not _read_link_pasted(raw, url):
         return None              # pasted to talk about, not to read
     return Intent("read_link", {"url": url, "words": low})
+
+
+def _run_repo_watch(intent: Intent, sched, now: float) -> Result:
+    """The per-repository watcher (2026-11-07).
+
+    STARTING A WATCH CREATES THE THING THAT POLLS. The quick path does not
+    raise a card of its own: it calls `jarvis_watch.ensure_repo_watch_job`,
+    which is `Scheduler.add_repeat` - the same call the older "tell me when
+    CI fails on ..." GitHub watch makes - and THAT creates the repeating job
+    row in `waiting` and raises the ONE `schedule_repeat` card. Nothing is
+    polled before the owner's yes; on the first fire the approved job makes
+    the watch active and looks. Stopping, resuming and changing the cadence
+    are instant, like every other stop and every other cadence change.
+    Nothing here approves anything.
+    """
+    n = intent.name
+    try:
+        import jarvis_watch as W
+    except Exception:
+        return Result("Your PC's Jarvis cannot watch a repository yet - run "
+                      "apply-patches.ps1 on the PC.", n)
+    f = intent.f or {}
+    # The read-only list has no action of its own: its NAME is the action, so
+    # it cannot accidentally fall through to starting a watch.
+    action = "list" if n == "repo_watch_list" else str(f.get("action") or "watch")
+    target = str(f.get("repo") or "") or W.REPO_DEFAULT
+    polling = {j["id"]: j for j in W.repo_jobs(sched)}
+    if action == "list":
+        st = W.repo_status()
+        if not st["watched"] and not st["followed"]:
+            return Result("You are not watching any repository yet. Say \"watch "
+                          f"{W.REPO_DEFAULT}\" to start.", n)
+        checks = {}
+        for job in polling.values():
+            checks[job["repo"] or job["follow"]] = job
+        bits = []
+        for w in st["watched"][:8]:
+            job = checks.get(w["repo"]) or {}
+            mode = ("tells you" if w["mode"] == "active" else
+                    "observe mode - records only")
+            when = ("waiting for your yes" if job.get("state") == "waiting"
+                    else "checking every ten minutes" if job else
+                    "not polling yet")
+            bits.append(f"{w['repo']} - {w['frequency_words']}, "
+                        f"{', '.join(w['events'])}, {mode}, {when}")
+        for t in st["followed"][:5]:
+            job = checks.get(t["topic"]) or {}
+            when = ("waiting for your yes" if job.get("state") == "waiting"
+                    else "checking every ten minutes" if job else "not polling yet")
+            bits.append(f"new repositories for topic {t['topic']} - "
+                        f"{W.REPO_FREQUENCY_WORDS.get(t['frequency'], t['frequency'])}, "
+                        f"{when}")
+        return Result("You are watching: " + "; ".join(bits) + ".", n)
+    if action == "follow_stop":
+        topic = str(f.get("topic") or "")
+        r = W.stop_follow(topic)
+        W.stop_repo_watch_jobs(topic, sched=sched, follow=True)
+        if not r.get("ok"):
+            return Result(f"I was not following new repositories for "
+                          f"{topic or 'that topic'}.", n)
+        return Result(f"Stopped following new repositories for {r['topic']}.", n)
+    if action == "follow_new":
+        topic = str(f.get("topic") or "").strip()
+        if not topic:
+            return Result("Which topic? Say it like \"follow new repos for topic mcp\".", n)
+        freq = str(f.get("frequency") or "daily")
+        r = W.follow_new(topic, frequency=freq)
+        if not r.get("ok"):
+            return Result(str(r.get("reason") or "I could not start that."), n)
+        job = W.ensure_repo_watch_job(topic, freq, [], sched=sched, follow=True)
+        said = (f"Following new repositories for topic {topic}, "
+                f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
+        if not job.get("ok"):
+            return Result(said + " " + str(job.get("reason") or "").strip(), n)
+        if job.get("existing"):
+            said += (" It is already being checked"
+                     + (" - the approval card is still waiting for your yes."
+                        if job.get("state") == "waiting" else " every ten minutes."))
+        else:
+            said += (" One card is waiting for your yes - the same approval card "
+                     "every repeating watch uses. Approve it and it starts "
+                     "checking every ten minutes.")
+        return Result(said, n)
+    if action == "stop_talking":
+        r = W.set_repo_frequency(target, "off")
+        if not r.get("ok"):
+            return Result(f"I was not watching {target}.", n)
+        return Result(f"{r['repo']} is pull-only now: I still record what is new and "
+                      "say nothing. Say \"resume watching it\" to start telling you "
+                      "again.", n)
+    if action == "forget":
+        r = W.stop_repo(target)
+        W.stop_repo_watch_jobs(target, sched=sched)
+        if not r.get("ok"):
+            return Result(f"I was not watching {target}.", n)
+        return Result(f"Stopped watching {r['repo']}, deleted the check that was "
+                      "polling it, and forgot what I recorded.", n)
+    if action == "resume":
+        r = W.resume_repo(target)
+        if not r.get("ok"):
+            return Result(f"I was not watching {target}. Say \"watch {target}\" to "
+                          "start.", n)
+        job = W.ensure_repo_watch_job(r["repo"], r["frequency"], None, sched=sched)
+        said = (f"Telling you about {r['repo']} again - "
+                f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
+        if job.get("ok") and not job.get("existing"):
+            said += (" One card is waiting for your yes - approve it and it starts "
+                     "checking again.")
+        return Result(said, n)
+    if action == "frequency":
+        freq = str(f.get("frequency") or "")
+        if not freq:
+            return Result("How often? Say daily, weekly, or instantly.", n)
+        r = W.set_repo_frequency(target, freq)
+        if r.get("ok"):
+            job = W.ensure_repo_watch_job(r["repo"], freq, None, sched=sched)
+            said = (f"{r['repo']} now goes "
+                    f"{W.REPO_FREQUENCY_WORDS.get(freq, freq)}.")
+            if job.get("ok") and not job.get("existing"):
+                said += (" It was not polling, so one card is waiting for your yes "
+                         "- approve it and it starts.")
+            return Result(said, n)
+        # Not watching it yet: a cadence sentence about a repository IS a
+        # request to watch it, and that request carries its own card.
+        target = target or W.REPO_DEFAULT
+    events = f.get("events") or None
+    freq = str(f.get("frequency") or "daily")
+    r = W.watch_repo(target, frequency=freq, events=events)
+    if not r.get("ok"):
+        return Result(str(r.get("reason") or "I could not start that."), n)
+    job = W.ensure_repo_watch_job(r["repo"], r["frequency"], r["events"],
+                                  sched=sched)
+    said = (f"Watching {r['repo']} for {_repo_events_words(r['events'])}, "
+            f"{W.REPO_FREQUENCY_WORDS.get(r['frequency'], r['frequency'])}.")
+    if not job.get("ok"):
+        return Result(said + " " + str(job.get("reason") or "").strip(), n)
+    if job.get("existing"):
+        if job.get("state") == "waiting":
+            said += (" Its approval card is still waiting for your yes - approve it "
+                     "and it starts checking every ten minutes.")
+        else:
+            said += (" It is already checking every ten minutes, and the observer "
+                     "log records what it finds at GET /api/watch/decisions.")
+    else:
+        said += (" One card is waiting for your yes - the same approval card every "
+                 "repeating watch uses. Approve it and it starts checking every ten "
+                 "minutes, and it can never ring or interrupt you.")
+    return Result(said, n)
+
+
+def _repo_events_words(events: list) -> str:
+    names = {"releases": "new releases", "commits": "new commits",
+             "issues": "new issues", "prs": "new pull requests",
+             "ci": "CI state changes"}
+    got = [names.get(e, e) for e in (events or names)]
+    if len(got) == 1:
+        return got[0]
+    return ", ".join(got[:-1]) + " and " + got[-1]
 
 
 def _run_tellme(intent: Intent, sched, now: float) -> Result:
@@ -4787,6 +5268,269 @@ def _settings_help(s: str) -> Optional[Intent]:
         return Intent("settings_help")
     return None
 
+#: "Can you explain any setting?" / "how do I find out what a setting is set
+#: to?" (2026-11-07, the feature self-awareness audit). The NAMED explain door
+#: already existed (`find_explain_setting`); these are the GENERAL shapes the
+#: model was answering with "I don't have a tool to query my full state" while
+#: the door was there. Read-only: the runner lists the real counts and the
+#: exact shape, and changes nothing.
+_SETTINGS_EXPLAIN_ALL = re.compile(
+    r"(?:can|could|would)\s+you\s+explain\s+(?:any|a|the|your|my)\s+"
+    r"(?:of\s+your\s+|of\s+the\s+)?settings?\s*(?:\s+.*)??"
+    r"|explain\s+(?:to\s+me\s+)?(?:any\s+settings?(?:\s+.*)?|(?:your|the)\s+settings?\s*\??)"
+    r"|how\s+do\s+i\s+(?:find\s+out|see|check)\s+what\s+"
+    r"(?:a|one\s+of\s+your|the)\s+settings?\s+(?:is\s+)?(?:currently\s+)?"
+    r"(?:set\s+to|at)(?:\s+.*)?")
+
+
+def _settings_explain_all(s: str) -> Optional[Intent]:
+    if _SETTINGS_EXPLAIN_ALL.fullmatch(s):
+        return Intent("settings_explain_all")
+    return None
+
+
+#: "What is <setting> set to?" (2026-11-07). The options-understanding audit
+#: measured 0 of 48 settings matching this ordinary shape, so it reached the
+#: model, which said it had no way to read a value. The subject is resolved by
+#: the SAME registry matcher every other explain question uses and answered by
+#: `_run_setting_explain` - one wording, one source, never a guessed value.
+_SETTING_SET_TO = re.compile(
+    r"what(?:'s|\s+is)\s+(?:the\s+|my\s+)?(.+?)\s+set\s+to(?:\s+right\s+now)?"
+    r"|what(?:'s|\s+is)\s+(?:the\s+)?(?:current\s+)?value\s+of\s+(?:the\s+|my\s+)?(.+)"
+    r"|what\s+is\s+(?:the\s+|my\s+)?(.+?)\s+currently\s+set\s+to")
+
+
+def _setting_set_to(s: str) -> Optional[Intent]:
+    m = _SETTING_SET_TO.fullmatch(s)
+    if not m:
+        return None
+    target = (m.group(1) or m.group(2) or m.group(3) or "").strip()
+    if not target:
+        return None
+    return _setting_guide_intent(target)
+
+
+#: The four self-knowledge families (2026-11-07): the live audit measured the
+#: model denying each of these although the capability is live on this PC. The
+#: fixed sentences live in `jarvis_feature_guide.SELF_FACTS`; nothing is read
+#: or changed here, and the shapes are closed-world (an ordinary request that
+#: merely mentions a watch or spending still reaches its own feature).
+_SELF_KNOWLEDGE = (
+    ("approval_policy", re.compile(
+        r"(?:(?:can|could)\s+you\s+)?change\s+(?:what|which)\s+"
+        r"(?:needs|requires|gets)\s+an?\s+approval\s+card(?:\s+.*)?"
+        r"|(?:(?:can|could)\s+you\s+)?change\s+(?:the\s+)?approval\s+"
+        r"(?:policy|rules?)(?:\s+.*)?"
+        r"|(?:can|could)\s+(?:something|an?\s+action)\s+need\s+"
+        r"(?:a\s+)?second\s+yes(?:\s+.*)?"
+        r"|can\s+i\s+change\s+(?:what|which)\s+(?:needs|requires)\s+"
+        r"an?\s+approval\s+card(?:\s+.*)?")),
+    ("watches_ci", re.compile(
+        r"do\s+you\s+have\s+(?:any\s+)?(?:watches|page\s+watches|website\s+watches|"
+        r"monitors?)(?:\s+.*)?"
+        r"|can\s+you\s+(?:watch|monitor|track)\s+(?:a\s+)?(?:website|web\s+page|page|"
+        r"github\s+actions|my\s+github\s+actions)(?:\s+.*)?"
+        r"|can\s+you\s+tell\s+me\s+when\s+(?:a\s+|the\s+)?(?:website|web\s+page|page)\s+"
+        r"changes?(?:\s+.*)?")),
+    ("spending_limits", re.compile(
+        r"do\s+you\s+have\s+(?:any\s+)?spending\s+limits?(?:\s+.*)?"
+        r"|are\s+there\s+spending\s+limits?(?:\s+.*)?"
+        r"|can\s+you\s+set\s+(?:a\s+)?spending\s+limits?(?:\s+.*)?"
+        r"|can\s+you\s+(?:limit|cap)\s+(?:my\s+)?spending(?:\s+.*)?")),
+    ("chat_history", re.compile(
+        r"do\s+you\s+(?:keep|save|store)\s+(?:a\s+)?(?:chat|conversation)\s+"
+        r"histor(?:y|ies)(?:[\s,;]+.*)?"
+        r"|do\s+you\s+have\s+(?:a\s+)?chat\s+histor(?:y|ies)(?:[\s,;]+.*)?"
+        r"|is\s+(?:my\s+)?chat\s+history\s+(?:kept|saved|on|stored)(?:[\s,;]+.*)?"
+        r"|how\s+long\s+do\s+you\s+keep\s+(?:my\s+)?(?:chat|conversation)\s+"
+        r"histor(?:y|ies)(?:[\s,;]+.*)?"))
+)
+
+
+def _self_knowledge(s: str) -> Optional[Intent]:
+    for family, rx in _SELF_KNOWLEDGE:
+        if rx.fullmatch(s):
+            return Intent("self_knowledge", {"family": family})
+    return None
+
+
+#: "What changed in your last update?" / "what's new in you?" (2026-11-07).
+#: The live audit measured this answered by the model with "I haven't changed"
+#: or an invented list, while the newest changelog bullets sat in the record.
+#: The answer is read from the shipped `jarvis_recent_changes` module, which
+#: carries those bullets (the live folder has no CHANGELOG.md to read).
+_RECENT_CHANGES = re.compile(
+    r"what\s+(?:has\s+)?changed\s+(?:in|with)\s+(?:your\s+)?"
+    r"(?:last|latest|newest|most\s+recent)\s+(?:update|version|release)(?:\s+.*)?"
+    r"|what(?:'s|\s+is)\s+new\s+(?:in\s+)?(?:you|your\s+(?:last|latest|newest)\s+"
+    r"(?:update|version|release))(?:\s+.*)?"
+    r"|what(?:'s|\s+is)\s+new\s+in\s+(?:the\s+)?(?:latest|newest|last)\s+"
+    r"(?:update|version|release)(?:\s+.*)?"
+    r"|what\s+changed\s+in\s+your\s+last\s+update(?:\s+.*)?"
+    r"|what\s+(?:did|have)\s+you\s+(?:just\s+)?(?:change|update|add)(?:\s+.*)?"
+    r"|what\s+are\s+your\s+(?:newest|latest|most\s+recent)\s+features?(?:\s+.*)?"
+    r"|what(?:'s|\s+is)\s+new\s+in\s+you(?:\s+.*)?")
+
+
+def _recent_changes(s: str) -> Optional[Intent]:
+    if _RECENT_CHANGES.fullmatch(s):
+        return Intent("recent_changes")
+    return None
+
+
+#: "Where do I change the face size?" / "open spending limits" (2026-11-07,
+#: F14). These functions have no Settings card of their own (or the card is
+#: elsewhere), so the ordinary open-this-section path cannot answer. The words
+#: come from `jarvis_feature_guide.PLACES`, written from the project's record;
+#: an unknown target returns None and falls through exactly as before.
+_WHERE_PLACE = re.compile(
+    r"(?:where|how)\s+(?:do|can)\s+i\s+(?:change|set|find|edit|adjust|open)\s+"
+    r"(?:the\s+|my\s+|a\s+)?(.+?)"
+    r"|where\s+(?:is|are)\s+(?:the\s+|my\s+)?(.+?)\s+(?:set|changed|found)"
+    r"|open\s+(?:the\s+)?(.+?)")
+
+
+def _settings_where_intent(s: str) -> Optional[Intent]:
+    m = _WHERE_PLACE.fullmatch(s)
+    if not m:
+        return None
+    target = (m.group(1) or m.group(2) or "").strip()
+    if not target:
+        return None
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return None
+    if not G.place_for(target):
+        return None
+    return Intent("settings_where", {"words": target})
+
+
+#: What makes Jarvis different, and what it borrowed from whom (owner's Q4
+#: ruling, 2026-11-07). Both halves are read-only fixed sentences from
+#: `jarvis_feature_guide.HERITAGE`, derived from the project's own record
+#: (docs/COMPETITORS-*, docs/ABOUT-JARVIS.md section 2, the Hermes rows) - the
+#: audit measured a model answer denying the lineage outright ("I don't borrow
+#: features from Muse or ChatGPT Dots"), which is the Muse failure mode.
+_DIFFERENT = re.compile(
+    r"what\s+makes\s+you\s+different(?:\s+from\s+(?:chatgpt|other\s+"
+    r"(?:ai\s+)?(?:assistants?|programs?|agents?)|the\s+others?))?(?:\s+.*)?"
+    r"|why\s+are\s+you\s+different(?:\s+from\s+(?:chatgpt|other\s+assistants?))?"
+    r"|what\s+(?:is|makes)\s+(?:you|jarvis)\s+(?:special|unique|stand\s+out)(?:\s+.*)?"
+    r"|what\s+features?\s+do\s+other\s+(?:assistants?|programs?|agents?)\s+not\s+have(?:\s+.*)?"
+    r"|what\s+can\s+you\s+do\s+that\s+(?:chatgpt|other\s+(?:assistants?|programs?))\s+"
+    r"can(?:no|')?t(?:\s+.*)?"
+    r"|which\s+(?:smart\s+)?features?\s+(?:do\s+)?others?\s+(?:do\s+)?not\s+have(?:\s+.*)?")
+_BORROWED = re.compile(
+    r"what\s+(?:did\s+you\s+(?:borrow|take|steal|copy|learn)|have\s+you\s+(?:borrowed|"
+    r"taken|copied))\s+(?:from|off)(?:\s+.*)?"
+    r"|what\s+did\s+you\s+borrow(?:\s+.*)?"
+    r"|which\s+(?:ideas|features?)\s+did\s+you\s+(?:borrow|take|copy)(?:\s+.*)?"
+    r"|where\s+did\s+(?:your|the)\s+(?:features?|ideas?)\s+come\s+from(?:\s+.*)?"
+    r"|what\s+did\s+you\s+take\s+from\s+(?:muse|chatgpt|chatgpt\s+dots|openmuse|hermes|"
+    r"other\s+(?:products?|assistants?|competitors?))(?:\s+.*)?"
+    r"|what\s+(?:was|is)\s+borrowed\s+from\s+(?:muse|chatgpt|dots|openmuse|hermes)(?:\s+.*)?"
+    r"|what\s+inspired\s+you(?:\s+.*)?")
+_HERITAGE_BOTH = re.compile(
+    r"(?:tell|show)\s+me\s+(?:about\s+)?your\s+(?:heritage|lineage|borrowings?)(?:\s+.*)?"
+    r"|what\s+is\s+your\s+(?:heritage|lineage)(?:\s+.*)?"
+    r"|what\s+did\s+you\s+borrow\s+and\s+what\s+makes\s+you\s+different(?:\s+.*)?"
+    r"|what\s+makes\s+you\s+different\s+and\s+what\s+did\s+you\s+borrow(?:\s+.*)?")
+
+
+def _heritage(s: str) -> Optional[Intent]:
+    if _HERITAGE_BOTH.fullmatch(s):
+        return Intent("heritage", {"part": "both"})
+    if _BORROWED.fullmatch(s):
+        return Intent("heritage", {"part": "lineage"})
+    if _DIFFERENT.fullmatch(s):
+        return Intent("heritage", {"part": "differentiators"})
+    return None
+
+
+#: A TWO-PART capability question (owner's Q3 ruling, 2026-11-07): "search old
+#: chats AND keep new ones private" used to answer one half or reach the model.
+#: Each part is resolved through the SAME catalogue resolver the single-part
+#: answer uses; the answer concatenates every row that really matched, in the
+#: owner's order, at most three, newline-separated. A part that matches no row
+#: is dropped - never invented - and fewer than two rows falls back to the
+#: single answer exactly as before.
+_CAP_SPLIT = re.compile(r"\s+(?:and|plus|also)\s+")
+#: Words that describe the question rather than name a thing, removed before a
+#: two-part question's halves are ranked against the catalogue.
+_CAP_PART_SKIP = frozenset({
+    "a", "an", "the", "my", "your", "our", "his", "her", "its", "and", "or",
+    "of", "to", "for", "in", "on", "with", "that", "this", "these", "those",
+    "it", "can", "could", "do", "does", "you", "jarvis", "i", "me", "we",
+    "is", "are", "will", "would", "should", "about", "any", "some", "also",
+    "plus", "both", "then", "them",
+})
+
+
+def _cap_part_row(part: str):
+    """The one catalogue row a question half clearly names, or None.
+
+    Deliberately a DIFFERENT rule from `_cap_resolve` (which needs a question
+    shape and a named phrase): a half of a two-part question is a noun phrase,
+    so the same index is ranked by shared tokens and only a clear best row
+    (score >= 3) is taken. No row means the half is dropped, never invented."""
+    index = _cap_index()
+    words = set()
+    for w in re.findall(r"[a-z0-9]+", str(part or "").lower()):
+        if w in _CAP_PART_SKIP or len(w) < 2:
+            continue
+        # One crude singular, the same matching-only rule the guide uses:
+        # "old chats" must reach the row whose own words say "chat".
+        if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        words.add(w)
+    if not index or not words:
+        return None
+    best, best_score = None, 0
+    for item in index:
+        score = (3 * len(words & set(item["name"]))
+                 + len(words & set(item["what"])))
+        if score > best_score:
+            best, best_score = item["row"], score
+    return best if best_score >= 3 else None
+
+
+def _cap_multi_question(raw) -> list:
+    text = " ".join(str(raw or "").lower().rstrip(" ?!.").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[ ,:]+", "", text)
+    # A two-part CAPABILITY question is a QUESTION about two abilities. A
+    # settings/change question ("where do I change my wifi password, and what
+    # is it set to") is not one, and neither is an ordinary statement ("I live
+    # in Lisbon and I teach maths" - which jarvis_intake asks this file to
+    # classify, so a match would drop an imported owner's words) nor a
+    # command-and-a-half ("set a timer for 10 minutes and then tell me a
+    # joke"). The lead has to be a question word, and a change verb disqualifies
+    # it. Both were caught on the merged wave-8 branch, 2026-11-07.
+    if not re.match(r"(?:can|could|would|will|do|does|did|is|are|what|which|how|"
+                    r"should)\b", text):
+        return []
+    if re.search(r"\b(?:where|how)\s+(?:do|can|should)\s+i\b"
+                 r"|\b(?:change|set\s+to|turn\s+on|turn\s+off)\b", text):
+        return []
+    parts = [p.strip() for p in _CAP_SPLIT.split(text) if p.strip()]
+    if not (2 <= len(parts) <= 3):
+        return []
+    rows, seen = [], set()
+    for part in parts:
+        row = (_cap_resolve("can you " + part)
+               or _cap_resolve(part)
+               or _cap_part_row(part))
+        if row is None:
+            continue
+        rid = str(row.get("id") or "")
+        if not rid or rid in seen:
+            continue
+        seen.add(rid)
+        rows.append(row)
+        if len(rows) >= 3:
+            break
+    return rows if len(rows) >= 2 else []
+
 
 #: The plain on/off settings (jarvis_settings_registry.BOOL_SETTINGS): "turn
 #: on background learning", "switch off lights without asking", "enable
@@ -4895,6 +5639,84 @@ _WAKE_WORD = re.compile(
     r"\s+(?P<on2>on|off)"
     r"|(?P<enable>enable|disable)\s+(?:the\s+|my\s+|your\s+)?"
     r"(?:wake\s+word|hey\s+jarvis(?:\s+wake\s+word)?)")
+
+#: THE STANDING CLOUD-ESCALATION SWITCH, SAID OUT LOUD (2026-11-07).
+#:
+#: WHY THIS EXISTS. The model tool from PR #1209 (`cloud_escalation`) is the
+#: intended door, but the local 9B model does not reliably call it: measured on
+#: live build 0.2.437, "turn on cloud escalation" was answered "I've turned on
+#: cloud escalation" while the switch stayed OFF, and the self-awareness row
+#: failed "no NEW card appeared within 25s" in two separate passes. Worse, the
+#: sentence did not even reach the model: the feature guide answered it with
+#: "Cloud ... is a Command-Only ability (runs when you ask, no switch needed)
+#: ... There is no fixed sentence for it", which is false about a switch the
+#: Presets menu really has and a card that really can be raised.
+#:
+#: WHAT MAY MATCH, and nothing else: the owner's own words for the SWITCH -
+#: "turn on cloud escalation", "turn cloud escalation on", "enable/disable the
+#: cloud escalation", "escalate (my|hard) questions to the cloud", "stop
+#: escalating to the cloud", and "turn it on/off" ONLY in a sentence that also
+#: names cloud escalation. A QUESTION is not a change request, so "is cloud
+#: escalation on?" keeps the feature guide's read, "what is the cloud" and "can
+#: you use the cloud?" keep their own paths, and "turn on the cloud light" names
+#: no escalation. The ladder itself - ON is ONE `change_own_config` card and
+#: writes nothing before the yes, OFF is instant, ON with no cloud provider
+#: chosen refuses BEFORE a card - is `jarvis_presets.cloud_escalate`'s; the
+#: runner below adds no rule to it and approves nothing.
+_CLOUD_ESCALATION_ON = re.compile(
+    r"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+)?cloud\s+escalation\s+on"
+    r"|(?:enable|activate)\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|escalate\s+(?:(?:my|hard|the)\s+questions?\s+|this\s+)?to\s+(?:the\s+)?cloud")
+_CLOUD_ESCALATION_OFF = re.compile(
+    r"(?:turn|switch)\s+off\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+)?cloud\s+escalation\s+off"
+    r"|(?:disable|deactivate)\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|stop\s+escalating\s+(?:(?:things|questions)\s+)?to\s+(?:the\s+)?cloud")
+#: "cloud escalation is on - turn it off": the pronoun is only read as the
+#: switch when the SAME sentence names the switch, and the verb has to follow a
+#: clause break. That second condition is deliberate: without it "cloud
+#: escalation is on but do not turn it off" would be read as OFF and turn the
+#: switch off at once - a mis-read that CHANGES the thing the owner asked to
+#: leave alone. A bare "turn it off" still keeps whatever path it had.
+#:
+#: The last two forms exist because the ASR pre-pass flattens dictation's
+#: commas away: "cloud escalation is off, turn it on" arrives with no visible
+#: clause break, so the STATED STATE carries the clause instead, and a
+#: "not/never/don't" between the state and the verb still refuses to read it.
+_CLOUD_ESCALATION_PRONOUN = re.compile(
+    r"(?:the\s+|my\s+)?cloud\s+escalation\b[^.;!?]*?"
+    r"[,;.!?\u2014-]\s*(?:(?:and|then|please)\s+)?"
+    r"(?:turn|switch)\s+(?:it|that)\s+(on|off)\b.*"
+    r"|\b(?:turn|switch)\s+(?:it|that)\s+(on|off)\b\s*[,;.!?\u2014-]\s*"
+    r"(?:the\s+|my\s+)?cloud\s+escalation\b.*"
+    r"|(?:the\s+|my\s+)?cloud\s+escalation\s+is\s+off\b"
+    r"(?![^.;!?]*\b(?:not|never|don'?t)\b)[^.;!?]*?"
+    r"\b(?:turn|switch)\s+(?:it|that)\s+(on)\b.*"
+    r"|(?:the\s+|my\s+)?cloud\s+escalation\s+is\s+on\b"
+    r"(?![^.;!?]*\b(?:not|never|don'?t)\b)[^.;!?]*?"
+    r"\b(?:turn|switch)\s+(?:it|that)\s+(off)\b.*"
+    r"|\b(?:turn|switch)\s+(?:it|that)\s+(on|off)\b\s+"
+    r"(?:the\s+|my\s+)?cloud\s+escalation\s+is\s+(?:on|off)\b.*")
+
+
+def _cloud_escalation_set(s: str) -> Optional[Intent]:
+    """The standing cloud switch in the owner's words, or None.
+
+    Every value it returns is the sentence's own: "turn it off" inside a
+    sentence naming cloud escalation is OFF, never a guess about what "it" is
+    without that name."""
+    if _CLOUD_ESCALATION_ON.fullmatch(s):
+        return Intent("cloud_escalation_set", {"on": True})
+    if _CLOUD_ESCALATION_OFF.fullmatch(s):
+        return Intent("cloud_escalation_set", {"on": False})
+    m = _CLOUD_ESCALATION_PRONOUN.fullmatch(s)
+    if m:
+        value = next((g for g in m.groups() if g), None)
+        if value is not None:
+            return Intent("cloud_escalation_set", {"on": value == "on"})
+    return None
+
 
 #: The Anti-Slop filter (jarvis_antislop.py, 2026-10-28). TWO sentences need
 #: their OWN patterns, and both would be answered wrongly by the generic
@@ -5026,6 +5848,24 @@ _ASKS_FIRST_LOOSER = re.compile(
 _TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
 _TOOL_OFF = re.compile(
     r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
+
+#: "Turn on the browser control tool", "switch the calculator tool off",
+#: "disable the browser control tool" (2026-11-07, live-parity LP-2). The
+#: owner's measured sentence for a switch Settings has drawn all along went to
+#: the model in typed chat and got an outside-text refusal in Live; the two
+#: shapes above only ever knew "let the ai model read X".
+#:
+#: CLOSED WORLD, and the word "tool" is the whole safety of it: the tail must
+#: be a WHOLE alias in jarvis_settings_registry.tool_targets() (find_tool_target
+#: returns None otherwise) and the sentence must carry "tool". So a device or a
+#: feature - "turn off the kitchen light", "turn off the timer", "turn on the
+#: weather" - still falls through exactly as before, and a half-heard name is
+#: never guessed into a switch. The card rule is the switch's own: ON is the PC
+#: only, one card plus Windows Hello; OFF is instant.
+_TOOL_SWITCH = re.compile(
+    r"(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool\s+(on|off)"
+    r"|(enable|disable)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool")
 
 #: "How much Jarvis may interrupt you" (jarvis_arbiter.py, 2026-10-08) - the
 #: number of times a day it may speak up UNASKED, and the hour the brief
@@ -5485,6 +6325,23 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         tool = R.find_tool_target(m.group(1))
         if tool is not None:
             return Intent("settings_tool", {"tool": tool, "on": bool(_TOOL_ON.fullmatch(s))})
+    # "Turn on the browser control tool" (2026-11-07, live-parity LP-2): the
+    # owner's own sentence for a switch Settings has always drawn, and one the
+    # two shapes above never knew. The regex demands the word "tool" and the
+    # tail must be a whole alias in the registry's generated table, so
+    # "turn off the kitchen light" / "turn off the timer" still fall through.
+    m = _TOOL_SWITCH.fullmatch(s)
+    if m:
+        g = m.groups()
+        if g[0] is not None:            # "turn/switch on|off <name> tool"
+            on, name = g[0] == "on", g[1]
+        elif g[2] is not None:          # "turn/switch <name> tool on|off"
+            on, name = g[3] == "on", g[2]
+        else:                           # "enable|disable <name> tool"
+            on, name = g[4] == "enable", g[5]
+        tool = R.find_tool_target(name)
+        if tool is not None:
+            return Intent("settings_tool", {"tool": tool, "on": bool(on)})
     m = _ASKS_FIRST_LOOSER.fullmatch(s) or _ASKS_FIRST_STRICTER.fullmatch(s)
     if m:
         action = R.find_asks_first_target(m.group(1))
@@ -5566,6 +6423,15 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     # The named-choice settings ("set the voice speed to faster", "keep my
     # chats for 30 days", "bring the captcha window to the front") - 2026-10-22.
     got = _settings_choice(s)
+    if got is not None:
+        return got
+    # The standing cloud-escalation switch (2026-11-07). It RUNS BEFORE the
+    # feature guide below, and that placement is the fix: the guide used to
+    # answer "turn on cloud escalation" with "there is no fixed sentence for
+    # it", so the sentence never reached the model or the switch's own card.
+    # A question asks for no change and falls past this to the guide exactly as
+    # before: "is cloud escalation on?" keeps its read.
+    got = _cloud_escalation_set(s)
     if got is not None:
         return got
     # A sentence that clearly asks to change A SETTING, naming one nothing
@@ -6348,13 +7214,22 @@ def _cap_question(raw) -> Optional[Intent]:
     sentence. The answer is the row's own `what` and `where`, plus its `asks`
     when the question asks about a card or the row is off until switched on.
     """
-    row = _cap_resolve(raw)
-    if row is None:
-        return None
     text = " ".join(str(raw or "").lower().split())
-    return Intent("capability_answer",
-                  {"id": str(row.get("id") or ""),
-                   "ask": bool(_CAP_ASKS_ABOUT_A_CARD.search(text))})
+    ask = bool(_CAP_ASKS_ABOUT_A_CARD.search(text))
+    # ONE row first: the ordinary deep shapes have to keep resolving exactly as
+    # they did before Q3 existed. A sentence that resolves as a single row is
+    # not a two-part question, even when it contains "and".
+    row = _cap_resolve(raw)
+    if row is not None:
+        return Intent("capability_answer",
+                      {"id": str(row.get("id") or ""), "ask": ask})
+    # Q3 (2026-11-07): a TWO-part question gets every row it really names, in
+    # the owner's order, up to three - never only the first and never the model.
+    rows = _cap_multi_question(raw)
+    if rows:
+        return Intent("capability_answer",
+                      {"ids": [str(r.get("id") or "") for r in rows], "ask": ask})
+    return None
 
 
 def _cap_safety_question(raw) -> Optional[Intent]:
@@ -6479,6 +7354,20 @@ def _run_capability_answer(f: dict) -> "Result":
     index = _cap_index()
     if not index:
         return None
+    # Q3 (2026-11-07): every row a two-part question named, newline-joined.
+    ids = [str(rid) for rid in (f.get("ids") or ()) if str(rid or "")]
+    if ids:
+        parts = []
+        for row_id in ids[:3]:
+            row = next((item["row"] for item in index
+                        if str(item["row"].get("id") or "") == row_id), None)
+            if row is not None:
+                parts.append(_capability_words(
+                    row, ask=bool(f.get("ask")),
+                    verdict=str(f.get("verdict") or "")))
+        if not parts:
+            return None
+        return Result("\n".join(parts), "capability_answer")
     row_id = str(f.get("id") or "")
     row = next((item["row"] for item in index
                 if str(item["row"].get("id") or "") == row_id), None)
@@ -6837,9 +7726,72 @@ _REMINDER_ACTION_TIME_RX = re.compile(
 #: The nouns of OTHER features. "how do I set up a calendar connection" names
 #: one of these and no reminder at all, so it is the connect/calendar card's
 #: question, not a reminder how-to (test_calendar_answer, 2026-11-01).
+#:
+#: THE KEY/API/MODEL NOUNS ARE HERE SINCE 2026-11-07 (the options-understanding
+#: audit's B2): the HOW shape below reads ANY "how do I add ..." as a reminder
+#: question, so "how do I add a Mistral key", "how do I add a model" and
+#: "how do I add a second PC" were answered with how to set a timer. The new
+#: `_adding_howto_question` branch answers those properly; this noun list is the
+#: second line, so an unusual phrasing that branch does not claim falls through
+#: to the model instead of being told about timers.
 _OTHER_TOPIC_RX = re.compile(
     r"\b(?:calendar|connect(?:ion|ed|ing|s)?|account|accounts|notes?|vault|email|"
-    r"file|files|wifi|bluetooth|home\s+assistant)\b")
+    r"file|files|wifi|bluetooth|home\s+assistant|api|apis|key|keys|token|tokens|"
+    r"provider|providers|cloud|model|models)\b")
+
+
+# --------------------------------------------------------------------------
+# "How do I add a key / a model / a second PC / Telegram?" (2026-11-07)
+#
+# THE OPTIONS-UNDERSTANDING AUDIT'S B2. `_REMINDER_HOWTO_HOW_RX` below reads ANY
+# "how do I add ..." as a reminder question, and that family had no key, API,
+# model or computer noun, so "how do I add a mistral key" was answered with how
+# to set a timer. Those sentences are about REAL features - the Chatbot API keys
+# card, the Brain's Models page, the phone pair, or something simply not built -
+# and this branch answers each one in the words those features already use, in
+# the same fixed, read-only way the reminder answers work. Every other
+# "how do I add ..." (a reminder, milk to a shopping list, a note) keeps the
+# answer it had.
+# --------------------------------------------------------------------------
+
+_ADDING_HOW_RX = re.compile(
+    r"\bhow\s+(?:do|can|should|could)\s+i\s+"
+    r"(?:add|set\s*up|setup|get|create|install|download|enter|put|save|configure)\b")
+#: A key/API/token word: the sentence is about an API key, not a reminder.
+_ADDING_KEY_RX = re.compile(r"\b(?:api|apis|key|keys|token|tokens)\b")
+#: A model word: "install a model", "add another model", "download a model".
+_ADDING_MODEL_RX = re.compile(r"\b(?:models?|llms?)\b")
+#: A second PC/computer/laptop: "add a second pc", "add another computer".
+_ADDING_SECOND_PC_RX = re.compile(
+    r"\b(?:second|another|new|one\s+more|2nd|third)\s+(?:pc|computer|laptop|machine)\b"
+    r"|\b(?:add|install|set\s*up|connect)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?"
+    r"(?:pc|computer|laptop)\b")
+
+
+def _adding_howto_question(raw) -> Optional[Intent]:
+    """The real feature behind "how do I add <a key / a model / a PC / Telegram>".
+
+    None for every other "how do I add ..." - a reminder, a shopping-list item,
+    a note - so those keep the answers they already had. Read from the RAW
+    sentence, BEFORE `_reminders_question`, because that family's HOW shape
+    claims any "how do I add" and this is the fix for the sentences it claimed
+    wrongly (the 2026-11-07 options-understanding audit's B2).
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if not _ADDING_HOW_RX.search(text):
+        return None
+    if _ADDING_KEY_RX.search(text):
+        return Intent("adding_key_howto")
+    if _ADDING_MODEL_RX.search(text):
+        return Intent("adding_model_howto")
+    if _ADDING_SECOND_PC_RX.search(text):
+        return Intent("adding_second_pc_howto")
+    if re.search(r"\btelegram\b", text):
+        return Intent("adding_telegram_howto")
+    return None
 
 
 def _reminders_question(raw) -> Optional[Intent]:
@@ -6990,6 +7942,69 @@ def _run_reminders(name: str, surface: str) -> "Result":
                       "Coming up and the HUD's Reminders panel." + suffix, "reminder_howto")
     return Result("Yes - see Brain, Work, Coming up for timers, alarms and reminders on this PC.",
                   "reminder_capability")
+
+
+def _api_key_route_words() -> tuple:
+    """(the six services, the key command, the limit command) for B2's answer.
+
+    Read from `jarvis_chatbot_api` - the module that owns the services, their
+    short names and both command lines - so this answer can never drift from
+    what the command line actually accepts. Fixed words only when that module is
+    not installed; not one service name is invented here."""
+    try:
+        import jarvis_chatbot_api as API
+        services = ", ".join(f"{p.company} ({p.short})" for p in API.PRESETS.values())
+        return (services,
+                API.KEY_LINE.format(short="<service>"),
+                API.LIMIT_LINE.format(short="<service>", amount=5))
+    except Exception:                       # noqa: BLE001 - no API module, fixed words
+        return ("OpenAI (openai), DeepSeek (deepseek), Mistral AI (mistral), "
+                "xAI (xai), OpenRouter (openrouter), Groq (groq)",
+                "py -3 jarvis_chatbot_api.py key <service>",
+                "py -3 jarvis_chatbot_api.py limit <service> 5")
+
+
+def _run_adding_howto(name: str) -> Result:
+    """One fixed, read-only answer naming the real feature behind the question.
+
+    No card, no write, no model and no route: each of these only says where the
+    feature lives, in the words the Settings page or the tool's own row uses
+    (the 2026-11-07 options-understanding audit's B2)."""
+    if name == "adding_key_howto":
+        services, key_line, limit_line = _api_key_route_words()
+        return Result(
+            "Keys for the paid AI services are added on the PC only - never from the "
+            "phone, and never from this chat. In the desktop app: Settings, Chatbot "
+            "API keys. On the PC's command line, in Jarvis's folder: \"" + key_line
+            + "\" (paste the key at the hidden prompt). The services are " + services
+            + ". The key is kept in Windows Credential Manager, never shown or logged, "
+            "and sent only to that service's own host. Each service also needs a "
+            "monthly money limit, for example \"" + limit_line + "\", or it is not "
+            "used at all.", "adding_key_howto")
+    if name == "adding_model_howto":
+        return Result(
+            "Adding a model is done on the PC, not from this chat box. Brain, Model, "
+            "Models - install another by name; it raises ONE approval card, and "
+            "nothing downloads until you approve it. The \"Check for new models\" "
+            "button at the bottom of that list shows a short list the PC chose from "
+            "what fits your graphics cards. On the phone, Brain, Models: type the "
+            "model's name by hand - there is no catalogue to browse. On the command "
+            "line the same install is \"ollama pull <the model>\".", "adding_model_howto")
+    if name == "adding_second_pc_howto":
+        return Result(
+            "A second PC cannot join yet. Jarvis runs on ONE PC, and other devices "
+            "connect to it: the phone pairs with this PC (say \"pair my phone\"). A "
+            "second PC sharing this Jarvis - or this desktop connecting to another "
+            "PC's Jarvis - is designed but not built, so there is nothing to add "
+            "today.", "adding_second_pc_howto")
+    if name == "adding_telegram_howto":
+        return Result(
+            "Telegram is not built into Jarvis, so there is nothing to connect: no "
+            "Telegram, Slack or Discord account or message feature exists. Jarvis can "
+            "open a program on the PC for you (say \"open Telegram\" if it is "
+            "installed), but it cannot read or send Telegram messages.",
+            "adding_telegram_howto")
+    return Result("That is not something I can do from chat here.", "adding_howto")
 
 
 
@@ -8648,8 +9663,15 @@ _CLOUD_CONNECTED = re.compile(
     r"(?:are|do)\s+you\s+(?:have\s+(?:a\s+)?(?:connection|access)\s+to|connect(?:ed)?\s+to|"
     r"use|using)\s+(?:my\s+|the\s+|a\s+)?(?:deepseek(?:\s+api)?|cloud(?:\s+api)?|api)\b.*")
 _CLOUD_HAVE_KEY = re.compile(
+    # "do you have my key" / "do you have my deepseek key" (the 2026-10-31
+    # shapes), plus the owner's ordinary "is my key saved" forms (2026-11-07,
+    # the options-understanding audit's B6 half): before this the plain saved
+    # question matched nothing and went to the local model.
     r"(?:do|did)\s+you\s+(?:have|got|get|keep|store)\s+(?:my\s+|the\s+|a\s+)?"
-    r"(?:deepseek|cloud)?\s*(?:api\s+)?key\b.*")
+    r"(?:openai|deepseek|mistral|xai|openrouter|groq|cloud)?\s*(?:api\s+)?keys?\b.*"
+    r"|(?:is|are)\s+(?:my|the|a)\s+"
+    r"(?:openai|deepseek|mistral|xai|openrouter|groq|cloud)?\s*"
+    r"(?:api\s+)?keys?\s+(?:saved|stored|set|added)\b.*")
 _CLOUD_USING = re.compile(
     r"(?:are|is)\s+(?:you|jarvis)\s+(?:using|on)\s+the\s+cloud\b.*")
 _CLOUD_WHICH_ANSWER = re.compile(
@@ -8671,6 +9693,125 @@ _CLOUD_ON_OFF = re.compile(
 _CLOUD_PROVIDER = re.compile(
     r"(?:which|what)\s+(?:provider|service|api)\s+(?:is|does)\s+the\s+cloud\s+"
     r"(?:preset\s+)?(?:using|use)\b.*")
+
+
+# --- the cloud provider itself: view it, and change it from chat (2026-11-07)
+#
+# THE OWNER'S Q1/B6 RULING. Until now the provider could be chosen in the
+# Presets menu and described by the cloud-honesty answers, but chat could
+# neither LIST the six nor CHANGE the choice: the audit measured "which cloud
+# providers can I use?" and "switch my cloud provider to mistral" both falling
+# through to the model. The change is the SAME one-card path the Presets Cloud
+# row uses (`jarvis_presets.apply_cloud`: ONE change_own_config card, nothing
+# written until the yes), so this adds no second way to change it - only a
+# second door to the one that exists. VIEWING is read-only.
+#
+# The six services are this tree's own (`jarvis_chatbot_api.PRESETS`); there is
+# no Anthropic service in it, so no word for one is offered here.
+_CLOUD_PROVIDER_WORDS = (
+    ("openai", "openai_api"), ("open ai", "openai_api"),
+    ("chatgpt", "openai_api"), ("chat gpt", "openai_api"),
+    ("deepseek", "deepseek_api"), ("deep seek", "deepseek_api"),
+    ("mistral", "mistral_api"),
+    ("openrouter", "openrouter_api"), ("open router", "openrouter_api"),
+    ("groq", "groq_api"),
+    ("xai", "xai_api"), ("x ai", "xai_api"), ("grok", "xai_api"),
+)
+#: "cloud providers", "api services", "providers" on their own - the OBJECT a
+#: list or change question is about.
+_CLOUD_PROVIDER_OBJECT = re.compile(
+    r"\b(?:cloud\s+(?:providers?|services?|apis?)|(?:api\s+)?providers?|"
+    r"(?:cloud|api)\s+services?)\b")
+#: The verbs that turn "the cloud provider" + a service name into a change.
+_CLOUD_CHOOSE_VERB = re.compile(
+    r"\b(?:switch|change|move|set|choose|pick|use|make)\b")
+#: How the owner names the whole request: "switch to mistral", "use mistral".
+#: The SERVICE has to be the next thing said - "change my openai api key" is
+#: the Settings-only key refusal's question, not a provider change.
+_CLOUD_SWITCH_TO = re.compile(
+    r"^(?:switch|change|move|use|choose|pick|set|make)\s+(?:me\s+)?"
+    r"(?:over\s+)?(?:to\s+)?(?:the\s+)?(?:"
+    + "|".join(re.escape(word) for word, _pid in _CLOUD_PROVIDER_WORDS) + r")\b")
+_CLOUD_CAN_USE = re.compile(
+    r"\b(?:can|could|may)\s+i\s+(?:use|switch\s+to|choose|pick|try)\b")
+_CLOUD_ONE_AT_A_TIME = re.compile(
+    r"\b(?:two|2|multiple|several|both)\s+(?:different\s+)?"
+    r"(?:cloud\s+)?(?:providers?|services?|apis?)\b")
+
+
+#: The OBJECT a change question is about: "the cloud provider", "the service".
+#: Deliberately NOT the broad "cloud api"/"api service": a catalogue alias such
+#: as "cloud api" must keep answering as the feature row's own question
+#: (`test_feature_guide.py` builds "can I change <every alias>"), so the
+#: structural match below is made on the sentence with its parentheses removed
+#: as well - the Cloud row's own title carries "(an API service you choose)".
+_CLOUD_PROVIDER_CHANGE_OBJECT = re.compile(
+    r"\b(?:cloud\s+)?(?:provider|service)s?\b")
+
+
+def _cloud_provider_mentions(text: str) -> list:
+    """The service ids the sentence names, in the order they are said."""
+    found = []
+    for word, pid in _CLOUD_PROVIDER_WORDS:
+        for m in re.finditer(r"(?<!\w)" + re.escape(word) + r"(?!\w)", text):
+            found.append((m.start(), pid))
+    found.sort()
+    return [pid for _, pid in found]
+
+
+def _cloud_provider_prompt(s: str) -> Optional[Intent]:
+    """The intent for a cloud-provider list/change question, or None.
+
+    Read before the feature/settings grammars. Deliberately narrow: a sentence
+    must name a `cloud`/`api` providers-or-services OBJECT, a provider word with
+    "do you support"/"can I use"/a switch verb, or "switch to <provider>". An
+    ordinary "use the cloud for this" and "switch to the cloud preset" name no
+    SERVICE and keep their own paths. Parenthesised text is dropped before
+    matching, so a catalogue title such as "Cloud (an API service you choose)"
+    keeps answering as its own feature row.
+    """
+    text = " ".join(str(s or "").strip().lower().rstrip("?.!").split())
+    if not text or len(text) > 400:
+        return None
+    text = " ".join(re.sub(r"\([^()]*\)", " ", text).split())
+    if not text:
+        return None
+    mentions = _cloud_provider_mentions(text)
+    # "switch to deepseek for search" names the SEARCH provider, not the cloud
+    # service: it says what the choice is FOR and never says cloud/provider/
+    # service. Keep it for the settings grammar that owns the search provider
+    # (caught on the merged wave-8 branch, 2026-11-07).
+    if mentions and re.search(r"\b(?:search|research|web)\b", text) \
+            and not _CLOUD_PROVIDER_OBJECT.search(text) \
+            and not re.search(r"\bcloud\b", text):
+        return None
+    # 1. What can I use? Which are there? List them, and the one-at-a-time rule.
+    if re.search(r"\b(?:which|what|list|name|show)\b", text) and \
+            _CLOUD_PROVIDER_OBJECT.search(text):
+        return Intent("cloud_provider_list")
+    if mentions and re.search(r"\b(?:do|does)\s+(?:you|jarvis)\s+support\b", text):
+        return Intent("cloud_provider_list")
+    if mentions and _CLOUD_CAN_USE.search(text):
+        return Intent("cloud_provider_list")
+    if _CLOUD_ONE_AT_A_TIME.search(text):
+        return Intent("cloud_provider_list")
+    # 2. A change request - one with a service named, or one that only says
+    #    "the cloud provider" and so has to ask which.
+    changing = bool(_CLOUD_CHOOSE_VERB.search(text)) and (
+        bool(_CLOUD_PROVIDER_CHANGE_OBJECT.search(text))
+        or bool(_CLOUD_SWITCH_TO.match(text)))
+    if changing and mentions:
+        unique = list(dict.fromkeys(mentions))
+        if len(unique) > 1:
+            # "use mistral instead of deepseek" names the wanted one first.
+            if re.search(r"\b(?:instead\s+of|rather\s+than|not)\b", text):
+                unique = unique[:1]
+            else:
+                return Intent("cloud_provider_ask")
+        return Intent("cloud_provider_choose", {"pid": unique[0]})
+    if changing and _CLOUD_PROVIDER_CHANGE_OBJECT.search(text):
+        return Intent("cloud_provider_ask")
+    return None
 
 
 def _cloud_facts() -> dict:
@@ -8778,21 +9919,46 @@ def _run_cloud_honesty(f: dict) -> Result:
             f"memory, pictures, your screen and a tainted conversation never go.{escalate}",
             "cloud_honesty")
     if shape == "key":
-        if deepseek_saved is True:
+        # WHICH SERVICE THIS ANSWER IS ABOUT (2026-11-07, the
+        # options-understanding audit's B1/B6): the CHOSEN provider's key, never
+        # a hard-wired DeepSeek. Before this fix a saved OpenRouter key still
+        # answered "No. No DeepSeek API key is saved on this PC" - a live
+        # falsehood the moment another provider was chosen.
+        if not provider:
+            if deepseek_saved is True:
+                return Result(
+                    "No cloud service is chosen on this PC, so no key is in use right "
+                    "now. A DeepSeek API key is saved, but DeepSeek is not selected: "
+                    "choose the Cloud row in the Presets menu and a provider first. I "
+                    "never show, repeat or log a key.", "cloud_honesty")
+            if deepseek_saved is False:
+                return Result(
+                    "No. No cloud service is chosen on this PC and no DeepSeek API key "
+                    "is saved either. The Cloud row in the Presets menu is where a "
+                    "service is chosen; a key is added on the PC only, in Windows "
+                    "Credential Manager, and I never show or repeat it.", "cloud_honesty")
             return Result(
-                "Yes - a DeepSeek API key is saved on this PC, in Windows Credential "
-                "Manager. I never show it, repeat it, log it or put any part of it in "
-                "an answer. It is sent only to DeepSeek's own API host when you allow "
-                "a cloud turn.", "cloud_honesty")
-        if deepseek_saved is False:
+                "No cloud service is chosen on this PC, and this PC cannot read Windows "
+                "Credential Manager, so I cannot say whether any key is saved. I never "
+                "show or repeat a key.", "cloud_honesty")
+        company = st.get("company") or provider
+        if key is True:
             return Result(
-                "No. No DeepSeek API key is saved on this PC. The key is added in "
-                "Windows Credential Manager, on the PC only, and I never show or "
-                "repeat it.", "cloud_honesty")
+                f"Yes - a {company} API key is saved on this PC, in Windows Credential "
+                f"Manager. {company} is the chosen cloud service. I never show the key, "
+                f"repeat it, log it or put any part of it in an answer; it is sent only "
+                f"to {company}'s own API host when you allow a cloud turn.",
+                "cloud_honesty")
+        if key is False:
+            return Result(
+                f"No. No {company} API key is saved on this PC, and {company} is the "
+                "chosen cloud service. The key is added in Windows Credential Manager, "
+                "on the PC only, and I never show or repeat it.", "cloud_honesty")
         return Result(
-            "I cannot tell right now: this PC cannot read Windows Credential Manager. "
-            "I never show or repeat a key, and nothing is sent anywhere without your "
-            "yes.", "cloud_honesty")
+            f"No cloud service key can be read here: {company} is the chosen cloud "
+            "service, but this PC cannot read Windows Credential Manager, so I cannot "
+            "say whether its key is saved. I never show or repeat a key, and nothing "
+            "is sent anywhere without your yes.", "cloud_honesty")
     if shape == "using":
         preset = (f"The Cloud preset is set to {who}." if provider else
                   "No cloud service is chosen on this PC.")
@@ -8911,6 +10077,110 @@ def _run_cloud_honesty(f: dict) -> Result:
             "is where one is picked, and it lists the services whose keys are saved.",
             "cloud_honesty")
     return Result("That is not something I can do from chat here.", "honest_chat")
+
+
+# --- the cloud provider: view it, and change it through the ONE card ---------
+# (2026-11-07, the owner's Q1/B6 ruling; the audit's B5/B6. See
+# `_cloud_provider_prompt` for what reaches these.)
+
+def _cloud_choose_words(code, body, company: str) -> str:
+    """The one plain sentence for a chat provider change, from the route's body.
+
+    `jarvis_presets.apply_cloud` already answers with the card's outcome, the
+    PC's own refusal sentence, or the done message; this only puts the chat
+    turn's own lead-in on it. It never claims a change the body does not.
+    """
+    body = body if isinstance(body, dict) else {}
+    what = f"Making {company} the cloud service"
+    if code in (200, 202) and body.get("changed") is True:
+        said = str(body.get("message") or "").strip()
+        return f"{what}: done. " + (said or "")
+    outcome = str(body.get("outcome") or "").strip()
+    if outcome:
+        return (f"{what}: nothing was changed - the ONE approval card was not "
+                f"approved ({outcome}), so the cloud service stays as it was.")
+    reason = (str(body.get("error") or "").strip()
+              or str(body.get("message") or "").strip()
+              or "the PC refused it")
+    return f"{what}: nothing was changed - {reason}"
+
+
+def _run_cloud_provider_list() -> Result:
+    """Which clouds exist, whether each key is saved, and which one is chosen.
+
+    Every fact is the PC's own: `jarvis_presets.cloud_providers()` reads the six
+    from `jarvis_chatbot_api.PRESETS` (name, short name, host, model and key
+    PRESENCE only - never a key) and `cloud_chosen()` is the file the Presets
+    row writes. Read-only: no card, no write, no model.
+    """
+    try:
+        import jarvis_presets as P
+        rows = P.cloud_providers()
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud services could not be read on this PC.",
+                      "cloud_provider_list")
+    if not rows:
+        return Result("No cloud services are set up on this PC, so none can be "
+                      "used.", "cloud_provider_list")
+    parts = []
+    chosen_company = ""
+    for row in rows:
+        saved = row.get("key_saved")
+        key_word = ("key saved" if saved is True else
+                    "no key saved" if saved is False else "key state cannot be read")
+        if row.get("chosen"):
+            chosen_company = str(row.get("company") or "")
+            parts.append(f"{row.get('company')} ({row.get('short')}) is the chosen "
+                         f"one - {key_word}")
+        else:
+            parts.append(f"{row.get('company')} ({row.get('short')}) - {key_word}")
+    head = (f"The chosen cloud service is {chosen_company}. " if chosen_company else
+            "No cloud service is chosen on this PC right now. ")
+    return Result(
+        head + "One at a time, the six are: " + "; ".join(parts) + ". "
+        "To change it say for example \"use mistral as my cloud provider\", or "
+        "pick the Cloud row in the Presets menu - either way ONE approval card "
+        "asks first and nothing switches until you approve it. A service needs "
+        "its key saved first: Settings, Chatbot API keys, or "
+        "\"py -3 jarvis_chatbot_api.py key <service>\" on the PC.",
+        "cloud_provider_list")
+
+
+def _run_cloud_provider_ask() -> Result:
+    """No service was named: the six, and the one sentence that changes it."""
+    try:
+        import jarvis_chatbot_api as API
+        names = ", ".join(f"{p.company} ({p.short})" for p in API.PRESETS.values())
+    except Exception:                                       # noqa: BLE001
+        names = ("OpenAI (openai), DeepSeek (deepseek), Mistral AI (mistral), "
+                 "xAI (xai), OpenRouter (openrouter), Groq (groq)")
+    return Result(
+        "Which cloud service? The six are " + names + ". One at a time. Say for "
+        "example \"use mistral as my cloud provider\" - ONE approval card asks "
+        "first, and nothing switches until you approve it. The Cloud row in the "
+        "Presets menu does the same. A service needs its key saved first: "
+        "Settings, Chatbot API keys.", "cloud_provider_ask")
+
+
+def _run_cloud_provider_choose(f: dict) -> Result:
+    """Change the cloud provider through the EXISTING one-card route.
+
+    `jarvis_presets.apply_cloud` is the very function the Presets Cloud row
+    calls: it refuses a service this PC cannot use BEFORE any card, raises ONE
+    `change_own_config` card, and writes `cloud-choice.json` only after that
+    yes. Nothing about the card or the gate is re-implemented here - so the
+    card's shape, its tier and the write are the same ones Settings uses.
+    """
+    pid = str(f.get("pid") or "")
+    try:
+        import jarvis_presets as P
+        import jarvis_chatbot_api as API
+        company = API.PRESETS[pid].company if pid in API.PRESETS else pid
+        code, body = P.apply_cloud(provider=pid)
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud provider could not be changed on this PC.",
+                      "cloud_provider_choose")
+    return Result(_cloud_choose_words(code, body, company), "cloud_provider_choose")
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -11099,6 +12369,50 @@ _SELF_JOBS = re.compile(
     r"|what\s+(?:scheduled|recurring)\s+(?:jobs|things|tasks)\s+"
     r"(?:can\s+you\s+(?:run|schedule)|do\s+you\s+have)\b.*")
 
+#: "Can you change your own settings by voice through Jarvis Live?" (2026-11-07,
+#: live-parity LP-3). The model answered "No, you can't change my settings
+#: directly with a voice command right now. You'd need to use the desktop
+#: Settings card" - false: Live and typed chat share the same /api/chat route,
+#: the same agent, the same gate and the same approval cards
+#: (jarvis_live_turn.py sends `{"live": true, "provenance": "voice"}`), and
+#: `_settings_said` already speaks a calm card line for a carded setting
+#: change. A question about this project's own behaviour is answered from the
+#: code, never by the model's guess. Read-only: no model, no card, no write.
+_SELF_LIVE_SETTINGS = re.compile(
+    r"(?:change|changing|set|setting|adjust|control|alter)\s+"
+    r"(?:your|jarvis'?s?|its|my|the)?\s*(?:own\s+)?settings?\s+"
+    r"(?:by\s+(?:voice|talking|speech|speaking)|with\s+(?:a\s+|your\s+)?voice"
+    r"|using\s+(?:voice|speech))"
+    r"(?:\s+(?:through|in|on|via|inside)\s+(?:jarvis\s+)?live)?\s*\??$"
+    r"|(?:can|could|does|do)\s+(?:jarvis\s+live|live)\s+"
+    r"(?:change|set|adjust|control)\s+(?:your|jarvis'?s?|its|my)?\s*"
+    r"(?:own\s+)?settings?"
+    r"|(?:can|could|does|do)\s+you\s+(?:change|set|adjust)\s+"
+    r"(?:your\s+|jarvis'?s?\s+)?(?:own\s+)?settings?\s+"
+    r"(?:in|through|on|via|using)\s+(?:jarvis\s+)?live"
+    r"|(?:can|could)\s+i\s+(?:change|set|adjust)\s+"
+    r"(?:my\s+|your\s+|jarvis'?s?\s+)?(?:own\s+)?settings?\s+"
+    r"(?:by\s+(?:voice|talking|speech)|with\s+my\s+voice|using\s+voice)"
+    r"(?:\s+(?:in|through|on|via)\s+(?:jarvis\s+)?live)?\s*\??$"
+    r"|(?:does|do)\s+(?:jarvis\s+live|live)\s+(?:let|allow)\s+(?:you|me)\s+"
+    r"(?:change|set|adjust)\s+(?:your|my|jarvis'?s?)?\s*(?:own\s+)?settings?"
+    r"|(?:is|are)\s+(?:a\s+)?settings?\s+changes?\s+"
+    r"(?:possible|allowed|supported)\s+(?:in|through|on|via)\s+(?:jarvis\s+)?live")
+
+#: The fixed answer. It says YES plainly (the measured false denial was the
+#: whole finding), names the one door, and states the one safety limit without
+#: inventing a spoken-approval surface: the card is tapped, never said.
+LIVE_SETTINGS_ANSWER = (
+    "Yes - a setting change asked through Jarvis Live works exactly like typing "
+    "it: the same sentence, the same approval card and the same effect. Some "
+    "settings that loosen what asks first or turn on a tool are PC-only for "
+    "safety, so their card waits for you to tap it on your PC or phone - a "
+    "spoken yes is not heard.")
+
+
+def _run_how_live_settings(intent: Intent) -> Result:
+    return Result(LIVE_SETTINGS_ANSWER, intent.name)
+
 SELF_TOOLS_MISSING = ("Your PC's Jarvis cannot list its tools yet - run apply-patches.ps1 "
                       "on the PC.")
 
@@ -11133,6 +12447,251 @@ def _self_answers(s: str) -> Optional[Intent]:
         return Intent("pc_facts", {"shape": "space_all"})
     if _SELF_JOBS.fullmatch(s):
         return Intent("how_jobs")
+    # "Can you change your own settings by voice through Jarvis Live?"
+    # (2026-11-07, LP-3): answered from the route the code really takes, so the
+    # model can never deny the one door Live and typed chat share.
+    if _SELF_LIVE_SETTINGS.fullmatch(s):
+        return Intent("how_live_settings")
+    return None
+
+
+# --------------------------------------------------------------------------
+#   GitHub as Jarvis's own makeup, and what it may never do (2026-11-07)
+#
+# THE MEASURED GAP (audit `.dsh-scratch/TOOL-CAPABILITY-AUDIT-2026-11-07/`,
+# 2026-11-07, live 0.2.437). Every GitHub question that is not "connect" or
+# "is it connected" fell to the local model, and the model invented answers:
+# "what is your GitHub repository?" -> "I don't have a public GitHub
+# repository" (false: darknight11ish/Epic-Jarvis is public and the updater
+# downloads its releases from it); "can you merge a pull request?" -> a MERGE
+# APPROVAL CARD was invented ("I can propose the merge to you now"), while
+# jarvis_github.NEVER has merge in it and no merge action, card or endpoint
+# exists anywhere; "how do I disconnect it?" -> "you haven't told me what 'it'
+# is yet", while the true careful sentence already sits in
+# jarvis_accounts.state_words("github").
+#
+# WHAT THIS BLOCK DOES. Whole-sentence shapes only, answered from the modules
+# that own each fact, at answer time: jarvis_github.connected() for the token,
+# jarvis_github.NEVER_WORDS for the never-list, jarvis_accounts.state_words()
+# for the connect/disconnect facts (the same answer /api/accounts serves), and
+# jarvis_asks_first.view() for which GitHub actions ask. Read-only: no card, no
+# network, no model and nothing written - all four names are in
+# READ_ONLY_INTENTS. A near miss still goes to the model exactly as before.
+
+#: The owner's own repository - the public page this app's releases are
+#: downloaded from (jarvis_quick.UPDATE_MANIFEST_URL and
+#: jarvis_tool_updates' GitHub addresses live under the same owner).
+GITHUB_REPO = "darknight11ish/Epic-Jarvis"
+
+GITHUB_MISSING = ("Your PC's Jarvis has no GitHub module yet - run "
+                  "apply-patches.ps1 on the PC.")
+
+#: One fixed sentence, so "what is your repository", "where does your code
+#: live" and "what is your GitHub" cannot say three different things.
+GITHUB_OWN_REPO_WORDS = (
+    f"My source code is the public repository {GITHUB_REPO} - that is where this "
+    f"app's own releases come from. This PC runs its own installed copy of it. "
+    f"Your own repositories are separate from mine and need your token.")
+
+_GITHUB_OWN_REPO = re.compile(
+    r"(?:what|which)\s+(?:is|are)\s+(?:your|jarvis'?s?)\s+"
+    r"(?:github\s+)?(?:repo|repository|source\s*code|code\s*base|codebase)\s*\??"
+    r"|(?:what|which)\s+(?:github\s+)?(?:repo|repository)\s+(?:are\s+you|is\s+jarvis)"
+    r"\s+(?:in|using|from)\s*\??"
+    r"|where\s+(?:does|do|is)\s+(?:your|jarvis'?s?)\s+"
+    r"(?:code|source\s*code|repo|repository)\s+(?:live|sit|reside|come\s+from|stored?)\s*\??"
+    r"|where\s+is\s+(?:your|jarvis'?s?)\s+(?:github\s+)?(?:repo|repository)\s*\??"
+    r"|do\s+you\s+have\s+(?:a|your\s+own)\s+github\s+(?:repo|repository|page)\s*\??")
+
+#: A GitHub thing, and a verb that would CHANGE it. Both must be present for
+#: the never-list to answer, so "close the window" and "delete a file" keep
+#: their own paths; "merge" counts on its own because only code is merged.
+_GITHUB_THING = re.compile(
+    r"\b(?:github|pull\s*requests?|prs?|issues?|repos?(?:itory|itories)?|"
+    r"commits?|branches?|workflows?)\b")
+_GITHUB_CHANGE_VERB = re.compile(
+    r"\b(?:merge|push|commit|close|delete|remove|approve)\b")
+_GITHUB_ASK_LEAD = re.compile(
+    r"^(?:(?:hey\s+|ok\s+|okay\s+)?jarvis[,:]?\s+)?"
+    r"(?:(?:can|could|would|will|do|did|have|are)\s+(?:you|jarvis)\b"
+    r"|(?:please\s+)?(?:merge|push|commit|close|delete|remove|approve)\b)")
+
+#: Asking for one of the three real ACTIONS, so the answer can say "one card".
+_GITHUB_ACTION_ASK = re.compile(
+    r"\b(?:comment|commenting)\b.*\b(?:issue|pull\s*request|pr)\b"
+    r"|\b(?:open|opening|create|creating|file|filing)\b.*\bissues?\b"
+    r"|\b(?:re-?run|rerun|re-running|run\s+again|start\s+again)\b.*\bworkflows?\b")
+
+_GITHUB_NEEDS = re.compile(
+    r"what\s+(?:do\s+you|does\s+jarvis|would\s+you)\s+need\s+(?:before\s+)?"
+    r"(?:(?:you|jarvis)\s+(?:can|could)\s+)?(?:to\s+)?"
+    r"(?:read|access|see|look\s+at|check)\s+(?:my\s+|the\s+)?"
+    r"(?:github\s+)?(?:repos?|repositories?|pull\s*requests?|issues?|code)\b.*"
+    r"|what\s+(?:do\s+i|must\s+i|should\s+i)\s+(?:need\s+)?(?:to\s+)?(?:give|set\s+up|do)"
+    r"\s+(?:you\s+)?(?:for|to)\s+(?:read\s+my\s+github|use\s+github|access\s+my\s+github|github)\b.*"
+    r"|what\s+does\s+(?:reading|accessing)\s+my\s+github\s+(?:need|require)\b.*")
+
+_GITHUB_CANT = re.compile(
+    r"what\s+(?:can'?t|cannot|can\s+not|won'?t|will\s+not)\s+(?:you|jarvis)\s+do"
+    r"\s+(?:on|with|to)\s+(?:my\s+|the\s+)?github\b.*"
+    r"|what\s+(?:are\s+)?(?:your|jarvis'?s?)\s+(?:github\s+)?limits?\s+(?:on\s+github)?\s*\??$")
+
+_GITHUB_TOOLS_QUESTION = re.compile(
+    r"what\s+github\s+(?:tools|features|abilities)\s+"
+    r"(?:do\s+you|does\s+jarvis|have\s+you|are\s+you)\s+"
+    r"(?:have|got|use|using|offer|offered)\b.*"
+    r"|what\s+github\s+tools\s+(?:can\s+you\s+use|are\s+you\s+using|do\s+you\s+use)\b.*"
+    r"|do\s+you\s+have\s+(?:a\s+)?(?:feature|tool|ability|way)\s+(?:that\s+)?"
+    r"(?:can\s+)?(?:reads?|access(?:es)?|look\s+at|see)\s+(?:my\s+|the\s+)?github\b.*"
+    r"|what\s+github\s+(?:things?|stuff)\s+can\s+you\s+do\b.*"
+    # "what tools do you have for GitHub?" - the word order the model tool
+    # inventory uses; still requires GITHUB, so "what features do you have"
+    # (the catalogue's own groups answer) is never taken by this.
+    r"|what\s+(?:tools|features|abilities)\s+(?:do\s+you|have\s+you)\s+"
+    r"(?:have|got)\s+(?:for|on|about|to\s+use\s+(?:for|on))\s+github\b.*")
+
+_GITHUB_OWN_CI = re.compile(
+    r"what(?:'s|\s+is|\s+are)\s+(?:your|jarvis'?s?)\s+ci"
+    r"(?:\s+(?:status|doing|like))?\s*\??$"
+    r"|how\s+is\s+(?:your|jarvis'?s?)\s+ci\b.*"
+    r"|is\s+(?:your|jarvis'?s?)\s+ci\s+(?:green|passing|failing|red)\s*\??$")
+
+_GITHUB_ASKS = re.compile(
+    r"what\s+asks?\s+(?:you\s+)?(?:first\s+)?before\s+github\s+acts?\s*\??$"
+    r"|what\s+asks?\s+before\s+github\s+acts?\s*\??$"
+    r"|what\s+(?:github\s+)?(?:actions|things)\s+ask\s+(?:you\s+)?first\b.*"
+    r"|which\s+(?:github\s+)?(?:tools|actions)\s+ask\s+(?:you\s+)?first\b.*")
+
+
+def _github_module():
+    """jarvis_github when this PC has it, else None."""
+    try:
+        import jarvis_github as GH
+        return GH
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+def _github_state_words() -> str:
+    """Whether a token is saved, said in plain words, from jarvis_github."""
+    GH = _github_module()
+    if GH is None:
+        return GITHUB_MISSING
+    try:
+        connected = bool(GH.connected())
+    except Exception:                       # noqa: BLE001 - unreadable is unknown
+        return ("I could not read whether a GitHub token is saved on this PC, so I "
+                "will not say whether it is connected.")
+    if connected:
+        return ("A GitHub token is saved on this PC, so your GitHub is connected. "
+                "Say \"connect my GitHub\" to replace it.")
+    return ("Your GitHub is not connected yet: no token is saved on this PC. Say "
+            "\"connect my GitHub\" and one card appears for a personal access token, "
+            "typed on that card and never in chat.")
+
+
+def _github_never_words() -> str:
+    """The module's own refusal sentence, or a fixed fallback without it."""
+    GH = _github_module()
+    if GH is not None:
+        try:
+            return str(GH.never_words() or "").strip()
+        except Exception:                   # noqa: BLE001 - fall through to words
+            pass
+    return ("Jarvis cannot merge, push, commit, delete or close anything on GitHub - "
+            "it can read your GitHub, comment, open an issue and re-run a workflow, "
+            "and nothing else.")
+
+
+def _self_github(s: str) -> Optional[Intent]:
+    """GitHub questions answered from the real surface, never by the model.
+
+    Whole-sentence shapes only, in the order a person would be surprised to
+    see them interchanged. A sentence this does not claim keeps its old path.
+    """
+    if _GITHUB_OWN_REPO.fullmatch(s):
+        return Intent("github_self", {"shape": "repo"})
+    if _GITHUB_OWN_CI.fullmatch(s):
+        return Intent("github_self", {"shape": "ci"})
+    if _GITHUB_ASKS.fullmatch(s):
+        return Intent("github_self", {"shape": "asks"})
+    if _GITHUB_NEEDS.fullmatch(s):
+        return Intent("github_self", {"shape": "needs"})
+    if _GITHUB_CANT.fullmatch(s):
+        return Intent("github_self", {"shape": "never"})
+    if _GITHUB_TOOLS_QUESTION.fullmatch(s):
+        return Intent("github_self", {"shape": "tools"})
+    # A request to DO one of the never-list things, or to ask whether it can.
+    # `token`/`account` are excluded: "delete my GitHub token" is a disconnect
+    # question and belongs to the accounts answer below, not to this refusal.
+    if (_GITHUB_ASK_LEAD.match(s) and _GITHUB_CHANGE_VERB.search(s)
+            and (_GITHUB_THING.search(s) or "merge" in s)
+            and not re.search(r"\b(?:token|account|connection|link)\b", s)):
+        return Intent("github_self", {"shape": "merge"})
+    if _GITHUB_ACTION_ASK.search(s) and re.match(
+            r"^(?:(?:can|could|would|will|do)\s+(?:you|jarvis)\b|"
+            r"(?:please\s+)?(?:comment|open|create|file|re-?run|rerun)\b)", s):
+        return Intent("github_self", {"shape": "action"})
+    return None
+
+
+#: The account-shaped questions, answered from jarvis_accounts - the same
+#: module GET /api/accounts serves. Before 2026-11-07 `state_words()` and the
+#: whole-list `sentence()` had NO caller at all: the answer to "is my GitHub
+#: connected / how do I disconnect it / what can it do" was written and live at
+#: /api/accounts, and no door in either app reached it (the audit's BLOCKER 3).
+#: "is my GitHub connected?" keeps its older connect_account answer, which runs
+#: a real test; these shapes are the ones that had nothing.
+_ACCOUNTS_LIST = re.compile(
+    r"what\s+accounts?\s+(?:do\s+(?:i|you|we)\s+have|are\s+(?:connected|set\s*up|linked)"
+    r"|have\s+(?:you|i)\s+got|does\s+jarvis\s+have|can\s+you\s+see)\s*\??"
+    r"|which\s+accounts?\s+(?:do\s+(?:i|you)\s+have|are\s+(?:connected|set\s*up|linked))\s*\??"
+    r"|what\s+accounts?\s+are\s+connected\s*\??$")
+_ACCOUNTS_ABILITIES = re.compile(
+    r"what\s+(?:abilities|permissions|rights|access)\s+(?:does|do|has|have|can)\s+"
+    r"(?:my|the|your)\s+[\w -]{2,40}?(?:\s+(?:connection|account|link|token))?\s+"
+    r"(?:have|do|give|allow|let)\b.*"
+    r"|what\s+can\s+you\s+do\s+with\s+(?:my|the)\s+[\w -]{2,30}?"
+    r"\s+(?:account|connection|link)\b.*"
+    r"|what\s+(?:does|do)\s+(?:my|the)\s+[\w -]{2,30}?\s+(?:account|connection|link)\s+"
+    r"(?:let|allow)\s+you\s+do\b.*")
+_ACCOUNT_DISCONNECT = re.compile(
+    r"how\s+(?:do|can|could|would)\s+(?:i|you)\s+(?:please\s+)?"
+    r"(?:disconnect|remove|unlink|revoke|delete|forget)\s+(?:my|the|this)\s+[\w -]{2,40}$"
+    r"|(?:can|could|will|would)\s+(?:you|jarvis)\s+(?:please\s+)?"
+    r"(?:disconnect|remove|unlink|revoke|delete|forget)\s+(?:my|the|this)\s+[\w -]{2,40}$"
+    r"|(?:disconnect|remove|unlink|revoke|delete|forget)\s+(?:my|the)\s+[\w -]{2,40}$")
+
+
+def _accounts_module():
+    try:
+        import jarvis_accounts as ACC
+        return ACC
+    except Exception:                       # noqa: BLE001 - absent is a state
+        return None
+
+
+ACCOUNTS_MISSING = ("Your PC's Jarvis cannot read its accounts list yet - run "
+                    "apply-patches.ps1 on the PC.")
+
+
+def _self_accounts(s: str) -> Optional[Intent]:
+    """The accounts list, one account's abilities, and how one is disconnected."""
+    ACC = _accounts_module()
+    if ACC is None:
+        return None
+    if _ACCOUNTS_LIST.fullmatch(s):
+        return Intent("accounts_answer", {"shape": "list"})
+    if _ACCOUNT_DISCONNECT.fullmatch(s):
+        account = ACC.account_from_words(s)
+        if account:
+            return Intent("accounts_answer", {"shape": "disconnect", "account": account})
+        return None
+    if _ACCOUNTS_ABILITIES.fullmatch(s):
+        account = ACC.account_from_words(s)
+        if account:
+            return Intent("accounts_answer", {"shape": "abilities", "account": account})
+        return None
     return None
 
 
@@ -11469,6 +13028,176 @@ def _measured_question(s: str, raw: str) -> Optional[Intent]:
         got = _measured_setting_intent(raw, m.group(1))
         if got is not None:
             return got
+    return None
+
+
+# ---- its own code, from the shipped self-code map (2026-11-07) -------------
+#
+# THE GAP THIS CLOSES. Asked "what is your own GitHub repository?", the live
+# backend answered "I don't have a public GitHub repository of my own" - it had
+# no idea the code it runs IS a public repository. `jarvis_repomap.py` maps a
+# folder the owner names, `jarvis_self_portrait.py` knows its version and its
+# tools, and the feature catalogue knows what features DO; none of them knows
+# which module implements which part of Jarvis.
+#
+# WHERE THE ANSWER COMES FROM. One file beside the backend,
+# `jarvis-self-code.json`, generated from the repository tree by
+# `tools/gen_self_code_map.py` at the deploy's own commit and read by the
+# shipped `jarvis_self_code.py`. This block is only the grammar: it turns four
+# whole-sentence shapes into an intent, and the runner below asks that module.
+# No model, no card, no route, no write, and no code is read at answer time -
+# so these are in READ_ONLY_INTENTS.
+#
+# THE SHAPES ARE DELIBERATELY NARROW. "what does X do" fires ONLY when X is a
+# real part of the map (or a real module in it), because that shape is ordinary
+# English: "what does my oven do" must stay the model's. The three shapes that
+# say "code" out loud fire on any subject and answer "not in the map I was
+# built with" when it is missing - the map says what it does not know instead of
+# guessing. Those three run BEFORE `_where_put`, which otherwise takes any
+# "where is ..." sentence for a lost object, and before the feature guide and
+# the capability lane, so a fuzzy catalogue row can never claim a code question.
+# "What does X do" is the one exception: it runs AFTER the feature guide, because
+# that is the guide's own question shape and a real feature name must keep its
+# answer there.
+
+_SELF_CODE_OVERVIEW = re.compile(
+    r"(?:what|which)\s+are\s+(?:your|the|jarvis'?s?)\s+(?:major\s+|main\s+)?"
+    r"(?:parts|subsystems|components)\s*\??"
+    r"|what\s+are\s+the\s+(?:major\s+|main\s+)?parts\s+of\s+your\s+"
+    r"(?:code|codebase|source)\s*\??"
+    r"|what(?:'s|\s+is)\s+your\s+(?:architecture|code\s+structure|codebase|"
+    r"code\s+organi[sz]ation)\s*\??"
+    r"|how\s+(?:are\s+you|is\s+jarvis)\s+(?:built|put\s+together|structured|"
+    r"organi[sz]ed)\s*\??"
+    r"|how\s+is\s+your\s+code\s+(?:built|structured|organi[sz]ed)\s*\??")
+
+_SELF_CODE_DOES = re.compile(
+    r"what\s+does\s+(?:the\s+|your\s+|jarvis'?s?\s+)?(.+?)\s+do\s*\??")
+
+_SELF_CODE_WHERE = re.compile(
+    r"where\s+(?:is|are)\s+(?:the\s+|your\s+|jarvis'?s?\s+)?"
+    r"(?:code|source\s+code|source|module|file|files)\s+(?:for|of|that\s+"
+    r"(?:handles?|does?|runs?))\s+(.+?)\s*\??"
+    r"|where\s+(?:is|are)\s+(.+?)\s+(?:in|inside)\s+(?:your|the)\s+"
+    r"(?:code|codebase|source|repo|repository)\s*\??"
+    r"|which\s+part\s+of\s+(?:your|the)\s+(?:code|codebase|source|repo|"
+    r"repository)\s+(?:handles?|does?|is\s+for|runs?)\s+(.+?)\s*\??")
+
+_SELF_CODE_RECENT = re.compile(
+    r"what\s+(?:did|have)\s+you\s+(?:change|changed|ship|shipped|do)\s+"
+    r"(?:recently|lately)\s*\??"
+    r"|what\s+(?:changed|has\s+changed)\s+(?:recently|lately|on\s+main)\s*\??"
+    r"|what(?:'s|\s+is)\s+(?:new|changed|the\s+latest)\s+(?:on\s+main|in\s+"
+    r"(?:your|the)\s+(?:code|repo|repository))\s*\??"
+    r"|what\s+was\s+your\s+(?:last|latest|most\s+recent)\s+(?:release|change|"
+    r"deploy|update)\s*\??"
+    r"|what\s+did\s+you\s+(?:change|ship)\s+in\s+(?:the\s+)?(?:last|latest)\s+"
+    r"(?:release|deploy|update)\s*\??")
+
+_SELF_CODE_REPO = re.compile(
+    r"what(?:'s|\s+is)\s+your\s+(?:own\s+)?(?:github\s+)?(?:repository|repo|"
+    r"github(?:\s+(?:repository|repo|address|url|link))?)\s*\??"
+    r"|what(?:'s|\s+is)\s+your\s+github\s+(?:address|url|link)\s*\??"
+    r"|where\s+(?:is|are)\s+your\s+(?:code|source|repository|repo)\s+"
+    r"(?:on|at)\s+github\s*\??"
+    r"|where\s+do\s+you\s+live\s+on\s+github\s*\??"
+    r"|where\s+(?:is|are)\s+you\s+on\s+github\s*\??")
+
+#: The one- and two-word tail a code question may carry and not mean: "the
+#: memory SUBSYSTEM", "the gate MODULE". Stripped from the subject, so the
+#: lookup sees "memory" and "gate".
+_SELF_CODE_TAIL = re.compile(
+    r"\s+(?:part|parts|subsystem|subsystems|component|components|module|modules|"
+    r"section|sections|file|files|code|codebase|source)\s*$")
+_SELF_CODE_HEAD = re.compile(r"^(?:the|your|jarvis'?s?|jarvis)\s+")
+
+#: The reader once imported, or False when this build has none. None means "not
+#: asked yet" - see `_self_code_module` for why it is cached.
+_SELF_CODE_READER = None
+
+
+def _self_code_module():
+    """The shipped reader, or None on a PC the self-code map never reached.
+
+    Cached on purpose: this is called for a great many sentences that turn out
+    to be none of the four shapes, and on an unpatched PC a failed import would
+    otherwise be retried on every one of them.
+    """
+    global _SELF_CODE_READER
+    if _SELF_CODE_READER is None:
+        try:
+            import jarvis_self_code as SC
+            _SELF_CODE_READER = SC
+        except Exception:               # noqa: BLE001 - older PC: feature is off
+            _SELF_CODE_READER = False
+    return _SELF_CODE_READER or None
+
+
+def _self_code_topic(raw: str) -> str:
+    """The subject a code question names, cleaned, or "" when it is unusable.
+
+    The cleaning is small on purpose: articles and the "part/module" tail, and
+    nothing else. A subject longer than 60 characters is a sentence, not a
+    name, and is refused rather than half-matched.
+    """
+    topic = " ".join(str(raw or "").lower().split())
+    topic = topic.strip(" .,:;!?\"'")
+    for _ in range(2):
+        shorter = _SELF_CODE_TAIL.sub("", _SELF_CODE_HEAD.sub("", topic)).strip()
+        if shorter == topic:
+            break
+        topic = shorter
+    if not topic or len(topic) > 60 or not re.search(r"[a-z]", topic):
+        return ""
+    return topic
+
+
+def _self_code_intent(s: str, does: bool = False) -> Optional[Intent]:
+    """One of the four self-code questions, or None.
+
+    `s` is the tidied sentence. `does=True` asks for ONLY the "what does X do"
+    shape, which runs after the feature guide: that shape is the guide's own
+    question ("what does the spoken-style feature do?"), and a real feature name
+    must keep its answer. The other three shapes say "code" out loud and run
+    earlier, before "where did I put ...?" can take them for a lost object.
+
+    The module is imported lazily: on a PC that has not been patched the import
+    fails and every shape falls through to the model exactly as before, so an
+    older install is never answered with a sentence about code it cannot see.
+    """
+    if _self_code_module() is None:
+        return None
+    # GitHub is another module's fact, not this map's, for the ONE shape that
+    # names it as a question about the repository: "what is your GitHub
+    # repository?" belongs to the GitHub self-knowledge answer (the owner's Q6
+    # ruling), and this map's repo shape would otherwise take it. The "where is
+    # your code on github" shapes stay here, because the GitHub lane does not
+    # match them and falling through would answer a lost-object question
+    # (caught on the merged wave-8 branch, 2026-11-07).
+    if re.search(r"what(?:'s|\s+is)\s+your\s+(?:own\s+)?github\b", s):
+        return None
+    if does:
+        m = _SELF_CODE_DOES.fullmatch(s)
+        if not m:
+            return None
+        topic = _self_code_topic(m.group(1))
+        # ONLY a subject that really is a part of the map: "what does my oven
+        # do" is ordinary English and stays the model's, as it always was.
+        if topic and _self_code_module().resolve(topic) is not None:
+            return Intent("self_code_lookup", {"topic": topic})
+        return None
+    if _SELF_CODE_OVERVIEW.fullmatch(s):
+        return Intent("self_code_overview")
+    if _SELF_CODE_REPO.fullmatch(s):
+        return Intent("self_code_repo")
+    if _SELF_CODE_RECENT.fullmatch(s):
+        return Intent("self_code_recent")
+    m = _SELF_CODE_WHERE.fullmatch(s)
+    if m:
+        # Three alternatives, three groups; only the one that matched is set.
+        topic = _self_code_topic(m.group(1) or m.group(2) or m.group(3) or "")
+        if topic:
+            return Intent("self_code_lookup", {"topic": topic})
     return None
 
 
@@ -11848,6 +13577,38 @@ def _run_measured_self(intent: Intent, sources: Optional[dict] = None) -> Result
     return Result(builder(sources), intent.name)
 
 
+#: Said when the matcher fired but the reader is not in this build. It cannot
+#: normally happen (the matcher only fires when the module imports), and it is
+#: written down rather than left to an AttributeError on the one path that could.
+SELF_CODE_MISSING = ("This build of Jarvis cannot answer that about its own code yet "
+                     "- its backend carries no self-code reader. Run apply-patches.ps1 "
+                     "on the PC.")
+
+
+def _run_self_code(intent: Intent) -> Result:
+    """Answer one of the four self-code questions from the shipped map.
+
+    Every word comes from `jarvis_self_code`, which reads one JSON file beside
+    the backend and nothing else: no model, no card, no route, no write. The
+    module says plainly when the map was not installed with this build, and that
+    sentence is the answer - never a made-up one.
+    """
+    SC = _self_code_module()
+    if SC is None:
+        return Result(SELF_CODE_MISSING, intent.name)
+    if intent.name == "self_code_overview":
+        return Result(SC.overview(), intent.name)
+    if intent.name == "self_code_recent":
+        return Result(SC.recent(), intent.name)
+    if intent.name == "self_code_repo":
+        return Result(SC.self_repo(), intent.name)
+    return Result(SC.lookup(str(intent.f.get("topic") or "")), intent.name)
+
+
+_SELF_CODE_INTENTS = frozenset({"self_code_overview", "self_code_lookup",
+                                "self_code_recent", "self_code_repo"})
+
+
 def _run_self_setting_state(intent: Intent, sources: Optional[dict] = None) -> Optional[Result]:
     """"Is <setting> on right now", from the switch's live value.
 
@@ -12052,7 +13813,11 @@ _UPDATE_ASK = re.compile(
     r"|(?:any|new)\s+updates?"
     r"|(?:is|are)\s+(?:the\s+)?jarvis(?:\s+app)?\s+up\s+to\s+date"
     r"|(?:do|does)\s+(?:i|jarvis)\s+need\s+(?:an?\s+)?update"
-    r"|what(?:'s|s| is)\s+the\s+(?:latest|newest)\s+(?:version|release)"
+    # "the", "your", "its" and "Jarvis's" all ask the same question. Measured
+    # 2026-11-07: "what's the latest release?" was answered exactly, while
+    # "what's your latest release?" fell to the model, which said it had no
+    # version number at all - one pronoun away from the answer that exists.
+    r"|what(?:'s|s| is)\s+(?:the|your|its|jarvis'?s?)\s+(?:latest|newest)\s+(?:version|release)"
     r"(?:\s+of\s+jarvis)?"
     r"|what\s+version\s+(?:of\s+jarvis\s+)?(?:am\s+i|is\s+jarvis)\s+(?:on|running)"
     r"|check\s+for\s+(?:an?\s+|any\s+)?(?:new\s+)?updates?"
@@ -14109,6 +15874,13 @@ def _rename_move_overcapture(name: str, folder: str = "") -> bool:
 def _note_rename_move_asking(raw: str) -> Optional[Intent]:
     """Read a rename/move from the raw sentence, keeping the title's case."""
     s = str(raw or "").strip().rstrip("?.!").strip()
+    # "move all my notion notes into obsidian" is the NOTION IMPORT answer's
+    # sentence (2026-10-28, one card, the export tidied into a vault), not a
+    # note move: the two grammars overlap once the polite lead is stripped, and
+    # moving notes was the wrong action to offer (caught on the merged wave-8
+    # branch, 2026-11-07). The Notion matcher runs later and owns it.
+    if "notion" in s.lower():
+        return None
     m = _NOTE_RENAME.fullmatch(s)
     if m:
         name = (m.group("name") or m.group("name2") or "").strip()
@@ -14128,6 +15900,13 @@ def _note_rename_move_asking(raw: str) -> Optional[Intent]:
 
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
+    # "move all my notion notes into obsidian" is the NOTION IMPORT
+    # answer's sentence, not a note move (2026-10-28, one card, the
+    # export tidied into a vault). Once the polite lead is stripped the
+    # two grammars overlap, and moving notes was the wrong action to
+    # offer (caught on the merged wave-8 branch, 2026-11-07).
+    if "notion" in s.lower():
+        return None
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
     if _NOTE_DELETE_LINE.fullmatch(s):
@@ -17585,6 +19364,128 @@ def _run_connected(intent: Intent) -> Result:
                   "the AI model.", intent.name)
 
 
+#: The six on-demand tools, named EXACTLY as jarvis_agent.TOOLS registers them,
+#: plus the research tool and the scheduled watch body - so the inventory
+#: answer names the whole real GitHub surface and nothing invented.
+GITHUB_TOOLS_WORDS = (
+    "Six tools for your own GitHub: github_list (your repositories, a "
+    "repository's pull requests, issues or workflow runs), github_read_file (one "
+    "file), github_ci_status (the newest workflow run), github_comment (one "
+    "comment), github_open_issue (one new issue) and github_rerun_workflow (run an "
+    "existing workflow again). Plus github_search, which researches a library on "
+    "GitHub, and the scheduled watch_github job behind \"tell me when\" GitHub "
+    "checks.")
+
+
+def _github_asks_words() -> str:
+    """Which GitHub actions ask first, from the asks-first page's own rows."""
+    try:
+        import jarvis_asks_first as AF
+        view = AF.view(here=False)
+    except Exception:                       # noqa: BLE001 - older PC
+        return ("Four actions ask you first every time: reading your GitHub, "
+                "commenting, opening an issue and re-running a workflow.")
+    wanted = ("github_inspect", "github_comment", "github_open_issue",
+              "github_rerun_workflow")
+    got = []
+    for group in view.get("groups") or ():
+        for row in group.get("rows") or ():
+            rid = str((row or {}).get("id") or "")
+            if rid in wanted:
+                got.append(str(row.get("title") or rid))
+    if not got:
+        return ("Four actions ask you first every time: reading your GitHub, "
+                "commenting, opening an issue and re-running a workflow.")
+    return ("These GitHub actions ask you first every time: " + _self_list(got)
+            + ". The reads ask too, because a read sends your token to "
+              "api.github.com. That cannot be loosened from an app.")
+
+
+def _run_github_self(f: dict) -> Result:
+    """The GitHub questions the model used to invent answers to (2026-11-07).
+
+    Every sentence is built from a module that owns the fact at answer time:
+    `jarvis_github.connected()`, `jarvis_github.never_words()`,
+    `jarvis_asks_first.view()` and the fixed repository constant shared with
+    the updater. No model, no card, no network, no write.
+    """
+    shape = str(f.get("shape") or "")
+    state = _github_state_words()
+    never = _github_never_words()
+    if shape == "repo":
+        return Result(GITHUB_OWN_REPO_WORDS, "github_self")
+    if shape == "ci":
+        return Result(
+            "My own CI runs on GitHub Actions in " + GITHUB_REPO + ". " + state
+            + " The github_ci_status tool can read a repository's newest workflow "
+              "run once a token is saved and the GitHub tools are switched on; "
+              "neither app has a separate CI screen.", "github_self")
+    if shape == "never":
+        return Result(never + " " + state, "github_self")
+    if shape == "merge":
+        return Result(
+            "No. " + never + " There is no merge action and no merge card at all - "
+            "approving a card cannot create one, because merging was never built. "
+            "A pull request is merged on GitHub itself, by you.", "github_self")
+    if shape == "tools":
+        return Result(
+            GITHUB_TOOLS_WORDS + " All of them are off by default: each has its own "
+            "switch in Settings, What asks first, under \"Let the AI use this\" "
+            "(group \"Jarvis's own tools\"). " + state, "github_self")
+    if shape == "needs":
+        return Result(
+            "Two things. First a GitHub personal access token, saved on this PC by "
+            "the one \"connect my GitHub\" card - it is typed on the card and never "
+            "in chat. Second, the GitHub tools switched on in Settings, What asks "
+            "first, under \"Let the AI use this\"; each has its own switch and they "
+            "all ship off. " + state, "github_self")
+    if shape == "asks":
+        return Result(_github_asks_words() + " " + state, "github_self")
+    if shape == "action":
+        return Result(
+            "Yes - each one waits for its own approval card showing exactly what "
+            "will be posted or re-run. Commenting, opening an issue and re-running "
+            "a workflow are the only three things Jarvis can change on GitHub, and "
+            "nothing happens until you decide that card. Three reads work the same "
+            "way: listing your repositories, pull requests, issues or workflow runs, "
+            "reading one file, and checking the newest CI run - each asks first too, "
+            "because a read sends your token out. " + state, "github_self")
+    return Result(never + " " + state, "github_self")
+
+
+def _run_accounts_answer(f: dict) -> Result:
+    """The accounts list, its abilities and its removal - from jarvis_accounts.
+
+    This is the door that did not exist before 2026-11-07: `sentence()`,
+    `state_words()` and `ability` rows were live at GET /api/accounts and no
+    route, intent or app reached them (the audit's BLOCKER 3).
+    """
+    ACC = _accounts_module()
+    if ACC is None:
+        return Result(ACCOUNTS_MISSING, "accounts_answer")
+    shape = str(f.get("shape") or "")
+    if shape == "list":
+        return Result(str(ACC.sentence() or "").strip() or ACCOUNTS_MISSING,
+                      "accounts_answer")
+    account = str(f.get("account") or "")
+    words = str(ACC.state_words(account) or "").strip()
+    if not words:
+        return Result(ACCOUNTS_MISSING, "accounts_answer")
+    if shape == "disconnect":
+        # Lead with the removal sentence, because that is the question asked -
+        # it is the same text /api/accounts serves as the row's `remove`.
+        row = ACC.state_of(account) or {}
+        remove = str(row.get("remove") or "").strip()
+        if remove:
+            said = (f"{str(row.get('name') or account).strip()} - to disconnect it: "
+                    f"{remove}")
+            change = str(row.get("change") or "").strip()
+            if change:
+                said += f" (It is connected this way: {change}.)"
+            return Result(said, "accounts_answer")
+    return Result(words, "accounts_answer")
+
+
 def _run_self_refresh(intent: Intent) -> Result:
     """"Refresh your abilities" - the self portrait's own refresh, said.
 
@@ -19549,6 +21450,104 @@ def _run_settings_help() -> Result:
     return Result(R.changeable_words(), "settings_help")
 
 
+def _run_settings_explain_all() -> Result:
+    """The general "explain your settings" answer (2026-11-07).
+
+    Read-only: it names the REAL counts from the registry and the shape every
+    named explain answer has, then points at the list. It never claims a value
+    it did not read - the value comes from `_run_setting_explain` when the
+    owner names one setting."""
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result(SETTINGS_MISSING, "settings_explain_all")
+    switches = len(R.BOOL_SETTINGS)
+    choices = len(R.CHOICE_SETTINGS)
+    numbers = len(R.NUMBER_SETTINGS)
+    return Result(
+        f"I can explain any of the {switches} switches, {choices} named choices and "
+        f"{numbers} number setting on this PC. Ask about one by name - "
+        f"\"what is the anti-slop mode set to?\" or \"explain the focus preset\" - "
+        f"and I will say what it is set to right now, where it lives on both apps, "
+        f"and the exact phrase that changes it, for example \"turn off quiet hours\" "
+        f"or \"set the personality to advocate\". A change that loosens a rule still "
+        f"raises one approval card first. Say \"what can I change?\" for the list of "
+        f"everything you can change by asking.",
+        "settings_explain_all")
+
+
+def _run_self_knowledge(f: dict) -> Result:
+    """One bounded, read-only self-fact (approval policy, watches, spending,
+    chat history) - the four families the live audit measured the model
+    denying. The words are `jarvis_feature_guide.SELF_FACTS`; nothing here
+    reads state or changes anything."""
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "self_knowledge")
+    words = G.self_fact_words(str(f.get("family") or ""))
+    if not words:
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "self_knowledge")
+    return Result(words, "self_knowledge")
+
+
+def _run_settings_where(f: dict) -> Result:
+    """Where ONE off-list function really lives (F14, 2026-11-07). Read-only:
+    the words are `jarvis_feature_guide.PLACES`, written from the project's own
+    record, so "where do I change the face size" cannot be sent to a place that
+    does not exist."""
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "settings_where")
+    place = G.place_for(f.get("words") or "")
+    if not place:
+        return Result("That one is not written down on this PC, so I will not guess.",
+                      "settings_where")
+    return Result(str(place.get("words") or ""), "settings_where")
+
+
+def _run_recent_changes() -> Result:
+    """"What changed in your last update?" from the SHIPPED record digest.
+
+    `jarvis_recent_changes.py` is generated at build time from CHANGELOG.md and
+    the newest changelog.d fragments because the live backend folder has no
+    CHANGELOG.md to read at runtime. Read-only: it names the version and the
+    newest real bullets, and says so plainly when the record is missing."""
+    try:
+        import jarvis_recent_changes as RC
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("The newest changes are not written down beside the program on "
+                      "this PC, so I will not guess.", "recent_changes")
+    return Result(RC.answer(), "recent_changes")
+
+
+def _run_heritage(f: dict) -> Result:
+    """What makes Jarvis different, and what it borrowed from whom (Q4).
+
+    Read-only: the words are `jarvis_feature_guide.HERITAGE`, derived from the
+    project's own record. It never invents a borrow and never denies one that
+    is on the record; "both" joins the two halves in order."""
+    try:
+        import jarvis_feature_guide as G
+    except Exception:                       # noqa: BLE001 - an older PC
+        return Result("That is not written down beside the program on this PC, so I "
+                      "will not guess.", "heritage")
+    part = str(f.get("part") or "both")
+    if part == "both":
+        words = "\n\n".join(w for w in (G.heritage_words("differentiators"),
+                                          G.heritage_words("lineage")) if w)
+    else:
+        words = G.heritage_words(part)
+    if not words:
+        return Result("That is not written down beside the program on this PC, so I "
+                      "will not guess.", "heritage")
+    return Result(words, "heritage")
+
+
 def _run_menu_visibility(f: dict) -> Result:
     """"Hide the finance menu": no state here, no gate, no model. The reply is the
     same for every device; the route field tells each app what to apply."""
@@ -19660,6 +21659,28 @@ def _settings_waiting_line(setting) -> str:
     """
     return (f"A card is waiting for {_setting_label(setting)}, so approve it on your "
             f"phone or PC and it changes.")
+
+
+def _settings_tool_waiting_line(tool: str) -> str:
+    """The same ONE calm line for a carded TOOL switch in a Live turn (2026-11-07).
+
+    A tool switch ON goes through `jarvis_asks_first.request_tool_enable` - one
+    approval card plus Windows Hello - and Live speaks its answer, so the
+    setter's own card sentence is replaced by one line that says a card is
+    waiting and what it is for. Same rule as `_settings_waiting_line`: no card
+    id, no list, no question back, and no spoken "yes" anywhere.
+    """
+    name = str(tool or "that tool").replace("_", " ")
+    try:
+        import jarvis_settings_registry as R
+
+        names = R.tool_targets().get(tool) or ()
+        if names:
+            name = str(names[0])
+    except Exception:                        # noqa: BLE001 - the label is cosmetic
+        pass
+    return (f"A card is waiting to offer {name} to the AI model, so approve it "
+            f"on your phone or PC and it changes.")
 
 
 def _settings_row(key: str, kind: str = ""):
@@ -20041,6 +22062,17 @@ def _run_settings_bool(f: dict, peer, local, live: bool = False,
     setting = next((b for b in R.BOOL_SETTINGS if b.key == f["key"]), None)
     if setting is None:
         return Result(SETTINGS_MISSING, "settings_bool")
+    # A turn that asks for the value the switch ALREADY has is not a change:
+    # say so and write no receipt (2026-11-07, F13). The live audit measured
+    # "turn off anti-slop" when it was already off answering as if it had just
+    # been switched, and writing a before=false/after=false receipt whose undo
+    # could take back a later real change.
+    current = R.current_value(setting)
+    want_word = (getattr(setting, "on_word", "on") if f["on"]
+                 else getattr(setting, "off_word", "off"))
+    if current == want_word:
+        return Result(f"{_setting_label(setting)} is already {want_word}. "
+                      f"Nothing was changed.", "settings_bool")
     before = _setting_before(setting, f)
     # Read BEFORE the setter runs: a setting whose own module records its own
     # receipt (the Anti-Slop filter does) must not end up with two. The id that
@@ -20110,6 +22142,65 @@ def _run_settings_choice_help(f: dict) -> Result:
     if not options:
         return Result(f"{name} has no choices on this PC yet.", "settings_choice_help")
     return Result(f"For {name}, you can say: {options}.", "settings_choice_help")
+
+
+def _run_cloud_escalation_set(f: dict) -> Result:
+    """The standing cloud-escalation switch, through its OWN door (2026-11-07).
+
+    THE DOOR IS `jarvis_presets.cloud_escalate`, the exact call the Presets
+    menu's Cloud row and PR #1209's model tool make. It owns everything that
+    decides: ON raises ONE `change_own_config` card and writes nothing before
+    the owner's yes; OFF is instant; already on/off is a no-op; ON with no
+    cloud provider chosen refuses BEFORE a card, because a standing yes to a
+    service nobody picked cannot do anything. Nothing here copies, loosens or
+    re-decides any of that, and nothing here approves a card.
+
+    WHAT IT SAYS IS THE BODY'S OWN SENTENCE (`said`/`message`/`error`), because
+    this switch can spend money: a runner that filled in "Done" after a refused
+    or timed-out card would be the exact "it said it turned it on and it did
+    not" failure this fast path exists to end. `cloud_escalate` always carries
+    one, so its words are returned as they are; the fallbacks below are only
+    for an empty body, and the changed one is tied to `body["on"]` rather than
+    invented. A card that is still waiting is reported as waiting, never as on.
+    """
+    try:
+        import jarvis_presets as P
+    except Exception as exc:                # noqa: BLE001 - module absent
+        return Result("The cloud switch is not available on this PC "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "cloud_escalation_set")
+    try:
+        _code, body = P.cloud_escalate(on=(f.get("on") is True))
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result("The cloud switch could not be changed "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "cloud_escalation_set")
+    body = body if isinstance(body, dict) else {}
+    error = str(body.get("error") or "").strip()
+    if error:
+        return Result(error, "cloud_escalation_set")
+    said = (str(body.get("said") or "").strip()
+            or str(body.get("message") or "").strip())
+    pending = (body.get("waiting") is True
+               or (body.get("card") is True and body.get("changed") is not True
+                   and not body.get("outcome")))
+    if pending:
+        # Never "on" while the owner has not said yes: the switch is unchanged
+        # and the card is the only thing that can change it. The body's own
+        # sentence is kept, and the one honest line is added only when its words
+        # do not already say that a card is waiting.
+        if not re.search(r"wait|approv|card", said, re.I):
+            said = (said + " " if said else "") + (
+                "Waiting for your yes on the approval card on this PC. "
+                "Nothing has changed yet.")
+        return Result(said, "cloud_escalation_set")
+    if body.get("changed") is True:
+        if said:
+            return Result(said, "cloud_escalation_set")
+        # Said only when the body itself says the switch really moved.
+        return Result("Escalation is on now." if body.get("on") is True
+                      else "Escalation is off now.", "cloud_escalation_set")
+    return Result(said or "Nothing was changed.", "cloud_escalation_set")
 
 
 def _run_face_ask() -> Result:
@@ -20258,6 +22349,18 @@ def _run_settings_antislop_scope(f: dict, peer, local,
     name = str(f.get("scope") or "")
     want = bool(f.get("on"))
     before = R.antislop_scope_now(name)
+    # The FILTER's own switch decides whether any scope is doing anything. Read
+    # before the write so the answer cannot say "on" while the filter is off
+    # (the live audit's H6: "Anti-Slop on for code" with `enabled` false).
+    filter_on = _antislop_read_back("enabled")
+    if before is want:
+        if want and filter_on is not True:
+            return Result(f"The Anti-Slop filter itself is still off, so nothing is "
+                          f"being filtered yet; the {name} scope was already on for "
+                          f"when you turn the filter on. Nothing was changed.",
+                          "settings_antislop_scope")
+        return Result(f"Anti-slop is already {'on' if want else 'off'} for {name}. "
+                      f"Nothing was changed.", "settings_antislop_scope")
     since = _newest_receipt_id()
     out = R.set_antislop_scope(name, want, peer=peer, local=local)
     said = str(getattr(out, "said", "") or "").strip()
@@ -20289,7 +22392,16 @@ def _run_settings_antislop_scope(f: dict, peer, local,
                          for s in others)
     except Exception:
         also = ""
-    if also:
+    if filter_on is not True:
+        # Never claim the filter turned on when its own switch stayed off.
+        if want:
+            said = (f"The Anti-Slop filter itself is still off, so nothing is being "
+                    f"filtered yet. I set the {name} scope for when you turn the "
+                    f"filter on.")
+        else:
+            said = (f"The Anti-Slop filter is off, and the {name} scope is off too. "
+                    + (f"The other scopes are unchanged ({also})." if also else ""))
+    elif also:
         said = ((said + " ") if said else "") + f"The other scopes are unchanged ({also})."
     return Result(said, "settings_antislop_scope")
 
@@ -20580,15 +22692,22 @@ ANIMAL_MISSING = ("Your PC's Jarvis does not have the animal options yet - run "
 
 
 def _run_settings_tool(f: dict, peer, local,
-                       conversation: Optional[str] = None) -> Result:
-    """"Let the AI model use this" - whether a reading tool is offered to the
+                       conversation: Optional[str] = None,
+                       live: bool = False) -> Result:
+    """"Let the AI model use this" - whether a tool is offered to the
     model at all (jarvis_asks_first's [tools].enabled switch).
 
     The setter is the registry's own, which calls the module's route function:
     ON is the PC only, one card plus Windows Hello; OFF is instant. Since
     2026-11-03 a real change (in practice the instant OFF) leaves ONE undo
     receipt, with the before value read from the module that owns the list
-    (`reading_tool_now`)."""
+    (`reading_tool_now`).
+
+    `live` (2026-11-07) changes only the WORDING of a carded ON change's
+    answer, exactly like `_settings_said` does for a switch: Live speaks the
+    answer aloud, so a card waiting gets ONE calm line instead of the setter's
+    card sentence. The card, the tier, the PC-only refusal and the value are
+    all the setter's, unchanged."""
     import jarvis_settings_registry as R
     tool = str(f.get("tool") or "")
     on = bool(f.get("on"))
@@ -20606,6 +22725,8 @@ def _run_settings_tool(f: dict, peer, local,
             {"kind": "reading_tool", "key": f"reading_tool:{tool}", "value": on},
             f"{'Offered' if on else 'Stopped offering'} {names[0]} to the AI "
             f"model", since=since, label=label)
+    if live and getattr(out, "waiting", False):
+        return Result(_settings_tool_waiting_line(tool), "settings_tool")
     return Result(out.said, "settings_tool")
 
 
@@ -20755,11 +22876,37 @@ def _run_feature_state(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_state")
 
 
+def _setting_name_for_guide(key: str) -> str:
+    """The registry KEY an intent carries, in the words the guide answers by.
+
+    A SWITCH is asked about by the name its own registry row prints on the
+    Settings card: `jarvis_feature_guide.state()`/`how_to()` know rows and
+    settings by NAME, never by snake_case key. Passing the key answered 14 of
+    the 38 switches with "I do not have a feature called
+    \"lights_without_card\"" (the 2026-11-07 options-understanding audit's B4),
+    and showed the raw key to the owner.
+
+    A CHOICE keeps its key, deliberately: `jarvis_feature_guide.state()` answers
+    a choice key through `_choice_by_key` because a label like "the anti-slop
+    mode" folds onto the anti-slop SWITCH. Nothing is invented here - a switch's
+    name is the registry row's own first name, via `_setting_label`.
+    """
+    try:
+        import jarvis_settings_registry as R
+        key = str(key or "")
+        for bool_setting in getattr(R, "BOOL_SETTINGS", ()) or ():
+            if bool_setting.key == key:
+                return _setting_label(bool_setting)
+    except Exception:                       # noqa: BLE001 - no registry, no remap
+        pass
+    return str(key or "")
+
+
 def _run_feature_state_setting(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_state")
-    out = FG.state(f.get("key") or "")
+    out = FG.state(_setting_name_for_guide(f.get("key") or ""))
     return Result(str(out.get("words") or ""), "feature_state")
 
 
@@ -20775,7 +22922,7 @@ def _run_feature_howto_setting(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_howto")
-    out = FG.how_to(f.get("key") or "", bool(f.get("on")))
+    out = FG.how_to(_setting_name_for_guide(f.get("key") or ""), bool(f.get("on")))
     return Result(str(out.get("words") or ""), "feature_howto")
 
 
@@ -21086,6 +23233,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_measured_self(intent)
     if n == "self_setting_state":
         return _run_self_setting_state(intent)
+    # Its own code, from the map shipped beside the backend (2026-11-07): four
+    # fixed answers with no model and no write, so they are listed in
+    # READ_ONLY_INTENTS too - a private chat hands them to its own gate.
+    if n in _SELF_CODE_INTENTS:
+        return _run_self_code(intent)
     # The local calendar's own read, and the honest answers for abilities that
     # are off, built only in the apps, or not built at all (2026-10-31, pass
     # 11). Both are fixed sentences that read the real state: no model, no
@@ -21097,6 +23249,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_honest_chat(f)
     if n == "cloud_honesty":
         return _run_cloud_honesty(f)
+    # The cloud provider itself (2026-11-07, Q1/B6): the list and the
+    # "which one?" answer read only, and the change goes through
+    # `jarvis_presets.apply_cloud` - the SAME one `change_own_config` card the
+    # Presets Cloud row raises, so it is deliberately NOT in READ_ONLY_INTENTS.
+    if n == "cloud_provider_list":
+        return _run_cloud_provider_list()
+    if n == "cloud_provider_ask":
+        return _run_cloud_provider_ask()
+    if n == "cloud_provider_choose":
+        return _run_cloud_provider_choose(f)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "protection_apply":
@@ -21113,6 +23275,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_shortcuts(n, f, _client_surface(peer, local, client_surface))
     if n in _REMINDER_INTENTS:
         return _run_reminders(n, _client_surface(peer, local, client_surface))
+    if n in _ADDING_INTENTS:
+        # "how do I add a key / a model / a second PC / Telegram" (2026-11-07,
+        # the options-understanding audit's B2): one fixed sentence naming the
+        # real feature, read-only, listed in READ_ONLY_INTENTS.
+        return _run_adding_howto(n)
     if n in _PLUGIN_INTENTS:
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
     if n == "tool_profile":
@@ -21258,6 +23425,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_open(f)
     if n == "settings_help":
         return _run_settings_help()
+    if n == "settings_explain_all":
+        return _run_settings_explain_all()
+    if n == "self_knowledge":
+        return _run_self_knowledge(f)
+    if n == "settings_where":
+        return _run_settings_where(f)
+    if n == "recent_changes":
+        return _run_recent_changes()
+    if n == "heritage":
+        return _run_heritage(f)
     if n == "menu_visibility":
         return _run_menu_visibility(f)
     if n == "settings_bool":
@@ -21277,6 +23454,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_choice_bad(f)
     if n == "settings_choice_help":
         return _run_settings_choice_help(f)
+    # The standing cloud-escalation switch (2026-11-07): the fast path's own
+    # intent, answered through jarvis_presets.cloud_escalate - the same card the
+    # Presets menu raises. The runner decides nothing and approves nothing.
+    if n == "cloud_escalation_set":
+        return _run_cloud_escalation_set(f)
     if n == "face_ask":
         return _run_face_ask()
     if n == "settings_only":
@@ -21319,7 +23501,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_asks_first(f, peer, local,
                                        conversation=conversation)
     if n == "settings_tool":
-        return _run_settings_tool(f, peer, local, conversation=conversation)
+        return _run_settings_tool(f, peer, local, conversation=conversation,
+                                  live=live)
     # Explaining a feature (2026-10-20). `feature_switch` goes through
     # _run_settings_bool below, which calls the SAME BoolSetting.set every other
     # spoken setting change uses - the setting's own card rule is unchanged.
@@ -21438,6 +23621,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_tools_asking(intent)
     if n == "connected_list":
         return _run_connected(intent)
+    if n == "github_self":
+        return _run_github_self(f)
+    if n == "accounts_answer":
+        return _run_accounts_answer(f)
     if n == "self_refresh":
         return _run_self_refresh(intent)
     # The six subsystems that only the model answered before (2026-11-04).
@@ -21451,6 +23638,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_how_memory(intent)
     if n == "how_jobs":
         return _run_how_jobs(intent)
+    # "Can you change your own settings by voice through Jarvis Live?"
+    # (2026-11-07, LP-3): one fixed, true sentence about the route Live and
+    # typed chat share. Read-only, no card, no write.
+    if n == "how_live_settings":
+        return _run_how_live_settings(intent)
     # The ten pair rules (2026-11-04): read two real states and say what they do
     # together. Read-only, no card, no model.
     if n == "pair_answer":
@@ -21662,6 +23854,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_screen(intent, peer, local)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
+    if n.startswith("repo_watch"):
+        # The per-repository watcher (2026-11-07): its own store, its own
+        # cadence, and the scheduler's own repeating job + one card.
+        return _run_repo_watch(intent, sched, now)
     if n == "project_log":
         return _run_project_log(f, now)
     if n.startswith("focus_"):
@@ -22015,8 +24211,19 @@ _PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plu
 
 #: The reminders capability answers (2026-10-31): fixed words, no card.
 _REMINDER_INTENTS = frozenset({
+    # "what am I watching?" (2026-11-07) reads jarvis_watch.repo_status() and
+    # changes nothing, so it must not take away what "cancel that" would undo.
+    "repo_watch_list",
     "reminder_capability", "reminder_popup", "reminder_sound", "reminder_notify",
     "reminder_closed", "reminder_howto",
+})
+
+#: The "how do I add a key / a model / a second PC / Telegram" answers
+#: (2026-11-07, the options-understanding audit's B2): fixed words naming the
+#: real feature, no card, no write, no state read and no model.
+_ADDING_INTENTS = frozenset({
+    "adding_key_howto", "adding_model_howto", "adding_second_pc_howto",
+    "adding_telegram_howto",
 })
 
 READ_ONLY_INTENTS = frozenset({
@@ -22048,10 +24255,26 @@ READ_ONLY_INTENTS = frozenset({
     "read_link_q",
     "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
+    # The cloud provider VIEW (2026-11-07, Q1/B6): the six, which key is saved
+    # and which one is chosen. It reads the PC's own state and changes nothing,
+    # so it must not clear what "cancel that" would take back. The CHANGE
+    # (`cloud_provider_choose`) is deliberately not here - it raises the one
+    # `change_own_config` card.
+    "cloud_provider_list", "cloud_provider_ask",
+    # The "how do I add a key / a model / a second PC / Telegram" answers
+    # (2026-11-07, the options-understanding audit's B2): fixed words that name
+    # the real feature and change nothing, so they must not clear "cancel that".
+    "adding_key_howto", "adding_model_howto", "adding_second_pc_howto",
+    "adding_telegram_howto",
     # A quote from the local corpus (2026-11-05): reads a file beside the
     # backend, writes nothing, calls no model and raises no card - so it must
     # not take away what "cancel that" would undo.
     "quote_now", "quote_list",
+    # Its own code (2026-11-07): the four answers read `jarvis-self-code.json`
+    # beside the backend - a generated file, no code executed, no card, no
+    # route, no model, nothing written - so none may clear "cancel that".
+    "self_code_overview", "self_code_lookup", "self_code_recent",
+    "self_code_repo",
     "bulk", "chat_tag", "clock_both", "control_ask", "control_bad", "date_today",
     # "connect my calendar" / "set up a calendar bridge for me" (2026-10-28): a
     # fixed answer that reads this PC's own settings and connects nothing, so it
@@ -22129,6 +24352,10 @@ READ_ONLY_INTENTS = frozenset({
     # changing or restarting anything - so none may take back what "cancel
     # that" would undo.
     "tools_inventory", "tools_asking", "connected_list", "self_refresh",
+    # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
+    # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
+    # page) and raises no card, so none may take away what "cancel that" undoes.
+    "github_self", "accounts_answer",
     # The six subsystems that only the model answered (2026-11-04): each reads
     # a real state - the preset/hardware readers, the speed record, the memory
     # store, the disk reader, the two schedulers - and changes nothing, so none
@@ -22136,6 +24363,10 @@ READ_ONLY_INTENTS = frozenset({
     # two-setting warning are read-only for the same reason: the warning CHANGES
     # NOTHING, it only says the interaction and asks for one setting at a time.
     "how_running", "how_context", "how_fast", "how_memory", "how_jobs",
+    # "Can you change your own settings by voice through Jarvis Live?"
+    # (2026-11-07, LP-3): a fixed sentence about the code's own route. It reads
+    # nothing and writes nothing, so it must not take away a "cancel that".
+    "how_live_settings",
     "pair_answer", "settings_pair_note",
     # Jarvis's own measured facts and the six hard safety refusals (2026-11-06):
     # every one reads a local source or is fixed words, opens no card and writes
@@ -22150,6 +24381,11 @@ READ_ONLY_INTENTS = frozenset({
     # change nothing, so neither may take back what "cancel that" would undo.
     "two_entity_answer", "focus_presets",
     "settings_choice_help", "settings_help", "settings_not_by_asking", "settings_only",
+    # Self-knowledge answers (2026-11-07): all four read fixed words or the
+    # shipped record and write nothing, so "cancel that" must not lose its
+    # record to them.
+    "recent_changes", "self_knowledge", "settings_explain_all", "settings_where",
+    "heritage",
     "settings_browser_mode_bad",
     # Reading the Anti-Slop filter (2026-10-28): "is anti-slop on?" changes
     # nothing, so "cancel that" must not lose its record to it. Its change and

@@ -13478,7 +13478,7 @@ the REST route does, never a copy of its logic:
 | Reading phone notifications | "turn on/off phone notifications" | `jarvis_phone_notifications.request()` (§61) |
 | Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
-| Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
+| Offering any tool to the AI model (all 60 switchable tools since 2026-11-07) | "let/don't let the AI model read my calendar", "turn on/off the browser control tool", "switch the calculator tool off" | `jarvis_asks_first.handle_tools()` (§43) - the names are generated from `TOOLS_SWITCHABLE` by `tools/gen_tool_targets.py`; the "turn on/off <name> tool" shape is closed-world (the word "tool" and a whole known alias), so a device sentence keeps its own feature |
 | Animal options (2026-09-28) | "keep the animal still", "stop the animal's nodding", "turn on the sun and moon", "turn off the weather", "use Open-Meteo for the weather", "make the animal sharper" | `jarvis_animal.set_switch()`, `jarvis_sky.handle_post()`; sharpness and frame rate go back in X-Jarvis-Route for the asking device - §93.3 |
 | How much Jarvis may interrupt you (2026-10-08) | "speak up 5 times a day", "let jarvis speak up 2 times a day", "speak up less", "speak up more", "the brief at 8pm", "the digest arrives at 7 in the morning" | `jarvis_arbiter.change()` - the same function the route calls; the raise gets the same ONE card - §123.4 |
 
@@ -13543,6 +13543,33 @@ jumps there. Everything `jarvis_quick.py` already answers with its own
 grammar (timers, reminders, focus, media, "tell me when", the to-do list,
 web search's provider, manner, ...) is unchanged; this feature adds no
 second version of any of it.
+
+**The Live door is the same door, and every one of these is reachable through
+it (2026-11-07).** Jarvis Live answers through the same `/api/chat` route,
+agent, gate and approval cards - it is a typed turn with `live: true` and
+`provenance: "voice"` on the newest message - so no setting has a separate
+Live path and none may be missing from one. The audit that added this paragraph
+found the gaps were in the MATCHER, not the plumbing: only 4 of the 60
+switchable tools could be named (now all 60), the owner's own sentence "turn on
+the browser control tool" was not a shape any grammar knew, and the model
+denied that Live could change settings at all (now answered deterministically by
+`jarvis_quick.py`'s `how_live_settings`, read-only). The only Live difference in
+a settings answer is WORDING, and it is the same ONE calm line every carded
+setting already gets: Live speaks the reply, so a waiting card gets *"A card is
+waiting for <setting>, so approve it on your phone or PC and it changes."* - no
+card id, no list, no question back, and no spoken yes (the card is tapped;
+there is no spoken-approval surface anywhere, §18). `backend/test_live_parity.py`
+pins the door and the tool list; `backend/test_live_settings_parity.py` derives
+every `switch:`/`choice:`/`limit:`/`asks_first:`/`tool:` key from
+`jarvis_settings_registry.capability_keys()` (38 + 10 + 1 + 7 + 60 = 116
+options), drives each sentence typed and as a Live turn against a recorder
+standing in for the setter, and fails if a future option is added without both
+doors. One finding from that pass is reported and deliberately not fixed here:
+the route hands the answering turn a request that contains the PC's own
+recalled-facts system message, which `jarvis_agent._TurnWatch.app_context` reads
+as "the app sent extra text" and `_settings_turn_is_shaped` then refuses a
+model-issued `change_setting` for - identical for typed chat, not a Live or taint
+defect (`docs/LIVE-DESIGN.md` §3.8b has the evidence).
 
 ### 58.2.1 Named choices - "set the voice to heart", "change your face to Spiral"
 (2026-10-22; the face added 2026-10-26)
@@ -26537,6 +26564,79 @@ stub prompt, all ten shapes in every state, no key in any answer, no model
 call, no over-capture). A chosen provider whose key is not saved, whose monthly
 limit is unset, or whose model cannot be used says so rather than pretending.
 
+### 145.1a The provider you choose is the provider that answers (added 2026-11-07)
+
+The owner's Q1/B6 ruling, after the 2026-11-07 options-understanding audit
+measured the defect in the live code. `jarvis_chatbot_api.lane_service()` was a
+hard-coded `("deepseek_api", "deepseek-flash")`: the Presets Cloud row, the
+approval card and `/api/reach` named the chosen service while the request still
+went to `api.deepseek.com`. Since this change the ONE lane resolves its service
+**at request time** from `cloud-choice.json` (`jarvis_presets.cloud_chosen()`);
+`DEFAULT_LANE` (DeepSeek, the owner's 2026-10-06 choice) is only the fallback
+when **no** provider is chosen. That single read puts the chosen provider behind
+the key lookup (`lane_key`), the host and URL (`cloud_lane`), `/api/reach`'s
+cloud row (`lane_status`), the one `change_own_config` card's words
+(`_cloud_card_text`, `_escalate_card_text`) and the chat answers
+(`cloud_state_line` and the key question, which now names the CHOSEN provider's
+company and key state instead of hard-wired DeepSeek). A chosen Mistral, OpenAI,
+Groq, xAI or OpenRouter therefore can never send to DeepSeek - and a chosen
+provider whose key is not saved keeps the old behaviour: no lane is offered, and
+the PC's own sentence says why. A lane name this module does not know resolves
+to the chosen service too (one cloud service per PC), and only to
+`DEFAULT_LANE` while no choice is recorded. **There is no Anthropic service in
+this tree**; the six are openai, deepseek, mistral, xai, openrouter and groq.
+
+**The fixed chat answers: see the six, and change the choice.**
+`cloud_provider_list` (READ-ONLY) answers "which cloud providers can I use?",
+"what cloud providers are supported", "do you support <service>", "can I use
+<service>", "can I use two cloud providers" and "which provider is the cloud
+preset using" from `jarvis_presets.cloud_providers()`/`cloud_chosen()`: the six
+by their own company and short name, whether each key is saved (presence only -
+never a key or a fragment), which one is chosen, and the one-at-a-time rule.
+`cloud_provider_ask` (READ-ONLY) answers "change the cloud provider" with no
+service named: which six there are, the exact sentence that works, and that ONE
+card asks first. `cloud_provider_choose` - "switch my cloud provider to
+mistral", "switch to mistral", "use mistral instead of deepseek", "choose
+openrouter as my cloud provider" - calls
+`jarvis_presets.apply_cloud(provider=...)`, the SAME function the Presets Cloud
+row calls: a service this PC cannot use is refused BEFORE any card, ONE
+`change_own_config` card is raised, and `cloud-choice.json` is written only
+after that yes. It is a PC action like the row itself - the phone still only
+reads the cloud state - and the answer never claims a change the route did not
+make.
+
+Tests: `backend/test_options_understanding.py` (the chosen-provider proof for
+all six patched in memory, the key answer naming the chosen provider, the chat
+door's `change_own_config` card and its refusal-before-card, and
+reach/card/answer/lane agreement after a chosen Mistral),
+`backend/test_chatbot_api.py` (the lane's transport).
+
+**Q7 P0 - the privacy backstop is harder to get past (2026-11-07).**
+`jarvis_router._PRIVATE_TERMS` gains home address, street address, mailing
+address, postal address, "my/our address" and phone number (it already held
+ssn, social security, passport, driver's licence, routing number, credit card,
+bank words and "medical"). Its old `\bdiagnos\w*` was too broad and is narrowed
+to MEDICAL contexts - `medical diagnosis`, `diagnosed with <condition>`, and the
+owner's or a family member's possessive ("my diagnosis", "my son's diagnosis") -
+so a technical prompt such as "diagnose this test failure", "the diagnostic
+logs" or "root-cause diagnosis of the crash" can escalate normally again. The
+health words further down the list still catch a condition named without the
+word "diagnosis". A false match only keeps a question local (quality), a miss
+sends words to a cloud model (privacy), so the list errs toward local.
+Tests: `backend/test_router_private_terms.py`.
+
+**Q7 - auto-escalation semantics (kept, and now pinned).** The default when the
+standing cloud-escalation switch is OFF is detect-and-ask: a hard question is
+only OFFERED (gate `"offer"`, one card, `auto: false`). When the owner turns the
+standing switch ON through its own `change_own_config` card, the complexity
+router may auto-escalate (`auto: true`) **only** a prompt that passes every
+gate above the yes: Lockdown, a tainted conversation, a picture, the screen's
+words, an attached file, a private word, a pasted secret, complexity under the
+threshold, a spent budget, and a PC with no lane offered. The switch waives the
+per-question yes and nothing else. Tests:
+`backend/test_options_understanding.py` (every gate driven with the switch ON
+and OFF) and `backend/test_cloud_escalate_setting.py`.
+
 ### 145.2 What a cloud answer is corrected with, and `cloud_refused` (added 2026-10-28)
 
 From the 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`, H1 and M1). Two things changed about a cloud turn, and **no existing key moved or changed meaning** - the header gains ONE key, and only when it applies.
@@ -33971,7 +34071,20 @@ is a read). Origin and token checked exactly like every other route.
 Every row carries `at`, `source`, `thread_key`, `outcome`, `reason_code` and
 `preview_text`; the rest is for reading the log later.
 
-- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`.
+- `source` is one of `github_pr_ci`, `github_notifications`, `repo_check`, `github-watch-repos` (the per-repository watcher, 2026-11-07).
+- A **per-repository watch** (2026-11-07) writes the same row shape with
+  `source` = `github-watch-repos` and `thread_key` `repo:<owner/name>` (or
+  `follow:<topic>` for a followed topic). Its `reason_code` is one of
+  `repo_new_release`, `repo_new_commit`, `repo_new_issue`, `repo_new_pr`,
+  `repo_ci_changed`, `repo_new_repo`, `repo_observe_shadow`,
+  `repo_frequency_off`, `repo_digest_due`, `repo_instant_due`,
+  `repo_baseline`, `repo_poll_skipped` or `repo_unauthenticated_public` - every
+  one of them a key of the same closed `WATCH_REASONS` set. `mode` is the
+  watch's cadence (`instant`, `daily`, `weekly`, `off`) or `observe`; the extra
+  `repo`, `freq` and `url` fields are for reading the log later. These rows are
+  written by the same store this route already serves, so no new route was
+  added: `GET /api/watch/repos` does not exist, and the watch itself is
+  controlled from chat or Live (`backend/test_watch_repos.py`). The repeating half is the SCHEDULER's, not a new route either: starting a watch calls `Scheduler.add_repeat` for the scheduler kind `repo_watch`, so the row appears in the existing schedule list (`GET /api/schedule`), its ONE `schedule_repeat` card is the approval, and `DELETE`-equivalent scheduler act removes it with the watch.
 - `thread_key` is the batch: `pr:<number>:<head sha[:9]>` for a pull request,
   `notification:<id>`, `repo:<name>`.
 - `outcome` is `would_notify` (worth telling him), `ignored` (the batch rule
@@ -34939,7 +35052,7 @@ Without a saved token every one of the six answers in plain words - *"Jarvis has
 
 ### 190.4 What Jarvis will never do with GitHub
 
-**No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing.
+**No merge, no push, no commit, no delete, no close, no file write.** There is no planner, no endpoint and no tool for any of them, and the absence is the control. A person asking gets one plain sentence (`jarvis_github.NEVER_WORDS`) that names what Jarvis cannot do and why - a mistake in any of those cannot be undone - and every action tool's own description carries the same clause, so the model says it rather than guessing. **The refusal is deterministic now (2026-11-07):** "can you merge a pull request?" is answered by the `github_self` chat intent (§190.8) from `NEVER_WORDS`, and the answer says out loud that there is no merge action and no merge card, even with approval - the model used to answer "no" and then offer a merge card that does not exist.
 
 ### 190.5 The wording, the token and the failures
 
@@ -34947,7 +35060,7 @@ The card prints the **literal address** of every request and, for a comment or a
 
 ### 190.6 Switching it on
 
-All six ship **SWITCHED OFF** - they are not in `[tools].enabled`, exactly like `github_search`. Add `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` to that list, and save a token by saying "connect GitHub". The Reach page shows each one as off with the line that turns it on until then.
+All six ship **SWITCHED OFF**. Settings, **What asks first**, under **"Let the AI use this"** (group **"Jarvis's own tools"**) holds **one switch per tool** - `github_list`, `github_read_file`, `github_ci_status`, `github_comment`, `github_open_issue` and `github_rerun_workflow` - and turning one ON from the PC is one card plus Windows Hello while OFF is instant from either app (`POST /api/asks_first/tools`; the owner's decision of 2026-11-04). Adding the name to `[tools].enabled` by hand still works and is what the switch writes. The Reach page lists each one as off until then. The same page has the switches for `github_search` (GitHub research) and every other reading tool.
 
 `backend/github-tools.patch` gives `jarvis_gate.py` the four actions and the six `_TOOL_ACTIONS` entries - `jarvis_gate.py` is not in `$SHIPPED`, so a fresh base never reaches the owner's own gate and only a patch does.
 
@@ -34959,6 +35072,17 @@ writer of `jarvis_gate.py` (`unknown-risk-approvable.patch`) so neither of
 those reversals is disturbed**. The same facts are held by `test_card_words.py`, `test_reach.py`, `test_short_tool_list.py`, `test_asks_first.py`, `test_owner_check.py`, `test_gate_tool_actions.py`, `test_gate_risk_rows.py`, `test_installed_stand_in.py` and `test_tool_contract.py`.
 
 **One-sided on purpose:** there is no screen for this in either app, and `tools/check_parity.py` is unchanged because no route was added. The ability is in both apps' chats (the tools run on this PC, and either app's chat is the same turn); a GitHub screen would be deep configuration, and `docs/ARCHITECTURE.md` §8 carries the reason.
+### 190.8 Asking about it in chat, and the catalogue row (2026-11-07)
+
+The tool-capability audit of 2026-11-07 drove these questions through the live chat and found the model answering them: it denied having a public repository, offered a merge card that does not exist, said nothing was needed to read the owner's repos, and answered "how do I disconnect it?" with "you haven't told me what 'it' is yet". The surface was built; the self-knowledge was not. Two things fix that, and both are model-free:
+
+* **`features/features.json` has ONE `connected-github` row** - id `connected-github`, title "Read and act on your own GitHub" - naming the six tools, `github_search`, the scheduled `watch_github` job, the three carded actions and the never-list, with `gate` = the four real `ask` actions. It is the row the Features pages, the Feature Guide and the deterministic capability answer all read, so "what can you do with my GitHub?" now names the connected surface instead of only the two 2026-09-30 research features.
+* **Two read-only chat intents in `jarvis_quick.py`:**
+  * `github_self` (shapes `repo`, `ci`, `tools`, `needs`, `never`, `merge`, `asks`, `action`) answers "what is your GitHub repository?" / "where does your code live?" with **`darknight11ish/Epic-Jarvis`**, reads `jarvis_github.connected()` for the token state, lists the six tools plus `github_search` and `watch_github`, answers "what do you need before you can read my repos?" (a token + the tools switched on), "what can't you do on GitHub?" (the never-list), the four `ask` rows from `jarvis_asks_first.view()`, and refuses merge/push/commit/close/delete/approve with `NEVER_WORDS` + "there is no merge action and no merge card".
+  * `accounts_answer` (shapes `list`, `abilities`, `disconnect`) is the door `jarvis_accounts.sentence()` / `state_words()` never had: "what accounts do I have?", "what abilities does my GitHub connection have?" and "how do I disconnect my GitHub?" (the row's own `remove` sentence) are answered from the same values `GET /api/accounts` serves. `probe=False` - no socket is opened by a chat answer.
+
+`GET /api/accounts`'s GitHub row is corrected in the same change: six abilities (the three reads sharing `github_inspect`, plus `github_comment`, `github_open_issue`, `github_rerun_workflow`, and the existing `github_read`/`research_authenticated` watch pair), with its limit saying "Read AND act, each with its own card", and the truthful never-list. `test_github_self_knowledge.py` holds all of it; `test_self_answers.py` and `test_feature_guide.py` hold the chat and guide cases.
+
 ## 191. Hands-free mode: every card read out, one spoken answer, and a text message the phone sends (2026-11-04)
 
 The owner's own request of 2026-11-04:

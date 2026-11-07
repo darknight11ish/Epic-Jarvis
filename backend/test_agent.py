@@ -598,15 +598,17 @@ def _shipped_tiers():
     return out
 
 
-def t_github_search_resolves_to_an_auto_tier_in_the_shipped_config():
+def t_github_search_resolves_to_an_ask_tier_in_the_shipped_config():
     """The finding this guards: github_search -> jarvis_research_run ->
-    web_research, which the shipped toml sets to "auto". If this ever stops
-    being true the test below still holds; this one just pins the fact that
-    made the code check necessary."""
+    web_research. It shipped "auto" while `NEEDS_A_PERSON` was the only guard,
+    so the live "What asks first" page showed "Always asks" beside a tier of
+    "auto" and a developer diagnostic (measured 2026-11-07). Since 2026-11-07
+    the shipped line itself is "ask" - the file now says what the belt does -
+    and this pins both halves: the resolution and the honest tier."""
     tiers = _shipped_tiers()
     action, tier = tiers["github_search"]
     check("github_search resolves to web_research", action == "web_research", action)
-    check("web_research is 'auto' in the shipped config", tier == "auto", tier)
+    check("web_research is 'ask' in the shipped config", tier == "ask", tier)
 
 
 def _valid_args(tname):
@@ -1654,7 +1656,7 @@ if __name__ == "__main__":
                t_file_read_rejects_reserved_windows_device_names,
                t_tool_content_never_slices_a_json_string_mid_structure,
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
-               t_github_search_resolves_to_an_auto_tier_in_the_shipped_config,
+               t_github_search_resolves_to_an_ask_tier_in_the_shipped_config,
                t_this_run_can_read_the_shipped_tier_table,
                t_every_outbound_tool_is_refused_unless_a_person_approved,
                t_a_tool_let_through_without_asking_says_plain_words,

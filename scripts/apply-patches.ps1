@@ -2294,6 +2294,7 @@ $SHIPPED = @(
                                  # WinError 32 "schedule.json is in use" failure, fixed by hand three times)
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
+    'jarvis_recent_changes.py'   # "what changed in your last update?" answered from the shipped record (2026-11-07) - generated from CHANGELOG.md + changelog.d/ because the live folder has no CHANGELOG.md; jarvis_quick.py and jarvis_agent.py read it, no patch
     'jarvis_settings_registry.py' # "open"/"adjust" any setting by voice or chat, 2026-09-27; jarvis_quick.py (above) calls it, no patch of its own
     'jarvis_setup.py'            # the owner's setup questionnaire (2026-10-20): a guided path through the settings that already exist, through the registry's own setters; setup.patch adds the three routes, nothing new is on by itself
     'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch
@@ -3110,6 +3111,19 @@ $SHIPPED = @(
     # The corpus file jarvis_quotes.py reads at import (2026-11-05): a data file
     # shipped beside the module, so the base carries it too.
     'quotes_corpus.json'
+    # The self-code map (jarvis_self_code.py and jarvis-self-code.json,
+    # 2026-11-07; the owner's ask: "jarvis should understand every major part of
+    # its own code that can be viewed on the jarvis github main branch"). A
+    # READER shipped whole plus the JSON map beside it (BESIDE in
+    # tools/gen_base_from_backend.py), generated from the deployed tree by
+    # tools/gen_self_code_map.py. The reader reads that one file beside itself:
+    # no git, no network, no write, no model, no route and no gate action. The
+    # four chat intents are the shipped jarvis_quick.py's, so this adds no patch
+    # to jarvis_hud.py. The same two entries, in the same position, are in
+    # backend/_where.py's SHIPPED list. They sit BEFORE jarvis_bench.py, which
+    # stays LAST.
+    'jarvis_self_code.py'
+    'jarvis-self-code.json'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

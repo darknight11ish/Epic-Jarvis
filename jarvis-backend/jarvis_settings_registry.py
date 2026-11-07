@@ -1476,24 +1476,121 @@ def set_asks_first(action: str, ask: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
-# --- offering a reading tool to the AI model at all (jarvis_asks_first.py) -
-
+# --- offering a tool to the AI model at all (jarvis_asks_first.py) ----------
+#
+# SPOKEN NAMES FOR EVERY SWITCHABLE TOOL (2026-11-07, the live-parity audit's
+# H7/LP-2). This table used to name the four reading tools alone, so 56 of the
+# 60 switches Settings draws could not be reached by asking: measured, "Turn on
+# the browser control tool." went to the model in typed chat and got an
+# outside-text refusal in Jarvis Live. The table is GENERATED from
+# `jarvis_asks_first.TOOLS_SWITCHABLE` between the two markers below by
+# `tools/gen_tool_targets.py` - do not edit the block by hand; run that tool
+# (its `--check` mode fails the build when a tool is added, renamed or removed
+# and the table was not regenerated).
+#
+# THE CARDS ARE UNCHANGED. This is only a NAME table: every switch still runs
+# through `jarvis_asks_first.request_tool_enable` - ON is the PC only, one
+# approval card plus Windows Hello; OFF is instant. Nothing here approves or
+# loosens anything.
+#
+# THE CLOSED-WORLD RULE, and the whole safety of the sentences that read this
+# table: `find_tool_target` matches a WHOLE alias and returns None otherwise,
+# so a sentence naming no switchable tool falls through untouched. The tool
+# grammar in jarvis_quick.py also demands the word "tool" in the sentence, so
+# "turn off the kitchen light" and "turn off the timer" are still other
+# features' (or the model's) and are never read as a tool switch
+# (backend/test_settings_registry.py and backend/test_live_settings_parity.py
+# pin that).
+# BEGIN GENERATED: tool target names (tools/gen_tool_targets.py)
 _TOOL_TARGETS = {
-    "calendar_read": ("the calendar tool", "calendar", "my calendar"),
-    "email_read": ("the email tool", "email", "my email"),
-    "notes_search": ("the notes tool", "notes", "my notes"),
-    "home_read": ("the home status tool", "home status"),
+    'calendar_read': ('the calendar tool', 'calendar', 'my calendar', 'the calendar read tool', 'calendar read tool', 'the calendar read', 'calendar read'),
+    'notes_search': ('the notes tool', 'notes', 'my notes', 'the notes search tool', 'notes search tool', 'the notes search', 'notes search'),
+    'append_obsidian_daily': ('the append obsidian daily tool', 'append obsidian daily tool', 'the append obsidian daily', 'append obsidian daily', 'obsidian daily note', 'obsidian note'),
+    'create_joplin_note': ('the create joplin note tool', 'create joplin note tool', 'the create joplin note', 'create joplin note', 'joplin note'),
+    'append_logseq_journal': ('the append logseq journal tool', 'append logseq journal tool', 'the append logseq journal', 'append logseq journal', 'logseq journal'),
+    'set_timer': ('the set timer tool', 'set timer tool', 'the set timer', 'set timer', 'timer'),
+    'set_reminder': ('the set reminder tool', 'set reminder tool', 'the set reminder', 'set reminder', 'reminder'),
+    'todo_add': ('the todo add tool', 'todo add tool', 'the todo add', 'todo add'),
+    'todo_done': ('the todo done tool', 'todo done tool', 'the todo done', 'todo done'),
+    'coming_up': ('the coming up tool', 'coming up tool', 'the coming up', 'coming up'),
+    'protect_from_jarvis': ('the protect from jarvis tool', 'protect from jarvis tool', 'the protect from jarvis', 'protect from jarvis'),
+    'github_search': ('the github search tool', 'github search tool', 'the github search', 'github search'),
+    'send_file_to_phone': ('the send file to phone tool', 'send file to phone tool', 'the send file to phone', 'send file to phone', 'file to phone'),
+    'email_check': ('the email check tool', 'email check tool', 'the email check', 'email check'),
+    'send_email': ('the send email tool', 'send email tool', 'the send email', 'send email'),
+    'draft_email': ('the draft email tool', 'draft email tool', 'the draft email', 'draft email'),
+    'tidy_inbox': ('the tidy inbox tool', 'tidy inbox tool', 'the tidy inbox', 'tidy inbox'),
+    'home_read': ('the home status tool', 'home status', 'the home read tool', 'home read tool', 'the home read', 'home read'),
+    'home_control': ('the home control tool', 'home control tool', 'the home control', 'home control'),
+    'my_spending': ('the my spending tool', 'my spending tool', 'the my spending', 'my spending', 'spending summary', 'spending'),
+    'retirement_whatif': ('the retirement whatif tool', 'retirement whatif tool', 'the retirement whatif', 'retirement whatif'),
+    'shell_exec': ('the shell exec tool', 'shell exec tool', 'the shell exec', 'shell exec'),
+    'control_computer': ('the control computer tool', 'control computer tool', 'the control computer', 'control computer'),
+    'control_phone': ('the control phone tool', 'control phone tool', 'the control phone', 'control phone'),
+    'browser_control': ('the browser control tool', 'browser control tool', 'the browser control', 'browser control'),
+    'read_web_page': ('the read web page tool', 'read web page tool', 'the read web page', 'read web page', 'one web page', 'web page'),
+    'connect_account': ('the connect account tool', 'connect account tool', 'the connect account', 'connect account'),
+    'rea_investigate': ('the rea investigate tool', 'rea investigate tool', 'the rea investigate', 'rea investigate'),
+    'calculator': ('the calculator tool', 'calculator tool', 'the calculator', 'calculator'),
+    'memory_search': ('the memory search tool', 'memory search tool', 'the memory search', 'memory search'),
+    'file_read': ('the file read tool', 'file read tool', 'the file read', 'file read'),
+    'web_search': ('the web search tool', 'web search tool', 'the web search', 'web search'),
+    'my_files': ('the my files tool', 'my files tool', 'the my files', 'my files'),
+    'propose_plan': ('the propose plan tool', 'propose plan tool', 'the propose plan', 'propose plan'),
+    'change_setting': ('the change setting tool', 'change setting tool', 'the change setting', 'change setting'),
+    'feature_guide': ('the feature guide tool', 'feature guide tool', 'the feature guide', 'feature guide'),
+    'goals_list': ('the goals list tool', 'goals list tool', 'the goals list', 'goals list'),
+    'goal_add': ('the goal add tool', 'goal add tool', 'the goal add', 'goal add'),
+    'goal_progress': ('the goal progress tool', 'goal progress tool', 'the goal progress', 'goal progress'),
+    'goal_done': ('the goal done tool', 'goal done tool', 'the goal done', 'goal done'),
+    'conversation_find': ('the conversation find tool', 'conversation find tool', 'the conversation find', 'conversation find'),
+    'conversation_open': ('the conversation open tool', 'conversation open tool', 'the conversation open', 'conversation open'),
+    'phone_apps': ('the phone apps tool', 'phone apps tool', 'the phone apps', 'phone apps'),
+    'plugin_list': ('the plugin list tool', 'plugin list tool', 'the plugin list', 'plugin list'),
+    'plugin_switch': ('the plugin switch tool', 'plugin switch tool', 'the plugin switch', 'plugin switch'),
+    'pack_list': ('the pack list tool', 'pack list tool', 'the pack list', 'pack list'),
+    'pack_inspect': ('the pack inspect tool', 'pack inspect tool', 'the pack inspect', 'pack inspect'),
+    'pack_install': ('the pack install tool', 'pack install tool', 'the pack install', 'pack install'),
+    'pack_remove': ('the pack remove tool', 'pack remove tool', 'the pack remove', 'pack remove'),
+    'send_text_message': ('the send text message tool', 'send text message tool', 'the send text message', 'send text message'),
+    'refresh_abilities': ('the refresh abilities tool', 'refresh abilities tool', 'the refresh abilities', 'refresh abilities'),
+    'self_portrait': ('the self portrait tool', 'self portrait tool', 'the self portrait', 'self portrait'),
+    'setup_quiz': ('the setup quiz tool', 'setup quiz tool', 'the setup quiz', 'setup quiz'),
+    'github_list': ('the github list tool', 'github list tool', 'the github list', 'github list'),
+    'github_read_file': ('the github read file tool', 'github read file tool', 'the github read file', 'github read file'),
+    'github_ci_status': ('the github ci status tool', 'github ci status tool', 'the github ci status', 'github ci status'),
+    'github_comment': ('the github comment tool', 'github comment tool', 'the github comment', 'github comment'),
+    'github_open_issue': ('the github open issue tool', 'github open issue tool', 'the github open issue', 'github open issue'),
+    'github_rerun_workflow': ('the github rerun workflow tool', 'github rerun workflow tool', 'the github rerun workflow', 'github rerun workflow'),
+    'approval_policy': ('the approval policy tool', 'approval policy tool', 'the approval policy', 'approval policy'),
+    'email_read': ('the email tool', 'email', 'my email'),
 }
+# END GENERATED: tool target names (tools/gen_tool_targets.py)
 
 
 def tool_targets() -> dict:
     return dict(_TOOL_TARGETS)
 
 
+_PREFERRED_TOOL_TARGETS = ("calendar_read", "email_read", "notes_search",
+                           "home_read")
+
+
 def find_tool_target(words: str) -> Optional[str]:
+    """The tool a spoken name belongs to, preferring the four reading tools.
+
+    The four reading tools were the first ones a sentence could switch, and
+    their own suites pin the sentences ("don't let the ai model read my email").
+    The generated targets from every switchable tool can share a bare alias with
+    one of them ("email" is both `email_read` and `email_check`), so the four are
+    searched first and a collision never re-routes an old sentence (caught on
+    the merged wave-8 branch, 2026-11-07).
+    """
     bare = _bare(words)
-    for tool, names in _TOOL_TARGETS.items():
-        if any(bare == _bare(n) for n in names):
+    order = [t for t in _PREFERRED_TOOL_TARGETS if t in _TOOL_TARGETS]
+    order += [t for t in _TOOL_TARGETS if t not in _PREFERRED_TOOL_TARGETS]
+    for tool in order:
+        if any(bare == _bare(n) for n in (_TOOL_TARGETS.get(tool) or ())):
             return tool
     return None
 
@@ -5428,7 +5525,8 @@ def changeable_settings() -> dict:
     answer told the owner he could change 13 things while far more were
     reachable by asking. The switches below are still derived from
     `BOOL_SETTINGS`, the asks-first rows from `_ASKS_FIRST_TARGETS` and the
-    reading-tool row from `_TOOL_TARGETS`; the rest are counted from the module
+    tool-switch rows from `_TOOL_TARGETS` (every switchable tool since
+    2026-11-07); the rest are counted from the module
     that owns them. A switch added to any of those tables appears here by
     itself, and the count rises with it.
     """
@@ -5447,11 +5545,17 @@ def changeable_settings() -> dict:
                      f"notes, home status, Obsidian, Logseq, Joplin)",
                      "what asks first"))
         total += asks
-    # Offering a reading tool to the AI model at all.
+    # Offering a tool to the AI model at all (2026-11-07): this is now EVERY
+    # switchable tool - the 60 Settings rows - not the four reading tools it
+    # used to name. Saying "reading tools" would be a lie about 56 of them, and
+    # naming the four would understate what the owner can change by asking.
     tools = len(_TOOL_TARGETS)
     if tools:
-        rows.append((f"which of {tools} reading tools the AI model may use "
-                     f"(calendar, email, notes, home status)", "what asks first"))
+        rows.append((f"which of {tools} tools the AI model may use "
+                     f"(the calendar, email, notes and home-status readers "
+                     f"included, and browser control, shell commands, "
+                     f"computer and phone control and the rest)",
+                     "what asks first"))
         total += tools
 
     # The families whose table lives outside this registry.

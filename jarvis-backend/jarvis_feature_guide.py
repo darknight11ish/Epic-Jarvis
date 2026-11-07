@@ -825,6 +825,92 @@ def surface_words(row: dict) -> str:
 #: else - "planned", "not-a-setting" - really has no on/off to report.
 _HAS_A_CONTROL = frozenset({"switch", "adjust", "open-only"})
 
+#: THE AI-TOOL SWITCH PLACE, and the rows whose own `where` names it. Since the
+#: owner's decision of 2026-11-04 every tool the AI model can be offered has its
+#: own switch on Settings, "What asks first", under "Let the AI use this"
+#: (jarvis_asks_first.tools_status). That is NOT a BoolSetting, so `covers`
+#: cannot name it and `feature_switches()` cannot see it - and the answer said
+#: "The feature list names no on/off switch for it" DIRECTLY beside a `where`
+#: that says "switch it on" (measured 2026-11-07, the four-way contradiction in
+#: the github-research answer). These rows are read from the same page the apps
+#: draw instead: `TOOL_SWITCHES` is the rows where the exact tool is known, so
+#: the live state can be read; a row that only names the place still gets an
+#: honest sentence, never the "no switch" falsehood.
+TOOL_SWITCH_PLACE = "let the ai use this"
+TOOL_SWITCHES = {
+    # The GitHub research tool (jarvis_agent TOOLS "github_search"; its switch
+    # title is "GitHub research" in jarvis_asks_first.tools_status).
+    "github-research": ("github_search",),
+    # The six on-demand tools: one switch each, all off by default.
+    "connected-github": ("github_list", "github_read_file", "github_ci_status",
+                         "github_comment", "github_open_issue",
+                         "github_rerun_workflow"),
+}
+
+
+def _names_tool_switch(row: dict) -> bool:
+    """Does this row's own `where` say it is switched on in that page?"""
+    if not row:
+        return False
+    if str(row.get("id") or "") in TOOL_SWITCHES:
+        return True
+    return TOOL_SWITCH_PLACE in str(row.get("where") or "").lower()
+
+
+def _tool_switch_rows(row: dict) -> list:
+    """[{"key","label","state"}] for a row switched on by AI-tool switches.
+
+    Read from `jarvis_asks_first.tools_status()` - the same read the Settings
+    page and both apps use - so the state is never typed here. A module that is
+    missing or does not answer leaves `state` None and the sentence says so.
+    """
+    keys = TOOL_SWITCHES.get(str((row or {}).get("id") or "")) or ()
+    if not keys:
+        return []
+    labels, states = {}, {}
+    try:
+        import jarvis_asks_first as AF
+        view = AF.tools_status(here=False)
+        for item in view.get("items") or ():
+            key = str((item or {}).get("id") or "")
+            labels[key] = str(item.get("title") or key)
+            states[key] = item.get("on")
+    except Exception:                       # noqa: BLE001 - older PC: read nothing
+        labels, states = {}, {}
+    out = []
+    for key in keys:
+        state = states.get(key)
+        out.append({"key": key, "label": labels.get(key, str(key)),
+                    "state": state if isinstance(state, bool) else None})
+    return out
+
+
+def _tool_switch_words(row: dict) -> str:
+    """The honest switch sentence for a row switched on by AI-tool switches.
+
+    One known switch says its name and live state; several say each one; a row
+    whose tool is not recorded says the place and that it cannot read which
+    tool it is - never "there is no switch", which the row's own `where`
+    contradicts.
+    """
+    if not _names_tool_switch(row):
+        return ""
+    place = ('Settings, What asks first, under "Let the AI use this"')
+    switches = _tool_switch_rows(row)
+    known = [s for s in switches if isinstance(s["state"], bool)]
+    if len(switches) == 1 and len(known) == 1:
+        return (f'Its own switch is "{switches[0]["label"]}" in {place}; right now '
+                f'it is {ON_WORD if known[0]["state"] else OFF_WORD}.')
+    if switches and known:
+        said = ", ".join(f'"{s["label"]}" is {ON_WORD if s["state"] else OFF_WORD}'
+                         for s in known)
+        return f'Its own switches are in {place}: {said} right now.'
+    if switches:
+        return (f'Its own switches are in {place}; I could not read their live '
+                f'state, so I will not say whether they are on.')
+    return (f'Its own switch is in {place}; the feature list does not record which '
+            f'tool it is, so I could not read its state from chat.')
+
 
 def _no_switch_words(row: dict) -> str:
     """What to say when `feature_switches(row)` named no readable switch.
@@ -845,6 +931,11 @@ def _no_switch_words(row: dict) -> str:
     """
     mine = _matrix_row(row) or {}
     status = str(mine.get("status") or "")
+    tool_words = _tool_switch_words(row)
+    if tool_words:
+        # A row the AI-tool switch page really does hold: the "no switch"
+        # sentence would contradict the row's own `where` (2026-11-07).
+        return tool_words
     if status not in _HAS_A_CONTROL:
         return ("The feature list names no on/off switch for it, so there is no "
                 "state for me to read.")
@@ -1058,6 +1149,13 @@ def change_words(row: dict) -> str:
     if label == LABEL_PC_ONLY:
         return (f"It is changed at {settings_path_words(row)} on this PC; the phone "
                 f"says so rather than pretending it changed.")
+    tool_words = _tool_switch_words(row)
+    if tool_words:
+        # The state sentence is in `_state_clause` just above this call; this
+        # half says how to CHANGE it, and repeats no state claim.
+        return ('To change it, use its own switch in Settings, What asks first, '
+                'under "Let the AI use this". ' + _example_words(row)
+                + f" It is listed at {settings_path_words(row)}.")
     return ("It runs when you ask and has no switch of its own. "
             + _example_words(row)
             + f" It is listed at {settings_path_words(row)}.")
@@ -2418,6 +2516,23 @@ def state(words) -> dict:
         row = got["row"]
         rows = _switch_state_rows(row)
         if not rows:
+            # A row switched on by an AI-tool switch (2026-11-07): its state is
+            # read from the same page the apps draw, never from a BoolSetting,
+            # and never reported as "no switch" (its own `where` says it has one).
+            tool = _tool_switch_rows(row)
+            if _names_tool_switch(row):
+                known = [s for s in tool if isinstance(s["state"], bool)]
+                value = None
+                if known and len({s["state"] for s in known}) == 1:
+                    value = known[0]["state"]
+                if len(tool) == 1 and len(known) == 1:
+                    words = (f"\"{row['title']}\" is "
+                             f"{ON_WORD if value else OFF_WORD} right now "
+                             f"({tool[0]['label']}).")
+                else:
+                    words = f"{row['title']}: {_tool_switch_words(row)}"
+                return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                        "state": value, "switches": tool, "words": words}
             has_control = (str((_matrix_row(row) or {}).get("status") or "")
                            in _HAS_A_CONTROL)
             words = (f"{row['title']}: {_no_switch_words(row)}" if has_control else
@@ -2487,6 +2602,20 @@ def how_to(words, on: bool) -> dict:
         base = (f"{row['title']}. Where: {str(row.get('where') or '').strip()} "
                 f"Does it ask first? {str(row.get('asks') or '').strip()}")
         if not rows:
+            # A row switched on by an AI-tool switch (2026-11-07): there is no
+            # fixed typed sentence - the switch is the page's own control - so
+            # the answer names that switch and its live state instead of
+            # claiming "nothing to turn on or off".
+            tool = _tool_switch_rows(row)
+            if _names_tool_switch(row):
+                labels = "; ".join(f'"{s["label"]}"' for s in tool)
+                tail = ('To change it, use its own switch in Settings, What asks '
+                        'first, under "Let the AI use this"'
+                        + (f': {labels}.' if labels else '.')
+                        + ' There is no fixed sentence for it. '
+                        + _tool_switch_words(row))
+                return {"ok": True, "kind": "feature", "feature": _feature_facts(row),
+                        "switches": tool, "words": (base + " " + tail)}
             # An ability with no switch is not a dead end: say which kind it is
             # and how to use it, in the same words the "turn on <ability>"
             # phrase already gives (2026-10-26). A row that DOES have a control
@@ -2721,6 +2850,12 @@ NO_COMMAND_REASON = {
     "tutorials": ('read-only', 'An information or navigation page - it shows facts or opens a place. There is no setting here to change.', 'none-needed'),
     "pc-help": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "github-watchlist": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # The connected-GitHub surface (2026-11-07, the owner's 2026-11-03 "Read +
+    # actions" decision finally given its catalogue row). The six TOOLS each
+    # have their own switch on Settings, What asks first - no ONE switch belongs
+    # to the feature itself, so the row is an ability with three carded actions
+    # and no boolean of its own.
+    "connected-github": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "chatbot": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "support": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
     "projects": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
@@ -3772,3 +3907,238 @@ def abilities_directory() -> list:
     "All features & abilities" Settings directory and search are built from
     (Gemini Q2b/Q8; the UI itself is setup-ui's and Session B's)."""
     return [ability_row(row) for row in features()]
+
+# ---------------------------------------------------------------------------
+#   THE SELF-KNOWLEDGE TABLE (2026-11-07, the feature self-awareness audit)
+# ---------------------------------------------------------------------------
+# The live audit of 2026-11-07 measured the model falsely DENYING capabilities
+# this PC really has - the Muse failure mode the competitor audit warns about
+# ("it described its own access wrongly"). Four families were the worst:
+# approval policy, watches/CI, spending limits and chat history. Each is a
+# READ-ONLY fixed sentence built from the shipped record, so the fixed phrases
+# can answer without a model, and the `self_portrait` digest can hand the model
+# the same bounded fact instead of letting it guess. No state is read here and
+# nothing is changed: `where`/`limit` are the project's own words.
+#
+# WHY A TABLE AND NOT A CATALOGUE ROW: the 179 catalogue rows are generated
+# from features/features.json and their count is pinned by several checkers.
+# These four facts are about how Jarvis talks about itself, not new features,
+# so they live here and are held by `backend/test_self_answers.py`.
+SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history")
+
+SELF_FACTS = {
+    "approval_policy": {
+        "family": "approval_policy",
+        "digest": ("You can change what needs an approval card by asking. Three parts, "
+                   "one action and one part at a time: whether it raises a card, whether "
+                   "it needs a second yes, and whether a yes must pass Windows Hello. More "
+                   "asking is instant; less asking raises one PC-only card needing Windows "
+                   "Hello. No bulk form."),
+        "sentence": ("Yes. You can change what needs an approval card by talking to me. "
+                     "It has three separate parts and changes one action and one part at a "
+                     "time: whether an action raises a card at all (its tier), whether it "
+                     "needs a second yes, and whether a yes must also pass Windows Hello on "
+                     "this PC. More asking - a card where there was none, a second yes, "
+                     "Windows Hello - happens at once with no card, like turning a switch "
+                     "off. Less asking raises ONE card on the PC that needs Windows Hello "
+                     "to approve, and it is refused from any other device; nothing is "
+                     "written until you approve it. There is no bulk form: a sentence that "
+                     "names two parts is refused before anything is read or raised. "
+                     "Where: Settings, What asks first, on the PC - that page is read-only, "
+                     "and the change itself is by asking. Say for example "
+                     "\"make editing notes ask me first\" or \"let saving facts happen "
+                     "without a card\"."),
+    },
+    "watches_ci": {
+        "family": "watches_ci",
+        "digest": ("Yes: a \"tell me when\" watch can watch a page for changes, and the "
+                   "CI watcher watches GitHub Actions runs. Both are set up by asking and "
+                   "list what they saw on the PC."),
+        "sentence": ("Yes. I can watch a web page for you and tell you when it changes - "
+                     "that is the \"tell me when\" watch, and its list is on the PC's Brain, "
+                     "Watch tab. I can also watch a GitHub Actions run and tell you when it "
+                     "fails: say which repository, branch or pull request to follow, and the "
+                     "CI watcher keeps checking it on this PC. A watch that reads outside "
+                     "text is checked first, and a watch never acts by itself. Say, for "
+                     "example, \"tell me when this page changes: <address>\" or \"tell me "
+                     "when the CI fails on main\"."),
+    },
+    "spending_limits": {
+        "family": "spending_limits",
+        "digest": ("Yes: spending limits exist - a per-service money cap with a monthly "
+                   "limit and spending profiles; a cloud request that cannot be paid for "
+                   "is simply not sent, and a card that can spend money is capped too. It "
+                   "is set in Settings, Spending, on the PC."),
+        "sentence": ("Yes, spending limits are a feature I have. The cloud service's own "
+                     "money cap is kept on this PC, per service, with a monthly limit: a "
+                     "cloud request that cannot be paid for within it is never sent, and I "
+                     "say so instead. The same rule bounds a card that could spend money, "
+                     "and spending profiles record what you allow. Where: Settings, "
+                     "Spending, on the PC - changing a limit asks on the PC with its own "
+                     "approval, never silently. Say \"what are my spending limits?\" for "
+                     "the current numbers, never a guess."),
+    },
+    "chat_history": {
+        "family": "chat_history",
+        "digest": ("Yes: chat history is kept on this PC by default, encrypted, with a "
+                   "switch to turn it off and a retention length. It is in Settings, "
+                   "Security; turning history OFF is instant."),
+        "sentence": ("Yes. Chat history is kept on this PC by default - encrypted, on this "
+                     "machine, with no cloud copy - and both apps list it. There is a "
+                     "switch to turn it off (turning it off is instant), a number setting "
+                     "for how long it is kept, and Forget a time frame for deleting a "
+                     "range. Where: Settings, Security, on the PC, and the phone's History "
+                     "and Privacy screens. Turning history back on asks on a card first."),
+    },
+}
+
+
+def self_fact(family: str):
+    """One bounded self-fact by family id, a copy, or None - never a guess."""
+    row = SELF_FACTS.get(str(family or ""))
+    return dict(row) if row else None
+
+
+def self_fact_words(family: str) -> str:
+    """The owner-facing sentence for one family, or "" for an unknown id."""
+    row = self_fact(family)
+    return str(row.get("sentence") or "") if row else ""
+
+
+#: WHERE a function lives when it has no Settings card of its own (F14,
+#: 2026-11-07). The live audit measured "where do I change X?" reaching the
+#: model for these, and the model sent the owner to places that do not exist
+#: ("Settings, under Shortcuts" for the face size). Each entry is the real
+#: place in the project's own words; `words` is the answer, `key` the phrase
+#: the chat matcher accepts.
+PLACES = {
+    "standby hours": {
+        "key": "standby hours",
+        "words": ("Standby hours are a schedule on this PC's own scheduler, not a Settings "
+                  "switch: the Brain's Power card holds the hours, and a change raises one "
+                  "change-own-config approval card. Say for example \"standby from 1am to "
+                  "7am\" in chat, or open the Power card in the Brain."),
+    },
+    "attention budget": {
+        "key": "attention budget",
+        "words": ("The interruption (attention) budget lives in the Brain, on the Now "
+                  "page's Attention budget block. It says how many times a day I may speak "
+                  "up first, and a change is made there on the PC."),
+    },
+    "spending": {
+        "key": "spending limits",
+        "words": ("Spending limits are in Settings, Spending, on the PC. They are kept on "
+                  "this machine, and changing a limit asks on the PC with its own approval. "
+                  "The phone has a spending screen too."),
+    },
+    "notification styles": {
+        "key": "notification styles",
+        "words": ("Notification styles are the phone's own: Settings, Appearance, "
+                  "notification styles, on the Android app. The PC has no card for them - "
+                  "Windows draws its own toast - and the chat preview works on both."),
+    },
+    "face size": {
+        "key": "face size",
+        "words": ("The face size is a HUD look on this PC, not a setting the PC owns: open "
+                  "the faces panel from the HUD's left rail and choose Small, Medium or "
+                  "Large. It is kept for this device's HUD only, and the phone has its own "
+                  "appearance control instead."),
+    },
+}
+
+
+def place_for(words) -> dict:
+    """The real place for one off-list function, by its owner phrase, or {}."""
+    try:
+        import re as _re
+        text = " ".join(_re.sub(r"[^a-z0-9 ]", " ", str(words or "").lower()).split())
+    except Exception:                       # noqa: BLE001 - never raise a read
+        return {}
+    if not text:
+        return {}
+    for key, row in PLACES.items():
+        if key in text:
+            return dict(row)
+    return {}
+
+# ---------------------------------------------------------------------------
+#   HERITAGE: WHAT JARVIS IS, AND WHAT WAS BORROWED FROM WHOM (2026-11-07)
+# ---------------------------------------------------------------------------
+# The owner's Q4 ruling (2026-11-07): Jarvis must deterministically answer BOTH
+# halves - what makes it different, and which ideas it borrowed from which
+# competitors - and must never invent a borrow the record does not contain.
+# Both sentences are READ-ONLY and derived from the project's own record:
+#   * differentiators: CLAUDE.md's five rules, docs/ARCHITECTURE.md, the voice
+#     print (jarvis_voiceprint), the memory (jarvis_memory) and the local model
+#     lanes (jarvis_model_lanes) - each is a live property of this PC.
+#   * lineage: docs/COMPETITORS-2026-10-05.md, docs/ABOUT-JARVIS.md section 2,
+#     docs/COMPETITORS-MUSE-2026-09-25.md and the Hermes borrow rows in
+#     CHANGELOG.md/JARVIS-API.md (2026-11-05/06).
+# Changing a word here without the record behind it is the Muse failure the
+# audit exists to prevent.
+HERITAGE = {
+    "differentiators": {
+        "part": "differentiators",
+        "digest": ("Different: voice-print check before acting (local CAM++/TitaNet), "
+                   "zero standing grants (one card per action, Windows Hello / phone "
+                   "biometrics), bitemporal owner-words-only memory with real erase + "
+                   "VACUUM, strict local-first egress (no public tunnel; local Ollama on "
+                   "three GPUs)."),
+        "sentence": ("What makes me different is not a feature count - it is what has to "
+                     "be trusted. (1) Your voice is checked before I act on it: a local "
+                     "speaker check (CAM++/TitaNet embeddings, kept on this PC) has to "
+                     "recognise you, and the phone uses its own fingerprint for risky "
+                     "approvals. (2) There are no standing grants: one approval card per "
+                     "action, no approve-all, no auto-approve, and a risky yes needs "
+                     "Windows Hello on the PC or the phone's biometrics - so nothing is "
+                     "allowed later in advance. (3) Memory is bitemporal and learns only "
+                     "from your own words, and every fact can really be erased - the text, "
+                     "the search entry, the meaning vector and then VACUUM, not just hidden. "
+                     "(4) Everything stays local: no account, no public tunnel, no cloud by "
+                     "default; the phone reaches this PC over Tailscale or NordVPN Meshnet, "
+                     "and the models run on this PC's own graphics cards through Ollama. "
+                     "A sentence about what I can reach is answered from the live settings "
+                     "(\"what can you reach?\"), never from a claim."),
+    },
+    "lineage": {
+        "part": "lineage",
+        "digest": ("Borrowed, on the record: Muse (2026-09-25 audit) - one-card-per-email "
+                   "sending, hiding one-time OTP codes from screen capture, /api/reach. "
+                   "OpenMuse - a durable job queue (Long Fuse) with frozen capabilities and "
+                   "park-on-approval. ChatGPT Dots - a compact ambient presence indicator "
+                   "and non-intrusive HUD status rails. Nous Hermes Agent v0.23.0 - "
+                   "deny-and-steer (the deny-and-say-what-to-do-instead note), hidden-Unicode/control-byte warning "
+                   "pills, the \"What it costs\" cloud ledger line, a curator lock with "
+                   "provenance badges on packs, and in-memory encrypted session search."),
+        "sentence": ("Yes, I borrow ideas on the record - pretending otherwise would be the "
+                     "wrong answer. From Meta's Muse (the 2026-09-25 audit): sending email "
+                     "with one approval card per email showing the exact recipients, "
+                     "subject and text; hiding one-time codes (OTP) from screen capture; "
+                     "and /api/reach, one place that says what Jarvis can reach. From "
+                     "OpenMuse: a durable job queue - the Long Fuse pattern - with frozen "
+                     "capabilities per job and a job that parks on an approval instead of "
+                     "acting. From OpenAI's ChatGPT Dots: the compact ambient presence "
+                     "indicator and non-intrusive HUD status rails. From Nous Hermes Agent "
+                     "v0.23.0: approval cards that let you deny AND say what to do instead "
+                     "(the deny-and-say-what-to-do-instead note); warning pills for hidden Unicode and control "
+                     "bytes; the \"What it costs\" line on cloud cards; a curator lock with "
+                     "provenance badges on packs; and in-memory encrypted session search. "
+                     "What I refuse is also on the record: no standing grants, no always "
+                     "allow, no connector store, no data-for-service."),
+    },
+}
+
+
+def heritage(part: str) -> dict:
+    """One heritage half, a copy, or {} - never a guessed borrow."""
+    row = HERITAGE.get(str(part or ""))
+    return dict(row) if row else {}
+
+
+def heritage_words(part: str) -> str:
+    row = heritage(part)
+    return str(row.get("sentence") or "") if row else ""
+
+
+def heritage_digests() -> dict:
+    return {key: str(row.get("digest") or "") for key, row in HERITAGE.items()}

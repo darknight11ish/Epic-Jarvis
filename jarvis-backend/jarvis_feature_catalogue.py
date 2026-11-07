@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 179 rows from features/features.json.
+The owner's feature list, as data: 180 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34); the apps' Features pages read their own
+`features/features.json` (sha256 f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34"
+SOURCE_SHA256 = "f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -816,6 +816,18 @@ FEATURES = (
         "covers": ["brain.tab.watch", "brain.watch.watchlist", "work-and-attention", "limits-and-notes"],
     },
     {
+        "id": "connected-github",
+        "group": "Notes and files",
+        "title": "Read and act on your own GitHub",
+        "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file. It can also comment on an issue or pull request, open an issue and re-run a workflow.",
+        "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+        "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the three reads share one action, and commenting, opening an issue and re-running a workflow each have their own.",
+        "limit": "There is no merge, push, commit, delete, close or file-write action: it can never merge a pull request, and no card or approval can create one - a pull request is merged on GitHub itself. Private repositories need the token; a read sends it to api.github.com.",
+        "surface": "both",
+        "aliases": ["read my own github", "your own github", "github read and act"],
+        "covers": [],
+    },
+    {
         "id": "chatbot",
         "group": "Notes and files",
         "title": "Talk to a chatbot for me",
@@ -1536,13 +1548,13 @@ FEATURES = (
     {
         "id": "cloud-escalation",
         "group": "The PC itself",
-        "title": "Cloud (DeepSeek API)",
-        "what": "Send a hard question to the one cloud API service you chose - DeepSeek by default - after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
+        "title": "Cloud (an API service you choose)",
+        "what": "Send a hard question to the one cloud API service you chose after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
         "where": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
         "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
         "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
         "surface": "both",
-        "aliases": ["cloud", "cloud api", "deepseek api", "escalate to the cloud", "try the cloud model", "sends a hard question to deepseek after i say yes"],
+        "aliases": ["cloud", "cloud api", "cloud preset", "deepseek api", "escalate to the cloud", "try the cloud model", "sends a hard question to deepseek after i say yes"],
         "covers": [],
     },
     {

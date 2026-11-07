@@ -479,7 +479,26 @@
         "fired": []
       }
     },
-    "standby": {
+    "repo_watch": {
+      "listed": true,
+      "tag": "repository watch",
+      "snoozable": false,
+      "kind_module": "jarvis_watch",
+      "states": {
+        "active": [
+          "pause",
+          "delete"
+        ],
+        "paused": [
+          "resume",
+          "delete"
+        ],
+        "waiting": [
+          "delete"
+        ],
+        "fired": []
+      }
+    },    "standby": {
       "listed": true,
       "tag": "standby",
       "snoozable": false,
