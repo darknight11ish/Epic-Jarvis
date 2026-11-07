@@ -5498,11 +5498,17 @@ def _cap_part_row(part: str):
 def _cap_multi_question(raw) -> list:
     text = " ".join(str(raw or "").lower().rstrip(" ?!.").split())
     text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[ ,:]+", "", text)
-    # A two-part CAPABILITY question names two things it can do. A settings or
-    # change question ("where do I change my wifi password, and what is it set
-    # to") is not one: its halves are not capability phrases, and letting the
-    # token score resolve them answered an unknown setting from the catalogue
-    # (caught on the merged wave-8 branch, 2026-11-07).
+    # A two-part CAPABILITY question is a QUESTION about two abilities. A
+    # settings/change question ("where do I change my wifi password, and what
+    # is it set to") is not one, and neither is an ordinary statement ("I live
+    # in Lisbon and I teach maths" - which jarvis_intake asks this file to
+    # classify, so a match would drop an imported owner's words) nor a
+    # command-and-a-half ("set a timer for 10 minutes and then tell me a
+    # joke"). The lead has to be a question word, and a change verb disqualifies
+    # it. Both were caught on the merged wave-8 branch, 2026-11-07.
+    if not re.match(r"(?:can|could|would|will|do|does|did|is|are|what|which|how|"
+                    r"should)\b", text):
+        return []
     if re.search(r"\b(?:where|how)\s+(?:do|can|should)\s+i\b"
                  r"|\b(?:change|set\s+to|turn\s+on|turn\s+off)\b", text):
         return []
