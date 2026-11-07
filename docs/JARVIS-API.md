@@ -7579,6 +7579,112 @@ anything else, the edit door, the additive view, the audit never carrying a word
 both chat forms with the numbered echo and the Undo receipt (including undo after
 a restart), and a reminder with no parts behaving exactly as it did before.
 
+### 21.16 "Do you have a feature that ...?" is answered from the catalogue (added 2026-11-06)
+
+The failure this closes is the same class as 21.12, measured at scale. A
+72-question live self-awareness test against the deployed build
+(`JARVIS-SELF-AWARENESS-TEST-2026-11-06.md`; raw data
+`.dsh-scratch/SELF-AWARENESS-2026-11-06/results.json`) found that the chat model
+does not know its own feature list:
+
+* **21 of 25 "Do you have a feature that ...?" questions were DENIED** — the
+  Notion import, folders, a file from the PC, the vault organizer, widgets, the
+  talk button, Galaxy, Look at this, Picture mode, spending, phone
+  notifications, updates, the second card, Skills, the plugin switch, What asks
+  first and more;
+* **all 10 of the owner's trap sentences failed.** *"Can I upload documents from
+  my phone app and have you process them?"* answered *"I cannot receive file
+  uploads from your phone or other devices in this chat interface yet"*; *"Can I
+  bring in a Notion export on my phone and have it arrive on my PC?"* invented a
+  free **"Notion Mirror"** app that does not exist;
+* **four dangerous inversions.** *"Can you change a setting without asking?"* ->
+  *"Yes, I can change my own settings immediately without asking"* (the one
+  permission model says a loosening change raises ONE card); *"Can you keep
+  learning automatically?"* -> *"No, I don't learn automatically"*; *"Can you
+  install a model from my phone?"* -> *"I can't directly install models from your
+  phone"*; *"Can you stop mid-answer?"* -> *"I can't stop mid-sentence"*;
+* **a crisis-help question was answered by `quick: reminder_sound`** — the alarm
+  text — because the word "sounds" is that family's match.
+
+Meanwhile the model-free `quick: notion_export` answer (21.12) knew the truth.
+That is the pattern this generalises.
+
+**`jarvis_quick.py` now answers capability questions from
+`jarvis_feature_catalogue.FEATURES`** — the generated copy of
+`features/features.json`, the same 178 rows `jarvis_feature_guide` answers from
+and the apps' Features pages read. No model, no card, no route, no state read:
+`quick: capability_answer` is in `READ_ONLY_INTENTS`, so it does not take away
+what "cancel that" would undo and a private chat hands it to the model as every
+read-only answer does.
+
+**What the answer is.** The row's own `what` and `where`, in the row's own
+words, plus the row's `asks` rule when the question asks about a card or the row
+is off by default (Picture mode says it is off; the second card says its
+switches are off until measured). A `desktop` row says **"It is on the PC only —
+the phone has no screen for it."**; a `phone` row says it is on the phone only;
+a `both` row says both apps. It never contains "I cannot"/"I don't have" for a
+row that exists, and never an app or a route the catalogue does not name. Every
+one of the 178 rows is checked by `backend/test_capability_answers.py` to answer
+with its own words and its own surface.
+
+**The limit questions run early, and say the verdict first.** A short table
+(`_CAP_SAFETY`) maps the permission questions to the row that records the rule —
+`settings-by-asking`, `memory-saved`, `models`, `stop-everything`, `approvals`,
+`shell-commands`, `what-asks-first` — and quotes that row's own `asks` under a
+leading **No.** or **Yes.**, so the measured inversions cannot come back:
+"Can you change a setting without asking?" answers *"No. … that raises ONE
+approval card … and nothing changes until you answer it. A cosmetic change …
+happens at once, with no card."*; "Can you keep learning automatically?" answers
+*"Yes. … Everyday facts save with no card. Health, money, passwords and account
+numbers wait for your yes."*; "Can you install a model from my phone?" answers
+*"Yes. … Switching or installing raises one approval card, and nothing downloads
+until you approve it."*; "Can you stop mid-answer?" answers *"Yes. Stop
+everything: Halts what Jarvis is doing on the screen or the phone, at once."*.
+This table runs **before the reminder family**, which is also the crisis fix: the
+measured crisis-help question is caught by its own narrow pattern and answered
+from the `crisis-help` row, so `reminder_sound` can never answer it again. A real
+distress message is still never answered from here — `jarvis_wellbeing.
+crisis_in_turn` refuses the whole fast path before any of this runs.
+
+**The fall-through rule, which is the safety property.** The generic matcher is
+LAST in `match()`, beside `_notion` and `_open`, so a sentence that asks Jarvis
+to DO something has already been claimed by the path that does it (a timer, a
+reminder, opening a program, a setting change). It claims a sentence only when
+the sentence NAMES a row: a one- or two-word phrase the feature is called by (its
+id, title or an alias) appears in it, one of the pair's words being the row's own
+id word — "notion export", "folders", "what asks first", "second graphics card".
+A single word only counts when it is the row's whole id and rare enough to be a
+name ("documents", "skills"). Every other case, and any question where two rows
+fit about equally well, returns `None` and the model answers exactly as before.
+**Measured after the change, on the same 72 sentences:** 7 of the 10 trap
+sentences now answer from the catalogue (the Notion ones and the two upload
+sentences), the four inversions and the crisis question are deterministic, and
+15 of the 25 availability questions, 7 of the 8 how-tos resolve; the remaining
+10 fall through — their wording does not name a row's own name words — and are
+listed, per question, in the suite so today's reach is pinned rather than
+claimed. The two "a file from my phone to my PC" traps deliberately fall through:
+the catalogue's one file row is the PC-to-phone direction, and answering
+backwards would be worse than the model trying. `features.json` has no row for
+the phone-upload path (§196), which is why those two upload sentences resolve to
+the `documents` row and not to an upload row — adding one is a Features-page
+change, not this one.
+
+**Not matched, deliberately.** "Open Notion" still opens the app; a real timer or
+reminder request is still the scheduler's; "how do I use <a row's title>" is
+still the feature guide's; a real crisis is still the wellbeing answer's; and a
+private chat still hands every read-only answer to the model (§156).
+
+Tests: `backend/test_capability_answers.py` — 171 checks: the 10 trap sentences
+with their expected row (or the measured fall-through) and the three invented
+apps forbidden, the 25 availability and 8 how-to questions from the measured run,
+the four inversions with their verdicts and quoted words, the crisis misroute
+(the measured sentence is Crisis help and the alarm words are nowhere in it, and
+a real distress sentence is refused by the fast path), 10 out-of-catalogue
+sentences falling through, all 178 rows answering from their own words and
+surface with no denial, the read-only contract (READ_ONLY_INTENTS, no card, no
+route, a private chat gets None), and the measured settings inversion answering
+with its rule.
+
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for
 briefings; anything that repeats asks once with a card listing the next run

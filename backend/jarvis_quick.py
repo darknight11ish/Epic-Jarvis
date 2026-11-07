@@ -292,6 +292,7 @@ stays the model's.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import sys
@@ -1296,6 +1297,18 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- limits and permissions, from the row that records the rule -----------
+    # (2026-11-06) EARLY, and that is the fix, not a preference: the measured
+    # live test answered "Can you change a setting without asking?" with "Yes, I
+    # can change my own settings immediately without asking", and answered the
+    # owner's crisis-help question with the alarm-sound text because the
+    # reminder family below matches the word "sounds". Only the ten narrow
+    # limit shapes in `_CAP_SAFETY` (plus the crisis-help question) are claimed
+    # here, so an ordinary sentence steps past it exactly as before.
+    got = _cap_safety_question(text)
+    if got is not None:
+        return got
+
     # --- keyboard shortcuts, from the RAW sentence (2026-10-31 honesty fix) --
     # The owner asked and the model answered "I don't have any keyboard
     # shortcuts myself... that's up to your OS settings", which is false: the
@@ -1989,6 +2002,19 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _open(s)
     if got is not None:
         return got
+
+    # --- a capability question the catalogue answers (2026-11-06) -------------
+    # LAST, beside `_notion` and `_open` and for the same reason: every action
+    # matcher above has already declined, so a sentence that asks Jarvis to DO
+    # something keeps the path that does it, and this can only answer a
+    # sentence nothing else owns. What it answers with is the catalogue row's
+    # own words - so it can never deny a feature the owner's own list has, and
+    # never invent one it has not. No row above the measured threshold -> None,
+    # and the model answers exactly as before.
+    got = _cap_question(text)
+    if got is not None:
+        return got
+
 
     # --- an animal request nothing above understood (2026-09-28) ------------------
     # Last, so a reminder or a list that happens to mention "the animal" is
@@ -5843,6 +5869,584 @@ def _feature_capabilities(s: str) -> Optional[Intent]:
 
 
 # --------------------------------------------------------------------------
+#   Capability answers from the owner's own catalogue (2026-11-06)
+#
+# THE MEASURED BUG. A 72-question live self-awareness test on 2026-11-06
+# (`.dsh-scratch/SELF-AWARENESS-2026-11-06/results.json`, reported in
+# `JARVIS-SELF-AWARENESS-TEST-2026-11-06.md`) found the chat model does not know
+# its own feature list: 21 of 25 "Do you have a feature that ..." questions were
+# denied, and all 10 of the owner's own trap sentences failed - "Can I upload
+# documents from my phone app?" answered "I cannot receive file uploads from
+# your phone", "Can I bring in a Notion export on my phone?" invented a "Notion
+# Mirror" app that does not exist, and "Can you change a setting without
+# asking?" answered "Yes, I can change my own settings immediately without
+# asking" - the one permission model says the opposite. Meanwhile the
+# model-free `quick: notion_export` answer knew the truth (JARVIS-API 21.12).
+#
+# THE RULE THIS IMPLEMENTS (recorded in `decisions.d/`): a question about what
+# Jarvis can do is answered from the owner's catalogue - the same 178 rows the
+# Features pages read - so the answer can never deny a feature that is in the
+# owner's own list, and never invent one that is not. The model answers only
+# when no row matches. Read-only: no route, no card, no action, no state read.
+#
+# WHY THE ROWS AND NOT A PROMPT. A prompt is advice the model may ignore; the
+# catalogue is data. `backend/jarvis_feature_catalogue.py` is generated from
+# `features/features.json` and is already the guide's own copy (its header says
+# so), so this reads the SAME rows `jarvis_feature_guide` answers from - one
+# source of truth, and `backend/test_capability_answers.py` folds every word
+# back to those rows.
+#
+# WHERE IT SITS IN `match()`, and why that is the safety property: the generic
+# matcher runs LAST, after every action matcher, exactly like `_notion` and
+# `_open` - so a sentence that asks Jarvis to DO something has already been
+# claimed by the path that does it, and this can only answer a sentence nothing
+# else owns. The narrow safety/permission questions run EARLY, before the
+# reminder family, because "Can you stop mid-answer?" and "Do you have a
+# feature that answers with crisis help lines ...?" must never be answered by
+# the alarm-sound family (the measured `quick: reminder_sound` misroute).
+#
+# WHAT IT WILL NOT DO. No row NAMED in the question means None, and the model
+# answers exactly as before. "Named" is narrow on purpose: a one- or two-word
+# phrase the feature is called by (its id, title or an alias) has to appear in
+# the question, and a two-word phrase only counts when one of its words is the
+# row's own ID word - so "notion export" names notion-import, while "past
+# chats" does not name the History list on its own. Prose overlap alone is
+# never enough. Two rows that fit about equally well also fall through rather
+# than guess. And "can you ...?" is NOT a generic shape here: a bare
+# "can you ..." is how the owner asks Jarvis to DO things, so only the
+# limit/permission shapes below claim one.
+
+#: Filler that says nothing about WHICH feature is meant. Kept small on
+#: purpose: a word in here can never be the evidence for a row.
+_CAP_STOP = frozenset("""
+a an the and or of to in on at for from with by into onto about as is are was
+were be been being you your yours i me my mine we our us it its this that these
+those he she they them their do does did can could would should will shall may
+might must have has had having jarvis there here what which who whom whose when
+where why how any some all every each no not so if then than too very just also
+only own same other another such via per please feature features way able
+ability possible everything anything something thing things app apps let through over
+under between while during after before since until upon within without across
+along around behind beside beyond despite except inside outside toward towards
+off out up down back again else word words
+""".split())
+
+#: The verbs a question uses to ask what Jarvis DOES. A token here is weak
+#: evidence on its own ("can I drive a car" must not become Browser control
+#: because one catalogue name contains "drive"), so it is never allowed to be
+#: the ONLY thing a row matches on, and a row whose own name carries the
+#: question's leading verb is preferred (that is what "searches my own past
+#: chats" means - the search feature, not the list of past chats).
+_CAP_VERBS = frozenset("""
+open send read search play drive use run check find look watch make create add
+set turn change delete remove move copy install switch start stop build write
+save keep learn tell show ask answer give take put bring hold speak talk draw
+tidy organize organise list count track receive manage control connect pair
+share process import export sync transfer upload download view see edit rename
+format tag sort pause resume cancel schedule remind close launch begin finish
+work get go try need want
+""".split())
+
+_CAP_WORD = re.compile(r"[a-z0-9]+")
+_CAP_IRREGULAR = {"drawn": "draw", "drew": "draw", "wrote": "write",
+                  "written": "write", "built": "build", "made": "make",
+                  "said": "say", "kept": "keep", "held": "hold",
+                  "sent": "send", "found": "find", "got": "get"}
+
+#: A token in this many rows or fewer is "distinctive" - real evidence, not a
+#: word half the catalogue uses.
+_CAP_SPECIFIC_DF = 15
+#: ... and a word that names a row ON ITS OWN must be rarer than this. The
+#: measured set is what sets it: "documents", "skills", "folders" and
+#: "spending" are single-word IDs the owner's own questions use, while "word"
+#: (in "wake word") and "notifications" are too common to name a row alone.
+_CAP_LONE_DF = 3
+#: The generic matcher's minimum score, and how far ahead the winner must be.
+#: Both measured on the 72 live sentences plus 11 near misses: below either
+#: line the fast path declines and the model answers exactly as before.
+_CAP_WEAK_MIN = 4.0
+_CAP_MARGIN = 1.15
+
+#: The capability shapes. Everything after the shape is the question's own
+#: words, matched against the rows.
+_CAP_LEAD = re.compile(
+    r"(?:hey\s+|ok\s+|okay\s+)?(?:jarvis[,:]\s+)?(?:so\s+)?"
+    r"(?:"
+    r"do\s+you\s+have\s+(?:a\s+|an\s+|any\s+)?"
+    r"(?:feature|features|ability|capability|way|option)s?\s*"
+    r"(?:that\s+|which\s+|where\s+|to\s+|for\s+)?"
+    r"|do\s+you\s+have\s+(?:a\s+|an\s+|any\s+)?"
+    r"|does\s+jarvis\s+(?:have\s+|offer\s+|support\s+|do\s+)?(?:a\s+|an\s+|any\s+)?"
+    r"|is\s+there\s+(?:a|any)\s+(?:way|feature|option)\s+to\s+"
+    r"|can\s+i\s+(?:please\s+)?"
+    r"|could\s+i\s+(?:please\s+)?"
+    r"|am\s+i\s+able\s+to\s+"
+    r"|how\s+(?:do|can|should|would)\s+i\s+"
+    r"|how\s+does\s+"
+    r"|where\s+(?:do|can)\s+i\s+"
+    r")")
+
+#: A question that names a CARD or a PERMISSION, so the row's `asks` sentence
+#: (its own permission rule) belongs in the answer.
+_CAP_ASKS_ABOUT_A_CARD = re.compile(
+    r"\b(?:card|approval|approve|approves|asked|ask(?:s|ing)?\s+(?:me|you)|"
+    r"permission|without\s+asking|allowed|allow)\b")
+
+#: Does the question come from the PHONE toward the PC while the row's own words
+#: describe the PC sending TO the phone? Then the row answers the opposite
+#: direction and must not be claimed as this question's answer (the measured
+#: "Can I send a file from my phone to my PC?" - the catalogue has no row for
+#: that direction, so it falls through rather than answer backwards).
+_CAP_FROM_PHONE = re.compile(r"\bfrom\s+(?:my|the|a)\s+(?:phone|android|mobile)\b")
+_CAP_TO_PHONE = re.compile(r"\bto\s+(?:your|the|my|a)\s+phone\b")
+
+#: The limit/permission questions answered EARLY, in the owner's terms, from the
+#: row that records the rule. Each entry is (pattern, row id, leading verdict):
+#: "No." means the rule in the row's `asks` is a restriction and is quoted
+#: first; "Yes." means the row's `what` is quoted first and its `asks` after.
+#: The verdict is the one word the measured inversions got backwards, so it is
+#: stated before any quotation. Every id is a real row and the suite checks it.
+_CAP_SAFETY = (
+    # "Can you change a setting without asking?" - measured: "Yes, I can change
+    # my own settings immediately without asking". The row's own rule: a change
+    # that loosens something raises ONE card; a cosmetic one does not.
+    (re.compile(r"\bchange\b[^.?!]*\bsettings?\b[^.?!]*\bwithout\s+"
+                r"(?:asking|a\s+card|permission|approval)\b"
+                r"|\bchange\s+(?:a|my|your|the)\s+settings?\s+"
+                r"(?:by\s+yourself|on\s+your\s+own|automatically)\b"),
+     "settings-by-asking", "No."),
+    # "Can you keep learning automatically?" - measured: "No, I don't learn
+    # automatically". The catalogue says yes, with the sensitive-topic
+    # exception in the same row.
+    (re.compile(r"\bkeep\s+learning\b|\blearn(?:ing)?\s+"
+                r"(?:automatically|on\s+your\s+own|by\s+yourself|without\s+asking)\b"),
+     "memory-saved", "Yes."),
+    # "Can you install a model from my phone?" - measured: "I can't directly
+    # install models from your phone". One card, and nothing downloads first.
+    (re.compile(r"\b(?:install|switch|change)\s+(?:a\s+|the\s+|another\s+)?"
+                r"model\b[^.?!]*\b(?:phone|android|mobile)\b"
+                r"|\b(?:install|switch)\s+(?:a\s+|the\s+)?model\s+from\s+"
+                r"(?:my|the)\s+phone\b"),
+     "models", "Yes."),
+    # "Can you stop mid-answer?" - measured: "I can't stop mid-sentence". The
+    # stop control exists on both surfaces.
+    (re.compile(r"\bstop\s+(?:mid|middle|in\s+the\s+middle)\b"
+                r"|\bstop\s+(?:yourself|mid-answer|mid-sentence|while\s+you)\b"
+                r"|\binterrupt\s+(?:you|yourself|an\s+answer)\b"),
+     "stop-everything", "Yes."),
+    # "Can you approve something for me automatically?" - the one permission
+    # model: there is no approve-all anywhere.
+    (re.compile(r"\bapprove\b[^.?!]*\b(?:automatically|for\s+me|"
+                r"without\s+(?:asking|me))\b"),
+     "approvals", "No."),
+    # "Can you run a shell command?" - the row is real and OFF by default; the
+    # measured answer ("I cannot run commands") was a denial of a real feature.
+    (re.compile(r"\brun\s+(?:a\s+|one\s+|any\s+)?(?:shell\s+)?commands?\b"),
+     "shell-commands", ""),
+    # "Can you tell me what asks first?" - the row is the plain-words list.
+    (re.compile(r"\b(?:tell|show|list|explain)\b[^.?!]*\bwhat\s+asks\s+first\b"),
+     "what-asks-first", ""),
+)
+
+#: The crisis-help question, caught BEFORE the reminder family: the measured
+#: sentence "Do you have a feature that answers with crisis help lines if a
+#: message sounds like a crisis?" was answered by `quick: reminder_sound` with
+#: the alarm text, because the word "sounds" is that family's match. Only a
+#: question ABOUT the feature is claimed - `jarvis_wellbeing.crisis` gets the
+#: last word, so a real distress message is never answered from here.
+_CAP_CRISIS_Q = re.compile(
+    r"\b(?:do\s+you\s+have|is\s+there|can\s+you|does\s+(?:jarvis|it))\b[^.?!]*"
+    r"\bcrisis\b"
+    r"|\bcrisis\s+(?:help|support|line|lines|feature)\b[^.?!]*"
+    r"\b(?:work|works|feature|answer|answers|do|does)\b")
+
+#: Words that ask for something STRONGER than the row says. A question with one
+#: of these is answered by the row only when the row's own words mention it too,
+#: so a near-miss can never be claimed on the strength of one shared word.
+_CAP_ASKED_STRONGER = ("password", "passwords", "encrypt", "encrypted", "pin")
+
+_CAP_INDEX = None
+
+#: The catalogue rows that ARE the reminder family's own subject. A how-to
+#: question that resolves to one of them keeps `_reminders_question`'s answer;
+#: any other row's how-to steps aside for the catalogue answer (2026-11-06).
+_CAP_REMINDER_ROWS = frozenset({
+    "coming-up", "reminder-asks", "reminder-actions", "also-on-phone", "today",
+})
+
+
+def _cap_stem(word: str) -> str:
+    """A crude stem for matching only: searches -> search, tidies -> tidy."""
+    if word in _CAP_IRREGULAR:
+        return _CAP_IRREGULAR[word]
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 5 and word.endswith("ing"):
+        return word[:-3]
+    if len(word) > 4 and word.endswith("ed"):
+        return word[:-2]
+    if len(word) > 4 and word.endswith("es") and word[-3] in "sxzh":
+        return word[:-2]
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def _cap_tokens(text) -> tuple:
+    """The content words of a phrase, lower-cased, stemmed, de-duplicated."""
+    out = []
+    for word in _CAP_WORD.findall(str(text or "").lower()):
+        if word in _CAP_STOP or len(word) < 2:
+            continue
+        word = _cap_stem(word)
+        if word not in _CAP_STOP and word not in out:
+            out.append(word)
+    return tuple(out)
+
+
+def _cap_words(text) -> tuple:
+    """The content words of a phrase IN ORDER, repeats kept.
+
+    `_cap_tokens` is for a QUESTION (where a repeated word adds nothing); this
+    one builds a row's name sequence, where "Obsidian vault" must stay
+    adjacent even if the row's title and id both say it.
+    """
+    out = []
+    for word in _CAP_WORD.findall(str(text or "").lower()):
+        if word in _CAP_STOP or len(word) < 2:
+            continue
+        word = _cap_stem(word)
+        if word not in _CAP_STOP:
+            out.append(word)
+    return tuple(out)
+
+
+def _cap_index() -> Optional[list]:
+    """Every catalogue row with its own name and `what` words, or None.
+
+    `name` is the row's ID words, its title and its aliases - what the feature
+    is CALLED. `what` is its one-sentence description. Nothing else is read:
+    the `where`/`asks`/`limit` prose is quoted by the answer, never matched on,
+    so a passing mention in a sentence cannot make an unrelated row win.
+    """
+    global _CAP_INDEX
+    if _CAP_INDEX is not None:
+        return _CAP_INDEX or None
+    try:
+        import jarvis_feature_catalogue as C
+        rows = list(C.FEATURES)
+    except Exception:                                       # noqa: BLE001
+        _CAP_INDEX = ()
+        return None
+    index = []
+    df, df_name = {}, {}
+    for row in rows:
+        parts = [str(row.get("id") or "").replace("-", " "),
+                 str(row.get("title") or "")]
+        parts += [str(a) for a in (row.get("aliases") or ())]
+        name = frozenset(_cap_tokens(" ".join(parts)))
+        name_seq = _cap_words(" ".join(parts))
+        id_seq = _cap_words(str(row.get("id") or "").replace("-", " "))
+        #: Every one- and two-word phrase the feature is CALLED, as a set of
+        #: words so the order the owner says them in does not matter ("send an
+        #: email" matches "an email ... sends it"). A phrase is the evidence
+        #: this matcher runs on, so a passing word in a row's prose can never
+        #: name it. A single word only ever comes from the row's ID
+        #: ("documents", "skills"), never from a title's prose word.
+        phrases = set()
+        for at in range(len(name_seq)):
+            for size in (1, 2):
+                piece = name_seq[at:at + size]
+                if len(piece) == size:
+                    phrases.add(frozenset(piece))
+        singles = ({frozenset((id_seq[0],))} if len(id_seq) == 1 else set())
+        what = frozenset(_cap_tokens(row.get("what") or ""))
+        index.append({"row": row, "name": name, "name_seq": name_seq, "id_seq": id_seq,
+                      "phrases": phrases, "singles": singles, "what": what})
+        for token in name | what:
+            df[token] = df.get(token, 0) + 1
+        for token in name:
+            df_name[token] = df_name.get(token, 0) + 1
+    for item in index:
+        item["df"], item["df_name"] = df, df_name
+    _CAP_INDEX = index
+    return index
+
+
+def _cap_idf(token: str, df: dict, total: int) -> float:
+    return math.log(1.0 + total / (1.0 + df.get(token, 0)))
+
+
+def _cap_tail(raw) -> str:
+    """The question's own words, with the capability shape taken off."""
+    text = " ".join(str(raw or "").replace("\u2019", "'").lower().rstrip("?.! ").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,:]\s+", "", text)
+    text = re.sub(r"\s+answer\s+in\s+(?:one|a\s+short|a\s+single)\s+sentence$", "", text)
+    text = re.sub(r"\s+please$", "", text)
+    seen = _CAP_LEAD.match(text)
+    return text[seen.end():].strip() if seen else ""
+
+
+def _cap_direction_ok(row: dict, text: str) -> bool:
+    """Is this row's direction the question's own? See _CAP_FROM_PHONE."""
+    what = str(row.get("what") or "").lower()
+    return not (_CAP_FROM_PHONE.search(text) and _CAP_TO_PHONE.search(what))
+
+
+def _cap_resolve(raw) -> Optional[dict]:
+    """The catalogue row a capability question names, or None (the model's).
+
+    THE MEASURED RULE (2026-11-06). A sentence is claimed only when it NAMES a
+    row - a one- or two-word phrase the feature is called by (its id, title or
+    an alias) appears in it, like "notion export", "folders", "what asks first",
+    "second graphics card". A single word counts only when it is the row's whole
+    id and rare enough to be a name ("documents", "skills"), never a passing
+    word in a title. When no row is named, a question that is EXPLICITLY about
+    Jarvis may still be answered by a row it describes in three or more of its
+    own words ("draws a map of everything you know about me" -> Galaxy), which
+    is the only tier prose alone can reach. In both tiers the winner must be
+    clearly ahead of every other row that fits, so two rows that fit about as
+    well fall through to the model rather than the fast path guessing.
+    """
+    index = _cap_index()
+    if not index:
+        return None
+    tail = _cap_tail(raw)
+    if not tail:
+        return None
+    query = _cap_tokens(tail)
+    if len(query) < 2:
+        return None
+    query_set = frozenset(query)
+    # Is this question about JARVIS at all? "Do you have ...", "can I ...",
+    # "does Jarvis ..." are asked of the assistant by their shape. A HOW or
+    # WHERE question ("how do I delete my account on Netflix") has to show it,
+    # and so does a question answered from prose alone.
+    text_low = str(raw or "").lower()
+    said_you = bool(re.search(r"\b(?:you|your|yours|jarvis)\b", text_low))
+    lead = re.match(r"\s*(?:hey\s+|ok\s+|okay\s+)?(?:jarvis[,:]\s+)?"
+                    r"(?:(how|where)\b|(?:can|could|do|does|is|are)\b)", text_low)
+    about = said_you or not (lead and lead.group(1))
+    df, total = index[0]["df"], len(index)
+    found = []
+    for item in index:
+        in_name = tuple(t for t in query if t in item["name"])
+        in_what = tuple(t for t in query if t in item["what"] and t not in in_name)
+        if not in_name and not in_what:
+            continue
+        if not any(item["df"].get(t, 99) <= _CAP_SPECIFIC_DF
+                   for t in in_name + in_what):
+            continue
+        named = [p for p in item["phrases"] if p <= query_set and (len(p) == 2 or (p in item["singles"]
+                                 and item["df"].get(next(iter(p)), 99)
+                                 <= _CAP_LONE_DF))]
+        # A TWO-word phrase only names the row when one of its words is the
+        # row's OWN id word: "Obsidian vault" names notion-import (its id says
+        # notion) and vault-organizer (its id says vault), while "past chats"
+        # does not name History by itself - the question has to say "history".
+        # That is the difference between answering the right feature and the
+        # neighbouring one.
+        named = [p for p in named
+                 if len(p) == 1 or any(t in item["id_seq"] for t in p)]
+        if not named:
+            continue
+        if not about and all(len(p) == 1 for p in named):
+            # A lone one-word name from a question that does not say whose
+            # features they are is not enough ("how do I delete my account on
+            # Netflix" shares only "account").
+            continue
+        score = 0.0
+        if named:
+            score += 3.0 * sum(_cap_idf(t, df, total)
+                               for p in named for t in p)
+        if in_what:
+            score += sum(_cap_idf(t, df, total) for t in in_what)
+        found.append({"row": item["row"], "score": score,
+                      "named": len({t for p in named for t in p}),
+                      "whats": len(in_what),
+                      "ok": _cap_direction_ok(item["row"], tail),
+                      "first": min(query.index(t) for t in in_name + in_what)})
+    if not found:
+        return None
+    found.sort(key=lambda c: (-c["named"], -c["score"], -c["whats"], c["first"],
+                              str(c["row"].get("id") or "")))
+    best = found[0]
+    if not best["ok"]:
+        # The row that fits best answers the OPPOSITE direction ("a file from
+        # my phone to my PC" against the PC's own File-from-your-PC row), so
+        # there is no honest catalogue answer at all. Fall through rather than
+        # answer backwards from a worse-fitting row.
+        return None
+    if best["score"] < _CAP_WEAK_MIN:
+        return None
+    if any(word in text_low for word in _CAP_ASKED_STRONGER):
+        # The question asks for something the row's own words never claim.
+        # Measured: "can I protect a folder with a password?" names the
+        # Protected-from-Jarvis row by its own alias, but a password is not in
+        # that row's what/where/asks/limit - the row makes a folder untouchable
+        # by Jarvis, not password-protected - so the model keeps the question.
+        said = " ".join(str(best["row"].get(f) or "") for f in
+                        ("what", "where", "asks", "limit")).lower()
+        if not any(word in said for word in _CAP_ASKED_STRONGER):
+            return None
+    others = [c for c in found[1:] if c["row"].get("id") != best["row"].get("id")
+              and c["ok"]]
+    if others and others[0]["score"] * _CAP_MARGIN > best["score"]:
+        # Two rows fit about as well: this is not a confident answer, so the
+        # model answers exactly as before rather than the fast path guessing.
+        return None
+    return best["row"]
+
+
+def _cap_question(raw) -> Optional[Intent]:
+    """A capability question answered from the catalogue, or None (2026-11-06).
+
+    Called LAST in `match()`, so every action matcher has already declined the
+    sentence. The answer is the row's own `what` and `where`, plus its `asks`
+    when the question asks about a card or the row is off until switched on.
+    """
+    row = _cap_resolve(raw)
+    if row is None:
+        return None
+    text = " ".join(str(raw or "").lower().split())
+    return Intent("capability_answer",
+                  {"id": str(row.get("id") or ""),
+                   "ask": bool(_CAP_ASKS_ABOUT_A_CARD.search(text))})
+
+
+def _cap_safety_question(raw) -> Optional[Intent]:
+    """A limit or permission question, answered from the row that records it.
+
+    Runs EARLY, because these are the sentences the measured test got backwards
+    ("Can you change a setting without asking?" -> "Yes") and because the
+    reminder-sound family would otherwise take the crisis-help question. Only a
+    real question shape and a short list of limits are claimed here; anything
+    else keeps its own path.
+    """
+    text = " ".join(str(raw or "").replace("\u2019", "'").lower().rstrip(" ?!.").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,:]\s+", "", text)
+    if not text or len(text) > 300:
+        return None
+    # THE FEATURE GUIDE AND THE SETTINGS GRAMMAR OWN THESE SHAPES. "can I
+    # change Run one shell command", "how do I use Crisis help" and "turn off
+    # Smartwatch notifications" all contain a limit row's own words, but they
+    # are questions about that row, not about the permission rule - the guide
+    # answers them, and its own 178-row suite holds that (2026-11-06).
+    if re.match(r"(?:can|could|would|will)\s+i\s+"
+                r"(?:change|turn|switch|use|set|adjust|edit|configure)\b"
+                r"|(?:turn|switch)\s+(?:on|off)\b|how\s+(?:do|can|should)\s+i\b",
+                text):
+        return None
+    # A QUESTION ABOUT ABILITY, not "how do I use <a row's title>" - the feature
+    # guide answers those, and its own 178-row suite proves it (2026-11-06).
+    # "how does crisis help work?" is the one how-question this hook owns.
+    how = bool(re.match(r"how\b", text))
+    if not re.match(r"(?:can|could|would|will|do|does|did|is|are)\b", text) \
+            and not how:
+        return None
+    if _CAP_CRISIS_Q.search(text):
+        try:
+            import jarvis_wellbeing
+            if jarvis_wellbeing.crisis(text):
+                return None
+        except Exception:                                   # noqa: BLE001
+            pass
+        return Intent("capability_answer", {"id": "crisis-help", "ask": False,
+                                            "verdict": ""})
+    if how:
+        return None
+    for pattern, row_id, verdict in _CAP_SAFETY:
+        if pattern.search(text):
+            ask = bool(_CAP_ASKS_ABOUT_A_CARD.search(text))
+            return Intent("capability_answer",
+                          {"id": row_id, "ask": ask, "verdict": verdict})
+    return None
+
+
+def _cap_sentence(text: str) -> str:
+    """The row's own words as a sentence: first letter up, full stop on."""
+    said = " ".join(str(text or "").split())
+    if not said:
+        return ""
+    if said[-1] not in ".!?":
+        said += "."
+    return said[:1].upper() + said[1:]
+
+
+def _cap_surface_words(row: dict) -> str:
+    """Which apps have it. A one-sided row says so in the brief's own words."""
+    surface = str(row.get("surface") or "")
+    if surface == "both":
+        return "It is in both apps - the PC and the phone."
+    if surface == "desktop":
+        return "It is on the PC only - the phone has no screen for it."
+    if surface == "phone":
+        return "It is on the phone only."
+    return ""
+
+
+#: A row whose own `asks` or `limit` says it is off until switched on. Its
+#: state belongs in every answer, because "yes, Picture mode" without "off by
+#: default" would claim the PC is already reading pictures.
+_CAP_OFF_BY_DEFAULT = re.compile(
+    r"\boff\s+(?:by\s+default|until\s+you\s+turn\s+it\s+on|until\s+it\s+is\s+"
+    r"switched\s+on|until\s+switched\s+on|until\s+it\s+is\s+turned\s+on)\b"
+    r"|\bstarts\s+switched\s+off\b")
+
+
+def _capability_words(row: dict, *, ask: bool, verdict: str) -> str:
+    """One capability answer, in the owner's own words (2026-11-06).
+
+    The facts are the catalogue row's, verbatim: `what`, `where` and - when the
+    question asks about a card, the row is off by default, or the question is
+    one of the limit shapes - the row's `asks` rule. Nothing is invented and
+    nothing is softened: a desktop-only row says the phone has no screen for it.
+    """
+    title = str(row.get("title") or "").strip()
+    what = _cap_sentence(row.get("what"))
+    where = _cap_sentence(row.get("where"))
+    asks = _cap_sentence(row.get("asks"))
+    off = bool(_CAP_OFF_BY_DEFAULT.search(str(row.get("asks") or ""))
+               or _CAP_OFF_BY_DEFAULT.search(str(row.get("limit") or "")))
+    parts = []
+    if verdict == "No.":
+        parts.append(f"No. {title}: {asks}")
+        if where:
+            parts.append(f"Where: {where}")
+    elif verdict == "Yes.":
+        parts.append(f"Yes. {title}: {what}")
+        if where:
+            parts.append(f"Where: {where}")
+        if asks:
+            parts.append(asks)
+    else:
+        parts.append(f"Yes - {title}. {what}" if title else what)
+        if where:
+            parts.append(f"Where: {where}")
+        if asks and (ask or off):
+            parts.append(asks)
+    surface = _cap_surface_words(row)
+    if surface:
+        parts.append(surface)
+    return " ".join(p for p in parts if p)
+
+
+def _run_capability_answer(f: dict) -> "Result":
+    """The fixed answer for a catalogue row, or None when the row is gone."""
+    index = _cap_index()
+    if not index:
+        return None
+    row_id = str(f.get("id") or "")
+    row = next((item["row"] for item in index
+                if str(item["row"].get("id") or "") == row_id), None)
+    if row is None:
+        return None
+    return Result(_capability_words(row, ask=bool(f.get("ask")),
+                                    verdict=str(f.get("verdict") or "")),
+                  "capability_answer")
+
+
+# --------------------------------------------------------------------------
 # Keyboard shortcuts (2026-10-31 honesty fix)
 #
 # MEASURED, never invented. The PC list is `jarvis-desktop/src-tauri/src/
@@ -6234,6 +6838,15 @@ def _reminders_question(raw) -> Optional[Intent]:
     # Galaxy up" carries "set", but both are feature questions (2026-11-01).
     if _asks_about_a_named_feature(text, str(raw or "")):
         return None
+    # A HOW-TO question that names a catalogue row OUTSIDE the reminder family
+    # is that row's (2026-11-06): "how do I ask you to look at my screen" was
+    # answered with the reminder how-to because the shape starts "how do I
+    # ask". "how do I ask for a reminder" resolves to a reminder row and keeps
+    # this family's answer, so only the other rows step aside.
+    if _REMINDER_HOWTO_HOW_RX.search(text):
+        row = _cap_resolve(str(raw or ""))
+        if row is not None and str(row.get("id") or "") not in _CAP_REMINDER_ROWS:
+            return None
     if _REMINDER_CLOSED_RX.search(text):
         return Intent("reminder_closed", {"surface": "closed"})
     # A question whose nouns are another feature's and which never says reminder,
@@ -19673,6 +20286,12 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # the module or the answer has gone, which hands the turn to the model
         # exactly as before this path existed.
         return _run_tool_profile(f)
+    if n == "capability_answer":
+        # A question about its own features, answered from the owner's feature
+        # catalogue (2026-11-06) - the row's own what/where/asks words. No
+        # model, no card, no route, no state read; listed in READ_ONLY_INTENTS
+        # so it cannot take away what "cancel that" would undo.
+        return _run_capability_answer(f)
     if n == "phone_apps_list":
         # Q7 (2026-11-03): the owner's own allow-list, read-only. Both apps get
         # the same sentence - the list lives on the PC and the phone shows it
@@ -20578,6 +21197,11 @@ READ_ONLY_INTENTS = frozenset({
     # no network. So a private chat hands it to the model (the branch above),
     # and it must not take away what "cancel that" would undo.
     "tool_profile",
+    # A capability question answered from the owner's feature catalogue
+    # (2026-11-06): it quotes the row's own what/where/asks words, opens no
+    # card, calls no model and changes nothing - so it must not take away what
+    # "cancel that" would undo.
+    "capability_answer",
     # "which apps on my phone may you open?" (Q7, 2026-11-03) reads the
     # owner's own [phone_apps] table through jarvis_phone_apps.view() - the
     # same read-only view the route serves. It changes nothing, so it must not
