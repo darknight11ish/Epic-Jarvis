@@ -57,6 +57,16 @@ import com.jarvis.client.ui.theme.LocalRadii
  * start by accident and an utterance cannot be unsent once the desktop has
  * verified it.
  *
+ * A HOLD SAYS SO WHILE IT LASTS (2026-11-06). The pause is right for a tap -
+ * nothing else ends it - but a held button is a finger the owner is still
+ * pressing, and a pause in a held sentence is thinking, not finishing. So
+ * `onHoldStarted` fires once, about 400 ms into the press, WHILE the finger is
+ * still down; the session then keeps capture open until the release. A quick
+ * tap, and a slide-away before that moment, never fire it: tap mode is
+ * unchanged. This is the owner's report of 2026-11-06 fixed - "I'm holding
+ * down the mic manual button and ... it keeps cutting me off ... even when I'm
+ * still speaking".
+ *
  * GESTURE KEYS, AND THE BUG THEY CAUSED (the owner's report, 2026-10-13:
  * "the mic button ... doesnt work if i tap it or hold it down"). This block
  * used to be keyed `pointerInput(enabled, capturing)`. `onBegin()` makes
@@ -85,6 +95,19 @@ fun VoiceButton(
      */
     micLevel: State<Float>,
     onBegin: () -> Unit,
+    /**
+     * The press has lasted [VoicePress.HOLD_THRESHOLD_MS] and the finger is
+     * still down: this is a hold, not a tap. Called exactly once per gesture,
+     * and never for a quick tap or a slide-away before the threshold.
+     *
+     * WHY IT EXISTS (the owner, 2026-11-06: "I'm holding down the mic manual
+     * button and ... it keeps cutting me off ... even when I'm still
+     * speaking"). The release callback cannot say this: it only fires when the
+     * finger lifts. The session needs to know DURING the press, because a
+     * pause in the sentence would otherwise end the clip and send it while the
+     * button is still held. See [com.jarvis.client.voice.HoldEndRule].
+     */
+    onHoldStarted: () -> Unit,
     onRelease: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -98,6 +121,7 @@ fun VoiceButton(
     // restart the press that changed it (see the doc comment above).
     val capturingNow = rememberUpdatedState(capturing)
     val currentOnBegin = rememberUpdatedState(onBegin)
+    val currentOnHoldStarted = rememberUpdatedState(onHoldStarted)
     val currentOnRelease = rememberUpdatedState(onRelease)
     val currentOnCancel = rememberUpdatedState(onCancel)
 
@@ -147,9 +171,48 @@ fun VoiceButton(
 
                     var cancelled = false
                     var released = false
+                    // Exactly once per gesture: the session is told the finger
+                    // is STILL DOWN the moment the press becomes a hold, so a
+                    // pause can no longer end the capture (the owner's report,
+                    // 2026-11-06). A slide-away before the threshold must not
+                    // fire it - `cancelled` is part of VoicePress.holdReached.
+                    var holdFired = false
                     try {
                         while (true) {
-                            val event = awaitPointerEvent()
+                            // A finger held still sends no pointer events at
+                            // all, so an untimed awaitPointerEvent() would
+                            // never notice the hold. Wait for the next event,
+                            // but never longer than the rest of the threshold,
+                            // through the gesture scope's OWN timeout - the one
+                            // Compose's long-press detector uses - so pointer
+                            // dispatch stays correct.
+                            val event = if (holdFired || cancelled) {
+                                awaitPointerEvent()
+                            } else {
+                                val sinceDown = System.currentTimeMillis() - downTime
+                                val remaining = VoicePress.HOLD_THRESHOLD_MS - sinceDown
+                                if (remaining <= 0L) {
+                                    null
+                                } else {
+                                    withTimeoutOrNull(remaining) { awaitPointerEvent() }
+                                }
+                            }
+                            if (event == null) {
+                                // The rest of the threshold passed with no
+                                // event: the finger is still down and has not
+                                // slid away, so this press is a hold.
+                                val isHold = VoicePress.holdReached(
+                                    durationMs = System.currentTimeMillis() - downTime,
+                                    cancelled = cancelled,
+                                    released = false,
+                                    alreadyFired = holdFired,
+                                )
+                                if (isHold) {
+                                    holdFired = true
+                                    currentOnHoldStarted.value()
+                                }
+                                continue
+                            }
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             val nowCancelled = (down.position.y - change.position.y) > cancelPx
                             if (nowCancelled && !cancelled) {

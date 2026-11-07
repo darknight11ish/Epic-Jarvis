@@ -4748,6 +4748,7 @@ class MainActivity : FragmentActivity() {
                                     JarvisRuntime.decisionBlocker(item, approve = false)
                                 },
                                 onVoiceBegin = ::beginVoice,
+                                onVoiceHoldStarted = ::holdVoice,
                                 onVoiceRelease = ::releaseVoice,
                                 onVoiceCancel = ::cancelVoice,
                                 onDismissVoiceNotice = { JarvisRuntime.voice.clearNotice() },
@@ -4942,6 +4943,22 @@ class MainActivity : FragmentActivity() {
         }
         micGrantedCallback = { voice.begin(unlockedAtPress = unlockedAtPress) }
         micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    /**
+     * [VoiceButton]'s `onHoldStarted`: the press has become a HOLD and the
+     * finger is still down (the owner's report, 2026-11-06).
+     *
+     * Marks the turn [beginVoice] started so the capture loop keeps a pause
+     * from ending a held sentence and sending it while he is still speaking -
+     * [VoiceSession.holdStarted] and `voice/HoldEndRule.kt` are the rest.
+     * Nothing to do about the permission dialog here: when it is still open
+     * there is no turn yet, and `holdStarted()` on the previous (finished)
+     * turn is read by nothing. Only a first press on a fresh install can land
+     * in that window, and it falls back to tap behaviour for that one clip.
+     */
+    private fun holdVoice() {
+        JarvisRuntime.voice.holdStarted()
     }
 
     /**

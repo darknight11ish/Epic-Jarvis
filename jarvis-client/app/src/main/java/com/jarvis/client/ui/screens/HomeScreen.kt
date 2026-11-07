@@ -921,6 +921,14 @@ data class HomeActions(
      */
     val denyBlockerFor: (PendingItem) -> String?,
     val onVoiceBegin: () -> Unit,
+    /**
+     * The talk button's press has become a HOLD and the finger is still down
+     * (2026-11-06). The session marks the live turn with it so a pause cannot
+     * end a held sentence and send it while the owner is still speaking; see
+     * [com.jarvis.client.voice.VoiceSession.holdStarted] and
+     * [com.jarvis.client.voice.HoldEndRule]. Never called for a tap.
+     */
+    val onVoiceHoldStarted: () -> Unit,
     val onVoiceRelease: () -> Unit,
     val onVoiceCancel: () -> Unit,
     val onDismissVoiceNotice: () -> Unit,
@@ -5122,6 +5130,7 @@ private fun Composer(
                 capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
                 micLevel = micLevel,
                 onBegin = actions.onVoiceBegin,
+                onHoldStarted = actions.onVoiceHoldStarted,
                 onRelease = actions.onVoiceRelease,
                 onCancel = actions.onVoiceCancel,
             )
@@ -5381,6 +5390,7 @@ private fun VoiceBar(
                             capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
                             micLevel = micLevel,
                             onBegin = actions.onVoiceBegin,
+                            onHoldStarted = actions.onVoiceHoldStarted,
                             onRelease = actions.onVoiceRelease,
                             onCancel = actions.onVoiceCancel,
                         )

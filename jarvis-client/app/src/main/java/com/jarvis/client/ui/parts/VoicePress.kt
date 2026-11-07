@@ -23,11 +23,21 @@ package com.jarvis.client.ui.parts
  *    named so the four cases are visible and testable instead of being four
  *    branches inside a coroutine.
  *
+ * A THIRD PART, added 2026-11-06 for the owner's next report ("I'm holding
+ * down the mic manual button and ... it keeps cutting me off ... even when I'm
+ * still speaking"): [holdReached] says when the press has become a hold WHILE
+ * THE FINGER IS STILL DOWN, and [VoiceButton]'s `onHoldStarted` tells the
+ * session from that moment. Before it, hold-versus-tap was only decided when
+ * the finger lifted, so a pause in a held sentence ended the clip as if the
+ * finger had come off (the rule that consumes it is
+ * [com.jarvis.client.voice.HoldEndRule]). Tap-to-talk never sets that flag and
+ * keeps its pause auto-send exactly as it was.
+ *
  * The rules are the ones the button has always documented: a tap starts a
  * recording that outlives the tap; a second tap while recording sends; a
- * sustained hold releases to send; sliding away cancels; and a gesture torn
- * down with no release at all (the pointerInput being disposed, the parent
- * leaving composition) cancels rather than sending.
+ * sustained hold announces itself and then releases to send; sliding away
+ * cancels; and a gesture torn down with no release at all (the pointerInput
+ * being disposed, the parent leaving composition) cancels rather than sending.
  */
 internal object VoicePress {
 
@@ -48,6 +58,35 @@ internal object VoicePress {
         /** Throw the clip away (slid away, or the gesture was torn down). */
         CANCEL,
     }
+
+    /**
+     * Whether the press has become a HOLD - the finger is still down and the
+     * press has lasted [HOLD_THRESHOLD_MS] - so the session can be told that
+     * before the finger lifts.
+     *
+     * WHY THIS EXISTS. [release] above only decides at the END of a press. The
+     * owner's report of 2026-11-06 - "I'm holding down the mic manual button
+     * and ... it keeps cutting me off ... even when I'm still speaking" - is
+     * what that gap costs: the session began the clip on press-down, then a
+     * mid-sentence pause hit the Smart Turn end, and the clip was sent while
+     * the finger was still on the button. The button must say "still holding"
+     * while there is still time, and this is the predicate that says when.
+     *
+     * A slide-away before the threshold must never fire it ([cancelled]), and
+     * neither must a press that somehow arrives here after its release was
+     * seen ([released]) - so the owner is never told a hold that was already
+     * over. [alreadyFired] is the "exactly once per gesture" half.
+     *
+     * The gesture itself is Compose-only; this predicate is pure so the three
+     * ways a press can fail to become a hold are testable off-device.
+     */
+    fun holdReached(
+        durationMs: Long,
+        cancelled: Boolean,
+        released: Boolean,
+        alreadyFired: Boolean,
+    ): Boolean =
+        !alreadyFired && !cancelled && !released && durationMs >= HOLD_THRESHOLD_MS
 
     /**
      * What one press means, from what the gesture observed.
