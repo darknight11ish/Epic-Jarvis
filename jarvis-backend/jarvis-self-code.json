@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "cc0abb2b67b92a425ce8673ef3839717e0ddce63",
- "built_at": "2026-11-07T05:21:47-08:00",
+ "ref": "b8a9406907fc38a5fc89ed0e7826d1c93cdd2018",
+ "built_at": "2026-11-07T11:16:03-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4478,6 +4478,7 @@
     "changelog.d/2026-11-07-self-code-map.md",
     "changelog.d/2026-11-07-self-knowledge-honesty.md",
     "changelog.d/2026-11-07-three-gpu-coding-preset.md",
+    "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4606,6 +4607,7 @@
     "decisions.d/2026-11-07-chat-live-change-parity.md",
     "decisions.d/2026-11-07-cloud-escalation-said-out-loud.md",
     "decisions.d/2026-11-07-cloud-provider-choice-and-privacy-backstop.md",
+    "decisions.d/2026-11-07-dispatch-sets-are-not-read-only-marks.md",
     "decisions.d/2026-11-07-github-self-knowledge-catalogue-not-lane-system.md",
     "decisions.d/2026-11-07-gpu-pin-11434-to-headless.md",
     "decisions.d/2026-11-07-repo-watcher.md",
@@ -5057,7 +5059,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 805,
+   "file_count": 807,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6121,6 +6123,41 @@
  ],
  "recent_commits": [
   {
+   "sha": "b8a9406907fc38a5fc89ed0e7826d1c93cdd2018",
+   "date": "2026-11-07",
+   "subject": "ci(audit,release): checkout full history in audit job and set targetCommitish on client-latest"
+  },
+  {
+   "sha": "e39301b765da9d21a2c2695a65f74262569a834c",
+   "date": "2026-11-07",
+   "subject": "fix(quick): route repo_watch_list to _run_repo_watch, retry meta-instruction suffixes, and pin dispatch-set reachability"
+  },
+  {
+   "sha": "a1da4576b20edaa32bbdafbaaa5a465824a7ca14",
+   "date": "2026-11-07",
+   "subject": "Merge pull request #1211 from darknight11ish/integration/wave8-2026-11-07"
+  },
+  {
+   "sha": "858b258b4c3ba321908dcae5a0a4d348cd8ebf58",
+   "date": "2026-11-07",
+   "subject": "integration: fix the backend suite failures the full CI run found"
+  },
+  {
+   "sha": "293bcb60c7dbef797e11b2bf51dd1ec205a43d6b",
+   "date": "2026-11-07",
+   "subject": "integration: the two-part capability answer only answers a real question"
+  },
+  {
+   "sha": "141b3ffd0a7a6d78d66d125328e68264980c46c7",
+   "date": "2026-11-07",
+   "subject": "integration: the no-op rule reaches the settings-registry dispatch loop too"
+  },
+  {
+   "sha": "758d4d88129a910bd3d89f6e018beea285cd66f7",
+   "date": "2026-11-07",
+   "subject": "integration: the merged suite interactions found on this branch are fixed"
+  },
+  {
    "sha": "cc0abb2b67b92a425ce8673ef3839717e0ddce63",
    "date": "2026-11-07",
    "subject": "integration: cloud provider door complete - list/ask/change, chosen provider answers (Q1 B6)"
@@ -6184,41 +6221,6 @@
    "sha": "53c7069d0005d423a450bb731962dea4dd72ab43",
    "date": "2026-11-07",
    "subject": "integration: deterministic cloud-escalation chat switch"
-  },
-  {
-   "sha": "fc47f888704cafdc785b71408e612890c9437050",
-   "date": "2026-11-07",
-   "subject": "feat(github): Jarvis knows its own GitHub - catalogue row, deterministic answers, accounts door"
-  },
-  {
-   "sha": "46d3ae0ae105e9b0edd2575514dcf472cf27099c",
-   "date": "2026-11-07",
-   "subject": "fix(parity): every switchable tool can be switched by chat and Jarvis Live"
-  },
-  {
-   "sha": "cde857925821d3641f7eded32971f1f86ee2b47c",
-   "date": "2026-11-07",
-   "subject": "feat(self-code): a generated map of Jarvis's own code, shipped beside the backend (2026-11-07)"
-  },
-  {
-   "sha": "2979f45cafb6edea699146a47a7b6dea3b40d50d",
-   "date": "2026-11-07",
-   "subject": "fix(agent): fix the seven #1209 follow-up audit bugs, loosening no gate (2026-11-07)"
-  },
-  {
-   "sha": "444f8debcc3690e171d31dd9c804cbd8eb1483db",
-   "date": "2026-11-07",
-   "subject": "fix(quick): route \"turn cloud escalation on/off\" in chat to the real switch (2026-11-07)"
-  },
-  {
-   "sha": "37d1befc83ffa6ea404e98c49531353aef1c5d27",
-   "date": "2026-11-07",
-   "subject": "feat(watch): a watch that polls - the scheduler kind behind \"watch X daily\""
-  },
-  {
-   "sha": "9b67948278ca2399940c9c9ae83090b4659bde42",
-   "date": "2026-11-07",
-   "subject": "integration: self-knowledge honesty bundle (task-3)"
   }
  ],
  "top_level": [
@@ -6253,19 +6255,19 @@
    "files": 254
   },
   {
+   "path": "changelog.d/",
+   "line": "one bullet per pull request, rolled into CHANGELOG.md",
+   "files": 222
+  },
+  {
    "path": "videos/",
    "line": "every numbered launch video, kept rather than replaced",
    "files": 222
   },
   {
-   "path": "changelog.d/",
-   "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 221
-  },
-  {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 134
+   "files": 135
   },
   {
    "path": "plugins/",
@@ -6339,8 +6341,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5462,
-  "covered": 4997,
+  "tracked_files": 5464,
+  "covered": 4999,
   "excluded": 465,
   "subsystems": 27
  },
