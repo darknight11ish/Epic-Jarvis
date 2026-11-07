@@ -77,11 +77,13 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -233,6 +235,17 @@ private const val REPLY_KEY = "reply"
  * the owner reads, this is what the phone says out loud.
  */
 private const val FACE_TYPE_HINT = "Type a message to Jarvis"
+
+/**
+ * What TalkBack says about the answer box on the full-screen bar when the
+ * answer is longer than its three visible lines (2026-11-06).
+ *
+ * Compose's own scroll semantics already say the area is scrollable; these
+ * words say why that is enough. They are only added when the answer really is
+ * longer than the box ([ReplyPeekPlan.fits]), so a short answer is not
+ * described as something it is not.
+ */
+private const val LONG_ANSWER_HINT = "Long answer. Drag inside it to read the rest."
 
 /**
  * The Home HUD's key in the conversation list (2026-11-02). It is the list's
@@ -921,6 +934,14 @@ data class HomeActions(
      */
     val denyBlockerFor: (PendingItem) -> String?,
     val onVoiceBegin: () -> Unit,
+    /**
+     * The talk button's press has become a HOLD and the finger is still down
+     * (2026-11-06). The session marks the live turn with it so a pause cannot
+     * end a held sentence and send it while the owner is still speaking; see
+     * [com.jarvis.client.voice.VoiceSession.holdStarted] and
+     * [com.jarvis.client.voice.HoldEndRule]. Never called for a tap.
+     */
+    val onVoiceHoldStarted: () -> Unit,
     val onVoiceRelease: () -> Unit,
     val onVoiceCancel: () -> Unit,
     val onDismissVoiceNotice: () -> Unit,
@@ -1527,8 +1548,10 @@ fun HomeScreen(
                 onShowChat = { peekChat = true },
                 onOpenMore = { moreOpen = true },
                 // A question typed in the bar does go to the PC, and then the
-                // chat opens so the answer can be read: full screen shows only
-                // the first three lines of it. Said here, where `peekChat`
+                // chat opens so the whole thread is there: since 2026-11-06 the
+                // box above this bar scrolls, so the answer ON SCREEN is
+                // readable without it, but earlier turns and the answer's own
+                // menu still live in the chat. Said here, where `peekChat`
                 // lives - the bar itself knows nothing about the split.
                 onTypedSend = { peekChat = true },
                 // "Was this answer right?" typed in the face box opens the
@@ -5122,6 +5145,7 @@ private fun Composer(
                 capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
                 micLevel = micLevel,
                 onBegin = actions.onVoiceBegin,
+                onHoldStarted = actions.onVoiceHoldStarted,
                 onRelease = actions.onVoiceRelease,
                 onCancel = actions.onVoiceCancel,
             )
@@ -5289,8 +5313,9 @@ private fun VoiceBar(
             com.jarvis.client.net.AnswerMenuAsk.Decision.SEND -> {
                 askLine = null
                 actions.onSend()
-                // The chat opens where the answer can be read: full screen
-                // shows only the first three lines of it.
+                // The chat opens for the whole thread: since 2026-11-06 the
+                // answer box above this bar scrolls the answer itself, but
+                // earlier turns and the answer's menu are the chat's.
                 onTypedSend()
             }
             com.jarvis.client.net.AnswerMenuAsk.Decision.HELD -> Unit
@@ -5310,7 +5335,9 @@ private fun VoiceBar(
             VoiceStrip("Approvals are off on the desktop", tone = chrome.warnInk)
         }
         VoiceStrips(state, actions)
-        ReplyPeek(reply, state.streaming)
+        // The same "follow the reply" setting the full-screen chat's own list
+        // obeys: one answer, one follow rule, whichever surface is showing it.
+        ReplyPeek(reply, state.streaming, state.followReply)
         // "Was this answer right?" with no finished answer to open a menu for:
         // the same line, in the same words, the chat's box shows above itself.
         askLine?.let { line ->
@@ -5381,6 +5408,7 @@ private fun VoiceBar(
                             capturing = state.voicePhase == VoiceSession.Phase.CAPTURING,
                             micLevel = micLevel,
                             onBegin = actions.onVoiceBegin,
+                            onHoldStarted = actions.onVoiceHoldStarted,
                             onRelease = actions.onVoiceRelease,
                             onCancel = actions.onVoiceCancel,
                         )
@@ -5545,22 +5573,154 @@ private fun FaceTypeBox(
 }
 
 /**
- * The first few lines of the answer, for Full screen. Read as a lambda and
- * only in here, for the reason [HomeScreen]'s `reply` parameter gives: a
- * streamed token redraws these lines and nothing else.
+ * The answer on the full-screen bar: the first [ReplyPeekPlan.LINES] lines of it
+ * at rest - the same three lines, the same style and the same footprint this
+ * box had while it could only truncate - with the WHOLE answer reachable by
+ * dragging inside it (2026-11-06).
+ *
+ * THE BOX DOES NOT GROW. The owner's report of 2026-11-06 was a long answer cut
+ * off after about three lines with "…", readable only by pressing "Show chat"
+ * (his words: *"if i get a response from jarvis rhat is longer, i should be able
+ * to scroll down to read the whole response instead of havijg to press more
+ * chat"*). Given the choice the next day he picked the box that stays where it
+ * is: the face, the doors row and the bar must not move, so the area keeps the
+ * height of the three lines it always showed ([ReplyPeekPlan.capDp], from this
+ * Text's own line height at the phone's text size) plus the same 6dp above and
+ * below, and it scrolls INSIDE itself. "Show chat" stays where it was, for the
+ * whole thread - earlier turns, the "You" line, the answer's own menu - not for
+ * the answer on screen.
+ *
+ * FOLLOW RULE. The newest words stay in view while a reply arrives, and an
+ * owner's drag takes over from that moment ([ReplyPeekPlan.follow]); the
+ * full-screen chat's own list follows the same rule, so the two cannot teach
+ * two different gestures. The one extra move is [ReplyPeekPlan.settle], for the
+ * last token landing in the same frame as the "stopped streaming" flag.
+ *
+ * The answer stays ONE plain `Text` - not `FormattedAnswer` and not a markdown
+ * view: this change is about reaching the words that are already drawn, and
+ * nothing about how they are drawn. It is still `bodyMedium` + `textMid`.
+ *
+ * Read as a lambda and only in here, for the reason [HomeScreen]'s `reply`
+ * parameter gives: a streamed token redraws these lines and nothing else.
  */
 @Composable
-private fun ReplyPeek(reply: () -> String, streaming: Boolean) {
+private fun ReplyPeek(
+    reply: () -> String,
+    streaming: Boolean,
+    followReply: Boolean = true,
+) {
     val text = reply()
     if (text.isBlank() && !streaming) return
-    Text(
-        text.ifBlank { "…" },
-        style = MaterialTheme.typography.bodyMedium,
-        color = LocalChrome.current.textMid,
-        maxLines = 3,
-        overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-    )
+    val chrome = LocalChrome.current
+    // The answer's own look, unchanged.
+    val style = MaterialTheme.typography.bodyMedium
+    val density = LocalDensity.current
+    // The height of the three lines the OLD Text showed, from the same line
+    // height it drew with: at the default type 3 x 22sp = 66dp, plus the 6dp a
+    // side - exactly today's footprint, at every text size.
+    val cap = with(density) {
+        ReplyPeekPlan.capDp(style.lineHeight.value, fontScale = density.fontScale).dp
+    }
+    val scrollState = rememberScrollState()
+    // The answer's real line count, from its own layout: only used to tell
+    // TalkBack that a long answer is longer than the box it is drawn in.
+    var totalLines by remember { mutableIntStateOf(ReplyPeekPlan.LINES) }
+    // The owner dragged the answer by hand: from then on the answer is theirs.
+    var ownerDragged by remember { mutableStateOf(false) }
+    // True when this answer streamed inside this box. An answer that was already
+    // finished when the box appeared is left at its start, which is what the
+    // old three-line peek always showed (see [ReplyPeekPlan.settle]).
+    var streamedHere by remember { mutableStateOf(false) }
+    // A new reply starts following again: the drag that stopped the last one
+    // belonged to the answer that was on screen then.
+    LaunchedEffect(streaming) {
+        if (streaming) streamedHere = true
+    }
+    // A drag, not a programmatic scroll: `value` also changes on every followed
+    // token, so the interaction stream is the only honest "the owner did it".
+    LaunchedEffect(scrollState) {
+        scrollState.interactionSource.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) ownerDragged = true
+        }
+    }
+    // Follow the newest words in while the answer streams, until the owner's own
+    // drag. The viewport's max scroll is the signal, and it is laid out only
+    // after the new words exist, so nothing here reads the reply text per token.
+    LaunchedEffect(scrollState, streaming, followReply) {
+        if (!followReply) return@LaunchedEffect
+        if (streaming) ownerDragged = false
+        if (!ReplyPeekPlan.follow(streaming, ownerDragged)) return@LaunchedEffect
+        snapshotFlow { scrollState.maxValue }.collect { max ->
+            if (!ownerDragged && scrollState.value != max) scrollState.scrollTo(max)
+        }
+    }
+    // A reply that streamed HERE and that the owner never touched is shown its
+    // end once it stops: the last token and the stop flag can arrive in the same
+    // frame, so the final growth is laid out after the follow has stopped.
+    LaunchedEffect(streaming, followReply) {
+        if (streaming || !followReply) return@LaunchedEffect
+        if (!ReplyPeekPlan.settle(streamedHere, ownerDragged)) return@LaunchedEffect
+        // One frame, so the final text has been measured; then the end. The
+        // drag check is repeated because a finger can land in that frame.
+        withFrameNanos { }
+        if (!ownerDragged) scrollState.scrollTo(scrollState.maxValue)
+    }
+    // The fade is shown only when the answer really is LONGER than the box AND
+    // there is more of it below the fold. The first half matters on the very
+    // first frame: a scroll state's max height starts at Int.MAX_VALUE before
+    // the first layout (Compose's own default), and `moreBelow` alone would
+    // flash the fade over a short answer for one frame. `fits` starts from the
+    // box's own three lines and is corrected by the text's layout below.
+    val more = !ReplyPeekPlan.fits(totalLines) &&
+        ReplyPeekPlan.moreBelow(scrollState.value, scrollState.maxValue)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                // THREE lines at most - and shorter when the answer is shorter,
+                // so a short answer looks exactly as it did and a long one is no
+                // taller than the box that used to truncate it.
+                .heightIn(max = cap)
+                .verticalScroll(scrollState)
+                .semantics {
+                    // Compose's own scroll semantics are what make the area
+                    // scrollable to TalkBack; these words say why that is enough,
+                    // rather than leaving a long answer reading like a cut box.
+                    if (!ReplyPeekPlan.fits(totalLines)) stateDescription = LONG_ANSWER_HINT
+                },
+        ) {
+            Text(
+                text.ifBlank { "…" },
+                style = style,
+                color = chrome.textMid,
+                modifier = Modifier.fillMaxWidth(),
+                // The whole answer, laid out unbounded inside the scroll: no
+                // line limit and no ellipsis could ever cut a word of it.
+                onTextLayout = { layout -> totalLines = layout.lineCount },
+            )
+        }
+        if (more) {
+            // The one sign that there is more below: the bar's own background
+            // fading in over the answer's last 12dp. It is drawn OVER the text,
+            // so it costs no height, and it goes as soon as the end is reached -
+            // the last line is always read at full contrast.
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(ReplyPeekPlan.FADE_DP.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, chrome.surface1),
+                        ),
+                    ),
+            )
+        }
+    }
 }
 
 /**

@@ -553,6 +553,21 @@ class VoiceSession(
     private class Turn {
         @Volatile var releaseRequested = false
 
+        /**
+         * The talk button said the finger is STILL DOWN (the owner's report,
+         * 2026-11-06: "I'm holding down the mic manual button and ... it keeps
+         * cutting me off ... even when I'm still speaking"). Set by
+         * [holdStarted] about 400 ms into a press, and never cleared: the
+         * capture loop reads it to keep a pause from ending a held sentence
+         * ([HoldEndRule]).
+         *
+         * Only the talk button sets it. "hey Jarvis", Jarvis Live and
+         * handsfree build their own `TurnEnd` in their own services and never
+         * come through [begin], so their pause-based end is untouched - there
+         * is no held button on any of those paths.
+         */
+        @Volatile var holdStarted = false
+
         /** "Stop" was said: nothing more of this turn's reply is spoken. See [stopSpeaking]. */
         @Volatile var silenced = false
 
@@ -1130,20 +1145,53 @@ class VoiceSession(
                     val seconds = n / rate.toFloat()
                     val rms = Wav.rms(buf, n)
                     val step = turnEnd.push(rms, seconds)
-                    if (step == TurnEnd.Step.END) {
-                        true
-                    } else if (step == TurnEnd.Step.ASK && smartTurn != null) {
-                        val samples16k = if (rate == Wav.SAMPLE_RATE) {
-                            samples.copyOf(count)
-                        } else {
-                            Wav.resample(samples.copyOf(count), rate)
+                    // A HELD TALK BUTTON OUTRANKS THE PAUSE (the owner's
+                    // report, 2026-11-06: "I'm holding down the mic manual
+                    // button and ... it keeps cutting me off ... even when I'm
+                    // still speaking"). While the finger is down and has not
+                    // been released, a pause that would end a tap does not end
+                    // this capture - the owner is thinking, not finishing -
+                    // and the Smart Turn model is not asked, because it exists
+                    // only to end the clip on that pause. A release (or a
+                    // slide-away, which is [cancel] and sets the same flag)
+                    // stops exactly as it always did, and a tap never sets
+                    // `holdStarted`, so tap-to-talk is unchanged. The whole
+                    // decision is [HoldEndRule], tested off-device.
+                    //
+                    // The physical cap still bites, deliberately: this does
+                    // not touch `Recorder.record`'s own `maxSeconds` read-loop
+                    // stop, and `TurnEnd` is given that same number, so a held
+                    // capture ends at the server's cap however long the finger
+                    // stays down. A finger left on the button can never hold
+                    // the microphone open past it.
+                    when (HoldEndRule.move(turn.holdStarted, turn.releaseRequested, step)) {
+                        HoldEndRule.Move.STOP -> true
+                        HoldEndRule.Move.CONTINUE -> false
+                        HoldEndRule.Move.ASK -> {
+                            val model = smartTurn
+                            if (model == null) {
+                                // push() only returns ASK with a model in use;
+                                // no model means nothing to ask.
+                                false
+                            } else {
+                                val samples16k = if (rate == Wav.SAMPLE_RATE) {
+                                    samples.copyOf(count)
+                                } else {
+                                    Wav.resample(samples.copyOf(count), rate)
+                                }
+                                val finished = runCatching {
+                                    model.complete(samples16k, samples16k.size)
+                                }.getOrDefault(false)
+                                // The model's own answer goes through the SAME
+                                // rule: a finger that came down while it was
+                                // thinking still owns the capture.
+                                HoldEndRule.move(
+                                    turn.holdStarted,
+                                    turn.releaseRequested,
+                                    turnEnd.answer(finished),
+                                ) == HoldEndRule.Move.STOP
+                            }
                         }
-                        val finished = runCatching {
-                            smartTurn.complete(samples16k, samples16k.size)
-                        }.getOrDefault(false)
-                        turnEnd.answer(finished) == TurnEnd.Step.END
-                    } else {
-                        false
                     }
                 },
             )
@@ -1180,8 +1228,26 @@ class VoiceSession(
         }
     }
 
-    /** Release of the button. The capture ends and the utterance goes. */
+    /**
+     * Release of the button. The capture ends and the utterance goes.
+     *
+     * Also what ends a held capture: while the finger is down a pause may not
+     * end it ([holdStarted], [HoldEndRule]), but the release always does.
+     */
     fun release() { current?.releaseRequested = true }
+
+    /**
+     * The talk button has become a HOLD: the finger is still down, so no pause
+     * may end this capture until it lifts ([HoldEndRule]).
+     *
+     * Called about 400 ms into the press - before the finger lifts, which is
+     * the whole point - so the turn [begin] already created is the one marked.
+     * Before that turn exists (a first run still waiting on the microphone
+     * permission dialog) there is nothing to mark and this does nothing: the
+     * same window [release]/[cancel] already accept, and only a press on a
+     * fresh install can land in it.
+     */
+    fun holdStarted() { current?.holdStarted = true }
 
     /**
      * Slide-away, or a second thought. Nothing is sent and nothing is kept.

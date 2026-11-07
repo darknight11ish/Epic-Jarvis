@@ -12640,17 +12640,22 @@ _NOTION_JUST_IMPORT = re.compile(
 #: The answer to "can you process all of my Notion notes into Obsidian?".
 #: Every step is one this PC really has: the export is Notion's own; the
 #: import unpacks into a NEW folder in a listed folder (PC only, no card);
-#: and the vault converter is `/api/notion/import` - PC only, ONE card, and
-#: no button in either app yet, which is why the sentence says so instead of
-#: promising it. No Notion login, no sync, no edit on Notion's side.
+#: and the vault converter is `/api/notion/import` - PC only, ONE card. Since
+#: 2026-11-05 it also has a PHONE door (the "Bring in a Notion export" button
+#: under Settings, Folders Jarvis may look in, which picks one of the vaults
+#: this PC offers and raises the same card), so the sentence that used to say
+#: "no app has a button for it yet" said the opposite of what the phone can do
+#: - corrected 2026-11-06. No Notion login, no sync, no edit on Notion's side.
 NOTION_WORDS = (
     "I cannot log into Notion, but I do have a Notion import. In Notion: Settings, "
     "Export all workspace content, as Markdown & CSV, then save the .zip. On this PC: "
     "Settings, Folders Jarvis may look in, then under Bring in a Notion export pick a "
     "folder from the list and press Choose the .zip… - I unpack it into a NEW folder "
-    "there that I can read and search, and nothing in Notion is changed. The full "
-    "Notion-to-Obsidian-vault converter is built (POST /api/notion/import, PC only, "
-    "one card) but no app has a button for it yet.")
+    "there that I can read and search, and nothing in Notion is changed. The vault "
+    "converter also has a phone door: on the phone, Settings, Folders Jarvis may look "
+    "in, then Bring in a Notion export - pick one of the vaults this PC has already "
+    "checked, pick the .zip, read the free preview, then press Bring it in. The vault "
+    "is written after one card on the PC, and an Undo takes it back off.")
 
 #: The same steps for "import my Notion export" on its own: the .zip is picked
 #: with this PC's own file picker, so the one honest thing to say is where.

@@ -30,7 +30,7 @@ that the chat model does not know its own feature list:
     is the pattern this follows (JARVIS-API 21.12).
 
 THE FIX PROVED HERE. `jarvis_quick` now answers a capability question from
-`jarvis_feature_catalogue.FEATURES` - the 178 rows the owner's Features pages
+`jarvis_feature_catalogue.FEATURES` - the 179 rows the owner's Features pages
 read, generated from `features/features.json` - with no model: the row's own
 `what` and `where`, plus its `asks` rule when the question asks about a card or
 the row is off by default, and its own surface (a desktop-only row says the
@@ -44,9 +44,11 @@ means None, and the model answers exactly as before.
 WHAT THIS SUITE CHECKS
 
   1. the 10 owner trap sentences, with the row each one must resolve to (or,
-     for the two "a file from my phone to my PC" sentences, that it falls
-     through: the catalogue has no row for that direction, and answering with
-     the opposite-direction row would be worse than the model);
+     for the two "send a file from my phone to my PC" sentences, that it still
+     falls through: since 2026-11-06 the catalogue HAS a phone document door
+     and the two upload-documents sentences resolve to it, but these two name
+     a generic "file" and no door word, so the matcher declines rather than
+     guessing);
   2. the 25 availability questions from the measured run, each of which must
      now resolve to its own row - and the answer must quote that row's words;
   3. the 4 dangerous inversions, each with the verdict and the row it must use;
@@ -54,7 +56,7 @@ WHAT THIS SUITE CHECKS
      never `reminder_sound`, and a real distress sentence must not be claimed;
   5. no false confidence: 10 sentences outside the catalogue still reach the
      model (None from the fast path);
-  6. every one of the 178 rows produces an answer built from that row alone -
+  6. every one of the 179 rows produces an answer built from that row alone -
      its own what/where quoted verbatim, its own surface sentence, a denial
      phrase nowhere - and every row the matcher names is a real catalogue row;
   7. it is read-only: `capability_answer` is in READ_ONLY_INTENTS (a private
@@ -89,28 +91,40 @@ FAILED, PASSED = [], []
 
 #: The owner's own measured sentences, verbatim, and the catalogue row each one
 #: must be answered from. None means "must fall through to the model" - the
-#: catalogue has no row for a file coming FROM the phone, so answering with the
-#: opposite-direction row would be worse than letting the model try.
+#: sentence names no single door, so answering with a nearby row would be worse
+#: than letting the model try.
+#:
+#: THE PHONE DOOR CHANGED THIS ON 2026-11-06 (PR #1203). `features/features.json`
+#: gained a 179th row, `document-from-phone` ("Send a document from your
+#: phone"), and `notion-import` became a BOTH-surface row with a phone door. So
+#: the two "upload documents from my phone" sentences now resolve to
+#: `document-from-phone` (they used to land on `documents`, which is the
+#: PC-side read - the opposite direction), and the Notion/Android sentence now
+#: resolves to `notion-import`, whose new aliases name exactly that door,
+#: instead of falling through. The two "send a file from my phone to my PC"
+#: sentences still fall through: "file" with no door word does not clear the
+#: matcher's threshold, so the model answers as before.
 TRAPS = (
     ("Can I open and import my Notion notes as a markdown file and can you "
      "process it in the Android app and send it to the main Jarvis?",
      "notion-import"),
     ("Can I upload documents from my phone through the app and have you "
-     "process them?", "documents"),
+     "process them?", "document-from-phone"),
     ("Can I import a Notion export from my phone?", "notion-import"),
     ("Can I send a file from my phone to my PC?", None),
     ("Can I open and import my Notion notes as a markdown file and can you "
      "process it in the Android app and send it to the main Jarvis please?",
      "notion-import"),
     ("Can I upload documents from my phone app and have you process them?",
-     "documents"),
+     "document-from-phone"),
     ("Can I import a Notion export from my phone into my vault?",
      "notion-import"),
     ("Can I send a file from my phone to my PC wirelessly?", None),
-    # This one names two features and no single row, so it falls through: the
-    # catalogue is not allowed to guess between Notion and the Android app.
+    # This one used to name two features and no single row. Since #1203 the
+    # Notion row's aliases include "process my notion notes in the android app",
+    # so it names that one door exactly and must be answered from it.
     ("Can I open my Notion notes in the Android app and send them to the main "
-     "Jarvis?", None),
+     "Jarvis?", "notion-import"),
     ("Can I bring in a Notion export on my phone and have it arrive on my PC?",
      "notion-import"),
 )
@@ -351,14 +365,32 @@ def t_the_owner_trap_sentences():
           resolved >= 6, f"{resolved} answered")
 
 
-def t_a_desktop_only_row_says_the_phone_has_no_screen():
+def t_the_phone_door_and_a_pc_only_row_are_both_said_plainly():
+    """A PC-only row says so; the Notion row must NOT say it any more.
+
+    2026-11-06 (PR #1203, merged the same day as this branch): `notion-import`
+    gained a phone door - Settings, "Bring in a Notion export" - so the old
+    "PC only" sentence would now be the measured kind of false claim. The
+    desktop-only sentence still has to exist for the rows that really are
+    PC-only, so this reads one of them from the catalogue instead of pinning a
+    feature that has since gained a phone door.
+    """
+    pc_only = [row for row in C.FEATURES if row.get("surface") == "desktop"]
+    check("there is still a PC-only row to say so about", bool(pc_only),
+          len(pc_only))
+    if pc_only:
+        check("a PC-only row's own words say the phone has no screen for it",
+              Q._cap_surface_words(pc_only[0])
+              == "It is on the PC only - the phone has no screen for it.",
+              Q._cap_surface_words(pc_only[0]))
     for sentence, expected in TRAPS:
         if expected != "notion-import":
             continue
         res, _ = _answer(sentence)
-        check("a desktop-only row tells the phone plainly",
+        check("the Notion row now names its phone door, never PC-only",
               res is not None
-              and "It is on the PC only - the phone has no screen for it." in res.reply,
+              and "Bring in a Notion export" in res.reply
+              and "PC only - the phone has no screen for it." not in res.reply,
               res.reply[:200] if res else "no answer")
 
 
@@ -465,10 +497,10 @@ def t_outside_the_catalogue_falls_through():
 
 
 # --------------------------------------------------------------------------
-#   6. every one of the 178 rows answers from itself
+#   6. every one of the 179 rows answers from itself
 # --------------------------------------------------------------------------
 def t_every_catalogue_row_answers_from_its_own_words():
-    check("the catalogue has its 178 rows", len(C.FEATURES) == 178,
+    check("the catalogue has its 179 rows", len(C.FEATURES) == 179,
           len(C.FEATURES))
     missing = []
     for row in C.FEATURES:
@@ -483,7 +515,7 @@ def t_every_catalogue_row_answers_from_its_own_words():
               and not any(i in low for i in INVENTED))
         if not ok:
             missing.append(row["id"])
-    check("all 178 rows answer with their own what/where/surface, never a denial",
+    check("all 179 rows answer with their own what/where/surface, never a denial",
           not missing, ", ".join(missing[:8]))
 
 
@@ -581,7 +613,7 @@ def t_the_measured_report_quote_is_reproduced():
         return
     data = json.loads(report.read_text(encoding="utf-8"))
     by_id = {row["id"]: row for row in data["rows"]}
-    for row_id, expected in (("trap-upload-phone-app", "documents"),
+    for row_id, expected in (("trap-upload-phone-app", "document-from-phone"),
                              ("trap-notion-phone-pc", "notion-import"),
                              ("limit-setting-no-asking", "settings-by-asking")):
         row = by_id.get(row_id)
@@ -599,7 +631,7 @@ def t_the_measured_report_quote_is_reproduced():
 
 def main():
     for fn in (t_the_owner_trap_sentences,
-               t_a_desktop_only_row_says_the_phone_has_no_screen,
+               t_the_phone_door_and_a_pc_only_row_are_both_said_plainly,
                t_the_measured_availability_questions,
                t_the_measured_howto_questions,
                t_the_four_dangerous_inversions,
