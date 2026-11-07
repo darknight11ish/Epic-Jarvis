@@ -459,3 +459,58 @@ suites that own each door (`test_feature_guide.py`, `test_self_answers.py`,
 `test_setting_explain.py`, `test_antislop.py`) are extended in the same
 branch. Record: `changelog.d/2026-11-07-self-knowledge-honesty.md`,
 `decisions.d/2026-11-07-self-knowledge-honesty.md`.
+
+## Wave 8.2 (2026-11-07): full self-awareness and the change journal
+
+The owner asked for two things in the same breath: *full awareness of
+everything the jarvis program has, including if anything changes*, and the
+ability to *change almost everything (when it makes sense) through chat and
+discuss it properly in detail, including where multiple parts affect the same
+area*. Wave 8.2 is the measured answer, and `backend/test_self_awareness.py`
+is its acceptance proof.
+
+**The new deterministic answers (chat and Jarvis Live are the same door):**
+
+- `preset_current`: which preset is ACTIVE, its model, the context window it
+  starts with, the measured speed, and how to switch (one card). Before this,
+  "which preset am I on?" went to the model, which could only guess.
+- `bench_history` / `bench_run` / `bench_progress` / `bench_stop`: the
+  benchmark rows this PC has recorded, from `jarvis_bench`'s own log; starting
+  ONE async benchmark of the current model through `jarvis_bench.start` and
+  its own machine-checkable `confirm` block (measurement changes no setting,
+  so no card); its step count while it runs; its measured words when it
+  finishes; and stopping it. **"Run a benchmark" used to match the generic
+  open-app doorway and answer "I have asked this PC to open benchmark" with no
+  benchmark and no card - that false claim is gone.**
+- `self_changes`: what changed about this PC's Jarvis and when, from a local
+  change journal. The journal is a snapshot of every awareness-relevant value
+  (version, chosen preset/model, all 49 settings, all 61 tool switches, the
+  counts, the benchmark count) diffed against the last snapshot and appended
+  to `self-awareness/changes.jsonl` under the owner's Jarvis home (bounded to
+  500 rows). It is written when a changing quick answer runs, and refreshed
+  when asked - so a change made through the desktop or the phone is caught the
+  next time Jarvis looks.
+- `changeable_overview` ("what can you change?") and `self_inventory` ("what
+  do you have?") answer with the counts read from the program's own tables
+  (49 settings, 61 tools, 180 features, presets, installed models, version)
+  and the card rule that applies to changes.
+- `tool_switches_on_off` / `tool_switch_state`: which tool switches are on or
+  off, and one named tool's state (detail still comes from `tool_profile`).
+- `desktop_row_info`: any Settings-page row by the words printed on the page,
+  with its detail line and current value; a row with no spoken adjust says so
+  and points at the page rather than pretending it is missing.
+- `area_overview`: the eight areas that hold more than one part (learning,
+  manner, notifications, voices, web-search, second-card, big-model, security)
+  list every part with its current value, and a two-name question compares
+  them and says whether they interact.
+- `setting_named_read`: any named setting's current value and how to change
+  it - the gap that had left one learning switch (rewording facts) readable
+  only by the model.
+
+**Audit and evidence:** `.dsh-scratch/AWARENESS-CHANGE-AUDIT-2026-11-07/`
+holds the read-only audit (`audit.py`), its 180 measured rows
+(`audit-results.json`) and the report (`REPORT.md`). Before the fixes it found
+121 gap rows; after them the same audit reports **0**. Record:
+`changelog.d/2026-11-07-wave-8-2-full-self-awareness.md`,
+`decisions.d/2026-11-07-self-awareness-contract-and-change-journal.md`,
+claims C104/C105.

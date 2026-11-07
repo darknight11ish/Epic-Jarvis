@@ -1490,6 +1490,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- full self-awareness: preset, benchmarks, changes, inventories,
+    #     per-tool switches and the same-area groups (2026-11-07, Wave 8.2).
+    #     BEFORE the reminder family and the model/feature lanes: "is the set
+    #     timer tool on?" is a tool-switch question, not a reminder question,
+    #     and "run a benchmark" was being read as opening an app named
+    #     "benchmark" before this.
+    got = _awareness_chat(s, text)
+    if got is not None:
+        return got
+
     # --- timers, alarms and reminders, capability questions only (2026-10-31)
     # The owner asked "can you make a reminder for me" and the model said it
     # could not set a system alarm and could only note reminders in a calendar -
@@ -23472,6 +23482,32 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # read changes nothing; the change goes through
     # jarvis_settings_registry.set_live_idle -> jarvis_limits.change, the same
     # writer both Settings screens POST to.
+    if n == "preset_current":
+        return _run_preset_current()
+    if n == "bench_history":
+        return _run_bench_history()
+    if n == "bench_run":
+        return _run_bench_run()
+    if n == "bench_progress":
+        return _run_bench_progress()
+    if n == "bench_stop":
+        return _run_bench_stop()
+    if n == "self_changes":
+        return _run_self_changes(f)
+    if n == "changeable_overview":
+        return _run_changeable_overview()
+    if n == "self_inventory":
+        return _run_self_inventory()
+    if n == "tool_switches_on_off":
+        return _run_tool_switches_on_off(f)
+    if n == "tool_switch_state":
+        return _run_tool_switch_state(f)
+    if n == "desktop_row_info":
+        return _run_desktop_row_info(f)
+    if n == "setting_named_read":
+        return _run_setting_named_read(f)
+    if n == "area_overview":
+        return _run_area_overview(f)
     if n == "live_idle_ask":
         return _run_live_idle_ask()
     if n == "live_idle_set":
@@ -24244,7 +24280,16 @@ _PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plu
 #: read-only intents to the model, but the model cannot know what is in the
 #: scheduler's watch store, so it would invent an answer. Only reads the LOCAL
 #: code answers from its own state may be listed here.
-_PRIVATE_DETERMINISTIC_READS = frozenset({"repo_watch_list"})
+_PRIVATE_DETERMINISTIC_READS = frozenset({
+    "repo_watch_list",
+    # Wave 8.2 (2026-11-07): the same rule one step further. The model cannot
+    # know this PC's preset, benchmark rows, switch states or change journal,
+    # so a private chat answers these from the local code, never the model.
+    "preset_current", "bench_history", "bench_progress", "self_changes",
+    "changeable_overview", "self_inventory", "tool_switches_on_off",
+    "tool_switch_state", "desktop_row_info", "setting_named_read",
+    "area_overview",
+})
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
 #: set: every name here is routed there BEFORE the rest of the chain, so a name
@@ -24272,6 +24317,13 @@ READ_ONLY_INTENTS = frozenset({
     # dispatch mark - see the _REMINDER_INTENTS comment for the cost of
     # confusing the two.
     "repo_watch_list",
+    # Wave 8.2's self-awareness reads (2026-11-07): every one reads this PC's
+    # own state and changes nothing, so none may clear what "cancel that"
+    # would take back.
+    "preset_current", "bench_history", "bench_progress", "self_changes",
+    "changeable_overview", "self_inventory", "tool_switches_on_off",
+    "tool_switch_state", "desktop_row_info", "setting_named_read",
+    "area_overview",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
@@ -25075,6 +25127,16 @@ def answer(text, *, sched=None, now: Optional[float] = None,
             sched.mark_command(text)
         except Exception:
             pass
+        if res.intent not in READ_ONLY_INTENTS:
+            # Wave 8.2 (2026-11-07): an answer that CHANGED something is
+            # exactly the moment the change journal should record it - the
+            # snapshot it compares is the program's own current state, so a
+            # change made through the apps is caught the next time a change
+            # runs here too.
+            try:
+                _awareness_note()
+            except Exception:
+                pass
         try:
             if res.made and conversation:
                 sched.note_set(conversation, res.made, res.what, res.intent, nouns=res.nouns)
@@ -25550,3 +25612,792 @@ def reply_bytes(reply: str, stream: bool) -> bytes:
 
 def content_type(stream: bool) -> str:
     return "text/event-stream" if stream else "application/json"
+
+
+# ==========================================================================
+#   Full self-awareness: the preset it is on, the benchmarks recorded, the
+#   change journal, inventories, per-tool switch states and the same-area
+#   groups (Wave 8.2, 2026-11-07; the owner: "full awareness of everything
+#   that the jarvis program has, including if anything changes").
+#
+#   Every word below comes from the program's own registries and stores:
+#   jarvis_presets, jarvis_model_knowledge, jarvis_bench, jarvis_settings_
+#   registry, jarvis_feature_catalogue. Reads only - no model, no card, no
+#   write. The one action (start a benchmark) goes through jarvis_bench's own
+#   async runner and its own machine-checkable `confirm` block; it changes no
+#   setting, so it raises no card.
+# ==========================================================================
+
+_AW_PRESET_CURRENT = re.compile(
+    r"(?:what|which)\s+preset\s+(?:am\s+i|are\s+you|are\s+we)\s+"
+    r"(?:on|using|running)(?:\s+right\s+now)?"
+    r"|(?:what|which)\s+preset\s+is\s+(?:chosen|active|selected|current)"
+    r"|(?:what|which)\s+preset\s+(?:am\s+i|are\s+you)\s*", re.I)
+
+_AW_BENCH_HISTORY = re.compile(
+    r"(?:what|which)\s+benchmarks?\s+(?:have|has|were|did)\s+(?:been\s+)?"
+    r"(?:run|measured|done|recorded|completed)(?:\s+(?:on|for)\s+(?:you|me|this\s+pc))?"
+    r"|(?:what|which)\s+(?:are\s+)?(?:your|the)\s+benchmark\s+"
+    r"(?:results|numbers|measurements|scores|history)"
+    r"|(?:show|tell)\s+me\s+(?:your|the)\s+benchmarks?"
+    r"|what\s+have\s+you\s+measured"
+    r"|benchmark\s+history", re.I)
+
+_AW_BENCH_RUN = re.compile(
+    r"(?:run|do|start|take|perform)\s+(?:a|one|the|another)\s+"
+    r"(?:quick\s+|short\s+)?(?:benchmark|speed\s+test|tok/s\s+test|"
+    r"tokens?\s+per\s+second\s+test)"
+    r"(?:\s+(?:of|on|for)\s+(?:the\s+|your\s+)?(?:current\s+|running\s+)?model)?"
+    r"|benchmark\s+(?:yourself|the\s+current\s+model|your\s+current\s+model|"
+    r"the\s+running\s+model|this\s+model)"
+    r"|(?:run|take)\s+a\s+(?:speed|tok/s)\s+test", re.I)
+
+_AW_BENCH_PROGRESS = re.compile(
+    r"how(?:'s|\s+is)\s+the\s+benchmark\s+(?:going|doing|coming\s+along)"
+    r"|benchmark\s+(?:status|progress|state)"
+    r"|is\s+the\s+benchmark\s+(?:done|finished)\s*", re.I)
+
+_AW_BENCH_STOP = re.compile(
+    r"(?:stop|cancel|abort)\s+(?:the\s+)?(?:benchmark|bench\s+run)", re.I)
+
+_AW_CHANGES = re.compile(
+    r"what(?:\s+has|\s+have|\s+)?(?:'s\s+)?changed(?:\s+about\s+(?:you|jarvis))?"
+    r"(?:\s+(?:since|in)\s+(?P<when>yesterday|this\s+morning|today|"
+    r"the\s+last\s+\w+|your\s+last\s+update|my\s+last\s+(?:question|visit)))?"
+    r"|(?:any|what)\s+changes?(?:\s+about\s+you|\s+since\s+\w+)?"
+    r"|what(?:'s|\s+is)\s+new\s+with\s+you", re.I)
+
+_AW_CHANGEABLE = re.compile(
+    r"what\s+can\s+(?:you|i)\s+change(?:\s+by\s+(?:chat|asking|voice))?"
+    r"|what(?:'s|\s+is)\s+changeable"
+    r"|what\s+settings?\s+and\s+tools?\s+can\s+you\s+change", re.I)
+
+_AW_INVENTORY = re.compile(
+    r"what\s+do\s+you\s+have(?:\s+in\s+total)?"
+    r"|what\s+does\s+(?:the\s+)?(?:program|jarvis)\s+have"
+    r"|list\s+everything\s+you\s+have", re.I)
+
+_AW_TOOL_LIST = re.compile(
+    r"(?:which|what)\s+tools?\s+(?:are|is)\s+(?:on|off|enabled|disabled|"
+    r"turned\s+on|turned\s+off)"
+    r"|(?:list|show)\s+(?:me\s+)?(?:the\s+)?tools?\s+(?:that\s+are\s+)?"
+    r"(?:on|off|enabled|disabled)"
+    r"|(?:which|what)\s+tools?\s+can\s+the\s+(?:ai\s+)?model\s+use", re.I)
+
+_AW_TOOL_STATE = re.compile(
+    r"is\s+(?P<name>.+?)\s+(?:on|off|enabled|disabled)\s*"
+    r"|can\s+the\s+(?:ai\s+)?model\s+use\s+(?P<name2>.+?)\s*", re.I)
+
+_AW_DESKTOP_ROW = re.compile(
+    r"what\s+does\s+(?:the\s+)?(?P<name>.+?)\s+setting\s+do"
+    r"|how\s+do\s+i\s+change\s+(?:the\s+)?(?P<name2>.+?)(?:\s+setting)?\s*"
+    r"|what\s+is\s+(?:the\s+)?(?P<name3>.+?)\s+setting\s+set\s+to", re.I)
+
+_AW_SETTING_READ = re.compile(
+    r"what\s+is\s+(?:the\s+)?(?P<name>.+?)\s+set\s+to\s*"
+    r"|explain\s+(?:the\s+)?(?P<name2>.+?)\s+setting\s*", re.I)
+
+_AW_AREA = re.compile(
+    r"what\s+else\s+(?:affects|touches|is\s+in)\s+(?:the\s+)?(?P<area>.+?)"
+    r"(?:\s+area)?\s*"
+    r"|what\s+(?:switches|settings|parts?)\s+(?:are\s+)?in\s+(?:the\s+)?"
+    r"(?P<area2>.+?)(?:\s+area)?\s*"
+    r"|what\s+happens\s+if\s+i\s+change\s+(?P<a>.+?)\s+and\s+(?P<b>.+?)"
+    r"\s+together\s*", re.I)
+
+
+def _awareness_dir() -> str:
+    home = (os.environ.get("OPENJARVIS_HOME") or os.environ.get("JARVIS_HOME")
+            or os.environ.get("OPENJARVIS_CONFIG_DIR")
+            or os.path.expanduser("~/.openjarvis"))
+    return os.path.join(home, "self-awareness")
+
+
+def _awareness_snapshot() -> dict:
+    """Every awareness-relevant value the local code can read, one flat dict."""
+    snap = {}
+    try:
+        version = _read_version_source()
+        if version.get("version"):
+            snap["version"] = str(version["version"])
+    except Exception:
+        pass
+    try:
+        import jarvis_presets as P
+        pid = str(P.choice() or "")
+        if pid:
+            snap["preset"] = pid
+            row = _preset_row(pid) or {}
+            if row.get("model"):
+                snap["preset_model"] = str(row["model"])
+    except Exception:
+        pass
+    try:
+        model = _model_record()
+        if model:
+            snap["model"] = model
+    except Exception:
+        pass
+    try:
+        import jarvis_settings_registry as R
+        for setting in (list(R.BOOL_SETTINGS) + list(R.CHOICE_SETTINGS)
+                        + list(R.NUMBER_SETTINGS)):
+            try:
+                value = R.current_value(setting)
+            except Exception:
+                value = None
+            if value is not None:
+                snap["setting:" + setting.key] = str(value)
+        for tool in R.tool_targets():
+            try:
+                value = R.reading_tool_now(tool)
+            except Exception:
+                value = None
+            if value is not None:
+                snap["tool:" + tool] = "on" if value else "off"
+        import jarvis_feature_catalogue as C
+        snap["count:features"] = len(C.FEATURES)
+        snap["count:tools"] = len(R.tool_targets())
+        snap["count:settings"] = (len(R.BOOL_SETTINGS) + len(R.CHOICE_SETTINGS)
+                                  + len(R.NUMBER_SETTINGS))
+    except Exception:
+        pass
+    try:
+        import jarvis_bench as B
+        snap["count:bench_runs"] = len(B.BenchLog().runs(limit=500))
+    except Exception:
+        pass
+    return snap
+
+
+def _awareness_note() -> dict:
+    """Diff the snapshot against the last one and journal what changed."""
+    snap = _awareness_snapshot()
+    folder = _awareness_dir()
+    try:
+        os.makedirs(folder, exist_ok=True)
+    except Exception:
+        return snap
+    path = os.path.join(folder, "snapshot.json")
+    prev = None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            prev = json.load(fh)
+    except Exception:
+        prev = None
+    if isinstance(prev, dict) and prev != snap:
+        changed = [{"key": key, "from": prev.get(key), "to": snap.get(key)}
+                   for key in sorted(set(prev) | set(snap))
+                   if prev.get(key) != snap.get(key)]
+        if changed:
+            jpath = os.path.join(folder, "changes.jsonl")
+            lines = []
+            try:
+                with open(jpath, encoding="utf-8") as fh:
+                    lines = fh.read().splitlines()[-499:]
+            except Exception:
+                lines = []
+            lines.append(json.dumps({"at": int(time.time()), "changed": changed}))
+            try:
+                with open(jpath, "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(lines) + "\n")
+            except Exception:
+                pass
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(snap, fh, indent=1, sort_keys=True)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+    return snap
+
+
+def _awareness_journal_rows() -> list:
+    try:
+        with open(os.path.join(_awareness_dir(), "changes.jsonl"),
+                  encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh.read().splitlines() if line.strip()]
+    except Exception:
+        return []
+
+
+def _awareness_area_words(area: str) -> str:
+    area = area.strip().lower()
+    import jarvis_settings_registry as R
+    keys = []
+    for setting in R.BOOL_SETTINGS:
+        if str(setting.section or "").lower() == area:
+            keys.append(setting)
+    for setting in R.CHOICE_SETTINGS:
+        if str(getattr(setting, "where", "") or "").lower() == area:
+            keys.append(setting)
+    if not keys:
+        return ""
+    bits = []
+    for setting in keys:
+        try:
+            value = R.current_value(setting)
+        except Exception:
+            value = None
+        bits.append(str(setting.names[0]) + " (" + (value or "value unreadable") + ")")
+    return ("The " + area.replace("-", " ") + " area has " + str(len(bits))
+            + " parts: " + "; ".join(bits) + ". They act on the same thing, so they "
+            "are worth changing one at a time: each change asks its own card where it "
+            "needs one, and I record it in the change journal.")
+
+
+def _run_area_overview(f: dict) -> Result:
+    import jarvis_settings_registry as R
+    area = str(f.get("area") or "").strip()
+    a, b = str(f.get("a") or "").strip(), str(f.get("b") or "").strip()
+    if a and b:
+        def find(words):
+            words = words.strip()
+            for finder in (R.find_bool_setting, R.find_choice_setting,
+                           R.find_number_setting, R.find_bool_setting_words,
+                           R.find_choice_setting_words, R.find_number_setting_words):
+                try:
+                    got = finder(words)
+                except Exception:
+                    got = None
+                if got is not None:
+                    return got
+            return None
+        sa, sb = find(a), find(b)
+        if sa is None or sb is None:
+            def fuzzy(words):
+                words = words.strip().lower()
+                pool = (list(R.BOOL_SETTINGS) + list(R.CHOICE_SETTINGS)
+                        + list(R.NUMBER_SETTINGS))
+                best = None
+                for setting in pool:
+                    aliases = [str(n).lower() for n in (setting.names or ())]
+                    if any(words == alias or words in alias or alias in words
+                           for alias in aliases):
+                        best = best or setting
+                return best
+            sa = sa or fuzzy(a)
+            sb = sb or fuzzy(b)
+        if sa is None or sb is None:
+            return Result("I could not find two settings in that sentence to compare, "
+                          "so I will not guess. Say both names as they appear in "
+                          "Settings and I will read their current values.",
+                          "area_overview")
+        va = R.current_value(sa)
+        vb = R.current_value(sb)
+        same = (str(getattr(sa, "section", "") or getattr(sa, "where", ""))
+                == str(getattr(sb, "section", "") or getattr(sb, "where", "")))
+        head = (str(sa.names[0]) + " is " + (va or "unreadable") + " and "
+                + str(sb.names[0]) + " is " + (vb or "unreadable") + ". ")
+        if same:
+            return Result(head + "They are in the same area, so they interact - "
+                          "change one at a time and watch the other; each change asks "
+                          "its own card where it needs one, and the change journal "
+                          "records what moved.", "area_overview")
+        return Result(head + "They are in different areas and do not overwrite each "
+                      "other; each change asks its own card where it needs one.",
+                      "area_overview")
+    words = _awareness_area_words(area)
+    if words:
+        return Result(words, "area_overview")
+    return Result("I could not read an area called that, so I will not guess. The "
+                  "areas with several switches are: learning, manner, notifications, "
+                  "voices, web-search, second-card, big-model and security - ask about "
+                  "one of those and I will read every part it holds.", "area_overview")
+
+
+def _run_preset_current() -> Result:
+    """Which preset is ACTIVE, its model, context, measured speed and how to switch."""
+    import jarvis_presets as P
+    try:
+        pid = str(P.choice() or "")
+    except Exception:
+        pid = ""
+    row = _preset_row(pid) or {}
+    if not pid:
+        return Result("I cannot read which preset is chosen on this PC right now, so I "
+                      "will not name one. Say \"use the Coding preset\" to choose "
+                      "one; that asks one card first.", "preset_current")
+    title = str(row.get("title") or pid)
+    model = str(row.get("model") or _model_record() or "")
+    try:
+        context = _how_context_words()
+    except Exception:
+        context = ""
+    try:
+        speed = _how_fast_words()
+    except Exception:
+        speed = ""
+    said = 'I am on the "' + title + '" preset'
+    if model:
+        said += ", running " + model
+    said += ". " + context
+    if speed:
+        said += " " + speed
+    said += (' To change it, say "use the <name> preset" - that asks one card '
+             "before anything switches, and the change is recorded in my change "
+             "journal.")
+    return Result(said, "preset_current")
+
+
+def _bench_state_path() -> str:
+    return os.path.join(_awareness_dir(), "bench-run.json")
+
+
+def _bench_progress_snapshot():
+    try:
+        with open(_bench_state_path(), encoding="utf-8") as fh:
+            return json.loads(fh.read())
+    except Exception:
+        return None
+
+
+def _run_bench_history() -> Result:
+    """The benchmark rows this PC recorded, newest first, or an honest empty."""
+    try:
+        import jarvis_bench as B
+        rows = list(B.BenchLog().runs(limit=5))
+    except Exception:
+        rows = []
+    if not rows:
+        return Result("I have no benchmark runs recorded on this PC yet. Brain, "
+                      "Model, Models runs one, and since today I can start one for "
+                      'the current model if you say "run a benchmark".',
+                      "bench_history")
+    bits = []
+    for row in rows:
+        model = str(row.get("model") or "a model")
+        lane = str(row.get("lane") or "")
+        speed = row.get("gen_median")
+        try:
+            speed_s = (f"{float(speed):.1f} tokens a second"
+                       if speed is not None else "no speed number")
+        except (TypeError, ValueError):
+            speed_s = "no speed number"
+        said = model + (" on the " + lane + " lane" if lane else "") + " - " + speed_s
+        if row.get("spilled"):
+            said += " (some layers spilled)"
+        if row.get("ok") is False:
+            said += " (that run failed)"
+        bits.append(said)
+    return Result("The newest benchmark runs on this PC: " + "; ".join(bits)
+                  + '. Ask "run a benchmark" to measure the current model again.',
+                  "bench_history")
+
+
+def _run_bench_run() -> Result:
+    """Start ONE async benchmark of the current model through jarvis_bench itself."""
+    import jarvis_bench as B
+    model = _model_record() or ""
+    if not model:
+        try:
+            import jarvis_presets as P
+            model = str((_preset_row(str(P.choice() or "")) or {}).get("model") or "")
+        except Exception:
+            model = ""
+    if not model:
+        return Result("Nothing was measured: I cannot read which model is running on "
+                      "this PC right now, and I will not guess one.", "bench_run")
+    lane = "everyday"
+    try:
+        import jarvis_presets as P
+        pid = str(P.choice() or "").lower()
+    except Exception:
+        pid = ""
+    if "coding" in pid:
+        lane = "coding"
+    body = {"model": model, "lane": lane,
+            "confirm": {"model": model, "lane": lane, "may_evict": True}}
+    try:
+        code, out = B.start(body)
+    except Exception as exc:                       # noqa: BLE001 - said plainly
+        return Result(f"Nothing was measured: the benchmark runner could not start "
+                      f"({type(exc).__name__}).", "bench_run")
+    out = out if isinstance(out, dict) else {}
+    if code != 200:
+        said = str(out.get("error") or out.get("sentence") or "the run was refused")
+        return Result("Nothing was measured: " + said.rstrip(".") + ".",
+                      "bench_run")
+    run_id = str(out.get("run_id") or "")
+    try:
+        os.makedirs(_awareness_dir(), exist_ok=True)
+        with open(_bench_state_path(), "w", encoding="utf-8") as fh:
+            json.dump({"run_id": run_id, "model": model, "lane": lane,
+                       "at": int(time.time())}, fh)
+    except Exception:
+        pass
+    said = (f"Measuring {model} now on the {lane} lane - run {run_id}. "
+            "Nothing else should use the model until it finishes. Ask \"how is the "
+            'benchmark going?" and I will tell you.')
+    note = str(out.get("message") or "")
+    if note and "Nothing else" not in note:
+        said += " " + note
+    return Result(said, "bench_run")
+
+
+def _run_bench_progress() -> Result:
+    state = _bench_progress_snapshot()
+    if not state:
+        return Result("I have no benchmark run in progress and none recorded from "
+                      'this chat. Say "run a benchmark" and I will measure the '
+                      "current model.", "bench_progress")
+    run_id = str(state.get("run_id") or "")
+    try:
+        import jarvis_bench as B
+        code, out = B.view(run_id)
+    except Exception as exc:                       # noqa: BLE001 - said plainly
+        return Result(f"I cannot read that benchmark run right now "
+                      f"({type(exc).__name__}).", "bench_progress")
+    out = out if isinstance(out, dict) else {}
+    if code != 200:
+        return Result("I cannot read that benchmark run: "
+                      + str(out.get("error") or "it is unknown to this PC") + ".",
+                      "bench_progress")
+    st = str(out.get("state") or "")
+    if st == "running":
+        return Result(f"The benchmark is running: step {out.get('step')} of "
+                      f"{out.get('of')} for {state.get('model') or 'the current model'}. "
+                      "I will have the numbers when it finishes.", "bench_progress")
+    if st == "failed":
+        return Result("That benchmark run failed: "
+                      + str(out.get("why") or "no reason was recorded") + ".",
+                      "bench_progress")
+    result = out.get("result") or {}
+    words = str(result.get("words") or "") if isinstance(result, dict) else ""
+    if words:
+        return Result(words, "bench_progress")
+    return Result("The benchmark finished. " + json.dumps(result)[:400],
+                  "bench_progress")
+
+
+def _run_bench_stop() -> Result:
+    state = _bench_progress_snapshot()
+    if not state:
+        return Result("There is no benchmark run from this chat to stop.",
+                      "bench_stop")
+    run_id = str(state.get("run_id") or "")
+    try:
+        import jarvis_bench as B
+        code, out = B.cancel(run_id)
+    except Exception as exc:                       # noqa: BLE001 - said plainly
+        return Result(f"I could not stop it ({type(exc).__name__}).", "bench_stop")
+    out = out if isinstance(out, dict) else {}
+    said = str(out.get("words") or out.get("message") or out.get("error") or "")
+    return Result(said or ("Stopped the benchmark run." if code == 200 else
+                           "I could not stop that benchmark run."), "bench_stop")
+
+
+def _run_self_changes(f: dict) -> Result:
+    """What changed about this PC's Jarvis, from the local change journal."""
+    _awareness_note()
+    rows = _awareness_journal_rows()
+    when = str(f.get("when") or "").lower()
+    now = time.time()
+    cutoff = 0
+    if "today" in when:
+        cutoff = now - 86400
+    elif "yesterday" in when:
+        cutoff = now - 2 * 86400
+    elif "last" in when:
+        cutoff = now - 7 * 86400
+    rows = [r for r in rows if int(r.get("at") or 0) >= cutoff]
+    if not rows:
+        said = ("Nothing has changed since I started keeping this record"
+                + (" in that window" if cutoff else "") + ".")
+    else:
+        bits = []
+        for row in rows[-6:]:
+            changes = row.get("changed") or []
+            if not changes:
+                continue
+            parts = []
+            for change in changes[:6]:
+                key = str(change.get("key") or "")
+                old = change.get("from")
+                new = change.get("to")
+                if key.startswith("setting:"):
+                    parts.append(f"{key[8:]} went from {old} to {new}")
+                elif key.startswith("tool:"):
+                    parts.append(f"the {key[5:]} tool switch went from {old} to {new}")
+                elif key == "preset":
+                    parts.append(f"the preset went from {old} to {new}")
+                elif key == "model":
+                    parts.append(f"the running model went from {old} to {new}")
+                elif key == "version":
+                    parts.append(f"Jarvis updated from {old} to {new}")
+                elif key.startswith("count:"):
+                    parts.append(f"{key[6:]} went from {old} to {new}")
+                else:
+                    parts.append(f"{key} went from {old} to {new}")
+            when_s = time.strftime("%H:%M on %d %b",
+                                   time.localtime(int(row.get("at") or now)))
+            bits.append(when_s + ": " + "; ".join(parts))
+        said = "What changed, newest last: " + " | ".join(bits) + "."
+    try:
+        import jarvis_recent_changes as RC
+        bullets = list(getattr(RC, "BULLETS", ()) or ())
+        if bullets:
+            said += (" The newest item on the record of shipped changes is: "
+                     + str(bullets[0]) + ".")
+    except Exception:
+        pass
+    return Result(said, "self_changes")
+
+
+def _run_self_inventory() -> Result:
+    """What the program HAS, counted from its own registries."""
+    counts = []
+    try:
+        import jarvis_feature_catalogue as C
+        counts.append(f"{len(C.FEATURES)} features in the feature list")
+    except Exception:
+        pass
+    try:
+        import jarvis_settings_registry as R
+        counts.append(f"{len(R.BOOL_SETTINGS) + len(R.CHOICE_SETTINGS) + len(R.NUMBER_SETTINGS)} settings")
+        counts.append(f"{len(R.tool_targets())} tools I can offer the AI model")
+    except Exception:
+        pass
+    try:
+        import jarvis_presets as P
+        presets = P.presets() if hasattr(P, "presets") else []
+        counts.append(f"{len(presets)} presets")
+    except Exception:
+        pass
+    try:
+        import jarvis_model_knowledge as K
+        models = K.installed_models() or []
+        counts.append(f"{len(models)} local models installed")
+    except Exception:
+        pass
+    version = ""
+    try:
+        version = str((_read_version_source() or {}).get("version") or "")
+    except Exception:
+        version = ""
+    said = "I have " + ", ".join(counts) + "."
+    if version:
+        said = f"I am backend {version}, and I have " + ", ".join(counts) + "."
+    said += (' Ask "what can you change?" for the things you control from here, or '
+             '"what tools do you have?" for the tool switches.')
+    return Result(said, "self_inventory")
+
+
+def _run_changeable_overview() -> Result:
+    """Every kind of thing the owner can change from chat/Live."""
+    import jarvis_settings_registry as R
+    tools = len(R.tool_targets())
+    settings = (len(R.BOOL_SETTINGS) + len(R.CHOICE_SETTINGS)
+                + len(R.NUMBER_SETTINGS))
+    try:
+        import jarvis_presets as P
+        presets = len(P.presets()) if hasattr(P, "presets") else 0
+    except Exception:
+        presets = 0
+    said = (f"I can change {settings} settings and {tools} tool switches, switch "
+            f"between {presets} presets, switch or install a local model, change "
+            "what needs an approval card, allow apps on your phone, connect "
+            "accounts, add or remove plug-ins and skills, and change my manner "
+            "and personality - through chat or Jarvis Live, the same way. ")
+    said += ("A change that matters asks one card before it happens and is recorded "
+             'in my change journal; reads and answers never do. Examples: "turn on '
+             'background learning", "set the personality to advocate", "use the '
+             'Coding preset", "which tools are on?", "what changed about you?".')
+    return Result(said, "changeable_overview")
+
+
+def _run_tool_switches_on_off(f: dict) -> Result:
+    import jarvis_settings_registry as R
+    want = str(f.get("want") or "")
+    on, off, err = [], [], []
+    for tool, names in R.tool_targets().items():
+        try:
+            value = R.reading_tool_now(tool)
+        except Exception:
+            err.append(tool)
+            continue
+        label = str((names or (tool,))[0])
+        (on if value else off).append(label)
+    if want == "on":
+        if not on:
+            return Result("Every tool switch is OFF right now, so the AI model is "
+                          "offered none of them.", "tool_switches_on_off")
+        return Result("On right now: " + ", ".join(sorted(on)) + ".",
+                      "tool_switches_on_off")
+    if want == "off":
+        if not off:
+            return Result("Every tool switch is ON right now.", "tool_switches_on_off")
+        return Result("Off right now: " + ", ".join(sorted(off)) + ".",
+                      "tool_switches_on_off")
+    return Result(f"{len(on)} on, {len(off)} off"
+                  + (f", {len(err)} unreadable" if err else "")
+                  + '. Ask "which tools are on?" or "which tools are off?" for the '
+                  "names.", "tool_switches_on_off")
+
+
+def _run_tool_switch_state(f: dict) -> Result:
+    import jarvis_settings_registry as R
+    tool = str(f.get("tool") or "")
+    names = R.tool_targets().get(tool) or (tool,)
+    label = str(names[0])
+    try:
+        value = R.reading_tool_now(tool)
+    except Exception:
+        value = None
+    state = "on" if value else "off"
+    other = "off" if value else "on"
+    return Result(f"The {label} switch is {state} right now. Say \"turn {other} "
+                  f"{label}\" to change it - an ON change asks one card plus Windows "
+                  f"Hello on this PC; OFF is instant. Say \"tell me about {label}\" "
+                  "for what it does.", "tool_switch_state")
+
+
+def _run_desktop_row_info(f: dict) -> Result:
+    """One desktop Settings-page row, explained by name, with its current value."""
+    import jarvis_settings_registry as R
+    name = str(f.get("name") or "").strip().lower()
+    if not name:
+        return Result("Which setting? Say the words on the Settings page and I will "
+                      "read it for you.", "desktop_row_info")
+    row = None
+    for candidate in R.SETTINGS_ROWS:
+        if str(candidate.label or "").strip().lower() == name:
+            row = candidate
+            break
+    if row is None:
+        for candidate in R.SETTINGS_ROWS:
+            if name and name in str(candidate.label or "").strip().lower():
+                row = candidate
+                break
+    if row is None:
+        return Result("I could not find a Settings-page row with those words, so I "
+                      'will not guess. Ask "what settings do you have?" for the '
+                      "areas, or name a switch.", "desktop_row_info")
+    said = '"' + str(row.label) + '": ' + (row.detail.strip()
+                                           or "no detail line on the page.")
+    if row.setting:
+        setting = None
+        for candidate in (list(R.BOOL_SETTINGS) + list(R.CHOICE_SETTINGS)
+                          + list(R.NUMBER_SETTINGS)):
+            if str(getattr(candidate, "key", "")) == str(row.setting):
+                setting = candidate
+                break
+        value = R.current_value(setting) if setting is not None else None
+        if value:
+            said += f" Right now it is {value}."
+        said += " You can change it by asking me, or on the Settings page."
+    else:
+        said += (" This one is changed on the Settings page only (it has no spoken "
+                 "adjust), in the " + str(row.section) + " area"
+                 + (f", row {row.order}" if row.order else "") + ".")
+    return Result(said, "desktop_row_info")
+
+
+def _run_setting_named_read(f: dict) -> Result:
+    """A named setting's current value, and how to change it."""
+    import jarvis_settings_registry as R
+    name = str(f.get("name") or "").strip()
+    setting = None
+    for finder in (R.find_bool_setting, R.find_choice_setting,
+                   R.find_bool_setting_words, R.find_choice_setting_words):
+        try:
+            setting = finder(name)
+        except Exception:
+            setting = None
+        if setting is not None:
+            break
+    if setting is None:
+        return Result("I could not find a setting with those words, so I will not "
+                      'guess. Ask "what settings do you have?" for the areas.',
+                      "setting_named_read")
+    value = R.current_value(setting)
+    label = str(setting.names[0])
+    where = str(getattr(setting, "section", "") or getattr(setting, "where", "") or "")
+    said = label + " is " + (value or "unreadable right now")
+    if where:
+        said += " (the " + where.replace("-", " ") + " area)"
+    said += "."
+    if hasattr(setting, "on_word"):
+        said += f' To change it say "{label} on" or "{label} off"'
+    else:
+        said += f' To change it say "set {label} to <one of its values>"'
+    said += "; a change that needs a card asks one first."
+    return Result(said, "setting_named_read")
+
+
+def _awareness_chat(s: str, text: str) -> Optional[Intent]:
+    """The full self-awareness sentences, matched before the older lanes."""
+    low = str(s or "").strip()
+    if not low or len(low) > 400:
+        return None
+
+    if _AW_PRESET_CURRENT.fullmatch(low):
+        return Intent("preset_current")
+    if _AW_BENCH_RUN.fullmatch(low):
+        return Intent("bench_run")
+    if _AW_BENCH_PROGRESS.fullmatch(low):
+        return Intent("bench_progress")
+    if _AW_BENCH_STOP.fullmatch(low):
+        return Intent("bench_stop")
+    if _AW_BENCH_HISTORY.fullmatch(low):
+        return Intent("bench_history")
+    m = _AW_CHANGES.fullmatch(low)
+    if m:
+        return Intent("self_changes", {"when": (m.groupdict().get("when") or "")})
+    if _AW_CHANGEABLE.fullmatch(low):
+        return Intent("changeable_overview")
+    if _AW_INVENTORY.fullmatch(low):
+        return Intent("self_inventory")
+    if _AW_TOOL_LIST.fullmatch(low):
+        if re.search(r"\b(?:off|disabled|turned\s+off)\b", low):
+            want = "off"
+        elif re.search(r"\b(?:on|enabled|turned\s+on)\b", low):
+            want = "on"
+        else:
+            want = ""
+        return Intent("tool_switches_on_off", {"want": want})
+    m = _AW_TOOL_STATE.fullmatch(low)
+    if m:
+        import jarvis_settings_registry as R
+        words = (m.groupdict().get("name") or m.groupdict().get("name2") or "").strip()
+        words = re.sub(r"^(?:the|my|your)\s+", "", words)
+        words = re.sub(r"\s+(?:tool|switch)$", "", words)
+        tool = R.find_tool_target(words)
+        if tool:
+            return Intent("tool_switch_state", {"tool": tool})
+    m = _AW_DESKTOP_ROW.fullmatch(low)
+    if m:
+        import jarvis_settings_registry as R
+        words = (m.groupdict().get("name") or m.groupdict().get("name2")
+                 or m.groupdict().get("name3") or "").strip()
+        words = re.sub(r"^(?:the|my|your)\s+", "", words)
+        for candidate in R.SETTINGS_ROWS:
+            label = str(candidate.label or "").strip().lower()
+            if label and (words == label or (len(words) >= 4 and words in label)):
+                return Intent("desktop_row_info", {"name": words})
+    m = _AW_SETTING_READ.fullmatch(low)
+    if m:
+        import jarvis_settings_registry as R
+        words = (m.groupdict().get("name") or m.groupdict().get("name2") or "").strip()
+        words = re.sub(r"^(?:the|my|your)\s+", "", words)
+        setting = None
+        for finder in (R.find_bool_setting, R.find_choice_setting,
+                       R.find_bool_setting_words, R.find_choice_setting_words):
+            try:
+                setting = finder(words)
+            except Exception:
+                setting = None
+            if setting is not None:
+                break
+        if setting is not None:
+            return Intent("setting_named_read", {"name": words})
+    m = _AW_AREA.fullmatch(low)
+    if m:
+        d = m.groupdict()
+        if d.get("a") and d.get("b"):
+            return Intent("area_overview", {"a": d["a"].strip(), "b": d["b"].strip()})
+        area = (d.get("area") or d.get("area2") or "").strip()
+        if area:
+            return Intent("area_overview", {"area": area})
+    return None
