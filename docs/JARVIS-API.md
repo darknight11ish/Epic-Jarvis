@@ -13478,7 +13478,7 @@ the REST route does, never a copy of its logic:
 | Reading phone notifications | "turn on/off phone notifications" | `jarvis_phone_notifications.request()` (§61) |
 | Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
-| Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
+| Offering any tool to the AI model (all 60 switchable tools since 2026-11-07) | "let/don't let the AI model read my calendar", "turn on/off the browser control tool", "switch the calculator tool off" | `jarvis_asks_first.handle_tools()` (§43) - the names are generated from `TOOLS_SWITCHABLE` by `tools/gen_tool_targets.py`; the "turn on/off <name> tool" shape is closed-world (the word "tool" and a whole known alias), so a device sentence keeps its own feature |
 | Animal options (2026-09-28) | "keep the animal still", "stop the animal's nodding", "turn on the sun and moon", "turn off the weather", "use Open-Meteo for the weather", "make the animal sharper" | `jarvis_animal.set_switch()`, `jarvis_sky.handle_post()`; sharpness and frame rate go back in X-Jarvis-Route for the asking device - §93.3 |
 | How much Jarvis may interrupt you (2026-10-08) | "speak up 5 times a day", "let jarvis speak up 2 times a day", "speak up less", "speak up more", "the brief at 8pm", "the digest arrives at 7 in the morning" | `jarvis_arbiter.change()` - the same function the route calls; the raise gets the same ONE card - §123.4 |
 
@@ -13543,6 +13543,33 @@ jumps there. Everything `jarvis_quick.py` already answers with its own
 grammar (timers, reminders, focus, media, "tell me when", the to-do list,
 web search's provider, manner, ...) is unchanged; this feature adds no
 second version of any of it.
+
+**The Live door is the same door, and every one of these is reachable through
+it (2026-11-07).** Jarvis Live answers through the same `/api/chat` route,
+agent, gate and approval cards - it is a typed turn with `live: true` and
+`provenance: "voice"` on the newest message - so no setting has a separate
+Live path and none may be missing from one. The audit that added this paragraph
+found the gaps were in the MATCHER, not the plumbing: only 4 of the 60
+switchable tools could be named (now all 60), the owner's own sentence "turn on
+the browser control tool" was not a shape any grammar knew, and the model
+denied that Live could change settings at all (now answered deterministically by
+`jarvis_quick.py`'s `how_live_settings`, read-only). The only Live difference in
+a settings answer is WORDING, and it is the same ONE calm line every carded
+setting already gets: Live speaks the reply, so a waiting card gets *"A card is
+waiting for <setting>, so approve it on your phone or PC and it changes."* - no
+card id, no list, no question back, and no spoken yes (the card is tapped;
+there is no spoken-approval surface anywhere, §18). `backend/test_live_parity.py`
+pins the door and the tool list; `backend/test_live_settings_parity.py` derives
+every `switch:`/`choice:`/`limit:`/`asks_first:`/`tool:` key from
+`jarvis_settings_registry.capability_keys()` (38 + 10 + 1 + 7 + 60 = 116
+options), drives each sentence typed and as a Live turn against a recorder
+standing in for the setter, and fails if a future option is added without both
+doors. One finding from that pass is reported and deliberately not fixed here:
+the route hands the answering turn a request that contains the PC's own
+recalled-facts system message, which `jarvis_agent._TurnWatch.app_context` reads
+as "the app sent extra text" and `_settings_turn_is_shaped` then refuses a
+model-issued `change_setting` for - identical for typed chat, not a Live or taint
+defect (`docs/LIVE-DESIGN.md` §3.8b has the evidence).
 
 ### 58.2.1 Named choices - "set the voice to heart", "change your face to Spiral"
 (2026-10-22; the face added 2026-10-26)

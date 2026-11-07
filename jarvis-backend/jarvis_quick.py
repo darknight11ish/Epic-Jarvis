@@ -352,7 +352,11 @@ _TAIL = re.compile(r"(?:[\s,]+(?:please|thanks|thank\s+you|jarvis|for\s+me))+$")
 
 def normalise(text) -> str:
     t = str(text or "")
+    # Spoken punctuation: the speech-to-text layer likes long dashes and curly
+    # quotes; the grammars are written with the plain forms (2026-11-07, the
+    # owner's Q2 ruling: ASR spelling must not decide a match).
     t = t.replace("’", "'").replace("‘", "'").replace("–", "-")
+    t = t.replace("—", "-").replace("‒", "-").replace("―", "-")
     t = t.lower().strip()
     t = re.sub(r"\ba\.\s?m\.?", "am", t)
     t = re.sub(r"\bp\.\s?m\.?", "pm", t)
@@ -360,7 +364,7 @@ def normalise(text) -> str:
     t = re.sub(r"[\s.!?]+$", "", t)
     t = _LEAD.sub("", t).strip()
     t = _TAIL.sub("", t).strip()
-    t = re.sub(r"[\s.!?,]+$", "", t)
+    t = re.sub(r"[\s.!?,;:]+$", "", t)
     # "to-do", "to do", "todo" - only where it names the list, never in
     # "remind me to do the laundry".
     t = re.sub(r"\b(my|the)\s+to-?\s?dos?\b", r"\1 todo", t)
@@ -413,11 +417,19 @@ _EXTRA_LEADS = (
     "do you think you could ",
     "do you think you can ",
     "i would like you to ",
+    "i would like to ",
     "i would love you to ",
+    "i'd like you to ",
+    "i'd like to ",
+    "i want you to ",
+    "i want to ",
+    "i need you to ",
+    "i need to ",
     "any chance you could ",
     "any chance you can ",
     "could you possibly ",
     "can you possibly ",
+    "go ahead and ",
     "possibly ",
     "be so kind as to ",
     "if you don't mind ",
@@ -426,10 +438,22 @@ _EXTRA_LEADS = (
     "could you ",
     "would you ",
     "will you ",
+    "okay so ",
+    "ok so ",
+    "alright ",
+    "all right ",
     "please ",
     "kindly ",
     "just ",
     "mind ",
+    # Spoken filler at the front of a dictated command (2026-11-07, the
+    # owner's Q2 ruling). These only ever strip a word that carries no
+    # command; a sentence that does not match after them still falls through
+    # to the model with the owner's ORIGINAL words.
+    "um ",
+    "uh ",
+    "erm ",
+    "hmm ",
 )
 
 #: "would you mind SETTING a timer" - a polite lead is followed by a gerund,
@@ -520,8 +544,16 @@ def normalize_spoken_command(text) -> str:
     """`text` tidied for the grammar: `normalise`'s own tidying, the polite
     lead-ins `normalise` does not strip, and the three safe number rewrites
     above. Idempotent (test_voice_reflex.py runs it twice on every sentence
-    it tests), and it NEVER changes which words the model is asked."""
+    it tests), and it NEVER changes which words the model is asked.
+
+    Spoken punctuation is flattened to spaces here and ONLY for matching
+    (2026-11-07, the owner's Q2 ruling): a dictated "um, turn on anti-slop"
+    or "JARVIS; go ahead and ..." carries commas and semicolons the grammars
+    do not spell out, and the words either side are unchanged. The model is
+    still asked the owner's original sentence, never this string."""
     t = normalise(text)
+    t = re.sub(r"[,;:]+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
     stripped = False
     changed = True
     while changed:
@@ -5763,6 +5795,24 @@ _TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+
 _TOOL_OFF = re.compile(
     r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
 
+#: "Turn on the browser control tool", "switch the calculator tool off",
+#: "disable the browser control tool" (2026-11-07, live-parity LP-2). The
+#: owner's measured sentence for a switch Settings has drawn all along went to
+#: the model in typed chat and got an outside-text refusal in Live; the two
+#: shapes above only ever knew "let the ai model read X".
+#:
+#: CLOSED WORLD, and the word "tool" is the whole safety of it: the tail must
+#: be a WHOLE alias in jarvis_settings_registry.tool_targets() (find_tool_target
+#: returns None otherwise) and the sentence must carry "tool". So a device or a
+#: feature - "turn off the kitchen light", "turn off the timer", "turn on the
+#: weather" - still falls through exactly as before, and a half-heard name is
+#: never guessed into a switch. The card rule is the switch's own: ON is the PC
+#: only, one card plus Windows Hello; OFF is instant.
+_TOOL_SWITCH = re.compile(
+    r"(?:turn|switch)\s+(on|off)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool\s+(on|off)"
+    r"|(enable|disable)\s+(?:the\s+|my\s+|your\s+)?(.+?)\s+tool")
+
 #: "How much Jarvis may interrupt you" (jarvis_arbiter.py, 2026-10-08) - the
 #: number of times a day it may speak up UNASKED, and the hour the brief
 #: arrives. Digits only, and whole sentences only, like every setting here:
@@ -6221,6 +6271,23 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         tool = R.find_tool_target(m.group(1))
         if tool is not None:
             return Intent("settings_tool", {"tool": tool, "on": bool(_TOOL_ON.fullmatch(s))})
+    # "Turn on the browser control tool" (2026-11-07, live-parity LP-2): the
+    # owner's own sentence for a switch Settings has always drawn, and one the
+    # two shapes above never knew. The regex demands the word "tool" and the
+    # tail must be a whole alias in the registry's generated table, so
+    # "turn off the kitchen light" / "turn off the timer" still fall through.
+    m = _TOOL_SWITCH.fullmatch(s)
+    if m:
+        g = m.groups()
+        if g[0] is not None:            # "turn/switch on|off <name> tool"
+            on, name = g[0] == "on", g[1]
+        elif g[2] is not None:          # "turn/switch <name> tool on|off"
+            on, name = g[3] == "on", g[2]
+        else:                           # "enable|disable <name> tool"
+            on, name = g[4] == "enable", g[5]
+        tool = R.find_tool_target(name)
+        if tool is not None:
+            return Intent("settings_tool", {"tool": tool, "on": bool(on)})
     m = _ASKS_FIRST_LOOSER.fullmatch(s) or _ASKS_FIRST_STRICTER.fullmatch(s)
     if m:
         action = R.find_asks_first_target(m.group(1))
@@ -11864,6 +11931,50 @@ _SELF_JOBS = re.compile(
     r"|what\s+(?:scheduled|recurring)\s+(?:jobs|things|tasks)\s+"
     r"(?:can\s+you\s+(?:run|schedule)|do\s+you\s+have)\b.*")
 
+#: "Can you change your own settings by voice through Jarvis Live?" (2026-11-07,
+#: live-parity LP-3). The model answered "No, you can't change my settings
+#: directly with a voice command right now. You'd need to use the desktop
+#: Settings card" - false: Live and typed chat share the same /api/chat route,
+#: the same agent, the same gate and the same approval cards
+#: (jarvis_live_turn.py sends `{"live": true, "provenance": "voice"}`), and
+#: `_settings_said` already speaks a calm card line for a carded setting
+#: change. A question about this project's own behaviour is answered from the
+#: code, never by the model's guess. Read-only: no model, no card, no write.
+_SELF_LIVE_SETTINGS = re.compile(
+    r"(?:change|changing|set|setting|adjust|control|alter)\s+"
+    r"(?:your|jarvis'?s?|its|my|the)?\s*(?:own\s+)?settings?\s+"
+    r"(?:by\s+(?:voice|talking|speech|speaking)|with\s+(?:a\s+|your\s+)?voice"
+    r"|using\s+(?:voice|speech))"
+    r"(?:\s+(?:through|in|on|via|inside)\s+(?:jarvis\s+)?live)?\s*\??$"
+    r"|(?:can|could|does|do)\s+(?:jarvis\s+live|live)\s+"
+    r"(?:change|set|adjust|control)\s+(?:your|jarvis'?s?|its|my)?\s*"
+    r"(?:own\s+)?settings?"
+    r"|(?:can|could|does|do)\s+you\s+(?:change|set|adjust)\s+"
+    r"(?:your\s+|jarvis'?s?\s+)?(?:own\s+)?settings?\s+"
+    r"(?:in|through|on|via|using)\s+(?:jarvis\s+)?live"
+    r"|(?:can|could)\s+i\s+(?:change|set|adjust)\s+"
+    r"(?:my\s+|your\s+|jarvis'?s?\s+)?(?:own\s+)?settings?\s+"
+    r"(?:by\s+(?:voice|talking|speech)|with\s+my\s+voice|using\s+voice)"
+    r"(?:\s+(?:in|through|on|via)\s+(?:jarvis\s+)?live)?\s*\??$"
+    r"|(?:does|do)\s+(?:jarvis\s+live|live)\s+(?:let|allow)\s+(?:you|me)\s+"
+    r"(?:change|set|adjust)\s+(?:your|my|jarvis'?s?)?\s*(?:own\s+)?settings?"
+    r"|(?:is|are)\s+(?:a\s+)?settings?\s+changes?\s+"
+    r"(?:possible|allowed|supported)\s+(?:in|through|on|via)\s+(?:jarvis\s+)?live")
+
+#: The fixed answer. It says YES plainly (the measured false denial was the
+#: whole finding), names the one door, and states the one safety limit without
+#: inventing a spoken-approval surface: the card is tapped, never said.
+LIVE_SETTINGS_ANSWER = (
+    "Yes - a setting change asked through Jarvis Live works exactly like typing "
+    "it: the same sentence, the same approval card and the same effect. Some "
+    "settings that loosen what asks first or turn on a tool are PC-only for "
+    "safety, so their card waits for you to tap it on your PC or phone - a "
+    "spoken yes is not heard.")
+
+
+def _run_how_live_settings(intent: Intent) -> Result:
+    return Result(LIVE_SETTINGS_ANSWER, intent.name)
+
 SELF_TOOLS_MISSING = ("Your PC's Jarvis cannot list its tools yet - run apply-patches.ps1 "
                       "on the PC.")
 
@@ -11898,6 +12009,11 @@ def _self_answers(s: str) -> Optional[Intent]:
         return Intent("pc_facts", {"shape": "space_all"})
     if _SELF_JOBS.fullmatch(s):
         return Intent("how_jobs")
+    # "Can you change your own settings by voice through Jarvis Live?"
+    # (2026-11-07, LP-3): answered from the route the code really takes, so the
+    # model can never deny the one door Live and typed chat share.
+    if _SELF_LIVE_SETTINGS.fullmatch(s):
+        return Intent("how_live_settings")
     return None
 
 
@@ -20718,6 +20834,28 @@ def _settings_waiting_line(setting) -> str:
             f"phone or PC and it changes.")
 
 
+def _settings_tool_waiting_line(tool: str) -> str:
+    """The same ONE calm line for a carded TOOL switch in a Live turn (2026-11-07).
+
+    A tool switch ON goes through `jarvis_asks_first.request_tool_enable` - one
+    approval card plus Windows Hello - and Live speaks its answer, so the
+    setter's own card sentence is replaced by one line that says a card is
+    waiting and what it is for. Same rule as `_settings_waiting_line`: no card
+    id, no list, no question back, and no spoken "yes" anywhere.
+    """
+    name = str(tool or "that tool").replace("_", " ")
+    try:
+        import jarvis_settings_registry as R
+
+        names = R.tool_targets().get(tool) or ()
+        if names:
+            name = str(names[0])
+    except Exception:                        # noqa: BLE001 - the label is cosmetic
+        pass
+    return (f"A card is waiting to offer {name} to the AI model, so approve it "
+            f"on your phone or PC and it changes.")
+
+
 def _settings_row(key: str, kind: str = ""):
     """`(kind, row)` for a stored receipt's `before` snapshot.
 
@@ -21727,15 +21865,22 @@ ANIMAL_MISSING = ("Your PC's Jarvis does not have the animal options yet - run "
 
 
 def _run_settings_tool(f: dict, peer, local,
-                       conversation: Optional[str] = None) -> Result:
-    """"Let the AI model use this" - whether a reading tool is offered to the
+                       conversation: Optional[str] = None,
+                       live: bool = False) -> Result:
+    """"Let the AI model use this" - whether a tool is offered to the
     model at all (jarvis_asks_first's [tools].enabled switch).
 
     The setter is the registry's own, which calls the module's route function:
     ON is the PC only, one card plus Windows Hello; OFF is instant. Since
     2026-11-03 a real change (in practice the instant OFF) leaves ONE undo
     receipt, with the before value read from the module that owns the list
-    (`reading_tool_now`)."""
+    (`reading_tool_now`).
+
+    `live` (2026-11-07) changes only the WORDING of a carded ON change's
+    answer, exactly like `_settings_said` does for a switch: Live speaks the
+    answer aloud, so a card waiting gets ONE calm line instead of the setter's
+    card sentence. The card, the tier, the PC-only refusal and the value are
+    all the setter's, unchanged."""
     import jarvis_settings_registry as R
     tool = str(f.get("tool") or "")
     on = bool(f.get("on"))
@@ -21753,6 +21898,8 @@ def _run_settings_tool(f: dict, peer, local,
             {"kind": "reading_tool", "key": f"reading_tool:{tool}", "value": on},
             f"{'Offered' if on else 'Stopped offering'} {names[0]} to the AI "
             f"model", since=since, label=label)
+    if live and getattr(out, "waiting", False):
+        return Result(_settings_tool_waiting_line(tool), "settings_tool")
     return Result(out.said, "settings_tool")
 
 
@@ -22486,7 +22633,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_asks_first(f, peer, local,
                                        conversation=conversation)
     if n == "settings_tool":
-        return _run_settings_tool(f, peer, local, conversation=conversation)
+        return _run_settings_tool(f, peer, local, conversation=conversation,
+                                  live=live)
     # Explaining a feature (2026-10-20). `feature_switch` goes through
     # _run_settings_bool below, which calls the SAME BoolSetting.set every other
     # spoken setting change uses - the setting's own card rule is unchanged.
@@ -22618,6 +22766,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_how_memory(intent)
     if n == "how_jobs":
         return _run_how_jobs(intent)
+    # "Can you change your own settings by voice through Jarvis Live?"
+    # (2026-11-07, LP-3): one fixed, true sentence about the route Live and
+    # typed chat share. Read-only, no card, no write.
+    if n == "how_live_settings":
+        return _run_how_live_settings(intent)
     # The ten pair rules (2026-11-04): read two real states and say what they do
     # together. Read-only, no card, no model.
     if n == "pair_answer":
@@ -23315,6 +23468,10 @@ READ_ONLY_INTENTS = frozenset({
     # two-setting warning are read-only for the same reason: the warning CHANGES
     # NOTHING, it only says the interaction and asks for one setting at a time.
     "how_running", "how_context", "how_fast", "how_memory", "how_jobs",
+    # "Can you change your own settings by voice through Jarvis Live?"
+    # (2026-11-07, LP-3): a fixed sentence about the code's own route. It reads
+    # nothing and writes nothing, so it must not take away a "cancel that".
+    "how_live_settings",
     "pair_answer", "settings_pair_note",
     # Jarvis's own measured facts and the six hard safety refusals (2026-11-06):
     # every one reads a local source or is fixed words, opens no card and writes
