@@ -1213,6 +1213,14 @@ jobs:
             gh release upload "$TAG" "jarvis-client/artifacts/$apk" --clobber
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" \
               -f sha="$GITHUB_SHA" -F force=true >/dev/null
+            # The rolling release's targetCommitish must name this build too
+            # (architect ruling Q7, 2026-11-07). The release API keeps the
+            # FIRST create's target, so after moving the tag the release is
+            # patched as well - the APK file name alone is not machine-checkable
+            # release identity.
+            rid=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq .id)
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$rid" \
+              -f target_commitish="$GITHUB_SHA" >/dev/null
             gh release edit "$TAG" --prerelease --title "$title" --notes "$notes"
             gh release view "$TAG" --json assets --jq '.assets[].name' | while IFS= read -r old; do
               if [ "$old" != "$apk" ]; then

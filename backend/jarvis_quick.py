@@ -1271,6 +1271,25 @@ def _run_call_record(f: dict) -> Result:
     return Result(said, "call_record", call_record={"action": action})
 
 
+#: A trailing instruction about the ANSWER's shape, not the command's content.
+_META_INSTRUCTION_TAIL = re.compile(
+    r"[\s,.!?;:\u2014\u2013-]+(?:in\s+)?(?:one\s+sentence|briefly|"
+    r"short\s+answer|be\s+brief)[.!?]*$", re.I)
+
+
+def _strip_meta_instruction(text) -> Optional[str]:
+    """The sentence without a trailing "one sentence"/"briefly" instruction.
+
+    None when there is no such tail, so the caller can tell a real retry from
+    an unchanged string. The tail is stripped only AFTER a first-pass miss.
+    """
+    raw = str(text or "")
+    stripped = _META_INSTRUCTION_TAIL.sub("", raw).strip()
+    if not raw or stripped == raw.strip():
+        return None
+    return stripped or None
+
+
 def match(text, now: Optional[float] = None,
           conversation: Optional[str] = None) -> Optional[Intent]:
     """The intent of a sentence, or None when it is not one of ours.
@@ -1282,6 +1301,16 @@ def match(text, now: Optional[float] = None,
     """
     now = time.time() if now is None else now
     got = _match(text, now, conversation)
+    if got is None:
+        # A trailing META-INSTRUCTION ("... One sentence.", "... in one
+        # sentence", "... briefly") is about the ANSWER, not the command:
+        # "Turn on cloud escalation. One sentence." must reach the same
+        # deterministic door as the bare sentence (architect ruling Q2,
+        # 2026-11-07). Retried only on a MISS, so a request whose own words
+        # end that way keeps whichever matcher claims it first.
+        stripped = _strip_meta_instruction(text)
+        if stripped is not None:
+            got = _match(stripped, now, conversation)
     if got is not None and got.f.get("text"):
         got.f["text"] = _restore(text, got.f["text"])
     if got is not None and got.f.get("about"):
@@ -24210,10 +24239,21 @@ _ANDROID_INTENTS = frozenset({"android_capability", "android_howto", "android_ne
 _PLUGIN_INTENTS = frozenset({"plugin_list", "plugin_state", "plugin_about", "plugin_install"})
 
 #: The reminders capability answers (2026-10-31): fixed words, no card.
+#: Read-only intents answered deterministically even in a PRIVATE chat
+#: (architect ruling Q3, 2026-11-07): a private chat's own rule hands
+#: read-only intents to the model, but the model cannot know what is in the
+#: scheduler's watch store, so it would invent an answer. Only reads the LOCAL
+#: code answers from its own state may be listed here.
+_PRIVATE_DETERMINISTIC_READS = frozenset({"repo_watch_list"})
+
+#: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
+#: set: every name here is routed there BEFORE the rest of the chain, so a name
+#: that belongs to another runner must never be added to it. A read-only
+#: intent's "changes nothing" mark belongs in READ_ONLY_INTENTS, not here - the
+#: two mistakes look alike and the watch list proved the cost (2026-11-07):
+#: "What am I watching?" was routed to the reminder answer for the whole Wave-8
+#: build because `repo_watch_list` was listed here.
 _REMINDER_INTENTS = frozenset({
-    # "what am I watching?" (2026-11-07) reads jarvis_watch.repo_status() and
-    # changes nothing, so it must not take away what "cancel that" would undo.
-    "repo_watch_list",
     "reminder_capability", "reminder_popup", "reminder_sound", "reminder_notify",
     "reminder_closed", "reminder_howto",
 })
@@ -24227,6 +24267,11 @@ _ADDING_INTENTS = frozenset({
 })
 
 READ_ONLY_INTENTS = frozenset({
+    # "what am I watching?" (2026-11-07): a read of the scheduler's watch store,
+    # so it must not take away what "cancel that" would undo. It is NOT a
+    # dispatch mark - see the _REMINDER_INTENTS comment for the cost of
+    # confusing the two.
+    "repo_watch_list",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
@@ -25002,8 +25047,10 @@ def answer(text, *, sched=None, now: Optional[float] = None,
             if _said is not None:
                 return Result(str(_said), "google_calendar", read=["calendar_read"])
         return None
-    if private:
-        # private-chat.patch: the whole fast path is OFF in a private chat.
+    if private and intent.name not in _PRIVATE_DETERMINISTIC_READS:
+        # private-chat.patch: the whole fast path is OFF in a private chat,
+        # except the deterministic reads the local code can answer itself
+        # (_PRIVATE_DETERMINISTIC_READS, ruling Q3 2026-11-07).
         # Refuse, in words, before a single state change or undo receipt -
         # and do not guess at what a read-only intent may write along the way:
         # hand it to the model like any ordinary question instead.
