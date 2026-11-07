@@ -3381,14 +3381,17 @@ GitHub with nobody asked. Now the loop also checks that the gate's answer
 was a person approving (`outcome == "approved"`), and otherwise refuses
 without running anything and tells the model which line to change.
 
-What that means for you: **`github_search` is refused until you set
-`web_research = "ask"`** (and `research_authenticated = "ask"`, if you use
-a GitHub token) in `jarvis-framework.toml`'s `[autonomy.tiers]`. Be aware
+What that means for you: **`github_search` asks you on a card**. It ships with
+`web_research = "ask"` since 2026-11-07 - it shipped `"auto"` while this belt
+was the only guard, which made the live "What asks first" page show "Always
+asks" beside a tier of `"auto"` and a developer diagnostic. `research_authenticated`
+is `"ask"` too, if you use a GitHub token. Be aware
 that `web_research` may also govern other web tools you have, which will
 then ask too. The reads you chose to leave at `"auto"` (calendar, email,
 notes, home state) and the two note writes are not affected.
 `test_agent.py` proves it against the shipped config: every one of the six,
-at `auto` or `notify`, never runs.
+at `auto` or `notify`, never runs - so a hand-written looser line cannot make
+one run unattended either.
 
 **What's genuinely rough about this first pass, said plainly rather than
 smoothed over:** a tool-enabled turn is one extra non-streamed round trip

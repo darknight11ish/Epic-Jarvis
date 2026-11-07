@@ -28,7 +28,12 @@ than described:
      after every privacy gate has already had its chance to answer local;
   7. an AUTOMATIC turn - standing switch or phrase - whose cloud reply has no
      usable answer is answered on this PC under one honest line, and the
-     model's private working-out is never shown as its answer.
+     model's private working-out is never shown as its answer;
+  8. THE CHAT FAST PATH (2026-11-07): `jarvis_quick.match()` reads the owner's
+     own words for this switch - and nothing else ("is cloud escalation on?"
+     and a bare "turn it on" do not become change requests) - and its runner
+     repeats the door's own words: a card that was not approved is never
+     reported as "turned on". No model, no network, no card decided.
 
 WHAT IS REAL AND WHAT IS INJECTED. `jarvis_router.choose()` (the shipped
 `backend/rebuilt/jarvis_router.py`), `jarvis_presets`, `jarvis_chatbot_api` and
@@ -44,6 +49,7 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -68,6 +74,7 @@ sys.path.insert(0, str(HERE))
 
 import jarvis_chatbot_api as API  # noqa: E402
 import jarvis_presets as P  # noqa: E402
+import jarvis_quick as Q  # noqa: E402
 import jarvis_router as RT  # noqa: E402
 
 FAILED, PASSED = [], []
@@ -238,6 +245,256 @@ def t_the_route_body_is_checked_before_it_is_acted_on():
           code == 400, (code, out))
     code, out = P.escalate_from_body(["on"])
     check("a body that is not an object is a 400", code == 400, (code, out))
+
+
+# ==========================================================================
+#  2b. THE FAST PATH (2026-11-07): the owner's own words, no model
+#
+#  WHY THESE ROWS EXIST. The model tool from PR #1209 is the intended door,
+#  and it is right - but the local 9B model does not reliably call it: on the
+#  live build "turn on cloud escalation" was answered "I've turned on cloud
+#  escalation" while the switch stayed OFF, and the self-awareness row failed
+#  "no NEW card appeared within 25s" in two separate passes. Worse, the
+#  sentence never reached the model at all: the feature guide answered "turn
+#  on cloud escalation" with "Cloud ... is a Command-Only ability ... There is
+#  no fixed sentence for it", which is false. `jarvis_quick.match()` now owns
+#  the sentence and `jarvis_presets.cloud_escalate` is still the only thing
+#  that decides anything - these rows prove the matcher is NARROW and that
+#  the runner repeats the door's own words instead of inventing a success.
+#
+#  NO CARD IS DECIDED HERE. `P._gate` is a stand-in (exactly as in
+#  `t_the_route_body_is_checked_before_it_is_acted_on`): it records what the
+#  card would ask and answers "no", which is the one direction this suite may
+#  stand in for. Nothing in this file approves a card.
+# ==========================================================================
+
+def t_the_fast_path_matches_the_switch_and_nothing_else():
+    clean()
+    on_words = (
+        "turn on cloud escalation",
+        "turn cloud escalation on",
+        "enable cloud escalation",
+        "enable the cloud escalation",
+        "switch on cloud escalation",
+        "escalate to the cloud",
+        "escalate my questions to the cloud",
+        "escalate hard questions to the cloud",
+        "escalate this to the cloud",
+        "cloud escalation is off, turn it on",
+        "cloud escalation is off - turn it on",
+        "please turn on cloud escalation",
+        "can you turn on cloud escalation",
+    )
+    for phrase in on_words:
+        got = Q.match(phrase)
+        check(f'"{phrase}" -> the standing switch, ON',
+              got is not None and got.name == "cloud_escalation_set"
+              and got.f.get("on") is True,
+              got and (got.name, got.f))
+    off_words = (
+        "turn off cloud escalation",
+        "turn cloud escalation off",
+        "disable cloud escalation",
+        "disable the cloud escalation",
+        "switch off cloud escalation",
+        "stop escalating to the cloud",
+        "stop escalating questions to the cloud",
+        "cloud escalation is on, turn it off",
+        "cloud escalation is on - turn it off",
+        "turn it off, cloud escalation is on",
+    )
+    for phrase in off_words:
+        got = Q.match(phrase)
+        check(f'"{phrase}" -> the standing switch, OFF',
+              got is not None and got.name == "cloud_escalation_set"
+              and got.f.get("on") is False,
+              got and (got.name, got.f))
+    got = Q.match("turn on cloud escalation")
+    check("... and the sentence no longer gets the false 'Command-Only ... no fixed "
+          "sentence' refusal that used to answer it",
+          got is not None and got.name != "feature_switch_refused", got)
+
+
+def t_the_fast_path_does_not_read_a_question_as_a_change_request():
+    """A question is a READ. "turn it off" alone names nothing to turn off."""
+    clean()
+    questions = (
+        "is cloud escalation on?",
+        "is cloud escalation turned on",
+        "what is cloud escalation?",
+        "what is the cloud",
+        "can you use the cloud?",
+        "should cloud escalation be on?",
+    )
+    for phrase in questions:
+        got = Q.match(phrase)
+        check(f'"{phrase}" is a read, not a standing change',
+              got is None or got.name != "cloud_escalation_set", got)
+    not_the_switch = (
+        "turn on the cloud light",
+        "turn it off",
+        "turn it on",
+        "escalate this",
+        "enable the cloud",
+        "cloud escalation is on but do not turn it off",
+    )
+    for phrase in not_the_switch:
+        got = Q.match(phrase)
+        check(f'"{phrase}" is not the cloud switch',
+              got is None or got.name != "cloud_escalation_set", got)
+
+
+def t_the_fast_path_on_raises_the_same_card_and_writes_nothing():
+    clean()
+    real_gate = P._gate
+    P._gate = gate_no
+    gate_no.seen.clear()
+    try:
+        got = Q.match("turn on cloud escalation")
+        out = Q.run(got, None, time.time()) if got is not None else None
+    finally:
+        P._gate = real_gate
+    check("the sentence is dispatched to the presets switch, not to the model",
+          out is not None and out.intent == "cloud_escalation_set",
+          out.reply if out else "the model")
+    check("... and it raised exactly ONE change_own_config card",
+          len(gate_no.seen) == 1 and gate_no.seen[0][0] == P.CLOUD_ACTION,
+          gate_no.seen)
+    check("... whose own words are the switch's, not a generic permission",
+          bool(gate_no.seen)
+          and "without asking" in gate_no.seen[0][1].get("text", ""),
+          gate_no.seen[0][1] if gate_no.seen else None)
+    check("... nothing was written before a yes",
+          P.escalate_on() is False and not _escalate_file().exists(),
+          sorted(p.name for p in SCRATCH.iterdir()))
+    check("... and the answer is the body's own 'Not turned on', never 'turned on'",
+          out is not None and out.reply == ("Not turned on - Jarvis still asks "
+                                            "before every cloud turn."),
+          out.reply if out else None)
+
+
+def t_the_fast_path_off_is_instant_and_already_is_a_no_op():
+    clean()
+    # Put the switch on exactly the way its own file holds it: the OFF below
+    # then really changes something.
+    _escalate_file().write_text(json.dumps({"on": True}) + "\n", encoding="utf-8")
+    real_gate = P._gate
+    P._gate = gate_yes
+    gate_yes.seen.clear()
+    try:
+        got = Q.match("turn off cloud escalation")
+        off = Q.run(got, None, time.time()) if got is not None else None
+        check("OFF is instant: no card is raised for a tightening",
+              gate_yes.seen == [], gate_yes.seen)
+        check("... and it says what the switch's own body said",
+              off is not None
+              and off.reply == "Jarvis asks before every cloud turn again.",
+              off.reply if off else None)
+        check("... and it really turned it off", P.escalate_on() is False)
+        # Ask again for ON while its own file says ON: no card may be raised
+        # for a request that changes nothing.
+        _escalate_file().write_text(json.dumps({"on": True}) + "\n",
+                                    encoding="utf-8")
+        gate_yes.seen.clear()
+        already = Q.run(Q.match("turn on cloud escalation"), None, time.time())
+        check("already ON: no second card, and the body's own 'already' words",
+              gate_yes.seen == [] and already is not None
+              and already.reply == "Escalation is already on.",
+              (gate_yes.seen, already.reply if already else None))
+        off_again = Q.run(Q.match("turn off cloud escalation"), None, time.time())
+        check("... then OFF really changes it again",
+              off_again is not None and P.escalate_on() is False
+              and off_again.reply == "Jarvis asks before every cloud turn again.",
+              (P.escalate_on(), off_again.reply if off_again else None))
+        twice = Q.run(Q.match("turn off cloud escalation"), None, time.time())
+        check("... and already OFF is a no-op with the body's own words",
+              twice is not None and twice.reply == "Escalation is already off."
+              and gate_yes.seen == [],
+              (gate_yes.seen, twice.reply if twice else None))
+    finally:
+        P._gate = real_gate
+
+
+def t_the_fast_path_no_provider_says_the_bodys_words_and_raises_no_card():
+    clean(provider="")
+    real_gate = P._gate
+    P._gate = gate_yes
+    gate_yes.seen.clear()
+    try:
+        got = Q.match("turn on cloud escalation")
+        out = Q.run(got, None, time.time()) if got is not None else None
+    finally:
+        P._gate = real_gate
+    check("no cloud provider chosen: the body's own sentence names the Presets menu",
+          out is not None and "Presets menu" in out.reply,
+          out.reply if out else None)
+    check("... and NO card was raised for a setting that could not work",
+          gate_yes.seen == [], gate_yes.seen)
+    check("... and nothing was written", P.escalate_on() is False)
+
+
+def t_the_fast_path_never_calls_a_waiting_card_on():
+    """A body that says the card is still up is repeated as waiting, never as on.
+
+    `cloud_escalate` itself waits inside the gate, so today this shape comes
+    from a caller that raises cards without waiting; the runner answers it
+    honestly rather than dressing it up as a success.
+    """
+    clean()
+    real = P.cloud_escalate
+    cases = (
+        ("waiting flag", {"ok": False, "on": False, "changed": False,
+                          "card": True, "waiting": True,
+                          "message": "Waiting for your approval."}),
+        ("card the body does not call decided",
+         {"ok": False, "on": False, "changed": False, "card": True}),
+        ("pending card whose own line says nothing about waiting",
+         {"ok": False, "on": False, "changed": False, "card": True,
+          "message": "The switch is not on yet."}),
+    )
+    try:
+        for label, body in cases:
+            P.cloud_escalate = lambda _body=body, **kw: (200, dict(_body))
+            got = Q.match("turn on cloud escalation")
+            out = Q.run(got, None, time.time()) if got is not None else None
+            check(f"a {label} is said as waiting, and the switch is never called on",
+                  out is not None and "waiting" in out.reply.lower()
+                  and "may now" not in out.reply and "is on" not in out.reply
+                  and P.escalate_on() is False,
+                  out.reply if out else None)
+    finally:
+        P.cloud_escalate = real
+
+
+def t_the_fast_path_repeats_the_bodys_own_success_words():
+    """A changed body's own sentence comes back verbatim - the runner adds none.
+
+    The body is a stand-in here: the REAL door is driven above (a refused card
+    writes nothing) and by `t_on_is_one_card_and_off_is_instant` (a yes writes).
+    What this row pins is that the fast path never rewrites either outcome.
+    """
+    clean()
+    real = P.cloud_escalate
+    try:
+        for want, body in (
+            (True, {"ok": True, "on": True, "changed": True, "card": True,
+                    "message": "The switch is on, in the door's own words."}),
+            (False, {"ok": True, "on": False, "changed": True, "card": False,
+                     "message": "The switch is off, in the door's own words."}),
+        ):
+            P.cloud_escalate = lambda _body=body, **kw: (200, dict(_body))
+            out = Q._run_cloud_escalation_set({"on": want})
+            check(f"a changed body asking for {'ON' if want else 'OFF'} is repeated "
+                  f"word for word",
+                  out.reply == body["message"], out.reply)
+        P.cloud_escalate = lambda **kw: (200, {"ok": True, "on": False,
+                                               "changed": False, "card": False,
+                                               "message": "Already as you left it."})
+        out = Q._run_cloud_escalation_set({"on": False})
+        check("... and a no-op body's own words are repeated, not replaced",
+              out.reply == "Already as you left it.", out.reply)
+    finally:
+        P.cloud_escalate = real
 
 
 # ==========================================================================
@@ -545,6 +802,13 @@ TESTS = [
     t_a_refused_card_writes_nothing,
     t_on_with_no_provider_refuses_before_a_card,
     t_the_route_body_is_checked_before_it_is_acted_on,
+    t_the_fast_path_matches_the_switch_and_nothing_else,
+    t_the_fast_path_does_not_read_a_question_as_a_change_request,
+    t_the_fast_path_on_raises_the_same_card_and_writes_nothing,
+    t_the_fast_path_off_is_instant_and_already_is_a_no_op,
+    t_the_fast_path_no_provider_says_the_bodys_words_and_raises_no_card,
+    t_the_fast_path_never_calls_a_waiting_card_on,
+    t_the_fast_path_repeats_the_bodys_own_success_words,
     t_the_standing_switch_is_the_only_source_of_a_standing_yes,
     t_no_client_flag_can_turn_the_switch_on,
     t_the_phrase_is_a_yes_for_that_turn_only,

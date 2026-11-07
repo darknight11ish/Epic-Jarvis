@@ -623,17 +623,33 @@ FAMILIES: Tuple[Family, ...] = (
         address_keys=(),
         # jarvis_research.TOKEN_ENV
         env_names=("JARVIS_GITHUB_TOKEN",),
-        # jarvis_gate._RISK and the tier table name both of these for the
-        # GitHub research tool (jarvis_gate._TOOL_ACTIONS maps the two).
-        abilities=("github_read", "research_authenticated"),
+        # The FULL surface, named the way the gate and jarvis_agent.TOOLS name
+        # it. The old pair here (`github_read`, `research_authenticated`) was
+        # the 2026-09-30 research-and-watch surface; it kept saying "Read-only"
+        # for four days after the owner's 2026-11-03 "Read + actions" decision
+        # added the three carded actions (2026-11-07 audit, BLOCKER 3: this row
+        # was the one place `/api/accounts` still described the old surface).
+        # The three reads share `github_inspect`; the three actions each have
+        # their own action in the shipped [autonomy.tiers].
+        abilities=("github_inspect", "github_comment", "github_open_issue",
+                   "github_rerun_workflow", "github_read", "research_authenticated"),
         verify="connect_account:github",
-        change='Say "connect my GitHub"',
+        change=('Say "connect my GitHub" for the token card, then switch each '
+                'GitHub tool on in Settings, What asks first, under "Let the AI '
+                'use this" (group "Jarvis\'s own tools")'),
         remove=("Not removable from any screen yet - the next slice adds a Remove "
                 "button; until then only by hand in Windows Credential Manager. Jarvis "
                 "forgetting it does not revoke it: the token stays valid on github.com "
-                "until you delete it there."),
-        limit="Read-only: private repositories and CI status.",
-        can="Search your own private repositories and read their CI.",
+                "until you delete it there. Switching the six tools off in Settings, "
+                "What asks first, stops it being used without deleting the token."),
+        limit=("Read AND act, each with its own card: three read tools (list, "
+               "read-file, CI status) and three actions (comment, open an issue, "
+               "re-run a workflow). It never merges a pull request, never pushes or "
+               "commits and never closes or deletes anything - there is no merge "
+               "action and no merge card, even with your approval."),
+        can=("Read your repositories, open pull requests, issues, CI status and one "
+             "file, and comment, open an issue or re-run a workflow - each after you "
+             "say yes on its own card; never merge, push or close."),
     ),
     Family(
         id="email",

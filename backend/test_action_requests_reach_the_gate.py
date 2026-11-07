@@ -259,6 +259,19 @@ def t_1_forget_one_fact_names_the_memory_door():
     check("forget-fact: it says no card can be raised here, so nothing is "
           "promised", "no approval card" in result["answer"],
           result["answer"][-320:])
+    # #1209 audit: "Don't forget this fact" is a request to REMEMBER it. The
+    # pattern alone matched, and the answer told the owner it could not remove
+    # the fact. A plain "forget this fact" must still get the Memory door.
+    check("forget-fact: 'Don't forget this fact' is not a request to forget it",
+          AG._memory_forget_line("Don't forget this fact: I like tea.") == "",
+          AG._memory_forget_line("Don't forget this fact: I like tea."))
+    check("forget-fact: 'Do not forget this fact' and 'Never forget this fact' "
+          "are not either",
+          AG._memory_forget_line("Do not forget this fact: I like tea.") == ""
+          and AG._memory_forget_line("Never forget this fact: I like tea.") == "")
+    check("forget-fact: a plain 'forget this fact' still names the Memory screen",
+          "Memory screen" in AG._memory_forget_line("Forget this fact: I like tea."),
+          AG._memory_forget_line("Forget this fact: I like tea."))
 
 
 def t_2_delete_a_note_is_the_fast_paths_honest_refusal_and_a_claim_is_corrected():
@@ -330,10 +343,39 @@ def t_3_send_an_email_reaches_the_gate_and_needs_a_person():
     check("email OFF: no card is raised", gate.calls == [], gate.actions)
     check("email OFF: the answer names the switch in Settings -> Tools",
           "Settings, Tools" in result["answer"]
-          and "Sending one email" in result["answer"], result["answer"][-360:])
+          and "Send an email (one card each)" in result["answer"],
+          result["answer"][-360:])
     check("email OFF: ...and says nothing ran and no card was raised",
           "nothing ran and no approval card was raised" in result["answer"],
           result["answer"][-360:])
+
+    # #1209 audit: a request to WRITE an email is `draft_email`'s own door, and
+    # this line's "nothing ran" is false once a draft really ran. Only a request
+    # with a SEND verb may get it.
+    lines = AG.postscript_lines(
+        "I've drafted the email to Alex.", steps=[
+            {"tool": "draft_email", "ran": True, "ok": True}],
+        owner_words="Write an email to Alex saying hello.",
+        enabled_tools={"change_setting", "draft_email"})
+    check("email OFF: a draft-only request gets no send-tool line",
+          not any("email tool is switched off" in line for _kind, line in lines),
+          lines)
+    check("email OFF: ...and a draft that really ran is never told 'nothing ran'",
+          not any("email tool is switched off" in line for _kind, line in
+                  AG.postscript_lines(
+                      "I drafted it.", steps=[
+                          {"tool": "draft_email", "ran": True, "ok": True}],
+                      owner_words="Write an email to Alex and send it.",
+                      enabled_tools={"change_setting", "draft_email"})))
+    lines = AG.postscript_lines(
+        "I cannot send it.", steps=(),
+        owner_words="Send an email to Alex saying hello.",
+        enabled_tools={"change_setting"})
+    check("email OFF: a SEND request still gets the line, quoting the real "
+          "Settings -> Tools row",
+          any("email tool is switched off" in line
+              and "Send an email (one card each)" in line for _kind, line in lines),
+          lines)
 
 
 def t_4_the_phone_switch_is_answered_in_words_and_raises_nothing():
@@ -351,6 +393,14 @@ def t_4_the_phone_switch_is_answered_in_words_and_raises_nothing():
           result["answer"][-360:])
     check("phone-aloud: ...says it is on the phone, not this PC",
           "on your phone, not on this PC" in result["answer"],
+          result["answer"][-360:])
+    # #1209 audit: since 2026-11-06 the phone's switch covers the mic AND a
+    # typed answer's "Read aloud" (docs/ARCHITECTURE.md section 8). The old
+    # sentence claimed "only the mic".
+    check("phone-aloud: the switch covers the mic and the typed Read aloud",
+          "covers the mic" in result["answer"]
+          and '"Read aloud"' in result["answer"]
+          and "only the mic" not in result["answer"],
           result["answer"][-360:])
 
 
@@ -464,10 +514,18 @@ def t_6_a_plugin_or_pack_install_is_off_by_default_and_a_url_is_never_fetched():
     check("plugin OFF: no card is raised", gate.calls == [], gate.actions)
     check("plugin OFF: the answer names the switch in Settings -> Tools",
           "Settings, Tools" in result["answer"]
-          and "Installing a skill pack" in result["answer"],
+          and "Installing ONE skill pack from a folder or .zip on this PC "
+              "(one card showing the whole scan; nothing lands until you say yes)"
+          in result["answer"],
           result["answer"][-400:])
     check("plugin OFF: ...and says a link is never downloaded",
           "never downloaded from a link" in result["answer"],
+          result["answer"][-400:])
+    # #1209 audit: packs are chat-only - Settings -> Tools has the on/off
+    # switch, not an installer. The line must name the chat door.
+    check("plugin OFF: the link line names the chat door, not a Settings installer",
+          "ask me in chat to install" in result["answer"]
+          and "pack's own installer" not in result["answer"],
           result["answer"][-400:])
 
     # ON, with the real module: a URL is refused by the scan, in words, no card.
@@ -499,6 +557,136 @@ def t_6_a_plugin_or_pack_install_is_off_by_default_and_a_url_is_never_fetched():
               fake.installed)
         check("plugin ON: ...and nothing counts as installed while the card waits",
               "pack_install" not in result["tools_ran"], result["tools_ran"])
+
+
+# --------------------------------------------------------------------------
+#   THE TWO #1209 EDGES ON THE CLOUD DOOR
+# --------------------------------------------------------------------------
+def t_7_the_card_limit_and_the_cloud_no_ops_do_not_lie():
+    """The two edges the audit found in `_cloud_call` (2026-11-07).
+
+    1. The card limit is about CARDS, so it may only refuse the one request
+       that would raise one: an ON while the switch is off. An OFF (a
+       tightening, instant, no card) and an ON that is already on (the module
+       answers `changed: False, card: False`) must go through even when the
+       answer has already asked five times.
+    2. `cloud_escalate` reports already-on / already-off as
+       `ok=True, changed=False, card=False`. That is a finished call, not a
+       refusal: it must not emit `tool_refused` (both apps render that as
+       "cloud_escalation not allowed") and it must stay in `tools_ran`.
+    """
+    def five_sends():
+        return {"choices": [{"message": {
+            "role": "assistant", "content": "",
+            "tool_calls": [
+                {"id": f"send{n}", "function": {
+                    "name": "send_email",
+                    "arguments": json.dumps(
+                        {"to": ["me@example.com"], "subject": "hello",
+                         "body": "Hello,"})}}
+                for n in range(AG.CARDS_PER_TURN)]}}]}
+
+    def set_escalate(on):
+        (CFG / "escalate-cloud.json").write_text(
+            json.dumps({"on": bool(on)}), encoding="utf-8")
+
+    _forget_cloud_choice()
+    _write_cloud_choice()
+    try:
+        # --- 1a: five cards already raised, then a real OFF ----------------
+        set_escalate(True)
+        with ModuleSwap("jarvis_email_send", fake_email_send()):
+            gate = Gate(DENY)
+            result, calls, seen = turn(
+                "Write and send five emails.",
+                [five_sends(),
+                 tool_call("cloud_escalation", {"action": "off"}),
+                 answer("Cloud escalation is off again.")],
+                gate=gate, enabled={"send_email", "change_setting",
+                                    "cloud_escalation"})
+        check("cloud limit: the turn really raised the limit's worth of cards",
+              gate.actions.count("send_email") == AG.CARDS_PER_TURN, gate.actions)
+        check("cloud limit: an OFF at the limit is not refused",
+              not refused(seen, "cloud_escalation"), seen)
+        check("cloud limit: ...and really turns the switch off",
+              PR.escalate_on() is False, PR.escalate_on())
+        check("cloud limit: ...and is recorded as having run",
+              "cloud_escalation" in result["tools_ran"], result["tools_ran"])
+
+        # --- 1b: five cards already raised, then an ON on an off switch ----
+        _forget_cloud_choice()
+        _write_cloud_choice()
+        with ModuleSwap("jarvis_email_send", fake_email_send()):
+            gate = Gate(PERSON_YES)
+            result, calls, seen = turn(
+                "Write and send five emails.",
+                [five_sends(),
+                 tool_call("cloud_escalation", {"action": "on"}),
+                 answer("I could not turn it on in this answer.")],
+                gate=gate, enabled={"send_email", "change_setting",
+                                    "cloud_escalation"})
+        check("cloud limit: an ON that WOULD raise a card is still refused at "
+              "the limit",
+              refused(seen, "cloud_escalation")
+              and "cloud_escalation" not in result["tools_ran"],
+              (result["tools_ran"], seen))
+        said = json.dumps(calls[-1]["messages"][-1].get("content", ""))
+        check("cloud limit: ...in words about the limit, not a false 'done'",
+              "already asked the owner for approval" in said
+              and "Nobody was asked and nothing ran" in said, said[-400:])
+        check("cloud limit: ...and the switch stays OFF",
+              PR.escalate_on() is False
+              and gate.actions.count("change_own_config") == 0,
+              (PR.escalate_on(), gate.actions))
+
+        # --- 2a: already ON, asked ON again -------------------------------
+        gate = Gate(PERSON_YES)
+        result, calls, seen = turn(
+            "Turn on cloud escalation.",
+            [tool_call("cloud_escalation", {"action": "on"}),
+             answer("Cloud escalation is on.")],
+            gate=gate, enabled={"change_setting", "cloud_escalation"})
+        check("cloud already on: the first ON reaches the one card",
+              gate.actions == ["change_own_config"] and PR.escalate_on() is True,
+              (gate.actions, PR.escalate_on()))
+        gate = Gate(PERSON_YES)
+        result, calls, seen = turn(
+            "Turn on cloud escalation again.",
+            [tool_call("cloud_escalation", {"action": "on"}),
+             answer("Cloud escalation is already on.")],
+            gate=gate, enabled={"change_setting", "cloud_escalation"})
+        check("cloud already on: no second card is raised", gate.calls == [],
+              gate.actions)
+        check("cloud already on: it is NOT reported as refused",
+              not refused(seen, "cloud_escalation")
+              and any(s.get("phase") == "tool_finished"
+                      and s.get("tool") == "cloud_escalation" for s in seen), seen)
+        check("cloud already on: ...and it stays in tools_ran",
+              "cloud_escalation" in result["tools_ran"], result["tools_ran"])
+        said = json.dumps(calls[-1]["messages"][-1].get("content", ""))
+        check("cloud already on: the model is handed the module's own words",
+              "already on" in said, said[-300:])
+
+        # --- 2b: already OFF, asked OFF again -----------------------------
+        set_escalate(False)
+        gate = Gate(PERSON_YES)
+        result, calls, seen = turn(
+            "Turn off cloud escalation again.",
+            [tool_call("cloud_escalation", {"action": "off"}),
+             answer("Cloud escalation is already off.")],
+            gate=gate, enabled={"change_setting", "cloud_escalation"})
+        check("cloud already off: no card is raised", gate.calls == [], gate.actions)
+        check("cloud already off: it is NOT reported as refused",
+              not refused(seen, "cloud_escalation")
+              and any(s.get("phase") == "tool_finished"
+                      and s.get("tool") == "cloud_escalation" for s in seen), seen)
+        check("cloud already off: ...and it stays in tools_ran",
+              "cloud_escalation" in result["tools_ran"], result["tools_ran"])
+        said = json.dumps(calls[-1]["messages"][-1].get("content", ""))
+        check("cloud already off: the model is handed the module's own words",
+              "already off" in said, said[-300:])
+    finally:
+        _forget_cloud_choice()
 
 
 # --------------------------------------------------------------------------
@@ -587,6 +775,24 @@ def t_the_rules_tell_the_model_to_call_the_tool():
     check("the settings tool says the model never changes a setting itself",
           "you never change it yourself" in settings, settings[-200:])
 
+    # #1209 audit: the architecture record claimed this feature rewrote
+    # LANE_SYSTEM and that the old "do not send/edit yourself" rule is gone.
+    # Both are false at the merged commit - the rules are main's own, which the
+    # checks above prove - so the paragraph must say where the instruction
+    # really lives. Pinned here so the record cannot drift back.
+    arch = (REPO / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    at = arch.find("A tool's own card is the gate")
+    bullet = arch[at:at + 1800] if at >= 0 else ""
+    check("the architecture record no longer claims the rules were rewritten",
+          bool(bullet) and "LANE_SYSTEM` says so" not in bullet
+          and "and is gone" not in bullet, bullet[:400])
+    check("...and says the call-it instruction lives in the tool descriptions, "
+          "on main's own rules",
+          "tool's own description" in bullet
+          and "byte-identical to `main`" in bullet
+          and "same PR's test pins this arrangement" in bullet,
+          bullet[:400])
+
 
 if __name__ == "__main__":
     for fn in (t_1_forget_one_fact_names_the_memory_door,
@@ -595,6 +801,7 @@ if __name__ == "__main__":
                t_4_the_phone_switch_is_answered_in_words_and_raises_nothing,
                t_5_cloud_escalation_reaches_its_card_and_only_a_yes_turns_it_on,
                t_6_a_plugin_or_pack_install_is_off_by_default_and_a_url_is_never_fetched,
+               t_7_the_card_limit_and_the_cloud_no_ops_do_not_lie,
                t_the_measured_false_sentences_are_corrected,
                t_the_rules_tell_the_model_to_call_the_tool):
         print(f"\n--- {fn.__name__} ---")

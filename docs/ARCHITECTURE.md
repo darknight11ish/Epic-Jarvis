@@ -612,12 +612,20 @@ answers that refused in words or sent him to Windows settings. The rule that
 follows from it, and the one the next change must keep:
 
 - **A tool's own card is the gate, and the model's job is to reach it.** When
-  the owner asks for something a tool does, the model CALLS that tool
-  (`jarvis_agent.LANE_SYSTEM` says so in those words, and the Modelfile's SYSTEM
-  block carries the same sentence). Nothing is auto-approved: the card still
+  the owner asks for something a tool does, the model CALLS that tool: the
+  "call it, do not ask first" instruction lives in each tool's own description
+  (`jarvis_agent.TOOLS[...].schema()["function"]["description"]` - the settings
+  and cloud-escalation texts both carry it), not in `jarvis_agent.LANE_SYSTEM`.
+  The merged change leaves the rules byte-identical to `main`, including the
+  old sentence "You do not send email, edit files, or run commands yourself":
+  the 2026-11-06 draft that would have rewritten them was reverted before merge,
+  because it broke the three-copy character pin and the block's 1,800-token cap,
+  and none of the six doors needed it. A 9B model can read that old sentence as
+  *I cannot*, which is why the instruction that works is the one in each tool's
+  own description. The same PR's test pins this arrangement -
+  `backend/test_action_requests_reach_the_gate.py`, "the rules are main's own -
+  the 2026-11-06 rewrite was reverted". Nothing is auto-approved: the card still
   decides, and "waiting for your yes" is the honest wording while one is up.
-  The old rule sentence - "You do not send email, edit files, or run commands
-  yourself" - was read by a 9B model as *I cannot*, and is gone.
 - **A tool that ships switched off is named, not denied.** Sending one email and
   installing a skill pack are real, card-first tools that are absent from the
   shipped `[tools].enabled`. The answer names the Settings -> Tools switch
@@ -4898,6 +4906,8 @@ what is missing is only the Settings screen agreeing about who turned it off.
 **The curator lock has no app control at all, and that is one-sided on purpose** (2026-11-06; the owner's ruling, next-sprint PR 2, Hermes borrows #5/#8; JARVIS-API §197.11). `"locked": true` in `jarvis-packs.json` refuses a replacement and a removal of that one pack until it is unlocked, and it is written only by the PC: `jarvis_packs.set_locked(name, on, here=True)` refuses `here=False` and writes nothing, and the one door is the PC's own command line (`py -3 jarvis_packs.py lock|unlock|locked`). No route was added, so a phone cannot lock or unlock a pack and `tools/check_parity.py` has nothing to classify - the same shape as the pack manager's own entry above, where what is one-sided is the *screen*, not the permission. Both apps still show the lock's effect where they already show a pack: `pack_list` carries `locked`, and a locked pack's install and removal are refused in the owner's exact sentence. A lock button in either app would be a new control over a protection the owner set on the PC, which is why this slice adds none; what both apps DO get is the new **provenance tier** on the install card and the **hidden-byte** and **cost** pills on every approval card, so nothing about this change is missing from either client except a lock switch the ruling did not ask for.
 - **The phone's home-screen answer box scrolls inside its own three-line footprint, and the desktop deliberately has no equivalent box - one-sided on purpose** (2026-11-06; the owner's report and his choice of option B, `decisions.d/2026-11-06-phone-home-answer-scroll.md`; `jarvis-client`'s `ui/screens/ReplyPeekPlan.kt` and `HomeScreen.ReplyPeek`). On the phone's Full screen the bar showed the start of the reply cut off after three lines with "…", and reading the rest meant pressing "Show chat"; since this slice the box keeps exactly the height those three lines always had and scrolls its own answer, so every word is reachable by dragging inside it and "Show chat" is no longer needed to read the answer that is on screen. A short answer still measures as it did, and no line is ever ellipsis-truncated. **The desktop gets nothing, and that is not a gap:** its answers already scroll in their own panes (the chat list, the reply pane), so a second scroll box on the PC would duplicate a thing that already works rather than reach parity. Nothing else is one-sided: both apps read the same replies from the same routes, and this slice adds no route, control, permission or approval card - it is display only, so `tools/check_parity.py` has nothing new to classify.
 
+- **The per-repository GitHub watcher has no screen in either app, on purpose (2026-11-07).** It is controlled entirely by one sentence in chat and in Jarvis Live - the same matcher, the same runner, the same store - and what it would have said is read from the existing `GET /api/watch/decisions` route. So neither app gains a page, a toggle or a card: adding a screen to only one of them would be the one-sided case, and adding the same screen to both would duplicate a control the owner asked to be conversational ("through jarvis live and chat").
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps
@@ -6372,3 +6382,52 @@ permission of any kind** - the safest feature is one that adds no way in. The
 suite is `backend/test_quotes.py` (74 checks) and the `quote` kind is in
 `contract/schedule-cases.json`, so the HUD, Coming up and the phone are compared
 on 32 cases each with no mismatch.
+
+---
+
+## 20. Knowing its own code — the self-code map (added 2026-11-07)
+
+**The gap.** Asked *"what is your own GitHub repository?"*, the live backend
+answered "I don't have a public GitHub repository of my own" — it did not know
+that the code it runs **is** the public `darknight11ish/Epic-Jarvis` repository.
+`jarvis_repomap.py` maps a folder the owner names, `jarvis_self_portrait.py`
+knows its version and tools, and the feature catalogue knows what features do;
+none of them knows which module implements which part of Jarvis.
+
+**What it is.** One generated JSON file beside the backend,
+`jarvis-self-code.json`, listing the five runtime parts in the order they fit
+(backend on this PC → the models in Ollama → the Tauri desktop shell → the
+Android client over a private network → the public repository with its CI and
+deploy pipeline), then one row per major part of the code: its purpose, every
+file it owns, the modules to start reading, the tests that prove it and the
+documents that describe it. It also carries the commit it was built from, that
+commit's date, the version, the newest twenty commit subjects and the repo's
+major directories. `tools/gen_self_code_map.py` writes it from the tree at the
+deploy's own commit; `backend/jarvis_self_code.py` (shipped whole, twin kept)
+only reads it beside itself — no git, no socket, no write, no model, and no code
+body. The map names code; it does not hold code and it runs nothing.
+
+**Completeness is checked, not claimed.** Every tracked file belongs to exactly
+one subsystem, from one table in the generator; the generator exits non-zero and
+names the paths when a file belongs to none or to two, and skips generated,
+binary and vendored files only through an explicitly named list whose counts it
+prints and stores. `--check` re-derives the document in memory and compares it
+byte for byte with the committed copy. `backend/test_self_code.py` proves both
+halves, the map's shape, the four answers, a miss, a missing map, and that the
+older self-answers keep their own sentences.
+
+**Where it is answered.** Four deterministic intents in `jarvis_quick.py`, with
+no model and no card: the overview ("what are your major parts", "what is your
+architecture"), a lookup ("where is the code for X", "what does X do" — the
+latter only when X is really in the map), the recent changes ("what changed on
+main") and the repository identity ("where do you live on github"). A subject
+the map does not know is answered "not in the map I was built with" plus the two
+nearest parts, never a guess. All four are in `READ_ONLY_INTENTS`.
+
+**Its honest limit, stated in every answer.** The map knows nothing newer than
+the deploy that installed it, so a question about code merged after that deploy
+is answered as unknown. Refreshing it is one command and a copy, described in
+`docs/SELF-CODE-MAP.md`, and `--check` fails when the committed map and the tree
+have drifted apart. It adds **no route, no model tool, no gate action, no reach
+row and no permission of any kind**.
+

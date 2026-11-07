@@ -852,6 +852,14 @@ def t_every_bool_setting_resolves_on_and_off_and_reaches_its_own_setter():
                 out = Q._run_settings_bool({"key": b.key, "on": want_on}, "peer-a", True)
             finally:
                 R.BOOL_SETTINGS = saved
+            # 2026-11-07 no-op rule (F13): a turn asking for the value a switch
+            # already has says "already ... Nothing was changed." and calls no
+            # setter. That is the correct outcome, so the loop accepts it and
+            # holds the sentence instead of demanding the spy call.
+            if not calls and out is not None and "already" in str(out.reply).lower():
+                check(f"...and an unchanged {b.key} says 'already', calling no setter",
+                      "nothing was changed" in str(out.reply).lower(), out.reply)
+                continue
             check(f"...and dispatch calls {b.key}'s own setter with the value",
                   calls == [(want_on, "peer-a", True)], calls)
             check(f"...and reports the setter's own sentence ({b.key})",

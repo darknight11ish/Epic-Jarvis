@@ -574,7 +574,7 @@ def t_switching_uses_the_real_setter_and_reports_its_outcome():
             dataclasses.replace(b, set=lambda on, **kw: calls.append(on) or Out(
                 False, "That did not work - the browser setting could not be saved."))
             if b.key == "headless_browser" else b for b in R.BOOL_SETTINGS)
-        out = say(match("turn off browser engine"))
+        out = say(match("turn on browser engine"))   # a CHANGE, so the real setter runs
         check("a setter that did not work is repeated as it said it, never as success",
               out is not None and out.reply == ("That did not work - the browser setting "
                                                 "could not be saved.")
@@ -2523,6 +2523,45 @@ def t_a_named_choice_answers_state_and_how_to():
           out.get("kind") in ("setting", "feature"), out)
 
 
+def t_a_tool_switch_row_never_says_it_has_no_switch():
+    """A row whose `where` says "switch it on" must not answer "no switch".
+
+    MEASURED 2026-11-07 (`.dsh-scratch/TOOL-CAPABILITY-AUDIT-2026-11-07/`):
+    `explain("github-research")` said, in one answer, "Where: Off by default;
+    switch it on in Settings, What asks first under 'Let the AI use this'" and
+    then "The feature list names no on/off switch for it, so there is no state
+    for me to read" and "It runs when you ask and has no switch of its own".
+    The switch is one of the AI-tool switches on that page, which is not a
+    BoolSetting, so `covers` could not link it - the answer must name the switch
+    and its live state instead, and it must never repeat the "no switch" claim
+    in the same answer.
+    """
+    for fid in ("github-research", "connected-github"):
+        row = FG.row_by_id(fid)
+        check(f"{fid} is a real catalogue row", row is not None)
+        if row is None:
+            continue
+        words = str(FG.explain(fid)["words"] or "")
+        low = words.lower()
+        check(f"{fid}: its answer names the AI-tool switch place",
+              'under "let the ai use this"' in low, words[:300])
+        check(f"{fid}: the answer says no 'names no on/off switch'",
+              "names no on/off switch" not in low, words)
+        check(f"{fid}: the answer says no 'has no switch of its own'",
+              "has no switch of its own" not in low, words)
+        check(f"{fid}: the Status line stays the contract's own label",
+              FG.status_label(FG.row_by_id(fid)) == FG.label_for(FG.row_by_id(fid)),
+              FG.status_label(FG.row_by_id(fid)))
+        state = FG.state(fid)
+        check(f"{fid}: 'is it on?' reads a real boolean state",
+              isinstance(state.get("state"), bool), state.get("words"))
+        how = str(FG.how_to(fid, True)["words"] or "")
+        check(f"{fid}: 'how do I turn it on' names its own switch and no false "
+              f"fixed phrase",
+              "let the ai use this" in how.lower()
+              and "names no on/off switch" not in how.lower(), how[:400])
+
+
 if __name__ == "__main__":
     for fn in (t_every_row_is_looked_up_and_its_facts_equal_the_json,
                t_unknown_and_ambiguous_never_guess,
@@ -2570,7 +2609,8 @@ if __name__ == "__main__":
                t_every_switch_is_explained_by_a_row_or_its_own_label,
                t_an_unreadable_module_says_could_not_read,
                t_every_rows_where_names_a_real_place,
-               t_a_named_choice_answers_state_and_how_to):
+               t_a_named_choice_answers_state_and_how_to,
+               t_a_tool_switch_row_never_says_it_has_no_switch):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

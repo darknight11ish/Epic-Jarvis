@@ -651,6 +651,71 @@ raises the same one card, tap-decided only, and Live still pauses while a card
 waits (§6). What remains Live-only is the **speed** half: the `[live]` model,
 its lane, and the 16K window (§4.1).
 
+### 3.8b Every setting and tool switch changes the same way through Live (2026-11-07)
+
+The owner's requirement: *"also make sure anything that can be changed by chat
+with jarvis (with an approval card when appropriate) can also be changed in the
+same manner through jarvis live. i dont want any gaps."* The door was already
+shared - Live is an ordinary `/api/chat` turn with `live: true` and
+`provenance: "voice"` - so the measured gaps were in the MATCHER and in the
+model's self-description, not in the plumbing:
+
+* **Only 4 of the 60 switchable tools could be named.** Settings draws a row
+  for every tool in `jarvis_asks_first.TOOLS_SWITCHABLE`, but
+  `jarvis_settings_registry._TOOL_TARGETS` named only the four reading tools.
+  *"Turn on the browser control tool."* went to the model in typed chat, and the
+  Live-shaped turn got the settings tool's own outside-text refusal. The table
+  is now generated from `TOOLS_SWITCHABLE` by `tools/gen_tool_targets.py`
+  (`--check` fails when it drifts), and both sentence shapes resolve through it:
+  the old "let the AI model read <name>" and the owner's own "turn on the
+  browser control tool" / "switch the calculator tool off". The shape is
+  **closed-world**: it needs the word "tool" AND a whole alias from that table,
+  so "turn off the kitchen light", "turn off the timer" and "turn on the
+  weather" still reach their own features.
+* **The card rules did not change.** `_TOOL_TARGETS` is a name table only. ON is
+  still the PC only, ONE approval card plus Windows Hello; OFF is instant;
+  nothing is auto-approved. The one Live difference is **wording**, the same
+  calm line a carded switch already spoke: Live says *"A card is waiting to
+  offer the browser control tool to the AI model, so approve it on your phone or
+  PC and it changes."* - one sentence, no card id, no list, and no spoken yes.
+  There is deliberately no "say approve" anywhere: the card is tapped (§6).
+* **It denied that Live could change settings at all.** Asked *"Can you change
+  your own settings by voice through Jarvis Live?"*, the model answered "No,
+  you can't change my settings directly with a voice command right now" - false,
+  and the opposite of the owner's requirement. `jarvis_quick.py` now answers
+  that whole question from the code, without the model
+  (`quick: "how_live_settings"`, read-only): yes, the same sentence, the same
+  approval card and the same effect; some settings that loosen what asks first
+  or turn on a tool are PC-only, so their card waits to be tapped on the PC or
+  phone.
+* **The audit's Live-only refusal is not Live's fault.** It is a route bug that
+  is identical for typed chat - see the last paragraph of this section.
+
+`backend/test_live_settings_parity.py` proves the parity: it derives every
+option from `jarvis_settings_registry.capability_keys()` (38 switches, 10
+choices, 1 number, 7 asks-first actions, 60 tool switches), drives each sentence
+typed and as a Live turn against a recorder standing in for the setter, and
+checks that both doors call the SAME setter once with the same arguments, that a
+waiting card is the setter's sentence typed and ONE calm line in Live, that
+Anti-Slop and humour really write the same files, and that the fallback Live
+tool list carries the same configuration tools (`change_setting`, the
+`cloud_escalation` switch, `approval_policy`). A future setting added to any
+registry table without both doors fails its coverage check.
+
+**The one finding this pass reports and did not fix.** The route that answers a
+tool turn hands `jarvis_agent.run_local_turn` a request built from the
+memory-augmented messages, so the PC's own recalled-facts block is a `system`
+message in it; `_TurnWatch.app_context` reads any system message there as "the
+app sent extra text", and `_settings_turn_is_shaped` then refuses a
+model-issued `change_setting` with `SETTINGS_AFTER_OUTSIDE` (the very sentence
+the audit saw Live speak) whenever memory recall fired. The live log shows the
+refused turn with three recalled facts, a clean voice message and no reading
+tool, and the same check turns true for a clean typed turn when that block is
+present - so this is a real route bug, identical for typed chat, not a Live or
+taint defect. The fix belongs in the `request=` value the route builds
+(pass the client's own body, not the memory-augmented payload), and it is left
+for its own change because it touches a safety guard.
+
 ## 4. How long a turn takes
 
 All numbers per turn, from "you stop talking" to "Jarvis's first sound".

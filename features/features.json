@@ -1386,6 +1386,28 @@
     ]
   },
   {
+    "id": "connected-github",
+    "group": "Notes and files",
+    "title": "Read and act on your own GitHub",
+    "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file. It can also comment on an issue or pull request, open an issue and re-run a workflow.",
+    "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+    "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the three reads share one action, and commenting, opening an issue and re-running a workflow each have their own.",
+    "limit": "There is no merge, push, commit, delete, close or file-write action: it can never merge a pull request, and no card or approval can create one - a pull request is merged on GitHub itself. Private repositories need the token; a read sends it to api.github.com.",
+    "surface": "both",
+    "covers": [],
+    "aliases": [
+      "read my own github",
+      "your own github",
+      "github read and act"
+    ],
+    "gate": [
+      "github_inspect",
+      "github_comment",
+      "github_open_issue",
+      "github_rerun_workflow"
+    ]
+  },
+  {
     "id": "chatbot",
     "group": "Notes and files",
     "title": "Talk to a chatbot for me",
@@ -2712,8 +2734,8 @@
   {
     "id": "cloud-escalation",
     "group": "The PC itself",
-    "title": "Cloud (DeepSeek API)",
-    "what": "Send a hard question to the one cloud API service you chose - DeepSeek by default - after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
+    "title": "Cloud (an API service you choose)",
+    "what": "Send a hard question to the one cloud API service you chose after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
     "where": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
     "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
     "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
@@ -2721,6 +2743,7 @@
     "aliases": [
       "cloud",
       "cloud api",
+      "cloud preset",
       "deepseek api",
       "escalate to the cloud",
       "try the cloud model",
