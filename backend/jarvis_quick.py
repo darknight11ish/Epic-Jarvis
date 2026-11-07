@@ -25721,6 +25721,33 @@ def _awareness_dir() -> str:
     return os.path.join(home, "self-awareness")
 
 
+def _safe_todo_carryover_words() -> Optional[str]:
+    """The to-do carryover choice, read WITHOUT creating or ticking a scheduler."""
+    try:
+        import sqlite3
+        from pathlib import Path
+        import jarvis_schedule as JS
+        path = Path(JS.db_path())
+        if not path.exists():
+            return None
+        conn = sqlite3.connect("file:" + str(path).replace("\\", "/") + "?mode=ro",
+                               uri=True)
+        try:
+            row = conn.execute(
+                "SELECT value FROM meta WHERE key = 'todo_mode'").fetchone()
+        finally:
+            conn.close()
+        mode = str(row[0]) if row else ""
+        if not mode:
+            return None
+        label = next((str(item.get("label") or "")
+                      for item in getattr(JS, "TODO_MODE_WORDS", ())
+                      if item.get("value") == mode), "")
+        return label or mode
+    except Exception:
+        return None
+
+
 def _awareness_snapshot() -> dict:
     """Every awareness-relevant value the local code can read, one flat dict."""
     snap = {}
@@ -25750,10 +25777,20 @@ def _awareness_snapshot() -> dict:
         import jarvis_settings_registry as R
         for setting in (list(R.BOOL_SETTINGS) + list(R.CHOICE_SETTINGS)
                         + list(R.NUMBER_SETTINGS)):
-            try:
-                value = R.current_value(setting)
-            except Exception:
-                value = None
+            if setting.key == "todo_carryover":
+                # NOT R.current_value here: that reader calls
+                # jarvis_schedule.get(), which CREATES/ticks the global
+                # scheduler as a side effect - inside an answer, and inside a
+                # test that has its own fake scheduler, that fires jobs nobody
+                # asked to fire (caught by test_watch_repos on 2026-11-07).
+                # The journal reads the same meta value from the same file
+                # with sqlite's read-only open instead.
+                value = _safe_todo_carryover_words()
+            else:
+                try:
+                    value = R.current_value(setting)
+                except Exception:
+                    value = None
             if value is not None:
                 snap["setting:" + setting.key] = str(value)
         for tool in R.tool_targets():
@@ -26381,6 +26418,13 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         words = (m.groupdict().get("name") or m.groupdict().get("name2")
                  or m.groupdict().get("name3") or "").strip()
         words = re.sub(r"^(?:the|my|your)\s+", "", words)
+        # The older explain door keeps a sentence it can answer ("how do i
+        # change auto adjust" is its own per-device answer, not a page row).
+        try:
+            if R.find_explain_setting(words) is not None:
+                return None
+        except Exception:
+            pass
         for candidate in R.SETTINGS_ROWS:
             label = str(candidate.label or "").strip().lower()
             if label and (words == label or (len(words) >= 4 and words in label)):

@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "baec446a83b74d634a02dd855f56471cdb646337",
- "built_at": "2026-11-07T12:13:31-08:00",
+ "ref": "1f837d41f22dc1549a0ec1721c9e18362c94caf3",
+ "built_at": "2026-11-07T12:48:07-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6126,6 +6126,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "1f837d41f22dc1549a0ec1721c9e18362c94caf3",
+   "date": "2026-11-07",
+   "subject": "test(awareness): align the suites the new answers deliberately change"
+  },
+  {
    "sha": "baec446a83b74d634a02dd855f56471cdb646337",
    "date": "2026-11-07",
    "subject": "Merge remote-tracking branch 'origin/main' into feat/wave82-total-awareness"
@@ -6219,11 +6224,6 @@
    "sha": "b3d440e1f329b112c31b647e0e91a7f74d10d7d0",
    "date": "2026-11-07",
    "subject": "integration: GitHub self-knowledge G1-G8 (Q6, LANE_SYSTEM untouched)"
-  },
-  {
-   "sha": "c95479a664c038143ca453ba50134fabe93370b1",
-   "date": "2026-11-07",
-   "subject": "integration: repo watcher fixups (claims + job creation)"
   }
  ],
  "top_level": [

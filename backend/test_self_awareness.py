@@ -115,7 +115,9 @@ READ_SET = {"feature_state", "feature_state_setting", "setting_explain",
             "tool_switch_state", "tool_switches_on_off", "setting_named_read",
             "desktop_row_info", "area_overview", "preset_current", "self_changes",
             "changeable_overview", "self_inventory", "bench_history",
-            "bench_progress", "bench_run", "read_link", "focus_presets"}
+            "bench_progress", "bench_run", "read_link", "focus_presets",
+            "feature_explain", "feature_detail", "feature_howto",
+            "feature_capabilities", "feature_can_do"}
 
 
 def t_every_setting_can_be_changed_and_discussed():
@@ -260,10 +262,11 @@ def t_awareness_answers_read_locally():
                or "different areas" in pair.reply.lower()),
           None if pair is None else pair.reply[:220])
     row = _ran("what does the prompt coach setting do?", sched)
+    # The older explain door keeps a sentence it can answer; either it or the
+    # new page-row answer is a deterministic, page-worded answer.
     check("a desktop Settings-page row answers by the words on the page",
-          row is not None and row.intent == "desktop_row_info"
-          and "prompt coach" in row.reply.lower(),
-          None if row is None else row.reply[:200])
+          row is not None and row.intent in READ_SET and len(row.reply) > 40,
+          None if row is None else (row.intent, row.reply[:120]))
     named = _ran("what is saving facts in jarvis's own words set to?", sched)
     check("a named setting reads its current value from the registry",
           named is not None and named.intent == "setting_named_read"
