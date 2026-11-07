@@ -3772,3 +3772,238 @@ def abilities_directory() -> list:
     "All features & abilities" Settings directory and search are built from
     (Gemini Q2b/Q8; the UI itself is setup-ui's and Session B's)."""
     return [ability_row(row) for row in features()]
+
+# ---------------------------------------------------------------------------
+#   THE SELF-KNOWLEDGE TABLE (2026-11-07, the feature self-awareness audit)
+# ---------------------------------------------------------------------------
+# The live audit of 2026-11-07 measured the model falsely DENYING capabilities
+# this PC really has - the Muse failure mode the competitor audit warns about
+# ("it described its own access wrongly"). Four families were the worst:
+# approval policy, watches/CI, spending limits and chat history. Each is a
+# READ-ONLY fixed sentence built from the shipped record, so the fixed phrases
+# can answer without a model, and the `self_portrait` digest can hand the model
+# the same bounded fact instead of letting it guess. No state is read here and
+# nothing is changed: `where`/`limit` are the project's own words.
+#
+# WHY A TABLE AND NOT A CATALOGUE ROW: the 179 catalogue rows are generated
+# from features/features.json and their count is pinned by several checkers.
+# These four facts are about how Jarvis talks about itself, not new features,
+# so they live here and are held by `backend/test_self_answers.py`.
+SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history")
+
+SELF_FACTS = {
+    "approval_policy": {
+        "family": "approval_policy",
+        "digest": ("You can change what needs an approval card by asking. Three parts, "
+                   "one action and one part at a time: whether it raises a card, whether "
+                   "it needs a second yes, and whether a yes must pass Windows Hello. More "
+                   "asking is instant; less asking raises one PC-only card needing Windows "
+                   "Hello. No bulk form."),
+        "sentence": ("Yes. You can change what needs an approval card by talking to me. "
+                     "It has three separate parts and changes one action and one part at a "
+                     "time: whether an action raises a card at all (its tier), whether it "
+                     "needs a second yes, and whether a yes must also pass Windows Hello on "
+                     "this PC. More asking - a card where there was none, a second yes, "
+                     "Windows Hello - happens at once with no card, like turning a switch "
+                     "off. Less asking raises ONE card on the PC that needs Windows Hello "
+                     "to approve, and it is refused from any other device; nothing is "
+                     "written until you approve it. There is no bulk form: a sentence that "
+                     "names two parts is refused before anything is read or raised. "
+                     "Where: Settings, What asks first, on the PC - that page is read-only, "
+                     "and the change itself is by asking. Say for example "
+                     "\"make editing notes ask me first\" or \"let saving facts happen "
+                     "without a card\"."),
+    },
+    "watches_ci": {
+        "family": "watches_ci",
+        "digest": ("Yes: a \"tell me when\" watch can watch a page for changes, and the "
+                   "CI watcher watches GitHub Actions runs. Both are set up by asking and "
+                   "list what they saw on the PC."),
+        "sentence": ("Yes. I can watch a web page for you and tell you when it changes - "
+                     "that is the \"tell me when\" watch, and its list is on the PC's Brain, "
+                     "Watch tab. I can also watch a GitHub Actions run and tell you when it "
+                     "fails: say which repository, branch or pull request to follow, and the "
+                     "CI watcher keeps checking it on this PC. A watch that reads outside "
+                     "text is checked first, and a watch never acts by itself. Say, for "
+                     "example, \"tell me when this page changes: <address>\" or \"tell me "
+                     "when the CI fails on main\"."),
+    },
+    "spending_limits": {
+        "family": "spending_limits",
+        "digest": ("Yes: spending limits exist - a per-service money cap with a monthly "
+                   "limit and spending profiles; a cloud request that cannot be paid for "
+                   "is simply not sent, and a card that can spend money is capped too. It "
+                   "is set in Settings, Spending, on the PC."),
+        "sentence": ("Yes, spending limits are a feature I have. The cloud service's own "
+                     "money cap is kept on this PC, per service, with a monthly limit: a "
+                     "cloud request that cannot be paid for within it is never sent, and I "
+                     "say so instead. The same rule bounds a card that could spend money, "
+                     "and spending profiles record what you allow. Where: Settings, "
+                     "Spending, on the PC - changing a limit asks on the PC with its own "
+                     "approval, never silently. Say \"what are my spending limits?\" for "
+                     "the current numbers, never a guess."),
+    },
+    "chat_history": {
+        "family": "chat_history",
+        "digest": ("Yes: chat history is kept on this PC by default, encrypted, with a "
+                   "switch to turn it off and a retention length. It is in Settings, "
+                   "Security; turning history OFF is instant."),
+        "sentence": ("Yes. Chat history is kept on this PC by default - encrypted, on this "
+                     "machine, with no cloud copy - and both apps list it. There is a "
+                     "switch to turn it off (turning it off is instant), a number setting "
+                     "for how long it is kept, and Forget a time frame for deleting a "
+                     "range. Where: Settings, Security, on the PC, and the phone's History "
+                     "and Privacy screens. Turning history back on asks on a card first."),
+    },
+}
+
+
+def self_fact(family: str):
+    """One bounded self-fact by family id, a copy, or None - never a guess."""
+    row = SELF_FACTS.get(str(family or ""))
+    return dict(row) if row else None
+
+
+def self_fact_words(family: str) -> str:
+    """The owner-facing sentence for one family, or "" for an unknown id."""
+    row = self_fact(family)
+    return str(row.get("sentence") or "") if row else ""
+
+
+#: WHERE a function lives when it has no Settings card of its own (F14,
+#: 2026-11-07). The live audit measured "where do I change X?" reaching the
+#: model for these, and the model sent the owner to places that do not exist
+#: ("Settings, under Shortcuts" for the face size). Each entry is the real
+#: place in the project's own words; `words` is the answer, `key` the phrase
+#: the chat matcher accepts.
+PLACES = {
+    "standby hours": {
+        "key": "standby hours",
+        "words": ("Standby hours are a schedule on this PC's own scheduler, not a Settings "
+                  "switch: the Brain's Power card holds the hours, and a change raises one "
+                  "change-own-config approval card. Say for example \"standby from 1am to "
+                  "7am\" in chat, or open the Power card in the Brain."),
+    },
+    "attention budget": {
+        "key": "attention budget",
+        "words": ("The interruption (attention) budget lives in the Brain, on the Now "
+                  "page's Attention budget block. It says how many times a day I may speak "
+                  "up first, and a change is made there on the PC."),
+    },
+    "spending": {
+        "key": "spending limits",
+        "words": ("Spending limits are in Settings, Spending, on the PC. They are kept on "
+                  "this machine, and changing a limit asks on the PC with its own approval. "
+                  "The phone has a spending screen too."),
+    },
+    "notification styles": {
+        "key": "notification styles",
+        "words": ("Notification styles are the phone's own: Settings, Appearance, "
+                  "notification styles, on the Android app. The PC has no card for them - "
+                  "Windows draws its own toast - and the chat preview works on both."),
+    },
+    "face size": {
+        "key": "face size",
+        "words": ("The face size is a HUD look on this PC, not a setting the PC owns: open "
+                  "the faces panel from the HUD's left rail and choose Small, Medium or "
+                  "Large. It is kept for this device's HUD only, and the phone has its own "
+                  "appearance control instead."),
+    },
+}
+
+
+def place_for(words) -> dict:
+    """The real place for one off-list function, by its owner phrase, or {}."""
+    try:
+        import re as _re
+        text = " ".join(_re.sub(r"[^a-z0-9 ]", " ", str(words or "").lower()).split())
+    except Exception:                       # noqa: BLE001 - never raise a read
+        return {}
+    if not text:
+        return {}
+    for key, row in PLACES.items():
+        if key in text:
+            return dict(row)
+    return {}
+
+# ---------------------------------------------------------------------------
+#   HERITAGE: WHAT JARVIS IS, AND WHAT WAS BORROWED FROM WHOM (2026-11-07)
+# ---------------------------------------------------------------------------
+# The owner's Q4 ruling (2026-11-07): Jarvis must deterministically answer BOTH
+# halves - what makes it different, and which ideas it borrowed from which
+# competitors - and must never invent a borrow the record does not contain.
+# Both sentences are READ-ONLY and derived from the project's own record:
+#   * differentiators: CLAUDE.md's five rules, docs/ARCHITECTURE.md, the voice
+#     print (jarvis_voiceprint), the memory (jarvis_memory) and the local model
+#     lanes (jarvis_model_lanes) - each is a live property of this PC.
+#   * lineage: docs/COMPETITORS-2026-10-05.md, docs/ABOUT-JARVIS.md section 2,
+#     docs/COMPETITORS-MUSE-2026-09-25.md and the Hermes borrow rows in
+#     CHANGELOG.md/JARVIS-API.md (2026-11-05/06).
+# Changing a word here without the record behind it is the Muse failure the
+# audit exists to prevent.
+HERITAGE = {
+    "differentiators": {
+        "part": "differentiators",
+        "digest": ("Different: voice-print check before acting (local CAM++/TitaNet), "
+                   "zero standing grants (one card per action, Windows Hello / phone "
+                   "biometrics), bitemporal owner-words-only memory with real erase + "
+                   "VACUUM, strict local-first egress (no public tunnel; local Ollama on "
+                   "three GPUs)."),
+        "sentence": ("What makes me different is not a feature count - it is what has to "
+                     "be trusted. (1) Your voice is checked before I act on it: a local "
+                     "speaker check (CAM++/TitaNet embeddings, kept on this PC) has to "
+                     "recognise you, and the phone uses its own fingerprint for risky "
+                     "approvals. (2) There are no standing grants: one approval card per "
+                     "action, no approve-all, no auto-approve, and a risky yes needs "
+                     "Windows Hello on the PC or the phone's biometrics - so nothing is "
+                     "allowed later in advance. (3) Memory is bitemporal and learns only "
+                     "from your own words, and every fact can really be erased - the text, "
+                     "the search entry, the meaning vector and then VACUUM, not just hidden. "
+                     "(4) Everything stays local: no account, no public tunnel, no cloud by "
+                     "default; the phone reaches this PC over Tailscale or NordVPN Meshnet, "
+                     "and the models run on this PC's own graphics cards through Ollama. "
+                     "A sentence about what I can reach is answered from the live settings "
+                     "(\"what can you reach?\"), never from a claim."),
+    },
+    "lineage": {
+        "part": "lineage",
+        "digest": ("Borrowed, on the record: Muse (2026-09-25 audit) - one-card-per-email "
+                   "sending, hiding one-time OTP codes from screen capture, /api/reach. "
+                   "OpenMuse - a durable job queue (Long Fuse) with frozen capabilities and "
+                   "park-on-approval. ChatGPT Dots - a compact ambient presence indicator "
+                   "and non-intrusive HUD status rails. Nous Hermes Agent v0.23.0 - "
+                   "deny-and-steer (redirect_note), hidden-Unicode/control-byte warning "
+                   "pills, the \"What it costs\" cloud ledger line, curator_lock with "
+                   "provenance badges on packs, and in-memory encrypted session search."),
+        "sentence": ("Yes, I borrow ideas on the record - pretending otherwise would be the "
+                     "wrong answer. From Meta's Muse (the 2026-09-25 audit): sending email "
+                     "with one approval card per email showing the exact recipients, "
+                     "subject and text; hiding one-time codes (OTP) from screen capture; "
+                     "and /api/reach, one place that says what Jarvis can reach. From "
+                     "OpenMuse: a durable job queue - the Long Fuse pattern - with frozen "
+                     "capabilities per job and a job that parks on an approval instead of "
+                     "acting. From OpenAI's ChatGPT Dots: the compact ambient presence "
+                     "indicator and non-intrusive HUD status rails. From Nous Hermes Agent "
+                     "v0.23.0: approval cards that let you deny AND say what to do instead "
+                     "(the redirect_note); warning pills for hidden Unicode and control "
+                     "bytes; the \"What it costs\" line on cloud cards; curator_lock with "
+                     "provenance badges on packs; and in-memory encrypted session search. "
+                     "What I refuse is also on the record: no standing grants, no always "
+                     "allow, no connector store, no data-for-service."),
+    },
+}
+
+
+def heritage(part: str) -> dict:
+    """One heritage half, a copy, or {} - never a guessed borrow."""
+    row = HERITAGE.get(str(part or ""))
+    return dict(row) if row else {}
+
+
+def heritage_words(part: str) -> str:
+    row = heritage(part)
+    return str(row.get("sentence") or "") if row else ""
+
+
+def heritage_digests() -> dict:
+    return {key: str(row.get("digest") or "") for key, row in HERITAGE.items()}

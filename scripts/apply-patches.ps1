@@ -2294,6 +2294,7 @@ $SHIPPED = @(
                                  # WinError 32 "schedule.json is in use" failure, fixed by hand three times)
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
+    'jarvis_recent_changes.py'   # "what changed in your last update?" answered from the shipped record (2026-11-07) - generated from CHANGELOG.md + changelog.d/ because the live folder has no CHANGELOG.md; jarvis_quick.py and jarvis_agent.py read it, no patch
     'jarvis_settings_registry.py' # "open"/"adjust" any setting by voice or chat, 2026-09-27; jarvis_quick.py (above) calls it, no patch of its own
     'jarvis_setup.py'            # the owner's setup questionnaire (2026-10-20): a guided path through the settings that already exist, through the registry's own setters; setup.patch adds the three routes, nothing new is on by itself
     'jarvis_standby_schedule.py' # the standby schedule ("standby from 01:00 to 07:00"): a kind of job on the one scheduler, no patch

@@ -404,6 +404,11 @@ SHIPPED = (
     # process" failure, fixed by hand three times before it was shared).
     "jarvis_sqlite.py",
     "jarvis_schedule.py", "jarvis_quick.py",
+    # "what changed in your last update?" answered from the record (2026-11-07):
+    # generated from CHANGELOG.md + changelog.d/ by tools/gen_recent_changes.py,
+    # because the live backend folder carries neither file. jarvis_quick.py's
+    # chat fast path and jarvis_agent.py's self portrait read it; no route.
+    "jarvis_recent_changes.py",
     # "open"/"adjust" any setting by voice or chat (2026-09-27): jarvis_quick.py
     # (already SHIPPED, above) is the only importer - no patch of its own.
     "jarvis_settings_registry.py",
