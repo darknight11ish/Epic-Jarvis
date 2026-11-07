@@ -601,6 +601,54 @@ positives are cards nobody can ever be shown. `backend/test_gate_touches.py`
 holds both halves, including the three real cards raised end to end through
 the real gate.
 
+### An explicit action request reaches its gating tool, or says the real door (added 2026-11-06)
+
+**The measured failure.** The owner's 2026-11-06 self-awareness run asked six
+action requests in chat - *forget this fact*, *delete my note called Welcome*,
+*write and send an email*, *turn on reading remembered-fact answers aloud on my
+phone*, *turn on cloud escalation*, *install this plugin from a URL* - and
+`POST /api/pending` stayed `[]` after every one: no card, nothing changed, and
+answers that refused in words or sent him to Windows settings. The rule that
+follows from it, and the one the next change must keep:
+
+- **A tool's own card is the gate, and the model's job is to reach it.** When
+  the owner asks for something a tool does, the model CALLS that tool
+  (`jarvis_agent.LANE_SYSTEM` says so in those words, and the Modelfile's SYSTEM
+  block carries the same sentence). Nothing is auto-approved: the card still
+  decides, and "waiting for your yes" is the honest wording while one is up.
+  The old rule sentence - "You do not send email, edit files, or run commands
+  yourself" - was read by a 9B model as *I cannot*, and is gone.
+- **A tool that ships switched off is named, not denied.** Sending one email and
+  installing a skill pack are real, card-first tools that are absent from the
+  shipped `[tools].enabled`. The answer names the Settings -> Tools switch
+  (`jarvis_agent._off_tool_lines`); "Jarvis cannot send email" is false.
+- **Three of the six have no card to raise, and the answer names the real
+  door** - driven by the owner's own words, never guessed from the model's
+  answer: a single saved fact is forgotten on the Memory screen's own Forget
+  (2026-09-24 decision; there is no tool that forgets one fact); the phone's
+  "Read out answers that use what Jarvis remembers" is a **phone-local** switch
+  (§8, one-sided on purpose), so this PC cannot change it and no card exists for
+  it; and a skill pack or plugin is a file or folder ON THIS PC - there is no
+  URL download anywhere, so a link is refused in words and never fetched.
+- **The standing cloud escalation switch gained the door chat never had.**
+  `jarvis_agent`'s `cloud_escalation` tool calls `jarvis_presets.cloud_escalate`,
+  the same call the Presets menu's Cloud row makes: ON is the same ONE
+  `change_own_config` card, OFF is instant, and no service chosen refuses BEFORE
+  any card. It rides with `change_setting` (`RIDES_WITH_SETTINGS`) instead of
+  being a Settings -> Tools switch, because the turn would ignore that switch -
+  the same rule the two web-search grant tools follow. It adds no gate action,
+  no tier and no card words.
+- **A claim is checked against what ran.** `jarvis_claims` gains
+  `CLAIMS_DELEGATED` for "I have asked this PC to open listening when I say hey
+  Jarvis" (the pass-3 measured sentence - "asked" was in no verb list, and its
+  own "when I" clause excused it), and `jarvis_agent` corrects "my change_setting
+  tool changes a setting directly whenever I hear the request, so I don't ask
+  first". The proof, for all six probes plus both measured sentences, is
+  `backend/test_action_requests_reach_the_gate.py`: the real
+  `run_local_turn` loop, a scripted model and a recording fake gate - the gate is
+  asked for each probe that has one, a denial changes nothing, and nothing is
+  auto-approved.
+
 ### The approval gap: what a program already on the PC can and cannot do
 
 **State of it, 2026-10-08** (the heading above used to read "A known limit: a

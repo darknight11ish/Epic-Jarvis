@@ -100,7 +100,7 @@ def expected_tier(name: str, shipped: set) -> str:
     The order is the decision order: a tool that is already in the shipped list
     needs no action, a tool with its own module switch is governed by that
     switch before anything else, then the in-app switches, then the rest."""
-    if name in shipped or name in A.GRANT_ASK_TOOLS:
+    if name in shipped or name in A.GRANT_ASK_TOOLS or name in A.RIDES_WITH_SETTINGS:
         return "always-available"
     if name in OWN_SWITCH_TOOLS:
         return "off-by-default"
@@ -365,6 +365,12 @@ def t_always_available_really_is():
             continue
         if name in A.GRANT_ASK_TOOLS and "web_search" in shipped:
             continue            # offered whenever web search is (jarvis_agent)
+        # The same ride-along rule, for the standing cloud escalation switch
+        # (2026-11-06): it rides with `change_setting`, because it is the only
+        # door in chat to a PRESETS row and a Settings switch the turn ignored
+        # would be a lie. See jarvis_agent.RIDES_WITH_SETTINGS.
+        if name in A.RIDES_WITH_SETTINGS and "change_setting" in shipped:
+            continue
         bad.append(name)
     check("every always-available tool is in the shipped list, or rides with one",
           not bad, str(bad))
@@ -373,6 +379,10 @@ def t_always_available_really_is():
                                 "stop_web_search_approval")
           and not (set(A.GRANT_ASK_TOOLS) & set(AF.TOOLS_SWITCHABLE)),
           str(A.GRANT_ASK_TOOLS))
+    check("the cloud escalation switch rides with change_setting, not a switch",
+          A.RIDES_WITH_SETTINGS == ("cloud_escalation",)
+          and not (set(A.RIDES_WITH_SETTINGS) & set(AF.TOOLS_SWITCHABLE)),
+          str(A.RIDES_WITH_SETTINGS))
 
 
 def t_switchable_matches_the_in_app_switches():

@@ -2406,10 +2406,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -4836,10 +4838,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -7261,10 +7265,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -9681,10 +9687,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -12117,10 +12125,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -14548,10 +14558,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -16968,10 +16980,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -19402,10 +19416,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -21827,10 +21843,12 @@
       "run_data_script",
       "product_check",
       "approve_web_search_for_conversation",
-      "stop_web_search_approval"
+      "stop_web_search_approval",
+      "cloud_escalation"
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
+      "cloud_escalation": "cloud escalation",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
@@ -21960,6 +21978,7 @@
   "missing": "Your PC's Jarvis cannot show what asks first yet - run apply-patches.ps1 on the PC.",
   "no_switch_note": {
    "approve_web_search_for_conversation": "This one rides with Web search: with Web search offered, the AI is offered this too, and without it this tool could not search anyway. It has no switch of its own, so nothing was changed here.",
+   "cloud_escalation": "This one is not a switch of its own: it rides with \"Change one of Jarvis's own settings\", and while that tool is offered the AI is offered this too. Its card is the Presets menu's Cloud row switch, so nothing was changed here.",
    "product_check": "The product check has its own switch: the line [product_check] enabled = true in jarvis-framework.toml. That line is what offers this tool, so a line in [tools].enabled would change nothing. Nothing was changed here.",
    "run_data_script": "The data and maths sandbox has its own switch: Settings, Data sandbox (or the sandbox row on the What asks first page). That switch is what offers this tool, so a line in [tools].enabled would change nothing. Nothing was changed here.",
    "stop_web_search_approval": "This one rides with Web search: with Web search offered, the AI is offered this too. It has no switch of its own, so nothing was changed here."

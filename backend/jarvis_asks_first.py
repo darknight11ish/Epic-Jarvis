@@ -468,7 +468,7 @@ TIER_EXTRA = (
     # Your own GitHub, on demand (jarvis_github.py, the owner's decision of
     # 2026-11-03: "Read + actions"). They joined this list when the GitHub
     # tools branch met the owner's 2026-11-04 decision - EVERY tool the model
-    # can be offered is switchable from an app except the four NOT_A_SWITCH
+    # can be offered is switchable from an app except the five NOT_A_SWITCH
     # names - so leaving them nowhere would have been the one hole in that
     # rule. Each one still raises its own card, and the ACTION they share
     # (github_inspect for the three reads) stays the "ask" tier.
@@ -481,6 +481,16 @@ TIER_EXTRA = (
     "approval_policy",
 )
 
+#: The standing cloud escalation switch (2026-11-06) rides with
+#: `change_setting` rather than being a row of its own: it is the only door in
+#: chat to the Presets menu's Cloud row, and `offered_tools` adds it wherever
+#: `change_setting` is offered - so a switch whose state the turn ignored would
+#: be a lie, exactly like the two web-search grant tools above.
+#: `jarvis_agent.RIDES_WITH_SETTINGS` is the authority for the same list; it is
+#: repeated here as a literal because this file must not import jarvis_agent at
+#: import time (the same reason GRANT_ASK_TOOLS is a literal).
+CLOUD_RIDES_WITH_SETTINGS = ("cloud_escalation",)
+
 #: Known tools that are deliberately NOT switches of their own on this page.
 #: Each one is here for the same measured reason: the turn IGNORES the tool's
 #: line in [tools].enabled, so a switch whose state the turn ignored would be a
@@ -492,15 +502,17 @@ TIER_EXTRA = (
 #: from ITS OWN switch too - the settings file's `[product_check] enabled`, off
 #: by default: `offered_tools` drops it unless that line is on, so a
 #: `[tools].enabled` line alone would change nothing, exactly as for the
-#: sandbox.
-NOT_A_SWITCH = ("run_data_script", "product_check") + GRANT_ASK_TOOLS
+#: sandbox. `cloud_escalation` rides with `change_setting` (2026-11-06).
+NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
+                + CLOUD_RIDES_WITH_SETTINGS)
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: four above. 60 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
+#: ones above. 60 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
 #: GitHub tools the tool list had grown without a row of their own, plus
 #: hands-free's send_text_message, plus the approval-policy tool's own row,
 #: plus the four pack tools; the product check is the fourth exception
-#: rather than a row).
+#: rather than a row, and the cloud escalation switch the fifth - it rides with
+#: change_setting, so the count does not move with it).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)
@@ -577,7 +589,7 @@ def _app_can_switch(tool: str) -> bool:
     test request_tool_enable applies. A group row can be appended for a tool
     that raises a card but must never be switched from an app:
     jarvis_storage_health.py's scan and cleanup are one (a cleanup is a
-    deletion, so storage_cleanup is in MUST_ASK) - and NOT_A_SWITCH's four are
+    deletion, so storage_cleanup is in MUST_ASK) - and NOT_A_SWITCH's five are
     the others (their own switch decides them)."""
     return (tool in TOOLS_SWITCHABLE or tool in LEGACY_TOOL_NAMES
             or real_tool(tool) in SWITCHABLE_TOOL_NAMES)
@@ -1804,6 +1816,14 @@ NO_SWITCH_NOTE = {
         "This one rides with Web search: with Web search offered, the AI is "
         "offered this too. It has no switch of its own, so nothing was changed "
         "here."),
+    # The standing cloud escalation switch (2026-11-06): it rides with
+    # `change_setting` for the reason CLOUD_RIDES_WITH_SETTINGS records, so a
+    # switch here would be one the turn ignored.
+    "cloud_escalation": (
+        "This one is not a switch of its own: it rides with \"Change one of "
+        "Jarvis's own settings\", and while that tool is offered the AI is "
+        "offered this too. Its card is the Presets menu's Cloud row switch, so "
+        "nothing was changed here."),
 }
 
 
@@ -1829,6 +1849,12 @@ TOOLS_OFF_A_TOOL_WITH_ITS_OWN_SWITCH = (
 TOOLS_OFF_A_TOOL_THAT_RIDES_ALONG = (
     "Done - the line naming it is gone. It rides with Web search, so while Web search is "
     "offered the AI is still offered this too.")
+#: The same answer for the tool that rides with the settings tool rather than
+#: with Web search (the standing cloud escalation switch, 2026-11-06).
+TOOLS_OFF_A_TOOL_THAT_RIDES_WITH_SETTINGS = (
+    "Done - the line naming it is gone. It is not a switch of its own: it rides with "
+    "\"Change one of Jarvis's own settings\", so while that tool is offered the AI is "
+    "still offered this too.")
 _TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
 _ENABLED_LINE = re.compile(
     r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
@@ -2271,6 +2297,8 @@ def _tools_off_said(tool: str) -> str:
         return TOOLS_OFF_A_TOOL_WITH_ITS_OWN_SWITCH
     if real in GRANT_ASK_TOOLS:
         return TOOLS_OFF_A_TOOL_THAT_RIDES_ALONG
+    if real in CLOUD_RIDES_WITH_SETTINGS:
+        return TOOLS_OFF_A_TOOL_THAT_RIDES_WITH_SETTINGS
     return ("Done - it is off now, so the AI model is not offered it. This page has no "
             "switch to turn it back on: add \"" + real + "\" to the [tools] enabled list in "
             "the settings file on this PC (jarvis-framework.toml) if you want the model "
@@ -2296,7 +2324,7 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
 
     ON accepts EVERY tool the AI model can be offered (the owner's decision,
     2026-11-04): Tier A and B, the raw Tier C set, the everyday helpers and
-    Jarvis's own tools. The four names in NOT_A_SWITCH are refused with the
+    Jarvis's own tools. The five names in NOT_A_SWITCH are refused with the
     sentence naming their real switch, never "does not know that name" - this
     PC does know them. A name it really does not know gets the plain
     "does not know" answer. Nothing is written until the person approves.
@@ -2423,7 +2451,7 @@ def _extra_tool_rows(items: list, enabled: set) -> list:
 
     Since 2026-11-04 every tool this PC knows has a switch row, so what lands
     here is a name this PC does not know (a drop-in program's own tool) and the
-    four NOT_A_SWITCH tools when the settings file happens to name them. The
+    five NOT_A_SWITCH tools when the settings file happens to name them. The
     state is the settings file's own (`enabled`, from tools_enabled_set), never
     a guess. `switchable: False` says plainly that this page offers no ON
     switch for the row; the page draws it with an OFF switch only. A row turned
