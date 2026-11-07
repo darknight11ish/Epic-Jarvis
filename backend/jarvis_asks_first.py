@@ -1790,9 +1790,10 @@ TOOLS_NOT_SWITCHED_WHY = (
     "A few tools are not switches here because the AI's own settings line does "
     "not decide them: the data and maths sandbox has its own switch under "
     "Settings, Data sandbox, the two conversation web-search tools ride with "
-    "Web search, and the product check is offered by its own settings-file line "
-    "([product_check] enabled = true). Each is named above; turning on its real "
-    "switch offers it.")
+    "Web search, the product check is offered by its own settings-file line "
+    "([product_check] enabled = true), and cloud escalation rides with Change one of "
+    "Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named "
+    "above; turning on its real switch offers it.")
 NO_SWITCH_NOTE = {
     "run_data_script": (
         "The data and maths sandbox has its own switch: Settings, Data sandbox "

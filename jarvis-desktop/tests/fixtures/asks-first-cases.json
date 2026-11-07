@@ -2411,12 +2411,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -4843,12 +4843,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -7270,12 +7270,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -9692,12 +9692,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -12130,12 +12130,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -14563,12 +14563,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -16985,12 +16985,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -19421,12 +19421,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -21848,12 +21848,12 @@
      ],
      "labels": {
       "approve_web_search_for_conversation": "Letting web searches in THIS chat run without a card each time (one card, once; search only - everything else still asks; until you say stop or 8 hours pass)",
-      "cloud_escalation": "cloud escalation",
+      "cloud_escalation": "Cloud escalation (its card is the Presets menu's Cloud row switch)",
       "product_check": "Checking one Amazon product page's reviews for sponsored-review patterns (one page, one PC-only card, read-only; off unless you switch it on)",
       "run_data_script": "Running a small Python script for data or maths (read-only, no network)",
       "stop_web_search_approval": "Putting the card back in front of every web search in this chat (instant, no card)"
      },
-     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it."
+     "why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it."
     },
     "vault": {
      "action": "change_own_config",
@@ -21998,7 +21998,7 @@
   "tools_detail": "Whether the AI model is offered each ability at all - a separate thing from whether it asks you first, above. Since 2026-11-04 EVERY ability the AI can be offered has a switch here, the raw and everyday ones included; a few are not switches because their own switch decides them, and the page names those. Turning one on shows ONE approval card and asks Windows Hello on this PC; turning it off is instant, from either app. Nothing here switches two tools at once.",
   "tools_label": "Let the AI use this",
   "tools_not_on_list": "This PC does not know a tool by that name, so nothing was changed.",
-  "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, and the product check is offered by its own settings-file line ([product_check] enabled = true). Each is named above; turning on its real switch offers it.",
+  "tools_not_switched_why": "A few tools are not switches here because the AI's own settings line does not decide them: the data and maths sandbox has its own switch under Settings, Data sandbox, the two conversation web-search tools ride with Web search, the product check is offered by its own settings-file line ([product_check] enabled = true), and cloud escalation rides with Change one of Jarvis's own settings - its card is the Presets menu's Cloud row. Each is named above; turning on its real switch offers it.",
   "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes one approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
  }

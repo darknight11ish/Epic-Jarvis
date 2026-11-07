@@ -204,12 +204,15 @@ class AsksFirstTest {
         assertTrue("its own words explain what it does", vault.what.contains("tidy-up"))
         assertTrue("its state is in words", AsksFirst.vaultState(vault).isNotEmpty())
         val no = requireNotNull(t.notSwitchable) { "the not-a-switch list is missing" }
-        assertEquals("4 tools have no switch of their own", 4, no.labels.size)
+        assertEquals("5 tools have no switch of their own", 5, no.labels.size)
         assertTrue("the note names the real switch for the sandbox", no.why.contains("Data sandbox"))
         assertTrue("... and says the web-search two ride with web search",
             no.why.contains("Web search"))
         assertTrue("... and names the product check's own settings-file line",
             no.why.contains("[product_check] enabled"))
+        assertTrue("... and says cloud escalation rides with the settings card and its roof is the Presets row",
+            no.why.contains("cloud escalation") &&
+                no.why.contains("Presets menu's Cloud row"))
         assertEquals("the phone shows the PC's own sentence",
             word("tools_pc_only"), AsksFirst.TOOLS_PC_ONLY)
     }
