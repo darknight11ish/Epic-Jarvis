@@ -26537,6 +26537,79 @@ stub prompt, all ten shapes in every state, no key in any answer, no model
 call, no over-capture). A chosen provider whose key is not saved, whose monthly
 limit is unset, or whose model cannot be used says so rather than pretending.
 
+### 145.1a The provider you choose is the provider that answers (added 2026-11-07)
+
+The owner's Q1/B6 ruling, after the 2026-11-07 options-understanding audit
+measured the defect in the live code. `jarvis_chatbot_api.lane_service()` was a
+hard-coded `("deepseek_api", "deepseek-flash")`: the Presets Cloud row, the
+approval card and `/api/reach` named the chosen service while the request still
+went to `api.deepseek.com`. Since this change the ONE lane resolves its service
+**at request time** from `cloud-choice.json` (`jarvis_presets.cloud_chosen()`);
+`DEFAULT_LANE` (DeepSeek, the owner's 2026-10-06 choice) is only the fallback
+when **no** provider is chosen. That single read puts the chosen provider behind
+the key lookup (`lane_key`), the host and URL (`cloud_lane`), `/api/reach`'s
+cloud row (`lane_status`), the one `change_own_config` card's words
+(`_cloud_card_text`, `_escalate_card_text`) and the chat answers
+(`cloud_state_line` and the key question, which now names the CHOSEN provider's
+company and key state instead of hard-wired DeepSeek). A chosen Mistral, OpenAI,
+Groq, xAI or OpenRouter therefore can never send to DeepSeek - and a chosen
+provider whose key is not saved keeps the old behaviour: no lane is offered, and
+the PC's own sentence says why. A lane name this module does not know resolves
+to the chosen service too (one cloud service per PC), and only to
+`DEFAULT_LANE` while no choice is recorded. **There is no Anthropic service in
+this tree**; the six are openai, deepseek, mistral, xai, openrouter and groq.
+
+**The fixed chat answers: see the six, and change the choice.**
+`cloud_provider_list` (READ-ONLY) answers "which cloud providers can I use?",
+"what cloud providers are supported", "do you support <service>", "can I use
+<service>", "can I use two cloud providers" and "which provider is the cloud
+preset using" from `jarvis_presets.cloud_providers()`/`cloud_chosen()`: the six
+by their own company and short name, whether each key is saved (presence only -
+never a key or a fragment), which one is chosen, and the one-at-a-time rule.
+`cloud_provider_ask` (READ-ONLY) answers "change the cloud provider" with no
+service named: which six there are, the exact sentence that works, and that ONE
+card asks first. `cloud_provider_choose` - "switch my cloud provider to
+mistral", "switch to mistral", "use mistral instead of deepseek", "choose
+openrouter as my cloud provider" - calls
+`jarvis_presets.apply_cloud(provider=...)`, the SAME function the Presets Cloud
+row calls: a service this PC cannot use is refused BEFORE any card, ONE
+`change_own_config` card is raised, and `cloud-choice.json` is written only
+after that yes. It is a PC action like the row itself - the phone still only
+reads the cloud state - and the answer never claims a change the route did not
+make.
+
+Tests: `backend/test_options_understanding.py` (the chosen-provider proof for
+all six patched in memory, the key answer naming the chosen provider, the chat
+door's `change_own_config` card and its refusal-before-card, and
+reach/card/answer/lane agreement after a chosen Mistral),
+`backend/test_chatbot_api.py` (the lane's transport).
+
+**Q7 P0 - the privacy backstop is harder to get past (2026-11-07).**
+`jarvis_router._PRIVATE_TERMS` gains home address, street address, mailing
+address, postal address, "my/our address" and phone number (it already held
+ssn, social security, passport, driver's licence, routing number, credit card,
+bank words and "medical"). Its old `\bdiagnos\w*` was too broad and is narrowed
+to MEDICAL contexts - `medical diagnosis`, `diagnosed with <condition>`, and the
+owner's or a family member's possessive ("my diagnosis", "my son's diagnosis") -
+so a technical prompt such as "diagnose this test failure", "the diagnostic
+logs" or "root-cause diagnosis of the crash" can escalate normally again. The
+health words further down the list still catch a condition named without the
+word "diagnosis". A false match only keeps a question local (quality), a miss
+sends words to a cloud model (privacy), so the list errs toward local.
+Tests: `backend/test_router_private_terms.py`.
+
+**Q7 - auto-escalation semantics (kept, and now pinned).** The default when the
+standing cloud-escalation switch is OFF is detect-and-ask: a hard question is
+only OFFERED (gate `"offer"`, one card, `auto: false`). When the owner turns the
+standing switch ON through its own `change_own_config` card, the complexity
+router may auto-escalate (`auto: true`) **only** a prompt that passes every
+gate above the yes: Lockdown, a tainted conversation, a picture, the screen's
+words, an attached file, a private word, a pasted secret, complexity under the
+threshold, a spent budget, and a PC with no lane offered. The switch waives the
+per-question yes and nothing else. Tests:
+`backend/test_options_understanding.py` (every gate driven with the switch ON
+and OFF) and `backend/test_cloud_escalate_setting.py`.
+
 ### 145.2 What a cloud answer is corrected with, and `cloud_refused` (added 2026-10-28)
 
 From the 2026-10-27 AI-safety audit (`.dsh-scratch/AUDITS-2026-10-27/partner-ai-safety.md`, H1 and M1). Two things changed about a cloud turn, and **no existing key moved or changed meaning** - the header gains ONE key, and only when it applies.

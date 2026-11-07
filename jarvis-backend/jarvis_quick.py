@@ -1281,6 +1281,15 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     if got is not None:
         return got
 
+    # --- the cloud provider itself: see it, or change it (2026-11-07, Q1/B6) --
+    # The six services and which one is chosen. The change goes through the
+    # EXISTING one-card path (`jarvis_presets.apply_cloud`, one
+    # change_own_config card), so chat gains a door to the same control the
+    # Presets Cloud row uses - not a second way to change it.
+    got = _cloud_provider_prompt(s)
+    if got is not None:
+        return got
+
     # --- which app is this? (2026-11-01 field test) --------------------------
     # The desktop HUD answered "where am I talking from?" with "I don't have
     # access to your location data or GPS", and the phone answered it right
@@ -1390,6 +1399,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # length or a how-long question), so every other sentence steps aside for
     # it exactly as before; the CHANGE verb still has to name the setting.
     got = _live_idle_intent(s)
+    if got is not None:
+        return got
+
+    # --- "how do I add a key / a model / a second PC / Telegram?" (2026-11-07) --
+    # BEFORE the reminder capability family below, and that is the fix: its HOW
+    # shape claims EVERY "how do I add ..." sentence, so the owner asking for a
+    # Mistral key was told how to set a timer. This branch answers the real
+    # feature for those four nouns and returns None for every other such
+    # sentence, so a reminder how-to (and a shopping list) keeps its own answer.
+    got = _adding_howto_question(text)
     if got is not None:
         return got
 
@@ -6837,9 +6856,72 @@ _REMINDER_ACTION_TIME_RX = re.compile(
 #: The nouns of OTHER features. "how do I set up a calendar connection" names
 #: one of these and no reminder at all, so it is the connect/calendar card's
 #: question, not a reminder how-to (test_calendar_answer, 2026-11-01).
+#:
+#: THE KEY/API/MODEL NOUNS ARE HERE SINCE 2026-11-07 (the options-understanding
+#: audit's B2): the HOW shape below reads ANY "how do I add ..." as a reminder
+#: question, so "how do I add a Mistral key", "how do I add a model" and
+#: "how do I add a second PC" were answered with how to set a timer. The new
+#: `_adding_howto_question` branch answers those properly; this noun list is the
+#: second line, so an unusual phrasing that branch does not claim falls through
+#: to the model instead of being told about timers.
 _OTHER_TOPIC_RX = re.compile(
     r"\b(?:calendar|connect(?:ion|ed|ing|s)?|account|accounts|notes?|vault|email|"
-    r"file|files|wifi|bluetooth|home\s+assistant)\b")
+    r"file|files|wifi|bluetooth|home\s+assistant|api|apis|key|keys|token|tokens|"
+    r"provider|providers|cloud|model|models)\b")
+
+
+# --------------------------------------------------------------------------
+# "How do I add a key / a model / a second PC / Telegram?" (2026-11-07)
+#
+# THE OPTIONS-UNDERSTANDING AUDIT'S B2. `_REMINDER_HOWTO_HOW_RX` below reads ANY
+# "how do I add ..." as a reminder question, and that family had no key, API,
+# model or computer noun, so "how do I add a mistral key" was answered with how
+# to set a timer. Those sentences are about REAL features - the Chatbot API keys
+# card, the Brain's Models page, the phone pair, or something simply not built -
+# and this branch answers each one in the words those features already use, in
+# the same fixed, read-only way the reminder answers work. Every other
+# "how do I add ..." (a reminder, milk to a shopping list, a note) keeps the
+# answer it had.
+# --------------------------------------------------------------------------
+
+_ADDING_HOW_RX = re.compile(
+    r"\bhow\s+(?:do|can|should|could)\s+i\s+"
+    r"(?:add|set\s*up|setup|get|create|install|download|enter|put|save|configure)\b")
+#: A key/API/token word: the sentence is about an API key, not a reminder.
+_ADDING_KEY_RX = re.compile(r"\b(?:api|apis|key|keys|token|tokens)\b")
+#: A model word: "install a model", "add another model", "download a model".
+_ADDING_MODEL_RX = re.compile(r"\b(?:models?|llms?)\b")
+#: A second PC/computer/laptop: "add a second pc", "add another computer".
+_ADDING_SECOND_PC_RX = re.compile(
+    r"\b(?:second|another|new|one\s+more|2nd|third)\s+(?:pc|computer|laptop|machine)\b"
+    r"|\b(?:add|install|set\s*up|connect)\s+(?:me\s+)?(?:a\s+|an\s+|the\s+)?"
+    r"(?:pc|computer|laptop)\b")
+
+
+def _adding_howto_question(raw) -> Optional[Intent]:
+    """The real feature behind "how do I add <a key / a model / a PC / Telegram>".
+
+    None for every other "how do I add ..." - a reminder, a shopping-list item,
+    a note - so those keep the answers they already had. Read from the RAW
+    sentence, BEFORE `_reminders_question`, because that family's HOW shape
+    claims any "how do I add" and this is the fix for the sentences it claimed
+    wrongly (the 2026-11-07 options-understanding audit's B2).
+    """
+    text = " ".join(str(raw or "").strip().lower().rstrip("?.!").split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    if not text or len(text) > 400:
+        return None
+    if not _ADDING_HOW_RX.search(text):
+        return None
+    if _ADDING_KEY_RX.search(text):
+        return Intent("adding_key_howto")
+    if _ADDING_MODEL_RX.search(text):
+        return Intent("adding_model_howto")
+    if _ADDING_SECOND_PC_RX.search(text):
+        return Intent("adding_second_pc_howto")
+    if re.search(r"\btelegram\b", text):
+        return Intent("adding_telegram_howto")
+    return None
 
 
 def _reminders_question(raw) -> Optional[Intent]:
@@ -6990,6 +7072,69 @@ def _run_reminders(name: str, surface: str) -> "Result":
                       "Coming up and the HUD's Reminders panel." + suffix, "reminder_howto")
     return Result("Yes - see Brain, Work, Coming up for timers, alarms and reminders on this PC.",
                   "reminder_capability")
+
+
+def _api_key_route_words() -> tuple:
+    """(the six services, the key command, the limit command) for B2's answer.
+
+    Read from `jarvis_chatbot_api` - the module that owns the services, their
+    short names and both command lines - so this answer can never drift from
+    what the command line actually accepts. Fixed words only when that module is
+    not installed; not one service name is invented here."""
+    try:
+        import jarvis_chatbot_api as API
+        services = ", ".join(f"{p.company} ({p.short})" for p in API.PRESETS.values())
+        return (services,
+                API.KEY_LINE.format(short="<service>"),
+                API.LIMIT_LINE.format(short="<service>", amount=5))
+    except Exception:                       # noqa: BLE001 - no API module, fixed words
+        return ("OpenAI (openai), DeepSeek (deepseek), Mistral AI (mistral), "
+                "xAI (xai), OpenRouter (openrouter), Groq (groq)",
+                "py -3 jarvis_chatbot_api.py key <service>",
+                "py -3 jarvis_chatbot_api.py limit <service> 5")
+
+
+def _run_adding_howto(name: str) -> Result:
+    """One fixed, read-only answer naming the real feature behind the question.
+
+    No card, no write, no model and no route: each of these only says where the
+    feature lives, in the words the Settings page or the tool's own row uses
+    (the 2026-11-07 options-understanding audit's B2)."""
+    if name == "adding_key_howto":
+        services, key_line, limit_line = _api_key_route_words()
+        return Result(
+            "Keys for the paid AI services are added on the PC only - never from the "
+            "phone, and never from this chat. In the desktop app: Settings, Chatbot "
+            "API keys. On the PC's command line, in Jarvis's folder: \"" + key_line
+            + "\" (paste the key at the hidden prompt). The services are " + services
+            + ". The key is kept in Windows Credential Manager, never shown or logged, "
+            "and sent only to that service's own host. Each service also needs a "
+            "monthly money limit, for example \"" + limit_line + "\", or it is not "
+            "used at all.", "adding_key_howto")
+    if name == "adding_model_howto":
+        return Result(
+            "Adding a model is done on the PC, not from this chat box. Brain, Model, "
+            "Models - install another by name; it raises ONE approval card, and "
+            "nothing downloads until you approve it. The \"Check for new models\" "
+            "button at the bottom of that list shows a short list the PC chose from "
+            "what fits your graphics cards. On the phone, Brain, Models: type the "
+            "model's name by hand - there is no catalogue to browse. On the command "
+            "line the same install is \"ollama pull <the model>\".", "adding_model_howto")
+    if name == "adding_second_pc_howto":
+        return Result(
+            "A second PC cannot join yet. Jarvis runs on ONE PC, and other devices "
+            "connect to it: the phone pairs with this PC (say \"pair my phone\"). A "
+            "second PC sharing this Jarvis - or this desktop connecting to another "
+            "PC's Jarvis - is designed but not built, so there is nothing to add "
+            "today.", "adding_second_pc_howto")
+    if name == "adding_telegram_howto":
+        return Result(
+            "Telegram is not built into Jarvis, so there is nothing to connect: no "
+            "Telegram, Slack or Discord account or message feature exists. Jarvis can "
+            "open a program on the PC for you (say \"open Telegram\" if it is "
+            "installed), but it cannot read or send Telegram messages.",
+            "adding_telegram_howto")
+    return Result("That is not something I can do from chat here.", "adding_howto")
 
 
 
@@ -8648,8 +8793,15 @@ _CLOUD_CONNECTED = re.compile(
     r"(?:are|do)\s+you\s+(?:have\s+(?:a\s+)?(?:connection|access)\s+to|connect(?:ed)?\s+to|"
     r"use|using)\s+(?:my\s+|the\s+|a\s+)?(?:deepseek(?:\s+api)?|cloud(?:\s+api)?|api)\b.*")
 _CLOUD_HAVE_KEY = re.compile(
+    # "do you have my key" / "do you have my deepseek key" (the 2026-10-31
+    # shapes), plus the owner's ordinary "is my key saved" forms (2026-11-07,
+    # the options-understanding audit's B6 half): before this the plain saved
+    # question matched nothing and went to the local model.
     r"(?:do|did)\s+you\s+(?:have|got|get|keep|store)\s+(?:my\s+|the\s+|a\s+)?"
-    r"(?:deepseek|cloud)?\s*(?:api\s+)?key\b.*")
+    r"(?:openai|deepseek|mistral|xai|openrouter|groq|cloud)?\s*(?:api\s+)?keys?\b.*"
+    r"|(?:is|are)\s+(?:my|the|a)\s+"
+    r"(?:openai|deepseek|mistral|xai|openrouter|groq|cloud)?\s*"
+    r"(?:api\s+)?keys?\s+(?:saved|stored|set|added)\b.*")
 _CLOUD_USING = re.compile(
     r"(?:are|is)\s+(?:you|jarvis)\s+(?:using|on)\s+the\s+cloud\b.*")
 _CLOUD_WHICH_ANSWER = re.compile(
@@ -8671,6 +8823,117 @@ _CLOUD_ON_OFF = re.compile(
 _CLOUD_PROVIDER = re.compile(
     r"(?:which|what)\s+(?:provider|service|api)\s+(?:is|does)\s+the\s+cloud\s+"
     r"(?:preset\s+)?(?:using|use)\b.*")
+
+
+# --- the cloud provider itself: view it, and change it from chat (2026-11-07)
+#
+# THE OWNER'S Q1/B6 RULING. Until now the provider could be chosen in the
+# Presets menu and described by the cloud-honesty answers, but chat could
+# neither LIST the six nor CHANGE the choice: the audit measured "which cloud
+# providers can I use?" and "switch my cloud provider to mistral" both falling
+# through to the model. The change is the SAME one-card path the Presets Cloud
+# row uses (`jarvis_presets.apply_cloud`: ONE change_own_config card, nothing
+# written until the yes), so this adds no second way to change it - only a
+# second door to the one that exists. VIEWING is read-only.
+#
+# The six services are this tree's own (`jarvis_chatbot_api.PRESETS`); there is
+# no Anthropic service in it, so no word for one is offered here.
+_CLOUD_PROVIDER_WORDS = (
+    ("openai", "openai_api"), ("open ai", "openai_api"),
+    ("chatgpt", "openai_api"), ("chat gpt", "openai_api"),
+    ("deepseek", "deepseek_api"), ("deep seek", "deepseek_api"),
+    ("mistral", "mistral_api"),
+    ("openrouter", "openrouter_api"), ("open router", "openrouter_api"),
+    ("groq", "groq_api"),
+    ("xai", "xai_api"), ("x ai", "xai_api"), ("grok", "xai_api"),
+)
+#: "cloud providers", "api services", "providers" on their own - the OBJECT a
+#: list or change question is about.
+_CLOUD_PROVIDER_OBJECT = re.compile(
+    r"\b(?:cloud\s+(?:providers?|services?|apis?)|(?:api\s+)?providers?|"
+    r"(?:cloud|api)\s+services?)\b")
+#: The verbs that turn "the cloud provider" + a service name into a change.
+_CLOUD_CHOOSE_VERB = re.compile(
+    r"\b(?:switch|change|move|set|choose|pick|use|make)\b")
+#: How the owner names the whole request: "switch to mistral", "use mistral".
+#: The SERVICE has to be the next thing said - "change my openai api key" is
+#: the Settings-only key refusal's question, not a provider change.
+_CLOUD_SWITCH_TO = re.compile(
+    r"^(?:switch|change|move|use|choose|pick|set|make)\s+(?:me\s+)?"
+    r"(?:over\s+)?(?:to\s+)?(?:the\s+)?(?:"
+    + "|".join(re.escape(word) for word, _pid in _CLOUD_PROVIDER_WORDS) + r")\b")
+_CLOUD_CAN_USE = re.compile(
+    r"\b(?:can|could|may)\s+i\s+(?:use|switch\s+to|choose|pick|try)\b")
+_CLOUD_ONE_AT_A_TIME = re.compile(
+    r"\b(?:two|2|multiple|several|both)\s+(?:different\s+)?"
+    r"(?:cloud\s+)?(?:providers?|services?|apis?)\b")
+
+
+#: The OBJECT a change question is about: "the cloud provider", "the service".
+#: Deliberately NOT the broad "cloud api"/"api service": a catalogue alias such
+#: as "cloud api" must keep answering as the feature row's own question
+#: (`test_feature_guide.py` builds "can I change <every alias>"), so the
+#: structural match below is made on the sentence with its parentheses removed
+#: as well - the Cloud row's own title carries "(an API service you choose)".
+_CLOUD_PROVIDER_CHANGE_OBJECT = re.compile(
+    r"\b(?:cloud\s+)?(?:provider|service)s?\b")
+
+
+def _cloud_provider_mentions(text: str) -> list:
+    """The service ids the sentence names, in the order they are said."""
+    found = []
+    for word, pid in _CLOUD_PROVIDER_WORDS:
+        for m in re.finditer(r"(?<!\w)" + re.escape(word) + r"(?!\w)", text):
+            found.append((m.start(), pid))
+    found.sort()
+    return [pid for _, pid in found]
+
+
+def _cloud_provider_prompt(s: str) -> Optional[Intent]:
+    """The intent for a cloud-provider list/change question, or None.
+
+    Read before the feature/settings grammars. Deliberately narrow: a sentence
+    must name a `cloud`/`api` providers-or-services OBJECT, a provider word with
+    "do you support"/"can I use"/a switch verb, or "switch to <provider>". An
+    ordinary "use the cloud for this" and "switch to the cloud preset" name no
+    SERVICE and keep their own paths. Parenthesised text is dropped before
+    matching, so a catalogue title such as "Cloud (an API service you choose)"
+    keeps answering as its own feature row.
+    """
+    text = " ".join(str(s or "").strip().lower().rstrip("?.!").split())
+    if not text or len(text) > 400:
+        return None
+    text = " ".join(re.sub(r"\([^()]*\)", " ", text).split())
+    if not text:
+        return None
+    mentions = _cloud_provider_mentions(text)
+    # 1. What can I use? Which are there? List them, and the one-at-a-time rule.
+    if re.search(r"\b(?:which|what|list|name|show)\b", text) and \
+            _CLOUD_PROVIDER_OBJECT.search(text):
+        return Intent("cloud_provider_list")
+    if mentions and re.search(r"\b(?:do|does)\s+(?:you|jarvis)\s+support\b", text):
+        return Intent("cloud_provider_list")
+    if mentions and _CLOUD_CAN_USE.search(text):
+        return Intent("cloud_provider_list")
+    if _CLOUD_ONE_AT_A_TIME.search(text):
+        return Intent("cloud_provider_list")
+    # 2. A change request - one with a service named, or one that only says
+    #    "the cloud provider" and so has to ask which.
+    changing = bool(_CLOUD_CHOOSE_VERB.search(text)) and (
+        bool(_CLOUD_PROVIDER_CHANGE_OBJECT.search(text))
+        or bool(_CLOUD_SWITCH_TO.match(text)))
+    if changing and mentions:
+        unique = list(dict.fromkeys(mentions))
+        if len(unique) > 1:
+            # "use mistral instead of deepseek" names the wanted one first.
+            if re.search(r"\b(?:instead\s+of|rather\s+than|not)\b", text):
+                unique = unique[:1]
+            else:
+                return Intent("cloud_provider_ask")
+        return Intent("cloud_provider_choose", {"pid": unique[0]})
+    if changing and _CLOUD_PROVIDER_CHANGE_OBJECT.search(text):
+        return Intent("cloud_provider_ask")
+    return None
 
 
 def _cloud_facts() -> dict:
@@ -8778,21 +9041,46 @@ def _run_cloud_honesty(f: dict) -> Result:
             f"memory, pictures, your screen and a tainted conversation never go.{escalate}",
             "cloud_honesty")
     if shape == "key":
-        if deepseek_saved is True:
+        # WHICH SERVICE THIS ANSWER IS ABOUT (2026-11-07, the
+        # options-understanding audit's B1/B6): the CHOSEN provider's key, never
+        # a hard-wired DeepSeek. Before this fix a saved OpenRouter key still
+        # answered "No. No DeepSeek API key is saved on this PC" - a live
+        # falsehood the moment another provider was chosen.
+        if not provider:
+            if deepseek_saved is True:
+                return Result(
+                    "No cloud service is chosen on this PC, so no key is in use right "
+                    "now. A DeepSeek API key is saved, but DeepSeek is not selected: "
+                    "choose the Cloud row in the Presets menu and a provider first. I "
+                    "never show, repeat or log a key.", "cloud_honesty")
+            if deepseek_saved is False:
+                return Result(
+                    "No. No cloud service is chosen on this PC and no DeepSeek API key "
+                    "is saved either. The Cloud row in the Presets menu is where a "
+                    "service is chosen; a key is added on the PC only, in Windows "
+                    "Credential Manager, and I never show or repeat it.", "cloud_honesty")
             return Result(
-                "Yes - a DeepSeek API key is saved on this PC, in Windows Credential "
-                "Manager. I never show it, repeat it, log it or put any part of it in "
-                "an answer. It is sent only to DeepSeek's own API host when you allow "
-                "a cloud turn.", "cloud_honesty")
-        if deepseek_saved is False:
+                "No cloud service is chosen on this PC, and this PC cannot read Windows "
+                "Credential Manager, so I cannot say whether any key is saved. I never "
+                "show or repeat a key.", "cloud_honesty")
+        company = st.get("company") or provider
+        if key is True:
             return Result(
-                "No. No DeepSeek API key is saved on this PC. The key is added in "
-                "Windows Credential Manager, on the PC only, and I never show or "
-                "repeat it.", "cloud_honesty")
+                f"Yes - a {company} API key is saved on this PC, in Windows Credential "
+                f"Manager. {company} is the chosen cloud service. I never show the key, "
+                f"repeat it, log it or put any part of it in an answer; it is sent only "
+                f"to {company}'s own API host when you allow a cloud turn.",
+                "cloud_honesty")
+        if key is False:
+            return Result(
+                f"No. No {company} API key is saved on this PC, and {company} is the "
+                "chosen cloud service. The key is added in Windows Credential Manager, "
+                "on the PC only, and I never show or repeat it.", "cloud_honesty")
         return Result(
-            "I cannot tell right now: this PC cannot read Windows Credential Manager. "
-            "I never show or repeat a key, and nothing is sent anywhere without your "
-            "yes.", "cloud_honesty")
+            f"No cloud service key can be read here: {company} is the chosen cloud "
+            "service, but this PC cannot read Windows Credential Manager, so I cannot "
+            "say whether its key is saved. I never show or repeat a key, and nothing "
+            "is sent anywhere without your yes.", "cloud_honesty")
     if shape == "using":
         preset = (f"The Cloud preset is set to {who}." if provider else
                   "No cloud service is chosen on this PC.")
@@ -8911,6 +9199,110 @@ def _run_cloud_honesty(f: dict) -> Result:
             "is where one is picked, and it lists the services whose keys are saved.",
             "cloud_honesty")
     return Result("That is not something I can do from chat here.", "honest_chat")
+
+
+# --- the cloud provider: view it, and change it through the ONE card ---------
+# (2026-11-07, the owner's Q1/B6 ruling; the audit's B5/B6. See
+# `_cloud_provider_prompt` for what reaches these.)
+
+def _cloud_choose_words(code, body, company: str) -> str:
+    """The one plain sentence for a chat provider change, from the route's body.
+
+    `jarvis_presets.apply_cloud` already answers with the card's outcome, the
+    PC's own refusal sentence, or the done message; this only puts the chat
+    turn's own lead-in on it. It never claims a change the body does not.
+    """
+    body = body if isinstance(body, dict) else {}
+    what = f"Making {company} the cloud service"
+    if code in (200, 202) and body.get("changed") is True:
+        said = str(body.get("message") or "").strip()
+        return f"{what}: done. " + (said or "")
+    outcome = str(body.get("outcome") or "").strip()
+    if outcome:
+        return (f"{what}: nothing was changed - the ONE approval card was not "
+                f"approved ({outcome}), so the cloud service stays as it was.")
+    reason = (str(body.get("error") or "").strip()
+              or str(body.get("message") or "").strip()
+              or "the PC refused it")
+    return f"{what}: nothing was changed - {reason}"
+
+
+def _run_cloud_provider_list() -> Result:
+    """Which clouds exist, whether each key is saved, and which one is chosen.
+
+    Every fact is the PC's own: `jarvis_presets.cloud_providers()` reads the six
+    from `jarvis_chatbot_api.PRESETS` (name, short name, host, model and key
+    PRESENCE only - never a key) and `cloud_chosen()` is the file the Presets
+    row writes. Read-only: no card, no write, no model.
+    """
+    try:
+        import jarvis_presets as P
+        rows = P.cloud_providers()
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud services could not be read on this PC.",
+                      "cloud_provider_list")
+    if not rows:
+        return Result("No cloud services are set up on this PC, so none can be "
+                      "used.", "cloud_provider_list")
+    parts = []
+    chosen_company = ""
+    for row in rows:
+        saved = row.get("key_saved")
+        key_word = ("key saved" if saved is True else
+                    "no key saved" if saved is False else "key state cannot be read")
+        if row.get("chosen"):
+            chosen_company = str(row.get("company") or "")
+            parts.append(f"{row.get('company')} ({row.get('short')}) is the chosen "
+                         f"one - {key_word}")
+        else:
+            parts.append(f"{row.get('company')} ({row.get('short')}) - {key_word}")
+    head = (f"The chosen cloud service is {chosen_company}. " if chosen_company else
+            "No cloud service is chosen on this PC right now. ")
+    return Result(
+        head + "One at a time, the six are: " + "; ".join(parts) + ". "
+        "To change it say for example \"use mistral as my cloud provider\", or "
+        "pick the Cloud row in the Presets menu - either way ONE approval card "
+        "asks first and nothing switches until you approve it. A service needs "
+        "its key saved first: Settings, Chatbot API keys, or "
+        "\"py -3 jarvis_chatbot_api.py key <service>\" on the PC.",
+        "cloud_provider_list")
+
+
+def _run_cloud_provider_ask() -> Result:
+    """No service was named: the six, and the one sentence that changes it."""
+    try:
+        import jarvis_chatbot_api as API
+        names = ", ".join(f"{p.company} ({p.short})" for p in API.PRESETS.values())
+    except Exception:                                       # noqa: BLE001
+        names = ("OpenAI (openai), DeepSeek (deepseek), Mistral AI (mistral), "
+                 "xAI (xai), OpenRouter (openrouter), Groq (groq)")
+    return Result(
+        "Which cloud service? The six are " + names + ". One at a time. Say for "
+        "example \"use mistral as my cloud provider\" - ONE approval card asks "
+        "first, and nothing switches until you approve it. The Cloud row in the "
+        "Presets menu does the same. A service needs its key saved first: "
+        "Settings, Chatbot API keys.", "cloud_provider_ask")
+
+
+def _run_cloud_provider_choose(f: dict) -> Result:
+    """Change the cloud provider through the EXISTING one-card route.
+
+    `jarvis_presets.apply_cloud` is the very function the Presets Cloud row
+    calls: it refuses a service this PC cannot use BEFORE any card, raises ONE
+    `change_own_config` card, and writes `cloud-choice.json` only after that
+    yes. Nothing about the card or the gate is re-implemented here - so the
+    card's shape, its tier and the write are the same ones Settings uses.
+    """
+    pid = str(f.get("pid") or "")
+    try:
+        import jarvis_presets as P
+        import jarvis_chatbot_api as API
+        company = API.PRESETS[pid].company if pid in API.PRESETS else pid
+        code, body = P.apply_cloud(provider=pid)
+    except Exception:                                       # noqa: BLE001
+        return Result("The cloud provider could not be changed on this PC.",
+                      "cloud_provider_choose")
+    return Result(_cloud_choose_words(code, body, company), "cloud_provider_choose")
 
 
 def _honest_chat_prompt(s: str) -> Optional[Intent]:
@@ -20755,11 +21147,37 @@ def _run_feature_state(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_state")
 
 
+def _setting_name_for_guide(key: str) -> str:
+    """The registry KEY an intent carries, in the words the guide answers by.
+
+    A SWITCH is asked about by the name its own registry row prints on the
+    Settings card: `jarvis_feature_guide.state()`/`how_to()` know rows and
+    settings by NAME, never by snake_case key. Passing the key answered 14 of
+    the 38 switches with "I do not have a feature called
+    \"lights_without_card\"" (the 2026-11-07 options-understanding audit's B4),
+    and showed the raw key to the owner.
+
+    A CHOICE keeps its key, deliberately: `jarvis_feature_guide.state()` answers
+    a choice key through `_choice_by_key` because a label like "the anti-slop
+    mode" folds onto the anti-slop SWITCH. Nothing is invented here - a switch's
+    name is the registry row's own first name, via `_setting_label`.
+    """
+    try:
+        import jarvis_settings_registry as R
+        key = str(key or "")
+        for bool_setting in getattr(R, "BOOL_SETTINGS", ()) or ():
+            if bool_setting.key == key:
+                return _setting_label(bool_setting)
+    except Exception:                       # noqa: BLE001 - no registry, no remap
+        pass
+    return str(key or "")
+
+
 def _run_feature_state_setting(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_state")
-    out = FG.state(f.get("key") or "")
+    out = FG.state(_setting_name_for_guide(f.get("key") or ""))
     return Result(str(out.get("words") or ""), "feature_state")
 
 
@@ -20775,7 +21193,7 @@ def _run_feature_howto_setting(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_howto")
-    out = FG.how_to(f.get("key") or "", bool(f.get("on")))
+    out = FG.how_to(_setting_name_for_guide(f.get("key") or ""), bool(f.get("on")))
     return Result(str(out.get("words") or ""), "feature_howto")
 
 
@@ -21097,6 +21515,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_honest_chat(f)
     if n == "cloud_honesty":
         return _run_cloud_honesty(f)
+    # The cloud provider itself (2026-11-07, Q1/B6): the list and the
+    # "which one?" answer read only, and the change goes through
+    # `jarvis_presets.apply_cloud` - the SAME one `change_own_config` card the
+    # Presets Cloud row raises, so it is deliberately NOT in READ_ONLY_INTENTS.
+    if n == "cloud_provider_list":
+        return _run_cloud_provider_list()
+    if n == "cloud_provider_ask":
+        return _run_cloud_provider_ask()
+    if n == "cloud_provider_choose":
+        return _run_cloud_provider_choose(f)
     if n == "honest_state":
         return _run_honest_state(f)
     if n == "protection_apply":
@@ -21113,6 +21541,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_shortcuts(n, f, _client_surface(peer, local, client_surface))
     if n in _REMINDER_INTENTS:
         return _run_reminders(n, _client_surface(peer, local, client_surface))
+    if n in _ADDING_INTENTS:
+        # "how do I add a key / a model / a second PC / Telegram" (2026-11-07,
+        # the options-understanding audit's B2): one fixed sentence naming the
+        # real feature, read-only, listed in READ_ONLY_INTENTS.
+        return _run_adding_howto(n)
     if n in _PLUGIN_INTENTS:
         return _run_plugins(n, f, _client_surface(peer, local, client_surface))
     if n == "tool_profile":
@@ -22019,6 +22452,14 @@ _REMINDER_INTENTS = frozenset({
     "reminder_closed", "reminder_howto",
 })
 
+#: The "how do I add a key / a model / a second PC / Telegram" answers
+#: (2026-11-07, the options-understanding audit's B2): fixed words naming the
+#: real feature, no card, no write, no state read and no model.
+_ADDING_INTENTS = frozenset({
+    "adding_key_howto", "adding_model_howto", "adding_second_pc_howto",
+    "adding_telegram_howto",
+})
+
 READ_ONLY_INTENTS = frozenset({
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
@@ -22048,6 +22489,17 @@ READ_ONLY_INTENTS = frozenset({
     "read_link_q",
     "reminder_capability", "reminder_popup", "reminder_sound",
     "reminder_notify", "reminder_closed", "reminder_howto", "animal_ask", "approval_where", "briefing_list", "briefing_now",
+    # The cloud provider VIEW (2026-11-07, Q1/B6): the six, which key is saved
+    # and which one is chosen. It reads the PC's own state and changes nothing,
+    # so it must not clear what "cancel that" would take back. The CHANGE
+    # (`cloud_provider_choose`) is deliberately not here - it raises the one
+    # `change_own_config` card.
+    "cloud_provider_list", "cloud_provider_ask",
+    # The "how do I add a key / a model / a second PC / Telegram" answers
+    # (2026-11-07, the options-understanding audit's B2): fixed words that name
+    # the real feature and change nothing, so they must not clear "cancel that".
+    "adding_key_howto", "adding_model_howto", "adding_second_pc_howto",
+    "adding_telegram_howto",
     # A quote from the local corpus (2026-11-05): reads a file beside the
     # backend, writes nothing, calls no model and raises no card - so it must
     # not take away what "cancel that" would undo.

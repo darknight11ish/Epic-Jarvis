@@ -3,7 +3,7 @@
 The owner's feature list, as data: 179 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34); the apps' Features pages read their own
+`features/features.json` (sha256 d53e25b6b6e2e0ac349ec7865af7cc8eca88e8dc11af36b691c19ef5a8f0bfaa); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34"
+SOURCE_SHA256 = "d53e25b6b6e2e0ac349ec7865af7cc8eca88e8dc11af36b691c19ef5a8f0bfaa"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1536,13 +1536,13 @@ FEATURES = (
     {
         "id": "cloud-escalation",
         "group": "The PC itself",
-        "title": "Cloud (DeepSeek API)",
-        "what": "Send a hard question to the one cloud API service you chose - DeepSeek by default - after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
+        "title": "Cloud (an API service you choose)",
+        "what": "Send a hard question to the one cloud API service you chose after your yes, or let the standing switch send one without asking each time. The Cloud preset chooses the service; it does not switch the answer by itself.",
         "where": "PC: Settings, Presets, the Cloud row, then pick a provider whose key is saved. The per-question Try the cloud model button is under an offered answer in either app; the standing switch is in the same Cloud row. On the phone the Cloud state is readable but choosing and switching are the PC's.",
         "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
         "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
         "surface": "both",
-        "aliases": ["cloud", "cloud api", "deepseek api", "escalate to the cloud", "try the cloud model", "sends a hard question to deepseek after i say yes"],
+        "aliases": ["cloud", "cloud api", "cloud preset", "deepseek api", "escalate to the cloud", "try the cloud model", "sends a hard question to deepseek after i say yes"],
         "covers": [],
     },
     {
