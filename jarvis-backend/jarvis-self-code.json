@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "6bff915fd7cf6191af7f0d48548856fbbc5b3ef0",
- "built_at": "2026-11-07T01:20:35-08:00",
+ "ref": "e18861f85ea70573bc2d7a827275a81f844c4914",
+ "built_at": "2026-11-07T05:00:04-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3146,12 +3146,13 @@
     "VERSION",
     "backend/jarvis_feedback.py",
     "backend/jarvis_identity.py",
+    "backend/jarvis_recent_changes.py",
     "backend/jarvis_self_code.py",
     "backend/jarvis_self_improve.py",
     "backend/jarvis_self_portrait.py",
     "backend/selftest.py"
    ],
-   "file_count": 7,
+   "file_count": 8,
    "key_modules": [
     {
      "path": "backend/jarvis_self_portrait.py",
@@ -3168,13 +3169,18 @@
     {
      "path": "backend/jarvis_self_improve.py",
      "summary": "jarvis_self_improve.py - Jarvis reads its own source, and drafts what it may not apply."
+    },
+    {
+     "path": "backend/jarvis_recent_changes.py",
+     "summary": "jarvis_recent_changes.py - \"what changed in your last update?\", answered from the project's own record."
     }
    ],
    "tests": [
     "backend/test_self_portrait.py",
     "backend/test_self_facts.py",
     "backend/test_self_knowledge.py",
-    "backend/test_identity.py"
+    "backend/test_identity.py",
+    "backend/test_self_knowledge_honesty.py"
    ],
    "docs": [
     "docs/SELF-AWARENESS.md",
@@ -3789,6 +3795,7 @@
     "backend/test_gate_tool_actions.py",
     "backend/test_gate_touches.py",
     "backend/test_gate_unknown_risk.py",
+    "backend/test_github_self_knowledge.py",
     "backend/test_github_tools.py",
     "backend/test_goals.py",
     "backend/test_goals_honesty.py",
@@ -3847,6 +3854,7 @@
     "backend/test_live.py",
     "backend/test_live_idle_timeout.py",
     "backend/test_live_parity.py",
+    "backend/test_live_settings_parity.py",
     "backend/test_live_stream.py",
     "backend/test_live_turn.py",
     "backend/test_live_voice_words.py",
@@ -3925,6 +3933,7 @@
     "backend/test_open_chat.py",
     "backend/test_optin_models.py",
     "backend/test_optin_roots.py",
+    "backend/test_options_understanding.py",
     "backend/test_origin.py",
     "backend/test_origin_hud_header.py",
     "backend/test_ort_quiet.py",
@@ -4058,6 +4067,7 @@
     "backend/test_self_improve.py",
     "backend/test_self_improve_diagnostic.py",
     "backend/test_self_knowledge.py",
+    "backend/test_self_knowledge_honesty.py",
     "backend/test_self_portrait.py",
     "backend/test_selftest_doctor.py",
     "backend/test_selftest_preflight.py",
@@ -4180,6 +4190,7 @@
     "backend/test_warm_prefix.py",
     "backend/test_watch_ci.py",
     "backend/test_watch_notify.py",
+    "backend/test_watch_repos.py",
     "backend/test_web_rogue_and_backup_hardening.py",
     "backend/test_web_search.py",
     "backend/test_web_search_grant.py",
@@ -4200,7 +4211,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 644,
+   "file_count": 649,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4457,7 +4468,16 @@
     "changelog.d/2026-11-06-phone-read-aloud-memory-screen.md",
     "changelog.d/2026-11-06-self-awareness-phone-documents-notion.md",
     "changelog.d/2026-11-06-self-facts-and-safety-model-free.md",
+    "changelog.d/2026-11-07-audit-1209-seven-fixes.md",
+    "changelog.d/2026-11-07-chat-live-change-parity.md",
+    "changelog.d/2026-11-07-cloud-escalation-chat-switch.md",
+    "changelog.d/2026-11-07-cloud-provider-follows-choice.md",
+    "changelog.d/2026-11-07-github-self-knowledge.md",
+    "changelog.d/2026-11-07-gpu-pin-11434-headless.md",
+    "changelog.d/2026-11-07-repo-watcher.md",
     "changelog.d/2026-11-07-self-code-map.md",
+    "changelog.d/2026-11-07-self-knowledge-honesty.md",
+    "changelog.d/2026-11-07-three-gpu-coding-preset.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4582,7 +4602,16 @@
     "decisions.d/2026-11-06-q6-runtime-tree-equivalence.md",
     "decisions.d/2026-11-06-self-facts-and-safety-model-free.md",
     "decisions.d/2026-11-06-stop-proof-listening-zero.md",
+    "decisions.d/2026-11-07-card-limit-only-for-card-asks.md",
+    "decisions.d/2026-11-07-chat-live-change-parity.md",
+    "decisions.d/2026-11-07-cloud-escalation-said-out-loud.md",
+    "decisions.d/2026-11-07-cloud-provider-choice-and-privacy-backstop.md",
+    "decisions.d/2026-11-07-github-self-knowledge-catalogue-not-lane-system.md",
+    "decisions.d/2026-11-07-gpu-pin-11434-to-headless.md",
+    "decisions.d/2026-11-07-repo-watcher.md",
     "decisions.d/2026-11-07-self-code-map-from-main.md",
+    "decisions.d/2026-11-07-self-knowledge-honesty.md",
+    "decisions.d/2026-11-07-three-gpu-presets-measured.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -4757,6 +4786,7 @@
     "docs/MEASURED-2026-10-13-ocr-two-readers.md",
     "docs/MEASURED-2026-10-30-CONTEXT.md",
     "docs/MEASURED-2026-11-02-POOLED-LANE.md",
+    "docs/MEASURED-2026-11-07-THREE-GPU.md",
     "docs/MEDIA-READ-DESIGN.md",
     "docs/MEDICAL-STORE.md",
     "docs/MEMORY-RESEARCH-2026-09-26.md",
@@ -5027,7 +5057,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 786,
+   "file_count": 805,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -5397,6 +5427,7 @@
     "tools/gen_projects_cases.py",
     "tools/gen_quiz_cloud_cases.py",
     "tools/gen_reach_cases.py",
+    "tools/gen_recent_changes.py",
     "tools/gen_retirement_cases.py",
     "tools/gen_risky_approval_cases.py",
     "tools/gen_sayable_cases.py",
@@ -5415,6 +5446,7 @@
     "tools/gen_support_cases.py",
     "tools/gen_tasks_cases.py",
     "tools/gen_tasks_patch.py",
+    "tools/gen_tool_targets.py",
     "tools/gen_topics_cases.py",
     "tools/gen_voice_status_cases.py",
     "tools/gen_voice_training_cases.py",
@@ -5545,7 +5577,7 @@
     "tools/voicestudio_sidecar.ps1",
     "tools/zero-jargon-allow.txt"
    ],
-   "file_count": 494,
+   "file_count": 496,
    "key_modules": [
     {
      "path": "tools/gen_self_code_map.py",
@@ -5954,6 +5986,7 @@
     "jarvis-backend/jarvis_readpage.py",
     "jarvis-backend/jarvis_recall.py",
     "jarvis-backend/jarvis_receipts.py",
+    "jarvis-backend/jarvis_recent_changes.py",
     "jarvis-backend/jarvis_referee.py",
     "jarvis-backend/jarvis_repomap.py",
     "jarvis-backend/jarvis_research.py",
@@ -6058,7 +6091,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 331,
+   "file_count": 332,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6088,111 +6121,111 @@
  ],
  "recent_commits": [
   {
-   "sha": "6bff915fd7cf6191af7f0d48548856fbbc5b3ef0",
+   "sha": "e18861f85ea70573bc2d7a827275a81f844c4914",
    "date": "2026-11-07",
-   "subject": "Merge pull request #1209 from darknight11ish/fix/agent-raises-cards-through-tools-2026-11-06"
+   "subject": "integration: cloud provider routing follows the choice + privacy backstop (Q1/Q7)"
   },
   {
-   "sha": "d592a5a57ebe72f2388ab04569f728eb1adeca40",
+   "sha": "443e25de186042263abba29206369dd0b2331348",
    "date": "2026-11-07",
-   "subject": "fix(agent): keep main's rules and put the call-it instruction in the tool texts"
+   "subject": "fix(cloud): the chosen provider answers, chat can see and switch it, and every switch answers about itself"
   },
   {
-   "sha": "94d71491775e16440e408133db822bed43fa9c3c",
+   "sha": "83278a82331533e8c12df093ccca1d09892996e8",
    "date": "2026-11-07",
-   "subject": "Merge pull request #1205 from darknight11ish/feat/capability-answers-from-catalogue-2026-11-06"
+   "subject": "integration: docs/README count 416 -> 417 (one new doc in this wave: SELF-CODE-MAP.md; size intentionally untouched)"
   },
   {
-   "sha": "42791319b5547f6185ca74231538c9e1769b896a",
-   "date": "2026-11-06",
-   "subject": "Merge remote-tracking branch 'origin/main' into fix/agent-raises-cards-through-tools-2026-11-06"
+   "sha": "b3d440e1f329b112c31b647e0e91a7f74d10d7d0",
+   "date": "2026-11-07",
+   "subject": "integration: GitHub self-knowledge G1-G8 (Q6, LANE_SYSTEM untouched)"
   },
   {
-   "sha": "cf82f43023ecb1a18bd4d3408739fed54a7e2fdd",
-   "date": "2026-11-06",
-   "subject": "test(capability): the four owner questions #1208's aliases now name"
+   "sha": "c95479a664c038143ca453ba50134fabe93370b1",
+   "date": "2026-11-07",
+   "subject": "integration: repo watcher fixups (claims + job creation)"
   },
   {
-   "sha": "603147ff0c007650ec848c7bf688810fd90807df",
-   "date": "2026-11-06",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/capability-answers-from-catalogue-2026-11-06"
+   "sha": "262eb3a9127ffc12fcd53bb1099fce7be19fee6b",
+   "date": "2026-11-07",
+   "subject": "integration: chat/Live change parity - 60 tool switches, 116-option suite, LP-3 (Q2)"
   },
   {
-   "sha": "b3567a9c5747f40801db8d95b329073dba0d81fa",
-   "date": "2026-11-06",
-   "subject": "fix(desktop tests): the not-a-switch list is five tools now - the JS pins move with the Rust and phone pins"
+   "sha": "d733cf609315fee62abc820a12a786cb41793c28",
+   "date": "2026-11-07",
+   "subject": "integration: self-code map beside-file (Q5)"
   },
   {
-   "sha": "cb3127c53fc54de4e7ff2481992d48d672bb2a4f",
-   "date": "2026-11-06",
-   "subject": "docs(about): the claims register is 194 rows, 181 built - the About page quotes the same counts the checker reports"
+   "sha": "ad4df438aff50731716af0170efe46434bd62dcf",
+   "date": "2026-11-07",
+   "subject": "integration: seven #1209 audit fixes"
   },
   {
-   "sha": "01308e56bf942e2f6c8e9bad1f18ad21ed38b1cf",
-   "date": "2026-11-06",
-   "subject": "Merge pull request #1208 from darknight11ish/fix/catalogue-aliases-for-phrasing-2026-11-06"
+   "sha": "53c7069d0005d423a450bb731962dea4dd72ab43",
+   "date": "2026-11-07",
+   "subject": "integration: deterministic cloud-escalation chat switch"
   },
   {
-   "sha": "a2818d54f51874035e895c5b60bb5f14988cd714",
-   "date": "2026-11-06",
-   "subject": "fix(asks-first): the cloud-escalation label and no-switch note are the PC's own words, and both apps' fixtures are regenerated"
+   "sha": "fc47f888704cafdc785b71408e612890c9437050",
+   "date": "2026-11-07",
+   "subject": "feat(github): Jarvis knows its own GitHub - catalogue row, deterministic answers, accounts door"
   },
   {
-   "sha": "20f1f05b9b38f6dbe4cdcbd6b1d9d07675dcb1e0",
-   "date": "2026-11-06",
-   "subject": "Merge pull request #1207 from darknight11ish/feat/awareness-sanity-gate-2026-11-06"
+   "sha": "46d3ae0ae105e9b0edd2575514dcf472cf27099c",
+   "date": "2026-11-07",
+   "subject": "fix(parity): every switchable tool can be switched by chat and Jarvis Live"
   },
   {
-   "sha": "249ef08d3b4aa8f49594be02d5e01007ceda68cb",
-   "date": "2026-11-06",
-   "subject": "fix(desktop): the new cloud-escalation no-switch note is in TOOLS_NO_SWITCH, so the asks-first words pin matches the backend's fifth row"
+   "sha": "cde857925821d3641f7eded32971f1f86ee2b47c",
+   "date": "2026-11-07",
+   "subject": "feat(self-code): a generated map of Jarvis's own code, shipped beside the backend (2026-11-07)"
   },
   {
-   "sha": "fd2d68d4246798ebb870efba7cf85504d9fd97e7",
-   "date": "2026-11-06",
-   "subject": "fix(agent): an explicit action request reaches its gating tool instead of a refusal or a false claim"
+   "sha": "2979f45cafb6edea699146a47a7b6dea3b40d50d",
+   "date": "2026-11-07",
+   "subject": "fix(agent): fix the seven #1209 follow-up audit bugs, loosening no gate (2026-11-07)"
   },
   {
-   "sha": "7246bc27ab169a80c0afc852d7933c15a4eff518",
-   "date": "2026-11-06",
-   "subject": "fix(features): the owner's own words resolve to the right catalogue row"
+   "sha": "444f8debcc3690e171d31dd9c804cbd8eb1483db",
+   "date": "2026-11-07",
+   "subject": "fix(quick): route \"turn cloud escalation on/off\" in chat to the real switch (2026-11-07)"
   },
   {
-   "sha": "9ffbf9e8b5101e21bc863bd598be476f444698e8",
-   "date": "2026-11-06",
-   "subject": "feat(deploy): the 25-probe awareness sanity gate (Gate 11) for every future deploy"
+   "sha": "37d1befc83ffa6ea404e98c49531353aef1c5d27",
+   "date": "2026-11-07",
+   "subject": "feat(watch): a watch that polls - the scheduler kind behind \"watch X daily\""
   },
   {
-   "sha": "c48b7188826bd3903018ece71674f446a51ff0f6",
-   "date": "2026-11-06",
-   "subject": "Merge pull request #1204 from darknight11ish/fix/phone-read-aloud-memory-and-screen-2026-11-06"
+   "sha": "9b67948278ca2399940c9c9ae83090b4659bde42",
+   "date": "2026-11-07",
+   "subject": "integration: self-knowledge honesty bundle (task-3)"
   },
   {
-   "sha": "d94b95c444434f844190a9eb3bd58154f333ab44",
-   "date": "2026-11-06",
-   "subject": "Merge origin/main (PR #1203) into feat/capability-answers-from-catalogue-2026-11-06"
+   "sha": "fb25f2c74d23657bedb511611b8cf088dfcdba69",
+   "date": "2026-11-07",
+   "subject": "integration: GPU pinning manual steps + records (task-5)"
   },
   {
-   "sha": "b9c0654431e83c3c73bfd11c03b14a1fa03e8676",
-   "date": "2026-11-06",
-   "subject": "Merge pull request #1203 from darknight11ish/fix/self-awareness-phone-upload-notion-2026-11-06"
+   "sha": "b4308f580ded796fcc870f4854375f736dcd2c70",
+   "date": "2026-11-07",
+   "subject": "integration: per-repo GitHub watcher (task-1)"
   },
   {
-   "sha": "d83a5fd549d914f2455798db643d3f724c25146f",
-   "date": "2026-11-06",
-   "subject": "Merge branch 'feat/self-facts-and-safety-answers-2026-11-06' into feat/capability-answers-from-catalogue-2026-11-06"
+   "sha": "f2f1216304b8501f14bcaf330d45ad58a1a2cf94",
+   "date": "2026-11-07",
+   "subject": "docs(gpu): deploy the 11434 pin as a task-scoped logon task (Option C)"
   },
   {
-   "sha": "db27e8e1e76777af597f66cc2865c32474f5387f",
-   "date": "2026-11-06",
-   "subject": "Merge pull request #1202 from darknight11ish/fix/phone-hold-to-talk-authoritative-2026-11-06"
+   "sha": "2223bc28248040c533fed858d530b0214e0470d1",
+   "date": "2026-11-07",
+   "subject": "Merge pull request #1210 from darknight11ish/feat/three-gpu-presets-2026-11-07"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1370
+   "files": 1376
   },
   {
    "path": "jarvis-desktop/",
@@ -6207,17 +6240,17 @@
   {
    "path": "docs/",
    "line": "the documentation, the audits and the records",
-   "files": 488
+   "files": 489
   },
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 343
+   "files": 344
   },
   {
    "path": "tools/",
    "line": "the generators and checkers that keep the records true",
-   "files": 252
+   "files": 254
   },
   {
    "path": "videos/",
@@ -6227,12 +6260,12 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 212
+   "files": 221
   },
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 125
+   "files": 134
   },
   {
    "path": "plugins/",
@@ -6306,8 +6339,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5434,
-  "covered": 4969,
+  "tracked_files": 5462,
+  "covered": 4997,
   "excluded": 465,
   "subsystems": 27
  },

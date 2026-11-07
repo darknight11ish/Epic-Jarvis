@@ -7,7 +7,7 @@ with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 416 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 417 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
   Measure-Object -Property Length -Sum).Sum                             # about 11,885,415 bytes
 ```

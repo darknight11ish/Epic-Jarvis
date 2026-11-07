@@ -19,11 +19,11 @@ from pathlib import Path
 #: The newest user-visible changes on record, newest first. Each is the
 #: record's own bold title, with its trailing date removed.
 BULLETS = (
+    'The Coding preset now uses all three graphics cards',
     'Jarvis can say what changed, explain any setting, and no longer denies the abilities this PC really has',
-    'Jarvis answers its own measured facts and its six hard safety questions without the model',
-    "Jarvis knows about the phone's document and Notion doors",
-    'His own okay can read a memory or screen answer aloud on the phone - once, on his unlocked phone',
-    "Home's answer box on the phone scrolls instead of cutting a long reply off",
+    'Jarvis now knows the major parts of its own code, and where its own repository is',
+    'A repository watcher you can steer by voice or typing',
+    'The Ollama server on port 11434 is pinned to the headless RTX 2080 SUPER by UUID, and the CPU spill ends',
 )
 
 
