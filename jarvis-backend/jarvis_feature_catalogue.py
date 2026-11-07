@@ -3,7 +3,7 @@
 The owner's feature list, as data: 180 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 519f046d2f8d3fc32acf6ba522ff8385236aee8e32df9aa7593591ac1503ad5a); the apps' Features pages read their own
+`features/features.json` (sha256 f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "519f046d2f8d3fc32acf6ba522ff8385236aee8e32df9aa7593591ac1503ad5a"
+SOURCE_SHA256 = "f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1554,7 +1554,7 @@ FEATURES = (
         "asks": "Applying the Cloud row raises ONE change_own_config card; so does turning the standing switch on. Turning it off is instant. Every privacy gate still runs first, and the monthly money limit still applies.",
         "limit": "One cloud service at a time. Its key lives in Windows Credential Manager (presence only is shown, never the key or a fragment), is never logged or echoed, and goes only to that service's own host. No key, no monthly limit or no usable model means no cloud turn. Email, files, credentials, stored memory, a picture, your screen, a private question or a tainted conversation never go. The newest message's own words are what is sent, not the earlier conversation. A chat answer is from the local model unless a cloud turn was allowed; the UI says so on the card.",
         "surface": "both",
-        "aliases": ["cloud", "cloud api", "deepseek api", "escalate to the cloud", "try the cloud model", "sends a hard question to deepseek after i say yes"],
+        "aliases": ["cloud", "cloud api", "cloud preset", "deepseek api", "escalate to the cloud", "try the cloud model", "sends a hard question to deepseek after i say yes"],
         "covers": [],
     },
     {
