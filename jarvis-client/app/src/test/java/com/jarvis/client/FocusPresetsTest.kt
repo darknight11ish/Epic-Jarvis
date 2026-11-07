@@ -253,7 +253,7 @@ class FocusPresetsTest {
     }
 
     @Test
-    fun `Fast is qwen3_5_4b on the 2080 SUPER, and Coding is the heavy both-card preset`() {
+    fun `Fast is qwen3_5_4b on the 2080 SUPER, and Coding is the heavy three-card preset`() {
         val fast = requireNotNull(view.preset("fast"))
         assertEquals("qwen3.5:4b", fast.model)
         assertEquals("coding", fast.lane.key)
@@ -264,10 +264,10 @@ class FocusPresetsTest {
 
         val coding = requireNotNull(view.preset("coding"))
         assertEquals("qwen3-coder-30b-a3b-ud-q3-k-xl", coding.model)
-        assertEquals("both cards", coding.lane.card)
+        assertEquals("all three cards", coding.lane.card)
         assertEquals("pooled", coding.lane.key)
-        assertEquals(32768, coding.context)
-        assertTrue("Coding needs both cards while it runs", coding.heavyMode)
+        assertEquals(49152, coding.context)
+        assertTrue("Coding needs all three cards while it runs", coding.heavyMode)
         assertNull("no second worker is planned in this contract", coding.helper)
         // Heavy mode IS offered (2026-11-02): the PC's pooled both-card lane
         // applies it, so there is no blocker any more - and the cost it states
@@ -278,7 +278,7 @@ class FocusPresetsTest {
         )
         assertTrue(
             "the heavy cost is said in the PC's own words: ${FocusPresets.heavyCost(coding)}",
-            FocusPresets.heavyCost(coding).contains("both cards")
+            FocusPresets.heavyCost(coding).contains("all three cards")
                 && FocusPresets.heavyCost(coding).contains("paused"),
         )
         assertEquals("", FocusPresets.heavyCost(requireNotNull(view.preset("fast"))))

@@ -219,7 +219,7 @@ await check("heavy-mode Coding is OFFERED, with the PC's own cost beside it", as
   const heavy = item.details.find((d) => d.label === "Heavy mode");
   assert.ok(heavy, "the heavy cost is not among the row's details");
   assert.equal(heavy.value, coding.heavyWords);
-  assert.match(heavy.value, /both cards/i, heavy.value);
+  assert.match(heavy.value, /all three cards/i, heavy.value);
   assert.match(heavy.value, /paused/i, heavy.value);
   assert.doesNotMatch(heavy.value, /refuses|cannot be used/i,
     `Coding still says it cannot be used: ${heavy.value}`);

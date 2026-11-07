@@ -374,7 +374,7 @@ await check("the rail lists the PC's nine presets in the contract's order, title
   // A heavy preset cannot run, so its model line is the PC's own refusal
   // instead of a model it can never load (contract audit F1).
   assert.deepEqual(rows.map((r) => r.model),
-    FIXTURE.presets.map((p) => (p.heavy_mode === true ? "needs both cards" : p.model)),
+    FIXTURE.presets.map((p) => (p.heavy_mode === true ? "needs all three cards" : p.model)),
     "models drifted");
   assert.deepEqual(problems, []);
 });
@@ -427,13 +427,13 @@ await check("Coding is drawn AND can be applied: the PC's pooled both-card lane 
   const rows = await presetRows(page);
   await page.close();
   assert.equal(coding.disabled, false, "Coding is still not a live apply button");
-  assert.match(coding.title, /both cards at once as one pooled lane/,
+  assert.match(coding.title, /all three cards at once as one pooled lane/,
     `Coding does not say what it costs: ${coding.title}`);
   assert.match(coding.title, /paused/,
     `Coding does not say the other models pause: ${coding.title}`);
   assert.doesNotMatch(coding.title, /refuses|cannot be used/,
     `Coding still says it cannot be used: ${coding.title}`);
-  assert.match(coding.model, /needs both cards/, "Coding no longer says it needs both cards");
+  assert.match(coding.model, /needs all three cards/, "Coding no longer says it needs all three cards");
   assert.equal(state.applyBody && state.applyBody.preset, "coding",
     "the click did not reach POST /api/work/apply");
   assert.deepEqual(rows.filter((r) => r.pressed === "true").map((r) => r.id), ["coding"],
@@ -915,7 +915,7 @@ await check("the menu is called Presets and lists the PC's focus presets and ten
     "the presets' visible labels are not the PC's own titles");
   assert.deepEqual(menu.costs.map((r) => r.preset), ["coding"],
     `the heavy preset's cost is not said under it: ${JSON.stringify(menu.costs)}`);
-  assert.match(menu.costs[0].text, /needs both cards at once as one pooled lane/,
+  assert.match(menu.costs[0].text, /needs all three cards at once as one pooled lane/,
     `the PC's own heavy-mode sentence is missing: ${menu.costs[0].text}`);
   assert.match(menu.costs[0].text, /paused/,
     `the heavy cost does not say the other models pause: ${menu.costs[0].text}`);
