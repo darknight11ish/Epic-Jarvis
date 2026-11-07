@@ -67,6 +67,23 @@ class MemoryAloudTest {
     }
 
     @Test
+    fun `the row now says the typed Read aloud is covered too`() {
+        // The owner's decision of 2026-11-06: the same switch covers "Read
+        // aloud" on a typed answer, on this phone while it is unlocked. The row
+        // he reads must say so - it used to say "only the mic".
+        val on = MemoryAloud.describe(on = true)
+        assertTrue(on, "Read aloud" in on)
+        assertTrue(on, "typed" in on.lowercase())
+        // ...and the one thing it still does not cover: a screen answer, which
+        // is his separate one-off tap (ReadAloud.ANYWAY), never this setting.
+        assertTrue(on, "anyway" in on.lowercase())
+        val off = MemoryAloud.describe(on = false)
+        assertTrue(off, "Read aloud" in off)
+        assertTrue("the note still says whose setting it is", "this phone" in MemoryAloud.NOTE.lowercase())
+        assertTrue(MemoryAloud.NOTE, "Read aloud" in MemoryAloud.NOTE)
+    }
+
+    @Test
     fun `the memory sentence is plain words and the memory rule is the only one with it`() {
         assertEquals(
             "That answer used things I remember, so it's on your screen.",

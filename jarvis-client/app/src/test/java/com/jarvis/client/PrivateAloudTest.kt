@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.net.Heard
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.voice.MemoryAloud
 import com.jarvis.client.voice.PrivateAloud
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -454,5 +455,62 @@ class PrivateAloudTest {
                 unlockedAtPress = true,
             ),
         )
+    }
+
+    // ------------- the owner's own okay (his decision of 2026-11-06) --------
+
+    @Test
+    fun `the phone's setting still never lifts a screen read on the voice path`() {
+        // The 2026-11-06 one-off is a TYPED-answer action (ReadAloud). The
+        // voice path's screen rule stays the PC's own `screen_aloud` /
+        // `hands_free_screen`, and the phone's memory setting cannot pass it.
+        assertEquals(
+            PrivateAloud.Refusal.SCREEN,
+            PrivateAloud.refusal(
+                privateAloud = false, questionPrivate = false,
+                route = PrivateAloud.route(header("plain", injected = 3, sensitive = 0)),
+                toolRan = false, toolsKnown = true,
+                screenRead = true, screenAloud = false,
+                phoneMemoryAloud = true, talkButton = true, unlockedAtPress = true,
+            ),
+        )
+        // The same screen read WITHOUT injected facts: still a hard refusal.
+        assertEquals(
+            PrivateAloud.Refusal.SCREEN,
+            PrivateAloud.refusal(
+                privateAloud = false, questionPrivate = false,
+                route = PrivateAloud.route(header("plain")),
+                toolRan = false, toolsKnown = true,
+                screenRead = true, screenAloud = false,
+                phoneMemoryAloud = true, talkButton = true, unlockedAtPress = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `the memory line names the phone switch only while that switch is off`() {
+        // The 2026-11-05 sentence stays exactly what he knows, alone.
+        assertEquals(PrivateAloud.MEMORY_ON_SCREEN, PrivateAloud.refusalLine(PrivateAloud.Refusal.MEMORY))
+        assertEquals(
+            PrivateAloud.MEMORY_ON_SCREEN + " " + PrivateAloud.MEMORY_SWITCH_HINT,
+            PrivateAloud.refusalLine(PrivateAloud.Refusal.MEMORY, phoneMemoryAloud = false),
+        )
+        // Switch on: "turn it on" would be wrong, so only the sentence.
+        assertEquals(
+            PrivateAloud.MEMORY_ON_SCREEN,
+            PrivateAloud.refusalLine(PrivateAloud.Refusal.MEMORY, phoneMemoryAloud = true),
+        )
+        // Never for another refusal - the switch is not why those are refused.
+        assertEquals(
+            PrivateAloud.ON_SCREEN,
+            PrivateAloud.refusalLine(PrivateAloud.Refusal.SCREEN, phoneMemoryAloud = false),
+        )
+        assertEquals(
+            PrivateAloud.ON_SCREEN,
+            PrivateAloud.refusalLine(PrivateAloud.Refusal.TOOL, phoneMemoryAloud = false),
+        )
+        // The hint names the actual button on the settings row, in plain words.
+        assertTrue(PrivateAloud.MEMORY_SWITCH_HINT, "Read them out" in PrivateAloud.MEMORY_SWITCH_HINT)
+        assertEquals(MemoryAloud.TURN_ON, "Read them out")
     }
 }

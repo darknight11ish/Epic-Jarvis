@@ -25,6 +25,7 @@ class ReadAloudTest {
         screenRead: Boolean = false,
         stale: Boolean = false,
         locked: Boolean = false,
+        phoneMemoryAloud: Boolean = false,
     ) = ReadAloud.Facts(
         hasRoute = hasRoute,
         privateGate = privateGate,
@@ -35,6 +36,7 @@ class ReadAloudTest {
         screenRead = screenRead,
         stale = stale,
         locked = locked,
+        phoneMemoryAloud = phoneMemoryAloud,
     )
 
     @Test
@@ -106,7 +108,11 @@ class ReadAloudTest {
         // what that sentence says, so they draw nothing (their own screens carry
         // their own truth).
         assertEquals(ReadAloud.ON_SCREEN, facts(privateGate = true).withheld)
-        assertEquals(ReadAloud.ON_SCREEN, facts(injectedFacts = 1).withheld)
+        // A memory-only block says what happened (2026-11-05's sentence), not
+        // the bare line - and names the switch while it is off.
+        assertTrue(
+            facts(injectedFacts = 1).withheld.orEmpty().startsWith(ReadAloud.MEMORY_ON_SCREEN),
+        )
         assertEquals(ReadAloud.ON_SCREEN, facts(injectedSensitive = 1).withheld)
         assertEquals(ReadAloud.ON_SCREEN, facts(toolRan = true).withheld)
         assertEquals(ReadAloud.ON_SCREEN, facts(screenRead = true).withheld)
@@ -115,6 +121,145 @@ class ReadAloudTest {
         assertNull("a readable answer must not show a refusal", facts().withheld)
         assertNull("a locked phone is not the privacy sentence", facts(locked = true).withheld)
         assertNull("a stale link is not the privacy sentence", facts(stale = true).withheld)
+    }
+
+    // ------------- the owner's own okay (his decision of 2026-11-06) --------
+
+    @Test
+    fun `the phone's memory switch lets a typed answer with remembered facts be read`() {
+        // His 2026-11-05 setting used to cover only the talk button; his
+        // 2026-11-06 decision extends the same switch to "Read aloud" on this
+        // phone, under the same rule: the memory rule must be the ONLY blocker.
+        val memory = facts(injectedFacts = 3)
+        assertFalse("switch off: remembered facts stay on screen", memory.mayRead)
+        assertEquals(ReadAloud.Why.MEMORY, memory.why)
+        assertTrue(
+            "switch on, memory-only: it may be read",
+            memory.copy(phoneMemoryAloud = true).mayRead,
+        )
+        // ...and it is never readable on the switch alone if anything else is
+        // private. Each of these is one other blocker, not an opinion.
+        for (other in listOf(
+            "a sensitive fact" to memory.copy(injectedSensitive = 1, phoneMemoryAloud = true),
+            "a screen read" to memory.copy(screenRead = true, phoneMemoryAloud = true),
+            "a private gate" to memory.copy(privateGate = true, phoneMemoryAloud = true),
+            "a private tool" to memory.copy(toolRan = true, phoneMemoryAloud = true),
+            "an unknown tool stream" to memory.copy(toolsKnown = false, phoneMemoryAloud = true),
+            "a stale link" to memory.copy(stale = true, phoneMemoryAloud = true),
+            "a locked phone" to memory.copy(locked = true, phoneMemoryAloud = true),
+            "no route" to memory.copy(hasRoute = false, phoneMemoryAloud = true),
+        )) {
+            assertFalse(other.first, other.second.mayRead)
+        }
+        // A plain answer is unaffected either way.
+        assertTrue(facts(phoneMemoryAloud = true).mayRead)
+    }
+
+    @Test
+    fun `the one-off action is only for a memory-only or screen-only refusal, unlocked`() {
+        val memory = facts(injectedFacts = 2)
+        val screen = facts(screenRead = true)
+        assertTrue("remembered non-sensitive facts: the one-off is offered", memory.oneOffAt(unlockedNow = true))
+        assertTrue("a screen read: the one-off is offered", screen.oneOffAt(unlockedNow = true))
+        // Never while the phone is locked at the tap.
+        assertFalse(memory.oneOffAt(unlockedNow = false))
+        assertFalse(screen.oneOffAt(unlockedNow = false))
+        // Two blockers is one too many: the one-off would read past the second.
+        assertFalse(facts(injectedFacts = 2, screenRead = true).oneOffAt(unlockedNow = true))
+        assertFalse(facts(injectedFacts = 2, toolRan = true).oneOffAt(unlockedNow = true))
+        assertFalse(facts(screenRead = true, privateGate = true).oneOffAt(unlockedNow = true))
+        // A sensitive fact, a private tool, an unknown stream, a stale link and
+        // a locked phone are hard refusals.
+        for (other in listOf(
+            facts(injectedFacts = 2, injectedSensitive = 1),
+            facts(injectedFacts = 2, toolRan = true),
+            facts(injectedFacts = 2, toolsKnown = false),
+            facts(injectedFacts = 2, stale = true),
+            facts(injectedFacts = 2, locked = true),
+            facts(privateGate = true),
+            facts(hasRoute = false),
+        )) {
+            assertFalse(other.why.name, other.oneOffAt(unlockedNow = true))
+        }
+        // A readable answer has no refusal strip, so nothing to override.
+        assertFalse(facts().oneOffAt(unlockedNow = true))
+        assertNull(ReadAloud.Offer("an answer", facts()).oneOffLabel(unlockedNow = true))
+        assertEquals(ReadAloud.ANYWAY, ReadAloud.Offer("an answer", memory).oneOffLabel(unlockedNow = true))
+        assertNull(ReadAloud.Offer("an answer", memory).oneOffLabel(unlockedNow = false))
+    }
+
+    @Test
+    fun `the memory refusal says what happened and names the switch, every other keeps one line`() {
+        // The owner's report of 2026-11-06: a typed memory answer used to draw
+        // the bare "It's on your screen." - no reason, no switch.
+        val memoryLine = facts(injectedFacts = 2).withheld.orEmpty()
+        assertTrue(memoryLine, memoryLine.startsWith(ReadAloud.MEMORY_ON_SCREEN))
+        assertTrue("the switch that fixes it is named", "Read them out" in memoryLine)
+        // Switch on: the answer is readable, so there is no refusal line at all.
+        assertNull(facts(injectedFacts = 2, phoneMemoryAloud = true).withheld)
+        // Every other privacy refusal keeps the one fixed sentence and never
+        // names a switch.
+        for (other in listOf(
+            facts(privateGate = true),
+            facts(toolRan = true),
+            facts(screenRead = true),
+            facts(injectedSensitive = 1, injectedFacts = 2),
+            facts(hasRoute = false),
+        )) {
+            assertEquals(other.why.name, ReadAloud.ON_SCREEN, other.withheld)
+        }
+        // Locked and stale draw nothing (their own screens say their truth).
+        assertNull(facts(locked = true).withheld)
+        assertNull(facts(stale = true).withheld)
+    }
+
+    @Test
+    fun `the blockers are the whole ladder, in the voice path's order`() {
+        // The order is not decoration: `why` and `withheld` report the first
+        // one, so a sensitive fact must outrank a screen read and the memory
+        // rule, and a lock and a stale link outrank both.
+        assertEquals(emptyList<ReadAloud.Why>(), facts().blockers)
+        assertEquals(
+            listOf(
+                ReadAloud.Why.SENSITIVE,
+                ReadAloud.Why.SCREEN,
+                ReadAloud.Why.PRIVATE_GATE,
+                ReadAloud.Why.MEMORY,
+                ReadAloud.Why.TOOL,
+                ReadAloud.Why.TOOLS_UNKNOWN,
+            ),
+            facts(
+                injectedFacts = 3,
+                injectedSensitive = 1,
+                screenRead = true,
+                privateGate = true,
+                toolRan = true,
+                toolsKnown = false,
+            ).blockers,
+        )
+        assertEquals(
+            listOf(ReadAloud.Why.LOCKED, ReadAloud.Why.OFFLINE, ReadAloud.Why.NO_ROUTE),
+            facts(hasRoute = false, stale = true, locked = true).blockers,
+        )
+    }
+
+    @Test
+    fun `the words of the 2026-11-06 doors are plain and quote nothing`() {
+        assertEquals(
+            "That answer used things I remember, so it's on your screen.",
+            ReadAloud.MEMORY_ON_SCREEN,
+        )
+        assertEquals("Read it aloud anyway", ReadAloud.ANYWAY)
+        assertEquals(
+            "To hear these every time, turn on \"Read them out\" in Voice settings.",
+            ReadAloud.MEMORY_SWITCH_HINT,
+        )
+        for (word in listOf("injected", "route", "gate", "memory_aloud", "JSON")) {
+            assertFalse(word, word.lowercase() in ReadAloud.MEMORY_SWITCH_HINT.lowercase())
+        }
+        // The action's words say what the tap does and nothing about the answer.
+        assertFalse(ReadAloud.ANYWAY.contains("\n"))
+        assertTrue("the action is a tap, not a setting", "aloud" in ReadAloud.ANYWAY.lowercase())
     }
 
     // --- the sentences ------------------------------------------------------

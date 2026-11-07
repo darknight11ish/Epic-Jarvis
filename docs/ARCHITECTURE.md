@@ -2876,12 +2876,14 @@ backend routes, in both directions; the rest are listed here only.
   for this one case, and the phone's own setting is: Settings, Voice, "Read out
   answers that use what Jarvis remembers". It is saved on the phone
   (`data/ClientSettings.readMemoriesAloud`) and never sent to the PC; it is OFF
-  by default; it covers only the mic press on this phone, and only when the
+  by default; it covers the mic press on this phone (and, since the owner's
+  decision of 2026-11-06, a typed answer read aloud on it), and only when the
   phone was unlocked at that press (the keyguard is read once, at the press,
   and never again); and it lifts ONLY the remembered-facts refusal - a
   sensitive saved fact, a private question, the router's private gate, a
-  private tool and an answer about the screen all still keep the answer on
-  screen. There is no desktop switch and none is wanted: the PC's own
+  private tool and a screen read on the VOICE path all still keep the answer on
+  screen (the typed path's own one-off is the next bullet). There is no desktop
+  switch and none is wanted: the PC's own
   `memory_aloud` (its setting AND a real voice check) still decides what the
   PC reads, and a desktop switch here would be a second control for a button
   the desktop does not have. The phone's refusals also have honest words now:
@@ -2893,6 +2895,32 @@ backend routes, in both directions; the rest are listed here only.
   they keep on screen, which is the shared table's word and is left exactly as
   it is (`contract/private-aloud-cases.json` is untouched). No route is added,
   so `tools/check_parity.py` classifies nothing new.
+
+- **The phone's one-off "Read it aloud anyway", and its memory switch covering
+  typed answers, are the phone's, and that is one-sided on purpose** (2026-11-06;
+  the owner's report: *"my Android jarvis app was still not reading different
+  things out loud because it said it was on my screen and because it's from
+  jarvis's memories even though it's okay to read these ones out loud"*). The
+  typed "Read aloud" path had no setting of its own at all: a typed answer
+  carries only `X-Jarvis-Route` (`gate`, `injected_facts`, `injected_sensitive`)
+  and no `memory_aloud`, so an answer that used what Jarvis remembers was
+  refused with the bare line however his PC was set. The owner's 2026-11-05
+  phone switch now covers that path too, under the same three facts (this phone,
+  unlocked, nothing else private), and a one-off "Read it aloud anyway" action
+  on the refusal strip covers exactly two refusals - remembered NON-sensitive
+  facts, or a screen read - for one answer, once, on his tap, while the phone is
+  unlocked and the link is live; it is never drawn for a sensitive fact, a
+  private tool, a stale link or a locked phone, and nothing is stored afterwards
+  (`voice/ReadAloud.kt` `Facts.oneOffAt`, `Offer.oneOffLabel`). **The desktop is
+  deliberately not changed:** its HUD per-answer speaker and typed read-aloud
+  keep their own `private-speech.js` path and its PC settings, the PC's
+  `memory_aloud` (setting AND a voice check) still decides what the PC says, and
+  the shared `contract/private-aloud-cases.json` table is untouched - the phone's
+  one-off is not a rule any desktop surface follows, so it is not ported. The
+  memory sentence and its "Read them out" switch hint are the phone's words on
+  both of its own paths; the desktop's bar and HUD still say the shared
+  "It's on your screen." No route, field, card or PC setting is added, so
+  `tools/check_parity.py` classifies nothing new.
 
 - **The mouth, the ears and the SMS hand of hands-free are the phone's, and that
   is one-sided on purpose** (2026-11-04; the owner's request: *"a hands-free

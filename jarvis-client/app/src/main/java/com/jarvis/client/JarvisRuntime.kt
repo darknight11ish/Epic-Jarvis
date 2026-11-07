@@ -9452,6 +9452,35 @@ object JarvisRuntime {
     /** True while a read-aloud clip is playing (the control says Stop). */
     val readingAloud: StateFlow<Boolean> = _readingAloud.asStateFlow()
 
+    private val _readAloudUnlocked = MutableStateFlow(false)
+
+    /**
+     * True while the phone was UNLOCKED at the last live check: no screen lock
+     * and App lock not asking for the fingerprint.
+     *
+     * This is what the one-off "Read it aloud anyway" action (the owner's
+     * decision of 2026-11-06) is drawn against - a control for his own tap on
+     * his unlocked phone must not be on screen for a locked one. It is a
+     * convenience for the DRAWING only: the tap itself asks the live question
+     * again ([readAloudLastAnswer]), so a phone that locked after the answer
+     * arrived can never be talked into reading it.
+     *
+     * Refreshed when a typed answer is recorded, when this screen starts or
+     * stops (MainActivity's lifecycle observer), and at the tap. Fail closed:
+     * false until something says otherwise, so the one-off is never drawn on
+     * the strength of a promise.
+     */
+    val readAloudUnlocked: StateFlow<Boolean> = _readAloudUnlocked.asStateFlow()
+
+    /** Re-reads the live lock for [readAloudUnlocked]. Cheap; safe to call often. */
+    fun refreshReadAloudUnlocked() {
+        _readAloudUnlocked.value = !readAloudLockedNow()
+    }
+
+    /** The link is down or stale now: nothing new can be fetched (the typed path's `OFFLINE`). */
+    private fun readAloudStaleNow(): Boolean =
+        _link.value != LinkState.CONNECTED || _stale.value
+
     /** The tool-run watch the voice path already uses, read the same way. */
     private fun readAloudWatch(): com.jarvis.client.voice.PrivateAloud.Watch =
         com.jarvis.client.voice.PrivateAloud.Watch(
@@ -9516,11 +9545,20 @@ object JarvisRuntime {
             toolRan = com.jarvis.client.voice.PrivateAloud.toolRan(start, now),
             toolsKnown = com.jarvis.client.voice.PrivateAloud.toolsKnown(start, now),
             screenRead = com.jarvis.client.voice.PrivateAloud.screenRead(start, now),
-            stale = _link.value != LinkState.CONNECTED || _stale.value,
+            stale = readAloudStaleNow(),
             // A locked phone never speaks: the screen lock, or App lock
             // wanting the fingerprint again (the rule "Hear it" already uses).
             locked = readAloudLockedNow(),
+            // The phone's own setting of 2026-11-05, which the owner's
+            // decision of 2026-11-06 extended to this typed path: it lifts
+            // ONLY the remembered-facts rule, and only when that is the only
+            // blocker (ReadAloud.Facts.mayRead).
+            phoneMemoryAloud = settings.readMemoriesAloud.value,
         )
+        // The same answer the facts were built from: what the one-off action
+        // may be drawn against. Never a second lock read that could disagree
+        // with `facts.locked`.
+        _readAloudUnlocked.value = !facts.locked
         val text = answer?.trim().orEmpty()
         if (text.isNotEmpty()) {
             _readAloud.value = com.jarvis.client.voice.ReadAloud.Offer(text, facts)
@@ -9535,10 +9573,32 @@ object JarvisRuntime {
      * [com.jarvis.client.voice.ReadAloud.READ_ALOUD_SENTENCE_CAP]) and it plays
      * here. Returns the one sentence to show when it did not speak; "" when it
      * (or was stopped on purpose).
+     *
+     * [oneOff] is the refusal strip's own "Read it aloud anyway" action (the
+     * owner's decision of 2026-11-06): it reads THIS answer once, on this tap,
+     * and nothing at all is stored afterwards - it is not a setting and not a
+     * standing grant. It is allowed only when the answer's ONLY blockers are
+     * remembered non-sensitive facts or a screen read
+     * ([com.jarvis.client.voice.ReadAloud.Facts.oneOffAt]), and only while the
+     * phone is unlocked and the link is fresh at the tap itself: a lock or a
+     * stale link is never overridable, and every other refusal keeps its one
+     * line and offers nothing.
      */
-    suspend fun readAloudLastAnswer(): String {
+    suspend fun readAloudLastAnswer(oneOff: Boolean = false): String {
         val offer = _readAloud.value ?: return com.jarvis.client.voice.ReadAloud.NOTHING
-        if (!offer.mayRead) return offer.refusal ?: com.jarvis.client.voice.ReadAloud.ON_SCREEN
+        if (oneOff) {
+            // The drawing was a moment ago; the tap is now. Ask the live
+            // questions first, and fail closed.
+            val lockedNow = readAloudLockedNow()
+            _readAloudUnlocked.value = !lockedNow
+            if (lockedNow) return com.jarvis.client.voice.ReadAloud.LOCKED
+            if (readAloudStaleNow()) return com.jarvis.client.voice.ReadAloud.OFFLINE
+            if (!offer.facts.oneOffAt(unlockedNow = true)) {
+                return offer.refusal ?: com.jarvis.client.voice.ReadAloud.ON_SCREEN
+            }
+        } else if (!offer.mayRead) {
+            return offer.refusal ?: com.jarvis.client.voice.ReadAloud.ON_SCREEN
+        }
         if (_readingAloud.value) return ""
         if (voice.speakerBusy()) return com.jarvis.client.voice.ReadAloud.BUSY
         val sentences = com.jarvis.client.voice.ReadAloud.sentences(offer.text)
@@ -9558,6 +9618,7 @@ object JarvisRuntime {
                 // app leaves the screen - the phone locking, HOME, another app -
                 // which covers a lock landing in the middle of one clip.
                 if (readAloudLockedNow()) {
+                    _readAloudUnlocked.value = false
                     stopReadingAloud()
                     return ""
                 }
