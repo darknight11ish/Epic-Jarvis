@@ -16380,9 +16380,9 @@ _PHONE_WORDS = re.compile(r"\b(?:phone|android|mobile)\b", re.I)
 PHONE_SWITCH_CORRECTION = (
     "(That switch is on your phone, not on this PC: open Jarvis on the phone, then "
     "Settings and the Voice screen, and turn on \"Read out answers that use what "
-    "Jarvis remembers\". It is off by default, it covers only the mic on that phone "
-    "while it is unlocked, and nothing on this PC is changed by it - so there is no "
-    "approval card for it here.)")
+    "Jarvis remembers\". It is off by default, it covers the mic and a typed answer's "
+    "\"Read aloud\" on that phone while it is unlocked, and nothing on this PC is "
+    "changed by it - so there is no approval card for it here.)")
 
 
 def _phone_only_switch_line(owner_words: str) -> str:
@@ -16402,8 +16402,14 @@ def _phone_only_switch_line(owner_words: str) -> str:
 #: decides whether it is off - never a guess about the answer.
 _OFF_TOOL_ASKS = (
     # (request pattern, tool, what the switch is called in Settings -> Tools)
-    (re.compile(r"\b(?:send|write)\b[^.!?\n]{0,40}?\b(?:e-?mail|mail)\b"
-                r"|\b(?:e-?mail|mail)\b[^.!?\n]{0,30}?\b(?:and\s+)?send\b", re.I),
+    # SEND, not "write": a request to WRITE an email is `draft_email`'s own door,
+    # and this line's "nothing ran" is false once a draft really ran. The label
+    # below is only a fallback - the real Settings -> Tools row is quoted at
+    # answer time by `_settings_tool_label` (2026-11-07, #1209 audit).
+    (re.compile(r"\b(?:send|sending|sent)\b(?:[^.!?\n]|\.(?=\S)){0,80}?"
+                r"\b(?:e-?mail|mail)\b"
+                r"|\b(?:e-?mail|mail)\b(?:[^.!?\n]|\.(?=\S)){0,80}?"
+                r"\b(?:and\s+)?(?:send|sending|sent)\b", re.I),
      "send_email",
      "Sending one email (off until you switch it on)"),
     (re.compile(r"\b(?:install|add|load)\b[^.!?\n]{0,40}?"
@@ -16411,6 +16417,26 @@ _OFF_TOOL_ASKS = (
      PACK_INSTALL_TOOL,
      "Installing a skill pack from a folder or .zip"),
 )
+
+
+def _settings_tool_label(tool: str, fallback: str) -> str:
+    """The tool's own row label in Settings -> Tools, or `fallback` when that
+    page's module cannot be imported here.
+
+    Quoted, never paraphrased: the settings page builds each row's title with
+    `jarvis_asks_first.tool_label`, which reads its words from
+    `jarvis_reach.TOOL_NAMES`, so a correction that says "Settings, Tools,
+    \"<label>\"" names the row the owner will actually look for.
+    """
+    try:
+        import jarvis_asks_first as AF
+        label = str(AF.tool_label(tool) or "").strip()
+        if label:
+            return label
+    except Exception:                                        # noqa: BLE001
+        pass
+    return fallback
+
 
 OFF_TOOL_CORRECTION = (
     "(The {what} tool is switched off on this PC, so nothing ran and no approval "
@@ -16423,9 +16449,9 @@ _NO_URL_INSTALL = re.compile(
     r"\b(?:https?://|www\.)\S+", re.I)
 
 NO_URL_INSTALL_LINE = (
-    "(A skill pack or plugin is added from a file or folder on this PC - Settings, "
-    "Tools, then the pack's own installer - never downloaded from a link, so "
-    "nothing was fetched from that address.)")
+    "(A skill pack or plugin is added from a file or folder on this PC - ask me in "
+    "chat to install it from a folder or a .zip, and the scan and its one card happen "
+    "there - never downloaded from a link, so nothing was fetched from that address.)")
 
 
 def _off_tool_lines(owner_words: str, steps, enabled=None) -> list:
@@ -16457,8 +16483,14 @@ def _off_tool_lines(owner_words: str, steps, enabled=None) -> list:
             continue
         if not rx.search(words):
             continue
+        if tool == "send_email" and _ran_any(steps, ("draft_email",)):
+            # A draft really ran this turn: the request was to WRITE one and
+            # this line's "nothing ran" would be false (2026-11-07, #1209
+            # audit - a draft-only request used to get the send-tool line).
+            continue
         what = ("email" if tool == "send_email" else "skill pack")
-        out.append(OFF_TOOL_CORRECTION.format(what=what, label=label))
+        out.append(OFF_TOOL_CORRECTION.format(
+            what=what, label=_settings_tool_label(tool, label)))
         if tool == PACK_INSTALL_TOOL and _NO_URL_INSTALL.search(words):
             out.append(NO_URL_INSTALL_LINE)
         break
@@ -16513,6 +16545,14 @@ _MEMORY_FORGET_ASK = re.compile(
     r"|\b(?:delete|remove)\b[^.!?\n]{0,30}?\b(?:memory|memories|saved\s+fact)\b",
     re.I)
 
+#: "Don't forget this fact" is a request to REMEMBER it, not to forget it. The
+#: negation is read in the words immediately before the verb, so the correction
+#: never fires on it (2026-11-07, found by the #1209 audit: the pattern alone
+#: matched, and the answer told the owner it could not remove the fact).
+_MEMORY_FORGET_NEGATED = re.compile(
+    r"\b(?:do\s+not|don['\u2019]?t|does\s+not|doesn['\u2019]?t|never|"
+    r"won['\u2019]?t|will\s+not)\s+(?:ever\s+)?$", re.I)
+
 MEMORY_FORGET_CORRECTION = (
     "(I cannot remove a single saved fact from chat - there is no tool for that, "
     "so no approval card can be raised here. Open the Memory screen (Brain, "
@@ -16522,7 +16562,11 @@ MEMORY_FORGET_CORRECTION = (
 
 def _memory_forget_line(owner_words: str) -> str:
     """"Forget this fact" answered with its real door, or "" for anything else."""
-    if _MEMORY_FORGET_ASK.search(str(owner_words or "")):
+    text = str(owner_words or "")
+    for match in _MEMORY_FORGET_ASK.finditer(text):
+        if _MEMORY_FORGET_NEGATED.search(
+                text[max(0, match.start() - 24):match.start()]):
+            continue
         return MEMORY_FORGET_CORRECTION
     return ""
 
@@ -17020,8 +17064,10 @@ def _cloud_call(args: dict, call: dict, convo: list, steps: list, say_step,
       1. a turn shaped by outside text changes nothing (SETTINGS_AFTER_OUTSIDE) -
          the same STRICTER rule the settings tool applies, never looser: a page
          or an email must not be able to turn on a standing grant;
-      2. the card limit is honoured BEFORE the card is raised, so one answer
-         cannot ask the owner six times (CARDS_PER_TURN);
+      2. the card limit is honoured BEFORE the card is raised, and ONLY for the
+         request that asks for one - an ON while the switch is off - so one
+         answer cannot ask the owner six times (CARDS_PER_TURN) while an OFF,
+         or an ON that is already on, is never refused by it;
       3. a value that is not "on"/"off" is answered in words with no card;
       4. the module's own result is what goes back to the model, so the answer
          can only repeat what really happened - `changed` is False while a card
@@ -17045,9 +17091,6 @@ def _cloud_call(args: dict, call: dict, convo: list, steps: list, say_step,
 
     if _settings_turn_is_shaped(watch):
         return stop(SETTINGS_AFTER_OUTSIDE)
-    limit = _card_limit(watch, name)
-    if watch.cards >= limit:
-        return stop(CARD_LIMIT_ERROR.format(n=limit))
     want = str(args.get("action") or "").strip().lower()
     if want not in ("on", "off"):
         return stop("refused: the action has to be \"on\" or \"off\". Nothing was "
@@ -17057,6 +17100,16 @@ def _cloud_call(args: dict, call: dict, convo: list, steps: list, say_step,
     except Exception as exc:                                # noqa: BLE001
         return stop(f"the cloud settings are not available here "
                     f"({type(exc).__name__}), so nothing was changed.", "unknown")
+    # CARDS_PER_TURN applies to the ONE case that ASKS for a card: turning the
+    # switch ON while it is OFF. OFF is a tightening and needs no card, and an
+    # ON on a switch that is already on is a no-op the module answers with
+    # `card: False` - so neither may ever be refused by a limit about cards
+    # (2026-11-07, found by the #1209 audit: the limit was read before the
+    # action was, so a card-full answer refused an instant OFF in words).
+    if want == "on" and not P.escalate_on():
+        limit = _card_limit(watch, name)
+        if watch.cards >= limit:
+            return stop(CARD_LIMIT_ERROR.format(n=limit))
     out.set_status("approval")
     try:
         status, body = P.cloud_escalate(on=(want == "on"), gate_check=checker)
@@ -17072,7 +17125,8 @@ def _cloud_call(args: dict, call: dict, convo: list, steps: list, say_step,
         # CARDS_PER_TURN like any other card this answer asked for.
         watch.cards += 1
     changed = bool(body.get("changed"))
-    ok = bool(body.get("ok")) and changed
+    ok_body = bool(body.get("ok"))
+    ok = ok_body and changed
     now_on = body.get("on")
     said = str(body.get("message") or body.get("error") or "")
     if ok and carded:
@@ -17081,6 +17135,15 @@ def _cloud_call(args: dict, call: dict, convo: list, steps: list, say_step,
     elif ok:
         # OFF is instant and needs no card: "auto" is exactly what the gate
         # reports for a change that needed no card (see _settings_call).
+        steps.append({"tool": name, "ran": True, "ok": True, "outcome": "auto"})
+        say_step("tool_finished", name, ok=True)
+    elif ok_body and not carded:
+        # The switch was ALREADY in the asked state: nothing changed, and there
+        # was no card to answer. That is a finished call, not a refusal - the
+        # module's own words ("Escalation is already on.") go back to the model,
+        # and the step stays in the list, so `tools_ran` and both apps see the
+        # call that really happened instead of "cloud_escalation not allowed"
+        # (2026-11-07, found by the #1209 audit).
         steps.append({"tool": name, "ran": True, "ok": True, "outcome": "auto"})
         say_step("tool_finished", name, ok=True)
     elif carded:

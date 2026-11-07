@@ -612,12 +612,20 @@ answers that refused in words or sent him to Windows settings. The rule that
 follows from it, and the one the next change must keep:
 
 - **A tool's own card is the gate, and the model's job is to reach it.** When
-  the owner asks for something a tool does, the model CALLS that tool
-  (`jarvis_agent.LANE_SYSTEM` says so in those words, and the Modelfile's SYSTEM
-  block carries the same sentence). Nothing is auto-approved: the card still
+  the owner asks for something a tool does, the model CALLS that tool: the
+  "call it, do not ask first" instruction lives in each tool's own description
+  (`jarvis_agent.TOOLS[...].schema()["function"]["description"]` - the settings
+  and cloud-escalation texts both carry it), not in `jarvis_agent.LANE_SYSTEM`.
+  The merged change leaves the rules byte-identical to `main`, including the
+  old sentence "You do not send email, edit files, or run commands yourself":
+  the 2026-11-06 draft that would have rewritten them was reverted before merge,
+  because it broke the three-copy character pin and the block's 1,800-token cap,
+  and none of the six doors needed it. A 9B model can read that old sentence as
+  *I cannot*, which is why the instruction that works is the one in each tool's
+  own description. The same PR's test pins this arrangement -
+  `backend/test_action_requests_reach_the_gate.py`, "the rules are main's own -
+  the 2026-11-06 rewrite was reverted". Nothing is auto-approved: the card still
   decides, and "waiting for your yes" is the honest wording while one is up.
-  The old rule sentence - "You do not send email, edit files, or run commands
-  yourself" - was read by a 9B model as *I cannot*, and is gone.
 - **A tool that ships switched off is named, not denied.** Sending one email and
   installing a skill pack are real, card-first tools that are absent from the
   shipped `[tools].enabled`. The answer names the Settings -> Tools switch
