@@ -544,27 +544,36 @@ def t_the_measured_false_sentences_are_corrected():
 
 
 # --------------------------------------------------------------------------
-#   THE PROMPT AND THE TOOLS SAY SO, so the model chooses the door
+#   THE TOOL TEXTS SAY SO, so the model chooses the door
 # --------------------------------------------------------------------------
 def t_the_rules_tell_the_model_to_call_the_tool():
+    """WHAT ACTUALLY SHIPS (2026-11-07): the instruction lives in the tool texts.
+
+    The 2026-11-06 draft of this PR also rewrote LANE_SYSTEM's third rule
+    paragraph and added two capability bullets. That rewrite was reverted before
+    merge: it broke `test_character`'s three-copy pin (LANE_SYSTEM is the
+    Modelfile's SYSTEM block and `jarvis_profiles.JARVIS_SYSTEM`, word for
+    word) and pushed the block past its 1,800-token cap. None of the feature's
+    six doors depended on it - each is reached from its tool's own description
+    - so this test pins the arrangement that really ships: main's rules
+    unchanged, and the "call it, do not ask first" instruction in the tool
+    texts. Keeping the rewritten rules would have meant editing the character
+    pins instead; the revert was the smallest honest change (handoff section 4).
+    """
+    import re
     rules = AG.LANE_SYSTEM
-    check("the rules say to CALL the tool, not to refuse in words",
-          "CALL THAT TOOL" in rules and "do not answer that you cannot do it" in rules,
+    check("the rules are main's own - the 2026-11-06 rewrite was reverted",
+          "CALL THAT TOOL" not in rules
+          and "The earlier messages in this chat are in front of you" not in rules,
           rules[:400])
-    check("the old sentence that made 'I do not send email' correct is gone",
-          "You do not send email, edit files, or run commands yourself" not in rules)
-    check("the rules say the card is what allows a change",
-          "the card is the only thing that allows a change" in rules)
-    check("the rules name the phone-only switch and forbid a card for it",
-          "A switch that belongs to the phone app is on the PHONE" in rules
-          and "never raise a card for it" in rules)
-    check("the rules say the earlier messages are in front of it",
-          "The earlier messages in this chat are in front of you" in rules)
+    check("...and the old 'you do not send/edit yourself' rule is still there",
+          "You do not send email, edit files, or run commands yourself" in rules)
     modelfile = (REPO / "backend" / "jarvis-primary.Modelfile").read_text(
         encoding="utf-8")
-    check("the Modelfile's SYSTEM block carries the same words",
-          "CALL THAT TOOL" in modelfile and
-          "A switch that belongs to the phone app is on the PHONE" in modelfile)
+    m = re.search(r'^SYSTEM """(.*?)"""', modelfile, re.S | re.M)
+    check("the Modelfile's SYSTEM block is the same rules, word for word",
+          m is not None and m.group(1) == rules,
+          "they differ: copy the block again")
 
     text = AG.TOOLS[AG.ESCALATION_TOOL].schema()["function"]["description"]
     check("the cloud tool's text says to call it, in any words",
@@ -573,6 +582,8 @@ def t_the_rules_tell_the_model_to_call_the_tool():
     check("...and that ON is ONE card and OFF is instant",
           "raises ONE approval card" in text and "off\" is instant" in text, text)
     settings = AG.TOOLS[AG.SETTINGS_TOOL].schema()["function"]["description"]
+    check("the settings tool says to call it, do not ask first",
+          "do not ask first, just call it" in settings, settings[:200])
     check("the settings tool says the model never changes a setting itself",
           "you never change it yourself" in settings, settings[-200:])
 
