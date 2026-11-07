@@ -1,0 +1,8 @@
+                "id": rid,
+                "state": "approved" if route == "/api/approve" else "denied",
+                "error": None if ok else "already decided, expired, or unknown id",
+                "note_kept": bool(note_kept),
+                "note_why": str(note_why or ""),
+            })
+
+        if route != "/api/chat":

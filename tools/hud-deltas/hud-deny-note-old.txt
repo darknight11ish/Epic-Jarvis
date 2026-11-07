@@ -1,0 +1,6 @@
+            rid = str(body.get("id") or "").strip()[:64]
+            if not rid:
+                return self._send(400, {"error": "no id"})
+            try:
+                ok = jarvis_gate.decide(rid, route == "/api/approve",
+                                        by=str(body.get("by") or "hud")[:64])

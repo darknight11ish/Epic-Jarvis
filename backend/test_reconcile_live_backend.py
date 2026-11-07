@@ -95,6 +95,23 @@ real PC:
      names for a fix that lives in the published base and in no patch. Fixture copies
      of both live files prove absent -> four inserts, present -> none, and the generic
      lines alone -> still ABSENT.
+  15. the 2026-11-06 deploy gap, the two ways the tool could not reach a change:
+      PR #1197 (`feat/approval-card-polish-2026-11-06`) changed the PUBLISHED BASE
+      only - the hidden-byte/cost card fields in `jarvis-backend/jarvis_gate.py` and
+      the `/api/deny` note hand-off in `jarvis-backend/jarvis_hud.py` - and no
+      `backend/*.patch` carries them, so the stack walk would report every patch
+      present and the run would finish clean with the owner's live HUD still missing
+      the whole change. That is a SILENT miss, not a refusal; the fix is four literal
+      deltas (two REPLACE pairs in `jarvis_hud.py`, two anchored inserts in
+      `jarvis_gate.py`). PR #1198 adds a BRAND-NEW patch,
+      `backend/activity-turn-guard.patch` (six hunks, all `jarvis_hud.py`), which had
+      no rule - and the tool REFUSES loudly when a patch is absent, touches a patched
+      file and has no rule, so this one would have blocked the deploy. Its fix is
+      `"hunks": True` with one post-image probe per hunk. The tests build every
+      fixture from the real files this ref holds (and reverse PR 2's blocks out of the
+      published base once #1197 has merged, so the whole-file comparison is against a
+      file this repository holds, never against a copy of the delta); the activity
+      test says SKIPPED, never "ok", until #1198's patch file is in the tree.
 
 NOTHING HERE TOUCHES THE REAL LIVE FOLDER. Every path is under a temporary directory; the
 only real repository files read are `scripts/apply-patches.ps1`, the patches the deploy
@@ -102,9 +119,10 @@ uses, and the published base files under `jarvis-backend/` - used as realistic F
 (a file that already carries the old text, and the pre-image the hunk rules are checked
 on), never as the reference presence is proved against (section 11 says why). The
 ref-read proof builds its own two-commit git repository under a temporary folder, and the
-`git apply` oracle in section 11 does the same. The one test that can name a real live
-folder (`t_the_real_live_gate_gets_the_guards_read_only`) is read-only, is driven by
-`JARVIS_LIVE_BACKEND`, and SKIPS when that is unset - which is how CI runs it.
+`git apply` oracle in section 11 does the same. The tests that can name a real live
+folder (`t_the_real_live_gate_gets_the_guards_read_only` and the 2026-11-06 one at
+the end) are read-only, are driven by `JARVIS_LIVE_BACKEND`, and SKIP when that is
+unset - which is how CI runs them.
 """
 from __future__ import annotations
 
@@ -222,6 +240,27 @@ MINI_HUD += (
     "        if path in (\"/\", \"/index.html\"):\n"
     "            return None\n"
     "        return None\n"
+)
+
+
+# 2026-11-06 (PR 2): the /api/deny route region the four literal card-field
+# deltas replace / reply to. The owner's live HUD holds these lines exactly once,
+# and every fixture that plans the whole table with literals=True needs them -
+# the same gap the anchors above fill. The `except`/`return` lines AROUND the two
+# OLD blocks are fixture code, not delta text: they keep the stand-in compilable
+# and are never part of a block file.
+MINI_HUD += (
+    "\n\n"
+    "def _approve_and_deny_route(self, route, body, jarvis_gate):\n"
+    "    if True:\n"
+    "        if True:\n"
+    + "\n".join(R._delta_lines(R.HUD_DENY_NOTE_OLD_FILE)) + "\n"
+    "            except Exception:\n"
+    "                return None\n"
+    "            return self._send(200 if ok else 409, {\n"
+    "                \"ok\": ok,\n"
+    + "\n".join(R._delta_lines(R.HUD_DENY_REPLY_OLD_FILE)) + "\n"
+    "            return None\n"
 )
 
 
@@ -1863,6 +1902,27 @@ MINI_GATE = (
     "    # nothing is asked.\n"
     '    "revoke_web_search_grant": ("yes", "local", "stops the grant"),\n'
     "})\n"
+)
+
+
+# 2026-11-06 (PR 2): the two gate regions the literal card-field entries insert
+# into - the `# Strictness order` comment the helpers go in front of, and the
+# `out.append(d)` line the two `pending()` fields go in front of. Fixture code
+# only: the live file's own text, with none of the new block.
+MINI_GATE += (
+    "\n"
+    "\n"
+    "# Strictness order. A prompt that matches several patterns is judged by the\n"
+    "# strongest one, never the weakest.\n"
+    "_RANK = {\"auto\": 0, \"notify\": 1, \"ask\": 2, \"never\": 3}\n"
+    "\n"
+    "\n"
+    "def pending_with_card_fields():\n"
+    "    rows = []\n"
+    "    out = []\n"
+    "    for d in rows:\n"
+    "        out.append(d)\n"
+    "    return out\n"
 )
 
 
@@ -4821,6 +4881,329 @@ def t_release_markers_leave_unchanged_files_alone():
         shutil.rmtree(root, ignore_errors=True)
 
 
+# --------------------------------------------------------------------------
+#   15. THE 2026-11-06 DEPLOY GAP: PR 2's card fields and the activity guard
+# --------------------------------------------------------------------------
+#
+# The two ways the next deploy could not carry a merged change, measured
+# 2026-11-06:
+#
+#   * PR #1197 (`feat/approval-card-polish-2026-11-06`) changed the PUBLISHED
+#     BASE only: the hidden-byte/cost card fields in
+#     `jarvis-backend/jarvis_gate.py` and the `/api/deny` note hand-off in
+#     `jarvis-backend/jarvis_hud.py`. No `backend/*.patch` carries them and the
+#     deploy never copies a patched base file over live, so the stack walk would
+#     report every patch present and the run would finish clean while the
+#     owner's live HUD lacked the whole change - a SILENT miss, not a refusal.
+#     They are four literal deltas, extracted from the real OLD (the owner's
+#     live / pre-PR base) and NEW (the PR base) bytes into `tools/hud-deltas/`.
+#   * PR #1198 adds a BRAND-NEW patch, `backend/activity-turn-guard.patch`
+#     (six hunks, all `jarvis_hud.py`), with no DELTA_TABLE rule - and the tool
+#     REFUSES loudly in exactly that shape. Its rule is `"hunks": True`.
+#
+# Both tests are green at every ref: where the PR is not in the tree yet they
+# still prove the rules on fixtures built from the real files that ARE here (the
+# base, the block files, the patch), and the strongest whole-file comparison
+# runs on merged main. The real-PC test is read-only and SKIPS when
+# `JARVIS_LIVE_BACKEND` is unset - which is how CI runs it.
+
+CARD_FIELDS_DELTAS = ("hud-deny-note.patch", "hud-deny-note-reply.patch",
+                      "gate-card-fields-helpers.patch",
+                      "gate-card-fields-pending.patch")
+ACTIVITY_PATCH = "activity-turn-guard.patch"
+
+
+def _card_field_pairs():
+    """(target, entry name, old_text, new_text) for the four literal PR-2 deltas."""
+    pairs = []
+    for name in CARD_FIELDS_DELTAS:
+        for target, entry in R.DELTA_TABLE[name].items():
+            new_text = "\n".join(R._delta_lines(str(entry["file"])))
+            old_text = ("\n".join(R._delta_lines(str(entry["replace_file"])))
+                        if entry.get("replace_file") else "")
+            pairs.append((target, name, old_text, new_text))
+    return pairs
+
+
+def _pre_pr2_text(text, target):
+    """`text` with PR 2's blocks reversed out, or None when they are not there.
+
+    The published base at this ref is the POST-image once PR #1197 has merged
+    and the pre-image before it; both are accepted, so the suite is green either
+    way. The reversal is exact because each entry carries its own old and new
+    bytes: a REPLACE pair swaps them back, and an anchor insert is removed
+    together with the newline `insert_before_anchor` added."""
+    for entry_target, _name, old_text, new_text in _card_field_pairs():
+        if entry_target != target:
+            continue
+        if new_text not in text:
+            return None
+        text = (text.replace(new_text, old_text, 1) if old_text
+                else text.replace(new_text + "\n", "", 1))
+    return text
+
+
+def t_the_card_fields_are_carried_as_literal_deltas():
+    """(a)/(b)/(c) PR 2's base-only change is planned, idempotent and refused loudly.
+
+    The fixture is the pre-PR-2 base file. Once PR #1197 has merged, that file is
+    derived by reversing the four entries out of the published base (the delta's
+    own old/new bytes), and then the staged result must be the published base
+    BYTE FOR BYTE - a file this repository holds, so the comparison proves the
+    entries carry the real change and not a copy of themselves. Before the merge
+    the same fixture is simply the base; the plan, the idempotency, the compile
+    check and the refusals still run, and the byte-for-byte line says NOT RUN
+    (never "ok")."""
+    root = tmpdir()
+    try:
+        pairs = _card_field_pairs()
+        check("PR 2's base-only change is FOUR literal entries, in table order",
+              [name for _t, name, _o, _n in pairs] == list(CARD_FIELDS_DELTAS),
+              pairs)
+        check("... each carries post-image probes and a block file",
+              all((R.DELTA_TABLE[name][target] or {}).get("probes")
+                  and (R.DELTA_TABLE[name][target] or {}).get("file")
+                  for target, name, _o, _n in pairs))
+        check("... and each block file is on disk and non-empty",
+              all((R._DELTA_DIR / str(R.DELTA_TABLE[name][target]["file"]))
+                  .read_text(encoding="utf-8").strip()
+                  for target, name, _o, _n in pairs))
+        base_texts = {"jarvis_hud.py": BASE_HUD.read_text(encoding="utf-8"),
+                      "jarvis_gate.py": BASE_GATE.read_text(encoding="utf-8")}
+        pre, post_in_tree = {}, True
+        for target, text in base_texts.items():
+            reversed_out = _pre_pr2_text(text, target)
+            if reversed_out is None:
+                post_in_tree = False
+                pre[target] = text
+            else:
+                pre[target] = reversed_out
+        hud_old_once = all(pre["jarvis_hud.py"].count(old) == 1
+                           for target, _n, old, _new in pairs
+                           if target == "jarvis_hud.py")
+        gate_anchors_once = (
+            pre["jarvis_gate.py"].count(R.GATE_CARD_HELPERS_ANCHOR) == 1
+            and pre["jarvis_gate.py"].count(R.GATE_CARD_PENDING_ANCHOR) == 1)
+        check("the fixture is the documented PRE-image: each old block / anchor "
+              "exactly once, no post-image line",
+              hud_old_once and gate_anchors_once
+              and all(new not in pre[target] for target, _n, _o, new in pairs),
+              (hud_old_once, gate_anchors_once))
+
+        live = make_base_live(root, "card-fields", pre)
+        only = {name: R.DELTA_TABLE[name] for name in CARD_FIELDS_DELTAS}
+        deltas, staged, refusals = R.plan_deltas(
+            live, [], show=lambda *a: b"", repo=REPO, state_patches=[],
+            table=only, literals=True)
+        check("(a) all four deltas are planned as inserts, with no refusal",
+              refusals == [] and [d.status for d in deltas] == ["insert"] * 4
+              and sorted(staged) == ["jarvis_gate.py", "jarvis_hud.py"],
+              (refusals, [(d.patch, d.status) for d in deltas]))
+        check("(a) every post-image probe is in the staged file",
+              all(str(p) in staged.get(target, "")
+                  for target, name, _o, _n in pairs
+                  for p in R.DELTA_TABLE[name][target]["probes"]))
+        check("(a) the staged files still compile", R.rehearse(staged) == [],
+              R.rehearse(staged))
+        if post_in_tree:
+            check("(d) the staged files are the published base BYTE FOR BYTE",
+                  all(staged[name].encode("utf-8")
+                      == (REPO / "jarvis-backend" / name).read_bytes()
+                      for name in staged), sorted(staged))
+        else:
+            print("NOT RUN  the staged files equal the published base byte for "
+                  "byte - PR #1197 is not in this tree yet (it ships the base-only "
+                  "change). That comparison did NOT run, and it did NOT pass.")
+
+        for name, text in staged.items():
+            (live / name).write_text(text, encoding="utf-8", newline="\n")
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [], show=lambda *a: b"", repo=REPO, state_patches=[],
+            table=only, literals=True)
+        check("(b) a live file that already carries PR 2 plans nothing (idempotent)",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"] * 4,
+              (again, staged2, refusals2))
+
+        # (c) A pre-image that does not match must be REFUSED, never guessed at -
+        # once for a replace-shaped entry (a duplicated old block) and once for an
+        # anchored insert (a duplicated anchor line).
+        hud_old = next(old for target, name, old, _n in pairs
+                       if name == "hud-deny-note.patch")
+        dup_hud = pre["jarvis_hud.py"].replace(hud_old, hud_old + "\n" + hud_old, 1)
+        bad = make_base_live(root, "card-duplicated",
+                             {"jarvis_hud.py": dup_hud,
+                              "jarvis_gate.py": pre["jarvis_gate.py"]})
+        _d, staged3, refusals3 = R.plan_deltas(
+            bad, [], show=lambda *a: b"", repo=REPO, state_patches=[],
+            table=only, literals=True)
+        check("(c) an old block that appears twice is REFUSED with its sentence",
+              len(refusals3) == 1
+              and "hud-deny-note.patch -> jarvis_hud.py" in refusals3[0]
+              and "appears 2 time(s)" in refusals3[0]
+              and "expected exactly 1" in refusals3[0]
+              and "Refusing rather than guessing" in refusals3[0], refusals3)
+        check("(c) ... and nothing is staged for it", staged3 == {}, staged3)
+        dup_gate = pre["jarvis_gate.py"].replace(
+            R.GATE_CARD_PENDING_ANCHOR,
+            R.GATE_CARD_PENDING_ANCHOR + "\n" + R.GATE_CARD_PENDING_ANCHOR, 1)
+        bad2 = make_base_live(root, "card-anchor",
+                              {"jarvis_hud.py": pre["jarvis_hud.py"],
+                               "jarvis_gate.py": dup_gate})
+        _d2, staged4, refusals4 = R.plan_deltas(
+            bad2, [], show=lambda *a: b"", repo=REPO, state_patches=[],
+            table=only, literals=True)
+        check("(c) a duplicated anchor is REFUSED with its sentence",
+              len(refusals4) == 1 and "the anchor" in refusals4[0]
+              and "appears 2 time(s)" in refusals4[0]
+              and "expected exactly 1" in refusals4[0], refusals4)
+        check("(c) ... and nothing is staged for it", staged4 == {}, staged4)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_activity_turn_guard_is_carried_by_its_six_hunks():
+    """(d) PR #1198's new patch is planned at its stack position, byte for byte.
+
+    The patch file ships in PR #1198, so a branch off `main` before that merge
+    does not have it and this says SKIPPED (never "ok"). On a ref that carries it
+    the test builds a live-shaped HUD from the published base: every hunk's
+    pre-image is already in the base except the one block an earlier patch
+    rewrote (`enabled_tools=jarvis_agent.enabled_tools_for_turn(cfg),`), which is
+    materialised from the patch's OWN pre-image, the same way `_stack.py`
+    materialises owner-only text. Then the plan must be ONE insert of six hunks,
+    the staged HUD must equal `git apply`'s own result byte for byte, and a
+    second plan must be a no-op."""
+    patch_path = REPO / "backend" / ACTIVITY_PATCH
+    if not patch_path.is_file():
+        print(f"SKIPPED  t_the_activity_turn_guard_is_carried_by_its_six_hunks - "
+              f"backend/{ACTIVITY_PATCH} is not in this ref (it ships in PR #1198). "
+              f"This test did NOT run, and it did NOT pass.")
+        return
+    root = tmpdir()
+    try:
+        raw = patch_path.read_text(encoding="utf-8")
+        files = R.parse_patch_files(raw)
+        hunks = R.patch_hunks(raw, "jarvis_hud.py")
+        entry = R.DELTA_TABLE[ACTIVITY_PATCH]["jarvis_hud.py"]
+        probes = tuple(entry.get("probes") or ())
+        check("the entry carries the patch's own SIX hunks, one probe each",
+              entry.get("hunks") is True and len(probes) == 6 and len(hunks) == 6,
+              (entry, len(hunks)))
+        check("... and the patch touches only jarvis_hud.py",
+              set(files) == {"jarvis_hud.py"}, sorted(files))
+        added = files["jarvis_hud.py"]["added"]
+        pre_image = R.patch_pre_image(raw, "jarvis_hud.py")
+        check("every probe is one of the patch's ADDED lines, never a pre-image line",
+              all(any(str(p) in str(a) for a in added) for p in probes)
+              and all(str(p) not in pre_image for p in probes), probes)
+        per_hunk = [sum(1 for p in probes if any(str(p) in str(a) for a in h["added"]))
+                    for h in hunks]
+        check("... one probe in each of the six hunks", per_hunk == [1] * 6, per_hunk)
+
+        # The live-shaped fixture: the published base, with the one hunk the base
+        # cannot hold materialised from the patch's own pre-image.
+        shape = BASE_HUD.read_text(encoding="utf-8")
+        materialised = []
+        for hunk in hunks:
+            old = "\n".join(hunk["old"])
+            if shape.count(old) == 1:
+                continue
+            for cut in range(1, len(hunk["old"])):
+                suffix = "\n".join(hunk["old"][cut:])
+                if shape.count(suffix) != 1:
+                    continue
+                at = shape.index(suffix)
+                previous = shape.rfind("\n", 0, at - 1) + 1
+                shape = shape[:previous] + old + shape[at + len(suffix):]
+                materialised.append(cut)
+                break
+        check("the live-shaped fixture holds every hunk pre-image exactly once",
+              all(shape.count("\n".join(h["old"])) == 1 for h in hunks))
+        check("... it materialised exactly one block from the patch's pre-image "
+              "(the line an earlier patch rewrote)", materialised == [1],
+              materialised)
+        check("... and none of the six probes is in it yet",
+              all(str(p) not in shape for p in probes))
+        live = make_base_live(root, "activity", {"jarvis_hud.py": shape})
+        show = lambda repo, ref, repo_path: raw.encode("utf-8")  # noqa: E731
+        only = {ACTIVITY_PATCH: R.DELTA_TABLE[ACTIVITY_PATCH]}
+        deltas, staged, refusals = R.plan_deltas(
+            live, [ACTIVITY_PATCH], show=show, repo=REPO, state_patches=[],
+            table=only)
+        check("(a) the activity patch is planned as ONE insert, no refusal",
+              refusals == [] and [(d.patch, d.status) for d in deltas]
+              == [(ACTIVITY_PATCH, "insert")], (refusals, deltas))
+        out = staged.get("jarvis_hud.py", "")
+        check("(a) ... all six probes are in the staged HUD",
+              all(str(p) in out for p in probes), probes)
+        check("(d) ... and the staged HUD is EXACTLY what git apply makes of the "
+              "patch on that base-shaped file, byte for byte",
+              out == git_apply_oracle(shape, [ACTIVITY_PATCH], "jarvis_hud.py"))
+        check("(a) ... and the staged HUD still compiles", R.rehearse(staged) == [])
+        check("... the live-shaped fixture file was never written",
+              (live / "jarvis_hud.py").read_text(encoding="utf-8") == shape)
+        (live / "jarvis_hud.py").write_text(out, encoding="utf-8", newline="\n")
+        again, staged2, refusals2 = R.plan_deltas(
+            live, [ACTIVITY_PATCH], show=show, repo=REPO, state_patches=[],
+            table=only)
+        check("(b) a live HUD that already carries the patch plans nothing",
+              refusals2 == [] and staged2 == {}
+              and [d.status for d in again] == ["already"],
+              (again, staged2, refusals2))
+        patches = R.parse_powershell_list(
+            (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8"),
+            "PATCHES")
+        at = patches.index(ACTIVITY_PATCH) if ACTIVITY_PATCH in patches else -1
+        check("the stack registers it immediately BEFORE plugin-loader.patch (the "
+              "position the tool walks)",
+              at >= 1 and at + 1 < len(patches)
+              and patches[at + 1] == "plugin-loader.patch"
+              and patches[-1] == "plugin-loader.patch",
+              patches[max(at - 1, 0):at + 2])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def t_the_real_live_hud_gets_the_card_fields_and_the_activity_guard_read_only():
+    """Against the OWNER's real live folder, READ-ONLY when it is reachable.
+
+    CI has no live folder, so this SKIPS there (a skip is not a pass). At the
+    desk it answers the deploy question: does a plan of the five 2026-11-06
+    deltas insert all of them with no refusal, and leave the real files alone?"""
+    live = Path(os.environ.get("JARVIS_LIVE_BACKEND", ""))
+    if not live.is_dir() or not (live / "jarvis_hud.py").is_file():
+        print("skip  no live backend folder here (JARVIS_LIVE_BACKEND unset or "
+              "missing) - the real-PC dry run is the desk check, not CI's")
+        return
+    patch_path = REPO / "backend" / ACTIVITY_PATCH
+    if not patch_path.is_file():
+        print(f"SKIPPED  t_the_real_live_hud_gets_the_card_fields_and_the_activity_"
+              f"guard_read_only - backend/{ACTIVITY_PATCH} is not in this ref (it "
+              f"ships in PR #1198). This test did NOT run, and it did NOT pass.")
+        return
+    raw = patch_path.read_text(encoding="utf-8")
+    only = {name: R.DELTA_TABLE[name] for name in CARD_FIELDS_DELTAS}
+    only[ACTIVITY_PATCH] = R.DELTA_TABLE[ACTIVITY_PATCH]
+    before = {name: (live / name).read_bytes()
+              for name in ("jarvis_hud.py", "jarvis_gate.py")}
+    deltas, staged, refusals = R.plan_deltas(
+        live, [ACTIVITY_PATCH], show=lambda *a: raw.encode("utf-8"), repo=REPO,
+        state_patches=[], table=only, literals=True)
+    check("the real live HUD plans all FIVE 2026-11-06 deltas with no refusal",
+          refusals == [] and len(deltas) == 5
+          and sorted(d.patch for d in deltas)
+          == sorted(list(CARD_FIELDS_DELTAS) + [ACTIVITY_PATCH]),
+          (refusals, [(d.patch, d.status) for d in deltas]))
+    check("... each one an insert or already carried (never half a block)",
+          all(d.status in ("insert", "already") for d in deltas),
+          [(d.patch, d.status) for d in deltas])
+    check("... any staged live text still compiles",
+          staged == {} or R.rehearse(staged) == [], R.rehearse(staged))
+    check("... and the real live files were not written (read-only plan)",
+          {name: (live / name).read_bytes() for name in before} == before)
+
+
 def main():
     for fn in (t_release_markers_carry_the_version_and_the_beside_files,
                t_release_marker_writes_are_in_the_planned_and_wrote_counts,
@@ -4843,6 +5226,9 @@ def main():
                t_the_call_notes_risk_row_is_carried_to_the_live_gate,
                t_the_wave6_entries_agree_with_the_real_patches,
                t_the_packs_tamper_patch_is_carried_by_its_hunk,
+               t_the_card_fields_are_carried_as_literal_deltas,
+               t_the_activity_turn_guard_is_carried_by_its_six_hunks,
+               t_the_real_live_hud_gets_the_card_fields_and_the_activity_guard_read_only,
                t_private_chat_delta_is_carried_as_its_patch_hunks,
                t_a_private_chat_hunk_that_shifted_is_refused,
                t_the_list_parser_refuses_rather_than_reading_nothing,
