@@ -744,7 +744,7 @@ and it is the part the project already has machinery for:
    check a machine runs"*, and `tools/check_claims.py` *"says so when a gap
    closes ... so the row cannot outlive the build the way CLAUDE.md's 'not yet
    built' queue outlived tap-to-talk."* The countable statements in §6 of this
-   page are the obvious first rows. **Honest caution:** 5 of the 201 rows are `unverifiable` and say why, so a claim in the chapter that no machine can
+   page are the obvious first rows. **Honest caution:** 5 of the 203 rows are `unverifiable` and say why, so a claim in the chapter that no machine can
    check should be written as a quotation with a date on it, not as a fact.
 3. **The numbers are re-measured, never remembered.** §6's table names the
    command for every figure, and `tools/check_docs_map.py` already re-measures
