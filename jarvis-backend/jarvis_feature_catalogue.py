@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 179 rows from features/features.json.
+The owner's feature list, as data: 180 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34); the apps' Features pages read their own
+`features/features.json` (sha256 73cca365d137ade8281e173ca44ed35667250a8983ca3c8b5625896941eb1150); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "16919b5a68ef1452678580ea6dbf556bda432824d03ee9f1cfd48a61de8a3b34"
+SOURCE_SHA256 = "73cca365d137ade8281e173ca44ed35667250a8983ca3c8b5625896941eb1150"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -814,6 +814,18 @@ FEATURES = (
         "surface": "both",
         "aliases": ["tells me what is new on github"],
         "covers": ["brain.tab.watch", "brain.watch.watchlist", "work-and-attention", "limits-and-notes"],
+    },
+    {
+        "id": "connected-github",
+        "group": "Notes and files",
+        "title": "Read and act on your own GitHub",
+        "what": "Reads your own GitHub when a personal access token is connected: your repositories, open pull requests, issues, CI status and one file. It can also comment on an issue or pull request, open an issue and re-run a workflow.",
+        "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+        "asks": "Not connected is a state, not an error: with no token saved every read says so and offers the connect card. With a token, every read and every action raises one approval card of its own first - the three reads share one action, and commenting, opening an issue and re-running a workflow each have their own.",
+        "limit": "There is no merge, push, commit, delete, close or file-write action: it can never merge a pull request, and no card or approval can create one - a pull request is merged on GitHub itself. Private repositories need the token; a read sends it to api.github.com.",
+        "surface": "both",
+        "aliases": ["read my own github", "your own github", "github read and act"],
+        "covers": [],
     },
     {
         "id": "chatbot",

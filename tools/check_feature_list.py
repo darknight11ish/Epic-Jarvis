@@ -396,6 +396,14 @@ LESSON_EXEMPT = {
     # A lesson would repeat the button and the card, and the phone has no
     # tutorial page for it to live on yet.
     "document-from-phone": "the door explains itself: the button's own sentence says the file goes into a folder Jarvis may look in, into a new folder called From my phone, and the PC's ONE card names the file, its size and the folder; a lesson would repeat the button and the card",
+    # The connected-GitHub surface (2026-11-07, the owner's "Read + actions"
+    # decision given the catalogue row it never had). There is no screen to
+    # teach - it is chat tools and their own cards - and the tool dossier
+    # ("what does github_comment do?") already gives each tool its own lesson
+    # text. A catalogue lesson would repeat the three card sentences and the
+    # tool dossier; the education tab's own Docker note asks for a lesson only
+    # when there is a screen a person has to be shown.
+    "connected-github": "no screen to teach: it is chat tools and their own approval cards, and each tool's dossier (\"what does github_comment do?\") already says what it does and what it never does; a lesson would repeat the three card sentences",
 }
 
 #: Rule 6's exemptions: lessons that are deliberately NOT a feature row, each

@@ -6084,8 +6084,9 @@ def _github_search_action_name() -> str:
 #:
 #: docs/ARCHITECTURE.md §3: "`allowed` is not 'a human decided'" - the gate
 #: returns allowed=True on tier `auto` (nobody asked) and `notify` (told
-#: after). That was all this loop checked, so `github_search`, which resolves
-#: to `web_research` - "auto" in the shipped config - sent a model-chosen
+#: after). That was all this loop checked, so `github_search`, which resolved
+#: to `web_research` and shipped at "auto" (it is "ask" since 2026-11-07; this
+#: belt existed because the line was auto), sent a model-chosen
 #: search term to GitHub with nobody asked, while §4 lists research as egress
 #: "per approved plan" and jarvis_research.run() is documented as executing
 #: "a plan that a human has already approved".

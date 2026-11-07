@@ -145,6 +145,21 @@ PACKS             = "backend/jarvis_packs.py"
 #: One entry per name in `jarvis_agent.TOOLS` (52 tools on this branch), in the
 #: same order that dict declares them. Every field is prose for a beginner
 #: developer; `sources` cites the files above that the claim was checked against.
+
+#: The REAL place the six on-demand GitHub tools are switched on. The old hints
+#: said "Your own GitHub" in "Settings -> Tools" - there is no "Tools" heading
+#: and no control with that name anywhere in either app: the string occurred
+#: only in these six hints and the test that pinned them (2026-11-07 audit,
+#: measured live). Since the owner's decision of 2026-11-04 every tool the AI
+#: model can be offered has its own switch on Settings, "What asks first",
+#: under "Let the AI use this" (jarvis_asks_first.tools_status); turning one ON
+#: is the PC only and asks one card plus Windows Hello, OFF is instant from
+#: either app. One shared sentence, so the six cannot drift.
+GITHUB_TOOL_ENABLE_HINT = (
+    'Turn on its own switch in Settings, "What asks first", under "Let the AI '
+    'use this" ("Jarvis\'s own tools" holds one switch per GitHub tool): ON asks '
+    'one card and Windows Hello on the PC.')
+
 PROFILES: dict = {
 
     "calculator": {
@@ -730,8 +745,7 @@ PROFILES: dict = {
                                 "says how the newest one went.",
         },
         "tier": "switchable",
-        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
-                       "in-app switch).",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
@@ -759,8 +773,7 @@ PROFILES: dict = {
                            "github_read_file reads the file.",
         },
         "tier": "switchable",
-        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
-                       "in-app switch).",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
@@ -791,8 +804,7 @@ PROFILES: dict = {
                            "how the newest went.",
         },
         "tier": "switchable",
-        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
-                       "in-app switch).",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
@@ -818,8 +830,7 @@ PROFILES: dict = {
                            "number; github_comment posts the reply.",
         },
         "tier": "switchable",
-        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
-                       "in-app switch).",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
@@ -845,8 +856,7 @@ PROFILES: dict = {
                                 "github_open_issue files what it found.",
         },
         "tier": "switchable",
-        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
-                       "in-app switch).",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
@@ -872,8 +882,7 @@ PROFILES: dict = {
                                 "github_rerun_workflow asks to run it again.",
         },
         "tier": "switchable",
-        "enable_hint": "Turn on \"Your own GitHub\" in Settings -> Tools (an "
-                       "in-app switch).",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
         "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
@@ -1903,7 +1912,7 @@ PROFILES: dict = {
         "id": "feature_guide",
         "title": "Explain one of Jarvis's features",
         "what": "Answers \"what is this feature?\", \"where is it?\" and \"is it "
-                "on?\" from the owner's own feature list - 179 rows in 9 groups, "
+                "on?\" from the owner's own feature list - 180 rows in 9 groups, "
                 "turned into a shipped module - rather than from a guess. The "
                 "counts in this sentence are checked against that module by the "
                 "suite, so they cannot go stale here.",
