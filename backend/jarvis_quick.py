@@ -552,26 +552,32 @@ def normalize_spoken_command(text) -> str:
     do not spell out, and the words either side are unchanged. The model is
     still asked the owner's original sentence, never this string."""
     t = normalise(text)
-    # Spoken punctuation is flattened to spaces here and ONLY for matching
-    # (2026-11-07, the owner's Q2 ruling): a dictated "um, turn on anti-slop"
-    # or "JARVIS; go ahead and ..." carries commas and semicolons the grammars
-    # do not spell out, and the words either side are unchanged. The model is
-    # still asked the owner's original sentence, never this string.
-    #
-    # The cloud-switch pronoun grammar used to rely on that comma as a clause
-    # break, so this flattening is paired with explicit state+verb alternatives
-    # in `_CLOUD_ESCALATION_PRONOUN` (caught on the merged wave-8 branch,
-    # 2026-11-07) - the comma may not be the only clause marker once dictation
-    # has removed it.
-    t = re.sub(r"[,;:]+", " ", t)
+    # Dictation punctuation is handled at the EDGES only (2026-11-07, the
+    # owner's Q2 ruling): a dictated "um, turn on anti-slop" or "JARVIS; go
+    # ahead and ..." carries commas the lead-in words do not spell out, so the
+    # lead loop below strips edge punctuation between leads. INTERNAL commas
+    # are deliberately kept: list and checklist grammars split on them, and
+    # flattening them turned "add Milk, eggs and bread" into one item and
+    # "Morning routine at 7: meds, keys, badge" into a different intent
+    # (caught on the merged wave-8 branch, 2026-11-07). The cloud-switch
+    # pronoun grammar can still read a comma-free clause because
+    # `_CLOUD_ESCALATION_PRONOUN` also matches the stated state.
     t = re.sub(r"\s+", " ", t).strip()
     stripped = False
     changed = True
     while changed:
         changed = False
+        # Dictated punctuation sits between leads ("um, jarvis, ..."), so the
+        # edge is stripped before each lead is compared, and a lead may be
+        # followed by a comma or semicolon instead of a space.
+        t = t.lstrip(" ,;:")
+        if not t:
+            break
         for lead in _EXTRA_LEADS:
-            if t.startswith(lead):
-                t = normalise(t[len(lead):])
+            core = lead.rstrip()
+            if (t == core or t.startswith(lead)
+                    or t.startswith(core + ",") or t.startswith(core + ";")):
+                t = normalise(t[len(core):].lstrip(" ,;:"))
                 stripped = True
                 changed = True
                 break
@@ -5492,6 +5498,14 @@ def _cap_part_row(part: str):
 def _cap_multi_question(raw) -> list:
     text = " ".join(str(raw or "").lower().rstrip(" ?!.").split())
     text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[ ,:]+", "", text)
+    # A two-part CAPABILITY question names two things it can do. A settings or
+    # change question ("where do I change my wifi password, and what is it set
+    # to") is not one: its halves are not capability phrases, and letting the
+    # token score resolve them answered an unknown setting from the catalogue
+    # (caught on the merged wave-8 branch, 2026-11-07).
+    if re.search(r"\b(?:where|how)\s+(?:do|can|should)\s+i\b"
+                 r"|\b(?:change|set\s+to|turn\s+on|turn\s+off)\b", text):
+        return []
     parts = [p.strip() for p in _CAP_SPLIT.split(text) if p.strip()]
     if not (2 <= len(parts) <= 3):
         return []

@@ -999,10 +999,22 @@ def t_turn_on_a_setting_in_the_owners_own_words():
         check("...the answer is the setter's own words, not a denial",
               r.reply == "Waiting for your approval: one card is on your screen.", r.reply)
         calls.clear()
-        r = say(w, "Turn on learning in the background")
-        check("...and background learning goes through its own route",
-              r is not None and calls and calls[0][0].endswith("/api/memory/learning/auto")
-              and calls[0][1] == {"enabled": True}, calls)
+        # The fake route records the call but does not change the state the
+        # registry reads, and since the 2026-11-07 no-op rule an already-on
+        # switch answers "already on. Nothing was changed." and calls no
+        # setter. Force the read to say off for this turn so the test measures
+        # the route, not the no-op.
+        _real_current = R.current_value
+        R.current_value = (lambda setting: "off"
+                           if getattr(setting, "key", "") == "background_learning"
+                           else _real_current(setting))
+        try:
+            r = say(w, "Turn on learning in the background")
+            check("...and background learning goes through its own route",
+                  r is not None and calls and calls[0][0].endswith("/api/memory/learning/auto")
+                  and calls[0][1] == {"enabled": True}, calls)
+        finally:
+            R.current_value = _real_current
     finally:
         AL.handle_post = real_post
     check("the words name the switches the registry already has",

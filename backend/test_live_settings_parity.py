@@ -801,9 +801,17 @@ def t_presets_and_search_providers_are_the_same_in_both_doors():
               and live.reply == typed.reply, (
                   None if typed is None else typed.reply,
                   None if live is None else live.reply))
-    skip("the Cloud row itself is a Command-Only ability (feature_switch_refused "
-         "answers it in both doors); its standing switch rides with change_setting, "
-         "which the tool-switch parity and the fallback-menu check cover")
+    # The Cloud row itself is a Command-Only ability, so there is no cloud
+    # SERVICE change to drive through two doors; what the owner asked for is
+    # that the sentence is answered the same WAY by both, so that is checked
+    # here rather than skipped (a skip is never a pass - 2026-10-11 rule).
+    for phrase in ("turn on cloud escalation", "turn off cloud escalation",
+                   "is cloud escalation on"):
+        typed, live = doors(phrase)
+        check(f"both doors answer {phrase!r} the same way",
+              typed is not None and live is not None and typed.reply == live.reply,
+              (None if typed is None else typed.reply,
+               None if live is None else live.reply))
 
 
 if __name__ == "__main__":
