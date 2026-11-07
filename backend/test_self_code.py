@@ -350,12 +350,20 @@ def t_recent_and_self_repo_answer_from_the_same_map():
     for sentence in ("what changed on main", "what was your last release"):
         check(f"{sentence!r} reaches the recent answer",
               answer(sentence)[0] == "self_code_recent")
-    name, repo = answer("what is your github repository")
-    check("'what is your github repository' is the repository answer",
+    name, repo = answer("what is your repository")
+    check("'what is your repository' is the repository answer",
           name == "self_code_repo", str(name))
     for said in ("darknight11ish/Epic-Jarvis", "github.com/darknight11ish",
                  "public"):
         check(f"the repository answer names {said!r}", said in repo)
+    # The ONE shape that belongs to the GitHub self-knowledge answer (the
+    # owner's 2026-11-07 Q6 ruling: the deterministic GitHub intent names the
+    # repository). The "where is your code on github" shapes stay here because
+    # the GitHub lane does not match them. The split is pinned because the merge
+    # of the two waves is what surfaced it.
+    check("'what is your github repository' reaches the GitHub self-knowledge answer",
+          answer("what is your github repository")[0] == "github_self",
+          str(answer("what is your github repository")[0]))
     for sentence in ("where is your code on github", "where do you live on github"):
         check(f"{sentence!r} reaches the repository answer",
               answer(sentence)[0] == "self_code_repo")

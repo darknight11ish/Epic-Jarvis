@@ -229,6 +229,21 @@ def t_every_switch_changes_the_same_way_in_both_doors():
                 typed, live = doors(phrase)
             finally:
                 restore()
+            # A no-op is a real outcome, not a gap: if the switch is ALREADY
+            # in the asked state, both doors answer the same honest "already
+            # ... Nothing was changed." and neither calls the setter (the
+            # no-op receipt rule, 2026-11-07). The recorder is never asked, so
+            # there is no card to be waiting for either.
+            already = (typed is not None and live is not None
+                       and "nothing was changed" in typed.reply.lower()
+                       and "already" in typed.reply.lower())
+            if already:
+                check(f"a no-op {b.key} ({on}) calls no setter in either door",
+                      rec.calls == [], rec.calls)
+                check(f"{b.key} says the same thing in both doors when it is "
+                      f"already {'on' if on else 'off'}",
+                      typed.reply == live.reply, (typed.reply, live.reply))
+                continue
             check(f"the same {b.key} setter runs once in typed and once in Live",
                   typed is not None and live is not None
                   and rec.calls == [(on,), (on,)], rec.calls)

@@ -552,6 +552,17 @@ def normalize_spoken_command(text) -> str:
     do not spell out, and the words either side are unchanged. The model is
     still asked the owner's original sentence, never this string."""
     t = normalise(text)
+    # Spoken punctuation is flattened to spaces here and ONLY for matching
+    # (2026-11-07, the owner's Q2 ruling): a dictated "um, turn on anti-slop"
+    # or "JARVIS; go ahead and ..." carries commas and semicolons the grammars
+    # do not spell out, and the words either side are unchanged. The model is
+    # still asked the owner's original sentence, never this string.
+    #
+    # The cloud-switch pronoun grammar used to rely on that comma as a clause
+    # break, so this flattening is paired with explicit state+verb alternatives
+    # in `_CLOUD_ESCALATION_PRONOUN` (caught on the merged wave-8 branch,
+    # 2026-11-07) - the comma may not be the only clause marker once dictation
+    # has removed it.
     t = re.sub(r"[,;:]+", " ", t)
     t = re.sub(r"\s+", " ", t).strip()
     stripped = False
@@ -5648,12 +5659,25 @@ _CLOUD_ESCALATION_OFF = re.compile(
 #: escalation is on but do not turn it off" would be read as OFF and turn the
 #: switch off at once - a mis-read that CHANGES the thing the owner asked to
 #: leave alone. A bare "turn it off" still keeps whatever path it had.
+#:
+#: The last two forms exist because the ASR pre-pass flattens dictation's
+#: commas away: "cloud escalation is off, turn it on" arrives with no visible
+#: clause break, so the STATED STATE carries the clause instead, and a
+#: "not/never/don't" between the state and the verb still refuses to read it.
 _CLOUD_ESCALATION_PRONOUN = re.compile(
     r"(?:the\s+|my\s+)?cloud\s+escalation\b[^.;!?]*?"
     r"[,;.!?\u2014-]\s*(?:(?:and|then|please)\s+)?"
     r"(?:turn|switch)\s+(?:it|that)\s+(on|off)\b.*"
     r"|\b(?:turn|switch)\s+(?:it|that)\s+(on|off)\b\s*[,;.!?\u2014-]\s*"
-    r"(?:the\s+|my\s+)?cloud\s+escalation\b.*")
+    r"(?:the\s+|my\s+)?cloud\s+escalation\b.*"
+    r"|(?:the\s+|my\s+)?cloud\s+escalation\s+is\s+off\b"
+    r"(?![^.;!?]*\b(?:not|never|don'?t)\b)[^.;!?]*?"
+    r"\b(?:turn|switch)\s+(?:it|that)\s+(on)\b.*"
+    r"|(?:the\s+|my\s+)?cloud\s+escalation\s+is\s+on\b"
+    r"(?![^.;!?]*\b(?:not|never|don'?t)\b)[^.;!?]*?"
+    r"\b(?:turn|switch)\s+(?:it|that)\s+(off)\b.*"
+    r"|\b(?:turn|switch)\s+(?:it|that)\s+(on|off)\b\s+"
+    r"(?:the\s+|my\s+)?cloud\s+escalation\s+is\s+(?:on|off)\b.*")
 
 
 def _cloud_escalation_set(s: str) -> Optional[Intent]:
@@ -5668,8 +5692,9 @@ def _cloud_escalation_set(s: str) -> Optional[Intent]:
         return Intent("cloud_escalation_set", {"on": False})
     m = _CLOUD_ESCALATION_PRONOUN.fullmatch(s)
     if m:
-        return Intent("cloud_escalation_set",
-                      {"on": (m.group(1) or m.group(2)) == "on"})
+        value = next((g for g in m.groups() if g), None)
+        if value is not None:
+            return Intent("cloud_escalation_set", {"on": value == "on"})
     return None
 
 
@@ -13110,6 +13135,15 @@ def _self_code_intent(s: str, does: bool = False) -> Optional[Intent]:
     older install is never answered with a sentence about code it cannot see.
     """
     if _self_code_module() is None:
+        return None
+    # GitHub is another module's fact, not this map's, for the ONE shape that
+    # names it as a question about the repository: "what is your GitHub
+    # repository?" belongs to the GitHub self-knowledge answer (the owner's Q6
+    # ruling), and this map's repo shape would otherwise take it. The "where is
+    # your code on github" shapes stay here, because the GitHub lane does not
+    # match them and falling through would answer a lost-object question
+    # (caught on the merged wave-8 branch, 2026-11-07).
+    if re.search(r"what(?:'s|\s+is)\s+your\s+(?:own\s+)?github\b", s):
         return None
     if does:
         m = _SELF_CODE_DOES.fullmatch(s)
