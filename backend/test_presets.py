@@ -374,26 +374,26 @@ def main() -> int:
     check("General is qwen3.5:9b on the 2060 at 196,608",
           gen.model == "qwen3.5:9b" and gen.context == 196608 and gen.lane == "main")
     cod = P.by_id("coding")
-    check("Coding is the one heavy row, on the pooled both-card lane",
+    check("Coding is the one heavy row, on the pooled all-three-card lane",
           cod.model == "qwen3-coder-30b-a3b-ud-q3-k-xl" and cod.heavy_mode is True
           and cod.lane == "pooled"
-          and cod.measured["tok_s"] == 76.2 and cod.measured["rubric"] == "6/6 coding rubric"
-          and cod.measured["size_gib"] == 14.0 and cod.measured["cold_load_s"] == 32.1
-          and "BOTH GPUs" in cod.cost, cod.model)
-    check("Coding asks for the 32,768-token window the pooled lane measured, and "
-          "records both that window and the old zero-spill rung honestly",
-          cod.context == 32768
-          and cod.measured["context_measured"] == 32768
-          and cod.measured["context_zero_spill"] == 16384
-          and cod.measured["spill_gib"] == 0.3
-          and "32,768" in cod.cost and "323.5 MiB" in cod.cost,
+          and cod.measured["tok_s"] == 83.8 and cod.measured["rubric"] == "6/6 coding rubric"
+          and cod.measured["size_gib"] == 16.2 and cod.measured["cold_load_s"] == 31.6
+          and "ALL THREE GPUs" in cod.cost, cod.model)
+    check("Coding asks for the 49,152-token window measured on all three cards, "
+          "with zero spill recorded against it",
+          cod.context == 49152
+          and cod.measured["context_measured"] == 49152
+          and cod.measured["context_zero_spill"] == 49152
+          and cod.measured["spill_gib"] == 0.0
+          and "49,152" in cod.cost and "zero CPU spill" in cod.cost,
           (cod.context, cod.measured))
     check("... its words say the other models are PAUSED and name the honest cost, "
           "never that a lane is still arriving",
           "pauses the other lanes' models" in cod.cost
           and "NOT resident" in cod.worse and "come back" in cod.worse
           and "arriving" not in (cod.what + cod.worse + cod.cost)
-          and "both cards" in cod.heavy_words
+          and "all three cards" in cod.heavy_words
           and "paused" in cod.heavy_words, (cod.cost, cod.worse, cod.heavy_words))
     check("Fast is qwen3.5:4b on the 2080 SUPER's coding lane at 16,384",
           P.by_id("fast").model == "qwen3.5:4b" and P.by_id("fast").lane == "coding"

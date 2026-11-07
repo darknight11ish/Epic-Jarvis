@@ -92,17 +92,17 @@
       "id": "coding",
       "title": "Coding",
       "focus": "code, files, debugging, multi-step work",
-      "what": "For writing and fixing code, reading a project, and long tool-driven coding jobs: the 30B coding model on ONE lane that sees both cards, started on demand by this apply.",
-      "cost": "HEAVY MODE: it fills BOTH GPUs (16.2 GB of video memory here, and another 0.3 GB in system RAM at this window) and pauses the other lanes' models while it works, for about 36 s on a cold load. Measured 2026-11-02 at 16,384 tokens: 85.3 tok/s median on three coding prompts, zero spill. Re-measured 2026-11-03 at 32,768 tokens: 80.4 tok/s median on the same three prompts (79.9 at 16,384, inside this model's own run-to-run noise), with 323.5 MiB of it in system RAM instead of video memory - measured and accepted for this window alone. It is not a single-card model.",
-      "worse": "Applying it makes it the model chat uses, so the Fast/Live and Agentic+Vision models are NOT resident while it runs - they come back when you apply another preset, and that switch costs a reload. It is not a quick helper: it takes both cards for as long as it is on, and nothing else can be loaded beside it.",
+      "what": "For writing and fixing code, reading a project, and long tool-driven coding jobs: the 30B coding model on ONE lane that sees all three cards, started on demand by this apply.",
+      "cost": "HEAVY MODE: it fills ALL THREE GPUs (16.2 GB of video memory here, with nothing pushed into system RAM) and pauses the other lanes' models while it works, for about 32 s on a cold load. Measured 2026-11-07 at 49,152 tokens on all three cards: 83.8 tokens a second warm after a 900-word prompt, zero CPU spill - against 60.6 tokens a second and a 69.6 s cold load on two cards at 32,768 tokens. Note: tonight's two-card control also measured zero spill, so this is not claimed as a spill reduction. The older figures (76.2 tok/s at 28,672 on two cards; 80.4 tok/s at 32,768 with 323.5 MiB of it in system RAM) are kept as history in docs/MEASURED-2026-11-07-THREE-GPU.md.",
+      "worse": "Applying it makes it the model chat uses, so the Fast/Live and Agentic+Vision models are NOT resident while it runs - they come back when you apply another preset, and that switch costs a reload. It is not a quick helper: it takes all three cards for as long as it is on, and nothing else can be loaded beside it. Measured about 59 tokens a second at 65,536 tokens, so the wider window is not offered.",
       "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
       "lane": {
         "key": "pooled",
-        "card": "both cards",
+        "card": "all three cards",
         "port": 11450,
-        "words": "one model across both cards"
+        "words": "one model across all three cards"
       },
-      "context": 32768,
+      "context": 49152,
       "helper": null,
       "policy": {
         "prompt": "coding",
@@ -113,19 +113,19 @@
         ]
       },
       "measured": {
-        "tok_s": 76.2,
+        "tok_s": 83.8,
         "rubric": "6/6 coding rubric",
-        "size_gib": 14.0,
-        "gpu_use": "100% GPU across both cards",
-        "cold_load_s": 32.1,
-        "spill_gib": 0.3,
-        "context_zero_spill": 16384,
-        "context_measured": 32768,
-        "source": "measurement 2026-10-18 at 28,672 tokens: 76.2 tok/s median eval, 6/6 coding rubric, no CPU spill. The 28,672-token rung was re-measured on 2026-11-02 and no longer loads with zero spill on this PC (212 MiB went to the CPU); 16,384 was the largest rung that loaded with none, and is kept above as that historical fact. From 2026-11-03 the preset asks for 32,768: the whole ladder was measured again through the same shipped path and every rung above 16,384 spills (20,480: 203.5 MiB, 24,576: 207.5, 28,672: 211.5, 32,768: 323.5). At 32,768 it loaded 16,513.7 MiB with 323.5 MiB (0.3 GiB) in system RAM, 79.88 -> 80.36 tok/s median on the three prompts (inside noise), cold load 36.0 s against 37.0 s. That 323.5 MiB is accepted for THIS window only, capped at 352 MiB by jarvis_model_lanes.POOLED_SPILL_ALLOWANCE; every other load still refuses any spill (docs/MEASURED-2026-11-02-POOLED-LANE.md, 2026-11-03 amendment)."
+        "size_gib": 16.2,
+        "gpu_use": "100% GPU across all three cards",
+        "cold_load_s": 31.6,
+        "spill_gib": 0.0,
+        "context_zero_spill": 49152,
+        "context_measured": 49152,
+        "source": "measurement 2026-11-07 on all three cards with OLLAMA_SCHED_SPREAD=1: 49,152 tokens loaded at 16.2 GiB entirely in video memory, 83.8 tok/s warm generation after a 900-word prompt, prompt ~1,644 tok/s, cold load 31.6 s, three cards used (nvidia-smi deltas). The same two-card control (32,768 tokens) measured 60.6 tok/s with a 69.6 s cold load and, in the same sweep, zero spill as well; 65,536 tokens on three cards measured 59.06 tok/s with zero spill, below the 75 tok/s bar, so 49,152 is the window (Q2: largest above 75 tok/s). The 6/6 coding rubric was measured 2026-10-18 on two cards and was not re-run. Evidence: docs/MEASURED-2026-11-07-THREE-GPU.md and .dsh-scratch/GPU-3WAY-2026-11-06/bench/results3/."
       },
       "pending": false,
       "heavy_mode": true,
-      "heavy_words": "This preset needs both cards at once as one pooled lane. While it runs, the everyday and Fast models are paused - they come back, proved from the model list, when you apply another preset. Loading it takes about half a minute.",
+      "heavy_words": "This preset needs all three cards at once as one pooled lane. While it runs, the everyday and Fast models are paused - they come back, proved from the model list, when you apply another preset. Loading it takes about half a minute.",
       "apply": {
         "action": "Use this preset",
         "switch_route": "/api/models/switch",
@@ -388,7 +388,7 @@
   ],
   "hardware": {
     "detected": {
-      "count": 2,
+      "count": 3,
       "cards": [
         {
           "index": 0,
@@ -403,7 +403,15 @@
           "name": "NVIDIA GeForce RTX 2080 SUPER",
           "vram_gib": 8.0,
           "uuid": "",
-          "pci_id": "0000:07:00.0",
+          "pci_id": "0000:05:00.0",
+          "monitor": null
+        },
+        {
+          "index": 2,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "vram_gib": 8.0,
+          "uuid": "",
+          "pci_id": "0000:08:00.0",
           "monitor": null
         }
       ],
@@ -460,7 +468,7 @@
           "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
           "card_index": 0,
           "card": "NVIDIA GeForce RTX 2060",
-          "context": 32768,
+          "context": 49152,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
@@ -560,12 +568,12 @@
           "preset": "coding",
           "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
           "card_index": 0,
-          "card": "both cards (pooled lane, port 11450)",
-          "context": 32768,
-          "tok_s": 76.2,
+          "card": "all three cards (pooled lane, port 11450)",
+          "context": 49152,
+          "tok_s": 83.8,
           "measured": true,
           "best_effort_not_tested": false,
-          "note": "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on the pooled lane (port 11450) across BOTH cards, started on demand; it pauses the other lanes' models while it runs"
+          "note": "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on the pooled lane (port 11450) across ALL THREE cards, started on demand; it pauses the other lanes' models while it runs"
         },
         "agentic_vision": {
           "preset": "agentic_vision",
@@ -662,7 +670,7 @@
           "model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
           "card_index": 0,
           "card": "all the cards (pooled lane, port 11450)",
-          "context": 32768,
+          "context": 49152,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
@@ -683,12 +691,12 @@
           "preset": "fast",
           "model": "qwen3.5:4b",
           "card_index": 1,
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:07:00.0); monitor not reported by this PC",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0); monitor not reported by this PC",
           "context": 16384,
           "tok_s": null,
           "measured": false,
           "best_effort_not_tested": true,
-          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:07:00.0); monitor not reported by this PC: display + Fast/Live lane, qwen3.5:4b"
+          "note": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0); monitor not reported by this PC: display + Fast/Live lane, qwen3.5:4b"
         },
         "reflect": {
           "preset": "reflect",
@@ -748,12 +756,12 @@
         },
         {
           "role": "monitor card's lane: display + Fast/Live, 16,384 tokens",
-          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:07:00.0); monitor not reported by this PC",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:05:00.0); monitor not reported by this PC",
           "context": 16384
         },
         {
           "role": "headless card's lane: no 9B lane fits - Agentic+Vision needs about 7.00 GiB against 6.65 GiB free, so it stays on the everyday card",
-          "card": "the headless 2080 SUPER (not installed yet)",
+          "card": "NVIDIA GeForce RTX 2080 SUPER (PCI 0000:08:00.0)",
           "context": 16384
         }
       ],

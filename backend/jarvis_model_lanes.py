@@ -226,7 +226,7 @@ def start_lane(lane_key, **kwargs) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-#   The pooled both-card lane (the Coding preset's heavy mode)
+#   The pooled three-card lane (the Coding preset's heavy mode)
 # ---------------------------------------------------------------------------
 #
 # WHAT IT IS. The two lanes above are the owner's own logon tasks: one Ollama
@@ -301,44 +301,38 @@ POOLED_KEY = "pooled"
 POOLED_PORT = 11450
 
 #: The model and the context. The model is `jarvis_big_coder`'s own, pinned by
-#: test. The CONTEXT is this lane's own MEASUREMENT and is deliberately not the
-#: big-coder mode's 28,672: measured on this PC on 2026-11-02 with every model
-#: unloaded, the zero-spill ceiling had moved - 20,480 / 24,576 / 28,672 all
-#: spilled 204-212 MiB, and 16,384 loaded with none (14,886 MiB, all of it in
-#: video memory). The preset ran at 16,384 until 2026-11-03. On that day the
-#: whole ladder was measured again through this same shipped path, and every
-#: rung above 16,384 spills: 20,480 at 203.5 MiB, 24,576 at 207.5, 28,672 at
-#: 211.5, and 32,768 at 323.5 MiB (the 8 GB card is the wall - its video memory
-#: is full first, then one more slab of the model goes to system RAM). The
-#: owner chose the full 32,768, the largest rung measured to load on this PC:
-#: 16,513.7 MiB with 323.5 MiB in system RAM, cold load 36.0 s against 37.0 s
-#: at 16,384, and decode inside this model's own run-to-run noise (80.36 against
-#: 79.88 tok/s median on three short prompts). So the preset now runs at 32,768
-#: and accepts those 323.5 MiB through `POOLED_SPILL_ALLOWANCE` below, which is
-#: one number for THIS window only. The preset's own `context` is pinned to it
-#: by test.
+#: test. The CONTEXT is this lane's own MEASUREMENT: 49,152 tokens, measured
+#: again on 2026-11-07 with ALL THREE cards and `OLLAMA_SCHED_SPREAD=1` in the
+#: server's environment - zero CPU spill, 16.2 GiB resident across cards 0, 1
+#: and 2, 83.8 tokens a second warm after a 900-word prompt, cold load 31.6 s.
+#: 32,768 tokens was measured in the same sweep too: 84.9 tok/s at 15.1 GiB and a
+#: 10.9 s cold load - 1.3 % faster and 1.07 GiB smaller, but 16,384 fewer tokens
+#: of window. The owner's Q2 ruling asks for the largest window that stays above
+#: 75 tok/s, so 49,152 is what this lane asks for and the spill allowance is ZERO.
+#: NOT claimed: that the third card removed the old 323.5 MiB two-card spill. The
+#: two-card control in tonight's sweep also measured zero spill (at 14.84 GiB)
+#: and the difference from the 2026-11-03 record is not explained; that record is
+#: kept as history in docs/MEASURED-2026-11-07-THREE-GPU.md.
 POOLED_MODEL = "qwen3-coder-30b-a3b-ud-q3-k-xl"
-POOLED_CTX = 32768
+POOLED_CTX = 49152
 
-#: The spill this one window is allowed to have, in BYTES. Measured 323.5 MiB
-#: at 32,768 on 2026-11-03 (source: `docs/MEASURED-2026-11-02-POOLED-LANE.md`'s
-#: 2026-11-03 amendment). 352 MiB is that measurement plus about 9%, so the
-#: same split reported slightly differently still loads; nothing larger is
-#: accepted. It is a MEASUREMENT, not a guess, and it is deliberately the only
-#: allowance in this code base: every other caller of `load_coder` -
-#: `jarvis_big_coder.start()` included - passes none and keeps the exact
-#: zero-spill rule.
-POOLED_SPILL_ALLOWANCE = 352 * 1024 * 1024
+#: The spill this one window is allowed to have, in BYTES. Zero, measured: with
+#: all three cards the 49,152-token window loaded with 16.2 GiB in video memory
+#: and nothing in system RAM (2026-11-07), so the lane keeps `load_coder`'s
+#: exact zero-spill rule and passes an explicit 0 rather than a measured
+#: allowance. The old 352 MiB / 323.5 MiB two-card figures are kept in the
+#: measured document as history, not as an allowance.
+POOLED_SPILL_ALLOWANCE = 0
 
-#: The spill that measurement really saw, in MiB. The card and the docs quote
-#: this number; it is kept beside the cap so the two cannot drift, and the test
-#: proves the cap is this plus about 9% and nothing more.
-POOLED_SPILL_MEASURED_MIB = 323.5
+#: The spill that measurement really saw, in MiB: zero. The card and the docs
+#: quote this number, and the test proves the allowance is zero rather than
+#: "anything small".
+POOLED_SPILL_MEASURED_MIB = 0.0
 
-#: What the contract calls it. `card` is "both cards" on purpose: there is no
-#: single card this lane lives on, and saying the 2060 would be a lie.
-POOLED = {"key": POOLED_KEY, "card": "both cards", "port": POOLED_PORT,
-          "words": "one model across both cards"}
+#: What the contract calls it. `card` is "all three cards" on purpose: there is
+#: no single card this lane lives on, and saying one card would be a lie.
+POOLED = {"key": POOLED_KEY, "card": "all three cards", "port": POOLED_PORT,
+          "words": "one model across all three cards"}
 
 _POOLED_LOCK = threading.Lock()
 _POOLED: dict = {}
@@ -350,7 +344,7 @@ def pooled_info() -> dict:
 
 
 def _engine(engine=None):
-    """The module that owns the both-cards server, or the one passed in.
+    """The module that owns the three-card server, or the one passed in.
 
     `jarvis_big_coder` is imported on use, never at import time: this module is
     imported by the backend's start-up banner and by suites that run without it
@@ -453,15 +447,14 @@ def pooled_card_text(*, engine=None) -> str:
     same model, the same cards, the same two lane models and contexts - because
     it is the same pause, and two descriptions of one action would drift. What
     this lane passes it is what is THIS lane's own measurement: the window it
-    asks for and the spill that measurement accepted, so the card describes the
-    load that will really happen (32,768 tokens with 323.5 MiB in system RAM,
-    2026-11-03) and never the big-coder mode's 28,672-token zero-spill rung.
-    The last line is this lane's own: what changes about chat.
+    asks for and the spill that measurement saw, so the card describes the load
+    that will really happen (49,152 tokens, zero CPU spill on all three cards,
+    83.8 tokens a second, 2026-11-07). The last line is this lane's own: what
+    changes about chat.
     """
     eng = _engine(engine)
-    measured = (f"the window measured on this PC on 2026-11-03, where "
-                f"{POOLED_SPILL_MEASURED_MIB:g} MiB of it spilled out of video memory "
-                f"into system RAM and is accepted for this window alone")
+    measured = ("the largest window measured on this PC with all three cards, "
+                "with zero CPU spill")
     return (eng.card_text_start(num_ctx=POOLED_CTX, measured_words=measured)
             + "\n\nWhile it runs, chat uses it. Applying another preset, or "
               "stopping it, unloads it and puts both models back exactly as "
@@ -485,7 +478,7 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
             "ok": True, "changed": False, "running": True, "lane": POOLED_KEY,
             "url": state["url"], "model": POOLED_MODEL,
             "num_ctx": state["context_length"] or POOLED_CTX,
-            "message": ("The pooled both-card lane is already holding the coding "
+            "message": ("The pooled three-card lane is already holding the coding "
                         "model, so nothing was started and nothing was paused."),
         }
 
@@ -518,7 +511,7 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
         return 503, {
             "ok": False, "changed": False, "running": False, "lane": POOLED_KEY,
             "error": (srv.get("why") or
-                      "the both-cards Ollama could not be started"),
+                      "the three-card Ollama could not be started"),
         }
     port = _port_of(srv.get("url"))
 
@@ -558,7 +551,7 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
         "ok": True, "changed": True, "running": True, "lane": POOLED_KEY,
         "url": srv.get("url") or pooled_url(), "model": POOLED_MODEL,
         "num_ctx": POOLED_CTX,
-        "message": (f"The coding model is running across both cards at "
+        "message": (f"The coding model is running across all three cards at "
                     f"{POOLED_CTX:,} tokens. The two lane models are paused and "
                     f"come back when you stop it or apply another preset."),
         "paused": paused["proof"], "proof": loaded["proof"],
@@ -599,10 +592,10 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True) -> tupl
         return 503, {"ok": False, "changed": was_running, "running": False,
                      "lane": POOLED_KEY, "error": error,
                      "unloaded": gone["proof"], "restored": back["proof"]}
-    message = ("The coding model is stopped, the both-cards server this "
+    message = ("The coding model is stopped, the three-card server this "
                "app started is stopped, and both lane models are back: "
                + "; ".join(eng.lane_lines())) if restore else (
-        "The coding model is stopped and the both-cards server this app "
+        "The coding model is stopped and the three-card server this app "
         "started is stopped; the two lane models were left stopped, because "
         "the cards are being freed.")
     return 200, {

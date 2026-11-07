@@ -215,8 +215,8 @@ def t_the_card_names_both_lanes():
     """The announcement has to say WHICH two models stop and what they come
     back at - the owner is deciding whether to interrupt his own assistant."""
     words = B.card_text_start()
-    check("the card names the model and both cards it needs",
-          B.MODEL in words and "BOTH" in words)
+    check("the card names the model and all three cards it needs",
+          B.MODEL in words and "ALL THREE" in words)
     for lane in B.LANES:
         check(f"the card names {lane.model} at {lane.ctx} on the {lane.card}",
               lane.model in words and f"{lane.ctx:,}" in words and lane.card in words,
@@ -748,46 +748,49 @@ def t_the_patch_order_allow_lists_carry_the_newest_patch_too():
 
 def t_the_both_cards_server_is_the_one_this_mode_owns():
     """The server this mode starts must be a DIFFERENT process on a DIFFERENT
-    port from both lanes, with CUDA_VISIBLE_DEVICES removed and OLLAMA_VULKAN
-    set - the trap that silently moves a load onto the other card."""
+    port from both lanes, with CUDA_VISIBLE_DEVICES removed, OLLAMA_VULKAN=0
+    and OLLAMA_SCHED_SPREAD=1 - the three settings that make the load really
+    use every card (measured 2026-11-07: without the spread flag Ollama fills
+    only as many cards as it needs, and the third card sat empty)."""
     check("the mode's port is neither lane's",
           B.BIG_PORT not in [lane.port for lane in B.LANES], str(B.BIG_PORT))
     env = B._child_env(B.BIG_PORT)
-    check("CUDA_VISIBLE_DEVICES is REMOVED, so Ollama sees both cards",
+    check("CUDA_VISIBLE_DEVICES is REMOVED, so Ollama sees every card",
           "CUDA_VISIBLE_DEVICES" not in env)
     check("OLLAMA_VULKAN=0 is set, so CUDA is really used", env.get("OLLAMA_VULKAN") == "0")
+    check("OLLAMA_SCHED_SPREAD=1 is set, so the third card is really filled",
+          env.get("OLLAMA_SCHED_SPREAD") == "1")
     check("it listens on loopback only", env.get("OLLAMA_HOST") == f"127.0.0.1:{B.BIG_PORT}")
     check("and it may never reach the cloud", env.get("OLLAMA_NO_CLOUD") == "1")
 
 
 def t_the_card_count_is_read_and_said_plainly():
-    """2026-10-17: the owner is adding a third RTX 2080 SUPER. The mode works
-    on 1, 2 or 3 cards: the measured two-card minimum keeps its exact words,
-    an extra card is used automatically, and the 28,672-token setting measured
-    on two is NOT raised for it until a new measurement says it fits. A PC the
-    code cannot read keeps the two-card words rather than inventing a count."""
-    two = B.cards_words(None)
-    check("unreadable hardware keeps the measured two-card words, exactly",
-          two.startswith("It needs BOTH graphics cards,"), two)
-    check("on today's two cards the sentence is unchanged too",
-          B.cards_words([object(), object()]) == two)
+    """2026-11-07: three cards ARE the measured minimum now.
+
+    Measuring the 32,768-token window on all three cards gave 84.9 tok/s and a
+    10.9 s cold load at zero spill; the same window on two cards gave 60.6
+    tok/s and a 69.6 s load, and one card cannot carry it. So the sentences
+    name three cards, a PC with fewer is refused in words, and a PC the code
+    cannot read keeps the measured three-card words rather than inventing a
+    count."""
+    three_words = B.cards_words(None)
+    check("unreadable hardware keeps the measured three-card words, exactly",
+          three_words.startswith("It needs ALL THREE graphics cards,"), three_words)
+    check("on today's three cards the sentence is the same too",
+          B.cards_words([object(), object(), object()]) == three_words)
     one = B.cards_words([object()])
     check("one card: said plainly, and no claim it can run",
-          "this PC has 1" in one and "BOTH" not in one, one)
-    three = B.cards_words([object(), object(), object()])
-    check("three cards: at least two, spread across all of them",
-          "this PC has 3" in three and "split across all of them" in three, three)
-    check("no extra-card sentence on one or two cards",
-          B.cards_note(None) == "" and B.cards_note([object(), object()]) == "")
-    note = B.cards_note([object(), object(), object()])
-    check("an extra card is used automatically, and the measured setting is NOT raised for it",
-          "used automatically" in note and "measured on two cards" in note
-          and "not raised" in note, note)
+          "this PC has 1" in one and "at least three" in one, one)
+    four = B.cards_words([object()] * 4)
+    check("more than three cards: spread across all of them",
+          "this PC has 4" in four and "split across all of them" in four, four)
+    check("no extra-card sentence now the third card is measured",
+          B.cards_note(None) == "" and B.cards_note([object()] * 4) == "")
     with mock.patch.object(B, "cards_in_pc", return_value=None):
         off = B.card_text_off()
-    check("the switch's words say both cards when the PC cannot be read",
-          "both graphics cards" in off, off)
-    for n in (1, 3):
+    check("the switch's words say all three cards when the PC cannot be read",
+          "all three graphics cards" in off, off)
+    for n in (1, 4):
         with mock.patch.object(B, "cards_in_pc", return_value=[object()] * n):
             start, off = B.card_text_start(), B.card_text_off()
         check(f"{n} card(s): the start text says the real count",
@@ -796,8 +799,8 @@ def t_the_card_count_is_read_and_said_plainly():
               f"this PC has {n}" in off, off)
     with mock.patch.object(B, "cards_in_pc", return_value=[object()] * 3):
         start = B.card_text_start()
-    check("three cards: the measured token setting is named and left alone",
-          f"{B.NUM_CTX:,} tokens" in start and "not raised" in start, start)
+    check("three cards: the measured token setting is named",
+          f"{B.NUM_CTX:,} tokens" in start, start)
 
 
 def main() -> int:

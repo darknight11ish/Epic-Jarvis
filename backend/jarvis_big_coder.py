@@ -1,4 +1,4 @@
-"""jarvis_big_coder.py - the 30B coder: both cards, with Jarvis paused.
+"""jarvis_big_coder.py - the 30B coder: all three cards, with Jarvis paused.
 
 WHAT THIS IS, AND WHY IT EXISTS
 
@@ -8,11 +8,12 @@ is the best coder and the fastest writer ever measured on this PC - 10/10 on
 the project's coding test, ~101 / 76.5 / 76.3 tokens a second on the three
 bench prompts, and no thinking mode to default on and return an empty answer.
 Its cost is the whole reason it is a MODE and not a model: its GPU-resident
-footprint at the smallest context tested is 14,813 MiB against a 12,288 MiB
-card and an 8,192 MiB card, so it needs BOTH cards and cannot sit beside
-anything. Measured for it: 49/49 layers across both cards and zero spill at
-28,672 tokens, with the 2060 at 12,052 of its 12,288 MiB - the ceiling
-(`.dsh-scratch/android-verify/BIG-MODELS-2026-10-10.md`, sections 6b, 6c, 12).
+footprint is 14,813 MiB at the smallest context tested, against an 8,192 MiB
+card, so it needs the whole pool and cannot sit beside anything. Measured for
+it on 2026-11-07 with all three cards: zero CPU spill at 49,152 tokens,
+83.8 tokens a second warm after a 900-word prompt, cold load 31.6 s - against
+60.6 tokens a second and a 69.6 s cold load on two cards at 32,768 tokens
+(`docs/MEASURED-2026-11-07-THREE-GPU.md`).
 
 THE OWNER'S DECISION, WHICH THIS FILE IMPLEMENTS AND DOES NOT RE-LITIGATE
 
@@ -35,10 +36,10 @@ REUSE, NOT A SECOND SUPERVISOR
 `jarvis_power_switch.py` already knows how to unload a lane, load a model and
 prove it from /api/ps, and how to preload one at the lane's own context instead
 of Ollama's small default. None of that is re-invented here. The one thing this
-mode needs that nothing else does is a server that can SEE both cards: the two
+mode needs that nothing else does is a server that can SEE every card: the two
 lane servers are pinned, one card each, so the model cannot be loaded on either
 of them without spilling. This file starts ONE `ollama serve` for the mode,
-with no `CUDA_VISIBLE_DEVICES` (both cards) and `OLLAMA_VULKAN=0` (without
+with no `CUDA_VISIBLE_DEVICES` (every card) and `OLLAMA_VULKAN=0` (without
 which CUDA_VISIBLE_DEVICES silently falls back to Vulkan onto the other card -
 `jarvis_picture_card.py` records that trap), on its own port, and stops it when
 the mode ends. It never touches the lane servers, which are the owner's.
@@ -91,18 +92,20 @@ MODEL = "qwen3-coder-30b-a3b-ud-q3-k-xl"
 MODEL_BYTES = 13806312608
 MODEL_SHA256 = "69cd7578d77dffc0b17e34bad9ef998d08ae0e20ccceef21bad4e7eb3d8c553b"
 
-#: The largest context measured to load with ZERO spill across the two cards
-#: (BIG-MODELS section 6c). 32,768 is the first rung that spills, by 0.20 GB.
-#: NOT raised for a third card: that is unmeasured (2026-10-17 - the owner is
-#: adding a second RTX 2080 SUPER; the setting stays at the measured value
-#: until a new measurement on this PC says more fits).
-NUM_CTX = 28672
+#: The largest context measured to load with ZERO spill across ALL THREE cards
+#: (2026-11-07, `docs/MEASURED-2026-11-07-THREE-GPU.md`): 49,152 tokens loaded
+#: at 16.2 GiB with nothing in system RAM, 83.8 tok/s warm after a 900-word
+#: prompt. 65,536 also loaded with zero spill but measured 59.06 tok/s, below
+#: the 75 tok/s bar the owner set for this preset, so it is not the window this
+#: mode asks for. The old two-card split measured 28,672 as its own ceiling.
+NUM_CTX = 49152
 
-#: The measured minimum is two cards, never one: on one card no context fits,
-#: not even the smallest. A third card, when present, is used automatically -
-#: the mode starts Ollama with no CUDA_VISIBLE_DEVICES pin, so the engine sees
-#: every card - but nothing is claimed about it until it is measured here.
-NEEDS_CARDS = 2
+#: The measured minimum is all three cards: on two cards the same 32,768 window
+#: loaded with zero spill but at 60.6 tok/s and a 69.6 s cold load, and on one
+#: card no context fits at all. The mode starts Ollama with no
+#: `CUDA_VISIBLE_DEVICES` pin, so the engine sees every card; the count is read
+#: from nvidia-smi for the words, never assumed.
+NEEDS_CARDS = 3
 BIG_PORT = 11450
 
 #: The opt-in switch, and the two gate actions this mode uses. Both already
@@ -383,7 +386,7 @@ def _settle(url: str, model: str, *, gone: bool, settle_s: float = SETTLE_S,
 
 
 # --------------------------------------------------------------------------
-#   The one server this mode needs: both cards, its own port
+#   The one server this mode needs: all three cards, its own port
 # --------------------------------------------------------------------------
 
 _SERVER: dict = {}
@@ -394,9 +397,17 @@ def _child_env(port: int) -> dict:
     """What the mode's own `ollama serve` inherits. Windows needs its own
     variables and the model folder, so they come from jarvis_child_env (the
     same helper the second Ollama uses). `CUDA_VISIBLE_DEVICES` is REMOVED on
-    purpose - leaving it unset is what lets Ollama see both cards - and
+    purpose - leaving it unset is what lets Ollama see every card - and
     `OLLAMA_VULKAN=0` is set, without which that unset variable silently falls
-    back to Vulkan onto one card (jarvis_picture_card.py records the trap)."""
+    back to Vulkan onto one card (jarvis_picture_card.py records the trap).
+
+    `OLLAMA_SCHED_SPREAD=1` is THE KNOB THAT MAKES THE THIRD CARD REAL
+    (measured 2026-11-07): without it Ollama fills only as many cards as the
+    model needs and leaves the rest empty, so the two-card split was what it
+    chose; with it, the same model spread across 0, 1 and 2 and gained 24.3
+    tokens a second and a 58.7 s faster cold load, at zero spill
+    (`docs/MEASURED-2026-11-07-THREE-GPU.md`).
+    """
     base = dict(os.environ)
     try:
         import jarvis_child_env
@@ -407,6 +418,7 @@ def _child_env(port: int) -> dict:
     env["OLLAMA_VULKAN"] = "0"
     env["OLLAMA_HOST"] = f"127.0.0.1:{int(port)}"
     env["OLLAMA_NO_CLOUD"] = "1"
+    env["OLLAMA_SCHED_SPREAD"] = "1"
     return env
 
 
@@ -425,7 +437,7 @@ def server_start(port: int = BIG_PORT) -> dict:
                                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception as exc:
         return {"ok": False, "url": url, "owned": False,
-                "why": f"could not start the both-cards Ollama ({type(exc).__name__})"}
+                "why": f"could not start the three-card Ollama ({type(exc).__name__})"}
     deadline = time.time() + 30.0
     while time.time() < deadline:
         if ps(url) is not None:
@@ -435,14 +447,14 @@ def server_start(port: int = BIG_PORT) -> dict:
             return {"ok": True, "url": url, "owned": True, "why": ""}
         if proc.poll() is not None:
             return {"ok": False, "url": url, "owned": False,
-                    "why": "the both-cards Ollama stopped as soon as it started"}
+                    "why": "the three-card Ollama stopped as soon as it started"}
         time.sleep(0.5)
     try:
         proc.terminate()
     except Exception:
         pass
     return {"ok": False, "url": url, "owned": False,
-            "why": "the both-cards Ollama did not answer within 30 seconds"}
+            "why": "the three-card Ollama did not answer within 30 seconds"}
 
 
 def server_stop() -> dict:
@@ -495,37 +507,33 @@ def cards_words(cards: Optional[list]) -> str:
     """What the big model needs of this PC's graphics cards, in plain words,
     for however many are in the PC (2026-10-17: N-card aware).
 
-    Two is the measured minimum (49/49 layers, zero spill at NUM_CTX) and the
-    two-card sentence is the one it always was. An extra card is used
-    automatically - the mode deliberately starts Ollama with no pin - but the
-    context stays at the value measured on two until a new measurement says
-    more fits, so a third card can never quietly change what was measured.
+    Three is the measured minimum for the current 49,152-token window
+    (2026-11-07): all three cards loaded it at zero spill, 83.8 tok/s and a
+    31.6 s cold load; two cards carried 32,768 at 60.6 tok/s and a
+    69.6 s load. The mode starts Ollama with no pin, so the engine sees every
+    card, and `OLLAMA_SCHED_SPREAD=1` is what makes it use all of them.
     """
     n = None if cards is None else len(cards)
     if n is not None and n < NEEDS_CARDS:
-        return (f"It needs at least two graphics cards, and this PC has {n}: one card "
-                "cannot carry the model, so this is not started.")
+        return (f"It needs at least three graphics cards, and this PC has {n}: the "
+                "measured 32,768-token window does not fit on fewer, so this is not "
+                "started.")
     if n is not None and n > NEEDS_CARDS:
-        return (f"It needs at least two graphics cards; this PC has {n}, so the big model is "
+        return (f"It needs all three graphics cards; this PC has {n}, so the big model is "
                 "split across all of them, and the two models running now are paused first, "
                 "and they are put back exactly as they are when you stop:")
-    return ("It needs BOTH graphics cards, so the two models running now are paused "
+    return ("It needs ALL THREE graphics cards, so the two models running now are paused "
             "first, and they are put back exactly as they are when you stop:")
 
 
 def cards_note(cards: Optional[list], *, num_ctx: Optional[int] = None) -> str:
-    """One sentence for a PC with more than the measured two cards, else "".
+    """No extra-card sentence any more (2026-11-07): the third card is measured.
 
-    `num_ctx` is the window the caller's own text names, so the extra-card
-    sentence can never quote a different number from the sentence beside it.
+    Kept as a function because `card_text_start` composits it, and a future
+    fourth card would want the same shape of sentence again. The measured
+    window already includes every card this PC has.
     """
-    n = None if cards is None else len(cards)
-    if n is None or n <= NEEDS_CARDS:
-        return ""
-    ctx = int(num_ctx or NUM_CTX)
-    return (f" The extra card is used automatically, but {ctx:,} tokens is the setting "
-            "measured on two cards: it is not raised for a third one until a new "
-            "measurement on this PC says it fits.")
+    return ""
 
 
 def card_text_start(*, num_ctx: Optional[int] = None,
@@ -533,16 +541,15 @@ def card_text_start(*, num_ctx: Optional[int] = None,
     """The card the owner reads, naming the window THIS start will ask for.
 
     The big-coder mode calls this with no arguments and gets the sentence it
-    always had: `NUM_CTX` (28,672) and the largest measured to fit both cards
-    with no spill. The Coding preset's pooled lane passes its own measured rung
-    and the plain words for what that measurement accepted, because it asks for
-    a different window with a measured, bounded spill (2026-11-03). One card
-    text, one copy of the pause and the lane lines, each start's own number.
+    now has: `NUM_CTX` (49,152) measured on all three cards with no spill at
+    83.8 tok/s. The Coding preset's pooled lane passes its own measured rung
+    and the plain words for that measurement. One card text, one copy of the
+    pause and the lane lines, each start's own number.
     """
     cards = cards_in_pc()
     ctx = int(num_ctx or NUM_CTX)
-    measured = measured_words or ("the largest measured to fit both cards with "
-                                  "no spill")
+    measured = measured_words or ("measured on all three cards with no CPU spill at "
+                                  "83.8 tokens a second")
     return "\n".join([
         "Use the big coding model: qwen3-coder-30b-a3b-ud-q3-k-xl.",
         "",
@@ -559,8 +566,8 @@ def card_text_start(*, num_ctx: Optional[int] = None,
 def card_text_off() -> str:
     cards = cards_in_pc()
     n = None if cards is None else len(cards)
-    needs = ("both graphics cards" if (n is None or n == NEEDS_CARDS)
-             else f"at least two graphics cards (this PC has {n})")
+    needs = ("all three graphics cards" if (n is None or n == NEEDS_CARDS)
+             else f"at least three graphics cards (this PC has {n})")
     return ("Turn the big coding model on as a choice you can use. It is OFF until you "
             f"start it, it needs {needs}, and it pauses the two running "
             "models while it is on. Nothing loads until you start it.")
@@ -624,7 +631,7 @@ def pause_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
 def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
                num_ctx: Optional[int] = None,
                allow_spill: Optional[int] = None) -> dict:
-    """Load the 30B on the both-cards server and prove from /api/ps that it
+    """Load the 30B on the three-card server and prove from /api/ps that it
     fits: present, at the context asked for, and with no spill beyond what the
     caller has measured and accepted. On anything else it is unloaded again and
     `ok` is False.
@@ -652,7 +659,7 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     ctx_wanted = int(num_ctx or NUM_CTX)
     url = url_for(port)
     if not load(url, MODEL, ctx_wanted):
-        return {"ok": False, "why": f"the both-cards Ollama on port {port} did not load "
+        return {"ok": False, "why": f"the three-card Ollama on port {port} did not load "
                                     f"{MODEL}", "proof": []}
     rows = _settle(url, MODEL, gone=False)
     row = _row_for(rows, MODEL)
@@ -675,12 +682,12 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
                    ", and it was unloaded again")
         elif allow_spill is not None:
             why = (f"{MODEL} loaded with {spill} B of spill, over the {allowed} B "
-                   f"measured allowance for {ctx_wanted} tokens - it needs both cards, "
+                   f"measured allowance for {ctx_wanted} tokens - it needs the whole three-card pool, "
                    f"and this machine gave it less video memory than that measurement, "
                    f"so it was unloaded again")
         else:
             why = (f"{MODEL} loaded with spill ({spill} B not in video memory) - it "
-                   f"needs both cards and this machine could not give it both, so it "
+                   f"needs all three cards and this machine could not give it all three, so it "
                    f"was unloaded again")
         return {"ok": False, "why": why, "proof": proof}
     try:
@@ -808,7 +815,7 @@ def status() -> dict:
         "off_words": card_text_off(),
         "what_a_start_would_do": [
             f"pause {lane.model} on port {lane.port}" for lane in LANES
-        ] + [f"load {MODEL} at {NUM_CTX:,} tokens on both cards (port {BIG_PORT})"],
+        ] + [f"load {MODEL} at {NUM_CTX:,} tokens on all three cards (port {BIG_PORT})"],
         "measured": ("10/10 on the project's coding test; about 101 / 76.5 / 76.3 tokens a "
                      "second on the three bench prompts; 28,672 tokens with zero spill; no "
                      "thinking mode to return an empty answer"),
@@ -846,7 +853,7 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
           tasks: Optional[Callable] = None,
           url_for: Callable[[int], str] = _url,
           start_server: Optional[Callable] = None) -> tuple:
-    """Start the mode: announce, pause both lanes, load the 30B on both cards.
+    """Start the mode: announce, pause both lanes, load the 30B on all three cards.
 
     The order is the contract, and it is why this function is one function:
     the announcement goes out BEFORE the first unload, both lanes are proved
@@ -877,7 +884,7 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
     srv = (start_server or server_start)()
     if not srv.get("ok"):
         return 503, {"ok": False, "running": False, "error": srv.get("why") or
-                                                          "could not start the both-cards Ollama"}
+                                                          "could not start the three-card Ollama"}
     paused = pause_lanes(url_for=url_for)
     if not paused["ok"]:
         restore_lanes(url_for=url_for)
@@ -900,7 +907,7 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
     _audit("big_coder.start", {"model": MODEL, "ctx": NUM_CTX, "by": by or "an app"})
     return 200, {"ok": True, "running": True, "changed": True, "model": MODEL,
                  "num_ctx": NUM_CTX,
-                 "message": (f"The big coding model is running on both cards at {NUM_CTX:,} "
+                 "message": (f"The big coding model is running on all three cards at {NUM_CTX:,} "
                              f"tokens. The two models are paused and come back when you "
                              f"stop it."),
                  "paused": paused["proof"], "proof": loaded["proof"]}
