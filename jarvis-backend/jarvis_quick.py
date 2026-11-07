@@ -4896,6 +4896,70 @@ _WAKE_WORD = re.compile(
     r"|(?P<enable>enable|disable)\s+(?:the\s+|my\s+|your\s+)?"
     r"(?:wake\s+word|hey\s+jarvis(?:\s+wake\s+word)?)")
 
+#: THE STANDING CLOUD-ESCALATION SWITCH, SAID OUT LOUD (2026-11-07).
+#:
+#: WHY THIS EXISTS. The model tool from PR #1209 (`cloud_escalation`) is the
+#: intended door, but the local 9B model does not reliably call it: measured on
+#: live build 0.2.437, "turn on cloud escalation" was answered "I've turned on
+#: cloud escalation" while the switch stayed OFF, and the self-awareness row
+#: failed "no NEW card appeared within 25s" in two separate passes. Worse, the
+#: sentence did not even reach the model: the feature guide answered it with
+#: "Cloud ... is a Command-Only ability (runs when you ask, no switch needed)
+#: ... There is no fixed sentence for it", which is false about a switch the
+#: Presets menu really has and a card that really can be raised.
+#:
+#: WHAT MAY MATCH, and nothing else: the owner's own words for the SWITCH -
+#: "turn on cloud escalation", "turn cloud escalation on", "enable/disable the
+#: cloud escalation", "escalate (my|hard) questions to the cloud", "stop
+#: escalating to the cloud", and "turn it on/off" ONLY in a sentence that also
+#: names cloud escalation. A QUESTION is not a change request, so "is cloud
+#: escalation on?" keeps the feature guide's read, "what is the cloud" and "can
+#: you use the cloud?" keep their own paths, and "turn on the cloud light" names
+#: no escalation. The ladder itself - ON is ONE `change_own_config` card and
+#: writes nothing before the yes, OFF is instant, ON with no cloud provider
+#: chosen refuses BEFORE a card - is `jarvis_presets.cloud_escalate`'s; the
+#: runner below adds no rule to it and approves nothing.
+_CLOUD_ESCALATION_ON = re.compile(
+    r"(?:turn|switch)\s+on\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+)?cloud\s+escalation\s+on"
+    r"|(?:enable|activate)\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|escalate\s+(?:(?:my|hard|the)\s+questions?\s+|this\s+)?to\s+(?:the\s+)?cloud")
+_CLOUD_ESCALATION_OFF = re.compile(
+    r"(?:turn|switch)\s+off\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|(?:turn|switch)\s+(?:the\s+|my\s+)?cloud\s+escalation\s+off"
+    r"|(?:disable|deactivate)\s+(?:the\s+|my\s+)?cloud\s+escalation"
+    r"|stop\s+escalating\s+(?:(?:things|questions)\s+)?to\s+(?:the\s+)?cloud")
+#: "cloud escalation is on - turn it off": the pronoun is only read as the
+#: switch when the SAME sentence names the switch, and the verb has to follow a
+#: clause break. That second condition is deliberate: without it "cloud
+#: escalation is on but do not turn it off" would be read as OFF and turn the
+#: switch off at once - a mis-read that CHANGES the thing the owner asked to
+#: leave alone. A bare "turn it off" still keeps whatever path it had.
+_CLOUD_ESCALATION_PRONOUN = re.compile(
+    r"(?:the\s+|my\s+)?cloud\s+escalation\b[^.;!?]*?"
+    r"[,;.!?\u2014-]\s*(?:(?:and|then|please)\s+)?"
+    r"(?:turn|switch)\s+(?:it|that)\s+(on|off)\b.*"
+    r"|\b(?:turn|switch)\s+(?:it|that)\s+(on|off)\b\s*[,;.!?\u2014-]\s*"
+    r"(?:the\s+|my\s+)?cloud\s+escalation\b.*")
+
+
+def _cloud_escalation_set(s: str) -> Optional[Intent]:
+    """The standing cloud switch in the owner's words, or None.
+
+    Every value it returns is the sentence's own: "turn it off" inside a
+    sentence naming cloud escalation is OFF, never a guess about what "it" is
+    without that name."""
+    if _CLOUD_ESCALATION_ON.fullmatch(s):
+        return Intent("cloud_escalation_set", {"on": True})
+    if _CLOUD_ESCALATION_OFF.fullmatch(s):
+        return Intent("cloud_escalation_set", {"on": False})
+    m = _CLOUD_ESCALATION_PRONOUN.fullmatch(s)
+    if m:
+        return Intent("cloud_escalation_set",
+                      {"on": (m.group(1) or m.group(2)) == "on"})
+    return None
+
+
 #: The Anti-Slop filter (jarvis_antislop.py, 2026-10-28). TWO sentences need
 #: their OWN patterns, and both would be answered wrongly by the generic
 #: grammar if they did not have them:
@@ -5566,6 +5630,15 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     # The named-choice settings ("set the voice speed to faster", "keep my
     # chats for 30 days", "bring the captcha window to the front") - 2026-10-22.
     got = _settings_choice(s)
+    if got is not None:
+        return got
+    # The standing cloud-escalation switch (2026-11-07). It RUNS BEFORE the
+    # feature guide below, and that placement is the fix: the guide used to
+    # answer "turn on cloud escalation" with "there is no fixed sentence for
+    # it", so the sentence never reached the model or the switch's own card.
+    # A question asks for no change and falls past this to the guide exactly as
+    # before: "is cloud escalation on?" keeps its read.
+    got = _cloud_escalation_set(s)
     if got is not None:
         return got
     # A sentence that clearly asks to change A SETTING, naming one nothing
@@ -20112,6 +20185,65 @@ def _run_settings_choice_help(f: dict) -> Result:
     return Result(f"For {name}, you can say: {options}.", "settings_choice_help")
 
 
+def _run_cloud_escalation_set(f: dict) -> Result:
+    """The standing cloud-escalation switch, through its OWN door (2026-11-07).
+
+    THE DOOR IS `jarvis_presets.cloud_escalate`, the exact call the Presets
+    menu's Cloud row and PR #1209's model tool make. It owns everything that
+    decides: ON raises ONE `change_own_config` card and writes nothing before
+    the owner's yes; OFF is instant; already on/off is a no-op; ON with no
+    cloud provider chosen refuses BEFORE a card, because a standing yes to a
+    service nobody picked cannot do anything. Nothing here copies, loosens or
+    re-decides any of that, and nothing here approves a card.
+
+    WHAT IT SAYS IS THE BODY'S OWN SENTENCE (`said`/`message`/`error`), because
+    this switch can spend money: a runner that filled in "Done" after a refused
+    or timed-out card would be the exact "it said it turned it on and it did
+    not" failure this fast path exists to end. `cloud_escalate` always carries
+    one, so its words are returned as they are; the fallbacks below are only
+    for an empty body, and the changed one is tied to `body["on"]` rather than
+    invented. A card that is still waiting is reported as waiting, never as on.
+    """
+    try:
+        import jarvis_presets as P
+    except Exception as exc:                # noqa: BLE001 - module absent
+        return Result("The cloud switch is not available on this PC "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "cloud_escalation_set")
+    try:
+        _code, body = P.cloud_escalate(on=(f.get("on") is True))
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result("The cloud switch could not be changed "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "cloud_escalation_set")
+    body = body if isinstance(body, dict) else {}
+    error = str(body.get("error") or "").strip()
+    if error:
+        return Result(error, "cloud_escalation_set")
+    said = (str(body.get("said") or "").strip()
+            or str(body.get("message") or "").strip())
+    pending = (body.get("waiting") is True
+               or (body.get("card") is True and body.get("changed") is not True
+                   and not body.get("outcome")))
+    if pending:
+        # Never "on" while the owner has not said yes: the switch is unchanged
+        # and the card is the only thing that can change it. The body's own
+        # sentence is kept, and the one honest line is added only when its words
+        # do not already say that a card is waiting.
+        if not re.search(r"wait|approv|card", said, re.I):
+            said = (said + " " if said else "") + (
+                "Waiting for your yes on the approval card on this PC. "
+                "Nothing has changed yet.")
+        return Result(said, "cloud_escalation_set")
+    if body.get("changed") is True:
+        if said:
+            return Result(said, "cloud_escalation_set")
+        # Said only when the body itself says the switch really moved.
+        return Result("Escalation is on now." if body.get("on") is True
+                      else "Escalation is off now.", "cloud_escalation_set")
+    return Result(said or "Nothing was changed.", "cloud_escalation_set")
+
+
 def _run_face_ask() -> Result:
     """Which face is on, in the spec's own words - a read, nothing written."""
     import jarvis_settings_registry as R
@@ -21277,6 +21409,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_choice_bad(f)
     if n == "settings_choice_help":
         return _run_settings_choice_help(f)
+    # The standing cloud-escalation switch (2026-11-07): the fast path's own
+    # intent, answered through jarvis_presets.cloud_escalate - the same card the
+    # Presets menu raises. The runner decides nothing and approves nothing.
+    if n == "cloud_escalation_set":
+        return _run_cloud_escalation_set(f)
     if n == "face_ask":
         return _run_face_ask()
     if n == "settings_only":
