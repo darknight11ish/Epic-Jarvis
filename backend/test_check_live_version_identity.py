@@ -388,6 +388,29 @@ def t_q6_the_live_record_is_the_deployed_ref():
         shutil.rmtree(live, ignore_errors=True)
 
 
+def t_the_help_text_runs():
+    """`--help` must print and exit 0.
+
+    It crashed with ValueError: unsupported format character 'O' until
+    2026-11-06: the `--desktop-exe` help held a literal `%LOCALAPPDATA%` and
+    argparse formats every help string with `%`. A tool whose own `--help` is
+    a traceback cannot be used by anybody who does not already know its flags,
+    so the fix (`%%`) is pinned here rather than left to the next reader.
+    """
+    tool = HERE.parent / "tools" / "check_live_version_identity.py"
+    proc = subprocess.run([sys.executable, "-B", str(tool), "--help"],
+                          capture_output=True, text=True, timeout=60)
+    check("--help: exits 0 instead of raising", proc.returncode == 0,
+          (proc.returncode, proc.stderr[-400:]))
+    check("--help: prints the usage line", "usage: check_live_version_identity.py" in proc.stdout,
+          proc.stdout[:200])
+    # argparse WRAPS the help string, so compare on one unwrapped line.
+    flat = " ".join(proc.stdout.split())
+    check("--help: names the real default path without a format crash",
+          "%LOCALAPPDATA%\\Jarvis Desktop\\jarvis-desktop.exe" in flat,
+          flat[-300:])
+
+
 def main():
     for fn in (t_a_match_is_exit_0_and_says_the_agreed_value,
                t_a_mismatch_is_exit_1_and_names_both_values,
@@ -399,7 +422,8 @@ def main():
                t_q6_a_runtime_change_requires_a_deploy,
                t_q6_an_unreadable_ref_is_exit_2_never_a_pass,
                t_q6_the_default_path_is_still_the_identity_check,
-               t_q6_the_live_record_is_the_deployed_ref):
+               t_q6_the_live_record_is_the_deployed_ref,
+               t_the_help_text_runs):
         fn()
     print()
     if FAILED:

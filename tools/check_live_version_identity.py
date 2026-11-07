@@ -227,7 +227,7 @@ def main(argv: Optional[list] = None) -> int:
     parser.add_argument("--desktop-exe", default="",
                         help="the installed desktop program whose FileVersion is "
                              "the release identity (default: "
-                             "%LOCALAPPDATA%\\Jarvis Desktop\\jarvis-desktop.exe, "
+                             "%%LOCALAPPDATA%%\\Jarvis Desktop\\jarvis-desktop.exe, "
                              f"or ${DESKTOP_EXE_ENV})")
     parser.add_argument("--deployed-ref", default="",
                         help="the commit the live backend was sealed from; a "
