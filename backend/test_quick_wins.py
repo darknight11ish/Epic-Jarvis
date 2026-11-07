@@ -1283,6 +1283,81 @@ def t_a_list_answer_in_live_carries_the_list_not_a_pointer():
           None if live is None else live.reply)
 
 
+def t_quick_dispatch_sets_are_disjoint_and_reachable():
+    """Q1/Q2/Q3 (architect rulings, 2026-11-07). A DISPATCH set is not a
+    read-mark: every name in one is routed to its runner before the rest of
+    run(), so a read-only intent must live in READ_ONLY_INTENTS instead, and
+    every dispatch name must be handled by the runner it routes to. The
+    Wave-8 build shipped with `repo_watch_list` in _REMINDER_INTENTS, so
+    "What am I watching?" answered with the timers sentence; these checks
+    fail on that build and pass on the fix."""
+    buckets = {}
+    for name in dir(Q):
+        if name == "READ_ONLY_INTENTS":
+            continue
+        value = getattr(Q, name)
+        if name.endswith("_INTENTS") and isinstance(value, (set, frozenset)):
+            buckets[name] = set(value)
+        elif name in ("_MEASURED_SELF_WORDS", "_SELF_CODE_INTENTS"):
+            buckets[name] = set(value)
+    check("the dispatch buckets were found", len(buckets) >= 6, sorted(buckets))
+    overlaps = []
+    names = sorted(buckets)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            both = buckets[a] & buckets[b]
+            if both:
+                overlaps.append((a, b, sorted(both)))
+    check("no intent name sits in two dispatch buckets", not overlaps, overlaps)
+    holders = [k for k, v in buckets.items() if "repo_watch_list" in v]
+    check("the repo-watch list is not in a dispatch bucket (the Wave-8 bug)",
+          not holders, holders)
+    check("the repo-watch list is marked read-only (it must not clear "
+          '"cancel that")', "repo_watch_list" in Q.READ_ONLY_INTENTS)
+    fallbacks = []
+    for name in sorted(Q._REMINDER_INTENTS):
+        got = Q._run_reminders(name, "capability")
+        if got.intent != name:
+            fallbacks.append((name, got.intent, got.reply[:80]))
+    check("every _REMINDER_INTENTS name has its own branch (no silent "
+          "fallback to the capability answer)", not fallbacks, fallbacks)
+    sched = S.get()
+    intent = Q.match("What am I watching?")
+    check("... the watch-list sentence matches the watch list",
+          intent is not None and intent.name == "repo_watch_list", intent)
+    ran = Q.run(intent, sched, time.time()) if intent is not None else None
+    check("... and run() reaches the watch-list runner, not the reminder "
+          "answer", ran is not None and ran.intent == "repo_watch_list"
+          and "timer" not in ran.reply.lower(),
+          None if ran is None else (ran.intent, ran.reply[:160]))
+    priv = Q.answer("What am I watching?", sched=sched, private=True)
+    check("... a PRIVATE chat still answers that read deterministically "
+          "(ruling Q3)", priv is not None and priv.intent == "repo_watch_list",
+          None if priv is None else (priv.intent, priv.reply[:120]))
+    bare_clock = Q.match("what time is it?")
+    tail_clock = Q.match("what time is it? in one sentence")
+    check("... a trailing 'in one sentence' is retried and reaches the clock "
+          "door", bare_clock is not None and tail_clock is not None
+          and tail_clock.name == bare_clock.name,
+          (None if bare_clock is None else bare_clock.name,
+           None if tail_clock is None else tail_clock.name))
+    bare_ce = Q.match("turn on cloud escalation")
+    tail_ce = Q.match("Turn on cloud escalation. One sentence.")
+    check("... and 'One sentence.' no longer loses the cloud-escalation "
+          "answer", bare_ce is not None and tail_ce is not None
+          and bare_ce.name == tail_ce.name == "cloud_escalation_set",
+          (None if bare_ce is None else bare_ce.name,
+           None if tail_ce is None else tail_ce.name))
+    helper = Q._strip_meta_instruction("Turn on cloud escalation. One sentence.")
+    check("... the helper strips only a real tail",
+          helper == "Turn on cloud escalation"
+          and Q._strip_meta_instruction("summarise this in one sentence")
+          == "summarise this"
+          and Q._strip_meta_instruction("what is the weather") is None,
+          helper)
+
+
+
 def main():
     orig_tz = os.environ.get("TZ")
     try:
