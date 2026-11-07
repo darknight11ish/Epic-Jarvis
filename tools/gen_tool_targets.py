@@ -72,7 +72,6 @@ END = "# END GENERATED: tool target names (tools/gen_tool_targets.py)\n"
 LEGACY_NAMES = {
     "calendar_read": ("the calendar tool", "calendar", "my calendar"),
     "email_read": ("the email tool", "email", "my email"),
-    "email_check": ("the email tool", "email", "my email"),
     "notes_search": ("the notes tool", "notes", "my notes"),
     "home_read": ("the home status tool", "home status"),
 }
@@ -140,6 +139,23 @@ def targets() -> dict:
                     "an explicit LEGACY_NAMES entry made distinct on purpose.")
             seen[name] = tool
         out[str(tool)] = names
+    # The old email_read row is not itself in TOOLS_SWITCHABLE any more (the
+    # real tool is email_check), but its spoken names must keep resolving to
+    # the READING-tool row: the reading-tool suites pin "don't let the ai
+    # model read my email" to email_read, and set_reading_tool accepts the
+    # legacy name. It gets ONLY the old names - its derived words would
+    # collide with email_check's own ("email check").
+    for tool, legacy in LEGACY_NAMES.items():
+        if tool in out:
+            continue
+        for name in legacy:
+            other = seen.get(name)
+            if other is not None and other != tool:
+                raise SystemExit(
+                    f"two switchable tools would answer to the same words "
+                    f"{name!r}: {other!r} and {tool!r}")
+            seen[name] = tool
+        out[tool] = tuple(legacy)
     return out
 
 

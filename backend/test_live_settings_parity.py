@@ -412,9 +412,12 @@ def _tool_core(name):
 def t_every_tool_switch_is_the_same_in_both_doors():
     """All 60 switchable tools: the generated names resolve, ON and OFF, both doors."""
     targets = R.tool_targets()
-    check("the registry names every switchable tool",
-          len(targets) == len(AF.TOOLS_SWITCHABLE),
-          (len(targets), len(AF.TOOLS_SWITCHABLE)))
+    extra = [t for t in targets if t not in AF.TOOLS_SWITCHABLE]
+    check("the registry names every switchable tool, plus the legacy "
+          "reading-tool row the old sentences still reach",
+          all(t in targets for t in AF.TOOLS_SWITCHABLE)
+          and extra == ["email_read"],
+          (len(targets), len(AF.TOOLS_SWITCHABLE), extra))
     for tool, names in targets.items():
         COVERED_KEYS.add(f"tool:{tool}")
         core = _tool_core(names[0] if names else tool)

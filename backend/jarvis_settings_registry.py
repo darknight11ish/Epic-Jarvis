@@ -1516,7 +1516,7 @@ _TOOL_TARGETS = {
     'protect_from_jarvis': ('the protect from jarvis tool', 'protect from jarvis tool', 'the protect from jarvis', 'protect from jarvis'),
     'github_search': ('the github search tool', 'github search tool', 'the github search', 'github search'),
     'send_file_to_phone': ('the send file to phone tool', 'send file to phone tool', 'the send file to phone', 'send file to phone', 'file to phone'),
-    'email_check': ('the email tool', 'email', 'my email', 'the email check tool', 'email check tool', 'the email check', 'email check'),
+    'email_check': ('the email check tool', 'email check tool', 'the email check', 'email check'),
     'send_email': ('the send email tool', 'send email tool', 'the send email', 'send email'),
     'draft_email': ('the draft email tool', 'draft email tool', 'the draft email', 'draft email'),
     'tidy_inbox': ('the tidy inbox tool', 'tidy inbox tool', 'the tidy inbox', 'tidy inbox'),
@@ -1563,6 +1563,7 @@ _TOOL_TARGETS = {
     'github_open_issue': ('the github open issue tool', 'github open issue tool', 'the github open issue', 'github open issue'),
     'github_rerun_workflow': ('the github rerun workflow tool', 'github rerun workflow tool', 'the github rerun workflow', 'github rerun workflow'),
     'approval_policy': ('the approval policy tool', 'approval policy tool', 'the approval policy', 'approval policy'),
+    'email_read': ('the email tool', 'email', 'my email'),
 }
 # END GENERATED: tool target names (tools/gen_tool_targets.py)
 
@@ -1571,10 +1572,25 @@ def tool_targets() -> dict:
     return dict(_TOOL_TARGETS)
 
 
+_PREFERRED_TOOL_TARGETS = ("calendar_read", "email_read", "notes_search",
+                           "home_read")
+
+
 def find_tool_target(words: str) -> Optional[str]:
+    """The tool a spoken name belongs to, preferring the four reading tools.
+
+    The four reading tools were the first ones a sentence could switch, and
+    their own suites pin the sentences ("don't let the ai model read my email").
+    The generated targets from every switchable tool can share a bare alias with
+    one of them ("email" is both `email_read` and `email_check`), so the four are
+    searched first and a collision never re-routes an old sentence (caught on
+    the merged wave-8 branch, 2026-11-07).
+    """
     bare = _bare(words)
-    for tool, names in _TOOL_TARGETS.items():
-        if any(bare == _bare(n) for n in names):
+    order = [t for t in _PREFERRED_TOOL_TARGETS if t in _TOOL_TARGETS]
+    order += [t for t in _TOOL_TARGETS if t not in _PREFERRED_TOOL_TARGETS]
+    for tool in order:
+        if any(bare == _bare(n) for n in (_TOOL_TARGETS.get(tool) or ())):
             return tool
     return None
 

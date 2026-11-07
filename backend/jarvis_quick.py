@@ -5276,8 +5276,8 @@ def _settings_help(s: str) -> Optional[Intent]:
 #: exact shape, and changes nothing.
 _SETTINGS_EXPLAIN_ALL = re.compile(
     r"(?:can|could|would)\s+you\s+explain\s+(?:any|a|the|your|my)\s+"
-    r"(?:of\s+your\s+|of\s+the\s+)?settings?(?:\s+.*)?"
-    r"|explain\s+(?:to\s+me\s+)?(?:your|the|any)\s+settings?(?:\s+.*)?"
+    r"(?:of\s+your\s+|of\s+the\s+)?settings?\s*(?:\s+.*)??"
+    r"|explain\s+(?:to\s+me\s+)?(?:any\s+settings?(?:\s+.*)?|(?:your|the)\s+settings?\s*\??)"
     r"|how\s+do\s+i\s+(?:find\s+out|see|check)\s+what\s+"
     r"(?:a|one\s+of\s+your|the)\s+settings?\s+(?:is\s+)?(?:currently\s+)?"
     r"(?:set\s+to|at)(?:\s+.*)?")
@@ -7216,17 +7216,20 @@ def _cap_question(raw) -> Optional[Intent]:
     """
     text = " ".join(str(raw or "").lower().split())
     ask = bool(_CAP_ASKS_ABOUT_A_CARD.search(text))
+    # ONE row first: the ordinary deep shapes have to keep resolving exactly as
+    # they did before Q3 existed. A sentence that resolves as a single row is
+    # not a two-part question, even when it contains "and".
+    row = _cap_resolve(raw)
+    if row is not None:
+        return Intent("capability_answer",
+                      {"id": str(row.get("id") or ""), "ask": ask})
     # Q3 (2026-11-07): a TWO-part question gets every row it really names, in
     # the owner's order, up to three - never only the first and never the model.
     rows = _cap_multi_question(raw)
     if rows:
         return Intent("capability_answer",
                       {"ids": [str(r.get("id") or "") for r in rows], "ask": ask})
-    row = _cap_resolve(raw)
-    if row is None:
-        return None
-    return Intent("capability_answer",
-                  {"id": str(row.get("id") or ""), "ask": ask})
+    return None
 
 
 def _cap_safety_question(raw) -> Optional[Intent]:
@@ -15871,6 +15874,13 @@ def _rename_move_overcapture(name: str, folder: str = "") -> bool:
 def _note_rename_move_asking(raw: str) -> Optional[Intent]:
     """Read a rename/move from the raw sentence, keeping the title's case."""
     s = str(raw or "").strip().rstrip("?.!").strip()
+    # "move all my notion notes into obsidian" is the NOTION IMPORT answer's
+    # sentence (2026-10-28, one card, the export tidied into a vault), not a
+    # note move: the two grammars overlap once the polite lead is stripped, and
+    # moving notes was the wrong action to offer (caught on the merged wave-8
+    # branch, 2026-11-07). The Notion matcher runs later and owns it.
+    if "notion" in s.lower():
+        return None
     m = _NOTE_RENAME.fullmatch(s)
     if m:
         name = (m.group("name") or m.group("name2") or "").strip()
@@ -15890,6 +15900,13 @@ def _note_rename_move_asking(raw: str) -> Optional[Intent]:
 
 def _note_asking(s: str) -> Optional[Intent]:
     """The note/vault sentences above, or None (not ours)."""
+    # "move all my notion notes into obsidian" is the NOTION IMPORT
+    # answer's sentence, not a note move (2026-10-28, one card, the
+    # export tidied into a vault). Once the polite lead is stripped the
+    # two grammars overlap, and moving notes was the wrong action to
+    # offer (caught on the merged wave-8 branch, 2026-11-07).
+    if "notion" in s.lower():
+        return None
     if _NOTE_WRITE_BATCH.fullmatch(s):
         return Intent("notes_batch_refused")
     if _NOTE_DELETE_LINE.fullmatch(s):
