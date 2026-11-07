@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "20f4324828821cbf70f9108ea0cc41384d91c948bfb2d761b3889c0ee75490cb",
+  "source_sha256": "081d8c21b354d3a42551a3f39290991a2ff545b0844fee95c54ee5e40c73f3a4",
   "feature_count": 179,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -2073,13 +2073,13 @@ export const FEATURE_DIRECTORY = {
     },
     {
       "id": "cloud-escalation",
-      "title": "Cloud (DeepSeek API)",
+      "title": "Cloud (an API service you choose)",
       "group": "The PC itself",
       "surface": "both",
       "label": "Command-Only (Runs When You Ask — No Switch Needed)",
       "status": "not-a-setting",
       "label_note": "",
-      "example": "turn on Cloud (DeepSeek API)",
+      "example": "what is the cloud",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",
       "where_desktop": "All features and abilities",

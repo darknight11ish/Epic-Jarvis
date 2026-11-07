@@ -93,9 +93,28 @@ _PRIVATE_TERMS = [
     # my driver's license number" typed in the owner's own words missed
     # the one backstop meant to catch literal private phrases.
     r"\bdriver'?s licen[cs]e\b",
+    # The owner can be found or impersonated by these (2026-11-07, the owner's
+    # Q7 ruling): home/street/mailing address, and a phone number. Deliberately
+    # NOT a bare `address` - an IP address, an email address, a web address and
+    # a memory address are ordinary technical words - and NOT a bare "phone"
+    # ("how do I make a phone call on this PC" is not private).
+    r"\bhome address\b", r"\bstreet address\b", r"\bmailing address\b",
+    r"\bpostal address\b", r"\b(?:my|our)\s+address\b",
+    r"\bphone number\b", r"\bphone\s+no\.?\b",
     r"\biban\b", r"\bsort code\b", r"\brouting number\b", r"\baccount number\b",
     r"\bcredit card\b", r"\bcvv\b",
-    r"\bdiagnos\w*\b", r"\bprescription\b", r"\bbiopsy\b", r"\bmedical record\b",
+    # WAS r"\bdiagnos\w*\b", and that was too broad (2026-11-07, the owner's Q7
+    # ruling): an engineering question - "diagnose this test failure", "the
+    # diagnostic logs" - should be allowed to escalate normally, while the
+    # medical words stay private. So only the medical CONTEXTS match now: an
+    # explicit "medical diagnosis", "diagnosed with <condition>", and the
+    # owner's or a family member's possessive ("my diagnosis", "my son's
+    # diagnosis"). The health words further down this list still catch a
+    # condition named without the word "diagnosis" at all.
+    r"\bmedical diagnos\w*",
+    r"\bdiagnos(?:ed|is)\s+with\b",
+    r"\b(?:my|our|his|her|their|your)\s+(?:[\w'-]+\s+)?diagnos(?:is|es)\b",
+    r"\bprescription\b", r"\bbiopsy\b", r"\bmedical record\b",
     r"\bsalary\b", r"\bbank statement\b", r"\btax return\b",
     # The topics `[privacy] never_leaves_device` names, which this list did
     # not - rule 1 of the project is that email, files and money stay local,
