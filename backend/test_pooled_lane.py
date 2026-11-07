@@ -68,7 +68,7 @@ class Engine:
 
     def card_text_start(self, **kw):
         self.card_kw = dict(kw)
-        return ("Use the coding model. It needs BOTH graphics cards, so the two "
+        return ("Use the coding model. It needs ALL THREE graphics cards, so the two "
                 "models running now are paused first.")
 
     def lane_lines(self):
@@ -159,17 +159,15 @@ def t_the_lane_is_the_one_big_coder_owns():
     check("the model is the mode's own, and the context is a MEASURED rung on "
           "this PC's ladder - never a number invented here",
           L.POOLED_MODEL == BC.MODEL == MODEL
-          and L.POOLED_CTX in (16384, 20480, 24576, 28672, 32768),
+          and L.POOLED_CTX in (16384, 20480, 24576, 28672, 32768, 49152, 65536),
           (L.POOLED_MODEL, L.POOLED_CTX, BC.MODEL, BC.NUM_CTX))
-    check("the pooled window is 32,768 - the 2026-11-03 measurement (the rung the "
-          "owner chose), not the old 16,384 and not the big-coder mode's 28,672",
-          L.POOLED_CTX == 32768 and BC.NUM_CTX == 28672,
+    check("the pooled window is 49,152 - the 2026-11-07 three-card measurement "
+          "(zero spill, 83.8 tok/s) - and the mode asks for the same window",
+          L.POOLED_CTX == 49152 and BC.NUM_CTX == 49152,
           (L.POOLED_CTX, BC.NUM_CTX))
-    measured = int(L.POOLED_SPILL_MEASURED_MIB * 1024 * 1024)
-    check("the allowance is ONE 352 MiB number: the measured 323.5 MiB plus about "
-          "9%, and nothing larger is accepted",
-          L.POOLED_SPILL_ALLOWANCE == 352 * 1024 * 1024
-          and measured < L.POOLED_SPILL_ALLOWANCE <= int(measured * 1.15),
+    check("the allowance is ZERO: the third card removed the 323.5 MiB spill the "
+          "two-card split used to accept (2026-11-07)",
+          L.POOLED_SPILL_ALLOWANCE == 0 and L.POOLED_SPILL_MEASURED_MIB == 0.0,
           (L.POOLED_SPILL_MEASURED_MIB, L.POOLED_SPILL_ALLOWANCE))
     check("the allowance is not a general 'spill is fine': load_coder defaults to "
           "NO allowance and the big-coder mode's start() cannot pass one",
@@ -178,16 +176,16 @@ def t_the_lane_is_the_one_big_coder_owns():
           (inspect.signature(BC.load_coder), inspect.signature(BC.start)))
     check("the Coding preset's own context IS the lane's measured rung, so the "
           "contract and the load cannot disagree",
-          P.by_id("coding").context == L.POOLED_CTX == 32768,
+          P.by_id("coding").context == L.POOLED_CTX == 49152,
           (P.by_id("coding").context, L.POOLED_CTX))
     cod = P.by_id("coding")
-    check("the preset records BOTH the new window and the old zero-spill rung as "
-          "history, with the measured spill it accepts",
-          cod.measured.get("context_measured") == 32768
-          and cod.measured.get("context_zero_spill") == 16384
-          and cod.measured.get("spill_gib") == 0.3, cod.measured)
-    check("the contract row says BOTH cards, never a single card",
-          L.POOLED["card"] == "both cards" and L.POOLED["port"] == L.POOLED_PORT)
+    check("the preset records the measured zero-spill window and its zero spill, "
+          "and the old two-card spill is kept only in the measured document",
+          cod.measured.get("context_measured") == 49152
+          and cod.measured.get("context_zero_spill") == 49152
+          and cod.measured.get("spill_gib") == 0.0, cod.measured)
+    check("the contract row says all three cards, never a single card",
+          L.POOLED["card"] == "all three cards" and L.POOLED["port"] == L.POOLED_PORT)
     check("the preset contract's pooled lane is this lane's own port and words",
           P.LANES["pooled"]["port"] == L.POOLED_PORT
           and P.LANES["pooled"]["card"] == L.POOLED["card"]
@@ -199,20 +197,18 @@ def t_the_lane_is_the_one_big_coder_owns():
 
 def t_the_card_describes_the_load_it_will_really_do():
     """The card is what the owner approves, so it must name the window this
-    lane asks for and the measured spill it accepts - not the big-coder mode's
-    zero-spill rung, and not the old 16,384-token window."""
+    lane asks for and the measured zero spill on all three cards."""
     import jarvis_big_coder as BC
     words = L.pooled_card_text()          # the real engine, this lane's words
-    check("the pooled card names the 32,768-token window it will ask for",
+    check("the pooled card names the 49,152-token window it will ask for",
           f"{L.POOLED_CTX:,} tokens" in words, words)
-    check("... and it says the measured 323.5 MiB out loud instead of promising "
-          "zero spill",
-          f"{L.POOLED_SPILL_MEASURED_MIB:g} MiB" in words
-          and "zero spill" not in words.lower()
-          and f"{BC.NUM_CTX:,}" not in words, words)
+    check("... and it says the measured zero CPU spill out loud",
+          "zero CPU spill" in words, words)
+    check("... and it names all three cards, because that is what it now takes",
+          "ALL THREE" in words or "all three" in words, words)
     check("... while the big-coder mode's own card keeps its own measured rung",
           f"{BC.NUM_CTX:,} tokens" in BC.card_text_start()
-          and "no spill" in BC.card_text_start(), BC.card_text_start())
+          and "no CPU spill" in BC.card_text_start(), BC.card_text_start())
 
 
 def t_the_order_is_card_then_announce_then_server_then_pause_then_load():
@@ -232,8 +228,8 @@ def t_the_order_is_card_then_announce_then_server_then_pause_then_load():
           len(seen) == 1 and seen[0][0] == "switch_model"
           and set(seen[0][1]) == {"from", "to", "why"}
           and seen[0][1]["to"] == MODEL and seen[0][1]["why"] == "preset", seen)
-    check("the card's words name both cards and the pause before anything happens",
-          "both cards" in seen[0][2] or "BOTH" in seen[0][2], seen[0][2])
+    check("the card's words name all three cards and the pause before anything happens",
+          ("ALL THREE" in seen[0][2] or "all three" in seen[0][2]), seen[0][2])
     check("the card comes BEFORE the pause announcement, and the announcement "
           "before the first unload",
           eng.names()[:4] == ["ps", "announce", "server_start", "pause"],
@@ -251,7 +247,7 @@ def t_the_order_is_card_then_announce_then_server_then_pause_then_load():
     check("the card was given this lane's own window and measured words, so it "
           "cannot describe the big-coder mode's load",
           eng.card_kw.get("num_ctx") == L.POOLED_CTX
-          and str(L.POOLED_SPILL_MEASURED_MIB) in str(eng.card_kw.get("measured_words")),
+          and "zero CPU spill" in str(eng.card_kw.get("measured_words")),
           eng.card_kw)
     check("... and the answer carries the proof of the pause and of the load",
           any("11436" in row for row in body["paused"])

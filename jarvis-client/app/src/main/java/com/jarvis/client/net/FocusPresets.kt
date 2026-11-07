@@ -64,7 +64,7 @@ object FocusPresets {
     const val HELPER = "Second worker:"
     const val PENDING = "Being prepared"
     /**
-     * The COST of a heavy preset: both cards at once, and the other models
+     * The COST of a heavy preset: all three cards at once, and the other models
      * paused while it runs. It is not a refusal any more (2026-11-02): the PC
      * has a pooled both-card lane, so the phone offers the preset and this is
      * what it says trying it means. The PC sends its own `heavy_words`; this is
@@ -72,7 +72,7 @@ object FocusPresets {
      * carry.
      */
     const val HEAVY_COST =
-        "This preset needs both cards at once as one pooled lane. While it runs, " +
+        "This preset needs all three cards at once as one pooled lane. While it runs, " +
             "the everyday and Fast models are paused - they come back when you apply " +
             "another preset. Loading it takes about half a minute."
     const val APPLY_UNPUBLISHED =
@@ -135,7 +135,7 @@ object FocusPresets {
         val helper: Helper?,
         val measured: Measured?,
         val pending: Boolean,
-        /** true when the preset's model needs both cards together (the PC's words say why). */
+        /** true when the preset's model needs all three cards together (the PC's words say why). */
         val heavyMode: Boolean,
         /** The PC's own plain-words COST of a heavy preset; "" for every other one. */
         val heavyWords: String = "",

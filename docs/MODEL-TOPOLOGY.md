@@ -693,14 +693,28 @@ has been run.
 
 ---
 
-## The Coding preset's pooled both-card lane, measured (2026-11-02, amended 2026-11-03)
+## The Coding preset's pooled lane, measured (2026-11-02, amended 2026-11-03 and 2026-11-07)
+
+**Since 2026-11-07 this lane runs on all three cards.** The third card is
+installed and measured: the preset asks for the same model at **49,152 tokens**
+(the owner's Q2 ruling: the largest window that stays above 75 tok/s), loads
+**16.17 GiB with zero spill** across the 2060 and both 2080 SUPERs, decodes at
+**83.8 tokens a second** against 60.6 at 32,768 on two cards, and cold-loads in
+**31.6 s** against 69.6 s. The 32,768-token row measured 84.93 tok/s, 15.10 GiB
+and a 10.884 s load, and is kept as the alternative. The knob is
+**`OLLAMA_SCHED_SPREAD=1` in the pooled server's child environment**. The
+two-card record below is kept as history; the new measurement, every row
+behind it, and what each preset does with the third card are in
+`docs/MEASURED-2026-11-07-THREE-GPU.md`.
 
 The Coding preset's model is `qwen3-coder-30b-a3b-ud-q3-k-xl`, about 14.8 GB of
-GPU-resident memory. That fits neither card alone, so its lane is neither
+GPU-resident memory. That fits no single card, so its lane is neither
 11436 (2060) nor 11435 (2080 SUPER): it is ONE Ollama on **port 11450**,
 started on demand by the preset apply with **no card pin**, so the engine sees
-both cards (`jarvis_model_lanes.start_pooled_lane`, reusing `jarvis_big_coder`'s
-server, pause, load and restore). `docs/JARVIS-API.md` §145.1 is the contract.
+every installed card (`jarvis_model_lanes.start_pooled_lane`, reusing
+`jarvis_big_coder`'s server, pause, load and restore). `docs/JARVIS-API.md`
+§145.1 is the contract. The 2026-11-02 measurement below saw two cards because
+two were installed then.
 
 Measured on this PC on 2026-11-02, through that shipped path, with both lane
 models paused first and put back afterwards:
@@ -722,13 +736,14 @@ whole ladder was measured again on 2026-11-03:
 
 | `num_ctx` | Size | In video memory | Spilled |
 |---|---|---|---|
-| **32,768 (what the preset asks for)** | **16,513.7 MiB** | **16,190.1 MiB** | **323.5 MiB** |
+| **32,768 (what the preset asked for then; history)** | **16,513.7 MiB** | **16,190.1 MiB** | **323.5 MiB** |
 | 28,672 | 16,114 MiB | 15,902 MiB | **212 MiB** |
 | 24,576 | 15,722 MiB | 15,514 MiB | **208 MiB** |
 | 20,480 | 15,326 MiB | 15,123 MiB | **204 MiB** |
 | 16,384 | 14,886 MiB | **14,886 MiB** | **0** |
 
-**2026-11-03: the preset moved to 32,768 and accepts the measured 323.5 MiB.**
+**2026-11-03 (history, superseded 2026-11-07): the preset moved to 32,768 and
+accepted the measured 323.5 MiB.**
 Every rung above 16,384 spills (20,480 at 203.5 MiB, 24,576 at 207.5, 28,672 at
 211.5), and 32,768 - the largest rung measured to load on this PC - loaded at
 **16,513.7 MiB with 323.5 MiB in system RAM**, against 16,384 at 14,886.2 MiB
@@ -751,8 +766,8 @@ than growing smoothly. The owner accepted that measured cost, so:
   and a load that spills past the 352 MiB cap is refused (503) in the machine's
   own words, naming both the spill and the allowance.
 
-The 2026-10-18 measurement's 28,672 rung is kept in `jarvis_big_coder.NUM_CTX`
-for that mode and was not changed. `OLLAMA_SCHED_SPREAD=1` was tried at 28,672
+The 2026-10-18 measurement's 28,672 rung was kept in `jarvis_big_coder.NUM_CTX`
+until 2026-11-07, when the mode's own measured rung moved to 49,152. `OLLAMA_SCHED_SPREAD=1` was tried at 28,672
 and did not change the split (212 MiB spilled, 68.4 tok/s). The whole
 measurement, the method and the undo are in
 `docs/MEASURED-2026-11-02-POOLED-LANE.md` - the 2026-11-02 numbers above, and
@@ -768,21 +783,93 @@ server), does not need to be stopped: measured on the same day, that server's
 model held no video memory when its process was idle, and freeing it changed
 the 2060's used memory by 89 MiB.
 
-### Planned once the third GPU is installed and measured
+### 2026-11-07: three cards, measured, and the lane uses them
 
-**Every row and number in this subsection is best-effort and UNMEASURED, and
-nothing here is switched on.** It is the research done on 2026-11-05 for a
-third card - a second RTX 2080 SUPER 8 GB, headless - written down here so it
-lives in git instead of only in untracked scratch notes. **No preset row
-changes until the third card is physically installed and measured on this
-PC**, the same rule the second card was held to. Three models the plan uses may
-already be in the local Ollama store: `qwen3-coder:30b-a3b-q4_K_M`,
-`gemma4:31b-it-qat` and `orcarouter/Qwen3.8-27B-Uncensored:q4_K_M` were listed
-by `ollama list` on 2026-11-04. **None of the three has ever been loaded or
-measured on this PC** - installed is not measured.
+The third card was installed and the whole preset matrix was measured again on
+2026-11-07, each config on its own throwaway `ollama serve` on port 11451. The
+decisive pair is the same model at the same 32,768-token window, measured the
+same way on the same day:
+
+| | Two cards (2060 + display 2080S) | Three cards (all) |
+|---|---:|---:|
+| Decode | 60.58 tok/s | **84.93 tok/s** |
+| Cold load | 69.611 s | **10.884 s** |
+| `/api/ps` size | 14.84 GiB | 15.10 GiB |
+| Spilled | 0.0 GiB | **0.0 GiB** |
+| Cards `nvidia-smi` saw | 0, 2 | **0, 1, 2** |
+
+**The lane ships at 49,152 tokens:** 83.82 tok/s, 16.17 GiB, zero spill and a
+31.561 s cold load - 1.3 % slower than the 32,768 row above and 1.07 GiB larger,
+for 16,384 more tokens; both clear the 75 tok/s bar and the ruling asks for the
+larger window.
+
+The three-card split is real per card, not just an aggregate: after the cold
+load `nvidia-smi` read **6,988 MiB** on the 2060, **4,537 MiB** on the headless
+2080 SUPER and **5,717 MiB** on the display 2080 SUPER. On two cards the same
+window put 9,360 MiB on the 2060 and 7,467 MiB on the display card, with the
+headless card at 0.
+
+- **The window ships at 49,152.** 32,768 measured 84.93 tok/s at 15.10 GiB with
+  a 10.884 s cold load - 1.3 % faster for 1.07 GiB less - and is the recorded
+  alternative; 49,152 clears the bar with 16,384 more tokens. 65,536 loaded at
+  17.25 GiB with zero spill but decoded at **59.06 tok/s**, below the 75 tok/s
+  bar, so it is not chosen.
+  98,304 read 88.69 tok/s at 19.41 GiB and is recorded, not chosen; **131,072
+  FAILED** (`server: server exited 4294967295`) and nothing is claimed about it.
+- **`OLLAMA_SCHED_SPREAD=1` is what makes it fast, not what makes it fit.**
+  Without it the same three cards were all used and the model decoded at
+  **56.82 tok/s** instead of 84.93. That is different from the 2026-11-02
+  two-card experiment above, where the variable did not change the split - on
+  two cards there was nothing to spread.
+- **The two-card control does not match this page's 2026-11-03 row, and the
+  record says so.** Tonight's two-card run read **14.84 GiB and zero spill**
+  against the 16,513.7 MiB / 323.5 MiB recorded above, and a 69.611 s cold load
+  against 36.0 s. The measured page states plainly that it does **not** explain
+  the difference; the older number stays here as history, and the claim the new
+  work makes is the one it measured - zero spill on three cards.
+
+**Every other preset keeps its measured single-card configuration.** The
+everyday 9B measured **44.11 tok/s at a 262,144-token window on three cards**
+(15.57 GiB, zero spill) against **42.01 tok/s at 196,608 on the 2060**, and it
+stays on the 2060: an always-on model across all three cards is exactly the
+pause the Coding preset's heavy mode exists to admit to, and 2.1 tokens a
+second is not a reason to pay it. Fast measured **76.20 tok/s on the display
+2080 SUPER against 65.85 across three cards**, so spreading it over the third
+card would make it slower - but on the **headless 2080 SUPER alone** it read
+**85.29 tok/s**, and the vision model read **63.35** there. A dedicated
+headless-card lane is therefore a measured gain, and it is deferred because it
+needs a new lane-start path on port 11438, not because the numbers are against
+it. The measured page has every row, the failed rows and what was not measured.
+
+**Measured but not shipped: the heavy presets.** `gemma4:31b-it-qat` fits -
+18.81 GiB at 32,768, 18.53 GiB at 24,576 and 18.25 GiB at 16,384, all zero
+spill - but decodes at **15.4-15.6 tok/s** with a 48-72 s cold load, and the
+uncensored 27B fits at 17.38 GiB and reads **17.96 tok/s**. The pooled lane
+still carries ONE fixed model, so `deep_think` and `creative` wait for the Wave
+8 refactor; the measured page and the decision fragment say the same.
+
+### The 2026-11-05 plan for the third GPU, and where the measurement left it
+
+**The rows and numbers in this subsection are the plan's own best-effort
+research, written down on 2026-11-05 so it lives in git instead of only in
+untracked scratch notes.** Its rule was that no preset row changes until the
+third card is physically installed and measured on this PC. **The card is now
+installed and measured (2026-11-07)**, so this subsection records where that
+left the plan:
+
+- **What the measurement took:** the Coding preset's lane moved to all three
+  cards, as the section above records. It did **not** take the plan's model
+  change - the preset keeps `qwen3-coder-30b-a3b-ud-q3-k-xl` and widens it to
+  49,152.
+- **What it did not take:** `deep_think` and `creative` are **not** presets and
+  nothing here is switched on. The pooled lane carries ONE fixed model, so
+  parameterising it for three models is Wave 8 work. All three of the plan's
+  models have now been measured on this PC - the 31B, the Q4 coder, and the
+  uncensored 27B at 17.38 GiB and 17.96 tok/s - and none of them becomes a
+  preset tonight. The measured page has the numbers.
 
 Eight presets keep the model, card and window they have today; only Coding
-changes model, and two heavy presets are new on the pooled lane. The
+changes lane and window, and no preset changes model tonight. The
 quantisation is what each file reports to `ollama show`.
 
 | Preset | Model and quantisation | Context | Lane | Planned change |
@@ -810,6 +897,16 @@ the only rung that meets it (**17.72 GiB** calculated), and the plan still
 recommends the Q4 coder at 32,768 because the owner asked for an upgrade and a
 better quant keeps the measured window and work pattern.
 
+**The measured decision of 2026-11-07 did not take that model change.** The
+shipped Coding preset keeps the Q3 tag, moves the lane to three cards and
+widens the window to 49,152: the Q4 build measured **87.47 tok/s at 19.52 GiB
+with zero spill** at 32,768 and **93.08 tok/s at 20.60 GiB** at 49,152, but its
+coding quality was never re-run on the 6/6 rubric (measured on the q3 weights),
+so it is an unmeasured quality claim and not taken. The plan's option-B rung,
+the Q3 tag at 49,152, is what ships: **83.82 tok/s at 16.17 GiB, zero spill**,
+1.3 % slower than 32,768 and 1.07 GiB larger for 16,384 more tokens - and it
+clears the 75 tok/s bar the ruling set.
+
 **Neither app claims any of these figures.** `jarvis_presets.hardware_block()`'s
 own `future_not_a_preset` line - which both apps render on their hardware plate -
 still says the 27B is a future "max quality" experiment, "not a preset", and
@@ -827,12 +924,15 @@ the research is not lost, and not something either app tells the owner.
    three cards; `nvidia-smi` per-card memory is the second proof.
 3. **Every model must report `size == size_vram` - 100% on the cards.** A load
    that does not is a fail, and `load_coder` unloads it and says so in words.
-   The one measured exception is today's Coding window, which is allowed the
-   323.5 MiB spill plus about 9% (352 MiB) and no more; every other load must
-   be exact.
+   The one measured exception *was* the Coding window on two cards, allowed its
+   323.5 MiB spill plus about 9% (352 MiB); since 2026-11-07 that same window
+   measures **zero spill on three cards**, so on this PC every load must again
+   be exact. The allowance stays in the code as the narrow rule it was, so a
+   split reported slightly differently still loads.
 4. **Decode speed** on the same three fixed coding prompts, reported as a
-   median of three, for every new or changed model. None of the three has a
-   measured speed on this PC and this plan gives none.
+   median of three, for every new or changed model. Two of the plan's models
+   now have a measured speed on this PC (the section above); the 27B has none,
+   and this plan gives none.
 5. **Cold load time** over the third card's link, timed with and without the
    third card in the pool.
 6. **The 12 GB card still holds the 9B at 196,608 with the third card in the

@@ -140,7 +140,7 @@ def main():
     cod_ctx = int(P.by_id("coding").context)
     check("preset detail: its model, window and honest cost",
           r is not None and "Coding" in r.reply and "qwen3-coder" in r.reply.lower()
-          and cod_ctx == 32768 and f"{cod_ctx:,} tokens" in r.reply
+          and cod_ctx == 49152 and f"{cod_ctx:,} tokens" in r.reply
           and "both cards at once" in r.reply and "paused" in r.reply,
           getattr(r, "reply", None))
     r = ask("which model would the general preset load?")

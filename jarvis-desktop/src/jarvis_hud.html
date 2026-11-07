@@ -7632,12 +7632,12 @@ window.addEventListener("jarvis:cloud-escalate", e => {
  *  word is server text, so it is set with textContent).
  *
  *  A HEAVY PRESET IS A BUTTON WITH ITS COST IN THE TOOLTIP (2026-11-02). Until
- *  the pooled both-card lane existed the PC answered 409 for it, so this drew a
+ *  the pooled three-card lane existed the PC answered 409 for it, so this drew a
  *  disabled button saying so (2026-10-27, contract audit F1). The lane is here,
  *  so the button is offered like every other one and says what choosing it
- *  does: both cards, and the other two models paused while it runs. The five
+ *  does: all three cards, and the other two models paused while it runs. The five
  *  rows stay: the order and the count are the PC's. */
-const HEAVY_PRESET_WORDS = "This preset needs both cards at once as one "
+const HEAVY_PRESET_WORDS = "This preset needs all three cards at once as one "
   + "pooled lane. While it runs, the other two models are paused - they "
   + "come back when you apply another preset. Loading it takes about half a minute.";
 function renderPresets(){
@@ -7656,7 +7656,7 @@ function renderPresets(){
     name.textContent = String(p.title || p.id || "preset");
     const model = document.createElement("span");
     model.className = "preset-model";
-    model.textContent = p.heavy_mode === true ? "needs both cards" : String(p.model || "");
+    model.textContent = p.heavy_mode === true ? "needs all three cards" : String(p.model || "");
     b.appendChild(name);
     b.appendChild(model);
     const what = [p.what, p.focus, p.model].filter(x => typeof x === "string" && x).join(" - ");

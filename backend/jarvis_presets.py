@@ -19,14 +19,14 @@ Every measured number below is from
 Lanes (this PC, 2026-10-10 measurements):
   main    RTX 2060 12 GB, port 11436 - the long-context card
   coding  RTX 2080 SUPER 8 GB, port 11435 - the fast card
-  pooled  both cards, port 11450 - the Coding preset's own lane (2026-11-02)
+  pooled  all three cards, port 11450 - the Coding preset's own lane (2026-11-02)
 The owner's choices: Fast runs qwen3.5:4b on the coding lane at the window that
 lane serves (16,384) while the 2060 keeps the general model warm; Coding starts
-its own pooled both-card lane on demand.
+its own pooled three-card lane on demand.
 
 Coding is the ONE heavy row, and since 2026-11-02 it has a lane that can really
 hold it: a 14.8 GB model fits neither card alone, so its lane is ONE Ollama on
-its own port with both cards visible (`jarvis_model_lanes.start_pooled_lane`),
+its own port with all three cards visible (`jarvis_model_lanes.start_pooled_lane`),
 started by the apply and stopped by the next apply that is not heavy. The cost
 is stated in the preset's own words and on the card: the two lane models are
 paused while it runs and come back when it is stopped.
@@ -49,13 +49,13 @@ LANES = {
              "words": "the long-context card"},
     "coding": {"key": "coding", "card": "RTX 2080 SUPER", "port": 11435,
                "words": "the fast card"},
-    # The Coding preset's own lane: ONE Ollama that sees BOTH cards, started on
-    # demand by the apply (never by a logon task, which would hold both cards
-    # against the two lanes the assistant runs on). `card` says "both cards"
+    # The Coding preset's own lane: ONE Ollama that sees ALL THREE cards, started
+    # on demand by the apply (never by a logon task, which would hold the cards
+    # against the two lanes the assistant runs on). `card` says "all three cards"
     # because there is no single card it lives on; its port and words are
     # `jarvis_model_lanes`' own, pinned to agree by test.
-    "pooled": {"key": "pooled", "card": "both cards", "port": 11450,
-               "words": "one model across both cards"},
+    "pooled": {"key": "pooled", "card": "all three cards", "port": 11450,
+               "words": "one model across all three cards"},
 }
 
 #: What the one owner-approved action is. It is a preset application, never a
@@ -86,7 +86,7 @@ class Preset:
     measured: Optional[dict] = None
     pending: bool = False
     heavy_mode: bool = False
-    #: The plain-words COST of a heavy preset (both cards, the other models
+    #: The plain-words COST of a heavy preset (all three cards, the other models
     #: paused), which both apps show BESIDE an apply that is now allowed. It is
     #: not a refusal: the refusal was "lane support is arriving", and the lane
     #: is here (`jarvis_model_lanes.start_pooled_lane`).
@@ -168,51 +168,57 @@ PRESETS = (
     Preset(
         id="coding", title="Coding", focus="code, files, debugging, multi-step work",
         what="For writing and fixing code, reading a project, and long tool-driven "
-             "coding jobs: the 30B coding model on ONE lane that sees both cards, "
+             "coding jobs: the 30B coding model on ONE lane that sees all three cards, "
              "started on demand by this apply.",
-        cost="HEAVY MODE: it fills BOTH GPUs (16.2 GB of video memory here, and "
-             "another 0.3 GB in system RAM at this window) and pauses the other "
-             "lanes' models while it works, for about 36 s on a cold load. "
-             "Measured 2026-11-02 at 16,384 tokens: 85.3 tok/s median on three "
-             "coding prompts, zero spill. Re-measured 2026-11-03 at 32,768 tokens: "
-             "80.4 tok/s median on the same three prompts (79.9 at 16,384, inside "
-             "this model's own run-to-run noise), with 323.5 MiB of it in system "
-             "RAM instead of video memory - measured and accepted for this window "
-             "alone. It is not a single-card model.",
+        cost="HEAVY MODE: it fills ALL THREE GPUs (16.17 GiB of video memory here, with the "
+             "same q8_0 cache the two live lanes use, and nothing pushed into system "
+             "RAM) and pauses the other lanes' models while it works, for about 32 s on "
+             "a cold load. Measured 2026-11-07 at 49,152 tokens on all three cards: "
+             "83.8 tokens a second after a 900-word prompt, prompt ~1,644 tokens a "
+             "second, zero CPU spill. The same-night two-card control (same q8_0 cache) "
+             "at 32,768 tokens read 60.6 tokens a second with a 69.6 s cold load; the "
+             "2026-11-03 shipped record used the default f16 cache and read 80.4 at a "
+             "36.0 s load, so it is not a like-for-like baseline. Against the control "
+             "the three-card window is about 38% faster; against the older record the "
+             "gain is small - the real change is the 16,384-token wider window with "
+             "zero spill and no spill allowance. The older figures (76.2 tok/s at "
+             "28,672; 80.4 at 32,768 with 323.5 MiB spilled) are kept in "
+             "docs/MEASURED-2026-11-07-THREE-GPU.md.",
         worse="Applying it makes it the model chat uses, so the Fast/Live and "
               "Agentic+Vision models are NOT resident while it runs - they come back "
               "when you apply another preset, and that switch costs a reload. It is "
-              "not a quick helper: it takes both cards for as long as it is on, and "
-              "nothing else can be loaded beside it.",
-        model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="pooled", context=32768,
+              "not a quick helper: it takes all three cards for as long as it is on, "
+              "and nothing else can be loaded beside it. Measured about 59 tokens a "
+              "second at 65,536 tokens, so the wider window is not offered.",
+        model="qwen3-coder-30b-a3b-ud-q3-k-xl", lane="pooled", context=49152,
         prompt="coding", diet="coding", heavy_mode=True,
-        heavy_words="This preset needs both cards at once as one pooled lane. While "
+        heavy_words="This preset needs all three cards at once as one pooled lane. While "
                     "it runs, the everyday and Fast models are paused - they come "
                     "back, proved from the model list, when you apply another preset. "
                     "Loading it takes about half a minute.",
         tools=("code", "files"),
-        measured={"tok_s": 76.2, "rubric": "6/6 coding rubric", "size_gib": 14.0,
-                  "gpu_use": "100% GPU across both cards", "cold_load_s": 32.1,
-                  "spill_gib": 0.3, "context_zero_spill": 16384,
-                  "context_measured": 32768,
-                  "source": "measurement 2026-10-18 at 28,672 tokens: 76.2 tok/s "
-                            "median eval, 6/6 coding rubric, no CPU spill. The "
-                            "28,672-token rung was re-measured on 2026-11-02 and no "
-                            "longer loads with zero spill on this PC (212 MiB went "
-                            "to the CPU); 16,384 was the largest rung that loaded "
-                            "with none, and is kept above as that historical fact. "
-                            "From 2026-11-03 the preset asks for 32,768: the whole "
-                            "ladder was measured again through the same shipped path "
-                            "and every rung above 16,384 spills (20,480: 203.5 MiB, "
-                            "24,576: 207.5, 28,672: 211.5, 32,768: 323.5). At 32,768 "
-                            "it loaded 16,513.7 MiB with 323.5 MiB (0.3 GiB) in "
-                            "system RAM, 79.88 -> 80.36 tok/s median on the three "
-                            "prompts (inside noise), cold load 36.0 s against 37.0 s. "
-                            "That 323.5 MiB is accepted for THIS window only, capped "
-                            "at 352 MiB by jarvis_model_lanes.POOLED_SPILL_ALLOWANCE; "
-                            "every other load still refuses any spill "
-                            "(docs/MEASURED-2026-11-02-POOLED-LANE.md, 2026-11-03 "
-                            "amendment)."},
+        measured={"tok_s": 83.8, "rubric": "6/6 coding rubric", "size_gib": 16.2,
+                  "gpu_use": "100% GPU across all three cards", "cold_load_s": 31.6,
+                  "spill_gib": 0.0, "context_zero_spill": 49152,
+                  "context_measured": 49152,
+                  "source": "measurement 2026-11-07 on all three cards with "
+                            "OLLAMA_SCHED_SPREAD=1: 49,152 tokens loaded at 16.2 GiB "
+                            "entirely in video memory, 83.8 tok/s warm generation "
+                            "after a 900-word prompt, prompt ~1,644 tok/s, cold load "
+                            "31.6 s, three cards used (nvidia-smi deltas). The same-night "
+                            "two-card control (q8_0, 32,768 tokens) measured 60.58 tok/s "
+                            "with a 69.611 s cold load and zero spill as well; the "
+                            "2026-11-03 shipped record used the default f16 cache and "
+                            "read 80.36 tok/s at a 36.0 s load, so the two baselines are "
+                            "not comparable. 65,536 tokens measured 59.06 tok/s and "
+                            "98,304 measured 88.69 tok/s, both with zero spill; 49,152 "
+                            "is the larger of the two windows the Q2 ruling named "
+                            "(49,152 and 65,536) that clears the 75 tok/s bar - 98,304 "
+                            "was outside those windows and is recorded, not chosen. "
+                            "The 6/6 coding rubric was measured "
+                            "2026-10-18 on two cards and was not re-run. Evidence: "
+                            "docs/MEASURED-2026-11-07-THREE-GPU.md and "
+                            ".dsh-scratch/GPU-3WAY-2026-11-06/bench/results3/."},
         words=("code", "coding", "program", "android", "app", "debug", "bug",
                "kotlin", "python", "script", "compile", "repository", "git"),
         strong=("writing code", "fix a bug", "build an app", "app development",
@@ -1095,7 +1101,7 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     exists. Its model is 14.8 GB against a 12 GB card and an 8 GB card, so it
     cannot run on either named lane; its lane is "pooled"
     (`jarvis_model_lanes.start_pooled_lane`), ONE Ollama on its own port with
-    both cards visible. That start raises the ONE `switch_model` card ITSELF,
+    all three cards visible. That start raises the ONE `switch_model` card ITSELF,
     before it unloads anything, because the pause has to be announced before
     the first unload - which is why the heavy path's `switch_model` is
     `_default_adopt` (record the model that is already loaded, no second card,
@@ -1154,7 +1160,7 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
             ended = {"ok": False, "ran": True,
                      "reason": f"{type(exc).__name__}: {exc}"}
         if isinstance(ended, dict) and ended.get("ran") and not ended.get("ok"):
-            why = ended.get("reason") or "the pooled both-card lane did not stop"
+            why = ended.get("reason") or "the pooled three-card lane did not stop"
             return 503, {"ok": False, "changed": False,
                          "error": ("the big coding model is still holding both "
                                    f"cards, so this preset was not applied: {why}")}
@@ -1294,7 +1300,7 @@ def _default_start_lane(key: str):
     """The preset's own lane, started on demand.
 
     "pooled" is not one of the PC's logon tasks: it is the ONE Ollama that sees
-    both cards, started here and stopped by the next apply that is not heavy
+    all three cards, started here and stopped by the next apply that is not heavy
     (`_default_stop_pooled`). `jarvis_model_lanes.start_pooled_lane` raises the
     ONE card for it, before it unloads anything.
     """
@@ -1332,8 +1338,8 @@ def _default_stop_pooled() -> dict:
     reason = ""
     if not ok:
         reason = (body.get("error") or body.get("message")
-                  or "the pooled both-card lane did not stop") if isinstance(body, dict) \
-            else "the pooled both-card lane did not stop"
+                  or "the pooled three-card lane did not stop") if isinstance(body, dict) \
+            else "the pooled three-card lane did not stop"
     return {"ok": ok, "ran": True, "reason": reason, "body": body}
 
 
@@ -1394,7 +1400,7 @@ def _default_adopt(ref: str):
         st["previous"] = cur
         st["current"] = ref
         st["switched_at"] = at
-        st["why"] = "the Coding preset's pooled both-card lane"[:300]
+        st["why"] = "the Coding preset's pooled three-card lane"[:300]
         log = list(st.get("switches") or [])
         log.append({"from": cur, "to": ref, "at": at})
         st["switches"] = log[-int(getattr(M, "MAX_HISTORY", 20) or 20):]
@@ -1404,7 +1410,7 @@ def _default_adopt(ref: str):
     except Exception as exc:
         return {"ok": False, "ref": ref, "reason": f"{type(exc).__name__}: {exc}"}
     return {"ok": True, "ref": ref, "previous": cur, "adopted": True,
-            "reason": f"the pooled both-card lane now answers as {ref}"}
+            "reason": f"the pooled three-card lane now answers as {ref}"}
 
 
 def apply_from_body(body) -> tuple:
@@ -1676,7 +1682,7 @@ def hardware_block() -> dict:
                               "answers": None}}
 
 
-#: The port the pooled both-cards lane listens on. It is
+#: The port the pooled three-cards lane listens on. It is
 #: `jarvis_model_lanes.POOLED_PORT` (and `jarvis_big_coder.BIG_PORT`), and it is
 #: a literal here on purpose: this module is imported by the backend's start-up
 #: banner and by suites that run without the lane module beside them, so it must
@@ -1831,15 +1837,15 @@ def recommendations() -> dict:
                     # The Coding preset became the 30B coding model on the
                     # pooled lane on 2026-11-02. "main model on the 2060" is
                     # its 2-GPU answer no more: it pauses both lanes and takes
-                    # both cards. The measured figures below are its own
+                    # all three cards. The measured figures below are its own
                     # (`p.measured`), so only the words were stale.
                     rows[p.id] = _row(p, 0, cards, p.measured is not None,
                                       p.measured is None,
                                       "HEAVY MODE: qwen3-coder-30b-a3b-ud-q3-k-xl on "
-                                      "the pooled lane (port 11450) across BOTH cards, "
+                                      "the pooled lane (port 11450) across ALL THREE cards, "
                                       "started on demand; it pauses the other lanes' "
                                       "models while it runs",
-                                      card_text="both cards (pooled lane, port 11450)")
+                                      card_text="all three cards (pooled lane, port 11450)")
                 else:
                     rows[p.id] = _row(p, 0, cards, p.measured is not None,
                                       p.measured is None,

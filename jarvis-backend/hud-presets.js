@@ -391,7 +391,7 @@ export { USER_ID_RE, MAX_USER_PRESETS };
  * chosen - never the click that asked for it.
  *
  * TWO FACTS DECIDE WHETHER A ROW CAN BE APPLIED, and both are the PC's:
- * `heavy_mode` (its model needs both cards as one pooled lane, which this PC
+ * `heavy_mode` (its model needs all three cards as one pooled lane, which this PC
  * refuses until that lane support lands - the same refusal the phone and the
  * older focus-preset module honour) and `pending` (the PC is still preparing
  * it). Carrying them here is the fix for the 2026-10-27 contract audit's F1:
@@ -483,13 +483,13 @@ export function modelApplyBody(id, provider) {
   return body;
 }
 
-/** The one plain-words COST of a heavy preset - both cards at once, and the
+/** The one plain-words COST of a heavy preset - all three cards at once, and the
  *  everyday/Fast models paused while it runs. It is not a refusal any more
- *  (2026-11-02): the PC's pooled both-card lane exists, so the row is a real
+ *  (2026-11-02): the PC's pooled three-card lane exists, so the row is a real
  *  button and this is what it tells the owner before they press it. The PC's
  *  own `heavy_words` wins when it sends one; this is the fallback for an older
  *  PC. The phone carries the same sentence (`FocusPresets.kt` HEAVY_COST). */
-export const HEAVY_PRESET_WORDS = "This preset needs both cards at once as one "
+export const HEAVY_PRESET_WORDS = "This preset needs all three cards at once as one "
   + "pooled lane. While it runs, the other two models are paused - they "
   + "come back when you apply another preset. Loading it takes about half a minute.";
 
@@ -1055,10 +1055,10 @@ export function mountHudPresets(options = {}) {
    *  rule in words before any click.
    *
    *  A HEAVY PRESET IS A BUTTON WITH ITS COST SAID (2026-11-02). Until the
-   *  pooled both-card lane existed the PC answered 409 for it and this menu
+   *  pooled three-card lane existed the PC answered 409 for it and this menu
    *  drew a dead paragraph instead (contract audit F1, 2026-10-27). The lane is
    *  here, so the row is offered like every other one and the sentence beneath
-   *  it says what choosing it does: both cards, and the other two models
+   *  it says what choosing it does: all three cards, and the other two models
    *  paused while it runs. The same rule the phone follows. */
   function renderModelPresets() {
     // "Focus presets" is the ONE name this feature has everywhere else - the

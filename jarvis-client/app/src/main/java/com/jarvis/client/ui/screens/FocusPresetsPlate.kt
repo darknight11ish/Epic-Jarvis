@@ -231,7 +231,7 @@ private fun FocusPresetList(
         Text(FocusPresets.WORSE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         Text(p.worse, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         // A heavy preset is offered like every other one (2026-11-02): the PC's
-        // pooled both-card lane applies it. What it costs - both cards, the other
+        // pooled three-card lane applies it. What it costs - all three cards, the other
         // models paused while it runs - is said here, before the button.
         FocusPresets.heavyCost(p).takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
