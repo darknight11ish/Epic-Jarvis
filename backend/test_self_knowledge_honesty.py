@@ -233,7 +233,7 @@ def test_heritage_both_halves_and_named_borrows():
     for name in ("Muse", "OpenMuse", "ChatGPT Dots", "Hermes"):
         assert name in lineage, (name, lineage[:300])
     for idea in ("one approval card per email", "/api/reach", "Long Fuse",
-                 "redirect_note", "hidden Unicode", "What it costs", "curator_lock",
+                 "deny-and-say-what-to-do-instead note", "hidden Unicode", "What it costs", "curator lock",
                  "session search", "provenance badges"):
         assert idea.lower() in lineage.lower(), (idea, lineage[:400])
     different = G.heritage_words("differentiators")

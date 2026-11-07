@@ -4107,8 +4107,8 @@ HERITAGE = {
                    "OpenMuse - a durable job queue (Long Fuse) with frozen capabilities and "
                    "park-on-approval. ChatGPT Dots - a compact ambient presence indicator "
                    "and non-intrusive HUD status rails. Nous Hermes Agent v0.23.0 - "
-                   "deny-and-steer (redirect_note), hidden-Unicode/control-byte warning "
-                   "pills, the \"What it costs\" cloud ledger line, curator_lock with "
+                   "deny-and-steer (the deny-and-say-what-to-do-instead note), hidden-Unicode/control-byte warning "
+                   "pills, the \"What it costs\" cloud ledger line, a curator lock with "
                    "provenance badges on packs, and in-memory encrypted session search."),
         "sentence": ("Yes, I borrow ideas on the record - pretending otherwise would be the "
                      "wrong answer. From Meta's Muse (the 2026-09-25 audit): sending email "
@@ -4120,8 +4120,8 @@ HERITAGE = {
                      "acting. From OpenAI's ChatGPT Dots: the compact ambient presence "
                      "indicator and non-intrusive HUD status rails. From Nous Hermes Agent "
                      "v0.23.0: approval cards that let you deny AND say what to do instead "
-                     "(the redirect_note); warning pills for hidden Unicode and control "
-                     "bytes; the \"What it costs\" line on cloud cards; curator_lock with "
+                     "(the deny-and-say-what-to-do-instead note); warning pills for hidden Unicode and control "
+                     "bytes; the \"What it costs\" line on cloud cards; a curator lock with "
                      "provenance badges on packs; and in-memory encrypted session search. "
                      "What I refuse is also on the record: no standing grants, no always "
                      "allow, no connector store, no data-for-service."),

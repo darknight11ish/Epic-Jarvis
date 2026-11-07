@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e18861f85ea70573bc2d7a827275a81f844c4914",
- "built_at": "2026-11-07T05:00:04-08:00",
+ "ref": "cc0abb2b67b92a425ce8673ef3839717e0ddce63",
+ "built_at": "2026-11-07T05:21:47-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6121,6 +6121,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "cc0abb2b67b92a425ce8673ef3839717e0ddce63",
+   "date": "2026-11-07",
+   "subject": "integration: cloud provider door complete - list/ask/change, chosen provider answers (Q1 B6)"
+  },
+  {
+   "sha": "6de745aab2f8de9ccc15a0173b5375c976f70cd5",
+   "date": "2026-11-07",
+   "subject": "integration: fix the merge interactions the merged suites found"
+  },
+  {
+   "sha": "0a119d0731e321de776f26fb1230c1a9e84bf9c6",
+   "date": "2026-11-07",
+   "subject": "integration: re-derive the records and generated files after merging every lane"
+  },
+  {
+   "sha": "e4c449ca68e85e0f45d3b4738eb45b233118040b",
+   "date": "2026-11-07",
+   "subject": "fix(cloud): the chosen provider answers, chat can see and switch it, and every switch answers about itself"
+  },
+  {
    "sha": "e18861f85ea70573bc2d7a827275a81f844c4914",
    "date": "2026-11-07",
    "subject": "integration: cloud provider routing follows the choice + privacy backstop (Q1/Q7)"
@@ -6199,26 +6219,6 @@
    "sha": "9b67948278ca2399940c9c9ae83090b4659bde42",
    "date": "2026-11-07",
    "subject": "integration: self-knowledge honesty bundle (task-3)"
-  },
-  {
-   "sha": "fb25f2c74d23657bedb511611b8cf088dfcdba69",
-   "date": "2026-11-07",
-   "subject": "integration: GPU pinning manual steps + records (task-5)"
-  },
-  {
-   "sha": "b4308f580ded796fcc870f4854375f736dcd2c70",
-   "date": "2026-11-07",
-   "subject": "integration: per-repo GitHub watcher (task-1)"
-  },
-  {
-   "sha": "f2f1216304b8501f14bcaf330d45ad58a1a2cf94",
-   "date": "2026-11-07",
-   "subject": "docs(gpu): deploy the 11434 pin as a task-scoped logon task (Option C)"
-  },
-  {
-   "sha": "2223bc28248040c533fed858d530b0214e0470d1",
-   "date": "2026-11-07",
-   "subject": "Merge pull request #1210 from darknight11ish/feat/three-gpu-presets-2026-11-07"
   }
  ],
  "top_level": [

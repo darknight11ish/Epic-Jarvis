@@ -636,15 +636,23 @@ def t_representative_settings_write_the_same_state_on_disk():
     import json
 
     # --- Anti-Slop on: typed and Live must leave antislop.json identical ------
+    # Reset through the PRODUCT path (the same door a person uses), not by
+    # calling the row's setter directly: the direct call leaves the owning
+    # module's cache stale, and the 2026-11-07 no-op rule then makes the two
+    # doors disagree in the harness for a reason that cannot happen in the app.
     row = next(b for b in R.BOOL_SETTINGS if b.key == "antislop")
-    row.set(False)
-    typed, _live = doors("turn on anti-slop")
+    # Each door is driven on its OWN, from the same starting state. Calling
+    # doors() runs typed and then Live in one go, and since 2026-11-07 the
+    # second turn honestly reports "already on. Nothing was changed." because
+    # the FIRST turn already made the change - a harness artefact, not a gap.
+    Q.answer_turn(body("turn off anti-slop", False))
+    typed = Q.answer_turn(body("turn on anti-slop", False))
     after_typed = _config_json("antislop.json")
     check("typed anti-slop ON really writes enabled true",
           typed is not None and (after_typed or {}).get("enabled") is True,
           (None if typed is None else typed.reply, after_typed))
-    row.set(False)
-    _typed, live = doors("turn on anti-slop")
+    Q.answer_turn(body("turn off anti-slop", False))
+    live = Q.answer_turn(body("turn on anti-slop", True))
     after_live = _config_json("antislop.json")
     check("Live anti-slop ON really writes enabled true too",
           live is not None and (after_live or {}).get("enabled") is True,
@@ -655,12 +663,14 @@ def t_representative_settings_write_the_same_state_on_disk():
           and after_typed.get("enabled") == after_live.get("enabled"))
 
     # --- Humour off: manner.json, the same way -------------------------------
+    # Same rule as anti-slop above: reset through the product door so the
+    # owning module's cache matches the file both doors read.
     hrow = next(b for b in R.BOOL_SETTINGS if b.key == "humor")
-    hrow.set(True)
-    typed, _live = doors("turn off humour")
+    Q.answer_turn(body("turn on humour", False))
+    typed = Q.answer_turn(body("turn off humour", False))
     typed_state = _config_json("manner.json")
-    hrow.set(True)
-    _typed, live = doors("turn off humour")
+    Q.answer_turn(body("turn on humour", False))
+    live = Q.answer_turn(body("turn off humour", True))
     live_state = _config_json("manner.json")
     check("both doors turn humour off in manner.json",
           typed is not None and live is not None

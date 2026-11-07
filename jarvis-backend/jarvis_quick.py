@@ -9754,6 +9754,14 @@ def _cloud_provider_prompt(s: str) -> Optional[Intent]:
     if not text:
         return None
     mentions = _cloud_provider_mentions(text)
+    # "switch to deepseek for search" names the SEARCH provider, not the cloud
+    # service: it says what the choice is FOR and never says cloud/provider/
+    # service. Keep it for the settings grammar that owns the search provider
+    # (caught on the merged wave-8 branch, 2026-11-07).
+    if mentions and re.search(r"\b(?:search|research|web)\b", text) \
+            and not _CLOUD_PROVIDER_OBJECT.search(text) \
+            and not re.search(r"\bcloud\b", text):
+        return None
     # 1. What can I use? Which are there? List them, and the one-at-a-time rule.
     if re.search(r"\b(?:which|what|list|name|show)\b", text) and \
             _CLOUD_PROVIDER_OBJECT.search(text):
