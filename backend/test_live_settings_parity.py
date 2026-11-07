@@ -541,7 +541,7 @@ def t_the_typed_sentences_still_resolve_exactly_as_before():
         ("set the hand-off to patient", "control_set"),
         ("stop asking before my calendar", "settings_asks_first"),
         ("let the ai model read my calendar", "settings_tool"),
-        ("what can i change", "settings_help"),
+        ("what can i change", "changeable_overview"),
         ("make jarvis live wait 3 minutes", "live_idle_set"),
     )
     for typed_text, want in pinned:

@@ -25660,11 +25660,18 @@ _AW_BENCH_PROGRESS = re.compile(
 _AW_BENCH_STOP = re.compile(
     r"(?:stop|cancel|abort)\s+(?:the\s+)?(?:benchmark|bench\s+run)", re.I)
 
+#: "What changed about you?" is the JOURNAL's. A question about the shipped
+#: update ("what changed in your last update?") stays `recent_changes`' - it
+#: is a different question about a different record, and jarvis_recent_changes
+#: has owned it since Wave 8. So this pattern names the journal's shapes only.
 _AW_CHANGES = re.compile(
-    r"what(?:\s+has|\s+have|\s+)?(?:'s\s+)?changed(?:\s+about\s+(?:you|jarvis))?"
+    r"what\s+changed\s+about\s+(?:you|jarvis)"
     r"(?:\s+(?:since|in)\s+(?P<when>yesterday|this\s+morning|today|"
     r"the\s+last\s+\w+|your\s+last\s+update|my\s+last\s+(?:question|visit)))?"
-    r"|(?:any|what)\s+changes?(?:\s+about\s+you|\s+since\s+\w+)?"
+    r"|what\s+changed\s+(?:since\s+(?P<when2>yesterday|this\s+morning|today|"
+    r"the\s+last\s+\w+)|recently)"
+    r"|what\s+changed\s*"
+    r"|(?:any|what)\s+changes?\s+(?:about\s+you|since\s+\w+)"
     r"|what(?:'s|\s+is)\s+new\s+with\s+you", re.I)
 
 _AW_CHANGEABLE = re.compile(
@@ -25693,9 +25700,10 @@ _AW_DESKTOP_ROW = re.compile(
     r"|how\s+do\s+i\s+change\s+(?:the\s+)?(?P<name2>.+?)(?:\s+setting)?\s*"
     r"|what\s+is\s+(?:the\s+)?(?P<name3>.+?)\s+setting\s+set\s+to", re.I)
 
+#: Only the VALUE question. "explain the <feature/setting>" is the older
+#: `setting_explain` / feature-explain grammar's, and it must keep owning it.
 _AW_SETTING_READ = re.compile(
-    r"what\s+is\s+(?:the\s+)?(?P<name>.+?)\s+set\s+to\s*"
-    r"|explain\s+(?:the\s+)?(?P<name2>.+?)\s+setting\s*", re.I)
+    r"what\s+is\s+(?:the\s+)?(?P<name>.+?)\s+set\s+to\s*", re.I)
 
 _AW_AREA = re.compile(
     r"what\s+else\s+(?:affects|touches|is\s+in)\s+(?:the\s+)?(?P<area>.+?)"
@@ -26344,7 +26352,8 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         return Intent("bench_history")
     m = _AW_CHANGES.fullmatch(low)
     if m:
-        return Intent("self_changes", {"when": (m.groupdict().get("when") or "")})
+        d = m.groupdict()
+        return Intent("self_changes", {"when": (d.get("when") or d.get("when2") or "")})
     if _AW_CHANGEABLE.fullmatch(low):
         return Intent("changeable_overview")
     if _AW_INVENTORY.fullmatch(low):
@@ -26391,6 +26400,15 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
             if setting is not None:
                 break
         if setting is not None:
+            # The older NAMED explain door owns a setting it already knows
+            # (`setting_explain`), and it must keep it: this new answer is the
+            # fallback for a setting that door cannot resolve (the Wave-8.2 gap
+            # was one learning switch). Never steal a sentence it answers.
+            try:
+                if R.find_explain_setting(words) is not None:
+                    return None
+            except Exception:
+                pass
             return Intent("setting_named_read", {"name": words})
     m = _AW_AREA.fullmatch(low)
     if m:

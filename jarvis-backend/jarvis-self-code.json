@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "cd463bade671bceb3f988d921a56701dde33b640",
- "built_at": "2026-11-07T11:17:17-08:00",
+ "ref": "baec446a83b74d634a02dd855f56471cdb646337",
+ "built_at": "2026-11-07T12:13:31-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4062,6 +4062,7 @@
     "backend/test_secrets.py",
     "backend/test_security_pc.py",
     "backend/test_self_answers.py",
+    "backend/test_self_awareness.py",
     "backend/test_self_code.py",
     "backend/test_self_facts.py",
     "backend/test_self_improve.py",
@@ -4211,7 +4212,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 649,
+   "file_count": 650,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4479,6 +4480,7 @@
     "changelog.d/2026-11-07-self-knowledge-honesty.md",
     "changelog.d/2026-11-07-three-gpu-coding-preset.md",
     "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
+    "changelog.d/2026-11-07-wave-8-2-full-self-awareness.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4611,6 +4613,7 @@
     "decisions.d/2026-11-07-github-self-knowledge-catalogue-not-lane-system.md",
     "decisions.d/2026-11-07-gpu-pin-11434-to-headless.md",
     "decisions.d/2026-11-07-repo-watcher.md",
+    "decisions.d/2026-11-07-self-awareness-contract-and-change-journal.md",
     "decisions.d/2026-11-07-self-code-map-from-main.md",
     "decisions.d/2026-11-07-self-knowledge-honesty.md",
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
@@ -5059,7 +5062,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 807,
+   "file_count": 809,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6123,6 +6126,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "baec446a83b74d634a02dd855f56471cdb646337",
+   "date": "2026-11-07",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/wave82-total-awareness"
+  },
+  {
+   "sha": "888b799777aac46750da0aa12bc59129543310aa",
+   "date": "2026-11-07",
+   "subject": "Merge pull request #1212 from darknight11ish/fix/wave8-followups-2026-11-07"
+  },
+  {
+   "sha": "cfeb76e1646a5ce5fe11efd70630570d7fb06ad2",
+   "date": "2026-11-07",
+   "subject": "feat(awareness): full self-awareness and a local change journal"
+  },
+  {
    "sha": "cd463bade671bceb3f988d921a56701dde33b640",
    "date": "2026-11-07",
    "subject": "chore(self-code): regenerate the map for the Wave 8.1 record fragments"
@@ -6206,28 +6224,13 @@
    "sha": "c95479a664c038143ca453ba50134fabe93370b1",
    "date": "2026-11-07",
    "subject": "integration: repo watcher fixups (claims + job creation)"
-  },
-  {
-   "sha": "262eb3a9127ffc12fcd53bb1099fce7be19fee6b",
-   "date": "2026-11-07",
-   "subject": "integration: chat/Live change parity - 60 tool switches, 116-option suite, LP-3 (Q2)"
-  },
-  {
-   "sha": "d733cf609315fee62abc820a12a786cb41793c28",
-   "date": "2026-11-07",
-   "subject": "integration: self-code map beside-file (Q5)"
-  },
-  {
-   "sha": "ad4df438aff50731716af0170efe46434bd62dcf",
-   "date": "2026-11-07",
-   "subject": "integration: seven #1209 audit fixes"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1376
+   "files": 1377
   },
   {
    "path": "jarvis-desktop/",
@@ -6257,7 +6260,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 222
+   "files": 223
   },
   {
    "path": "videos/",
@@ -6267,7 +6270,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 135
+   "files": 136
   },
   {
    "path": "plugins/",
@@ -6341,8 +6344,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5464,
-  "covered": 4999,
+  "tracked_files": 5467,
+  "covered": 5002,
   "excluded": 465,
   "subsystems": 27
  },
