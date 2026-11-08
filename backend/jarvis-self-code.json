@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "98812b9fc412adc83b9cf0baa3022814ea15064e",
- "built_at": "2026-11-07T15:37:10-08:00",
+ "ref": "5a0d3d28735f8ab795297691890451794c0cb5f5",
+ "built_at": "2026-11-07T18:00:40-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -2741,6 +2741,7 @@
     "jarvis-desktop/src/setup-settings.js",
     "jarvis-desktop/src/skills-menu-rules.js",
     "jarvis-desktop/src/skills-menu-settings.js",
+    "jarvis-desktop/src/skills-words.js",
     "jarvis-desktop/src/sky-feed.js",
     "jarvis-desktop/src/sky-settings.js",
     "jarvis-desktop/src/sky.js",
@@ -2949,6 +2950,7 @@
     "jarvis-desktop/tests/html-sinks.mjs",
     "jarvis-desktop/tests/hud-answer-menu.mjs",
     "jarvis-desktop/tests/hud-answer-route.mjs",
+    "jarvis-desktop/tests/hud-brain-doors.mjs",
     "jarvis-desktop/tests/hud-calendar.mjs",
     "jarvis-desktop/tests/hud-connect.mjs",
     "jarvis-desktop/tests/hud-current-models.mjs",
@@ -3005,6 +3007,7 @@
     "jarvis-desktop/tests/menu-visibility.mjs",
     "jarvis-desktop/tests/model-advisor.mjs",
     "jarvis-desktop/tests/model-chat.mjs",
+    "jarvis-desktop/tests/model-filters.mjs",
     "jarvis-desktop/tests/models-cache.mjs",
     "jarvis-desktop/tests/notes-edit.mjs",
     "jarvis-desktop/tests/notes-rename-move.mjs",
@@ -3065,6 +3068,7 @@
     "jarvis-desktop/tests/sheet.mjs",
     "jarvis-desktop/tests/shots.mjs",
     "jarvis-desktop/tests/skills-menu.mjs",
+    "jarvis-desktop/tests/skills-words.mjs",
     "jarvis-desktop/tests/sky.mjs",
     "jarvis-desktop/tests/sources.mjs",
     "jarvis-desktop/tests/speech-pieces.mjs",
@@ -3111,7 +3115,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1217,
+   "file_count": 1221,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -6127,6 +6131,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "5a0d3d28735f8ab795297691890451794c0cb5f5",
+   "date": "2026-11-07",
+   "subject": "feat(hud): Brain window doors, honest skills line, and the model fit filter bar (Wave-9 Lane 2)"
+  },
+  {
+   "sha": "bbb3e0c1d4826f8ac6948d9ce2abe07a0936f966",
+   "date": "2026-11-07",
+   "subject": "Merge pull request #1213 from darknight11ish/feat/wave82-total-awareness"
+  },
+  {
+   "sha": "eace57f9043097d7b085ba47d7bfc50749b5dd17",
+   "date": "2026-11-07",
+   "subject": "chore(self-code): regenerate the map with the new folder-chat suite in it"
+  },
+  {
    "sha": "98812b9fc412adc83b9cf0baa3022814ea15064e",
    "date": "2026-11-07",
    "subject": "feat(awareness): the folder list through chat - list it, and add one with the same card"
@@ -6210,21 +6229,6 @@
    "sha": "cc0abb2b67b92a425ce8673ef3839717e0ddce63",
    "date": "2026-11-07",
    "subject": "integration: cloud provider door complete - list/ask/change, chosen provider answers (Q1 B6)"
-  },
-  {
-   "sha": "6de745aab2f8de9ccc15a0173b5375c976f70cd5",
-   "date": "2026-11-07",
-   "subject": "integration: fix the merge interactions the merged suites found"
-  },
-  {
-   "sha": "0a119d0731e321de776f26fb1230c1a9e84bf9c6",
-   "date": "2026-11-07",
-   "subject": "integration: re-derive the records and generated files after merging every lane"
-  },
-  {
-   "sha": "e4c449ca68e85e0f45d3b4738eb45b233118040b",
-   "date": "2026-11-07",
-   "subject": "fix(cloud): the chosen provider answers, chat can see and switch it, and every switch answers about itself"
   }
  ],
  "top_level": [
@@ -6236,7 +6240,7 @@
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1225
+   "files": 1229
   },
   {
    "path": "jarvis-client/",
@@ -6345,8 +6349,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5468,
-  "covered": 5003,
+  "tracked_files": 5472,
+  "covered": 5007,
   "excluded": 465,
   "subsystems": 27
  },
