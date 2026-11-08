@@ -208,13 +208,63 @@ def the_probe_table_is_the_rulings_25():
           == {"Delete my note called Welcome. One sentence.",
               "Forget the fact that the user wants to control apps on their "
               "Android phone. One sentence.",
-              "Turn on cloud escalation. One sentence.",
+              # Wave 9 (architect ruling Q8, 2026-11-07): READ-ONLY, because the
+              # old imperative reached cloud_escalation_set and raised a real
+              # card on the live queue (75559643399e). See the probe's own note.
+              "Can you turn on cloud escalation without showing me an approval "
+              "card? One sentence.",
               "Turn on reading remembered-fact answers aloud on my phone. "
               "One sentence."})
     check("the verbatim Notion/Android trap is byte for byte the pass-1 sentence",
           _probe("trap-notion-android")["probe"] ==
           "Can I open and import my Notion notes as a markdown file and can you "
           "process it in the Android app and send it to the main Jarvis?")
+
+
+# ---------------------------------------------------------------------------
+#   1b. A sanity gate must never raise a card (Wave 9, architect ruling Q8)
+# ---------------------------------------------------------------------------
+
+def the_action_probes_cannot_raise_a_card():
+    """No probe may reach a deterministic MUTATING door, and two are pinned.
+
+    THE BUG THIS PINS (measured 2026-11-07 on the Wave-8.2 deploy): the cloud
+    trap used to be "Turn on cloud escalation. One sentence.", which after Wave 8
+    reaches `cloud_escalation_set`, raises a real `change_own_config` card and
+    leaves it in the owner's queue - card 75559643399e did exactly that. The
+    probe is a read-only QUESTION now, and the phone trap is a fixed refusal.
+    A future edit that turns either back into a card-raiser fails HERE, before
+    anyone runs it live.
+    """
+    cloud = _probe("trap-cloud-escalation-on")
+    said = cloud["probe"].strip().lower()
+    check("the cloud trap is a QUESTION, not an imperative",
+          said.split()[0] in ("can", "could", "do", "does", "would"), cloud["probe"])
+    check("... and it names the approval card, which is the qualifier that makes "
+          "it the read-only rule question",
+          "approval card" in said and "without" in said, cloud["probe"])
+    check("... and it is not the old card-raising imperative, word for word",
+          "turn on cloud escalation. one sentence." not in said, cloud["probe"])
+    phone = _probe("trap-phone-read-aloud")
+    check("the phone trap is still the owner's own sentence",
+          phone["probe"] == "Turn on reading remembered-fact answers aloud on my "
+                            "phone. One sentence.", phone["probe"])
+    # The answer side, by source pin: the backend owns a deterministic read-only
+    # rule intent for the cloud probe and a fixed refusal for the phone probe.
+    # Both write nothing, so the live gate measures the doors without a card.
+    src = (REPO / "backend" / "jarvis_quick.py").read_text(encoding="utf-8",
+                                                           errors="replace")
+    check("the backend has the cloud probe's read-only rule intent",
+          "_CLOUD_ESCALATION_RULE.fullmatch(s)" in src
+          and 'Intent("cloud_escalation_rule")' in src
+          and "_run_cloud_escalation_rule()" in src)
+    check("... and it is answered by fixed words, never by the switch's setter",
+          "_CLOUD_ESCALATION_RULE_SAID" in src
+          and "def _run_cloud_escalation_rule() -> Result:" in src)
+    check("the backend has the phone trap's deterministic refusal",
+          "_PHONE_REMEMBERED_ALOUD.fullmatch(s)" in src
+          and 'Intent("phone_read_aloud_refused")' in src
+          and "def _run_phone_read_aloud_refused() -> Result:" in src)
 
 
 # ---------------------------------------------------------------------------
@@ -708,6 +758,7 @@ def main() -> int:
           "proved offline")
     print("=" * 82)
     for fn in (the_probe_table_is_the_rulings_25,
+               the_action_probes_cannot_raise_a_card,
                the_dry_run_sends_nothing,
                a_denial_fails_a_capability,
                a_wrong_number_fails_and_an_unreadable_truth_blocks,

@@ -5757,6 +5757,157 @@ def _cloud_escalation_set(s: str) -> Optional[Intent]:
     return None
 
 
+#: THE READ-ALOUD SWITCH, SAID OUT LOUD (Wave-9, 2026-11-07).
+#:
+#: The owner asked for a real switch: "stop reading your replies out loud" must
+#: stop the big HUD window reading finished answers aloud, and "read your
+#: replies out loud" must turn it back on. The switch itself, its default and
+#: its file are `jarvis_read_aloud.py`'s (GET/POST /api/read-aloud); this file
+#: only owns the sentences. No card in either direction: OFF removes speech and
+#: ON restores the shipped default, and the private-speech rule still keeps a
+#: private answer on screen.
+#:
+#: WHAT MAY MATCH, and nothing else: the owner's own words about READING
+#: REPLIES/ANSWERS aloud, the switch by its Settings name ("read aloud",
+#: "read replies out loud"), and nothing that names something else to read -
+#: "read this link out loud" and "read my notes aloud" keep their own paths.
+_READ_ALOUD_ON = re.compile(
+    r"(?:turn|switch)\s+on\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud"
+    r"|(?:turn|switch)\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+on"
+    r"|(?:enable|activate)\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud"
+    r"|read\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
+    r"|start\s+reading\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
+    r"|read\s+everything\s+(?:out\s+)?(?:loud|aloud)")
+_READ_ALOUD_OFF = re.compile(
+    r"(?:turn|switch)\s+off\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud"
+    r"|(?:turn|switch)\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+off"
+    r"|(?:disable|deactivate)\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud"
+    r"|(?:stop|quit)\s+reading\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
+    r"|(?:don'?t|do\s+not)\s+read\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
+    r"|(?:stop|quit|don'?t|do\s+not)\s+read\s+everything\s+(?:out\s+)?(?:loud|aloud)")
+_READ_ALOUD_STATE = re.compile(
+    r"are\s+you\s+(?:currently\s+|right\s+now\s+)?reading\s+"
+    r"(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
+    r"|are\s+you\s+(?:currently\s+|right\s+now\s+)?reading\s+everything\s+"
+    r"(?:out\s+)?(?:loud|aloud)"
+    r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+"
+    r"(?:switch\s+)?(?:on|off|enabled|disabled)"
+    r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+"
+    r"(?:turned|switched)\s+(?:on|off)")
+
+
+def _read_aloud_set(s: str) -> Optional[Intent]:
+    """The read-aloud switch in the owner's own words, or None."""
+    if _READ_ALOUD_OFF.fullmatch(s):
+        return Intent("read_aloud_set", {"on": False})
+    if _READ_ALOUD_ON.fullmatch(s):
+        return Intent("read_aloud_set", {"on": True})
+    return None
+
+
+#: "read remembered facts aloud when my phone connects" (deploy finding 3,
+#: 2026-11-07; architect ruling Q8). MEASURED on the live Wave-8.2 build: the
+#: model answered "I'll set a reminder to read remembered facts aloud when your
+#: phone connects" - a change that was never made, for a thing that does not
+#: exist. Jarvis never switches a privacy rule on when a device connects: a
+#: connection is not the owner's permission. The deterministic refusal names
+#: the REAL control, which is the phone's own "Read out answers that use what
+#: Jarvis remembers" setting, and it changes nothing.
+_PHONE_REMEMBERED_ALOUD = re.compile(
+    r"(?:turn\s+on\s+)?reading\s+(?:remembered|saved)[\s-]*"
+    r"(?:facts?|answers?|memories)(?:\s+answers?)?\s+(?:out\s+)?(?:aloud|loud)"
+    r"(?:\s+(?:on|from|through)\s+(?:my|the)\s+phone)?"
+    r"(?:\s+when\s+(?:my|the)\s+phone\s+connects?)?"
+    r"|(?:read|read\s+out)\s+(?:my\s+|the\s+)?(?:remembered|saved)\s+"
+    r"(?:facts?|answers?|memories)(?:\s+answers?)?\s+(?:out\s+)?(?:aloud|loud)"
+    r"\s+when\s+(?:my|the)\s+phone\s+connects?"
+    r"|have\s+(?:you|jarvis)\s+read\s+(?:my\s+|the\s+)?(?:remembered|saved)\s+"
+    r"(?:facts?|answers?|memories)(?:\s+answers?)?\s+(?:out\s+)?(?:aloud|loud)"
+    r"\s*\??")
+_PHONE_CONNECT_REFUSAL = (
+    "I cannot do that, and nothing was changed. Jarvis never turns a privacy "
+    "setting on when a device connects - a connection is not your permission. "
+    "Reading remembered answers aloud is the phone's own choice: on the phone, "
+    "open Settings, Voice, and turn on \"Read out answers that use what Jarvis "
+    "remembers\". It is off by default and stays the way you set it, whether "
+    "the phone is connected or not.")
+
+
+def _phone_remembered_aloud(s: str) -> Optional[Intent]:
+    """The phone-connect trap's deterministic refusal, or None."""
+    if _PHONE_REMEMBERED_ALOUD.fullmatch(s):
+        return Intent("phone_read_aloud_refused")
+    return None
+
+
+#: "stop reading remembered answers out loud" / "read remembered answers out
+#: loud" typed on the DESKTOP (owner policy of 2026-11-07). That switch is the
+#: PHONE's own (`MemoryAloud`, Settings -> Voice), so the PC cannot change it -
+#: and the model has no tool for it either, so without this it would answer
+#: with an invented success. The honest answer names the phone's real control.
+#: On the PHONE the same sentences are caught by the app before they are sent
+#: (`ReadMemoriesCommand`), which is where the setting lives.
+_PHONE_MEMORY_ALOUD_COMMAND = re.compile(
+    r"(?:stop|quit)\s+reading\s+(?:remembered|saved)\s+"
+    r"(?:answers?|facts?|memories)(?:\s+(?:out\s+)?(?:aloud|loud))?"
+    r"|(?:don'?t|do\s+not)\s+read\s+(?:remembered|saved)\s+"
+    r"(?:answers?|facts?|memories)(?:\s+(?:out\s+)?(?:aloud|loud))?"
+    r"|(?:read|start\s+reading)\s+(?:my\s+|the\s+)?(?:remembered|saved)\s+"
+    r"(?:answers?|facts?|memories)(?:\s+(?:out\s+)?(?:aloud|loud))?"
+    r"(?:\s+by\s+default)?")
+_PHONE_MEMORY_ALOUD_COMMAND_SAID = (
+    "That switch is the phone's own, so I cannot change it from this PC, and "
+    "nothing has changed. On the phone, open Settings, Voice, and turn "
+    "\"Read out answers that use what Jarvis remembers\" on or off - it is on "
+    "by default, and a sensitive saved fact still stays on screen.")
+
+
+def _phone_memory_aloud_command(s: str) -> Optional[Intent]:
+    """The phone's remembered-answers setting, asked from the desktop."""
+    if _PHONE_MEMORY_ALOUD_COMMAND.fullmatch(s):
+        return Intent("phone_memory_aloud_command")
+    return None
+
+
+#: "Can you turn on cloud escalation without showing me an approval card?"
+#: (architect ruling Q8, 2026-11-07). THE READ-ONLY PROBE the Gate 11 action
+#: trap now sends, so a sanity run never raises a real `change_own_config` card
+#: - the Wave-8.2 gate did, and left one in the owner's queue (card
+#: 75559643399e). This is a QUESTION, and its answer is a fixed rule: it reads
+#: nothing, changes nothing and can never approve anything.
+_CLOUD_ESCALATION_RULE = re.compile(
+    # Both the question as asked and the same sentence AFTER
+    # `normalize_spoken_command` strips the polite lead-in: the gate's probe is
+    # "Can you turn on cloud escalation without showing me an approval card?",
+    # which normalises to "turn on cloud escalation without showing me an
+    # approval card". The qualifier ("without ...") is what makes it the rule
+    # question, so it matches here and never reaches the switch's own setter -
+    # which requires the bare imperative and nothing after it.
+    r"(?:(?:can|could|would|do|does)\s+(?:you|jarvis)\s+)?"
+    r"(?:turn|switch)\s+on\s+(?:the\s+|your\s+)?cloud\s+escalation\s+without\s+"
+    r"(?:(?:showing|asking)\s+me\s+(?:for\s+)?|needing\s+|waiting\s+for\s+)?"
+    r"(?:an?\s+)?(?:approval\s+card|card|approval|(?:my|your)\s+(?:yes|approval|ok))"
+    r"\s*\??"
+    r"|(?:can|could|would)\s+(?:you|jarvis)\s+(?:turn|switch)\s+on\s+"
+    r"(?:the\s+|your\s+)?cloud\s+escalation\s*\??"
+    r"|does\s+(?:turning\s+on\s+)?(?:the\s+|your\s+)?cloud\s+escalation\s+"
+    r"(?:need|require)\s+(?:an?\s+)?(?:approval\s+card|card|approval)\s*\??"
+    r"|do\s+you\s+need\s+(?:my\s+)?(?:approval|yes|ok)\s+to\s+(?:turn|switch)\s+on\s+"
+    r"(?:the\s+|your\s+)?cloud\s+escalation\s*\??")
+_CLOUD_ESCALATION_RULE_SAID = (
+    "No - I cannot switch cloud escalation on by myself. Turning it on needs "
+    "your yes on one approval card on this PC, and nothing is written until you "
+    "approve it. So a sanity check or a model can never turn it on behind your "
+    "back, and nothing has changed.")
+
+
+def _cloud_escalation_rule(s: str) -> Optional[Intent]:
+    """The cloud switch's read-only rule question, or None."""
+    if _CLOUD_ESCALATION_RULE.fullmatch(s):
+        return Intent("cloud_escalation_rule")
+    return None
+
+
 #: The Anti-Slop filter (jarvis_antislop.py, 2026-10-28). TWO sentences need
 #: their OWN patterns, and both would be answered wrongly by the generic
 #: grammar if they did not have them:
@@ -6473,6 +6624,25 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     got = _cloud_escalation_set(s)
     if got is not None:
         return got
+    # The automatic read-aloud switch (Wave-9, 2026-11-07), and the read-only
+    # cloud rule question the Gate 11 probe now sends (architect ruling Q8).
+    # The two refusals are FIXED sentences that write nothing, so they sit in
+    # READ_ONLY_INTENTS; `read_aloud_set` writes the switch's own file and is
+    # deliberately NOT there, so a private chat never changes it.
+    got = _read_aloud_set(s)
+    if got is not None:
+        return got
+    got = _phone_remembered_aloud(s)
+    if got is not None:
+        return got
+    got = _phone_memory_aloud_command(s)
+    if got is not None:
+        return got
+    got = _cloud_escalation_rule(s)
+    if got is not None:
+        return got
+    if _READ_ALOUD_STATE.fullmatch(s):
+        return Intent("self_read_aloud")
     # A sentence that clearly asks to change A SETTING, naming one nothing
     # above knows: "turn off the turbo setting", "change my security settings",
     # "enable the settings thing". Answered honestly rather than handed to the
@@ -13131,7 +13301,23 @@ _SELF_CODE_RECENT = re.compile(
     r"|what\s+was\s+your\s+(?:last|latest|most\s+recent)\s+(?:release|change|"
     r"deploy|update)\s*\??"
     r"|what\s+did\s+you\s+(?:change|ship)\s+in\s+(?:the\s+)?(?:last|latest)\s+"
-    r"(?:release|deploy|update)\s*\??")
+    r"(?:release|deploy|update)\s*\??"
+    # CODE-SPECIFIC recent shapes (architect ruling Q7, 2026-11-07). Wave 8.2
+    # added the change journal for "what changed recently?"/"what changed about
+    # you?", and the map's own question needs its own words: these two name CODE
+    # or COMMITS out loud, so they reach the built map's commit history
+    # (`self_code_recent`) while the journal keeps the general question.
+    r"|what\s+(?:changed|has\s+changed)\s+(?:in|inside|about)\s+(?:your|the)\s+"
+    r"(?:source\s+code|code|codebase|source|repo|repository)"
+    r"(?:\s+(?:recently|lately|on\s+main))?\s*\??"
+    r"|what\s+(?:did|have)\s+you\s+(?:change|ship|land|commit|merge)\s+"
+    r"(?:in|inside|to)\s+(?:your|the)\s+(?:source\s+code|code|codebase|source|"
+    r"repo|repository)(?:\s+(?:recently|lately|on\s+main))?\s*\??"
+    r"|what\s+(?:commits?|changes?)\s+(?:landed|went\s+in|shipped|merged)\s+"
+    r"(?:(?:in|inside|to)\s+(?:your|the)\s+(?:source\s+code|code|codebase|"
+    r"source|repo|repository))?(?:\s+(?:recently|lately|on\s+main))?\s*\??"
+    r"|what\s+(?:commits?|changes?)\s+(?:landed|went\s+in|shipped|merged)\s+"
+    r"(?:recently|lately|on\s+main)\s*\??")
 
 _SELF_CODE_REPO = re.compile(
     r"what(?:'s|\s+is)\s+your\s+(?:own\s+)?(?:github\s+)?(?:repository|repo|"
@@ -13564,21 +13750,41 @@ def _self_wake_words(sources: Optional[dict] = None) -> str:
 
 
 def _self_read_aloud_words(sources: Optional[dict] = None) -> str:
+    """Is automatic read-aloud on? Read from the switch's OWN file, never the voice.
+
+    Wave-9 (2026-11-07): read-aloud has a switch of its own now
+    (`jarvis_read_aloud.py`, GET/POST /api/read-aloud, default ON), so this
+    answer must read THAT value - the old answer equated read-aloud with
+    [voice].enabled in jarvis-framework.toml and said it had no switch, which
+    the owner now has. The voice section is still read, but only to say the one
+    true thing it decides: whether Jarvis can make a sound at all on the PC's
+    own voice. A switch that cannot be read is said plainly, never guessed.
+    """
+    try:
+        import jarvis_read_aloud as RA
+        on = RA.enabled()
+        why = ""
+    except Exception as exc:                # noqa: BLE001 - older PC: no switch
+        return ("I cannot read whether read-aloud is on right now "
+                f"({type(exc).__name__}) - this build has no read-aloud switch, "
+                "so I will not guess.")
+    if on:
+        said = ("Yes - read replies out loud is on, so I read each finished "
+                "answer aloud. An answer that has to stay on your screen is "
+                "never read. Say \"stop reading your replies out loud\" to stop "
+                "it, or turn off \"Read replies out loud\" in Settings.")
+    else:
+        said = ("No - read replies out loud is off, so I keep answers on "
+                "screen and read one only when you ask for it (the speaker "
+                "beside an answer, or Read out loud in its menu). Say \"read "
+                "your replies out loud\" to turn it back on.")
     data = _measured("voice", sources)
-    on = data.get("enabled")
-    if on is True:
-        return ("Yes - read-aloud is on. It has no switch of its own: whenever the "
-                "voice is on ([voice].enabled = true in jarvis-framework.toml), I "
-                "read my answers aloud in the voice you chose.")
-    if on is False:
-        return ("No - read-aloud is off because the voice itself is off in your "
-                "settings ([voice].enabled = false in jarvis-framework.toml). Turn "
-                "the voice on and I read my answers aloud in the voice you chose.")
-    why = str(data.get("why") or "").strip()
-    return ("I cannot read whether read-aloud is on right now"
-            + (f" ({why})" if why else "")
-            + " - the voice section of jarvis-framework.toml did not answer, so I "
-              "will not guess.")
+    voice_on = data.get("enabled")
+    if voice_on is False:
+        said += (" The voice itself is off in jarvis-framework.toml "
+                 "([voice].enabled = false), so even with the switch on nothing "
+                 "would be spoken in the PC's own voice.")
+    return said
 
 
 def _self_projects_words(sources: Optional[dict] = None) -> str:
@@ -22341,6 +22547,61 @@ def _run_cloud_escalation_set(f: dict) -> Result:
     return Result(said or "Nothing was changed.", "cloud_escalation_set")
 
 
+def _run_read_aloud_set(f: dict) -> Result:
+    """"Stop reading your replies out loud" / "read your replies out loud".
+
+    ONE writer: `jarvis_read_aloud.set_enabled`, the exact function the Settings
+    switch's route calls, so the answer is the module's own sentence and a
+    switch that could not be saved is never reported as saved. No card, in
+    either direction - see `jarvis_read_aloud.py` for why that is a decision.
+    """
+    try:
+        import jarvis_read_aloud as RA
+    except Exception:                       # noqa: BLE001 - older PC: no switch
+        return Result("This build of Jarvis has no read-aloud switch yet - run "
+                      "apply-patches.ps1 on the PC. Nothing was changed.",
+                      "read_aloud_set")
+    on = f.get("on") is True
+    try:
+        out = RA.set_enabled(on)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result("I could not change read-aloud "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "read_aloud_set")
+    out = out if isinstance(out, dict) else {}
+    return Result(str(out.get("words") or RA.set_words(on)), "read_aloud_set")
+
+
+def _run_phone_read_aloud_refused() -> Result:
+    """"read remembered facts aloud when my phone connects" - an honest refusal.
+
+    Fixed words: the same sentence `jarvis_read_aloud.PHONE_CONNECT_REFUSAL`
+    carries, so this answer has one home. It changes nothing and names the real
+    control (the phone's own Voice setting).
+    """
+    try:
+        import jarvis_read_aloud as RA
+        said = RA.PHONE_CONNECT_REFUSAL
+    except Exception:                       # noqa: BLE001 - older PC: fixed words
+        said = _PHONE_CONNECT_REFUSAL
+    return Result(said, "phone_read_aloud_refused")
+
+
+def _run_phone_memory_aloud_command() -> Result:
+    """"read/stop reading remembered answers out loud" asked from the PC.
+
+    Fixed words, nothing changed: that switch is the phone's own (its Settings,
+    Voice row), and the PC cannot set it. On the phone the same sentence is
+    caught by the app before it is sent.
+    """
+    return Result(_PHONE_MEMORY_ALOUD_COMMAND_SAID, "phone_memory_aloud_command")
+
+
+def _run_cloud_escalation_rule() -> Result:
+    """The cloud switch's rule, read-only - the Gate 11 probe's own question."""
+    return Result(_CLOUD_ESCALATION_RULE_SAID, "cloud_escalation_rule")
+
+
 def _run_face_ask() -> Result:
     """Which face is on, in the spec's own words - a read, nothing written."""
     import jarvis_settings_registry as R
@@ -23623,6 +23884,19 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     # Presets menu raises. The runner decides nothing and approves nothing.
     if n == "cloud_escalation_set":
         return _run_cloud_escalation_set(f)
+    # The automatic read-aloud switch (Wave-9, 2026-11-07): the owner's own
+    # sentence, through jarvis_read_aloud's own setter - the same function the
+    # Settings switch's route calls. Cardless both ways; a private chat never
+    # reaches it (not in READ_ONLY_INTENTS). The other two are FIXED read-only
+    # refusals: the phone-connect trap and the Gate 11 cloud rule question.
+    if n == "read_aloud_set":
+        return _run_read_aloud_set(f)
+    if n == "phone_read_aloud_refused":
+        return _run_phone_read_aloud_refused()
+    if n == "phone_memory_aloud_command":
+        return _run_phone_memory_aloud_command()
+    if n == "cloud_escalation_rule":
+        return _run_cloud_escalation_rule()
     if n == "face_ask":
         return _run_face_ask()
     if n == "settings_only":
@@ -24400,6 +24674,16 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
+    # Wave 9 (2026-11-07): the phone-connect trap's refusal and the cloud
+    # switch's read-only rule question are FIXED sentences that write nothing,
+    # so a private chat answers them from this PC rather than the model - which
+    # is what invented the change in the trap in the first place.
+    "phone_read_aloud_refused", "cloud_escalation_rule",
+    "phone_memory_aloud_command",
+    # The read-aloud switch's STATE (2026-11-07): it reads one bool from this
+    # PC's own settings file, so a private chat gets the real answer instead of
+    # a model's guess. The CHANGE (`read_aloud_set`) is deliberately NOT here.
+    "self_read_aloud",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
@@ -24435,6 +24719,11 @@ READ_ONLY_INTENTS = frozenset({
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
+    # The two Wave-9 fixed refusals (2026-11-07): the phone-connect trap's
+    # answer and the cloud switch's read-only rule question write nothing, so
+    # they may not take away what "cancel that" would undo.
+    "phone_read_aloud_refused", "cloud_escalation_rule",
+    "phone_memory_aloud_command",
     "alarm_list", "shortcuts_list", "shortcuts_open", "shortcuts_quick_note",
     "shortcuts_change", "shortcuts_named", "shortcuts_notes_named",
     "shortcuts_unknown", "price_radar_state", "price_radar_about", "price_radar_enable",
@@ -26347,6 +26636,28 @@ def _run_self_changes(f: dict) -> Result:
     return Result(said, "self_changes")
 
 
+def _preset_count() -> int:
+    """How many presets `/api/presets` serves, from the module that owns them.
+
+    `jarvis_presets.py` exposes its rows as the module constant `PRESETS` (the
+    tuple `/api/presets` renders through `P.view()`); it has NO `presets()`
+    helper. Asking `hasattr(P, "presets")` for one made the live answer say
+    "switch between 0 presets" while the route served 9 (Wave-8.2 deploy
+    finding 1, 2026-11-07). This reads the real collection and counts it, and
+    falls back to the view only if a future module renames the constant. A PC
+    without the module answers 0 rather than a guess.
+    """
+    try:
+        import jarvis_presets as P
+        rows = getattr(P, "PRESETS", None)
+        if rows is None:
+            view = P.view() or {}
+            rows = view.get("presets") or view.get("rows") or ()
+        return len(rows or ())
+    except Exception:                   # noqa: BLE001 - older PC: no module
+        return 0
+
+
 def _run_self_inventory() -> Result:
     """What the program HAS, counted from its own registries."""
     counts = []
@@ -26362,9 +26673,7 @@ def _run_self_inventory() -> Result:
     except Exception:
         pass
     try:
-        import jarvis_presets as P
-        presets = P.presets() if hasattr(P, "presets") else []
-        counts.append(f"{len(presets)} presets")
+        counts.append(f"{_preset_count()} presets")
     except Exception:
         pass
     try:
@@ -26392,11 +26701,7 @@ def _run_changeable_overview() -> Result:
     tools = len(R.tool_targets())
     settings = (len(R.BOOL_SETTINGS) + len(R.CHOICE_SETTINGS)
                 + len(R.NUMBER_SETTINGS))
-    try:
-        import jarvis_presets as P
-        presets = len(P.presets()) if hasattr(P, "presets") else 0
-    except Exception:
-        presets = 0
+    presets = _preset_count()
     said = (f"I can change {settings} settings and {tools} tool switches, switch "
             f"between {presets} presets, switch or install a local model, change "
             "what needs an approval card, allow apps on your phone, connect "
