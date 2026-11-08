@@ -318,9 +318,16 @@ async function openHud(browser, status, pageOptions = {}) {
           // through `hud-link`): no token, no words, nothing written.
           case "get_lock_flags": return lockFlags;
           case "mark_answer": {
+            // The Wave-10 reason sheet's two optional fields are forwarded only
+            // when the page sends them, exactly as Rust's mark_answer_body does.
+            const markBody = { turn_id: args.turnId, mark: args.mark };
+            if (Object.prototype.hasOwnProperty.call(args, "reason")) markBody.reason = args.reason;
+            if (Object.prototype.hasOwnProperty.call(args, "correction")) {
+              markBody.correction = args.correction;
+            }
             const r = await origFetch(backend + "/api/feedback/mark", { method: "POST",
               headers: { ...shellHeaders, "Content-Type": "application/json" },
-              body: JSON.stringify({ turn_id: args.turnId, mark: args.mark }) });
+              body: JSON.stringify(markBody) });
             if ([404, 501, 503].includes(r.status)) return { available: false, status: r.status };
             if (!r.ok) throw new Error(`the server answered HTTP ${r.status}`);
             return r.json();
@@ -574,7 +581,11 @@ async function openHud(browser, status, pageOptions = {}) {
         marks.push(JSON.parse(req.postData() || "{}"));
         return status.markRoute === false
           ? route.fulfill({ status: 404, headers: cors, json: { error: "not found" } })
-          : route.fulfill({ status: 200, headers: cors, json: { ok: true } });
+          : route.fulfill({ status: 200, headers: cors, json: {
+              // The Wave-10 reply: the PC's own receipt sentence, plus a flag
+              // the HUD must tolerate and never act on.
+              ok: true, said: "Marked wrong - thanks, I'll factor that in.",
+              card_raised: false } });
       }
       // A decision that came out of the HUD's own buttons: the shell's
       // `decide_approval` is what posts this, with the token (audit M2).
@@ -2807,10 +2818,24 @@ await check("a HUD answer gets a caret menu, not a permanent right/wrong row", a
     "more than one answer menu opened");
   // The menu heading is styled uppercase by CSS (hud-link.css text-transform); a\n  // case-sensitive regex reads the transformed text and fails on the case. Assert\n  // the sentence case-insensitively so the visual style stays.\n  assert.match(await menu.innerText(), /was this answer right\?/i);
   assert.match(await menu.innerText(), /Read out loud|Copy answer/);
+  // Wave 10: Wrong opens the reason sheet INSIDE the same menu, and nothing
+  // is sent until the owner submits.
   await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(200);
+  assert.equal(marks.length, 0, "Wrong sent a mark before the sheet was submitted");
+  const sheetWords = await menu.innerText();
+  assert.match(sheetWords, /What was wrong\?/i);
+  for (const label of ["wrong fact", "outdated", "misunderstood", "too long", "too sensitive"]) {
+    assert.match(sheetWords, new RegExp(label, "i"), `the sheet is missing ${label}`);
+  }
+  assert.match(sheetWords, /Just mark it wrong/i);
+  // "Just mark it wrong" is EXACTLY today's body: no reason, no correction.
+  await menu.locator("button", { hasText: "Just mark it wrong" }).click();
   await page.waitForTimeout(300);
   assert.deepEqual(marks, [{ turn_id: turnId, mark: "wrong" }]);
   assert.equal(await menu.locator("button", { hasText: "Wrong" }).getAttribute("aria-checked"), "true");
+  assert.match(await menu.innerText(), /Marked wrong - thanks/,
+    "the PC's said sentence is not shown as the receipt");
   // Esc closes and puts the keyboard back on the caret.
   await page.keyboard.press("Escape");
   await page.waitForTimeout(100);
@@ -2818,6 +2843,67 @@ await check("a HUD answer gets a caret menu, not a permanent right/wrong row", a
   assert.equal(await page.evaluate(() => document.activeElement &&
     document.activeElement.classList.contains("jarvis-answer-caret")), true,
     "Esc did not return focus to the caret");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("the wrong sheet sends a reason and correction only on Submit", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  const menu = tools.locator(".jarvis-answer-menu");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(150);
+  // The chip and the typed line are LOCAL until Submit.
+  await menu.locator(".jarvis-answer-reason", { hasText: "wrong fact" }).click();
+  await menu.locator(".jarvis-answer-correction").fill("I run a 2060, not a 2080.");
+  await page.waitForTimeout(150);
+  assert.equal(marks.length, 0, "the sheet sent something before Submit");
+  await menu.locator("button", { hasText: "Submit" }).click();
+  await page.waitForTimeout(300);
+  assert.deepEqual(marks, [{
+    turn_id: turnId, mark: "wrong", reason: "wrong_fact",
+    correction: "I run a 2060, not a 2080.",
+  }]);
+  assert.match(await menu.innerText(), /Marked wrong - thanks/,
+    "the PC's said sentence is not shown as the receipt");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  assert.equal(await menu.isVisible(), false, "Esc did not close the menu after a submit");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("the wrong sheet can be dismissed without sending anything", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  const menu = tools.locator(".jarvis-answer-menu");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(150);
+  // Esc closes the sheet with the menu; Cancel also goes back without sending.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  assert.equal(await menu.isVisible(), false, "Esc did not close the sheet/menu");
+  assert.equal(marks.length, 0, "dismissing the sheet sent a mark");
+  // Reopen: the sheet is gone and the normal items are back; Cancel is inert.
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(150);
+  await menu.locator("button", { hasText: "Cancel" }).click();
+  await page.waitForTimeout(150);
+  assert.match(await menu.innerText(), /Read out loud|Copy answer/,
+    "Cancel did not return to the normal menu");
+  assert.equal(marks.length, 0, "Cancel sent a mark");
   await page.close();
   assert.deepEqual(problems, []);
 });

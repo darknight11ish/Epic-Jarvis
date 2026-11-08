@@ -170,3 +170,147 @@
   opacity: 1;
   font-weight: 600;
 }
+
+/* Wave 10 (2026-11-08): the wrong-answer sheet, INSIDE the same answer menu.
+   Plain words, five reasons, one optional correction line. Colours are the
+   HUD's own tokens - no hard-coded colour. */
+.jarvis-answer-menu.is-sheet {
+  min-width: 260px;
+  max-width: 320px;
+}
+
+.jarvis-answer-menu.is-sheet > :not(.jarvis-answer-sheet) {
+  display: none !important;
+}
+
+.jarvis-answer-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+}
+
+.jarvis-answer-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.jarvis-answer-reason {
+  font: inherit;
+  font-size: 11px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line-hot);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.jarvis-answer-reason:hover {
+  color: var(--ice);
+}
+
+.jarvis-answer-reason[aria-pressed="true"] {
+  color: var(--ice);
+  border-color: rgb(var(--accent-rgb) / .6);
+  background: rgb(var(--accent-rgb) / .12);
+}
+
+.jarvis-answer-reason:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 1px;
+}
+
+.jarvis-answer-sheet-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.jarvis-answer-correction {
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-hot);
+  border-radius: 4px;
+  padding: 4px 6px;
+  min-height: 34px;
+  max-height: 90px;
+  resize: vertical;
+}
+
+.jarvis-answer-correction:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: -2px;
+}
+
+.jarvis-answer-counter {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--dim);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.jarvis-answer-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.jarvis-answer-sheet-action {
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line-hot);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.jarvis-answer-sheet-action:hover,
+.jarvis-answer-sheet-action:focus-visible {
+  color: var(--ice);
+  outline: none;
+}
+
+.jarvis-answer-sheet-action:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 1px;
+}
+
+.jarvis-answer-sheet-action.primary {
+  color: var(--ice);
+  border-color: rgb(var(--accent-rgb) / .6);
+}
+
+.jarvis-answer-sheet-action[disabled] {
+  opacity: .45;
+  cursor: default;
+}
+
+.jarvis-answer-sheet-note {
+  margin: 0 2px;
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.jarvis-answer-said {
+  margin: 2px 6px;
+  font-size: 12px;
+  color: var(--ice);
+}
+
+.jarvis-answer-said[hidden] {
+  display: none !important;
+}

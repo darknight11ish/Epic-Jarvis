@@ -1290,6 +1290,10 @@
     if (!openAnswerTools) return;
     var tools = openAnswerTools;
     openAnswerTools = null;
+    // A submitted/dismissed sheet must not survive a close (Wave 10): the
+    // sheet lives INSIDE this one menu, so closing the menu resets it here
+    // rather than leaving a half-typed correction behind for the next open.
+    if (tools.closeSheet) tools.closeSheet();
     tools.classList.remove("is-open");
     tools.menu.hidden = true;
     tools.caret.setAttribute("aria-expanded", "false");
@@ -1452,29 +1456,307 @@
       wrong.setAttribute("aria-checked", String(current === "wrong"));
     }
 
-    function send(mark) {
-      if (busy || !shellInvoke) return;
+    /** The PC's own receipt sentence for the last wrong mark (Wave 10). It is
+     *  the sentence the backend returns in `said`; the fixed line below is
+     *  used only when an older backend sends no sentence, never instead of a
+     *  real one. */
+    var saidBox = null;
+    function showSaid(text) {
+      if (!text) return;
+      if (!saidBox) {
+        saidBox = document.createElement("p");
+        saidBox.className = "jarvis-answer-said";
+        saidBox.setAttribute("role", "status");
+        menu.appendChild(saidBox);
+      }
+      saidBox.textContent = text;
+      saidBox.hidden = false;
+    }
+    function hideSaid() {
+      if (!saidBox) return;
+      saidBox.textContent = "";
+      saidBox.hidden = true;
+    }
+
+    /**
+     * Send ONE mark through the shell's existing `mark_answer` - the same
+     * command the Jarvis bar uses, which adds the token the page does not have.
+     *
+     * `details` is Wave 10's optional addition: `{reason, correction}` from
+     * the wrong-answer sheet. With NO details the body is byte-for-byte what
+     * every earlier client sent (`{turnId, mark}`), so Right, taking a mark
+     * back, and a plain "Just mark it wrong" all behave exactly as before.
+     */
+    function send(mark, details) {
+      if (busy || !shellInvoke) return Promise.resolve(null);
       var next = current === mark ? "none" : mark;
       busy = true;
       right.disabled = wrong.disabled = true;
-      shellInvoke("mark_answer", { turnId: turnId, mark: next })
+      var args = { turnId: turnId, mark: next };
+      if (details && Object.prototype.hasOwnProperty.call(details, "reason")) {
+        args.reason = String(details.reason || "");
+      }
+      if (details && Object.prototype.hasOwnProperty.call(details, "correction")) {
+        args.correction = String(details.correction || "");
+      }
+      return shellInvoke("mark_answer", args)
         .then(function (reply) {
           if (reply && reply.available === false) {
             if (tools.parentNode) tools.parentNode.removeChild(tools);
-            return;
+            return reply;
           }
           current = next;
-          // The visible receipt (owner's ask of 2026-11-07): the mark was
-          // recorded, or taken back. Painting the same item keeps it one menu.
-          receipt(next === "none" ? wrong : (next === "right" ? right : wrong),
-                  next === "none" ? "Cleared." : "Marked.");
+          if (next === "wrong") {
+            // The PC's own receipt sentence (Wave 10). `card_raised` is
+            // tolerated and NOT acted on: the HUD approves nothing.
+            receipt(wrong, "Marked.");
+            showSaid(
+              reply && typeof reply.said === "string" && reply.said.trim()
+                ? reply.said
+                : "Marked wrong."
+            );
+          } else {
+            // The visible receipt (owner's ask of 2026-11-07): the mark was
+            // recorded, or taken back. Painting the same item keeps it one menu.
+            receipt(next === "none" ? wrong : right,
+                    next === "none" ? "Cleared." : "Marked.");
+            hideSaid();
+          }
+          return reply;
         })
-        .catch(function () { /* leave it as it was */ })
-        .then(function () {
+        .catch(function () {
+          showSaid("Could not send the mark.");
+          return null;
+        })
+        .then(function (reply) {
           busy = false;
           right.disabled = wrong.disabled = false;
           paintMarks();
+          return reply;
         });
+    }
+
+    /* ── Wave 10: the wrong-answer sheet ──────────────────────────────────
+     *
+     * The owner's chosen Right/Wrong v2: tapping Wrong opens a compact,
+     * plain-word sheet with the reason chips and an optional one-line "what
+     * should I have said?" box. It lives INSIDE this same menu element - no
+     * second overlay, no second dismissal path: the menu's own Esc, outside
+     * click, one-menu-at-a-time and focus handling all apply unchanged.
+     *
+     * NOTHING IS SENT UNTIL SUBMIT. A chip only records a local choice, the
+     * box only counts characters; "Just mark it wrong", Submit and taking a
+     * mark back are the only doors to `send()`. Nothing approves anything.
+     */
+    var REASONS = [
+      { id: "wrong_fact", label: "wrong fact" },
+      { id: "outdated", label: "outdated" },
+      { id: "misunderstood", label: "misunderstood" },
+      { id: "too_long", label: "too long" },
+      { id: "too_sensitive", label: "too sensitive" },
+    ];
+    var CORRECTION_MAX = 500;
+    var sheet = null;
+    var sheetOpen = false;
+    var normalItems = null;
+    var sheetItems = [];
+    var chosenReason = "";
+
+    /** Put the normal menu items back: one menu, its original list. */
+    function closeWrongSheet() {
+      if (!sheetOpen) return;
+      sheetOpen = false;
+      menu.classList.remove("is-sheet");
+      if (sheet && sheet.parentNode) sheet.parentNode.removeChild(sheet);
+      if (normalItems) tools.items = normalItems;
+      tools.closeSheet = null;
+      tools.refresh();
+    }
+
+    function paintReasons() {
+      if (!sheet) return;
+      var chips = sheet.querySelectorAll(".jarvis-answer-reason");
+      for (var i = 0; i < chips.length; i++) {
+        chips[i].setAttribute("aria-pressed", String(chips[i].dataset.reason === chosenReason));
+      }
+    }
+
+    /** Build the sheet ONCE, detached until opened; opening resets its state. */
+    function buildWrongSheet() {
+      normalItems = [right, wrong, readItem, copyItem];
+      sheet = document.createElement("div");
+      sheet.className = "jarvis-answer-sheet";
+      sheet.setAttribute("role", "group");
+      sheet.setAttribute("aria-label", "What was wrong with this answer?");
+
+      var title = document.createElement("p");
+      title.className = "jarvis-answer-question";
+      title.textContent = "What was wrong? (optional)";
+      sheet.appendChild(title);
+
+      var reasons = document.createElement("div");
+      reasons.className = "jarvis-answer-reasons";
+      for (var i = 0; i < REASONS.length; i++) {
+        (function (reason) {
+          var chip = document.createElement("button");
+          chip.type = "button";
+          chip.className = "jarvis-answer-reason";
+          chip.dataset.reason = reason.id;
+          chip.textContent = reason.label;
+          chip.setAttribute("aria-pressed", "false");
+          chip.addEventListener("click", function (event) {
+            if (event && event.preventDefault) event.preventDefault();
+            if (event && event.stopPropagation) event.stopPropagation();
+            // A local choice only - nothing is sent. Pressing the chosen chip
+            // again clears it, so the sheet can go back to "no reason".
+            chosenReason = chosenReason === reason.id ? "" : reason.id;
+            paintReasons();
+            paintSubmit();
+          });
+          reasons.appendChild(chip);
+        })(REASONS[i]);
+      }
+      sheet.appendChild(reasons);
+
+      var label = document.createElement("label");
+      label.className = "jarvis-answer-sheet-label";
+      label.textContent = "What should I have said? (optional)";
+      var box = document.createElement("textarea");
+      box.className = "jarvis-answer-correction";
+      box.rows = 2;
+      box.maxLength = CORRECTION_MAX;
+      box.placeholder = "One line is enough.";
+      box.setAttribute("aria-label", "What should I have said? (optional)");
+      label.appendChild(box);
+      sheet.appendChild(label);
+
+      var counter = document.createElement("span");
+      counter.className = "jarvis-answer-counter";
+      counter.textContent = "0 / " + CORRECTION_MAX;
+      counter.setAttribute("aria-hidden", "true");
+      sheet.appendChild(counter);
+      box.addEventListener("input", function () {
+        counter.textContent = String(box.value.length) + " / " + CORRECTION_MAX;
+        paintSubmit();
+      });
+
+      var actions = document.createElement("div");
+      actions.className = "jarvis-answer-sheet-actions";
+      var submit = document.createElement("button");
+      submit.type = "button";
+      submit.className = "jarvis-answer-sheet-action primary";
+      submit.textContent = "Submit";
+      var just = document.createElement("button");
+      just.type = "button";
+      just.className = "jarvis-answer-sheet-action";
+      just.textContent = "Just mark it wrong";
+      var cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "jarvis-answer-sheet-action";
+      cancel.textContent = "Cancel";
+      actions.appendChild(submit);
+      actions.appendChild(just);
+      actions.appendChild(cancel);
+      sheet.appendChild(actions);
+
+      var note = document.createElement("p");
+      note.className = "jarvis-answer-sheet-note";
+      note.setAttribute("role", "status");
+      sheet.appendChild(note);
+
+      function correctionNow() {
+        return String(box.value || "").trim();
+      }
+      function paintSubmit() {
+        submit.disabled = busy || (!chosenReason && !correctionNow());
+        just.disabled = busy;
+        cancel.disabled = busy;
+      }
+      sheet.paintSubmit = paintSubmit;
+      sheet.counter = counter;
+      sheet.note = note;
+      sheet.box = box;
+      sheet.submit = submit;
+
+      submit.addEventListener("click", function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        var reason = chosenReason;
+        var correction = correctionNow();
+        if (!reason && !correction) {
+          note.textContent =
+            "Pick a reason or type what I should have said - or just mark it wrong.";
+          return;
+        }
+        // THE ONLY place a sheet submission sends anything.
+        busy = true;
+        paintSubmit();
+        note.textContent = "";
+        send("wrong", { reason: reason, correction: correction }).then(function (reply) {
+          if (reply && reply.available === false) return;
+          if (current === "wrong" && sheetOpen) {
+            closeWrongSheet();
+            return;
+          }
+          // A failed send leaves the sheet open with its words intact; say it
+          // in the sheet's own line rather than in a toast.
+          note.textContent = "Could not send the mark. Try again.";
+          busy = false;
+          paintSubmit();
+        });
+      });
+      just.addEventListener("click", function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        // EXACTLY today's mark: no reason, no correction - the old body.
+        busy = true;
+        paintSubmit();
+        send("wrong").then(function (reply) {
+          if (reply && reply.available === false) return;
+          if (current === "wrong" && sheetOpen) {
+            closeWrongSheet();
+            return;
+          }
+          note.textContent = "Could not send the mark. Try again.";
+          busy = false;
+          paintSubmit();
+        });
+      });
+      cancel.addEventListener("click", function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        closeWrongSheet();
+        wrong.focus();
+      });
+      sheetItems = [submit, just, cancel].concat(
+        Array.prototype.slice.call(reasons.querySelectorAll(".jarvis-answer-reason"))
+      );
+    }
+
+    /** Open the sheet in place of the menu's items, focus its first chip. */
+    function openWrongSheet() {
+      if (!sheet) buildWrongSheet();
+      chosenReason = "";
+      paintReasons();
+      sheet.box.value = "";
+      sheet.counter.textContent = "0 / " + CORRECTION_MAX;
+      sheet.note.textContent = "";
+      if (!sheet.parentNode) menu.appendChild(sheet);
+      menu.classList.add("is-sheet");
+      sheetOpen = true;
+      tools.items = sheetItems;
+      tools.closeSheet = closeWrongSheet;
+      busy = false;
+      sheet.paintSubmit();
+      var firstChip = sheet.querySelector(".jarvis-answer-reason");
+      if (firstChip && firstChip.focus) firstChip.focus();
+    }
+
+    /** The Wrong item: today's take-the-mark-back when already wrong; else the
+     *  sheet (Wave 10). It never marks anything by itself. */
+    function onWrongPicked() {
+      if (current === "wrong") {
+        send("wrong");
+        return;
+      }
+      openWrongSheet();
     }
 
     var q = document.createElement("p");
@@ -1482,7 +1764,7 @@
     q.textContent = "Was this answer right?";
     menu.appendChild(q);
     var right = item("Right", function () { send("right"); }, "menuitemradio");
-    var wrong = item("Wrong", function () { send("wrong"); }, "menuitemradio");
+    var wrong = item("Wrong", onWrongPicked, "menuitemradio");
     readItem = item("Read out loud", function (button) {
       // 1. The page's own speaker, when it exists: exactly the voice path the
       //    owner's speaker switch draws, with the page's own privacy check.
