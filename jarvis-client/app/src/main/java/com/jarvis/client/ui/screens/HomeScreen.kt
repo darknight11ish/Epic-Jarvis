@@ -4643,8 +4643,9 @@ private fun MessageMenu(
 
             // "Read out loud" for THIS answer (the owner's ask of 2026-11-07),
             // beside Right/Wrong in that answer's own menu, on every answer. It
-            // reads THIS answer through the phone's existing /api/voice/say path
-            // with the same rules the newest-answer control uses: a locked phone
+            // reads THIS answer through the phone's existing say path (the
+            // runtime's one voice route; no new one is added here) with the same
+            // rules the newest-answer control uses: a locked phone
             // refuses first, then the facts THIS answer was built with decide -
             // a sensitive saved fact or a private tool keeps it on screen with
             // its own words. An answer whose facts are not kept is refused in
