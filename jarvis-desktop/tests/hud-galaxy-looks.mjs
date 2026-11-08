@@ -187,7 +187,10 @@ await check("the stage words read Galaxy options, then Presets, after the five t
   assert.deepEqual(TABS.map((t) => t.word),
     ["Galaxy", "Approvals", "Reminders", "Memory", "Telemetry"],
     "the five section tabs changed order or lost a word");
-  assert.deepEqual(stageWords(HUD), ["Galaxy options", "Presets"],
+  // "Brain" is the Wave-9 owner-asked menu word (2026-11-07, Q5: the Brain
+// window reachable from BOTH the stage words and the left column); it is a
+// window door, not a sixth stage tab, so it sits after the five tabs' words.
+assert.deepEqual(stageWords(HUD), ["Galaxy options", "Presets", "Brain"],
     "the menu words are missing or out of order - the owner asked for Presets " +
     "\"in the right order next to the galaxy, approvals, reminders and other menu options\"");
   // The words come AFTER Telemetry in the source, which is the owner's one
