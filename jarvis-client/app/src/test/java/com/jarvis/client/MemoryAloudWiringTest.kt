@@ -129,7 +129,8 @@ class MemoryAloudWiringTest {
         val settings = code(text("data/ClientSettings.kt"))
         assertTrue(settings, "KEY_READ_MEMORIES_ALOUD = \"read_memories_aloud\"" in settings)
         assertTrue(settings, "prefs.getBoolean(KEY_READ_MEMORIES_ALOUD, PrivateAloud.MEMORY_ALOUD_DEFAULT)" in settings)
-        assertFalse(PrivateAloud.MEMORY_ALOUD_DEFAULT)
+        // The owner's decision of 2026-11-07: ON by default.
+        assertTrue(PrivateAloud.MEMORY_ALOUD_DEFAULT)
     }
 
     // ----------------------------------------------- the row on the screen ---

@@ -112,15 +112,18 @@ class ClientSettings(context: Context) {
 
     /**
      * "Read out answers that use what Jarvis remembers" on this phone
-     * (voice.MemoryAloud) - the owner's setting of 2026-11-05, **OFF by
-     * default** ([PrivateAloud.MEMORY_ALOUD_DEFAULT]) and this phone's own:
-     * the PC has no matching switch, and nothing here changes what the PC
-     * reads. It only ever covers the mic press on this phone while it was
-     * unlocked at that press, or a typed answer read aloud ("Read aloud") on
-     * this phone while it is unlocked (the owner's decision of 2026-11-06);
-     * "hey Jarvis" and Jarvis Live are not included, and a sensitive saved
-     * fact, a private tool or a stale link still keeps the answer on screen
-     * (voice.PrivateAloud, voice.ReadAloud).
+     * (voice.MemoryAloud) - the owner's setting of 2026-11-05, **ON by
+     * default** since the owner's decision of 2026-11-07
+     * ([PrivateAloud.MEMORY_ALOUD_DEFAULT]) and this phone's own: the PC has
+     * no matching switch, and nothing here changes what the PC reads. It
+     * covers every VOICE answer on this phone - the mic press, "hey Jarvis"
+     * and Jarvis Live - while it was unlocked at the press, and a TYPED answer
+     * read aloud ("Read aloud") while it is unlocked. A typed answer is silent
+     * by default. An extremely sensitive saved fact, a private tool, a stale
+     * link or a locked phone still keeps the answer on screen
+     * (voice.PrivateAloud, voice.ReadAloud). The chat can change the switch:
+     * "stop reading remembered answers out loud" / "read everything out
+     * loud" (voice.ReadMemoriesCommand).
      */
     val readMemoriesAloud: StateFlow<Boolean> = _readMemoriesAloud.asStateFlow()
 

@@ -56,30 +56,32 @@ import kotlinx.serialization.json.doubleOrNull
  * is asked again before EVERY sentence: a tool that starts halfway through
  * stops the reading there.
  *
- * THE PHONE'S OWN PROMISE, THE OWNER'S CHOICE OF 2026-11-05. The talk
- * button deliberately runs no voice check (the owner's request of
- * 2026-11-02), so the PC's `memory_aloud` is ALWAYS false for it
+ * THE PHONE'S OWN PROMISE, THE OWNER'S CHOICE OF 2026-11-05, widened on
+ * 2026-11-07. The talk button deliberately runs no voice check (the owner's
+ * request of 2026-11-02), so the PC's `memory_aloud` is ALWAYS false for it
  * (`jarvis_speech._QuickMessage`) and an answer that uses what Jarvis
  * remembers was always kept on screen - even on his own unlocked phone, with
  * his own setting on the PC saying memories may be read aloud. He chose a
  * setting ON THE PHONE for exactly that case: "read them aloud on my
- * unlocked phone", off by default ([MEMORY_ALOUD_DEFAULT]). It lifts ONLY the
- * remembered-facts refusal, and only when ALL of these hold:
+ * unlocked phone". On 2026-11-07 he widened it - "i wanted to read everything
+ * out loud ... unless it's extremely sensitive information it's okay" - so
+ * the default is ON ([MEMORY_ALOUD_DEFAULT]) and it covers EVERY voice answer
+ * on this phone: the mic press, "hey Jarvis" and Jarvis Live. It lifts ONLY
+ * the remembered-facts refusal, and only when ALL of these hold:
  *
- *  - the question came from the phone's talk button ([talkButton] - the mic
- *    press; not the wake word, not Jarvis Live);
  *  - the phone was UNLOCKED at the moment of that press ([unlockedAtPress],
  *    captured then and never re-read: the owner's own instruction);
  *  - the answer used at least one remembered fact (`injected_facts` above 0)
  *    and NO sensitive one (`injected_sensitive` 0 - the fail-closed count
- *    above still refuses);
+ *    above still refuses; health, money, passwords and other people's private
+ *    details always stay on screen);
  *  - nothing else was private: not the question, not the router's gate, no
  *    screen read kept on screen, no private tool, the stream live throughout.
  *
- * The setting is a promise this phone makes about its own button; it is
- * never a new default and it never reaches "hey Jarvis" or Live. Every other
- * rule keeps its place, which is why this is one branch of the same `when`
- * and not a second rule.
+ * The setting is a promise this phone makes about its own voice answers; a
+ * TYPED answer is silent unless he taps Read out loud. Every other rule keeps
+ * its place, which is why this is one branch of the same `when` and not a
+ * second rule.
  *
  * AND ON A TYPED ANSWER, SINCE THE OWNER'S DECISION OF 2026-11-06. The same
  * phone setting now covers a TYPED answer read aloud on this unlocked phone
@@ -142,11 +144,16 @@ object PrivateAloud {
     const val QUICK_MESSAGE = "quick_message"
 
     /**
-     * The phone setting's default, written down where the rule reads it: OFF.
-     * The owner's choice of 2026-11-05 was "a setting", not a new default, and
-     * `MemoryAloud.describe(false)` says so on the row too.
+     * The phone setting's default, written down where the rule reads it: ON.
+     * The owner's decision of 2026-11-07: remembered answers are read aloud by
+     * default - including in Jarvis Live and after "hey Jarvis" - unless the
+     * answer uses an EXTREMELY sensitive saved fact (health, money, passwords,
+     * other people's private details), which still always stays on screen
+     * (the sensitive rule of 2026-09-24 is unchanged). A typed answer is read
+     * only when he asks for it; the chat can change this default back off any
+     * time ("stop reading remembered answers out loud").
      */
-    const val MEMORY_ALOUD_DEFAULT = false
+    const val MEMORY_ALOUD_DEFAULT = true
 
     /**
      * Why an answer may not be read aloud, in the order the rules are asked.
@@ -222,6 +229,22 @@ object PrivateAloud {
         val facts = count(o, "injected_facts") ?: 0
         val sensitive = count(o, "injected_sensitive") ?: facts
         return Route(privateGate = gate == "private", injectedFacts = facts, injectedSensitive = sensitive)
+    }
+
+    /**
+     * The answer's own turn id from `X-Jarvis-Route` (`turn_id`, feedback.patch),
+     * or null when the header does not carry a real one. Used by the phone to
+     * keep each finished TYPED answer's privacy facts under its own id, so that
+     * answer's own menu can read THAT answer aloud later (2026-11-07) under the
+     * same rules it was built with. Null is "not known", never a guessed id.
+     */
+    fun turnId(header: String?): String? {
+        if (header.isNullOrBlank()) return null
+        val o = runCatching { JarvisJson.parseToJsonElement(header.trim()) as? JsonObject }.getOrNull()
+            ?: return null
+        val raw = (o["turn_id"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
+            ?: return null
+        return raw.takeIf { Regex("^[0-9a-f]{32}$").matches(it) }
     }
 
     /**
@@ -376,9 +399,17 @@ object PrivateAloud {
     /**
      * Whether an answer that used remembered facts may be read aloud for this
      * clip. The PC's own answer (`memory_aloud`) is enough on its own, exactly
-     * as before. The phone's setting is the ONLY other way, and it needs all
-     * three facts of its own - the setting on, the talk button, unlocked at
-     * the press - and no screen read.
+     * as before. The phone's setting is the ONLY other way: the setting on, the
+     * phone unlocked at the press, and no screen read.
+     *
+     * IT COVERS EVERY VOICE ANSWER ON THIS PHONE since the owner's decision of
+     * 2026-11-07 ("i wanted to read everything out loud ... unless it's
+     * extremely sensitive information"): the mic press, "hey Jarvis" and Jarvis
+     * Live. The [talkButton] argument is kept for the callers that still pass
+     * it (and for the words said about the rule) but no longer gates this: it
+     * used to, and that restriction is exactly what kept Live silent.
+     * `usesSensitive` is asked BEFORE this in [refusal], so an extremely
+     * sensitive fact still always stays on screen.
      */
     fun memoryMayRead(
         memoryAloud: Boolean,
@@ -386,7 +417,7 @@ object PrivateAloud {
         talkButton: Boolean,
         unlockedAtPress: Boolean,
         screenRead: Boolean,
-    ): Boolean = memoryAloud || (phoneMemoryAloud && talkButton && unlockedAtPress && !screenRead)
+    ): Boolean = memoryAloud || (phoneMemoryAloud && unlockedAtPress && !screenRead)
 
     /**
      * The whole rule, asked in order, answering WHY an answer stays on screen.

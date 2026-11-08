@@ -575,6 +575,49 @@ object JarvisRuntime {
         }
 
 
+    /**
+     * "Stop reading remembered answers out loud" / "read everything out loud" /
+     * "are you reading everything out loud?", typed in chat or said in Jarvis
+     * Live ([com.jarvis.client.voice.ReadMemoriesCommand], the owner's decision
+     * of 2026-11-07).
+     *
+     * Answered on the phone rather than sent to the model: the switch is this
+     * phone's own preference, so the PC cannot change it and the model has no
+     * tool for it - sending it on would get an invented success. Nothing is
+     * sent, so a MODEL ANSWER can never toggle it; only the owner's own words
+     * reach this parser.
+     */
+    fun readMemoriesCommand(change: com.jarvis.client.voice.ReadMemoriesCommand.Change): String {
+        val on = when (change) {
+            com.jarvis.client.voice.ReadMemoriesCommand.Change.ON -> true
+            com.jarvis.client.voice.ReadMemoriesCommand.Change.OFF -> false
+            com.jarvis.client.voice.ReadMemoriesCommand.Change.ASK ->
+                settings.readMemoriesAloud.value
+        }
+        if (change != com.jarvis.client.voice.ReadMemoriesCommand.Change.ASK) {
+            settings.setReadMemoriesAloud(on)
+        }
+        return when (change) {
+            com.jarvis.client.voice.ReadMemoriesCommand.Change.ASK ->
+                com.jarvis.client.voice.ReadMemoriesCommand.stateLine(on)
+            else -> if (on) com.jarvis.client.voice.ReadMemoriesCommand.SAID_ON
+            else com.jarvis.client.voice.ReadMemoriesCommand.SAID_OFF
+        }
+    }
+
+    /**
+     * The same command, read from the owner's OWN words in the typed box
+     * ([com.jarvis.client.voice.ReadMemoriesCommand.command]): the line to say,
+     * or null when the words are an ordinary question. Nothing is sent when a
+     * line comes back, so a model can never toggle this - the parser only ever
+     * sees the owner's own sentence.
+     */
+    fun readMemoriesLocalCommand(text: String?): String? {
+        val change = com.jarvis.client.voice.ReadMemoriesCommand.command(text) ?: return null
+        return readMemoriesCommand(change)
+    }
+
+
     /** True while "Start the local model" is being asked and watched. */
     private val _laneStarting = MutableStateFlow(false)
     val laneStarting: StateFlow<Boolean> = _laneStarting.asStateFlow()
@@ -1127,6 +1170,12 @@ object JarvisRuntime {
             // phone answers it, the same parser the typed chat uses, so the two
             // surfaces cannot say different things about one switch.
             onHandsfreeCommand = { asked -> handsfreeCommand(asked) },
+            // "stop reading remembered answers out loud" / "read everything out
+            // loud" / the state question, said in Jarvis Live or by "hey
+            // Jarvis" (the owner's decision of 2026-11-07): the switch is this
+            // phone's own, so the phone changes it - the same parser the typed
+            // box uses, so the two surfaces cannot disagree.
+            onReadMemoriesCommand = { change -> readMemoriesCommand(change) },
             // Jarvis Live (voice/LiveRules.kt): lowered, not paused, while
             // the PC checks another voice; no tap buttons while a card of
             // THIS session waits (LiveRules.cardInSession - an older card
@@ -9562,6 +9611,12 @@ object JarvisRuntime {
         val text = answer?.trim().orEmpty()
         if (text.isNotEmpty()) {
             _readAloud.value = com.jarvis.client.voice.ReadAloud.Offer(text, facts)
+            // Keep THIS answer's facts under its own turn id, so its own menu
+            // can read THAT answer aloud later (2026-11-07) under the same
+            // rules it was built with. Bounded and in memory only.
+            com.jarvis.client.voice.PrivateAloud.turnId(header)?.let { id ->
+                rememberAnswerOffer(id, com.jarvis.client.voice.ReadAloud.Offer(text, facts))
+            }
         }
         return answer
     }
@@ -9645,6 +9700,95 @@ object JarvisRuntime {
     fun stopReadingAloud() {
         _readingAloud.value = false
         voice.speaker.stop()
+    }
+
+    /**
+     * Every finished TYPED answer's privacy facts this app run, by turn id -
+     * bounded, in memory only, and never on disk (2026-11-07). The per-answer
+     * "Read out loud" in that answer's own menu needs the facts its own answer
+     * was built with; the newest-only [readAloud] offer cannot serve an older
+     * one. An answer from before this run has no entry, and is refused in words
+     * ([com.jarvis.client.voice.ReadAloud.OLD_ANSWER]) rather than guessed at.
+     */
+    private val answerOffers =
+        object : LinkedHashMap<String, com.jarvis.client.voice.ReadAloud.Offer>(16, 0.75f, true) {}
+
+    private fun rememberAnswerOffer(
+        turnId: String,
+        offer: com.jarvis.client.voice.ReadAloud.Offer,
+    ) {
+        synchronized(answerOffers) {
+            answerOffers[turnId] = offer
+            while (answerOffers.size > 20) {
+                val oldest = answerOffers.keys.firstOrNull() ?: break
+                answerOffers.remove(oldest)
+            }
+        }
+    }
+
+    private fun answerOffer(turnId: String?): com.jarvis.client.voice.ReadAloud.Offer? {
+        if (turnId.isNullOrEmpty()) return null
+        return synchronized(answerOffers) { answerOffers[turnId] }
+    }
+
+    /**
+     * "Read out loud" in ONE answer's own menu (the owner's ask of 2026-11-07),
+     * for THAT answer. Returns "" when it is speaking (or was stopped), and the
+     * fixed refusal line otherwise - the same shape [readAloudLastAnswer] has.
+     *
+     * THE RULES ARE THE SAME ONES, per answer: a locked phone, a stale link and
+     * a busy speaker refuse FIRST; then the facts THIS answer was built with
+     * ([com.jarvis.client.voice.ReadAloud.Offer.mayRead]) decide - a sensitive
+     * saved fact, a private tool, a private answer or an unreadable route keeps
+     * it on screen with its own words. Nothing here widens a rule, and an
+     * answer whose facts are not kept (an older run) is refused, not guessed.
+     */
+    suspend fun readAnswerAloud(turnId: String?, text: String): String {
+        val wanted = text.trim()
+        if (wanted.isEmpty()) return com.jarvis.client.voice.ReadAloud.NOTHING
+        if (readAloudLockedNow()) {
+            _readAloudUnlocked.value = false
+            return com.jarvis.client.voice.ReadAloud.LOCKED
+        }
+        if (readAloudStaleNow()) return com.jarvis.client.voice.ReadAloud.OFFLINE
+        val offer = answerOffer(turnId) ?: return com.jarvis.client.voice.ReadAloud.OLD_ANSWER
+        if (offer.text.trim() != wanted) {
+            return com.jarvis.client.voice.ReadAloud.OLD_ANSWER
+        }
+        if (!offer.mayRead) {
+            return offer.refusal ?: com.jarvis.client.voice.ReadAloud.ON_SCREEN
+        }
+        if (_readingAloud.value) return ""
+        if (voice.speakerBusy()) return com.jarvis.client.voice.ReadAloud.BUSY
+        val sentences = com.jarvis.client.voice.ReadAloud.sentences(offer.text)
+        if (sentences.isEmpty()) return com.jarvis.client.voice.ReadAloud.NOTHING
+        _readingAloud.value = true
+        try {
+            voice.speaker.arm()
+            for (sentence in sentences) {
+                if (!_readingAloud.value) return ""
+                // The lock is asked again before every sentence: a read must
+                // stop the moment the phone locks (the same rule the last-answer
+                // read follows).
+                if (readAloudLockedNow()) {
+                    _readAloudUnlocked.value = false
+                    stopReadingAloud()
+                    return ""
+                }
+                when (val said = api.say(sentence)) {
+                    is com.jarvis.client.net.ApiResult.Ok -> when (val clip = said.value) {
+                        is com.jarvis.client.net.SaidAloud.Audio -> voice.speaker.play(clip.wav)
+                        is com.jarvis.client.net.SaidAloud.NoEngine ->
+                            return com.jarvis.client.voice.ReadAloud.NO_ENGINE
+                    }
+                    is com.jarvis.client.net.ApiResult.Failed ->
+                        return com.jarvis.client.voice.ReadAloud.CANNOT
+                }
+            }
+            return ""
+        } finally {
+            _readingAloud.value = false
+        }
     }
 
     /**

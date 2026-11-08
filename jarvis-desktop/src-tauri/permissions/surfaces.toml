@@ -2420,3 +2420,27 @@ permissions = [
   "allow-shell-version-sync",
 ]
 
+
+
+# ---------------------------------------------------------------------------
+# The automatic read-aloud switch (Wave-9, 2026-11-07): "Read replies out
+# loud", GET/POST /api/read-aloud (jarvis_read_aloud.py, installed by its own
+# drop-in folder). ON by default; OFF removes automatic speech and ON restores
+# the shipped default, so neither direction raises a card and neither loosens
+# anything - private-speech.js still keeps a private answer on screen.
+#
+# READ is granted to every window that may need to know whether automatic
+# speech is on; WRITE is the Settings window's alone, the one surface whose
+# card changes it. A TYPED question is never read automatically (the owner's
+# decision of 2026-11-07), so the quickbar - the voice surface - reads it at
+# each voice turn.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "read-aloud-read"
+description = "Read whether the PC's automatic read-aloud switch is on. Read-only."
+permissions = ["allow-get-read-aloud"]
+
+[[set]]
+identifier = "read-aloud-write"
+description = "Turn automatic read-aloud on or off (Settings -> The big HUD window). Cardless both ways."
+permissions = ["allow-set-read-aloud"]

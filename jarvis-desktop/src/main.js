@@ -4743,6 +4743,9 @@ async function stopPushToTalk() {
       return;
     }
     state.voiceTurn = true;
+  // This VOICE turn may be read aloud; the PC's own switch decides (a typed
+  // turn never gets here). Re-read before the answer starts arriving.
+  refreshReadAloud();
     state.voicePrivacy = privacyFromHeard(heard);
     // The PC's own speech route wrote these words (stop_voice_capture), so
     // they go as "voice"; the PC checks that against what it transcribed.
@@ -4774,6 +4777,36 @@ function abandonPushToTalk() {
  *  original one-shot version of this did. */
 let spokenUpTo = 0;
 let speechQueue = [];
+
+/** The PC's automatic read-aloud switch ("Read replies out loud", ON by
+ *  default, GET /api/read-aloud). THE TWO RULES IT SERVES (the owner's, both
+ *  2026-11-07):
+ *
+ *    1. A TYPED question is never read automatically - "if i write it with my
+ *       keyboard I would like it not to be read out loud by Default". This
+ *       window only ever speaks a VOICE turn (`state.voiceTurn`), so typed
+ *       turns never reach the queue at all.
+ *    2. A VOICE turn is spoken unless the owner turned the switch off. OFF
+ *       means the answer is shown and not said; the HUD's per-answer speaker
+ *       and every answer's own "Read out loud" item still work on a tap.
+ *
+ *  Read at the START of every voice turn (`refreshReadAloud`), so a switch
+ *  changed in Settings or by "stop reading your replies out loud" is in force
+ *  for the next spoken answer. Until the first read resolves the shipped
+ *  default (ON) holds, and a read that fails leaves it as it was - the same
+ *  "today's behaviour" the switch ships with. */
+let readAloudOn = true;
+
+/** Re-read the PC's read-aloud switch. Cheap (one loopback GET) and never
+ *  throws: with no bridge (a browser window) the shipped default stands. */
+function refreshReadAloud() {
+  try {
+    invokeStrict("get_read_aloud").then(function (state) {
+      readAloudOn = !(state && state.enabled === false);
+    }, function () { /* keep the last known value; the shipped default is ON */ });
+  } catch (error) { /* no desktop bridge: nothing to ask */ }
+}
+
 let speaking = false;
 let currentAudio = null;
 /** Set by "stop" (`stopSpeaking`) for the rest of the turn it landed in, and
@@ -5031,6 +5064,14 @@ async function drainSpeechQueue() {
     return;
   }
   if (speechMuted) {
+    speechQueue = [];
+    aheadClip = null;
+    return;
+  }
+  if (!readAloudOn) {
+    // The owner's switch is OFF: automatic speech stops, the answer stays on
+    // screen. The per-answer speaker and "Read out loud" are his own taps and
+    // do not come through this queue.
     speechQueue = [];
     aheadClip = null;
     return;
@@ -5584,6 +5625,9 @@ listen("voice-heard", (event) => {
   const text = String(heard.text || "").trim();
   if (!text) return;
   state.voiceTurn = true;
+  // This VOICE turn may be read aloud; the PC's own switch decides (a typed
+  // turn never gets here). Re-read before the answer starts arriving.
+  refreshReadAloud();
   state.voicePrivacy = privacyFromHeard(heard);
   send(text, "voice");
 });
@@ -6735,6 +6779,9 @@ function liveTurnFinished(spokenAnswer) {
 
 function liveSend(text, privacy) {
   state.voiceTurn = true;
+  // This VOICE turn may be read aloud; the PC's own switch decides (a typed
+  // turn never gets here). Re-read before the answer starts arriving.
+  refreshReadAloud();
   state.voicePrivacy = privacy;
   live.lastQuestion = text;
   send(text, "voice", { live: true });

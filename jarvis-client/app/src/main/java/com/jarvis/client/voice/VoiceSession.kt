@@ -98,6 +98,17 @@ class VoiceSession(
      */
     private val onHandsfreeCommand: (suspend (com.jarvis.client.net.Handsfree.Asked) -> String?)? = null,
     /**
+     * "Stop reading remembered answers out loud" / "read everything out loud" /
+     * "are you reading everything out loud?", asked by VOICE or in Jarvis Live
+     * (2026-11-07). The phone's own remembered-answers switch lives in this
+     * phone's preferences, so the PC cannot change it - this callback applies
+     * the change and returns the line to say. Null as the whole callback means
+     * this build cannot answer, and the sentence goes to the model as before.
+     * A model ANSWER never reaches this: only the owner's own spoken sentence
+     * does, parsed before anything is sent.
+     */
+    private val onReadMemoriesCommand: (suspend (ReadMemoriesCommand.Change) -> String?)? = null,
+    /**
      * Jarvis Live is on on this phone (voice.LiveRules): another voice over a
      * reply LOWERS it instead of pausing it, and talking over the first
      * three seconds counts too.
@@ -1419,6 +1430,20 @@ class VoiceSession(
                 // The reply is a FIXED line of the app's own, so the phone's
                 // own voice is allowed where the PC has none (sayLine's own
                 // rule) - no card's words are ever synthesised here.
+                if (!line.isNullOrBlank()) runCatching { sayLine(line) }
+                setPhase(turn, Phase.OFF)
+                return heard
+            }
+        }
+        // "stop reading remembered answers out loud" / "read everything out
+        // loud" / the state question (the owner's decision of 2026-11-07): the
+        // switch is THIS PHONE's, so the phone answers it from the same parser
+        // the typed box uses. Nothing is sent, so a model can never toggle it.
+        onReadMemoriesCommand?.let { ask ->
+            ReadMemoriesCommand.command(text)?.let { wanted ->
+                setPhase(turn, Phase.THINKING)
+                speaker.arm()
+                val line = runCatching { ask(wanted) }.getOrNull()
                 if (!line.isNullOrBlank()) runCatching { sayLine(line) }
                 setPhase(turn, Phase.OFF)
                 return heard

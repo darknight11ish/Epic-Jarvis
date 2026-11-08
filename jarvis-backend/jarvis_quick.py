@@ -2243,6 +2243,16 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     # never taken for one: a plain question back, never a guess.
     if _ANIMAL_UNSURE.fullmatch(s):
         return Intent("animal_ask", {"about": "animal"})
+    # --- the hardware-aware model recommender (Lane 3, 2026-11-07) ---------------
+    # LAST, immediately before the model fallback, and that placement is the
+    # rule: every door above keeps the sentence it already owns, so the
+    # recommender can only answer a question nothing else does. Its own module
+    # returns None for anything it does not own, and its absence (an older PC,
+    # or this branch before the lane merges) falls straight through to the model
+    # exactly as before - see `_model_recommender_question`.
+    got = _model_recommender_question(text)
+    if got is not None:
+        return got
     return None
 
 
@@ -2251,6 +2261,36 @@ _VAGUE = r"(?:it|this|that|them|these|those|something|stuff|things)"
 #: A named list's name as said: one to three words before "list".
 _NAME = r"([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,2})"
 _OWN = r"(?:my|the|our)"
+
+
+def _model_recommender_question(raw: str) -> Optional[Intent]:
+    """The hardware-aware model recommender's chat door, or None.
+
+    Lane 3's module (`jarvis_model_recommender.py`, 2026-11-07) owns the
+    sentences: `chat_hook(question)` returns None for anything it does not own
+    and a plain deterministic answer for "what model should this PC run?" and
+    its own `CHAT_TRIGGERS`. This is the ONE call site, and it is lazy on
+    purpose: a PC without the module (an older install, or a branch before the
+    lane merges) answers None and the sentence reaches the model exactly as it
+    always did. Any failure inside the module also answers None - a fast-path
+    hook must never raise into the matcher.
+    """
+    try:
+        import jarvis_model_recommender as MR
+    except Exception:                         # noqa: BLE001 - older PC: no module
+        return None
+    try:
+        said = MR.chat_hook(raw)
+    except Exception:                         # noqa: BLE001 - said, never raised
+        return None
+    if not isinstance(said, str) or not said.strip():
+        return None
+    return Intent("model_recommender", {"said": said})
+
+
+def _run_model_recommender(f: dict) -> Result:
+    """The recommender's own answer, word for word - a read, no model, no card."""
+    return Result(str(f.get("said") or ""), "model_recommender")
 
 
 def _key(name: str):
@@ -23897,6 +23937,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_phone_memory_aloud_command()
     if n == "cloud_escalation_rule":
         return _run_cloud_escalation_rule()
+    if n == "model_recommender":
+        # Lane 3's hardware-aware recommender (2026-11-07): its own fixed words,
+        # a read of this PC's hardware - no model, no card, no write.
+        return _run_model_recommender(f)
     if n == "face_ask":
         return _run_face_ask()
     if n == "settings_only":
@@ -24680,6 +24724,9 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # is what invented the change in the trap in the first place.
     "phone_read_aloud_refused", "cloud_escalation_rule",
     "phone_memory_aloud_command",
+    # Lane 3's hardware-aware model recommender (2026-11-07): reads this PC's
+    # own hardware and answers in its module's fixed words - nothing written.
+    "model_recommender",
     # The read-aloud switch's STATE (2026-11-07): it reads one bool from this
     # PC's own settings file, so a private chat gets the real answer instead of
     # a model's guess. The CHANGE (`read_aloud_set`) is deliberately NOT here.

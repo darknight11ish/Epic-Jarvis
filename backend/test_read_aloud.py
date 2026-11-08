@@ -296,7 +296,9 @@ def t_a_model_answer_can_never_toggle_it():
     # backend - the deterministic runner in jarvis_quick.py - and no model tool.
     callers = []
     for path in sorted(HERE.glob("*.py")):
-        if path.name in ("jarvis_read_aloud.py", "test_read_aloud.py"):
+        # The suites are not callers: test_self_facts.py flips the switch to
+        # exercise the STATE answer, and that is a test seam, not a door.
+        if path.name == "jarvis_read_aloud.py" or path.name.startswith("test_"):
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         if "set_enabled(" in text and "jarvis_read_aloud" in text.lower():
@@ -443,6 +445,66 @@ def t_the_gate_11_cloud_probe_is_read_only_and_deterministic():
 # --------------------------------------------------------------------------
 #   Finding 4: the desktop-row door, by a page-only sentence
 # --------------------------------------------------------------------------
+
+def t_the_model_recommender_hook_is_deterministic_and_tolerant():
+    """Lane 3's hardware-aware recommender is wired in front of the model.
+
+    The module is merged from Lane 3, so this checkout may not have it yet. The
+    wiring is proved with a stub module either way: the hook's answer becomes
+    the deterministic answer with no model call, the module's None falls through
+    exactly as before, and a raise inside it never breaks the matcher. When the
+    real module IS present (the integration branch), its own chat_hook answers
+    the owner's sentence and that is checked too.
+    """
+    import types
+    import jarvis_quick as Q2
+
+    stub = types.ModuleType("jarvis_model_recommender")
+    stub_answers = {"what model should this pc run": "STUB ANSWER: use qwen3.5:9b."
+
+                    }
+    stub.chat_hook = lambda question: stub_answers.get(
+        " ".join(str(question or "").lower().split()).rstrip("?!"))
+    had_real = "jarvis_model_recommender" in sys.modules
+    real = sys.modules.get("jarvis_model_recommender")
+    try:
+        sys.modules["jarvis_model_recommender"] = stub
+        intent = Q2.match("what model should this PC run?")
+        check("the recommender gets the model question, with no model call",
+              intent is not None and intent.name == "model_recommender"
+              and intent.f.get("said") == "STUB ANSWER: use qwen3.5:9b.",
+              None if intent is None else (intent.name, intent.f))
+        got = Q2.run(intent, S.get(), time.time()) if intent is not None else None
+        check("... and its answer is returned word for word",
+              got is not None and got.intent == "model_recommender"
+              and got.reply == "STUB ANSWER: use qwen3.5:9b.",
+              None if got is None else (got.intent, got.reply[:100]))
+        check("a question the recommender does not own still routes as before",
+              _match("what models are installed?") == "models_list"
+              and _match("what model are you using?") == "model_current"
+              and _match("what does my oven do") is None)
+
+        def exploding(question):
+            raise RuntimeError("boom")
+
+        sys.modules["jarvis_model_recommender"].chat_hook = exploding
+        check("a recommender that raises never breaks the matcher",
+              Q2.match("what model should this PC run?") is None)
+    finally:
+        if had_real:
+            sys.modules["jarvis_model_recommender"] = real
+        else:
+            sys.modules.pop("jarvis_model_recommender", None)
+    if had_real:
+        got = _ran("what model should this PC run?")
+        check("with the real Lane-3 module, its own hook answers the question",
+              got is not None and got.intent == "model_recommender"
+              and len(got.reply) > 20,
+              None if got is None else got.reply[:120])
+    else:
+        print("skip  the real jarvis_model_recommender.py is not on this branch "
+              "yet (Lane 3); the wiring above is proved with its stub")
+
 
 def t_the_desktop_row_door_is_measured_by_a_page_only_sentence():
     sentence = "What does the morning briefing setting do?"

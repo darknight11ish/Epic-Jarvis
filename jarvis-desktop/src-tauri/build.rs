@@ -580,6 +580,14 @@ fn main() {
             // window only.
             "get_antislop",
             "set_antislop",
+            // The automatic read-aloud switch (Wave-9, 2026-11-07): "Read
+            // replies out loud", GET/POST /api/read-aloud. A read for the
+            // quickbar (its voice answers obey it) and the Settings card, and
+            // ONE cardless write from Settings. A typed question is never read
+            // automatically, so this is about VOICE answers only; the private
+            // rule keeps a private answer on screen whatever it says.
+            "get_read_aloud",
+            "set_read_aloud",
             // Hands-free mode (2026-11-04; JARVIS-API section 191,
             // backend/jarvis_handsfree.py). The read is a read; ON raises ONE
             // `handsfree_enable` approval card through the backend and the call
