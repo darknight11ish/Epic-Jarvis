@@ -2,13 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
-<<<<<<< HEAD
- "ref": "5a0d3d28735f8ab795297691890451794c0cb5f5",
- "built_at": "2026-11-07T18:00:40-08:00",
-=======
- "ref": "183b63913415873571f0116e69afdb6abc3b1e61",
- "built_at": "2026-11-07T18:49:40-08:00",
->>>>>>> feat/wave9-lane1-read-aloud-2026-11-07
+ "ref": "f4d8087e59717924406c6ae75a7d390beda2c606",
+ "built_at": "2026-11-07T19:04:13-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -212,6 +207,7 @@
     "backend/jarvis_model_knowledge.py",
     "backend/jarvis_model_lanes.py",
     "backend/jarvis_model_recommendations.py",
+    "backend/jarvis_model_recommender.py",
     "backend/jarvis_ollama_contract.py",
     "backend/jarvis_optin_models.py",
     "backend/jarvis_presets.py",
@@ -223,7 +219,7 @@
     "backend/jarvis_work.py",
     "backend/rebuilt/jarvis_compute.py"
    ],
-   "file_count": 38,
+   "file_count": 39,
    "key_modules": [
     {
      "path": "backend/jarvis_model_lanes.py",
@@ -3129,11 +3125,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-<<<<<<< HEAD
-   "file_count": 1221,
-=======
-   "file_count": 1223,
->>>>>>> feat/wave9-lane1-read-aloud-2026-11-07
+   "file_count": 1227,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -3690,9 +3682,11 @@
     "backend/test_base_matches_repo.py",
     "backend/test_base_regeneration.py",
     "backend/test_bench.py",
+    "backend/test_bench_suites.py",
     "backend/test_better_voice.py",
     "backend/test_between_us.py",
     "backend/test_big_coder.py",
+    "backend/test_big_coder_modes.py",
     "backend/test_big_model.py",
     "backend/test_bind_wildcard.py",
     "backend/test_biometric_seal.py",
@@ -3925,6 +3919,7 @@
     "backend/test_model_lanes.py",
     "backend/test_model_profiles.py",
     "backend/test_model_recommendations.py",
+    "backend/test_model_recommender.py",
     "backend/test_model_self_knowledge.py",
     "backend/test_model_tryout.py",
     "backend/test_mood.py",
@@ -3999,6 +3994,7 @@
     "backend/test_plugin_switch.py",
     "backend/test_plugins_honesty.py",
     "backend/test_pooled_lane.py",
+    "backend/test_pooled_modes.py",
     "backend/test_position_pins.py",
     "backend/test_power_switch.py",
     "backend/test_preset_answers.py",
@@ -4238,7 +4234,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 652,
+   "file_count": 656,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -5953,6 +5949,7 @@
     "jarvis-backend/jarvis_model_knowledge.py",
     "jarvis-backend/jarvis_model_lanes.py",
     "jarvis-backend/jarvis_model_recommendations.py",
+    "jarvis-backend/jarvis_model_recommender.py",
     "jarvis-backend/jarvis_models.py",
     "jarvis-backend/jarvis_money_parse.py",
     "jarvis-backend/jarvis_mood.py",
@@ -6123,7 +6120,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 333,
+   "file_count": 334,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6153,11 +6150,26 @@
  ],
  "recent_commits": [
   {
-<<<<<<< HEAD
-   "sha": "5a0d3d28735f8ab795297691890451794c0cb5f5",
+   "sha": "f4d8087e59717924406c6ae75a7d390beda2c606",
    "date": "2026-11-07",
-   "subject": "feat(hud): Brain window doors, honest skills line, and the model fit filter bar (Wave-9 Lane 2)"
-=======
+   "subject": "chore(self-code): regenerate the map after the three Wave-9 lanes merged"
+  },
+  {
+   "sha": "6c4713cb561e9503fb7f3378d3569cf385c29f12",
+   "date": "2026-11-07",
+   "subject": "Merge branch 'feat/wave9-lane1-read-aloud-2026-11-07' into integration/wave9-2026-11-07"
+  },
+  {
+   "sha": "d02447ff9126ee92e97955e5720aafb5e36732b0",
+   "date": "2026-11-07",
+   "subject": "chore(base): re-take jarvis-backend/_where.py with the new SHIPPED entries"
+  },
+  {
+   "sha": "f9efa0e914a04590302817c65c7bba3c7f5df0f0",
+   "date": "2026-11-07",
+   "subject": "chore(self-code): regenerate the map with the read-aloud switch in it"
+  },
+  {
    "sha": "183b63913415873571f0116e69afdb6abc3b1e61",
    "date": "2026-11-07",
    "subject": "chore(self-code): own the read-aloud switch in the map generator"
@@ -6173,10 +6185,34 @@
    "subject": "feat(desktop): typed answers silent, voice answers obey the read-aloud switch, and Read out loud on every answer"
   },
   {
+   "sha": "d6868d41d38785816abc6f98c91629b87f51c72a",
+   "date": "2026-11-07",
+   "subject": "Merge branch 'feat/wave9-lane3-bench-recommender-2026-11-07' into integration/wave9-2026-11-07"
+  },
+  {
+   "sha": "3f5b39cd3fc1161a4a1b00ba3c34f41a4a24c213",
+   "date": "2026-11-07",
+   "subject": "Merge branch 'feat/wave9-lane2-hud-model-filters-2026-11-07' into integration/wave9-2026-11-07"
+  },
+  {
+   "sha": "5a3086c7790ab534adf296a98a00465d77dbe367",
+   "date": "2026-11-07",
+   "subject": "feat(bench): five-suite measurement runner, hardware-aware recommender, pooled-lane modes"
+  },
+  {
+   "sha": "cb3c1d493bdb2a5a5662fd1a752a863abc4a4dfb",
+   "date": "2026-11-07",
+   "subject": "chore(self-code): regenerate the map for the Wave-9 Lane 2 files"
+  },
+  {
    "sha": "2927a61749f99a27ef13912681f8666c23984873",
    "date": "2026-11-07",
    "subject": "feat(awareness): Wave-9 findings 1-4 and the automatic read-aloud switch (backend)"
->>>>>>> feat/wave9-lane1-read-aloud-2026-11-07
+  },
+  {
+   "sha": "5a0d3d28735f8ab795297691890451794c0cb5f5",
+   "date": "2026-11-07",
+   "subject": "feat(hud): Brain window doors, honest skills line, and the model fit filter bar (Wave-9 Lane 2)"
   },
   {
    "sha": "bbb3e0c1d4826f8ac6948d9ce2abe07a0936f966",
@@ -6212,85 +6248,18 @@
    "sha": "1f837d41f22dc1549a0ec1721c9e18362c94caf3",
    "date": "2026-11-07",
    "subject": "test(awareness): align the suites the new answers deliberately change"
-  },
-  {
-   "sha": "baec446a83b74d634a02dd855f56471cdb646337",
-   "date": "2026-11-07",
-   "subject": "Merge remote-tracking branch 'origin/main' into feat/wave82-total-awareness"
-  },
-  {
-   "sha": "888b799777aac46750da0aa12bc59129543310aa",
-   "date": "2026-11-07",
-   "subject": "Merge pull request #1212 from darknight11ish/fix/wave8-followups-2026-11-07"
-  },
-  {
-   "sha": "cfeb76e1646a5ce5fe11efd70630570d7fb06ad2",
-   "date": "2026-11-07",
-   "subject": "feat(awareness): full self-awareness and a local change journal"
-  },
-  {
-   "sha": "cd463bade671bceb3f988d921a56701dde33b640",
-   "date": "2026-11-07",
-   "subject": "chore(self-code): regenerate the map for the Wave 8.1 record fragments"
-  },
-  {
-   "sha": "b8a9406907fc38a5fc89ed0e7826d1c93cdd2018",
-   "date": "2026-11-07",
-   "subject": "ci(audit,release): checkout full history in audit job and set targetCommitish on client-latest"
-  },
-  {
-   "sha": "e39301b765da9d21a2c2695a65f74262569a834c",
-   "date": "2026-11-07",
-   "subject": "fix(quick): route repo_watch_list to _run_repo_watch, retry meta-instruction suffixes, and pin dispatch-set reachability"
-  },
-  {
-   "sha": "a1da4576b20edaa32bbdafbaaa5a465824a7ca14",
-   "date": "2026-11-07",
-   "subject": "Merge pull request #1211 from darknight11ish/integration/wave8-2026-11-07"
-  },
-  {
-   "sha": "858b258b4c3ba321908dcae5a0a4d348cd8ebf58",
-   "date": "2026-11-07",
-   "subject": "integration: fix the backend suite failures the full CI run found"
-  },
-  {
-   "sha": "293bcb60c7dbef797e11b2bf51dd1ec205a43d6b",
-   "date": "2026-11-07",
-   "subject": "integration: the two-part capability answer only answers a real question"
-<<<<<<< HEAD
-  },
-  {
-   "sha": "141b3ffd0a7a6d78d66d125328e68264980c46c7",
-   "date": "2026-11-07",
-   "subject": "integration: the no-op rule reaches the settings-registry dispatch loop too"
-  },
-  {
-   "sha": "758d4d88129a910bd3d89f6e018beea285cd66f7",
-   "date": "2026-11-07",
-   "subject": "integration: the merged suite interactions found on this branch are fixed"
-  },
-  {
-   "sha": "cc0abb2b67b92a425ce8673ef3839717e0ddce63",
-   "date": "2026-11-07",
-   "subject": "integration: cloud provider door complete - list/ask/change, chosen provider answers (Q1 B6)"
-=======
->>>>>>> feat/wave9-lane1-read-aloud-2026-11-07
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1380
+   "files": 1385
   },
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-<<<<<<< HEAD
-   "files": 1229
-=======
-   "files": 1231
->>>>>>> feat/wave9-lane1-read-aloud-2026-11-07
+   "files": 1235
   },
   {
    "path": "jarvis-client/",
@@ -6305,7 +6274,7 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 345
+   "files": 346
   },
   {
    "path": "tools/",
@@ -6399,13 +6368,8 @@
   }
  ],
  "coverage": {
-<<<<<<< HEAD
-  "tracked_files": 5472,
-  "covered": 5007,
-=======
-  "tracked_files": 5480,
-  "covered": 5015,
->>>>>>> feat/wave9-lane1-read-aloud-2026-11-07
+  "tracked_files": 5490,
+  "covered": 5025,
   "excluded": 465,
   "subsystems": 27
  },

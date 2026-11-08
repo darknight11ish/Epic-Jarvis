@@ -173,6 +173,7 @@ SUBSYSTEMS = (
             "jarvis_model_knowledge", "jarvis_model_lanes",
             "jarvis_model_recommendations", "jarvis_presets", "jarvis_second_card",
             "jarvis_big_model", "jarvis_big_coder", "jarvis_bench", "jarvis_bakeoff",
+            "jarvis_model_recommender",
             "jarvis_speed", "jarvis_energy", "jarvis_hardware", "jarvis_profiles",
             "jarvis_ollama_contract", "jarvis_work", "jarvis_auto_router",
             "jarvis_thinking", "jarvis_hf_inspect", "jarvis_tripwire",
@@ -738,8 +739,7 @@ ARCHITECTURE = (
                     "backend reaches them over loopback and nothing private leaves the "
                     "machine.",
         "paths": ("backend/jarvis_model_lanes.py", "backend/jarvis_hardware.py",
-                  "backend/jarvis_second_card.py", "backend/jarvis_bench.py",
-                  "backend/jarvis_model_recommender.py"),
+                  "backend/jarvis_second_card.py", "backend/jarvis_bench.py"),
     },
     {
         "id": "desktop",
