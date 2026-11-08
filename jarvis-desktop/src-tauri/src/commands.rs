@@ -2598,6 +2598,61 @@ pub(crate) fn valid_turn_id(id: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// The reasons the wrong-answer sheet may carry (Wave 10, 2026-11-08).
+/// ONE vocabulary, the same five the HUD's chips name.
+pub(crate) const MARK_REASONS: [&str; 5] = [
+    "wrong_fact",
+    "outdated",
+    "misunderstood",
+    "too_long",
+    "too_sensitive",
+];
+
+/// Longest "what should I have said?" line the sheet accepts, in characters.
+pub(crate) const MARK_CORRECTION_MAX: usize = 500;
+
+/// The body POSTed to `/api/feedback/mark`.
+///
+/// ONE place, so the old body and the Wave-10 additions can be tested without
+/// a network call. With no `reason` and no `correction` it is EXACTLY the body
+/// every earlier client sent - `{"turn_id", "mark"}` plus the optional
+/// `conversation_id` - so Right, taking a mark back and "Just mark it wrong"
+/// stay byte-for-byte the old request. The wrong-answer sheet adds `reason`
+/// and/or `correction`; each is included only when the caller sent it. A
+/// reason outside the five, or a correction longer than 500 characters, is
+/// refused HERE, before the PC is asked.
+pub(crate) fn mark_answer_body(
+    turn_id: &str,
+    mark: &str,
+    conversation_id: Option<&str>,
+    reason: Option<String>,
+    correction: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::Map::new();
+    body.insert("turn_id".into(), serde_json::json!(turn_id));
+    body.insert("mark".into(), serde_json::json!(mark));
+    if let Some(id) = conversation_id.filter(|id| valid_conversation_id(id)) {
+        body.insert("conversation_id".into(), serde_json::json!(id));
+    }
+    if let Some(reason) = reason {
+        let reason = reason.trim().to_string();
+        if !(reason.is_empty() || MARK_REASONS.contains(&reason.as_str())) {
+            return Err("that is not one of the reasons a mark can carry".to_string());
+        }
+        body.insert("reason".into(), serde_json::json!(reason));
+    }
+    if let Some(correction) = correction {
+        let correction = correction.trim().to_string();
+        if correction.chars().count() > MARK_CORRECTION_MAX {
+            return Err(format!(
+                "the correction is longer than {MARK_CORRECTION_MAX} characters"
+            ));
+        }
+        body.insert("correction".into(), serde_json::json!(correction));
+    }
+    Ok(serde_json::Value::Object(body))
+}
+
 /// The owner's right/wrong mark on ONE answer (feedback.patch).
 ///
 /// One id and one mark, never a list: the server refuses a list with a 400
@@ -2612,15 +2667,23 @@ pub(crate) fn valid_turn_id(id: &str) -> bool {
 /// entirely for an invalid or missing id (an older window's still-valid
 /// call).
 ///
+/// `reason` and `correction` (Wave 10, 2026-11-08) are the wrong-answer
+/// sheet's optional additions, sent only when the owner submitted that sheet;
+/// an older client simply omits them and the body is unchanged.
+///
 /// A backend without the patch answers 404 (no such route) or 503 (the
 /// module is missing); both come back as `{"available": false}` so the page
-/// can hide the control quietly rather than show an error.
+/// can hide the control quietly rather than show an error. The reply the page
+/// receives is the PC's own JSON, so Wave 10's added `said` sentence and
+/// `card_raised` flag reach it unchanged (and the HUD approves nothing).
 #[tauri::command]
 pub async fn mark_answer(
     app: AppHandle,
     turn_id: String,
     mark: String,
     conversation_id: Option<String>,
+    reason: Option<String>,
+    correction: Option<String>,
 ) -> Result<serde_json::Value, String> {
     if !valid_turn_id(&turn_id) {
         return Err("that answer has no valid id to mark".to_string());
@@ -2628,20 +2691,18 @@ pub async fn mark_answer(
     if !matches!(mark.as_str(), "right" | "wrong" | "none") {
         return Err(format!("`{mark}` is not a mark (right, wrong or none)"));
     }
-    let mut body = serde_json::Map::new();
-    body.insert("turn_id".into(), serde_json::json!(turn_id));
-    body.insert("mark".into(), serde_json::json!(mark));
-    if let Some(id) = conversation_id
-        .as_deref()
-        .filter(|id| valid_conversation_id(id))
-    {
-        body.insert("conversation_id".into(), serde_json::json!(id));
-    }
+    let body = mark_answer_body(
+        &turn_id,
+        &mark,
+        conversation_id.as_deref(),
+        reason,
+        correction,
+    )?;
     let base = jarvis_base(&app);
     let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
         .post(format!("{base}/api/feedback/mark"))
         .headers(jarvis_headers(&app)?)
-        .json(&serde_json::Value::Object(body))
+        .json(&body)
         .send()
         .await
         .map_err(|e| {
@@ -8367,5 +8428,98 @@ mod surface_header_tests {
             source.contains("insert_surface_header(&mut headers);"),
             "jarvis_headers must insert the surface header"
         );
+    }
+}
+
+// ==========================================================================
+//   Wave 10 (2026-11-08): the wrong-answer sheet's body, without a network
+// ==========================================================================
+//
+// The sheet's five reasons and its optional one-line correction reach the PC
+// through the same `mark_answer` command every other mark uses. These tests
+// hold the backward-compatible half (the old body, byte for byte) and the new
+// half (the two fields, the five-value vocabulary and the 500-character bound)
+// to the words the HUD and docs use.
+#[cfg(test)]
+mod wave10_mark_answer_tests {
+    use super::*;
+
+    const TURN: &str = "0123456789abcdef0123456789abcdef";
+
+    #[test]
+    fn a_plain_mark_is_exactly_the_old_body() {
+        let got = mark_answer_body(TURN, "wrong", None, None, None).unwrap();
+        assert_eq!(got, serde_json::json!({"turn_id": TURN, "mark": "wrong"}));
+        // Taking a mark back and a Right mark are the same shape.
+        assert_eq!(
+            mark_answer_body(TURN, "none", None, None, None).unwrap(),
+            serde_json::json!({"turn_id": TURN, "mark": "none"})
+        );
+        assert_eq!(
+            mark_answer_body(TURN, "right", None, None, None).unwrap(),
+            serde_json::json!({"turn_id": TURN, "mark": "right"})
+        );
+        // The optional conversation id is still there, and only when valid.
+        let with_cid = mark_answer_body(TURN, "wrong", Some("conv-12345678"), None, None).unwrap();
+        assert_eq!(with_cid["conversation_id"], "conv-12345678");
+        let bad_cid = mark_answer_body(TURN, "wrong", Some("no"), None, None).unwrap();
+        assert!(bad_cid.get("conversation_id").is_none());
+    }
+
+    #[test]
+    fn the_sheet_body_carries_the_reason_and_correction() {
+        let got = mark_answer_body(
+            TURN,
+            "wrong",
+            None,
+            Some("wrong_fact".to_string()),
+            Some("  I run a 2060, not a 2080.  ".to_string()),
+        )
+        .unwrap();
+        assert_eq!(got["reason"], "wrong_fact");
+        // The line is trimmed; the PC bounds it again, this is not the only guard.
+        assert_eq!(got["correction"], "I run a 2060, not a 2080.");
+        assert_eq!(got.as_object().unwrap().len(), 4);
+    }
+
+    #[test]
+    fn an_empty_reason_or_correction_is_sent_as_an_empty_string() {
+        let got = mark_answer_body(
+            TURN,
+            "wrong",
+            None,
+            Some(String::new()),
+            Some(String::new()),
+        )
+        .unwrap();
+        assert_eq!(got["reason"], "");
+        assert_eq!(got["correction"], "");
+    }
+
+    #[test]
+    fn only_the_five_reasons_are_accepted() {
+        for reason in MARK_REASONS {
+            assert!(
+                mark_answer_body(TURN, "wrong", None, Some(reason.to_string()), None).is_ok(),
+                "{reason} was refused"
+            );
+        }
+        for bad in ["wrong", "too long", "WRONG_FACT", "fact_wrong", "1"] {
+            assert!(
+                mark_answer_body(TURN, "wrong", None, Some(bad.to_string()), None).is_err(),
+                "{bad} was accepted as a reason"
+            );
+        }
+    }
+
+    #[test]
+    fn a_correction_over_500_characters_is_refused_before_the_pc_is_asked() {
+        let max = "x".repeat(MARK_CORRECTION_MAX);
+        assert!(mark_answer_body(TURN, "wrong", None, None, Some(max)).is_ok());
+        let too_long = "x".repeat(MARK_CORRECTION_MAX + 1);
+        assert!(mark_answer_body(TURN, "wrong", None, None, Some(too_long)).is_err());
+        // Characters, not bytes: 300 two-byte characters are 300 characters.
+        let unicode = "\u{e9}".repeat(MARK_CORRECTION_MAX);
+        assert!(mark_answer_body(TURN, "wrong", None, None, Some(unicode)).is_ok());
     }
 }
