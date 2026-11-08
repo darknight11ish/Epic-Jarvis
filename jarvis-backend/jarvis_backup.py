@@ -781,6 +781,7 @@ NOT_BACKED_UP_PATHS = {
     # the live state, so a restore does not need it and a stale copy would only
     # claim changes the restored state contradicts.
     "changes.jsonl": "a bounded local record of what changed, rebuilt from the live state; no owner content",
+    "bench-scores.jsonl": "the benchmark scorecards (model/quant/ctx/date and measured numbers) written by jarvis_bench; re-measurable on this PC and never owner content",
 }
 
 #: The settings files the `*.json` glob cannot reach, because their extension is

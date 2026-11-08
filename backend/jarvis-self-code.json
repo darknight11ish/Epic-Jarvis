@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "2a07bf3cc08d6698e682da91c5ddd2464929c55c",
- "built_at": "2026-11-07T19:13:24-08:00",
+ "ref": "8fc8dfbbf7e3a9ed225fb25d166b3d68d03fbb23",
+ "built_at": "2026-11-07T19:16:50-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4505,6 +4505,7 @@
     "changelog.d/2026-11-07-three-gpu-coding-preset.md",
     "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
     "changelog.d/2026-11-07-wave-8-2-full-self-awareness.md",
+    "changelog.d/2026-11-07-wave-9-read-aloud-bench-and-brain.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4636,6 +4637,7 @@
     "decisions.d/2026-11-07-dispatch-sets-are-not-read-only-marks.md",
     "decisions.d/2026-11-07-github-self-knowledge-catalogue-not-lane-system.md",
     "decisions.d/2026-11-07-gpu-pin-11434-to-headless.md",
+    "decisions.d/2026-11-07-read-aloud-default-and-measured-model-promotion.md",
     "decisions.d/2026-11-07-repo-watcher.md",
     "decisions.d/2026-11-07-self-awareness-contract-and-change-journal.md",
     "decisions.d/2026-11-07-self-code-map-from-main.md",
@@ -5086,7 +5088,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 809,
+   "file_count": 811,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6152,6 +6154,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "8fc8dfbbf7e3a9ed225fb25d166b3d68d03fbb23",
+   "date": "2026-11-07",
+   "subject": "docs(records): Wave 9 claims, API/ARCHITECTURE sections, changelog and decision fragments"
+  },
+  {
    "sha": "2a07bf3cc08d6698e682da91c5ddd2464929c55c",
    "date": "2026-11-07",
    "subject": "feat(chat): the five-suite benchmark has a door - run the full benchmark by asking"
@@ -6245,11 +6252,6 @@
    "sha": "bbb3e0c1d4826f8ac6948d9ce2abe07a0936f966",
    "date": "2026-11-07",
    "subject": "Merge pull request #1213 from darknight11ish/feat/wave82-total-awareness"
-  },
-  {
-   "sha": "eace57f9043097d7b085ba47d7bfc50749b5dd17",
-   "date": "2026-11-07",
-   "subject": "chore(self-code): regenerate the map with the new folder-chat suite in it"
   }
  ],
  "top_level": [
@@ -6286,7 +6288,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 223
+   "files": 224
   },
   {
    "path": "videos/",
@@ -6296,7 +6298,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 136
+   "files": 137
   },
   {
    "path": "plugins/",
@@ -6370,8 +6372,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5492,
-  "covered": 5027,
+  "tracked_files": 5494,
+  "covered": 5029,
   "excluded": 465,
   "subsystems": 27
  },
