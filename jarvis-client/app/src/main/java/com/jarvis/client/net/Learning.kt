@@ -5,8 +5,10 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 
 /*
  * The phone's half of the 2026-09-23 learning work - the pure rules only,
@@ -94,10 +96,61 @@ object Feedback {
      * list form on purpose - the backend refuses one, and a "mark all" would
      * move every counter at once on one tap. Null for an id the backend
      * would refuse anyway, so nothing is sent.
+     *
+     * RIGHT/WRONG v2 (Wave 10, 2026-11-08). A "wrong" mark can also carry the
+     * owner's reason and their own correction words (the Lead's fixed
+     * contract, `net/Feedback.kt`): `reason` is one of
+     * `wrong_fact|outdated|misunderstood|too_long|too_sensitive`, or "" when
+     * the owner picked none, and `correction` is one line of at most
+     * [WrongFeedback.MAX_CORRECTION] characters. **With no reason and no
+     * correction the body is the OLD body, byte for byte** - an owner who
+     * just taps "Just mark it wrong", and every existing caller, sends
+     * exactly what it always sent. The new fields are built with
+     * `buildJsonObject`, so the correction's own quotes and backslashes can
+     * never break out of their string.
      */
-    fun markBody(turnId: String, mark: AnswerMark): String? {
+    fun markBody(
+        turnId: String,
+        mark: AnswerMark,
+        reason: FeedbackReason? = null,
+        correction: String = "",
+    ): String? {
         if (!isTurnId(turnId)) return null
-        return """{"turn_id":"$turnId","mark":"${mark.wire}"}"""
+        // One line, at the cap, with no stray ends: a correction of spaces
+        // only is "nothing said", so it must not grow the old body the PC's
+        // old shape does not know.
+        val words = WrongFeedback.cap(correction).trim()
+        if (reason == null && words.isEmpty()) {
+            return """{"turn_id":"$turnId","mark":"${mark.wire}"}"""
+        }
+        return buildJsonObject {
+            put("turn_id", turnId)
+            put("mark", mark.wire)
+            put("reason", reason?.wire ?: "")
+            put("correction", words)
+        }.toString()
+    }
+
+    /**
+     * The PC's receipt for one mark, read off the route's answer tolerantly.
+     *
+     * The response keeps `ok` and adds `said` (a string - the PC's own
+     * sentence, shown to the owner word for word) and `card_raised` (a bool -
+     * ONE card is waiting on the PC; the phone never answers it). A missing
+     * or non-string `said` is "" (an older PC) and a missing or non-boolean
+     * `card_raised` is false: nothing here invents a claim.
+     */
+    fun receipt(body: JsonObject?): MarkReceipt {
+        if (body == null) return MarkReceipt()
+        val said = (body["said"] as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.content
+            ?.trim()
+            .orEmpty()
+        val raised = (body["card_raised"] as? JsonPrimitive)
+            ?.takeIf { !it.isString }
+            ?.booleanOrNull == true
+        return MarkReceipt(said, raised)
     }
 
     /**
