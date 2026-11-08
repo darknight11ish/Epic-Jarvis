@@ -738,7 +738,8 @@ ARCHITECTURE = (
                     "backend reaches them over loopback and nothing private leaves the "
                     "machine.",
         "paths": ("backend/jarvis_model_lanes.py", "backend/jarvis_hardware.py",
-                  "backend/jarvis_second_card.py", "backend/jarvis_bench.py"),
+                  "backend/jarvis_second_card.py", "backend/jarvis_bench.py",
+                  "backend/jarvis_model_recommender.py"),
     },
     {
         "id": "desktop",
