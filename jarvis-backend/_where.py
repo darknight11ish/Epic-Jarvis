@@ -437,6 +437,16 @@ SHIPPED = (
     # install(), called by plugins/ready/antislop - no patch of its own. A
     # cardless preference either way, like the prompt coach.
     "jarvis_antislop.py",
+    # The automatic read-aloud switch (2026-11-07): ON by default, so the big
+    # HUD window reads finished answers aloud exactly as before; OFF at once,
+    # by the Settings switch or by saying "stop reading your replies out loud"
+    # in chat or Jarvis Live. GET/POST /api/read-aloud come from its own
+    # install(), called by plugins/ready/read-aloud - no patch of its own. No
+    # card either way: OFF removes speech and ON restores the shipped default,
+    # and the private-speech rule still keeps a private answer on screen. A
+    # model answer can never toggle it: there is no model tool and no route the
+    # model reaches.
+    "jarvis_read_aloud.py",
     # The Jarvis-owned local calendar (2026-10-29): the owner's own events in
     # `calendar.db`, ON when no settings file says otherwise, OFF keeps every
     # row. GET /api/calendar and the three writes come from its own install(),
