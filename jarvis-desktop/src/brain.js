@@ -1731,6 +1731,12 @@ function renderModels() {
   // "Check for new models" (2026-10-28, the owner's ask): the candidates, the
   // benchmark measured here, and the preset changes to approve or argue with.
   dom.models.append(advisorPanel());
+  // Lane 3's "what this PC should run" panel (Wave-9 Lane 2b, 2026-11-07),
+  // beside the model advisor through that ONE render seam. It rides the same
+  // GET /api/models/recommendations read as an OPTIONAL `recommender` key; a
+  // PC without the module simply draws no section here.
+  const recPanel = advisorRecommenderPanel();
+  if (recPanel) dom.models.append(advisorRecommenderSection(recPanel));
 
   const comp = state.data.compute || {};
   const compPlan = comp.plan && typeof comp.plan === "object" ? comp.plan : comp;
@@ -2795,6 +2801,91 @@ function renderCompute() {
       el("p", "note model-preset-suggestion", "Your card can hold the 14B at 32K — try the Smartest preset in Settings > Hardware and models.")
     );
   }
+}
+
+
+/* ── "What this PC should run" (Lane 3's recommender; Wave-9 Lane 2b) ──────
+ *
+ * The owner's Q6 ruling: combine both tiers with strict provenance labels -
+ * MEASURED ON THIS PC (a local benchmark record matching this hardware) and
+ * the estimate for an unmeasured model - and never dress an estimate as a
+ * measurement. `jarvis_model_recommender.panel()` builds the facts; this is
+ * the ONE render seam for it, beside the model filter bar, and the words come
+ * from `model-advisor.js`'s pure block so they are proved without a browser.
+ *
+ * It is OPTIONAL by construction: the GET answer carries `recommender` only
+ * when that shipped module is present (Lane 2b's backend change). A PC without
+ * it draws NO section - no error, no invented table.
+ */
+
+/** The panel for this render: the current answer first, else the stored read.
+ *  The POST check's answer does not carry the recommender, so the tab's own
+ *  GET read (which does) is the fallback; it says its own date. */
+function advisorRecommenderPanel() {
+  const answer = advisorAnswer();
+  const fromAnswer = Advisor.recommenderPanel(answer && answer.payload);
+  if (fromAnswer) return fromAnswer;
+  const body = state.data.model_recommendations;
+  if (body && body.available !== false) {
+    return Advisor.recommenderPanel(body);
+  }
+  return null;
+}
+
+/** One row: the provenance tag, the model, the measured line and any warning. */
+function advisorRecommenderRow(row) {
+  const item = el("div", "row-item model-recommender-row");
+  const tag = el("span", "row-tag", row.provenanceLabel);
+  if (row.provenanceState) tag.dataset.state = row.provenanceState;
+  item.append(tag);
+  const main = el("div", "row-main");
+  main.append(el("span", "row-title", row.label));
+  for (const line of row.meta) main.append(el("span", "row-meta", line));
+  if (row.measuredLine) {
+    main.append(el("span", "row-meta model-advisor-measured", row.measuredLine));
+  }
+  if (row.warning) {
+    const warning = el("p", "banner model-recommender-warning", `Warning: ${row.warning}`);
+    warning.id = `model-recommender-warning-${row.model.replace(/[^a-z0-9]+/gi, "-")}`;
+    main.append(warning);
+  }
+  item.append(main);
+  return item;
+}
+
+/** The whole section, exactly as the owner's ruling describes it. */
+function advisorRecommenderSection(panel) {
+  const wrap = el("section", "model-recommender");
+  wrap.id = "model-recommender";
+  const title = el("h4", "", panel.title);
+  title.id = "model-recommender-title";
+  wrap.append(title);
+  if (panel.hardwareWords) {
+    const words = el("p", "note model-recommender-hardware", panel.hardwareWords);
+    words.id = "model-recommender-hardware";
+    wrap.append(words);
+  }
+  if (panel.tierLabel) {
+    wrap.append(el("p", "note model-recommender-tier",
+      `${panel.tierLabel}${panel.tierWords ? `: ${panel.tierWords}` : ""}`));
+  }
+  if (panel.rows.length) {
+    const list = el("div", "rows");
+    for (const row of panel.rows) list.append(advisorRecommenderRow(row));
+    wrap.append(list);
+  } else {
+    wrap.append(el("p", "note", "No model on the known list fits this PC."));
+  }
+  const notShown = Advisor.recommenderNotShownLine(panel);
+  if (notShown) {
+    const line = el("p", "note model-recommender-not-shown", notShown);
+    line.id = "model-recommender-not-shown";
+    wrap.append(line);
+  }
+  for (const note of panel.notes) wrap.append(el("p", "note model-recommender-note", note));
+  const when = Advisor.recommenderWhen(panel);
+  if (when) wrap.append(el("p", "note", when));
+  return wrap;
 }
 
 function renderSkills() {

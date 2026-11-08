@@ -120,9 +120,14 @@ def t_the_read_answer_is_the_contract_shape_and_touches_no_network():
         out = M.recommendations_view(path=path, gpus=GPUS)
     finally:
         M.measured_gpus = real
-    check("GET's answer is exactly the six contract keys",
-          set(out) == {"checked_at", "gpus", "candidates", "skipped_no_size",
-                       "recommendations", "benchmarked"}, sorted(out))
+    # The six original keys, plus the OPTIONAL `recommender` panel (Lane 3's
+    # module is present in this repository, so the key is there; the next test
+    # proves it is omitted when the module is absent).
+    check("GET's answer is the six contract keys plus the optional recommender panel",
+          set(out) - {"recommender"} == {"checked_at", "gpus", "candidates",
+                                         "skipped_no_size", "recommendations",
+                                         "benchmarked"}
+          and "recommender" in out, sorted(out))
     check("nothing checked yet reads as checked_at null, no candidates, nothing measured",
           out["checked_at"] is None and out["candidates"] == []
           and out["skipped_no_size"] == 0
@@ -274,6 +279,71 @@ def t_the_filter_fields_are_the_catalogue_s_own_and_never_guessed():
           row["vram_need_gb"] is None and row["fit_pooled"] is None
           and row["pooled_vram_gb"] is None and row["capabilities"] == []
           and row["released_at"] is None, row)
+
+
+def t_the_recommender_panel_is_carried_and_omitted_honestly():
+    """Lane 3's hardware-aware recommender reaches the Brain through this GET
+    (Wave-9 Lane 2b, 2026-11-07): carried as `recommender`, and OMITTED rather
+    than faked when the module is not installed.
+
+    The module is imported lazily in `_recommender_panel` and called only there;
+    the loader is injectable so both halves are proved without a second import
+    path. No new route, no card, no download."""
+    import jarvis_model_recommender as REC
+    fixture = {"hardware": {"cards": [{"name": "test card", "total_gib": 12.0}],
+                            "card_count": 1, "vram_total_gib": 12.0,
+                            "largest_card_gib": 12.0, "ram_gib": 32.0,
+                            "cpu": "test cpu", "detected": True,
+                            "words": "the test PC's one sentence"},
+               "tier": {"id": "single_12_16gb", "label": "One 12-16 GB card",
+                        "words": "one 12-16 GB card: the everyday model fits"},
+               "rows": [{"model": "qwen3.5:9b", "label": "Qwen 9B",
+                         "params": "9B", "quant": "Q4_K_M",
+                         "capabilities": ["tools"],
+                         "fit": "fits_1_card", "vram_needed_gib": 6.0,
+                         "context_gib": 16.0,
+                         "provenance": "measured_this_pc",
+                         "provenance_label": "MEASURED ON THIS PC (41.0 tok/s, 0% spill)",
+                         "measured": {"decode_tps": 41.0, "spill_bytes": 0,
+                                      "on_card_percent": 100,
+                                      "at": 1761700000, "suite": "speed"},
+                         "downgrade_warning": "",
+                         "why": "it fits on one card", "measured_note": ""}],
+               "not_shown": 2, "notes": ["nothing has been benchmarked yet"],
+               "generated_at": 1761700000, "words": "the test PC's one sentence"}
+    calls = []
+    real = REC.panel
+
+    def fake_panel(**kwargs):
+        calls.append(kwargs)
+        return dict(fixture)
+
+    try:
+        REC.panel = fake_panel
+        path = fresh("recommender")
+        out = M.recommendations_view(path=path, gpus=GPUS)
+    finally:
+        REC.panel = real
+    check("the GET answer carries the recommender panel when the module is here",
+          isinstance(out.get("recommender"), dict), list(out))
+    check("... it is the panel() answer, unchanged",
+          out.get("recommender") == fixture, out.get("recommender"))
+    check("... and it was asked for exactly once, with no arguments",
+          calls == [{}], calls)
+    check("... the six older keys are untouched beside it",
+          out["candidates"] == [] and out["gpus"] == GPUS, out)
+
+    def absent(name):
+        raise ImportError(name + " is not installed here")
+
+    path2 = fresh("no-recommender")
+    out2 = M.recommendations_view(path=path2, gpus=GPUS,
+                                  recommender_loader=absent)
+    check("an absent recommender module OMITS the key, it is never invented",
+          "recommender" not in out2, sorted(out2))
+    check("... and the rest of the answer is exactly as before",
+          set(out2) == {"checked_at", "gpus", "candidates", "skipped_no_size",
+                        "recommendations", "benchmarked"}, sorted(out2))
 
 
 def t_check_refuses_when_no_card_was_measured_and_does_no_lookup():
@@ -1020,6 +1090,7 @@ def main() -> int:
         t_the_read_answer_is_the_contract_shape_and_touches_no_network,
         t_the_check_caches_candidates_and_never_downloads,
         t_the_filter_fields_are_the_catalogue_s_own_and_never_guessed,
+        t_the_recommender_panel_is_carried_and_omitted_honestly,
         t_check_refuses_when_no_card_was_measured_and_does_no_lookup,
         t_check_refuses_honestly_without_the_catalogue_module,
         t_the_check_answer_has_no_fit_claim_without_an_estimate,

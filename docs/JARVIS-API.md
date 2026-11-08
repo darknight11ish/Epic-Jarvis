@@ -29107,6 +29107,19 @@ about (`model`, `lane` or `context`); `preset` names the row itself. `fit` is
 `fits` / `tight` / `no`, from the measured card sizes and the candidate's
 **estimated** need (the only estimate in the answer, labelled in `why`).
 
+**`recommender` - optional, added 2026-11-07 (Wave-9 Lane 2b).** When the
+shipped `backend/jarvis_model_recommender.py` is installed, the GET answer also
+carries `recommender`: the hardware-aware "what should THIS PC run?" panel
+(`jarvis_model_recommender.panel()`), with `hardware` (the measured cards, RAM
+and CPU plus the one sentence a screen shows), `tier`, `rows` (each row's
+`fit`, `vram_needed_gib`, `provenance` and its `provenance_label` -
+MEASURED ON THIS PC / MEASURED ON DIFFERENT CARDS / ESTIMATED FIT - the
+`measured` speed and spill, `downgrade_warning` and `why`), `not_shown`,
+`notes` and `generated_at`. The module is imported lazily; a backend without it
+OMITS the key entirely (never an error and never an invented panel, so an older
+PC draws no such section). It adds no route, no card and no download: every row
+is a sentence and a table of this PC's own hardware and benchmark scorecards.
+
 **The five filter fields (2026-11-07, the Brain's model filter bar).** The
 owner's Q4 ruling asked for a full filter set on Brain -> Models -> "Check for
 new models", so a candidate now carries what those filters read, each from the

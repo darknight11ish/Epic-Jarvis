@@ -846,3 +846,192 @@ export function filterWords(filters, rows, shownRows) {
   }
   return pieces.join(" ");
 }
+
+/* ── The hardware-aware recommender section (Wave-9 Lane 2b, 2026-11-07) ────
+ *
+ * Lane 3's `jarvis_model_recommender.panel()` answers "what model should THIS
+ * PC run?" with strict provenance labels (Q6: MEASURED ON THIS PC / MEASURED
+ * ON DIFFERENT CARDS / ESTIMATED FIT). This block is the READING half of that
+ * panel for the Brain: pure normalisation and words, no DOM, no fetch, no
+ * clock. brain.js draws it through ONE render seam (advisorRecommenderSection),
+ * beside the model filter bar, and nothing here downloads, applies, benchmarks
+ * or changes a preset.
+ *
+ * THE PANEL IS OPTIONAL. A backend without `jarvis_model_recommender` omits the
+ * `recommender` key from GET /api/models/recommendations (Lane 2b's backend
+ * change), and `recommenderPanel()` then returns null - which brain.js draws as
+ * NO section, never as an error and never as an invented table.
+ *
+ * Q4 STILL HOLDS HERE: a row that does not fit this PC is not drawn. Lane 3's
+ * panel already leaves those out and counts them in `not_shown`, which is shown
+ * as a line; this block filters `fit === "too_big"` anyway so a future shape
+ * cannot smuggle one in.
+ */
+
+/** The section's own heading, shared by the page and its test. */
+export const RECOMMENDER_TITLE = "What this PC should run";
+
+/** The three provenance labels, short, in the order the owner's ruling names. */
+export const PROVENANCE_LABELS = Object.freeze({
+  measured_this_pc: "MEASURED ON THIS PC",
+  measured_other_hardware: "MEASURED ON DIFFERENT CARDS",
+  estimated_fit: "ESTIMATED FIT",
+});
+
+/** The tag state for each provenance (the page's own row-tag colours). */
+export const PROVENANCE_STATES = Object.freeze({
+  measured_this_pc: "ok",
+  measured_other_hardware: "warn",
+  estimated_fit: "",
+});
+
+const textOr = (v) => (typeof v === "string" ? v.trim() : "");
+
+/** A catalogue date from a unix-seconds stamp, UTC and fixed width, or "". */
+function isoDate(seconds) {
+  const n = num(seconds);
+  if (n === null || n <= 0) return "";
+  try {
+    return new Date(n * 1000).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * One measured line: only the facts the PC really sent. "41.0 tok/s", "0%
+ * spill" (or the real spill), the on-card percentage when reported, and the
+ * run's date. Nothing is filled in for a missing number.
+ */
+export function recommenderMeasuredLine(row) {
+  const measured = row && row.measured;
+  if (!measured || typeof measured !== "object") return "";
+  const bits = [];
+  if (typeof measured.decode_tps === "number" && measured.decode_tps > 0) {
+    bits.push(`${measured.decode_tps.toFixed(1)} tok/s`);
+  }
+  if (typeof measured.spill_bytes === "number") {
+    bits.push(measured.spill_bytes === 0
+      ? "0% spill"
+      : `${Math.round(measured.spill_bytes / (1024 * 1024))} MiB spilled`);
+  }
+  if (typeof measured.on_card_percent === "number") {
+    bits.push(`${measured.on_card_percent}% on card`);
+  }
+  const when = isoDate(measured.at);
+  if (when) bits.push(when);
+  return bits.join(" · ");
+}
+
+/** One row of the panel, as words brain.js can draw and a node test can read. */
+export function recommenderRowView(row) {
+  if (!row || typeof row !== "object") return null;
+  const provenance = textOr(row.provenance);
+  const label = PROVENANCE_LABELS[provenance] || textOr(row.provenance_label);
+  if (!textOr(row.model) && !textOr(row.label)) return null;
+  const meta = [];
+  if (textOr(row.params)) meta.push(`${textOr(row.params)} parameters`);
+  if (textOr(row.quant)) meta.push(`${textOr(row.quant)} quantization`);
+  if (Array.isArray(row.capabilities) && row.capabilities.length) {
+    meta.push(`capabilities: ${row.capabilities.join(", ")}`);
+  }
+  if (typeof row.vram_needed_gib === "number") {
+    const ctx = typeof row.context_gib === "number"
+      ? ` at ${row.context_gib.toLocaleString("en-US")} tokens` : "";
+    meta.push(`needs about ${row.vram_needed_gib} GiB${ctx}`);
+  }
+  if (textOr(row.why)) meta.push(textOr(row.why));
+  if (textOr(row.measured_note)) meta.push(textOr(row.measured_note));
+  return {
+    model: textOr(row.model),
+    label: textOr(row.label) || textOr(row.model) || "(unnamed)",
+    fit: textOr(row.fit),
+    provenance,
+    provenanceLabel: label,
+    provenanceState: PROVENANCE_STATES[provenance] || "",
+    measuredLine: recommenderMeasuredLine(row),
+    warning: textOr(row.downgrade_warning),
+    why: textOr(row.why),
+    meta,
+  };
+}
+
+/**
+ * The panel, normalised: the hardware sentence, the tier, the fitting rows,
+ * the not-shown count and the module's own notes. null when the answer carries
+ * no `recommender` at all (an older PC) - the caller then draws no section.
+ */
+export function recommenderPanel(payload) {
+  const rec = payload && typeof payload === "object" ? payload.recommender : null;
+  if (!rec || typeof rec !== "object") return null;
+  const hardware = rec.hardware && typeof rec.hardware === "object" ? rec.hardware : {};
+  const tier = rec.tier && typeof rec.tier === "object" ? rec.tier : {};
+  const rows = (Array.isArray(rec.rows) ? rec.rows : [])
+    .filter((row) => row && textOr(row.fit) !== "too_big")
+    .map(recommenderRowView)
+    .filter(Boolean);
+  const notes = (Array.isArray(rec.notes) ? rec.notes : [])
+    .map(textOr).filter(Boolean);
+  const words = textOr(rec.words);
+  const hardwareWords = textOr(hardware.words);
+  const tierLabel = textOr(tier.label);
+  const tierWords = textOr(tier.words);
+  if (!rows.length && !notes.length && !words && !hardwareWords && !tierLabel) {
+    return null;
+  }
+  return {
+    title: RECOMMENDER_TITLE,
+    words,
+    hardwareWords,
+    tierLabel,
+    tierWords,
+    rows,
+    notShown: Number.isInteger(rec.not_shown) && rec.not_shown > 0 ? rec.not_shown : 0,
+    notes,
+    generatedAt: num(rec.generated_at),
+  };
+}
+
+/** "As of 2026-10-28", or "" when the panel carries no moment. */
+export function recommenderWhen(panel) {
+  const day = isoDate(panel && panel.generatedAt);
+  return day ? `As of ${day}.` : "";
+}
+
+/** The not-shown line: Q4's rule said out loud, or "". */
+export function recommenderNotShownLine(panel) {
+  const n = panel && panel.notShown;
+  if (!n) return "";
+  return (
+    `${n} more model${n === 1 ? "" : "s"} need more video memory than this PC has, ` +
+    "so they are not offered here. The filter above can show them as not-fitting " +
+    "and view-only."
+  );
+}
+
+/**
+ * The whole section as one readable string. brain.js draws the same facts as
+ * rows; this is the node fixture's view (and the shape a future `feature_guide`
+ * answer could reuse), so every label and warning is asserted without a browser.
+ */
+export function recommenderText(panel) {
+  if (!panel) return "";
+  const lines = [panel.title];
+  if (panel.hardwareWords) lines.push(panel.hardwareWords);
+  if (panel.tierLabel) {
+    lines.push(`${panel.tierLabel}${panel.tierWords ? `: ${panel.tierWords}` : ""}`);
+  }
+  for (const row of panel.rows) {
+    const bits = [row.provenanceLabel, row.label];
+    if (row.measuredLine) bits.push(row.measuredLine);
+    lines.push(bits.join(" - "));
+    for (const meta of row.meta) lines.push(meta);
+    if (row.warning) lines.push(`Warning: ${row.warning}`);
+  }
+  const notShown = recommenderNotShownLine(panel);
+  if (notShown) lines.push(notShown);
+  for (const note of panel.notes) lines.push(note);
+  const when = recommenderWhen(panel);
+  if (when) lines.push(when);
+  return lines.join("\n");
+}

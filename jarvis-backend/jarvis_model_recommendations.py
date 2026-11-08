@@ -1384,27 +1384,62 @@ def record_opinion(text, *, store_path_: Optional[Path] = None,
 #   The three read answers
 # --------------------------------------------------------------------------
 
+def _recommender_panel(loader=None) -> Optional[dict]:
+    """Lane 3's hardware-aware recommender panel, or None when it is absent.
+
+    THE SEAM (Wave-9, 2026-11-07): `jarvis_model_recommender.panel()` is the
+    merged module that says what THIS PC should run, labelled MEASURED ON THIS
+    PC / MEASURED ON DIFFERENT CARDS / ESTIMATED FIT. It is imported LAZILY and
+    only here, so a backend that never got the module still serves this route
+    exactly as before - the `recommender` key is then simply absent, which the
+    Brain draws as no section rather than as an error.
+
+    `loader` exists so a suite can prove both halves without a second copy of
+    the import: with no argument it is `importlib.import_module`, the same
+    standard-library door the rest of this module uses. Nothing here reads the
+    network, writes a file, raises a card or changes a preset: `panel()` is a
+    read of this PC's own hardware probe and scorecards, like the bench
+    module's status routes.
+    """
+    import importlib
+    load = loader or importlib.import_module
+    try:
+        module = load("jarvis_model_recommender")
+        panel = module.panel()
+    except Exception:                       # noqa: BLE001 - absent is a fact
+        return None
+    return panel if isinstance(panel, dict) and panel else None
+
+
 def recommendations_view(*, path: Optional[Path] = None,
                          gpus: Optional[list] = None,
-                         presets: Optional[list] = None) -> dict:
+                         presets: Optional[list] = None,
+                         recommender_loader=None) -> dict:
     """GET /api/models/recommendations: the cached check, the measured hardware,
-    the measured benchmarks, and the changes they justify.
+    the measured benchmarks, the changes they justify, and - when the shipped
+    recommender is present - its "what this PC should run" panel.
 
-    READ-ONLY and NETWORK-FREE: it reads one JSON file and the PC's own card
-    list. A cached check that does not exist yet is `checked_at: null` and no
-    candidates, not an error.
+    READ-ONLY and NETWORK-FREE: it reads one JSON file, the PC's own card list,
+    and (through `jarvis_model_recommender`) the PC's local hardware probe and
+    scorecard store. A cached check that does not exist yet is `checked_at:
+    null` and no candidates, not an error. `recommender` is OPTIONAL and is
+    omitted entirely when that module is absent - see `_recommender_panel`.
     """
     doc = load_store(path)
     gpus = gpus if gpus is not None else measured_gpus()
-    return {"checked_at": doc.get("checked_at"),
-            "gpus": gpus,
-            "candidates": doc.get("candidates") or [],
-            "skipped_no_size": doc.get("skipped_no_size") or 0,
-            "recommendations": preset_recommendations(
-                presets=presets, gpus=gpus,
-                benchmarked=doc.get("benchmarked"),
-                opinion=doc.get("last_opinion")),
-            "benchmarked": doc.get("benchmarked") or {}}
+    out = {"checked_at": doc.get("checked_at"),
+           "gpus": gpus,
+           "candidates": doc.get("candidates") or [],
+           "skipped_no_size": doc.get("skipped_no_size") or 0,
+           "recommendations": preset_recommendations(
+               presets=presets, gpus=gpus,
+               benchmarked=doc.get("benchmarked"),
+               opinion=doc.get("last_opinion")),
+           "benchmarked": doc.get("benchmarked") or {}}
+    panel = _recommender_panel(recommender_loader)
+    if panel is not None:
+        out["recommender"] = panel
+    return out
 
 
 def check_models(*, path: Optional[Path] = None,
