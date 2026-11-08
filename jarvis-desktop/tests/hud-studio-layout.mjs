@@ -16,10 +16,10 @@
  *   A. In the Studio (split-stage) layout `#stage` is a CSS grid. The two
  *      host-raised cards, `#secret-handoff` and `#connect-account`, had NO
  *      placement, so the grid auto-placed them into the face column, row 3,
- *      and pushed the conversation and the face down. Hidden stage cards also
- *      still claimed full-width cells, because their author `display:flex`
- *      beats the browser's `[hidden]` rule - which is what pushed the card
- *      into column 2 in the first place.
+ *      and pushed the conversation and the face down. The editor's Stage-top
+ *      region - which OWNS the approvals queue, because hud-edit.js moves the
+ *      queues into it on mount - was auto-placed too, so the first free cell
+ *      beside it was the face column.
  *
  *   B. `#hud-safety` is the fixed safety strip at the top of the window. At the
  *      owner's 150% scaling the stage bar's model/state chips slid under it
@@ -57,29 +57,31 @@ function check(name, fn) {
 const BLOCK = CSS.slice(CSS.indexOf("Wave 10 (2026-11-08)"));
 
 /** The watcher this lane added to the injected bootstrap, alone. */
-const WATCH = BOOT.slice(BOOT.indexOf("function watchSafetyBand()"),
-                         BOOT.indexOf("if (document.readyState === \"loading\") {\n    document.addEventListener(\"DOMContentLoaded\", watchSafetyBand"));
+const WATCH = BOOT.slice(
+  BOOT.indexOf("function watchSafetyBand()"),
+  BOOT.indexOf('if (document.readyState === "loading") {\n    document.addEventListener("DOMContentLoaded", watchSafetyBand'),
+);
 
 check("the Studio grid is re-numbered so the two host cards own full-width rows", () => {
-  // Non-edit: 10 explicit rows (1 bar | 2 menu | 3 home strip | 4 secret |
-  // 5 connect | 6 approvals | 7 initiative | 8 banner | 9 model-warn |
-  // 10 conversation + face).
+  // Non-edit: 9 explicit rows (1 bar | 2 menu | 3 main-screen strip |
+  // 4 secret | 5 connect | 6 Stage-top region/approvals | 7 banner |
+  // 8 model-warn | 9 conversation + face).
   assert.match(BLOCK,
-    /html\[data-hud-shell="split-stage"\] #stage\{\s*grid-template-rows:auto auto auto auto auto auto auto auto auto minmax\(0, 1fr\);/,
-    "the non-edit Studio grid is not the 10-row template");
+    /html\[data-hud-shell="split-stage"\] #stage\{\s*grid-template-rows:auto auto auto auto auto auto auto auto minmax\(0, 1fr\);/,
+    "the non-edit Studio grid is not the 9-row template");
   assert.match(BLOCK,
     /#stage > #secret-handoff\{\s*grid-column:1 \/ -1; grid-row:4; margin:10px 16px 0;/,
     "#secret-handoff has no deliberate full-width row");
   assert.match(BLOCK,
     /#stage > #connect-account\{\s*grid-column:1 \/ -1; grid-row:5; margin:10px 16px 0;/,
     "#connect-account has no deliberate full-width row");
-  // The cards that were placed by number moved down by exactly the two rows.
-  for (const [id, row] of [["approvals", 6], ["initiative", 7], ["banner", 8],
-                           ["model-warn", 9]]) {
-    assert.match(BLOCK, new RegExp(`#stage > #${id}\\{grid-row:${row};\\}`),
-      `#${id} was not moved to row ${row} with the new card rows`);
-  }
-  assert.match(BLOCK, /#stage > #talk,\s*html\[data-hud-shell="split-stage"\] #stage > #brain\{grid-row:10;\}/,
+  // The rows below the two new cards shift down with them.
+  assert.match(BLOCK, /#stage > #banner\{grid-row:7;\}/,
+    "the banner was not moved to row 7 below the raised cards");
+  assert.match(BLOCK, /#stage > #model-warn\{grid-row:8;\}/,
+    "the model warning was not moved to row 8");
+  assert.match(BLOCK,
+    /#stage > #talk,\s*html\[data-hud-shell="split-stage"\] #stage > #brain\{grid-row:9;\}/,
     "the conversation/face row was not moved below the raised cards");
   // The main-screen strip is a direct child too; it gets its own row rather
   // than being auto-placed (and never claims a cell on the Galaxy tab, where
@@ -88,25 +90,39 @@ check("the Studio grid is re-numbered so the two host cards own full-width rows"
     "the main-screen card strip is still auto-placed in the Studio grid");
 });
 
-check("a hidden stage card stops claiming a grid cell; the empty edit region stops too", () => {
-  // The page's author display:flex beats the UA [hidden] rule, which was the
-  // real reason the auto-placed card landed in column 2. Scoped to the GRID
-  // shell only: every other shell still lays the stage out as a flex column.
+check("the Stage-top region gets a row of its own - it owns the approvals queue", () => {
+  // hud-edit.js MOVES #approvals/#initiative into this region on mount, so
+  // hiding it (or leaving it auto-placed) would hide or mis-place the queue.
+  assert.match(BLOCK,
+    /#stage > \[data-hud-region="stage_top"\]\{\s*grid-column:1 \/ -1; grid-row:6; margin:10px 16px 0;/,
+    "the editor's Stage-top region (which owns the approvals queue) is still auto-placed");
+  assert.doesNotMatch(BLOCK,
+    /#stage > \[data-hud-region="stage_top"\]\{display:none/,
+    "the Stage-top region is hidden outside Edit HUD - that would hide the approvals queue");
+  // Before the editor mounts, the two queues are direct children; they belong
+  // in that same row.
+  assert.match(BLOCK,
+    /#stage > #approvals,\s*html\[data-hud-shell="split-stage"\] #stage > #initiative\{\s*grid-column:1 \/ -1; grid-row:6; margin:10px 16px 0;/,
+    "the pre-mount approvals/initiative queues have no deliberate row");
+});
+
+check("a hidden stage card stops claiming a grid cell", () => {
+  // The page's author display:flex beats the UA [hidden] rule. Scoped to the
+  // GRID shell only: every other shell still lays the stage out as a flex
+  // column, where the page's own display rules have never pushed anything.
   assert.match(BLOCK,
     /html\[data-hud-shell="split-stage"\] #stage > \[hidden\]\{display:none !important;\}/,
     "a hidden stage card can still claim a full-width grid cell");
-  assert.match(BLOCK,
-    /body:not\(\[data-hud-edit="on"\]\)\s*\n?\s*#stage > \[data-hud-region="stage_top"\]\{display:none !important;\}/,
-    "the editor's empty Stage-top region still claims a row outside Edit HUD");
 });
 
 check("the EDIT-MODE template keeps step, and the Stage-top region keeps row 3", () => {
-  // Edit: 12 rows (1 bar | 2 editor banner | 3 Stage-top region |
-  // 4 secret | 5 connect | 6 menu | 7 main-screen strip | 8 approvals |
-  // 9 initiative | 10 banner | 11 model-warn | 12 conversation + face).
+  // Edit: 10 rows (1 bar | 2 editor banner | 3 Stage-top region | 4 secret |
+  // 5 connect | 6 menu | 7 main-screen strip | 8 banner | 9 model-warn |
+  // 10 conversation + face). Approvals/initiative are inside the region, so
+  // they take no #stage row of their own.
   assert.match(BLOCK,
-    /body\[data-hud-edit="on"\] #stage\{\s*grid-template-rows:auto auto auto auto auto auto auto auto auto auto auto minmax\(0, 1fr\);/,
-    "the edit-mode Studio grid is not the 12-row template");
+    /body\[data-hud-edit="on"\] #stage\{\s*grid-template-rows:auto auto auto auto auto auto auto auto auto minmax\(0, 1fr\);/,
+    "the edit-mode Studio grid is not the 10-row template");
   assert.match(BLOCK,
     /body\[data-hud-edit="on"\] #stage > \[data-hud-region="stage_top"\]\{\s*grid-column:1 \/ -1; grid-row:3;/,
     "the editor's Stage-top region is not row 3");
@@ -117,14 +133,13 @@ check("the EDIT-MODE template keeps step, and the Stage-top region keeps row 3",
     /body\[data-hud-edit="on"\] #stage > #connect-account\{\s*grid-column:1 \/ -1; grid-row:5;/,
     "the connect card has no own row in Edit HUD");
   for (const [id, row] of [["stage-menu", 6], ["hud-home-cards", 7],
-                           ["approvals", 8], ["initiative", 9], ["banner", 10],
-                           ["model-warn", 11]]) {
+                           ["banner", 8], ["model-warn", 9]]) {
     assert.match(BLOCK,
       new RegExp(`body\\[data-hud-edit="on"\\] #stage > #${id}\\{[^}]*grid-row:${row};`),
       `#${id} is not on edit row ${row}`);
   }
   assert.match(BLOCK,
-    /body\[data-hud-edit="on"\] #stage > #talk,\s*\n?\s*html\[data-hud-shell="split-stage"\] body\[data-hud-edit="on"\] #stage > #brain\{\s*grid-row:12; grid-column:1 \/ -1;/,
+    /body\[data-hud-edit="on"\] #stage > #talk,\s*\n?\s*html\[data-hud-shell="split-stage"\] body\[data-hud-edit="on"\] #stage > #brain\{\s*grid-row:10; grid-column:1 \/ -1;/,
     "the edit-mode conversation/face row is not below the new card rows");
 });
 
@@ -136,12 +151,11 @@ check("the shell reserves a band for the strip, scoped to the Studio shell", () 
     "no band rule reserves room for the fixed safety strip");
   // Scoped on purpose: the other layouts' geometry was measured clear in H4's
   // own tests, so only Studio's layout may move.
-  // The rule must always carry the Studio prefix; a bare body[...] rule would
-  // move every shell's layout.
   assert.doesNotMatch(BLOCK, /(?:^|\n)body\[data-hud-safety-visible\] #shell\{/m,
     "the band is not scoped to the Studio shell");
   // The strip must not become a control or move inside a region/card.
-  assert.doesNotMatch(BLOCK, /#hud-safety\{[^}]*position:static|#hud-safety\{[^}]*pointer-events:auto/,
+  assert.doesNotMatch(BLOCK,
+    /#hud-safety\{[^}]*position:static|#hud-safety\{[^}]*pointer-events:auto/,
     "the safety strip was moved into the layout or given a control path");
 });
 
@@ -166,7 +180,8 @@ check("hud_bootstrap.js watches the strip's real height and shows/hides the band
   assert.match(WATCH, /new MutationObserver\(applyBand\)/);
   assert.match(WATCH, /childList: true, subtree: true, characterData: true/,
     "the band does not follow the strip's own words wrapping taller");
-  assert.match(WATCH, /attributes: true,\s*\n?\s*attributeFilter: \["data-hud-edit"\]/,
+  assert.match(WATCH,
+    /attributes: true,\s*\n?\s*attributeFilter: \["data-hud-edit"\]/,
     "the band is not repainted when Edit HUD turns the strip on");
   assert.match(WATCH, /window\.addEventListener\("resize", applyBand\)/,
     "the band does not follow a window resize");
@@ -174,9 +189,11 @@ check("hud_bootstrap.js watches the strip's real height and shows/hides the band
     "the band is not remeasured after the local fonts arrive");
   // It only reads: it must not move, restyle or hide the strip, and it adds
   // no control (H4's promise is that nothing can hide it).
-  assert.doesNotMatch(WATCH, /appendChild\(strip\)|insertBefore\(strip|strip\.hidden = true/,
+  assert.doesNotMatch(WATCH,
+    /appendChild\(strip\)|insertBefore\(strip|strip\.hidden = true/,
     "the band watcher moves or hides the safety strip");
-  assert.doesNotMatch(WATCH, /createElement\("button"\)|addEventListener\("click"/,
+  assert.doesNotMatch(WATCH,
+    /createElement\("button"\)|addEventListener\("click"/,
     "the band watcher adds a control where H4 promises none");
   // And it really runs: DOMContentLoaded first, or immediately if already late.
   assert.match(BOOT,

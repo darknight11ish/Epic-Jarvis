@@ -3420,14 +3420,14 @@ await check("Studio: the two host cards own full-width rows, and hidden stage ca
     "the two host cards share one grid row instead of owning one each");
   assert.ok(m.talk.y >= Math.max(m.connect.bottom, m.secret.bottom) - 1,
     `the conversation is not below the raised cards (talk ${m.talk.y}, cards end ${m.connect.bottom}/${m.secret.bottom})`);
-  // A hidden stage card must claim no cell. #approvals is author display:flex,
-  // so before the fix it was a 0-height full-width row player, not display:none.
+  // A hidden stage card claims no height: #approvals is author display:flex,
+  // so before the fix it was a 0-height full-width row player.
   assert.equal(m.approvals.h, 0, "the hidden approvals card has height");
-  assert.equal(m.approvals.display, "none",
-    "a hidden stage card still claims a grid cell in the Studio shell");
+  // The editor's Stage-top region is NOT hidden (it owns the approvals queue);
+  // it gets a deliberate row instead of being auto-placed into a free cell.
   if (m.region) {
-    assert.equal(m.region.display, "none",
-      "the editor's empty Stage-top region claims a cell outside Edit HUD");
+    assert.notEqual(m.region.gridRow, "auto",
+      "the editor's Stage-top region (which owns the approvals queue) is still auto-placed");
   }
   // Hiding the cards again moves the conversation back up: the card row was
   // what pushed it down (the owner's complaint).
