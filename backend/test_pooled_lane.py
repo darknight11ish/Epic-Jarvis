@@ -100,7 +100,8 @@ class Engine:
                 "proof": ["port 11436: qwen3.5:9b is STILL loaded after being asked "
                           "to unload"]}
 
-    def load_coder(self, *, port=11450, num_ctx=None, allow_spill=None):
+    def load_coder(self, *, port=11450, num_ctx=None, allow_spill=None,
+                   mode=None):
         self.calls.append(("load", port, num_ctx, allow_spill))
         if not self.load_ok:
             return {"ok": False,
@@ -115,7 +116,7 @@ class Engine:
         return {"ok": True, "why": "", "proof": [f"port {port}: {MODEL} ctx={num_ctx}"],
                 "row": self.rows[0]}
 
-    def unload_coder(self, *, port=11450):
+    def unload_coder(self, *, port=11450, mode=None, model=None):
         self.calls.append(("unload", port))
         self.rows = []
         if self.unload_ok:

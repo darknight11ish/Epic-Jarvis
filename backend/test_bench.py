@@ -774,9 +774,11 @@ def t_the_lane_not_running_is_refused_and_never_started():
           body["error"] == "the coding lane is not running; start it first",
           body)
     calls = _programs_jarvis_bench_runs()
-    check("... and nothing in this module can start a lane: the only external "
-          "program it runs is nvidia-smi, which starts nothing",
-          calls == ["nvidia-smi"], calls)
+    check("... and nothing in this module can start a LANE: its four programs "
+          "are nvidia-smi, its own throwaway ollama server, taskkill (which "
+          "stops that server) and the python that runs a coding check",
+          sorted(calls) == sorted(["nvidia-smi", "ollama", "taskkill",
+                                   "sys.executable"]), calls)
     check("... it never builds a command line at all - no schtasks, no task "
           "name, no shell",
           not _uses_shell_or_task_name(), _uses_shell_or_task_name())
@@ -1379,13 +1381,16 @@ def _module_tree():
 
 
 def _programs_jarvis_bench_runs() -> list:
-    """The external program each `subprocess.run(...)` in the module can start.
+    """The external program each subprocess.run(...) / subprocess.Popen(...)
+    in the module can start, by the FIRST element of its argv list.
 
-    Resolved through the tree, not the text: the call's first argument is a
-    list whose head may be a literal or a NAME (`exe`), and a name is followed
-    back to the string constants assigned to it. That is what makes this an
-    answer about the code rather than about a spelling - the shape
-    `tools/check_no_source_pins.py` asks for.
+    Resolved through the tree, not the text: a head may be a literal, a NAME
+    (xe), or an attribute (sys.executable), and a name is followed back to
+    the string constants assigned to it. Since 2026-11-07 the module may also
+    start its OWN THROWAWAY ollama serve (never a lane: start_throwaway
+    refuses every live-lane port and ackend/test_bench_suites.py proves it)
+    and, on Windows, 	askkill that throwaway server's process tree - which
+    starts nothing. So the answer is four programs, each with its own test.
     """
     import ast
     tree = _module_tree()
@@ -1402,19 +1407,33 @@ def _programs_jarvis_bench_runs() -> list:
         if not isinstance(node, ast.Call):
             continue
         fn = node.func
-        if not (isinstance(fn, ast.Attribute) and fn.attr == "run"
+        if not (isinstance(fn, ast.Attribute) and fn.attr in ("run", "Popen")
                 and isinstance(fn.value, ast.Name)
                 and fn.value.id == "subprocess"):
             continue
         if not node.args:
             continue
-        consts = [n.value for n in ast.walk(node.args[0])
-                  if isinstance(n, ast.Constant) and isinstance(n.value, str)]
-        for n in ast.walk(node.args[0]):
-            if isinstance(n, ast.Name):
-                consts.extend(assigned.get(n.id, []))
-        exe = [c for c in consts if "nvidia-smi" in c]
-        out.append(exe[0] if exe else consts[:1])
+        argv = node.args[0]
+        first = None
+        if isinstance(argv, (ast.List, ast.Tuple)) and argv.elts:
+            head = argv.elts[0]
+            if isinstance(head, ast.Constant) and isinstance(head.value, str):
+                first = head.value
+            elif isinstance(head, ast.Name):
+                consts = assigned.get(head.id) or []
+                hits = [c for c in consts if "nvidia-smi" in c]
+                first = hits[0] if hits else (consts[:1] or [head.id])[0]
+            elif isinstance(head, ast.Attribute):
+                base = head.value
+                first = (f"{base.id}.{head.attr}"
+                         if isinstance(base, ast.Name) else head.attr)
+            elif isinstance(head, ast.Call):
+                names = [n.value for n in ast.walk(head)
+                         if isinstance(n, ast.Constant)
+                         and isinstance(n.value, str)]
+                first = names[0] if names else "a computed program"
+        if first is not None:
+            out.append(first)
     return out
 
 

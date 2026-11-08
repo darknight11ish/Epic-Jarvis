@@ -86,6 +86,8 @@ import os
 import shutil
 import statistics
 import subprocess
+import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -1130,6 +1132,14 @@ def ps_models(base: str, *, get: Optional[Callable[[str], dict]] = None
     except Exception:
         return None
     return [m for m in (body or {}).get("models") or [] if isinstance(m, dict)]
+
+
+def _bare(name) -> str:
+    """A model name without the `:latest` Ollama adds for itself. The same
+    rule `jarvis_big_coder._bare` uses, kept here so a scorecard written one
+    day is found the next."""
+    x = str(name or "").strip()
+    return x[:-7] if x.endswith(":latest") else x
 
 
 def _same(a: str, b: str) -> bool:
@@ -2363,3 +2373,1856 @@ def lane_pins() -> dict:
         return {}
     return {"lanes": {l.key: l.port for l in lanes.LANES},
             "pooled": getattr(lanes, "POOLED_PORT", None)}
+
+
+# ==========================================================================
+#   THE FIVE BENCHMARK SUITES (2026-11-07, Wave-9 Lane 3)
+# ==========================================================================
+#
+# WHAT THIS SECTION IS. The owner's ruling Q2 (2026-11-07 17:40 PT) made one
+# fixed 6-task quality rubric per domain plus a 3-repeat speed/VRAM gate the
+# official bar for changing a preset default. This section is that bar as code:
+# the five suites the owner chose, each scored by a check that cannot be talked
+# into a pass, each run on a THROWAWAY Ollama on port 11451+ so the number is
+# the model's own and never the live lane's queue.
+#
+# WHY A THROWAWAY SERVER AND NOT THE LIVE LANE. Measured on this PC (2026-11-06):
+# a model benchmarked beside a resident model on the same card spilled 16% to
+# system RAM and measured the spill, not the model. The shipped speed bench
+# (`start()` above) measures a LIVE lane and is right to: it times the setup the
+# owner actually runs. A suite run is a different question - "what can this
+# model do on this card" - so it gets its own server, its own card pin, and a
+# zero-spill requirement before a speed row is promotion-grade.
+#
+# WHAT THE OWNER RULED ABOUT THE LIVE LANES (Q3):
+#   * an OWNER-INITIATED run may unload the resident model on the target card,
+#     say so on the screen, and MUST warm the active preset back afterwards;
+#   * a SCHEDULED/BACKGROUND run is idle-only and never evicts anything;
+#   * the only 409 that is about being busy is a chat/voice turn that is
+#     STREAMING right now (plus the two safety rows this benchmark already had:
+#     standby, and a multi-step task running).
+#
+# WHAT IS NEVER STORED. Prompts and answers do not reach the store: the score
+# row's allowlist is an allowlist, like `_clean()`, and it has no field that
+# could hold a prompt or a model's answer. Only the task ID, a pass/fail and the
+# numbers are written. The one exception a reader might expect - the answer to
+# an exact-answer question - is judged in memory and discarded.
+#
+# THE CODING RUBRIC RUNS MODEL-WRITTEN CODE. That is what "automated objective
+# test" means for six small Python tasks: the answer's fenced block is executed
+# by a SEPARATE interpreter (`-I`, a temporary folder, a 20 s timeout, and an
+# allowlisted environment with no token, key or Jarvis variable in it). It is a
+# guard against a runaway or broken answer, NOT a sandbox against hostile code;
+# the code comes from the owner's own local model on the owner's own PC, and the
+# alternative - eyeballing six answers - is exactly what the ruling replaced.
+
+#: The suite IDs, in the order a screen should show them. Written into a score
+#: row as a closed vocabulary, so a typo is a dropped field and not a new suite.
+SUITE_KEYS = ("speed", "coding", "general", "tool_calling", "vision_ocr")
+
+#: The owner's five suites, with what each one is for and what it needs. The
+#: desktop Brain panel and any later route read this table rather than keeping
+#: a second copy of the names.
+SUITES = (
+    {"id": "speed", "label": "Speed",
+     "words": ("decode and prompt tokens a second, cold load, video memory and "
+               "spill, three repeats; only a 100%-on-card, zero-spill run is "
+               "promotion-grade"),
+     "needs_image": False, "needs_tools": False},
+    {"id": "coding", "label": "Coding",
+     "words": ("six fixed coding tasks, each checked by running its own test"),
+     "needs_image": False, "needs_tools": False},
+    {"id": "general", "label": "General",
+     "words": "six questions with one exact answer",
+     "needs_image": False, "needs_tools": False},
+    {"id": "tool_calling", "label": "Tool-calling",
+     "words": "fixed tasks, scored on the right tool and its arguments",
+     "needs_image": False, "needs_tools": True},
+    {"id": "vision_ocr", "label": "Vision / OCR",
+     "words": ("reads the text in one image; only a model that reports vision "
+               "is asked"),
+     "needs_image": True, "needs_tools": False},
+)
+
+#: The throwaway server's port range. NEVER a live lane's port: `LANE_PORTS`
+#: above holds 11436/11435/11450, and the 11451 convention (2026-11-07) is the
+#: first free number above the block. `_pick_port()` refuses anything inside
+#: `LANE_PORTS` even if a caller passes it.
+BENCH_PORT_FIRST, BENCH_PORT_LAST = 11451, 11460
+
+#: Which model a run must unload when the owner allowed it to evict, per target
+#: arrangement. "pooled" means all three cards are wanted, so the two lane
+#: models AND the pooled lane's own model are in the way. The pooled SERVER on
+#: 11450 is not stopped (it holds no model once its model is unloaded, and the
+#: throwaway server uses another port).
+EVICT_PORTS = {
+    "everyday": (11436,),
+    "coding": (11435,),
+    "pooled": (11436, 11435, 11450),
+}
+
+#: The context a suite run uses when the caller does not name one: the window
+#: that arrangement really serves. `everyday` is the user's own
+#: OLLAMA_CONTEXT_LENGTH (16,384); `coding` is that lane's task window;
+#: `pooled` is the measured three-card rung (49,152, `jarvis_big_coder.NUM_CTX`).
+DEFAULT_SUITE_CTX = {"everyday": 16384, "coding": 16384, "pooled": 49152}
+
+#: The decode floor each preset must clear before a candidate may replace it.
+#: Provenance, because a floor is a measurement and not taste:
+#:   * coding 75.0 - the owner's own 2026-11-07 bar for the Coding preset
+#:     (`jarvis_big_coder`'s NUM_CTX comment records it);
+#:   * general 40.0 - the everyday 9B's measured band on this PC is 38-43 tok/s
+#:     (docs/MODEL-TOPOLOGY.md, 2026-10-30), so 40 is the bottom of the measured
+#:     band rather than a wish;
+#:   * tool_calling 40.0 - the routing half runs on the same lane and model as
+#:     general, so it keeps the same floor;
+#:   * vision_ocr 20.0 - the measured vision model read 63.35 tok/s on the
+#:     headless card (docs/MEASURED-2026-11-07-THREE-GPU.md), so 20 is a floor
+#:     that admits a slower vision model without admitting a crawl.
+PROMOTION_DECODE_FLOOR = {"coding": 75.0, "general": 40.0,
+                          "tool_calling": 40.0, "vision_ocr": 20.0}
+
+#: The two measure-first pairs the packet names. `needs` is what a promotion
+#: verdict must have measured for BOTH models: the speed row is the zero-spill
+#: and speed evidence, the domain suite is the quality evidence, and General
+#: additionally needs tool-calling (Q2: it must pass both).
+PROMOTION_PAIRS = (
+    {"id": "coding_q4", "preset": "coding",
+     "incumbent": "qwen3-coder-30b-a3b-ud-q3-k-xl",
+     "candidate": "qwen3-coder:30b-a3b-q4_K_M",
+     "ctx": 49152, "suites": ("speed", "coding"),
+     "why": "the bigger q4 build measured 93.08 tok/s at 20.60 GiB against the "
+            "shipped q3 build; the coding rubric was never re-run on it"},
+    {"id": "general_12b", "preset": "general",
+     "incumbent": "qwen3.5:9b",
+     "candidate": "gemma4:12b-it-qat",
+     "ctx": 196608, "suites": ("speed", "general", "tool_calling"),
+     "why": "the 12B is a newer build than the everyday 9B; the preset's own "
+            "196,608-token window is the hard part, and routing/OCR must not "
+            "regress (Q2)"},
+)
+
+#: The sentences a screen shows. One constant each, so the desktop, the phone
+#: and the card cannot word the same refusal three ways.
+SUITE_STREAMING = ANSWER_STREAMING
+SUITE_ALREADY_RUNNING = ("a benchmark is already running; it takes a minute or two")
+SUITE_STANDBY = STANDBY
+SUITE_TASK_RUNNING = TASK_RUNNING
+SUITE_NOT_IDLE = ("a scheduled benchmark only runs while no model is loaded; "
+                  "start it yourself to let it pause the lane it needs")
+SUITE_LANE_DOWN = "nothing answers on port {port}, so that lane cannot be paused"
+SUITE_MODEL_MISSING = "{model} is not installed on this PC. It has: {has}"
+SUITE_NO_CARD = ("the graphics cards could not be read, so this run cannot pick "
+                 "one to measure on")
+SUITE_NOT_CONFIRMED = "nothing was measured: the run was not confirmed"
+SUITE_BAD_SUITE = "{suite!r} is not one of {keys}"
+SUITE_NO_PORT = ("no spare port between {first} and {last} is free, so a "
+                 "throwaway server cannot be started")
+SUITE_NOTHING = "nothing was measured: the run stopped before any suite ran"
+
+#: The fixture the vision suite reads, as a PNG embedded in this file rather
+#: than a file beside it: this module is shipped WHOLE to the owner's backend,
+#: and a `fixtures/` folder is not. 448x112, black-on-white block capitals,
+#: 791 bytes. `test_bench_suites.py` proves the base64 decodes to a real PNG
+#: and that the text it was rendered from is the text the suite expects.
+VISION_IMAGE_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAcAAAABwAQAAAACh450fAAAC3klEQVR42u2YMW7bMBSGP9IaNASN"
+    "hg7dLPQEOUCBsDfxEXqC9nXr2AN1YLYcoaMCdPCoFBnkQBY7UCKpmJbbTkUhLrJp/nz/+/m/R8HK"
+    "8XdDswJX4ApcgStwBf4zwIO6AHQKUAKflSo4aEDdKvhCHZffVcsRj6YAwIAT9n7yocaZpwtUm/Bp"
+    "gOcw98wxD3RY/2GPAwfQj0+w0IFZjtj7eYHOP/xoI5c5cEg4xrXjkDSDcxEHEIbpm/VpgI0bnQE6"
+    "BaCAZtPPaHRZYE8L3LoWsPQAXG0CCeRalqlexR9tNWrTA9zs8sBuZKKRsHWNaQNHU/UXvdqEdJJj"
+    "Pqtq6R/KH3QxxQznImUe2NIvMPjNsmppSw/YTmenzhqgeT1ETV5YxxrY/kkh/4yOW6D6NsrX0VSA"
+    "cSZFBqWLGc4GxeUxTN4nJowAfc7j9N7bNQcBGPS8WOZAee8J/ZgJ9DU4LhlFJt6dQk1WoIKnZGVT"
+    "LquqYUCM99IRoCtjaZ4AHSI2Q0liclItRyxm6tmRM7hgjBlwUBjvqjfgHDK26AZo6knuxYi7+MMH"
+    "T9OO1bzcHjcytZzQDcR440gO2Gvq2A4/jptY7zMBaNUS1Vs7TOEA3iWOa3QW2B1V3QE3DuCbnnj3"
+    "QRVbLIpTzmto50OaBznbOsIp2rT+qsQhJ/fj4+SOHtA0wPcC4CF0MGCIjUGf7AqoWD2unnf6vFeb"
+    "yRsCmDFSmm6nLjjHdLMLLnY+fQq0Q7Kg7qcqVth8+eo0M7t1g4sZVy9utuzFKs2smQ5p4m0BG+fs"
+    "Vmx5GrHtRx1kvEIqv43s0ziP6qTLdXvAjBYtknvp2ZmS06Y8Ac2hngkclhinL77LudCONFCGmg0q"
+    "5e7HGgqQMVRyCHWqWQZYQTkkkjdpNLMALCdCZkqx8MGvkoSHDLCAXVL1Jr0j1JI4G5A+uVY6tF+v"
+    "hFf5d6hxNNcuPzo+5abV+kfQClyBK3AFrsD/F/gLXX0Ysrb+K1kAAAAASUVORK5CYII="
+)
+
+#: The two tokens the image contains, lower-cased. Both must appear in the
+#: model's answer (normalised) for the vision task to pass - a model that reads
+#: only one of them has not read the image.
+VISION_EXPECTED = ("jarvis", "42")
+
+#: What each suite needs from the model, by name, so a run can say "not a
+#: vision model" instead of scoring it zero and calling that a result. Ollama
+#: reports these in `/api/show`'s `capabilities` list ("completion", "tools",
+#: "vision", "thinking", "embedding").
+SUITE_NEEDS_CAPABILITY = {"tool_calling": "tools", "vision_ocr": "vision"}
+
+# ==========================================================================
+#   The 6-task rubrics
+# ==========================================================================
+#
+# EACH TASK IS FIXED. The prompt is one short sentence, the check is a machine
+# check, and the check is the only thing that decides a pass - never the
+# harness's opinion of the prose. The tasks are deliberately small: this rubric
+# ranks two local models against each other, it is not a coding exam.
+
+#: Six coding tasks. `tests` are (expression, expected) pairs appended to the
+#: model's own code and run by a separate interpreter. The function names are
+#: part of the prompt so a check is unambiguous.
+CODING_TASKS = (
+    {"id": "add_two",
+     "prompt": ("Write a Python function called add_two(a, b) that returns the "
+                "sum of a and b. Reply with only the code in one ```python "
+                "block."),
+     "tests": (("add_two(2, 3)", 5), ("add_two(-4, 1)", -3),
+               ("add_two(0, 0)", 0))},
+    {"id": "is_even",
+     "prompt": ("Write a Python function called is_even(n) that returns True "
+                "when n is even and False otherwise. Reply with only the code "
+                "in one ```python block."),
+     "tests": (("is_even(4)", True), ("is_even(7)", False),
+               ("is_even(0)", True))},
+    {"id": "reverse_words",
+     "prompt": ("Write a Python function called reverse_words(text) that "
+                "returns the words of text in reverse order, separated by "
+                "single spaces. Reply with only the code in one ```python "
+                "block."),
+     "tests": (("reverse_words('one two three')", "three two one"),
+               ("reverse_words('hello')", "hello"))},
+    {"id": "max_of_three",
+     "prompt": ("Write a Python function called max_of_three(a, b, c) that "
+                "returns the largest of three numbers. Reply with only the "
+                "code in one ```python block."),
+     "tests": (("max_of_three(1, 5, 3)", 5), ("max_of_three(-2, -9, -4)", -2),
+               ("max_of_three(7, 7, 2)", 7))},
+    {"id": "count_vowels",
+     "prompt": ("Write a Python function called count_vowels(text) that "
+                "returns how many vowels (aeiou, either case) are in text. "
+                "Reply with only the code in one ```python block."),
+     "tests": (("count_vowels('Jarvis')", 2), ("count_vowels('xyz')", 0),
+               ("count_vowels('AEIOU')", 5))},
+    {"id": "factorial",
+     "prompt": ("Write a Python function called factorial(n) that returns n "
+                "factorial for a non-negative integer, with factorial(0) == 1. "
+                "Reply with only the code in one ```python block."),
+     "tests": (("factorial(0)", 1), ("factorial(5)", 120),
+               ("factorial(7)", 5040))},
+)
+
+#: Six questions with one exact answer. `expected` is compared to the WHOLE
+#: answer (normalised: lower-cased, surrounding punctuation and markdown
+#: stripped) and to its last non-empty line, because a model that answers
+#: "391" and a model that answers "The answer is\n391" have both answered the
+#: question; a model that writes a paragraph has not followed "only".
+GENERAL_TASKS = (
+    {"id": "multiply", "prompt": "What is 17 multiplied by 23? Reply with only the number.",
+     "expected": "391"},
+    {"id": "leap_year", "prompt": "How many days are in a leap year? Reply with only the number.",
+     "expected": "366"},
+    {"id": "gold", "prompt": "What is the chemical symbol for gold? Reply with only the symbol.",
+     "expected": "au"},
+    {"id": "canberra", "prompt": "What is the capital city of Australia? Reply with only the city name.",
+     "expected": "canberra"},
+    {"id": "power", "prompt": "What is 2 to the power of 10? Reply with only the number.",
+     "expected": "1024"},
+    {"id": "hexagon", "prompt": "How many sides does a hexagon have? Reply with only the number.",
+     "expected": "6"},
+)
+
+#: The tools the tool-calling suite offers. Small, fixed, local in meaning (the
+#: model only has to CALL them; nothing here executes).
+TOOL_SCHEMAS = (
+    {"type": "function", "function": {
+        "name": "get_weather",
+        "description": "Get the current weather for a city.",
+        "parameters": {"type": "object", "properties": {
+            "city": {"type": "string", "description": "The city name."}},
+            "required": ["city"]}}},
+    {"type": "function", "function": {
+        "name": "set_timer",
+        "description": "Set a countdown timer.",
+        "parameters": {"type": "object", "properties": {
+            "minutes": {"type": "integer", "description": "How many minutes."},
+            "label": {"type": "string", "description": "What the timer is for."}},
+            "required": ["minutes", "label"]}}},
+    {"type": "function", "function": {
+        "name": "search_web",
+        "description": "Search the web for a query.",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "What to search for."}},
+            "required": ["query"]}}},
+    {"type": "function", "function": {
+        "name": "read_file",
+        "description": "Read a text file on this PC.",
+        "parameters": {"type": "object", "properties": {
+            "path": {"type": "string", "description": "The file path."}},
+            "required": ["path"]}}},
+    {"type": "function", "function": {
+        "name": "create_note",
+        "description": "Create a note with a title and a body.",
+        "parameters": {"type": "object", "properties": {
+            "title": {"type": "string"},
+            "body": {"type": "string"}},
+            "required": ["title", "body"]}}},
+)
+
+#: Five routing tasks. `args` are exact (numbers, booleans); `args_contain` are
+#: case-insensitive substrings (free text a model may word differently).
+#: `forbid` is an argument the model must NOT put in: asking `search_web` for
+#: "Paris" instead of `get_weather` is the failure this half exists to catch.
+TOOL_TASKS = (
+    {"id": "weather_paris", "prompt": "What is the weather in Paris right now?",
+     "tool": "get_weather", "args": {}, "args_contain": {"city": "paris"}},
+    {"id": "timer_pasta",
+     "prompt": "Set a timer for 10 minutes and call it pasta.",
+     "tool": "set_timer", "args": {"minutes": 10},
+     "args_contain": {"label": "pasta"}},
+    {"id": "search_ollama",
+     "prompt": "Search the web for the latest Ollama release.",
+     "tool": "search_web", "args": {}, "args_contain": {"query": "ollama"}},
+    {"id": "read_notes", "prompt": "Read the file notes.txt on this PC.",
+     "tool": "read_file", "args": {}, "args_contain": {"path": "notes.txt"}},
+    {"id": "make_note",
+     "prompt": "Create a note titled Shopping with the body Milk and eggs.",
+     "tool": "create_note", "args": {},
+     "args_contain": {"title": "shopping", "body": "milk"}},
+)
+
+# ==========================================================================
+#   The scorecard store - its own file, its own allowlist
+# ==========================================================================
+#
+# WHY NOT REUSE `BenchLog`. That store's rows are speed measurements of a live
+# lane; its allowlist, its run ring and its tests are shaped for those. A
+# suite row carries a score and a rubric ID and belongs in its own file, so an
+# old bench row can never be read as a scorecard and a scorecard can never be
+# read as a 300-field speed row. The privacy rule is the same and is the point:
+# an ALLOWLIST, and there is deliberately no field for a prompt or an answer.
+
+SCORE_FILE = "bench-scores.jsonl"
+SCORE_SCHEMA = 1
+SCORE_MAX_ROWS = 2000
+SCORE_MAX_BYTES = 2 * 1024 * 1024
+
+_SCORE_NUMBER = {
+    "v", "at", "ctx", "size", "size_vram", "spill_bytes", "on_card_percent",
+    "decode_tps", "prompt_tps", "cold_load_ms", "score_pct", "items",
+    "items_passed", "repeats", "seconds",
+}
+_SCORE_BOOL = {"ok", "passed", "skipped", "promotion_grade", "spilled"}
+_SCORE_NAME = {
+    "run": 60, "model": 120, "digest": 80, "quant": 40, "family": 40,
+    "parameter_size": 40, "cards_used": 80, "ollama_version": 40,
+    "driver_version": 40, "why": MAX_REASON, "words": MAX_WORDS,
+}
+_SCORE_ENUM = {"kind": ("bench-suite",), "measured_on": ("this_pc",),
+               "suite": SUITE_KEYS}
+
+
+def _clean_score(row: dict) -> dict:
+    """`_clean()`'s rule for a score row: allowed fields only, allowed shapes
+    only. A prompt or an answer handed in by mistake is dropped here, not
+    written and read back later."""
+    out: dict = {}
+    for k, v in (row or {}).items():
+        if k in _SCORE_NUMBER:
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            if isinstance(v, float) and (v != v or v in (float("inf"),
+                                                         float("-inf"))):
+                continue
+            out[k] = round(float(v), 2) if isinstance(v, float) else v
+        elif k in _SCORE_BOOL:
+            if isinstance(v, bool):
+                out[k] = v
+        elif k in _SCORE_ENUM:
+            if isinstance(v, str) and v in _SCORE_ENUM[k]:
+                out[k] = v
+        elif k in _SCORE_NAME:
+            if isinstance(v, str) and v.strip():
+                out[k] = v.strip()[:_SCORE_NAME[k]]
+    return out
+
+
+def scores_path() -> Path:
+    """`~/.openjarvis/bench-scores.jsonl`, beside the speed history."""
+    return _config_dir() / SCORE_FILE
+
+
+class ScoreLog:
+    """Append-only JSON lines for suite scorecards. Never raises.
+
+    The store is small (a scorecard is ~15 fields) and a run writes one row per
+    suite, so the row cap is a history cap, not a performance guard. A row that
+    fails to parse is skipped on read rather than killing the history; a write
+    that fails returns False and the run says the scorecard was not saved.
+    """
+
+    def __init__(self, path=None):
+        self.path = Path(path) if path else scores_path()
+
+    def rows(self) -> list:
+        try:
+            text = self.path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
+        out = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(row, dict):
+                out.append(row)
+        return out
+
+    def append(self, row: dict) -> bool:
+        try:
+            stamped = dict(row or {})
+            stamped.setdefault("kind", "bench-suite")
+            stamped.setdefault("measured_on", "this_pc")
+            stamped.setdefault("v", SCORE_SCHEMA)
+            stamped.setdefault("at", int(time.time()))
+            clean = _clean_score(stamped)
+            rows = self.rows()
+            rows.append(clean)
+            while len(rows) > SCORE_MAX_ROWS:
+                rows.pop(0)
+            text = "\n".join(json.dumps(r, sort_keys=True,
+                                        separators=(",", ":")) for r in rows) + "\n"
+            while len(text.encode("utf-8")) > SCORE_MAX_BYTES and len(rows) > 1:
+                rows.pop(0)
+                text = "\n".join(json.dumps(r, sort_keys=True,
+                                            separators=(",", ":"))
+                                 for r in rows) + "\n"
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(text, encoding="utf-8")
+            return True
+        except Exception:
+            return False
+
+    def by_run(self, run_id: str) -> list:
+        return [r for r in self.rows() if str(r.get("run") or "") == run_id]
+
+    def clear(self) -> bool:
+        try:
+            self.path.write_text("", encoding="utf-8")
+            return True
+        except OSError:
+            return False
+
+
+def score_history(*, limit: int = 50, model: str = "", suite: str = "",
+                  store: Optional[ScoreLog] = None) -> list:
+    """The scorecards, newest first, optionally filtered. Read-only."""
+    rows = (store or ScoreLog()).rows()
+    if model:
+        rows = [r for r in rows if _same(str(r.get("model") or ""), model)]
+    if suite:
+        rows = [r for r in rows if r.get("suite") == suite]
+    rows.sort(key=lambda r: (int(r.get("at") or 0), str(r.get("run") or "")),
+              reverse=True)
+    return rows[:max(1, int(limit))]
+
+
+def latest_scorecards(*, store: Optional[ScoreLog] = None) -> dict:
+    """The newest scorecard per (model, suite), as a dict.
+
+    Keyed `(model, suite)`. A model name is compared case-insensitively and
+    without a `:latest` suffix, so a store written on one day is not invisible
+    on the next because Ollama added the suffix.
+    """
+    out: dict = {}
+    for row in score_history(limit=100000, store=store):
+        key = (_bare(str(row.get("model") or "")), str(row.get("suite") or ""))
+        if key[0] and key[1] and key not in out:
+            out[key] = row
+    return out
+
+
+def model_identity(base: str, model: str, *,
+                   get: Optional[Callable[[str], dict]] = None,
+                   show: Optional[Callable[[str, dict], dict]] = None) -> dict:
+    """What a scorecard must carry about a model, read from Ollama itself.
+
+    The digest and the quantisation come from `/api/tags` (the same list a
+    screen shows); `/api/show` fills anything missing and is the one place that
+    reports `capabilities` ("completion", "tools", "vision", ...), which the
+    suite runner uses to SKIP a suite the model cannot do instead of scoring it
+    zero. Every field is capped, and an unreadable field is absent rather than
+    guessed - a scorecard with no digest is honest, one with a made-up digest
+    is not.
+    """
+    out = {"model": str(model or "")[:120], "digest": "", "quant": "",
+           "family": "", "parameter_size": "", "capabilities": []}
+    try:
+        body = (get or http_get)(f"{base}/api/tags")
+        for m in (body or {}).get("models") or []:
+            if not isinstance(m, dict):
+                continue
+            if not _same(str(m.get("name") or m.get("model") or ""), model):
+                continue
+            out["digest"] = str(m.get("digest") or "")[:80]
+            details = m.get("details") or {}
+            if isinstance(details, dict):
+                out["quant"] = str(details.get("quantization_level") or "")[:40]
+                out["family"] = str(details.get("family") or "")[:40]
+                out["parameter_size"] = str(
+                    details.get("parameter_size") or "")[:40]
+            break
+    except Exception:
+        pass
+    try:
+        body = (show or http_post_json)(f"{base}/api/show", {"model": model})
+        if isinstance(body, dict):
+            details = body.get("details") or {}
+            if isinstance(details, dict):
+                out["quant"] = out["quant"] or str(
+                    details.get("quantization_level") or "")[:40]
+                out["family"] = out["family"] or str(
+                    details.get("family") or "")[:40]
+                out["parameter_size"] = out["parameter_size"] or str(
+                    details.get("parameter_size") or "")[:40]
+            caps = body.get("capabilities")
+            if isinstance(caps, list):
+                out["capabilities"] = [str(c)[:30] for c in caps
+                                       if isinstance(c, str)][:8]
+    except Exception:
+        pass
+    return out
+
+
+def scorecard_row(*, run_id: str, identity: dict, lane: str, suite: dict,
+                  model: str, ctx: int, result: dict, ollama_version: str = "",
+                  driver: str = "", cards_used: str = "") -> dict:
+    """One stored row for one suite result. The ONLY place a result becomes a
+    row, so the allowlist in `_clean_score()` is exercised on one shape."""
+    return {
+        "kind": "bench-suite", "run": run_id,
+        "model": model, "digest": identity.get("digest", ""),
+        "quant": identity.get("quant", ""), "family": identity.get("family", ""),
+        "parameter_size": identity.get("parameter_size", ""),
+        "ctx": int(ctx), "cards_used": cards_used,
+        "suite": suite["id"],
+        "size": result.get("size"), "size_vram": result.get("size_vram"),
+        "spill_bytes": result.get("spill_bytes"),
+        "on_card_percent": result.get("on_card_percent"),
+        "decode_tps": result.get("decode_tps"),
+        "prompt_tps": result.get("prompt_tps"),
+        "cold_load_ms": result.get("cold_load_ms"),
+        "score_pct": result.get("score_pct"),
+        "items": result.get("items"), "items_passed": result.get("items_passed"),
+        "repeats": result.get("repeats"),
+        "seconds": result.get("seconds"),
+        "ok": bool(result.get("ok")), "passed": bool(result.get("passed")),
+        "skipped": bool(result.get("skipped")),
+        "promotion_grade": bool(result.get("promotion_grade")),
+        "spilled": bool(result.get("spilled")),
+        "why": str(result.get("why") or "")[:MAX_REASON],
+        "words": str(result.get("words") or "")[:MAX_WORDS],
+        "ollama_version": ollama_version, "driver_version": driver,
+        "measured_on": "this_pc",
+    }
+
+
+# ==========================================================================
+#   The throwaway server: this PC's Ollama, on a spare port, pinned by UUID
+# ==========================================================================
+#
+# WHY BY UUID. Ollama's own device numbering is the reverse of nvidia-smi's on
+# this PC (`start-lane.ps1` records the trap), so an index is a coin flip
+# between two cards. Every pin here is the `uuid` nvidia-smi printed.
+
+def _cards_now(smi: Optional[Callable[[], str]] = None) -> list:
+    """The card rows, or []. Never raises - a benchmark that dies because
+    nvidia-smi hiccuped once is worse than one with a missing number."""
+    return read_cards(smi).get("cards") or []
+
+
+def _is_monitor(card: dict) -> bool:
+    return str(card.get("display_active") or "").strip().lower().startswith("en")
+
+
+def card_choice(lane: str, *, smi: Optional[Callable[[], str]] = None) -> dict:
+    """Which card set a suite run measures on, from nvidia-smi, never from a
+    hard-coded index.
+
+    Options in plain words:
+      * "everyday" - the card WITHOUT the monitor, because measuring there does
+        not stutter the desktop (the shipped speed bench's own reason);
+      * "coding"   - the card WITH the monitor, which is the fast card this
+        PC's second lane already uses;
+      * "pooled"   - every card, no `CUDA_VISIBLE_DEVICES` at all, because the
+        pooled lane's whole point is the sum of the cards.
+
+    Returns {"ok", "why", "kind", "uuid", "name", "indexes"}. A PC that cannot
+    be read gets ok False and ONE sentence, never a guessed card.
+    """
+    cards = [c for c in _cards_now(smi)
+             if isinstance(c.get("total_mb"), (int, float))
+             and c.get("total_mb") and c.get("uuid")]
+    if not cards:
+        return {"ok": False, "why": SUITE_NO_CARD, "kind": "", "uuid": "",
+                "name": "", "indexes": []}
+    if lane == "pooled":
+        return {"ok": True, "why": "", "kind": "pool", "uuid": "",
+                "name": "all cards",
+                "indexes": [int(c["index"]) for c in cards]}
+    monitors = [c for c in cards if _is_monitor(c)]
+    if lane == "coding":
+        chosen = (monitors or sorted(cards, key=lambda c: c["total_mb"],
+                                     reverse=True))[0]
+    else:
+        plain = [c for c in cards if not _is_monitor(c)] or cards
+        chosen = sorted(plain, key=lambda c: c["total_mb"], reverse=True)[0]
+    return {"ok": True, "why": "", "kind": "one", "uuid": str(chosen["uuid"]),
+            "name": str(chosen.get("name") or "a graphics card"),
+            "indexes": [int(chosen["index"])]}
+
+
+def throwaway_env(port: int, choice: dict, ctx: Optional[int]) -> dict:
+    """The environment the throwaway `ollama serve` gets.
+
+    Same discipline as `jarvis_big_coder._child_env()`: `jarvis_child_env`'s
+    allowlist when it is beside this module (so no token or key of the owner's
+    is inherited), the model folder, loopback only, one model, one request at a
+    time, kv cache q8_0 (the format every measurement and live lane uses), and
+    `OLLAMA_VULKAN=0` - without it a CUDA_VISIBLE_DEVICES pin silently falls back
+    to Vulkan on another card (measured 2026-10-10, `start-lane.ps1`'s header).
+    """
+    try:
+        import jarvis_child_env  # type: ignore
+        env = jarvis_child_env.inherited(names=("OLLAMA_MODELS",))
+    except Exception:
+        # The same narrow fallback shape `_child_env()` uses: never the parent's
+        # whole environment, so a token or key of the owner's cannot ride along.
+        env = {}
+        for name in ("PATH", "SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME",
+                     "USERPROFILE", "LOCALAPPDATA", "OLLAMA_MODELS"):
+            if os.environ.get(name):
+                env[name] = os.environ[name]
+    for name in ("CUDA_VISIBLE_DEVICES", "GGML_VK_VISIBLE_DEVICES"):
+        env.pop(name, None)
+    if choice.get("kind") == "one" and choice.get("uuid"):
+        env["CUDA_VISIBLE_DEVICES"] = str(choice["uuid"])
+    env["OLLAMA_VULKAN"] = "0"
+    env["OLLAMA_NO_CLOUD"] = "1"
+    env["OLLAMA_HOST"] = f"127.0.0.1:{int(port)}"
+    env["OLLAMA_KEEP_ALIVE"] = "-1"
+    env["OLLAMA_NUM_PARALLEL"] = "1"
+    env["OLLAMA_MAX_LOADED_MODELS"] = "1"
+    env["OLLAMA_KV_CACHE_TYPE"] = "q8_0"
+    if ctx:
+        env["OLLAMA_CONTEXT_LENGTH"] = str(int(ctx))
+    return env
+
+
+def _port_busy(port: int, *, get: Optional[Callable[[str], dict]] = None) -> bool:
+    """Is something already answering on this port? One loopback GET."""
+    try:
+        (get or http_get)(f"http://127.0.0.1:{int(port)}/api/version")
+        return True
+    except Exception:
+        return False
+
+
+def pick_port(*, get: Optional[Callable[[str], dict]] = None,
+              first: int = BENCH_PORT_FIRST,
+              last: int = BENCH_PORT_LAST) -> Optional[int]:
+    """The first free port in the throwaway range. Never a lane port:
+    `LANE_PORTS` is checked both ways, so a caller that edits the range cannot
+    hand a suite the server a live lane is using."""
+    live = set(int(p) for p in LANE_PORTS.values())
+    for port in range(int(first), int(last) + 1):
+        if port in live or port in (11434, 11439):
+            continue
+        if not _port_busy(port, get=get):
+            return port
+    return None
+
+
+def _kill_tree(proc) -> None:
+    """Take the whole process tree down. On Windows a plain terminate can leave
+    `llama-server.exe` behind holding the cards; `taskkill /T` is the shipped,
+    documented way to end it. Never raises."""
+    pid = getattr(proc, "pid", None)
+    try:
+        if os.name == "nt" and pid:
+            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                           capture_output=True, text=True, timeout=20,
+                           shell=False, env=_child_env())
+    except Exception:
+        pass
+    for method in ("terminate", "kill"):
+        try:
+            getattr(proc, method)()
+            break
+        except Exception:
+            continue
+    try:
+        proc.wait(timeout=10)
+    except Exception:
+        pass
+
+
+def start_throwaway(*, choice: dict, ctx: Optional[int] = None,
+                    port: Optional[int] = None,
+                    spawn: Optional[Callable] = None,
+                    get: Optional[Callable[[str], dict]] = None,
+                    clock: Optional[Callable[[], float]] = None,
+                    wait_s: float = 45.0) -> dict:
+    """Start ONE `ollama serve` for this run. {"ok","why","url","port","proc","owned"}.
+
+    It is started on a port the caller never had to choose, with the card pin
+    in its environment, and it is the only Ollama a suite run talks to. If a
+    server is already answering on the chosen port it is REUSED and `owned` is
+    False - the same rule `jarvis_big_coder.server_start` follows - so a
+    previous run's leftover is not doubled.
+    """
+    chosen_port = int(port) if port else pick_port(get=get)
+    if not chosen_port:
+        return {"ok": False, "why": SUITE_NO_PORT.format(first=BENCH_PORT_FIRST,
+                                                         last=BENCH_PORT_LAST),
+                "url": "", "port": None, "proc": None, "owned": False}
+    if chosen_port in set(int(p) for p in LANE_PORTS.values()):
+        return {"ok": False, "why": (f"port {chosen_port} is a live lane's, and a "
+                                     "suite run never measures a live lane"),
+                "url": "", "port": None, "proc": None, "owned": False}
+    url = f"http://127.0.0.1:{chosen_port}"
+    try:
+        (get or http_get)(f"{url}/api/version")
+        return {"ok": True, "why": "", "url": url, "port": chosen_port,
+                "proc": None, "owned": False}
+    except Exception:
+        pass
+    env = throwaway_env(chosen_port, choice, ctx)
+    runner = spawn or (lambda environment: subprocess.Popen(
+        ["ollama", "serve"], env=environment, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)))
+    try:
+        proc = runner(env)
+    except Exception as exc:
+        return {"ok": False,
+                "why": f"could not start the throwaway Ollama ({type(exc).__name__})",
+                "url": "", "port": None, "proc": None, "owned": False}
+    now = clock or time.monotonic
+    deadline = now() + float(wait_s)
+    while now() < deadline:
+        try:
+            (get or http_get)(f"{url}/api/tags")
+            return {"ok": True, "why": "", "url": url, "port": chosen_port,
+                    "proc": proc, "owned": True}
+        except Exception:
+            if getattr(proc, "poll", lambda: None)() is not None:
+                return {"ok": False,
+                        "why": "the throwaway Ollama stopped as soon as it started",
+                        "url": "", "port": None, "proc": None, "owned": False}
+            time.sleep(0.25)
+    _kill_tree(proc)
+    return {"ok": False,
+            "why": "the throwaway Ollama did not answer within 45 seconds",
+            "url": "", "port": None, "proc": None, "owned": False}
+
+
+def stop_throwaway(handle: dict, *, kill: Optional[Callable] = None) -> dict:
+    """Stop the server this run started. A server it did not start is left
+    alone; a suite run must never kill a lane."""
+    proc = (handle or {}).get("proc")
+    if proc is None:
+        return {"stopped": False, "why": ""}
+    try:
+        (kill or _kill_tree)(proc)
+    except Exception as exc:
+        return {"stopped": False,
+                "why": f"the throwaway Ollama could not be stopped ({type(exc).__name__})"}
+    return {"stopped": True, "why": ""}
+
+
+# ==========================================================================
+#   Pausing the live lane (owner-initiated only) and warming it back
+# ==========================================================================
+#
+# Q3's two halves, in code. The pause is only ever entered by an OWNER run: a
+# scheduled run is refused before this is reached. The warm-back is in a
+# `finally`, so a suite that raises still puts the owner's model back.
+
+def _ps_row(rows: Optional[list], model: str) -> Optional[dict]:
+    for m in rows or ():
+        if _same(str(m.get("name") or m.get("model") or ""), model):
+            return m
+    return None
+
+
+def pause_for_run(lane: str, *, get: Optional[Callable[[str], dict]] = None,
+                  post: Optional[Callable] = None,
+                  clock: Optional[Callable[[], float]] = None) -> dict:
+    """Unload whatever is resident on the ports this run's cards are behind.
+
+    Returns {"paused": [{"port","model","ctx","note"}], "words"}. A lane that
+    does not answer is not a refusal here: the throwaway server has its own
+    model store and does not need the lane up. What matters is that no OTHER
+    model is left holding the cards.
+    """
+    paused: list = []
+    post = post or http_post_json
+    for port in EVICT_PORTS.get(lane, ()):
+        base = f"http://127.0.0.1:{int(port)}"
+        held = ps_models(base, get=get) or []
+        for m in held:
+            name = str(m.get("name") or m.get("model") or "")
+            if not name:
+                continue
+            ctx = _int(m.get("context_length"))
+            note = _unload(name, base, post=post)
+            paused.append({"port": int(port), "model": name, "ctx": ctx,
+                           "note": note})
+    words = ""
+    if paused:
+        words = ("Paused for the run: "
+                 + "; ".join(f"{p['model']} on port {p['port']}" for p in paused)
+                 + ". It is warmed back when the run ends.")
+    return {"paused": paused, "words": words}
+
+
+def warm_back(paused: list, *, get: Optional[Callable[[str], dict]] = None,
+              post: Optional[Callable] = None,
+              clock: Optional[Callable[[], float]] = None,
+              wait_s: float = 120.0) -> dict:
+    """Load each paused model back at its own window and PROVE it from
+    /api/ps. {"ok","restored","wrong","proof"}.
+
+    A model that does not come back is named, and `ok` is False - a run that
+    claims to have restored a lane it did not is worse than one that admits it.
+    """
+    post = post or http_post_json
+    now = clock or time.monotonic
+    restored, wrong, proof = [], [], []
+    for item in paused or ():
+        base = f"http://127.0.0.1:{int(item.get('port') or 0)}"
+        model = str(item.get("model") or "")
+        ctx = _int(item.get("ctx"))
+        if not model:
+            continue
+        payload = {"model": model, "prompt": "", "stream": False,
+                   "keep_alive": -1,
+                   "options": {"num_ctx": int(ctx)} if ctx else {}}
+        try:
+            post(f"{base}/api/generate", payload)
+        except Exception as exc:
+            wrong.append(f"{model} could not be loaded back ({type(exc).__name__})")
+            proof.append(f"port {item.get('port')}: {model} was NOT reloaded")
+            continue
+        seen = None
+        deadline = now() + float(wait_s)
+        while now() < deadline:
+            rows = ps_models(base, get=get)
+            seen = _ps_row(rows, model)
+            if seen is not None:
+                break
+            time.sleep(0.25)
+        if seen is None:
+            wrong.append(f"{model} is not loaded again on port {item.get('port')}")
+            proof.append(f"port {item.get('port')}: {model} did NOT come back")
+            continue
+        got_ctx = _int(seen.get("context_length"))
+        proof.append(f"port {item.get('port')}: {model} ctx={got_ctx} "
+                     f"(intended {ctx}) size={seen.get('size')} "
+                     f"size_vram={seen.get('size_vram')}")
+        if ctx and got_ctx and int(got_ctx) != int(ctx):
+            wrong.append(f"{model} came back at {got_ctx}, not {ctx}, on port "
+                         f"{item.get('port')}")
+        restored.append(f"{model} @{item.get('port')}")
+    why = ""
+    if wrong:
+        why = ("the paused model was not put back exactly as it was: "
+               + "; ".join(wrong))
+    return {"ok": not wrong, "restored": restored, "wrong": wrong, "why": why,
+            "proof": proof}
+
+
+# ==========================================================================
+#   One request, and the five suite runners
+# ==========================================================================
+
+def _generate(base: str, model: str, prompt: str, *, ctx: Optional[int],
+              num_predict: int = 128, post: Optional[Callable] = None,
+              tools: Optional[list] = None, image_b64: str = "",
+              timeout: float = 300.0) -> dict:
+    """ONE question to the throwaway server, answered whole.
+
+    A tool-calling or vision task goes to `/api/chat` (the only endpoint that
+    takes `tools` and `messages[].images`); everything else goes to
+    `/api/generate`. `stream: False` on purpose: a suite needs the text AND the
+    counters, and the shipped speed bench already owns the streaming
+    time-to-first-token path.
+    """
+    options = {"temperature": 0, "num_predict": int(num_predict)}
+    if ctx:
+        options["num_ctx"] = int(ctx)
+    if tools or image_b64:
+        message = {"role": "user", "content": prompt}
+        if image_b64:
+            message["images"] = [image_b64]
+        payload = {"model": model, "messages": [message], "stream": False,
+                   "options": options}
+        if tools:
+            payload["tools"] = tools
+        return (post or http_post_json)(f"{base}/api/chat", payload, timeout)
+    payload = {"model": model, "prompt": prompt, "stream": False,
+               "options": options}
+    return (post or http_post_json)(f"{base}/api/generate", payload, timeout)
+
+
+def _answer_text(reply: dict) -> str:
+    """The answer text out of either endpoint's reply. "" when absent."""
+    if not isinstance(reply, dict):
+        return ""
+    text = reply.get("response")
+    if not isinstance(text, str):
+        msg = reply.get("message")
+        text = (msg or {}).get("content") if isinstance(msg, dict) else ""
+    return text if isinstance(text, str) else ""
+
+
+def _rate(count, duration_ns) -> Optional[float]:
+    """tokens a second from one reply, or None - absent is never zero."""
+    c, d = _int(count), _int(duration_ns)
+    if not c or not d or d <= 0:
+        return None
+    return round(c * 1e9 / d, 2)
+
+
+def _sentence(parts: list) -> str:
+    return "; ".join(p for p in parts if p)
+
+
+def run_speed_suite(base: str, model: str, ctx: Optional[int], *,
+                    post: Optional[Callable] = None,
+                    get: Optional[Callable[[str], dict]] = None,
+                    smi: Optional[Callable[[], str]] = None,
+                    clock: Optional[Callable[[], float]] = None,
+                    repeats: int = 3, prefill_tokens: int = 512,
+                    num_predict: int = 128) -> dict:
+    """The Speed suite: what the model does on ONE card at ONE window.
+
+    Three repeats, a FRESH prompt each time (so prompt speed is measured, not
+    read from Ollama's cache - the prefill trap this module's docstring is
+    largely about), and a zero-spill requirement: a run is only
+    `promotion_grade` when `/api/ps` says `size == size_vram` (100% on the
+    card). `ollama ps`'s own `PROCESSOR 100% GPU` is NOT used as that proof.
+    """
+    started = (clock or time.monotonic)()
+    cards_before = _cards_now(smi)
+    samples = [cards_before]
+    replies, gen_rates, prefill_rates = [], [], []
+    first_load_ms = None
+    last_ps = None
+    for i in range(max(1, int(repeats))):
+        prompt = prefill_prompt(int(prefill_tokens), tag=f"suite-{i}")
+        try:
+            reply = _generate(base, model, prompt, ctx=ctx,
+                              num_predict=num_predict, post=post)
+        except Exception as exc:
+            if i == 0:
+                return {"ok": False, "passed": False, "skipped": False,
+                        "why": f"the model did not answer ({type(exc).__name__})",
+                        "words": (f"Nothing was measured: {model} did not answer "
+                                  f"({type(exc).__name__}).")}
+            break
+        replies.append(reply)
+        gen = _rate(reply.get("eval_count"), reply.get("eval_duration"))
+        if gen is not None:
+            gen_rates.append(gen)
+        pre = prefill_rate(reply.get("prompt_eval_count"),
+                           reply.get("prompt_eval_cached_count"),
+                           reply.get("prompt_eval_duration"))
+        rate = pre[0] if isinstance(pre, tuple) else pre
+        if rate is not None:
+            prefill_rates.append(float(rate))
+        if i == 0:
+            first_load_ms = round(float(reply.get("load_duration") or 0) / 1e6, 1)
+        samples.append(_cards_now(smi))
+        last_ps = _ps_row(ps_models(base, get=get), model)
+    seconds = round((clock or time.monotonic)() - started, 1)
+    peaks = peak_cards(samples)
+    peak0 = max((c.get("used_mb") or 0) for c in peaks) if peaks else None
+    size = _int((last_ps or {}).get("size"))
+    size_vram = _int((last_ps or {}).get("size_vram"))
+    spill = (size - size_vram) if (size is not None and size_vram is not None) else None
+    pct = on_card_percent(model, [last_ps] if last_ps else [])
+    decode = _median(gen_rates[1:] or gen_rates)
+    prompt_tps = _median(prefill_rates[1:] or prefill_rates)
+    if last_ps is None:
+        ok = False
+        why = ("the model was not in /api/ps after the repeats, so its video "
+               "memory could not be measured")
+    else:
+        ok = decode is not None
+        why = "" if ok else "the replies carried no generation timings"
+    # A grade requires the whole chain: a measured decode, a measured load, and
+    # that /api/ps says 100% of it is on the card. A run whose timings are
+    # missing is NOT "promotion-grade at 0 B spilled" just because the memory
+    # line was readable.
+    grade = bool(ok and spill == 0 and pct == 100)
+    words = _sentence([
+        f"{model} at {int(ctx):,} tokens" if ctx else model,
+        f"{decode:.1f} tokens a second decode" if decode is not None else "",
+        f"{prompt_tps:.0f} tokens a second prompt" if prompt_tps else "",
+        f"cold load {first_load_ms / 1000:.1f} s" if first_load_ms else
+        f"cold load {first_load_ms:.0f} ms" if first_load_ms else "",
+        (f"{size / 1024 ** 3:.2f} GiB loaded, "
+         f"{spill / 1024 ** 2:.0f} MiB not on the card"
+         if size is not None and spill else
+         f"{size / 1024 ** 3:.2f} GiB loaded, all of it on the card"
+         if size is not None else ""),
+        "promotion-grade" if grade else ("SPILLED - not promotion-grade"
+                                         if spill else "not proved on-card"),
+    ]) + "."
+    return {"ok": bool(ok), "passed": bool(ok and grade), "skipped": False,
+            "why": why, "words": words, "decode_tps": decode,
+            "prompt_tps": prompt_tps, "cold_load_ms": first_load_ms,
+            "size": size, "size_vram": size_vram, "spill_bytes": spill,
+            "on_card_percent": pct, "repeats": len(replies),
+            "seconds": seconds, "vram_peak_mb": peak0,
+            "promotion_grade": grade, "spilled": bool(spill)}
+
+
+#: A fenced python block, with or without the language tag.
+_CODE_FENCE = None
+
+
+def extract_python(answer: str) -> str:
+    """The code out of a model's answer: the first ```python block, or the
+    first ``` block, or a bare `def ...` run. "" when there is no code - and an
+    empty string is a failed task, never a crash."""
+    global _CODE_FENCE
+    import re
+    if _CODE_FENCE is None:
+        _CODE_FENCE = re.compile(
+            r"```(?:python|py)?[ \t]*\r?\n(.*?)```", re.S | re.I)
+    text = str(answer or "")
+    m = _CODE_FENCE.search(text)
+    if m:
+        return m.group(1).strip()
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if line.lstrip().startswith(("def ", "class ")):
+            return "\n".join(lines[i:]).strip()
+    return ""
+
+
+def coding_test_script(code: str, tests) -> str:
+    """The model's code plus its asserts, as one script for a separate
+    interpreter. `print()` at the end is the only pass signal."""
+    asserts = "\n".join(f"assert ({expr}) == ({expected!r})"
+                        for expr, expected in tests or ())
+    return (str(code or "") + "\n\n" + asserts +
+            "\nprint('JARVIS-BENCH-OK')\n")
+
+
+def run_coding_answer(answer: str, task: dict, *,
+                      code_runner: Optional[Callable] = None) -> tuple:
+    """(passed, why) for one coding task. The code runs in a separate `-I`
+    interpreter with a timeout and an allowlisted environment - a guard
+    against a runaway answer, not a sandbox against hostile code (see the
+    section comment)."""
+    code = extract_python(answer)
+    if not code.strip():
+        return False, "the answer contained no code"
+    script = coding_test_script(code, task.get("tests"))
+    if code_runner is not None:
+        return code_runner(script)
+    env = {"PATH": os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"}
+    for name in ("SYSTEMROOT", "WINDIR", "TEMP", "TMP", "HOME", "USERPROFILE",
+                 "LOCALAPPDATA"):
+        if os.environ.get(name):
+            env[name] = os.environ[name]
+    try:
+        with tempfile.TemporaryDirectory(prefix="jarvis-bench-") as tmp:
+            proc = subprocess.run([sys.executable, "-I", "-c", script],
+                                  cwd=tmp, env=env, capture_output=True,
+                                  text=True, timeout=20, shell=False)
+    except subprocess.TimeoutExpired:
+        return False, "the test did not finish within 20 seconds"
+    except OSError as exc:
+        return False, f"the test could not be run ({type(exc).__name__})"
+    if proc.returncode == 0 and "JARVIS-BENCH-OK" in (proc.stdout or ""):
+        return True, ""
+    tail = ((proc.stderr or proc.stdout or "").strip().splitlines() or [""])[-1]
+    return False, tail[:MAX_REASON] or "the test failed"
+
+
+def run_coding_suite(base: str, model: str, ctx: Optional[int], *,
+                     post: Optional[Callable] = None,
+                     code_runner: Optional[Callable] = None) -> dict:
+    """Six fixed coding tasks, each checked by running its own test."""
+    passed, per_item, failures = 0, [], []
+    answered = 0
+    for task in CODING_TASKS:
+        try:
+            reply = _generate(base, model, task["prompt"], ctx=ctx,
+                              num_predict=400, post=post)
+            answered += 1
+            ok, why = run_coding_answer(_answer_text(reply), task,
+                                        code_runner=code_runner)
+        except Exception as exc:
+            ok, why = False, f"the model did not answer ({type(exc).__name__})"
+        per_item.append({"id": task["id"], "pass": bool(ok), "why": why})
+        if ok:
+            passed += 1
+        else:
+            failures.append(f"{task['id']}: {why}")
+    if not answered:
+        return {"ok": False, "passed": False, "skipped": False,
+                "why": "the model did not answer any coding task",
+                "words": (f"Nothing was measured: {model} did not answer any of "
+                          "the six coding tasks.")}
+    score = round(100.0 * passed / len(CODING_TASKS), 1)
+    return {"ok": True, "passed": passed == len(CODING_TASKS), "skipped": False,
+            "why": ("Every coding task passed." if not failures else
+                    "Failed: " + "; ".join(failures))[:MAX_REASON],
+            "words": (f"{passed} of {len(CODING_TASKS)} coding tasks passed "
+                      f"({score:.0f}%)."),
+            "items": len(CODING_TASKS), "items_passed": passed,
+            "score_pct": score, "per_item": per_item}
+
+
+def _normalised_answer(text: str) -> str:
+    """Lower case, no markdown, no surrounding punctuation, one line."""
+    import re
+    t = str(text or "").strip().lower()
+    t = t.replace("**", "").replace("`", "")
+    t = re.sub(r"\s+", " ", t)
+    return t.strip(" \t\r\n.,;:!?\"'()[]{}")
+
+
+def general_answer_passes(answer: str, expected: str) -> bool:
+    """Exact-answer check: the WHOLE answer, or its last non-empty line.
+
+    The last-line rule is not leniency: "The answer is\\n391" HAS answered the
+    question, while a paragraph of reasoning has not followed "reply with only".
+    Both are judged against the same normalisation.
+    """
+    want = _normalised_answer(expected)
+    whole = _normalised_answer(answer)
+    if whole == want:
+        return True
+    lines = [ln for ln in str(answer or "").splitlines() if ln.strip()]
+    return bool(lines) and _normalised_answer(lines[-1]) == want
+
+
+def run_general_suite(base: str, model: str, ctx: Optional[int], *,
+                      post: Optional[Callable] = None) -> dict:
+    """Six questions with one exact answer."""
+    passed, per_item, failures = 0, [], []
+    answered = 0
+    for task in GENERAL_TASKS:
+        try:
+            reply = _generate(base, model, task["prompt"], ctx=ctx,
+                              num_predict=64, post=post)
+            answered += 1
+            text = _answer_text(reply)
+            ok = general_answer_passes(text, task["expected"])
+            why = "" if ok else f"answered {_normalised_answer(text)[:60]!r}"
+        except Exception as exc:
+            ok, why = False, f"the model did not answer ({type(exc).__name__})"
+        per_item.append({"id": task["id"], "pass": bool(ok), "why": why})
+        if ok:
+            passed += 1
+        else:
+            failures.append(f"{task['id']}: {why}")
+    if not answered:
+        return {"ok": False, "passed": False, "skipped": False,
+                "why": "the model did not answer any general question",
+                "words": (f"Nothing was measured: {model} did not answer any of "
+                          "the six general questions.")}
+    score = round(100.0 * passed / len(GENERAL_TASKS), 1)
+    return {"ok": True, "passed": passed == len(GENERAL_TASKS), "skipped": False,
+            "why": ("Every general question was answered exactly." if not failures
+                    else "Failed: " + "; ".join(failures))[:MAX_REASON],
+            "words": f"{passed} of {len(GENERAL_TASKS)} exact-answer questions "
+                     f"passed ({score:.0f}%).",
+            "items": len(GENERAL_TASKS), "items_passed": passed,
+            "score_pct": score, "per_item": per_item}
+
+
+def _tool_calls(reply: dict) -> list:
+    msg = (reply or {}).get("message") if isinstance(reply, dict) else None
+    calls = (msg or {}).get("tool_calls") if isinstance(msg, dict) else None
+    if calls is None and isinstance(reply, dict):
+        calls = reply.get("tool_calls")
+    return [c for c in (calls or []) if isinstance(c, dict)]
+
+
+def _call_arguments(call: dict) -> dict:
+    fn = call.get("function") if isinstance(call, dict) else None
+    args = (fn or {}).get("arguments") if isinstance(fn, dict) else None
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except ValueError:
+            return {}
+    return args if isinstance(args, dict) else {}
+
+
+def tool_call_passes(reply: dict, task: dict) -> tuple:
+    """(passed, why): a call to the RIGHT tool whose arguments match.
+
+    Exact arguments (numbers, booleans) must be equal; free text is a
+    case-insensitive substring, because "Paris" and "paris, France" are the
+    same intent and the rubric is about routing, not wording.
+    """
+    name_wanted = task.get("tool")
+    for call in _tool_calls(reply):
+        fn = call.get("function") if isinstance(call, dict) else {}
+        if not isinstance(fn, dict) or fn.get("name") != name_wanted:
+            continue
+        args = _call_arguments(call)
+        bad = []
+        for key, want in (task.get("args") or {}).items():
+            if args.get(key) != want:
+                bad.append(f"{key}={args.get(key)!r} (wanted {want!r})")
+        for key, want in (task.get("args_contain") or {}).items():
+            got = args.get(key)
+            if not isinstance(got, str) or str(want).lower() not in got.lower():
+                bad.append(f"{key}={got!r} (wanted it to mention {want!r})")
+        if not bad:
+            return True, ""
+        return False, f"called {name_wanted} with " + ", ".join(bad)
+    names = [((c.get("function") or {}).get("name")) for c in _tool_calls(reply)]
+    return False, (f"called {names!r}, not {name_wanted}" if names
+                   else f"did not call {name_wanted}")
+
+
+def run_tool_calling_suite(base: str, model: str, ctx: Optional[int], *,
+                           post: Optional[Callable] = None) -> dict:
+    """Five fixed routing tasks, scored on the right tool and its arguments."""
+    passed, per_item, failures = 0, [], []
+    answered = 0
+    for task in TOOL_TASKS:
+        try:
+            reply = _generate(base, model, task["prompt"], ctx=ctx,
+                              num_predict=64, post=post, tools=list(TOOL_SCHEMAS))
+            answered += 1
+            ok, why = tool_call_passes(reply, task)
+        except Exception as exc:
+            ok, why = False, f"the model did not answer ({type(exc).__name__})"
+        per_item.append({"id": task["id"], "pass": bool(ok), "why": why})
+        if ok:
+            passed += 1
+        else:
+            failures.append(f"{task['id']}: {why}")
+    if not answered:
+        return {"ok": False, "passed": False, "skipped": False,
+                "why": "the model did not answer any tool-calling task",
+                "words": (f"Nothing was measured: {model} did not answer any of "
+                          "the five tool-calling tasks.")}
+    score = round(100.0 * passed / len(TOOL_TASKS), 1)
+    return {"ok": True, "passed": passed == len(TOOL_TASKS), "skipped": False,
+            "why": ("Every tool task called the right tool with the right "
+                    "arguments." if not failures else
+                    "Failed: " + "; ".join(failures))[:MAX_REASON],
+            "words": (f"{passed} of {len(TOOL_TASKS)} tool-calling tasks passed "
+                      f"({score:.0f}%)."),
+            "items": len(TOOL_TASKS), "items_passed": passed,
+            "score_pct": score, "per_item": per_item}
+
+
+def vision_answer_passes(answer: str, expected=VISION_EXPECTED) -> bool:
+    """Both tokens the image contains must appear in the answer. One token
+    means the model read a word and guessed the rest - not OCR."""
+    norm = _normalised_answer(answer)
+    return all(str(want).lower() in norm for want in (expected or ()))
+
+
+def run_vision_suite(base: str, model: str, ctx: Optional[int], *,
+                     post: Optional[Callable] = None) -> dict:
+    """Read ONE image and check both words in it. The image is embedded in
+    this file as base64 (this module is shipped whole; a `fixtures/` folder is
+    not shipped with it) and decodes to a 448x112 PNG reading "JARVIS 42"."""
+    prompt = ("Read the text in this image. Reply with only the text you can "
+              "see, nothing else.")
+    try:
+        reply = _generate(base, model, prompt, ctx=ctx, num_predict=48,
+                          post=post, image_b64=VISION_IMAGE_PNG_B64)
+    except Exception as exc:
+        return {"ok": False, "passed": False, "skipped": False,
+                "why": f"the model did not answer ({type(exc).__name__})",
+                "words": (f"Nothing was measured: {model} did not answer the "
+                          f"image question ({type(exc).__name__}).")}
+    text = _answer_text(reply)
+    ok = vision_answer_passes(text)
+    return {"ok": True, "passed": ok, "skipped": False,
+            "why": "" if ok else f"read {_normalised_answer(text)[:80]!r}",
+            "words": ("The image text was read correctly."
+                      if ok else "The image text was NOT read correctly."),
+            "items": 1, "items_passed": 1 if ok else 0,
+            "score_pct": 100.0 if ok else 0.0,
+            "per_item": [{"id": "ocr", "pass": bool(ok),
+                          "why": "" if ok else "wrong text"}]}
+
+
+#: Which runner answers which suite ID. One table, so a suite can never be
+#: added to `SUITES` and silently never run.
+SUITE_RUNNERS = {
+    "speed": run_speed_suite,
+    "coding": run_coding_suite,
+    "general": run_general_suite,
+    "tool_calling": run_tool_calling_suite,
+    "vision_ocr": run_vision_suite,
+}
+
+
+def run_one_suite(suite_id: str, base: str, model: str, ctx: Optional[int], *,
+                  identity: Optional[dict] = None,
+                  post: Optional[Callable] = None,
+                  get: Optional[Callable[[str], dict]] = None,
+                  smi: Optional[Callable[[], str]] = None,
+                  clock: Optional[Callable[[], float]] = None,
+                  code_runner: Optional[Callable] = None) -> dict:
+    """Run one suite, with the capability gate and one never-a-fake-score rule.
+
+    A suite whose capability the model does NOT report is `skipped`, with the
+    reason in words, and `passed` is False: BLOCKED is never a pass in this
+    project. A suite that raises is `ok: False` with the exception named - never
+    a zero that would look like a measured result.
+    """
+    suite = next((s for s in SUITES if s["id"] == suite_id), None)
+    if suite is None:
+        return {"suite": suite_id, "ok": False, "passed": False,
+                "skipped": False,
+                "why": SUITE_BAD_SUITE.format(suite=suite_id, keys=SUITE_KEYS),
+                "words": "Nothing was measured: that is not one of the suites."}
+    needed = SUITE_NEEDS_CAPABILITY.get(suite_id)
+    caps = [str(c).lower() for c in ((identity or {}).get("capabilities") or [])]
+    if needed and caps and needed not in caps:
+        return {"suite": suite_id, "ok": True, "passed": False, "skipped": True,
+                "why": (f"{model} does not report {needed} support, so the "
+                        f"{suite['label']} suite was NOT attempted"),
+                "words": (f"{suite['label']}: not run - the model does not "
+                          f"report {needed} support.")}
+    runner = SUITE_RUNNERS[suite_id]
+    kwargs = {"post": post}
+    if suite_id == "speed":
+        kwargs.update({"get": get, "smi": smi, "clock": clock})
+    if suite_id == "coding":
+        kwargs.update({"code_runner": code_runner})
+    try:
+        result = runner(base, model, ctx, **kwargs)
+    except Exception as exc:
+        result = {"ok": False, "passed": False, "skipped": False,
+                  "why": f"the {suite['label']} suite raised "
+                         f"{type(exc).__name__}",
+                  "words": (f"The {suite['label']} suite stopped with "
+                            f"{type(exc).__name__}; nothing is claimed.")}
+    result.setdefault("skipped", False)
+    result["suite"] = suite_id
+    return result
+
+
+# ==========================================================================
+#   Starting a suite run: refusals in order, then the work
+# ==========================================================================
+#
+# THE ORDER IS THE RULING'S (Q3), then this module's existing safety rows:
+#   1. a run is already going;
+#   2. an owner run refuses for ONE busy reason only - a chat/voice turn that is
+#      STREAMING right now (a scheduled run also refuses while anything at all
+#      is using the model, because it may not evict);
+#   3. standby, which exists to keep the cards free (both modes);
+#   4. a multi-step task running (both modes: pausing lanes under a task breaks
+#      it);
+#   5. a scheduled run needs the PC idle: no model loaded on any lane;
+#   6. the POST must carry `confirm`, so a stale screen cannot start a run
+#      nobody agreed to.
+
+def suite_choices(body: dict) -> tuple:
+    """(lane, suites, ctx, mode, notes) from a POST body - validated, never
+    guessed. Raises nothing; the caller refuses on an empty suites list."""
+    body = body if isinstance(body, dict) else {}
+    lane = str(body.get("lane") or "everyday").strip().lower()
+    if lane not in LANE_KEYS:
+        lane = "everyday"
+    wanted = body.get("suites")
+    if not isinstance(wanted, (list, tuple)) or not wanted:
+        suites = list(SUITE_KEYS)
+    else:
+        suites = [str(s).strip().lower() for s in wanted]
+    mode = str(body.get("mode") or "owner").strip().lower()
+    if mode not in ("owner", "scheduled"):
+        mode = "owner"
+    ctx = _int(body.get("num_ctx")) or DEFAULT_SUITE_CTX.get(lane, 16384)
+    notes = []
+    if ctx < 2048:
+        ctx = 2048
+        notes.append("num_ctx below 2,048 was raised to 2,048")
+    return lane, suites, int(ctx), mode, notes
+
+
+def _any_model_loaded(*, get: Optional[Callable[[str], dict]] = None) -> list:
+    """Every model resident on any lane, with its port. Read-only."""
+    found = []
+    for lane, port in LANE_PORTS.items():
+        rows = ps_models(f"http://127.0.0.1:{int(port)}", get=get)
+        for row in rows or []:
+            name = str(row.get("name") or row.get("model") or "")
+            if name:
+                found.append((lane, int(port), name))
+    return found
+
+
+def check_suite_job(body: dict, *, mode: str = "owner",
+                    get: Optional[Callable[[str], dict]] = None,
+                    busy: Optional[Callable[[], Optional[str]]] = None,
+                    standby: Optional[Callable[[], bool]] = None,
+                    tasks: Optional[Callable[[], list]] = None,
+                    running: Optional[Callable[[], Optional[str]]] = None) -> None:
+    """Raise `Refusal` when this POST must not start a suite run."""
+    body = body if isinstance(body, dict) else {}
+
+    # 1. the same one-benchmark-at-a-time lock the speed bench uses.
+    if (running or _current_run)() is not None:
+        raise Refusal(409, SUITE_ALREADY_RUNNING)
+
+    # 2. the ruling's ONE busy refusal for an owner run: a turn streaming now.
+    if busy is not None:
+        sentence = busy()
+    elif mode == "owner":
+        sentence = answer_streaming()
+    else:
+        sentence = (_answer_hold() or {}).get("sentence")
+    if sentence:
+        raise Refusal(409, sentence)
+
+    # 3. standby keeps the cards free on purpose.
+    if (standby or read_standby)():
+        raise Refusal(409, SUITE_STANDBY)
+
+    # 4. a multi-step task continues between turns and would lose its model.
+    if (tasks or running_tasks)():
+        raise Refusal(409, SUITE_TASK_RUNNING)
+
+    # 5. a scheduled run may not evict, so it only runs when nothing is loaded.
+    if mode == "scheduled":
+        held = _any_model_loaded(get=get)
+        if held:
+            raise Refusal(409, SUITE_NOT_IDLE)
+
+    # 6. explicit, machine-checkable consent. An owner run may pause the live
+    #    lane, so it must say so; a scheduled run may not, and must not claim it.
+    confirm = body.get("confirm")
+    if not isinstance(confirm, dict):
+        raise Refusal(400, SUITE_NOT_CONFIRMED)
+    model = str(body.get("model") or "").strip()
+    if model and str(confirm.get("model") or "") not in ("", model):
+        raise Refusal(400, SUITE_NOT_CONFIRMED)
+    wants_evict = bool(confirm.get("may_evict"))
+    if mode == "owner" and not wants_evict:
+        raise Refusal(400, SUITE_NOT_CONFIRMED)
+    if mode == "scheduled" and wants_evict:
+        raise Refusal(400, "a scheduled run may not pause a lane; run it yourself")
+    for suite in suite_choices(body)[1]:
+        if suite not in SUITE_KEYS:
+            raise Refusal(400, SUITE_BAD_SUITE.format(suite=suite,
+                                                      keys=SUITE_KEYS))
+
+
+def start_suites(body: dict, *, spawn: Optional[Callable] = None,
+                 post: Optional[Callable] = None,
+                 get: Optional[Callable[[str], dict]] = None,
+                 show: Optional[Callable[[str, dict], dict]] = None,
+                 smi: Optional[Callable[[], str]] = None,
+                 clock: Optional[Callable[[], float]] = None,
+                 store: Optional[ScoreLog] = None,
+                 busy: Optional[Callable[[], Optional[str]]] = None,
+                 standby: Optional[Callable[[], bool]] = None,
+                 tasks: Optional[Callable[[], list]] = None,
+                 running: Optional[Callable[[], Optional[str]]] = None,
+                 code_runner: Optional[Callable] = None,
+                 spawn_thread: bool = True) -> tuple:
+    """Start ONE five-suite run in the background. (http_status, body).
+
+    Asynchronous, like the speed bench: the work happens on a thread and a
+    screen polls `suite_view(run_id)`. `spawn_thread=False` runs it in place and
+    is for the tests, which want the numbers before the call returns.
+    """
+    body = body if isinstance(body, dict) else {}
+    model = str(body.get("model") or "").strip()
+    if not model:
+        return 400, {"error": "nothing was measured: no model was named"}
+    lane, suites, ctx, mode, notes = suite_choices(body)
+    try:
+        check_suite_job(body, mode=mode, get=get, busy=busy, standby=standby,
+                        tasks=tasks, running=running)
+    except Refusal as exc:
+        return exc.code, exc.body
+    run_id = _new_run_id()
+    with _RUNS_LOCK:
+        _RUNS[run_id] = {
+            "state": "running", "step": 0, "of": len(suites), "partial": False,
+            "notes": notes, "run_id": run_id, "at": int(time.time()),
+            "kind": "suites", "model": model, "lane": lane,
+            "suites": list(suites), "ctx": int(ctx), "mode": mode,
+            "notice": "",
+        }
+
+    def work() -> None:
+        try:
+            _suites_work(run_id, model=model, lane=lane, ctx=ctx, suites=suites,
+                         mode=mode, spawn=spawn, post=post, get=get, show=show,
+                         smi=smi, clock=clock, store=store or ScoreLog(),
+                         code_runner=code_runner)
+        except Exception as exc:                       # never leaves a gap
+            _set_state(run_id, state="failed", partial=True,
+                       why=f"the run stopped ({type(exc).__name__})")
+
+    if not spawn_thread:
+        work()
+        return 200, {"ok": True, "run_id": run_id, "notes": notes,
+                     "message": "Measured."}
+    try:
+        (spawn or _spawn)(work)
+    except Exception:
+        _set_state(run_id, state="failed")
+        return 503, {"error": "could not start the benchmark"}
+    message = ("Measuring now on a throwaway Ollama. "
+               + ("The lane this run needs is paused first and warmed back "
+                  "afterwards." if mode == "owner" else
+                  "It only runs while nothing else is using the model."))
+    return 200, {"ok": True, "run_id": run_id, "notes": notes,
+                 "message": message}
+
+
+def _suites_work(run_id: str, *, model: str, lane: str, ctx: int, suites: list,
+                 mode: str, spawn, post, get, show, smi, clock,
+                 store: ScoreLog, code_runner) -> None:
+    """Start the throwaway server, pause if allowed, run the suites, stop the
+    server and warm the lane back - each step in the only safe order."""
+    notes = list((_state(run_id) or {}).get("notes") or [])
+    choice = card_choice(lane, smi=smi)
+    if not choice["ok"]:
+        _fail_suite_run(run_id, model, lane, pattern=[] ,
+                        why=choice["why"])
+        return
+    chosen_cards = ",".join(str(i) for i in choice["indexes"])
+    paused: list = []
+    results: list = []
+    server: dict = {}
+    identity: dict = {}
+    ollama_v, driver = "", ""
+    try:
+        if mode == "owner":
+            p = pause_for_run(lane, get=get, post=post, clock=clock)
+            paused = p.get("paused") or []
+            if p.get("words"):
+                notes.append(p["words"])
+                _set_state(run_id, notice=p["words"])
+        server = start_throwaway(choice=choice, ctx=ctx, spawn=spawn, get=get,
+                                 clock=clock)
+        if not server.get("ok"):
+            _set_state(run_id, notes=notes)
+            _fail_suite_run(run_id, model, lane, pattern=[],
+                            why=server.get("why") or "the server would not start")
+            return
+        identity = model_identity(server["url"], model, get=get, show=show)
+        names = installed_models(server["url"], get=get)
+        if names is None:
+            _fail_suite_run(run_id, model, lane, pattern=[],
+                            why="the throwaway Ollama did not list its models")
+            return
+        if not any(_same(n, model) for n in names):
+            _fail_suite_run(
+                run_id, model, lane, pattern=[],
+                why=SUITE_MODEL_MISSING.format(
+                    model=model, has=", ".join(sorted(names)[:12]) or "nothing"))
+            return
+        ollama_v = ollama_version(server["url"], get=get) or ""
+        driver = read_cards(smi).get("driver") or ""
+        cancelled = False
+        for i, suite_id in enumerate(suites):
+            st = _state(run_id)
+            if st is None or st.get("cancelled"):
+                cancelled = True
+                break
+            _set_state(run_id, step=i + 1)
+            result = run_one_suite(
+                suite_id, server["url"], model, ctx, identity=identity,
+                post=post, get=get, smi=smi, clock=clock,
+                code_runner=code_runner)
+            results.append(result)
+            suite = next(s for s in SUITES if s["id"] == suite_id)
+            row = scorecard_row(
+                run_id=run_id, identity=identity, lane=lane, suite=suite,
+                model=model, ctx=ctx, result=result, ollama_version=ollama_v,
+                driver=driver, cards_used=chosen_cards)
+            if not store.append(row):
+                notes.append("the scorecard could not be saved to disk")
+        _set_state(run_id, notes=notes, partial=bool(cancelled))
+    except Exception as exc:
+        _fail_suite_run(run_id, model, lane, pattern=[],
+                        why=f"the run stopped ({type(exc).__name__})")
+        return
+    finally:
+        stopped = stop_throwaway(server or {})
+        if stopped.get("why"):
+            notes.append(stopped["why"])
+        if paused:
+            warm = warm_back(paused, get=get, post=post, clock=clock)
+            notes.append("Warmed back: " + "; ".join(warm.get("restored") or [])
+                         if warm.get("ok") else warm.get("why") or "")
+            if not warm.get("ok"):
+                notes.append("THE LANE WAS NOT PUT BACK: " + str(warm.get("why")))
+    result = _suite_run_result(run_id=run_id, model=model, lane=lane, ctx=ctx,
+                               mode=mode, choice=choice, suites=suites,
+                               results=results, paused=paused,
+                               cancelled=bool(cancelled),
+                               notes=notes)
+    _set_state(run_id, state="done" if results and not cancelled else "failed",
+               step=len(results), of=len(suites), partial=bool(cancelled),
+               result=result, notes=notes)
+
+
+def _suite_run_result(*, run_id: str, model: str, lane: str, ctx: int,
+                      mode: str, choice: dict, suites: list, results: list,
+                      paused: list, cancelled: bool, notes: list) -> dict:
+    """The one sentence a screen shows, and the per-suite results behind it."""
+    skipped = [r for r in results if r.get("skipped")]
+    failed = [r for r in results if not r.get("skipped") and not r.get("passed")]
+    passed_all = (bool(results) and not cancelled and not skipped and not failed
+                  and all(r.get("ok") for r in results))
+    parts = []
+    for r in results:
+        label = next((s["label"] for s in SUITES if s["id"] == r.get("suite")),
+                     r.get("suite"))
+        if r.get("skipped"):
+            parts.append(f"{label} NOT RUN")
+        elif not r.get("ok"):
+            parts.append(f"{label} failed")
+        elif r.get("suite") == "speed":
+            tps = r.get("decode_tps")
+            parts.append(f"{label} {'promotion-grade' if r.get('promotion_grade') else 'SPILLED'}"
+                         + (f" at {tps:.1f} tok/s" if tps else ""))
+        else:
+            parts.append(f"{label} {r.get('items_passed')}/{r.get('items')}")
+    words = (f"{model} on the {choice.get('name') or 'card'} at {int(ctx):,} tokens: "
+             + _sentence(parts) + "." if results else
+             "Nothing was measured.")
+    return {"kind": "suites", "run": run_id, "model": model, "lane": lane,
+            "card": choice.get("name") or "", "cards_used": choice.get("indexes"),
+            "ctx": int(ctx), "mode": mode, "requested": list(suites),
+            "results": results, "passed": passed_all, "cancelled": bool(cancelled),
+            "paused": paused, "notes": notes, "words": words,
+            "measured_on": "this_pc"}
+
+
+def _fail_suite_run(run_id: str, model: str, lane: str, *, pattern: list,
+                    why: str) -> None:
+    """A suite run that died writes NOTHING to the scorecard store - a fake row
+    with zeros would be read as a measurement. The failure is in the run state,
+    in one sentence."""
+    _set_state(run_id, state="failed", partial=True,
+               why=str(why)[:MAX_REASON],
+               result={"kind": "suites", "run": run_id, "model": model,
+                       "lane": lane, "passed": False, "results": pattern,
+                       "words": f"Nothing was measured: {str(why)[:MAX_WORDS]}"},
+               notes=list((_state(run_id) or {}).get("notes") or [])
+               + [str(why)[:MAX_REASON]])
+
+
+def suite_view(run_id: str, *, store: Optional[ScoreLog] = None) -> tuple:
+    """(status, body) for one suite run - live from memory, then the store."""
+    st = _state(run_id)
+    if st is not None:
+        out = {"state": st.get("state"), "step": st.get("step"),
+               "of": st.get("of"), "partial": bool(st.get("partial")),
+               "kind": "suites", "model": st.get("model"),
+               "lane": st.get("lane"), "ctx": st.get("ctx")}
+        if st.get("notice"):
+            out["notice"] = st["notice"]
+        if st.get("notes"):
+            out["notes"] = list(st["notes"])
+        if st.get("state") in ("done", "failed") and st.get("result"):
+            out["result"] = st["result"]
+        if st.get("why"):
+            out["why"] = st["why"]
+        return 200, out
+    rows = (store or ScoreLog()).by_run(run_id)
+    if not rows:
+        return 404, {"error": "no suite run with that id"}
+    model = str(rows[0].get("model") or "")
+    notes = [f"{len(rows)} scorecard row(s) on file for this run"]
+    results = [{"suite": r.get("suite"), "ok": bool(r.get("ok")),
+                "passed": bool(r.get("passed")),
+                "skipped": bool(r.get("skipped")),
+                "why": r.get("why") or "", "words": r.get("words") or "",
+                "score_pct": r.get("score_pct"),
+                "decode_tps": r.get("decode_tps")} for r in rows]
+    return 200, {"state": "done", "step": len(rows), "of": len(rows),
+                 "partial": False, "kind": "suites", "model": model,
+                 "notes": notes,
+                 "result": {"kind": "suites", "run": run_id, "model": model,
+                            "passed": all(r.get("passed") for r in results),
+                            "results": results,
+                            "words": "Read from the scorecard history."}}
+
+
+def cancel_suite(run_id: str) -> tuple:
+    """Ask a suite run to stop after the suite in flight. The request already
+    sent is never cut off; what has been measured stays measured."""
+    st = _state(run_id)
+    if st is None:
+        return 404, {"error": "no suite run with that id"}
+    if st.get("state") != "running":
+        return 409, {"error": "that run has already finished"}
+    _set_state(run_id, cancelled=True)
+    return 200, {"ok": True, "cancelled": True}
+
+
+# ==========================================================================
+#   The measure-first promotion harness (Q2, as code)
+# ==========================================================================
+#
+# WHAT THIS IS. The owner's ruling: a preset default may change only when a
+# measured run shows (1) zero spill at the preset's own window, (2) quality not
+# worse on the domain rubric, and (3) the preset's speed floor. This turns two
+# scorecards into those three checks and a verdict - and the verdict can say
+# "keep the current default" perfectly well. It NEVER changes a preset; the
+# `applied` key is always False and the words say which existing card would be
+# the only way to apply one.
+
+def promotion_plan(pair_id: str) -> dict:
+    """What to measure for one pair, so a screen can offer the run."""
+    pair = next((p for p in PROMOTION_PAIRS if p["id"] == pair_id), None)
+    if pair is None:
+        return {"ok": False,
+                "why": f"no promotion pair called {pair_id!r}; there are: "
+                       + ", ".join(p["id"] for p in PROMOTION_PAIRS)}
+    return {"ok": True, "pair": dict(pair),
+            "message": (f"Measure {pair['candidate']} and {pair['incumbent']} on "
+                        f"a throwaway server at {pair['ctx']:,} tokens, then "
+                        f"compare: zero spill, the {pair['preset']} rubric not "
+                        f"worse, and the speed floor. Nothing is applied."),
+            "suites": list(pair["suites"]), "ctx": pair["ctx"]}
+
+
+def _rows_for(scorecards: dict, model: str) -> dict:
+    """{suite: row} for one model out of `latest_scorecards()`."""
+    bare = _bare(model)
+    return {suite: row for (name, suite), row in (scorecards or {}).items()
+            if name == bare}
+
+
+def promotion_checks(pair: dict, incumbent: dict, candidate: dict) -> list:
+    """The three Q2 checks, each with a plain sentence. Every check must pass
+    for the verdict to promote; a missing measurement fails its own check
+    rather than being skipped."""
+    checks: list = []
+    suites = list(pair.get("suites") or ())
+    missing = []
+    for name, rows in ((pair.get("incumbent"), incumbent),
+                       (pair.get("candidate"), candidate)):
+        for suite in suites:
+            if suite not in rows:
+                missing.append(f"{name} {suite}")
+    checks.append({
+        "check": "both models measured at the preset's window",
+        "pass": not missing,
+        "detail": ("both have a scorecard" if not missing else
+                   "no scorecard yet for: " + ", ".join(missing)),
+    })
+    speed = candidate.get("speed") or {}
+    spill = speed.get("spill_bytes")
+    pct = speed.get("on_card_percent")
+    spill_pass = (spill == 0 and pct == 100)
+    checks.append({
+        "check": "zero spill at the preset's target context",
+        "pass": bool(spill_pass),
+        "detail": (f"candidate spilled {spill} B, {pct}% on card"
+                   if spill is not None else
+                   "the candidate has no speed scorecard showing its spill"),
+    })
+    for suite in [s for s in suites if s != "speed"]:
+        inc = (incumbent.get(suite) or {}).get("score_pct")
+        cand = (candidate.get(suite) or {}).get("score_pct")
+        worse = inc is not None and cand is not None and float(cand) < float(inc)
+        checks.append({
+            "check": f"quality not worse on the {suite} rubric",
+            "pass": bool(inc is not None and cand is not None and not worse),
+            "detail": (f"candidate {cand}%, current default {inc}%"
+                       if inc is not None and cand is not None else
+                       f"missing a {suite} score for "
+                       + ("the candidate" if cand is None else "the current default")),
+        })
+    floor = PROMOTION_DECODE_FLOOR.get(str(pair.get("preset") or ""))
+    tps = speed.get("decode_tps")
+    if floor is None:
+        checks.append({"check": "speed floor", "pass": False,
+                       "detail": f"no floor is defined for preset "
+                                 f"{pair.get('preset')!r}"})
+    else:
+        checks.append({
+            "check": f"speed floor of {floor:g} tokens a second",
+            "pass": bool(isinstance(tps, (int, float)) and not isinstance(tps, bool)
+                         and float(tps) >= float(floor)),
+            "detail": (f"candidate {float(tps):.1f} tok/s" if isinstance(tps, (int, float))
+                       and not isinstance(tps, bool) else
+                       "the candidate has no measured decode speed"),
+        })
+    return checks
+
+
+def promotion_verdict(pair: dict, incumbent: dict, candidate: dict) -> dict:
+    """The verdict for ONE pair, as a dict a screen can render. Never applies."""
+    checks = promotion_checks(pair, incumbent, candidate)
+    promote = all(c["pass"] for c in checks)
+    failed = [c for c in checks if not c["pass"]]
+    if promote:
+        words = (f"Measured evidence supports {pair['candidate']} over "
+                 f"{pair['incumbent']} for the {pair['preset']} preset: zero "
+                 f"spill, no worse on its rubric, above the speed floor. "
+                 f"Nothing has been changed.")
+    else:
+        words = (f"Keep {pair['incumbent']} as the {pair['preset']} default: "
+                 + "; ".join(f"{c['check']} - {c['detail']}" for c in failed)
+                 + ". Nothing has been changed.")
+    return {"pair": pair.get("id"), "preset": pair.get("preset"),
+            "incumbent": pair.get("incumbent"),
+            "candidate": pair.get("candidate"), "ctx": pair.get("ctx"),
+            "suites": list(pair.get("suites") or ()),
+            "promote": promote, "checks": checks, "applied": False,
+            "words": words,
+            "note": ("a preset default only changes through the existing "
+                     "approval card; this verdict does not touch one")}
+
+
+def pair_verdict(pair_id: str, *, scores: Optional[dict] = None,
+                 store: Optional[ScoreLog] = None) -> dict:
+    """The verdict for one named pair, from the newest stored scorecards.
+
+    `scores` is `latest_scorecards()`'s shape ({(model, suite): row}); a test
+    hands a fake one, a route hands none and the store is read. Read-only.
+    """
+    pair = next((p for p in PROMOTION_PAIRS if p["id"] == pair_id), None)
+    if pair is None:
+        return {"ok": False, "applied": False,
+                "why": f"no promotion pair called {pair_id!r}; there are: "
+                       + ", ".join(p["id"] for p in PROMOTION_PAIRS)}
+    cards = scores if scores is not None else latest_scorecards(store=store)
+    out = promotion_verdict(pair, _rows_for(cards, pair["incumbent"]),
+                            _rows_for(cards, pair["candidate"]))
+    out["ok"] = True
+    return out
+
+
+def promotion_pairs_view(*, store: Optional[ScoreLog] = None) -> dict:
+    """Every pair and its verdict - the read shape a screen offers.
+
+    Deterministic and read-only: no model is called, no card is raised and no
+    preset is applied.
+    """
+    cards = latest_scorecards(store=store)
+    verdicts = [pair_verdict(p["id"], scores=cards) for p in PROMOTION_PAIRS]
+    return {"pairs": verdicts, "measured_on": "this_pc",
+            "note": ("scorecards come from the five suites run on a throwaway "
+                     "Ollama; a missing pair reads as 'keep the current default' "
+                     "because there is no measurement to promote on")}

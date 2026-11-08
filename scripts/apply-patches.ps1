@@ -3124,6 +3124,14 @@ $SHIPPED = @(
     # stays LAST.
     'jarvis_self_code.py'
     'jarvis-self-code.json'
+    # The hardware-aware model recommender (jarvis_model_recommender.py,
+    # 2026-11-07, Wave-9 Lane 3; the owner's Q6 ruling): what model should THIS
+    # PC run? for any PC, from the detected cards/VRAM/RAM and this PC's own
+    # scorecards, every row labelled MEASURED ON THIS PC or ESTIMATED FIT.
+    # Read-only, no card, no model call; its chat hook is documented in its
+    # docstring for jarvis_quick. The same entry, in the same position, is in
+    # backend/_where.py's SHIPPED list.
+    'jarvis_model_recommender.py',
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

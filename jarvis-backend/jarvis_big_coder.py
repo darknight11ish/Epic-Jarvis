@@ -142,6 +142,86 @@ LANES = (
 )
 
 
+# --------------------------------------------------------------------------
+#   The modes ONE pooled three-card server can carry (Wave-9 Lane 3)
+# --------------------------------------------------------------------------
+#
+# WHAT THIS IS. The pooled lane was the Coding preset's own lane: one Ollama
+# across all three cards, one fixed model and window. The owner's Wave-9 packet
+# asks for the same lane to be able to load the two models the 2026-11-07
+# three-card sweep measured for the heavy presets, `deep_think`
+# (`gemma4:31b-it-qat`) and `creative`
+# (`orcarouter/Qwen3.8-27B-Uncensored:q4_K_M`), as well as `coding`.
+#
+# THE DEFAULTS DO NOT MOVE. `coding` is still what every existing caller gets
+# when it passes no mode: same model, same 49,152-token window, same zero-spill
+# rule. A mode is a CAPABILITY here, not a preset change - the packet is
+# explicit that a shipped preset default may only change after a measured
+# promotion result (the bar `jarvis_bench.PROMOTION_PAIRS` applies).
+#
+# WHERE THE NUMBERS COME FROM. Every window and measured sentence below is a
+# row of docs/MEASURED-2026-11-07-THREE-GPU.md, run on THIS PC's three cards on
+# 2026-11-07. A mode whose window was never measured does not exist here.
+
+class Mode(NamedTuple):
+    key: str
+    label: str
+    model: str
+    num_ctx: int
+    measured_words: str
+    spill_allowance: int
+    needs_cards: int
+    suites: tuple
+    decode_floor: Optional[float]
+    model_bytes: Optional[int]
+    model_sha256: str
+
+
+#: Every mode the pooled lane can load, `coding` first because it is the
+#: default. `suites`/`decode_floor` are the promotion bar for that domain
+#: (`jarvis_bench.PROMOTION_PAIRS`); `None` means "not a preset default, so no
+#: floor to clear".
+MODES = (
+    Mode("coding", "Coding", MODEL, NUM_CTX,
+         "measured on all three cards with no CPU spill at 83.8 tokens a second",
+         0, NEEDS_CARDS, ("speed", "coding"), 75.0, MODEL_BYTES, MODEL_SHA256),
+    Mode("deep_think", "Deep think", "gemma4:31b-it-qat", 32768,
+         "measured on all three cards with no CPU spill at 15.5 tokens a second",
+         0, NEEDS_CARDS, ("speed", "general"), None, None, ""),
+    Mode("creative", "Creative", "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
+         32768,
+         "measured on all three cards with no CPU spill at 17.7 tokens a second",
+         0, NEEDS_CARDS, ("speed", "general"), None, None, ""),
+)
+
+#: The mode a caller gets when it does not name one. Kept as a constant so a
+#: test can prove the default did not move.
+DEFAULT_MODE = "coding"
+
+MODE_KEYS = tuple(m.key for m in MODES)
+
+
+def mode_profile(key: Optional[str] = None) -> Mode:
+    """The named mode, or `coding`. An UNKNOWN key is not silently the coding
+    mode: it raises, so a typo in a route is a refusal rather than a 30B model
+    loaded under the wrong sentence."""
+    want = str(key or DEFAULT_MODE).strip().lower()
+    for m in MODES:
+        if m.key == want:
+            return m
+    raise ValueError(f"{key!r} is not one of the pooled modes: "
+                     + ", ".join(MODE_KEYS))
+
+
+def modes_view() -> list:
+    """Every mode as plain data a screen can list. Read-only."""
+    return [{"key": m.key, "label": m.label, "model": m.model,
+             "num_ctx": m.num_ctx, "measured_words": m.measured_words,
+             "needs_cards": m.needs_cards, "decode_floor": m.decode_floor,
+             "is_default": m.key == DEFAULT_MODE} for m in MODES]
+
+
+
 def _bare(name) -> str:
     """A model name without a ":latest" Ollama adds for itself."""
     x = str(name or "").strip()
@@ -552,21 +632,27 @@ def cards_note(cards: Optional[list], *, num_ctx: Optional[int] = None) -> str:
 
 
 def card_text_start(*, num_ctx: Optional[int] = None,
-                    measured_words: Optional[str] = None) -> str:
+                    measured_words: Optional[str] = None,
+                    mode: str = DEFAULT_MODE) -> str:
     """The card the owner reads, naming the window THIS start will ask for.
 
     The big-coder mode calls this with no arguments and gets the sentence it
     now has: `NUM_CTX` (49,152) measured on all three cards with no spill at
     83.8 tok/s. The Coding preset's pooled lane passes its own measured rung
-    and the plain words for that measurement. One card text, one copy of the
-    pause and the lane lines, each start's own number.
+    and the plain words for that measurement. Wave-9 adds `mode`: the pooled
+    lane can also carry `deep_think` and `creative`, and each mode's own
+    measured sentence comes from `MODES` rather than from a second copy here.
+    One card text, one copy of the pause and the lane lines, each start's own
+    number.
     """
+    m = mode_profile(mode)
     cards = cards_in_pc()
-    ctx = int(num_ctx or NUM_CTX)
-    measured = measured_words or ("measured on all three cards with no CPU spill at "
-                                  "83.8 tokens a second")
+    ctx = int(num_ctx or m.num_ctx)
+    measured = measured_words or m.measured_words
+    what = ("big coding model" if m.key == DEFAULT_MODE
+            else f"{m.label} model")
     return "\n".join([
-        "Use the big coding model: qwen3-coder-30b-a3b-ud-q3-k-xl.",
+        f"Use the {what}: {m.model}.",
         "",
         cards_words(cards),
         "",
@@ -645,7 +731,8 @@ def pause_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
 
 def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
                num_ctx: Optional[int] = None,
-               allow_spill: Optional[int] = None) -> dict:
+               allow_spill: Optional[int] = None,
+               mode: str = DEFAULT_MODE) -> dict:
     """Load the 30B on the three-card server and prove from /api/ps that it
     fits: present, at the context asked for, and with no spill beyond what the
     caller has measured and accepted. On anything else it is unloaded again and
@@ -667,58 +754,59 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     `jarvis_model_lanes` passes 0 since 2026-11-07, because the three-card
     window loaded with zero spill (`docs/MEASURED-2026-11-07-THREE-GPU.md`).
     """
-    ctx_wanted = int(num_ctx or NUM_CTX)
+    m = mode_profile(mode)
+    ctx_wanted = int(num_ctx or m.num_ctx)
     # A PC with fewer cards than this window was measured on is refused
     # BEFORE anything is loaded: the words already say it will not start,
     # and a load attempted anyway would spill or fail with a worse message.
     cards = cards_in_pc()
-    if cards is not None and len(cards) < NEEDS_CARDS:
+    if cards is not None and len(cards) < m.needs_cards:
         return {"ok": False,
-                "why": (f"{MODEL} needs all {NEEDS_CARDS} graphics cards at "
+                "why": (f"{m.model} needs all {m.needs_cards} graphics cards at "
                         f"{ctx_wanted:,} tokens, and this PC has {len(cards)}; "
                         "nothing was loaded."),
                 "proof": []}
     url = url_for(port)
-    if not load(url, MODEL, ctx_wanted):
+    if not load(url, m.model, ctx_wanted):
         return {"ok": False, "why": f"the three-card Ollama on port {port} did not load "
-                                    f"{MODEL}", "proof": []}
-    rows = _settle(url, MODEL, gone=False)
-    row = _row_for(rows, MODEL)
+                                    f"{m.model}", "proof": []}
+    rows = _settle(url, m.model, gone=False)
+    row = _row_for(rows, m.model)
     if row is None:
-        return {"ok": False, "why": f"{MODEL} is not in /api/ps after loading it",
+        return {"ok": False, "why": f"{m.model} is not in /api/ps after loading it",
                 "proof": []}
     spill = _spill(row)
     ctx = row.get("context_length")
-    proof = [f"port {port}: {MODEL} ctx={ctx} size={row.get('size')} "
+    proof = [f"port {port}: {m.model} ctx={ctx} size={row.get('size')} "
              f"size_vram={row.get('size_vram')} spill={spill}"]
     # allow_spill=None (every caller except the pooled lane) and
     # allow_spill=0 (the pooled lane since 2026-11-07) mean the same thing:
     # NO spill is accepted; a positive number is a measured allowance.
-    allowed = int(allow_spill or 0)
+    allowed = int(m.spill_allowance if allow_spill is None else allow_spill)
     if spill is None or spill > allowed:
-        unload(url, MODEL)
+        unload(url, m.model)
         if spill is None:
-            why = (f"{MODEL} loaded and the server did not say how much of it was in "
+            why = (f"{m.model} loaded and the server did not say how much of it was in "
                    f"video memory - " +
                    (f"the {allowed} B measured allowance for {ctx_wanted} tokens could "
                     f"not be checked" if allow_spill is not None else
                     f"this caller accepts no spill, so it could not be proved to fit") +
                    ", and it was unloaded again")
         elif allow_spill:
-            why = (f"{MODEL} loaded with {spill} B of spill, over the {allowed} B "
+            why = (f"{m.model} loaded with {spill} B of spill, over the {allowed} B "
                    f"measured allowance for {ctx_wanted} tokens - it needs the whole three-card pool, "
                    f"and this machine gave it less video memory than that measurement, "
                    f"so it was unloaded again")
         else:
-            why = (f"{MODEL} loaded with spill ({spill} B not in video memory) - it "
+            why = (f"{m.model} loaded with spill ({spill} B not in video memory) - it "
                    f"needs all three cards and this machine could not give it all three, so it "
                    f"was unloaded again")
         return {"ok": False, "why": why, "proof": proof}
     try:
         if ctx is not None and int(ctx) != ctx_wanted:
-            unload(url, MODEL)
+            unload(url, m.model)
             return {"ok": False,
-                    "why": (f"{MODEL} loaded at {ctx} tokens, not the measured "
+                    "why": (f"{m.model} loaded at {ctx} tokens, not the measured "
                             f"{ctx_wanted} - it was unloaded again"),
                     "proof": proof}
     except (TypeError, ValueError):
@@ -726,18 +814,25 @@ def load_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
     return {"ok": True, "why": "", "proof": proof, "row": row}
 
 
-def unload_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT) -> dict:
-    """Unload the 30B and prove it is gone. {"ok", "why", "proof"}."""
+def unload_coder(*, url_for: Callable[[int], str] = _url, port: int = BIG_PORT,
+                 mode: str = DEFAULT_MODE,
+                 model: Optional[str] = None) -> dict:
+    """Unload one mode's model (or an explicit `model`) and prove it is gone.
+
+    `model=` exists for `stop()`, which unloads whatever the three-card server
+    is holding right now - including a mode this process did not start.
+    """
+    target = str(model or mode_profile(mode).model)
     url = url_for(port)
-    unload(url, MODEL)
-    rows = _settle(url, MODEL, gone=True)
+    unload(url, target)
+    rows = _settle(url, target, gone=True)
     if rows is None:
         return {"ok": True, "why": "the server had already stopped, so nothing is loaded",
                 "proof": [f"port {port}: no answer, so nothing is resident"]}
-    if _row_for(rows, MODEL) is not None:
-        return {"ok": False, "why": f"{MODEL} is STILL loaded after being asked to unload",
-                "proof": [f"port {port}: {MODEL} is still in /api/ps"]}
-    return {"ok": True, "why": "", "proof": [f"port {port}: {MODEL} is not loaded"]}
+    if _row_for(rows, target) is not None:
+        return {"ok": False, "why": f"{target} is STILL loaded after being asked to unload",
+                "proof": [f"port {port}: {target} is still in /api/ps"]}
+    return {"ok": True, "why": "", "proof": [f"port {port}: {target} is not loaded"]}
 
 
 def restore_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
@@ -783,16 +878,37 @@ def restore_lanes(*, url_for: Callable[[int], str] = _url) -> dict:
 # --------------------------------------------------------------------------
 
 
-def running() -> bool:
-    """Is the mode on NOW? Evidence first: the model in /api/ps on the
-    both-cards server. Only when that server does not answer does the
+def running(mode: str = DEFAULT_MODE) -> bool:
+    """Is THIS mode on NOW? Evidence first: the model in /api/ps on the
+    three-card server. Only when that server does not answer does the
     in-memory record decide - and a server that does not answer holds
     nothing."""
+    m = mode_profile(mode)
     rows = ps(_url(BIG_PORT))
     if rows is not None:
-        return _row_for(rows, MODEL) is not None
+        return _row_for(rows, m.model) is not None
     with _STATE_LOCK:
-        return bool(STATE.get("running"))
+        return (bool(STATE.get("running"))
+                and STATE.get("mode", DEFAULT_MODE) == m.key)
+
+
+def running_mode() -> Optional[str]:
+    """Which pooled mode, if any, the three-card server holds right now.
+
+    The three modes share one server and one model at a time, so this is
+    also the answer to "is the big mode on at all" - `start()` refuses to
+    load a second one beside it.
+    """
+    rows = ps(_url(BIG_PORT))
+    if rows is not None:
+        for m in MODES:
+            if _row_for(rows, m.model) is not None:
+                return m.key
+        return None
+    with _STATE_LOCK:
+        if STATE.get("running") and STATE.get("mode") in MODE_KEYS:
+            return STATE.get("mode")
+    return None
 
 
 def state() -> dict:
@@ -835,6 +951,8 @@ def status() -> dict:
             "loaded": [r["name"] for r in (big_rows or [])],
         },
         "lanes": lanes,
+        "modes": modes_view(),
+        "running_mode": running_mode(),
         "words": card_text_start(),
         "off_words": card_text_off(),
         "what_a_start_would_do": [
@@ -876,29 +994,46 @@ def set_enabled(on, *, by: str = "", gate_check: Optional[Callable] = None) -> t
 def start(*, by: str = "", gate_check: Optional[Callable] = None,
           tasks: Optional[Callable] = None,
           url_for: Callable[[int], str] = _url,
-          start_server: Optional[Callable] = None) -> tuple:
+          start_server: Optional[Callable] = None,
+          mode: str = DEFAULT_MODE) -> tuple:
     """Start the mode: announce, pause both lanes, load the 30B on all three cards.
 
     The order is the contract, and it is why this function is one function:
     the announcement goes out BEFORE the first unload, both lanes are proved
     paused before anything is loaded, and ANY failure puts back what was taken
     and loads nothing. Returns (http status, body)."""
+    try:
+        m = mode_profile(mode)
+    except ValueError as exc:
+        return 400, {"ok": False, "running": False, "error": str(exc)}
     if not enabled():
         return 409, {"ok": False, "running": False,
                      "error": ("the big coding model is switched off - turn it on in "
                                "Settings first, or ask Jarvis to")}
-    if running():
-        return 200, {"ok": True, "running": True, "changed": False,
-                     "message": "The big coding model is already running."}
+    current = running_mode()
+    if current is not None:
+        if current == m.key:
+            return 200, {"ok": True, "running": True, "changed": False,
+                         "mode": m.key, "model": m.model,
+                         "message": (
+                             "The big coding model is already running."
+                             if m.key == DEFAULT_MODE else
+                             f"The {m.label.lower()} model is already running.")}
+        other = mode_profile(current)
+        return 409, {"ok": False, "running": True, "changed": False,
+                     "mode": current, "model": other.model,
+                     "error": (f"the {other.label.lower()} model ({other.model}) "
+                               "is already using the three-card server - stop it "
+                               "before starting another mode")}
     live = (tasks or _running_tasks)()
     if live:
         return 409, {"ok": False, "running": False,
                      "error": ("a task is running - stop it first, or pausing the two models "
                                "would break it")}
-    words = card_text_start()
+    words = card_text_start(mode=m.key)
     verdict = (gate_check or _gate)(
         ACTION_POWER, {"text": words},
-        f"pause both model lanes and load {MODEL}, asked from {by or 'an app'}")
+        f"pause both model lanes and load {m.model}, asked from {by or 'an app'}")
     if not getattr(verdict, "allowed", False):
         return 200, {"ok": False, "running": False, "changed": False,
                      "outcome": str(getattr(verdict, "outcome", "refused")),
@@ -915,9 +1050,11 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
         server_stop()
         return 409, {"ok": False, "running": False, "error": paused["why"],
                      "paused": paused["proof"]}
-    loaded = load_coder(url_for=url_for, port=_port_of(srv.get("url")))
+    loaded = load_coder(url_for=url_for, port=_port_of(srv.get("url")),
+                        mode=m.key)
     if not loaded["ok"]:
-        unload_coder(url_for=url_for, port=_port_of(srv.get("url")))
+        unload_coder(url_for=url_for, port=_port_of(srv.get("url")),
+                     mode=m.key)
         back = restore_lanes(url_for=url_for)
         server_stop()
         out = {"ok": False, "running": False, "error": loaded["why"],
@@ -926,40 +1063,65 @@ def start(*, by: str = "", gate_check: Optional[Callable] = None,
             out["error"] = out["error"] + " " + back["why"]
         return 503, out
     _set_state(running=True, since=time.time(), by=by or "an app",
+               mode=m.key, model=m.model, ctx=m.num_ctx,
                proof=list(paused["proof"]) + list(loaded["proof"]))
-    _publish("big-coder", {"state": "running", "model": MODEL, "ctx": NUM_CTX})
-    _audit("big_coder.start", {"model": MODEL, "ctx": NUM_CTX, "by": by or "an app"})
-    return 200, {"ok": True, "running": True, "changed": True, "model": MODEL,
-                 "num_ctx": NUM_CTX,
-                 "message": (f"The big coding model is running on all three cards at {NUM_CTX:,} "
-                             f"tokens. The two models are paused and come back when you "
-                             f"stop it."),
+    _publish("big-coder", {"state": "running", "mode": m.key,
+                           "model": m.model, "ctx": m.num_ctx})
+    _audit("big_coder.start", {"mode": m.key, "model": m.model,
+                               "ctx": m.num_ctx, "by": by or "an app"})
+    return 200, {"ok": True, "running": True, "changed": True,
+                 "mode": m.key, "model": m.model, "num_ctx": m.num_ctx,
+                 "message": (
+                     f"The big coding model is running on all three cards at "
+                     f"{m.num_ctx:,} tokens. The two models are paused and come "
+                     f"back when you stop it."
+                     if m.key == DEFAULT_MODE else
+                     f"The {m.label.lower()} model ({m.model}) is running on all "
+                     f"three cards at {m.num_ctx:,} tokens. The two models are "
+                     f"paused and come back when you stop it."),
                  "paused": paused["proof"], "proof": loaded["proof"]}
 
 
-def stop(*, by: str = "", url_for: Callable[[int], str] = _url) -> tuple:
+def stop(*, by: str = "", url_for: Callable[[int], str] = _url,
+         mode: Optional[str] = None) -> tuple:
     """Stop the mode: unload the 30B, stop the server this mode started, and
     put both lanes back exactly as they were - proved from /api/ps. Returns
     (http status, body)."""
-    if not running() and not state().get("running"):
+    current = running_mode()
+    try:
+        target = mode_profile(mode or current or DEFAULT_MODE)
+    except ValueError as exc:
+        return 400, {"ok": False, "running": current is not None,
+                     "error": str(exc)}
+    if current is None and not state().get("running"):
         back = restore_lanes(url_for=url_for)
         return 200, {"ok": back["ok"], "running": False, "changed": False,
-                     "message": "The big coding model is not running.",
+                     "mode": target.key,
+                     "message": ("The big coding model is not running."
+                                 if target.key == DEFAULT_MODE else
+                                 f"The {target.label.lower()} model is not "
+                                 "running."),
                      "restored": back["proof"],
                      **({"error": back["why"]} if not back["ok"] else {})}
-    gone = unload_coder(url_for=url_for)
+    gone = unload_coder(url_for=url_for, port=BIG_PORT,
+                        mode=target.key, model=(target.model if current is None
+                                                 else None))
     server_stop()
     back = restore_lanes(url_for=url_for)
-    _set_state(running=False, since=None, proof=back["proof"])
-    _publish("big-coder", {"state": "stopped"})
+    _set_state(running=False, since=None, mode=None, proof=back["proof"])
+    _publish("big-coder", {"state": "stopped", "mode": target.key})
     _audit("big_coder.stop", {"restored": back["ok"], "by": by or "an app"})
     if not gone["ok"] or not back["ok"]:
         error = "; ".join(x for x in (gone["why"], back["why"]) if x)
         return 503, {"ok": False, "running": False, "changed": True, "error": error,
                      "unloaded": gone["proof"], "restored": back["proof"]}
     return 200, {"ok": True, "running": False, "changed": True,
-                 "message": ("The big coding model is stopped and the two models are back: "
-                             + "; ".join(lane_lines())),
+                 "mode": target.key,
+                 "message": (
+                     "The big coding model is stopped and the two models are back: "
+                     if target.key == DEFAULT_MODE else
+                     f"The {target.label.lower()} model is stopped and the two "
+                     "models are back: ") + "; ".join(lane_lines()),
                  "unloaded": gone["proof"], "restored": back["proof"]}
 
 
@@ -983,8 +1145,12 @@ def handle_post(body, *, by: str = "") -> tuple:
     if "on" in body:
         return set_enabled(body.get("on"), by=by)
     action = str(body.get("action") or "").strip().lower()
+    mode = str(body.get("mode") or DEFAULT_MODE).strip().lower()
+    if action in ("start", "stop") and mode not in MODE_KEYS:
+        return 400, {"error": (f"mode {mode!r} is not one of the pooled "
+                                f"modes: " + ", ".join(MODE_KEYS))}
     if action == "start":
-        return start(by=by)
+        return start(by=by, mode=mode)
     if action == "stop":
-        return stop(by=by)
+        return stop(by=by, mode=mode)
     return 400, {"error": "send {\"on\": true|false} or {\"action\": \"start\"|\"stop\"}"}
