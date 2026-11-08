@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -105,6 +106,16 @@ ASKED = (
     "what did the test prove?",
     "i connected github",
 )
+
+#: GH-5: the overclaim words. The audit requires that a GitHub chat answer never
+#: says them, so the deterministic answers refuse code changes in plain words
+#: ("never copy a repository to this PC, send code back") instead.
+BAN = re.compile(r"cloning|pushing|pulling", re.I)
+
+
+def _ban_free(text: str) -> bool:
+    return not BAN.search(str(text or ""))
+
 
 #: Lines the model actually produced in the owner's transcript. NONE may appear
 #: in the deterministic answer: they were the bug.
@@ -265,9 +276,10 @@ def t_the_transcripts_exact_sentences_answer_from_the_receipt():
     check("... it names the honest surface, not an invented one",
           "search github" in low and "private repositories" in low
           and "watch ci" in low and "approval card" in low, said[:400])
-    check("... it names the never-list in the same breath",
-          "never clone, push or pull code" in low
-          and "never merge, commit, close or delete" in low, said[:400])
+    check("... its capability half refuses code changes in plain words, without "
+          "the overclaim words (GH-5)",
+          "never copy a repository" in low and "no merge action or merge card" in low
+          and _ban_free(said), said[:400])
     check("... and NONE of the transcript's invented lines survives",
           _no_claims(said), [bad for bad in OVERCLAIMS if bad in low])
     check("... the answer does not depend on which wording he used",
@@ -347,39 +359,113 @@ def t_nothing_saved_says_nothing_saved_yet():
         check("... with the one real door to fix it",
               "connect my github" in low and "never in chat" in low, said[:400])
         check("... and the honest capability list, not an invented one",
-              "never clone, push or pull code" in low and "private repositories" in low,
-              said[:400])
+              "search github" in low and "private repositories" in low
+              and _ban_free(said), said[:400])
         check("... no claim of connection anywhere", _no_claims(said))
 
     _without_env(lambda: _with_store(shelf, run))
 
 
 # --------------------------------------------------------------------------
+#   2b. GH-2: the status answer, its socket, and the verifier
+# --------------------------------------------------------------------------
+
+class _NoSocket:
+    """Any network call through the injected request hook fails the check."""
+
+    def __call__(self, *a, **k):
+        raise AssertionError("a socket was opened")
+
+
+def t_status_without_a_token_opens_no_socket():
+    shelf = StoreShelf()
+    _reset_receipts()
+
+    def run():
+        saved = C._REQUEST
+        C._REQUEST = _NoSocket()
+        try:
+            intent, result = _ran("is github connected?")
+        finally:
+            C._REQUEST = saved
+        check("with no receipt, 'is github connected?' keeps the connect status answer",
+              intent is not None and intent.name == "connect_account"
+              and intent.f.get("ask") == "status",
+              None if intent is None else (intent.name, intent.f))
+        said = result.reply if result is not None else ""
+        check("... no token means NO socket, and the words say not connected yet",
+              "not connected yet" in said.lower(), said[:300])
+        check("... and nothing is claimed beyond that", _no_claims(said))
+
+    _without_env(lambda: _with_store(shelf, run))
+
+
+def t_status_with_a_token_follows_only_the_verifier():
+    for code, body, want in (
+            (200, json.dumps({"login": "owner"}), "connected"),
+            (401, "{}", "did not work")):
+        shelf = StoreShelf()
+        shelf.by_target[RES.TOKEN_TARGET] = FakeStore(CANARY)
+        _reset_receipts()
+        fake = FakeHttp({"api.github.com/user": (code, body)})
+
+        def run(fake=fake, code=code, want=want):
+            saved = C._REQUEST
+            C._REQUEST = fake
+            try:
+                intent, result = _ran("is github connected?")
+            finally:
+                C._REQUEST = saved
+            said = result.reply if result is not None else ""
+            check(f"a token and a fake verifier answering {code} says {want!r}",
+                  intent is not None and intent.name == "connect_account"
+                  and want in said.lower(), said[:300])
+            if code != 200:
+                check("... and a failing verifier NEVER says connected",
+                      "connected" not in said.lower(), said[:300])
+            check("... the only call was the one verifier test",
+                  [c[1] for c in fake.calls] == ["https://api.github.com/user"],
+                  fake.calls)
+
+        _without_env(lambda: _with_store(shelf, run))
+
+
+# --------------------------------------------------------------------------
 #   3. No capability overclaim
 # --------------------------------------------------------------------------
 
-def t_never_clones_pushes_or_pulls():
+def t_capability_answers_carry_no_overclaim_words():
+    """GH-5 + F11: the four phrasings that reached the model, answered
+    deterministically, with the overclaim words absent from every chat answer
+    and the merge refusal naming that no merge action or card exists."""
     _seed()
-    import re
     positive = re.compile(
         r"\b(?:i|you|jarvis|it)\s+(?:can|could|will|would|is\s+able\s+to)\s+"
-        r"(?:now\s+)?(?:clone|push|pull)\b", re.I)
-    for sentence in ("can you clone a repository?", "can you push code?",
-                     "can you pull my repo?", "do you push code?"):
+        r"(?:now\s+)?(?:copy|download|send|update|merge)\b", re.I)
+    for sentence in ("can you clone my repo", "can you push to github",
+                     "can you pull my repo", "do you have access to my github",
+                     "can you read my github", "can you access my github"):
         intent, result = _ran(sentence)
         said = result.reply if result is not None else ""
-        check(f"{sentence!r} answers with the never-list",
-              intent is not None and intent.name == "github_connect_receipt"
-              and intent.f.get("shape") == "never", None if intent is None else intent.f)
-        check("... 'No', 'never clone, push or pull', no positive claim",
-              said.lower().startswith("no -")
-              and "never clone, push or pull code" in said.lower()
-              and not positive.search(said), said[:400])
+        check(f"{sentence!r} is answered deterministically (was NO MATCH -> model)",
+              intent is not None and intent.name == "github_connect_receipt",
+              None if intent is None else (intent.name, intent.f))
+        check("... the answer never says cloning/pushing/pulling (GH-5)",
+              _ban_free(said) and not positive.search(said), said[:400])
         check("... and it names what IS possible, each on its own card",
               "search github" in said.lower() and "private repositories" in said.lower()
               and "approval card" in said.lower(), said[:400])
-    # A push with no GitHub/code context keeps its own path (not stolen here).
-    intent, _result = _ran("can you push a notification to my phone?")
+        check("... the refusal is in plain words, with no merge action or card",
+              "never copy a repository" in said.lower()
+              and "no merge action" in said.lower(), said[:400])
+    # The merge refusal keeps its own deterministic answer.
+    intent, result = _ran("can you merge a pull request?")
+    said = result.reply if result is not None else ""
+    check("the merge refusal says there is no merge action and no merge card",
+          intent is not None and intent.name == "github_self"
+          and "no merge action and no merge card" in said.lower(), said[:300])
+    # A push with no GitHub/code context keeps its own path (not hijacked).
+    intent, _r = _ran("can you push a notification to my phone?")
     check("a 'push' that is not about code is not hijacked",
           intent is None or intent.name != "github_connect_receipt",
           None if intent is None else intent.name)
@@ -438,27 +524,47 @@ def _coding_model() -> str:
     return ""
 
 
+SENTENCES_FOR_PRESET = ASKED + (
+    "can you clone my repo", "can you push to github",
+    "can you pull my repo", "do you have access to my github",
+    "can you read my github", "can you merge a pull request?",
+    "can you push a notification to my phone?",
+)
+
+
+def _answers_with_model(model: str) -> dict:
+    saved = Q._model_record
+    try:
+        Q._model_record = lambda: model
+        got = {}
+        for sentence in SENTENCES_FOR_PRESET:
+            intent = Q.match(sentence)
+            result = Q.run(intent, S.get(), time.time()) if intent is not None else None
+            got[sentence] = (None if intent is None else intent.name,
+                             None if result is None else result.reply)
+        return got
+    finally:
+        Q._model_record = saved
+
+
 def t_the_answer_is_identical_on_the_coding_preset():
+    """NEG-2 style: the coding preset is the axis the owner's transcript was on,
+    so the corpus must be byte-identical there before any model/lane code."""
     _seed()
     coding = _coding_model()
     check("this checkout has a coding preset to test with", bool(coding), coding)
-    answers = []
-    matches = []
-    for model in ("general model", coding or "coding-model"):
-        saved = Q._model_record
-        try:
-            Q._model_record = lambda m=model: m
-            intent, result = _ran("i added a token")
-            matches.append(None if intent is None else intent.name)
-            answers.append(result.reply if result is not None else None)
-        finally:
-            Q._model_record = saved
-    check("the sentence is claimed on the coding preset too (before the model)",
-          matches == ["github_connect_receipt", "github_connect_receipt"], matches)
-    check("... and the words are IDENTICAL, whichever lane/preset runs",
-          answers[0] == answers[1] and answers[0] is not None
-          and coding not in (answers[0] or ""),
-          answers)
+    everyday = _answers_with_model("everyday model")
+    on_coding = _answers_with_model(coding or "coding-model")
+    check("every sentence is claimed identically on the coding preset",
+          [m for m, _r in everyday.values()] == [m for m, _r in on_coding.values()],
+          {k: (v[0], on_coding[k][0]) for k, v in everyday.items() if v[0] != on_coding[k][0]})
+    differing = {k: (v[1], on_coding[k][1]) for k, v in everyday.items()
+                 if v[1] != on_coding[k][1]}
+    check("... and the words are BYTE-IDENTICAL, whichever preset/lane runs",
+          not differing, differing)
+    check("... no reply leaks the model name",
+          all(coding not in (reply or "") for _m, reply in on_coding.values()),
+          coding)
 
 
 # --------------------------------------------------------------------------
@@ -482,11 +588,47 @@ def t_the_feature_guide_row_carries_the_same_words():
           not any(bad in low for bad in OVERCLAIMS), digest[:300])
     # The deterministic chat answer uses the SAME capability words: one source.
     short = str((row or {}).get("short") or "")
+    never = str((row or {}).get("never") or "")
+    check("the CHAT-facing halves never say cloning/pushing/pulling (GH-5)",
+          _ban_free(short) and _ban_free(never)
+          and "no merge action" in never.lower(), (short[:120], never[:120]))
     _seed()
     _intent, result = _ran("i added a token")
     said = result.reply if result is not None else ""
     check("the chat answer's capability half is the guide's own row",
           bool(short) and short in said, (short[:120], said[:240]))
+
+
+# --------------------------------------------------------------------------
+#   6b. GH-4: the receipt survives a NEW turn
+# --------------------------------------------------------------------------
+
+def t_a_save_then_a_new_turn_answers_from_the_stored_record():
+    shelf = StoreShelf()
+    fake = FakeHttp({"api.github.com/user": (200, json.dumps({"login": "owner"}))})
+    _reset_receipts()
+
+    def save_turn():
+        card = C.raise_card("github", "")
+        _with_http(fake, lambda: C.save_card(card["card_id"], {"token": CANARY}))
+
+    _fresh_cards(lambda: _without_env(lambda: _with_store(shelf, save_turn)))
+
+    # A NEW turn: fresh match + run, reading only the persisted file.
+    for sentence in ("i added a token", "did the token work?",
+                     "what did the github test prove?"):
+        intent, result = _ran(sentence)
+        said = result.reply if result is not None else ""
+        check(f"a NEW turn after the save answers {sentence!r} from the stored record",
+              intent is not None and intent.name == "github_connect_receipt"
+              and "GitHub accepted the token (signed in as owner)" in said
+              and "nothing more" in said, said[:300])
+    raw = C.receipts_path().read_text(encoding="utf-8")
+    check("the state file holds the service, the verdict words and a timestamp - "
+          "no token and no value",
+          '"service": "github"' in raw and '"verified": true' in raw
+          and '"saved_at":' in raw and "GitHub accepted the token" in raw
+          and CANARY not in raw, raw[:400])
 
 
 # --------------------------------------------------------------------------
@@ -559,11 +701,14 @@ def main() -> int:
             t_an_unrun_test_is_said_plainly,
             t_saved_but_no_receipt_is_not_a_pass,
             t_nothing_saved_says_nothing_saved_yet,
-            t_never_clones_pushes_or_pulls,
+            t_status_without_a_token_opens_no_socket,
+            t_status_with_a_token_follows_only_the_verifier,
+            t_capability_answers_carry_no_overclaim_words,
             t_the_answer_is_a_pure_function_of_the_recorded_receipt,
             t_a_private_chat_gets_the_same_answer,
             t_the_answer_is_identical_on_the_coding_preset,
             t_the_feature_guide_row_carries_the_same_words,
+            t_a_save_then_a_new_turn_answers_from_the_stored_record,
             t_a_save_records_the_receipt_and_never_the_value,
             t_connect_sentences_still_raise_the_card,
         ):

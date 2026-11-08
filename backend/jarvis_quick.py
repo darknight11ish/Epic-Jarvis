@@ -12858,10 +12858,11 @@ _GITHUB_TEST_PROVED = re.compile(
     r"(?:prove|say|show|find|report)\s*\??"
     r"|what\s+(?:did|does)\s+(?:it|that|the\s+test)\s+prove\s*\??"
     r"|what\s+(?:was|is)\s+(?:the\s+|my\s+)?github\s+test\s+result\s*\??")
-#: "is github connected?" is the receipt question (the owner's own words).
-#: "is github SET UP?" keeps the older connect path, which runs a real test when
-#: asked - that is the documented answer and still honest, so it is not claimed
-#: here (the connect suite pins it).
+#: "is github connected?" is the receipt question (the owner's own words) ONCE a
+#: save has been recorded; with no receipt it keeps the older connect path, which
+#: runs the service's one real test (and opens no socket at all when no token is
+#: saved) - that is the answer GH-2 pins. "is github SET UP?" keeps the connect
+#: path either way.
 _GITHUB_CONNECT_STATE = re.compile(
     r"is\s+(?:my\s+|the\s+|your\s+)?github\s+(?:now\s+)?"
     r"(?:connected|linked|working|ready)\s*\??"
@@ -12880,13 +12881,50 @@ _GITHUB_CODE_VERB = re.compile(
     r"|\b(?:push|pushed|pushes|pushing|pull|pulled|pulls|pulling)\b(?!\s+up\b)")
 
 
+#: "do you have access to my github", "can you read my github" - the capability
+#: question F11 found reaching the model. It gets the same honest capability
+#: list as the post-save answer, and its words never say cloning/pushing/pulling
+#: (GH-5), so no answer here can be read as a claim that those are possible.
+_GITHUB_ACCESS_ASK = re.compile(
+    r"(?:do|does|can|could|have|has)\s+(?:you|jarvis)\s+(?:have\s+|got\s+)?"
+    r"(?:access|a\s+connection)\s+(?:to|on)\s+(?:my|the)\s+github\s*\??"
+    r"|(?:do|does)\s+(?:you|jarvis)\s+have\s+(?:my|the)\s+github\s+token\s*\??"
+    r"|what\s+(?:access|permissions?|rights?)\s+(?:do\s+you|does\s+jarvis)\s+"
+    r"(?:have|got)\s+(?:to|on)\s+(?:my|the)\s+github\s*\??"
+    # The normalized sentence drops "can you", so the verb alone must claim it.
+    r"|(?:access|read|see|browse|look\s+at)\s+(?:my|the)\s+github\s*\??"
+    r"|are\s+you\s+able\s+to\s+(?:access|read|see)\s+(?:my|the)\s+github\s*\??")
+
+
+def _github_receipt_recorded() -> bool:
+    """Whether the host has a saved connect-card test receipt for GitHub.
+
+    Only used to decide which deterministic answer owns "is github connected?": a
+    recorded receipt answers from what the test said; with none, the older
+    connect answer runs the service's own test. No model, no socket by itself.
+    """
+    try:
+        import jarvis_connect_account as C
+        return C.receipt("github") is not None
+    except Exception:                       # noqa: BLE001 - older PC
+        return False
+
+
 def _github_connect_receipt_intent(s: str) -> Optional[Intent]:
     """The post-save receipt shapes, or None. Whole sentences only."""
     low = s.strip()
     if not low:
         return None
-    if (_GITHUB_TOKEN_ADDED.fullmatch(low) or _GITHUB_TEST_PROVED.fullmatch(low)
-            or _GITHUB_CONNECT_STATE.fullmatch(low)):
+    if _GITHUB_TOKEN_ADDED.fullmatch(low) or _GITHUB_TEST_PROVED.fullmatch(low):
+        return Intent("github_connect_receipt", {"shape": "status"})
+    if _GITHUB_CONNECT_STATE.fullmatch(low):
+        # The receipt answer only once one exists: before that, "is github
+        # connected?" keeps the connect path's own status answer, which runs
+        # the real test - and opens no socket at all when no token is saved.
+        if _github_receipt_recorded():
+            return Intent("github_connect_receipt", {"shape": "status"})
+        return None
+    if _GITHUB_ACCESS_ASK.fullmatch(low):
         return Intent("github_connect_receipt", {"shape": "status"})
     if _GITHUB_CODE_VERB.search(low) and _GITHUB_CODE_CONTEXT.search(low):
         # "can you clone ...", "do you push code?", and a bare "clone my repo"
@@ -19890,18 +19928,20 @@ GITHUB_CAPABILITY_FALLBACK = (
     "each on its own approval card. I can never clone, push or pull code, and never "
     "merge, commit, close or delete anything.")
 GITHUB_NEVER_FALLBACK = (
-    "No - I can never clone, push or pull code, and never merge, commit, close or "
-    "delete anything on GitHub: there is no action, card or endpoint for those. "
-    "What a saved token does let me do: search GitHub, see private repositories and "
-    "watch CI; and with the GitHub tools switched on, read your repositories, pull "
-    "requests, issues, CI status and one file, comment, open an issue and re-run a "
-    "workflow - each on its own approval card.")
+    "No - I never copy a repository to this PC, send code back to GitHub, or change "
+    "code in any way: there is no action, card or endpoint for that, so approving a "
+    "card cannot create one. What a saved token does let me do: search GitHub, see "
+    "private repositories and watch CI; and with the GitHub tools switched on, read "
+    "your repositories, pull requests, issues, CI status and one file, comment, open "
+    "an issue and re-run a workflow - each on its own approval card. There is no "
+    "merge action and no merge card at all.")
 GITHUB_SHORT_FALLBACK = (
     "It lets me search GitHub, see private repositories and watch CI; with the "
     "GitHub tools switched on, it can also read your repositories, pull requests, "
     "issues, CI status and one file, comment, open an issue and re-run a workflow - "
-    "each on its own approval card. I can never clone, push or pull code, and never "
-    "merge, commit, close or delete anything.")
+    "each on its own approval card. I never copy a repository to this PC, send code "
+    "back to GitHub, or change code in any way: there is no action, card or endpoint "
+    "for that, and no merge action or merge card either.")
 
 
 def _github_capability_words(which: str = "sentence") -> str:

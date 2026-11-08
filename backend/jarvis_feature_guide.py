@@ -4022,22 +4022,28 @@ SELF_FACTS = {
         # The capability half alone, for the deterministic chat answer after a
         # connect-card save: short, and the same words as `sentence`'s second
         # half. One source of truth for both.
+        # NO "cloning / pushing / pulling" in this chat-facing half (GH-5): the
+        # overclaim words an owner reads as "so you can do that". The refusal is
+        # the same fact in plain words.
         "short": ("It lets me search GitHub, see private repositories and watch CI; "
                   "with the GitHub tools switched on, it can also read your "
                   "repositories, pull requests, issues, CI status and one file, "
                   "comment, open an issue and re-run a workflow - each on its own "
-                  "approval card. I can never clone, push or pull code, and never "
-                  "merge, commit, close or delete anything."),
+                  "approval card. I never copy a repository to this PC, send code "
+                  "back to GitHub, or change code in any way: there is no action, "
+                  "card or endpoint for that, and no merge action or merge card "
+                  "either."),
         # The same never-list, said as the answer to "can you clone/push/pull?".
         # Kept here so the fixed answer, the model's digest and the chat receipt
         # answer cannot drift apart.
-        "never": ("No - I can never clone, push or pull code, and never merge, commit, "
-                  "close or delete anything on GitHub: there is no action, card or "
-                  "endpoint for those. What a saved token does let me do: search GitHub, "
-                  "see private repositories and watch CI; and with the GitHub tools "
-                  "switched on, read your repositories, pull requests, issues, CI status "
-                  "and one file, comment, open an issue and re-run a workflow - each on "
-                  "its own approval card."),
+        "never": ("No - I never copy a repository to this PC, send code back to "
+                  "GitHub, or change code in any way: there is no action, card or "
+                  "endpoint for that, so approving a card cannot create one. What a "
+                  "saved token does let me do: search GitHub, see private repositories "
+                  "and watch CI; and with the GitHub tools switched on, read your "
+                  "repositories, pull requests, issues, CI status and one file, comment, "
+                  "open an issue and re-run a workflow - each on its own approval card. "
+                  "There is no merge action and no merge card at all."),
     },
 }
 
