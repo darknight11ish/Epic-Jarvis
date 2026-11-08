@@ -1677,6 +1677,34 @@
         </label>
         <p class="note" id="hud-read-aloud-icons-status" role="status"></p>
 
+        <!-- The AUTOMATIC read-aloud switch (Wave-9, 2026-11-07; the owner's
+             words: "stop reading your replies out loud" must stop it, and "if
+             i write it with my keyboard I would like it not to be read out
+             loud by Default"). A `.mn-sync-row` like the icon switch above and
+             NOT a registry `.toggle` row, for the same reason: no phone lane
+             and no generated fixture owns it.
+
+             WHERE THE VALUE LIVES. The PC's backend, not localStorage:
+             GET/POST /api/read-aloud (jarvis_read_aloud.py) through two Tauri
+             commands (read_aloud.rs). That is what lets a chat or Jarvis Live
+             sentence change the SAME value the quickbar's voice answers obey -
+             one source of truth, no second copy in this window. Drawn and
+             saved by read-aloud-settings.js. -->
+        <label class="mn-sync-row">
+          <input id="hud-read-replies" type="checkbox" />
+          <span>Read replies out loud
+            <span class="toggle-detail" id="hud-read-replies-detail">
+              On by default. A VOICE answer - the quickbar's push-to-talk,
+              Jarvis Live, "hey Jarvis" - is read aloud in Jarvis's voice. A
+              TYPED question is never read automatically: ask for it with the
+              speaker beside an answer, or "Read out loud" in its own menu. Off
+              stops automatic speech at once; those one-answer taps still work,
+              and a private answer always stays on screen either way.
+            </span>
+          </span>
+        </label>
+        <p class="note" id="hud-read-replies-status" role="status"></p>
+
         <!-- The HUD's layouts (H1/H3 of the editable-HUD design; rulings
              23-28 and Q5): the seven built-in ones - Cockpit, Studio, Ambient,
              Quiet, Telemetry & Ops, Second Brain & Planner and Minimal - plus
@@ -3900,6 +3928,7 @@
     <script type="module" src="handsfree-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
     <script type="module" src="hud-window-settings.js"></script>
+    <script type="module" src="read-aloud-settings.js"></script>
 <script type="module" src="pictures-settings.js"></script>
     <script type="module" src="sandbox-settings.js"></script>
     <script type="module" src="media-index-settings.js"></script>

@@ -8,34 +8,31 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The words of the owner's setting of 2026-11-05 - "Read out answers that use
- * what Jarvis remembers" - held on the JVM, because the thing that went wrong
- * on 2026-11-05 was a sentence as much as a rule: his phone said "It's on your
- * screen." about an answer he expected to hear, and nothing said why.
+ * The words of the phone's remembered-answers setting - "Read out answers that
+ * use what Jarvis remembers" - held on the JVM, because the thing that went
+ * wrong on 2026-11-05 was a sentence as much as a rule: his phone said "It's on
+ * your screen." about an answer he expected to hear, and nothing said why.
  *
- * Three promises are checked here, in the app's plain words:
- *  1. it is OFF by default, and the row says so;
- *  2. it covers the mic on THIS phone while it is unlocked, and never claims
- *     "hey Jarvis" or Jarvis Live;
- *  3. it says whose setting it is - this phone's; the PC keeps its own rule.
+ * REWRITTEN for the owner's decision of 2026-11-07: "i wanted to read
+ * everything out loud if i ask it to by Default or unless I can change it
+ * through chat turn that off. unless it's extremely sensitive information it's
+ * okay." So:
+ *  1. it is ON by default, and the row says so;
+ *  2. it covers EVERY voice answer on this phone - the mic, "hey Jarvis" and
+ *     Jarvis Live;
+ *  3. a TYPED answer is silent unless he taps Read aloud;
+ *  4. an extremely sensitive saved fact and a private tool still stay on
+ *     screen, always;
+ *  5. it says whose setting it is - this phone's - and that the chat can change
+ *     it.
  */
 class MemoryAloudTest {
 
     @Test
-    fun `the setting is off by default, and the row says so`() {
-        assertFalse(PrivateAloud.MEMORY_ALOUD_DEFAULT)
-        val off = MemoryAloud.describe(on = false)
-        assertTrue(off, off.startsWith("Off by default"))
-        assertTrue(off, "screen" in off)
-        // Off is not silence about what ON would do.
-        assertTrue(off, "unlocked" in off)
-    }
-
-    @Test
-    fun `on says what it covers and what still stays on screen`() {
+    fun `the setting is on by default, and the row says so`() {
+        assertTrue(PrivateAloud.MEMORY_ALOUD_DEFAULT)
         val on = MemoryAloud.describe(on = true)
-        assertTrue(on, on.startsWith("On"))
-        assertTrue(on, "unlocked" in on)
+        assertTrue(on, on.startsWith("On by default"))
         // The half of the 2026-09-24 rule that never moves.
         assertTrue(on, "sensitive" in on)
         assertTrue(on, "private tool" in on)
@@ -43,16 +40,37 @@ class MemoryAloudTest {
     }
 
     @Test
-    fun `it never claims hey Jarvis or Jarvis Live`() {
-        val off = MemoryAloud.describe(on = false)
-        assertTrue(off, "\"hey Jarvis\"" in off)
-        assertTrue(off, "Jarvis Live" in off)
+    fun `on says it covers the mic, hey Jarvis and Jarvis Live`() {
+        val on = MemoryAloud.describe(on = true)
+        assertTrue(on, "\"hey Jarvis\"" in on)
+        assertTrue(on, "Jarvis Live" in on)
+        assertTrue(on, "mic" in on.lowercase() || "microphone" in on.lowercase())
     }
 
     @Test
-    fun `it says whose setting it is`() {
+    fun `a typed answer is silent unless asked for`() {
+        val on = MemoryAloud.describe(on = true)
+        assertTrue(on, "typed" in on.lowercase())
+        assertTrue(on, "Read aloud" in on)
+        // It is not read "by default": the tap is what reads it.
+        assertTrue(on, "only when you tap" in on.lowercase())
+    }
+
+    @Test
+    fun `off says what happens and how to turn it back on`() {
+        val off = MemoryAloud.describe(on = false)
+        assertTrue(off, off.startsWith("Off"))
+        assertTrue(off, "stays on your screen" in off)
+        // An off switch he can fix names the way back, in words he can say.
+        assertTrue(off, "read everything out loud" in off)
+    }
+
+    @Test
+    fun `it says whose setting it is, and that the chat can change it`() {
         assertTrue(MemoryAloud.NOTE, "this phone" in MemoryAloud.NOTE.lowercase())
         assertTrue(MemoryAloud.NOTE, "PC" in MemoryAloud.NOTE)
+        assertTrue(MemoryAloud.NOTE, "stop reading remembered answers out loud" in MemoryAloud.NOTE)
+        assertTrue(MemoryAloud.NOTE, "read everything out loud" in MemoryAloud.NOTE)
         assertTrue(MemoryAloud.NAME.isNotBlank())
         // A name the owner can find, not a setting key.
         assertTrue(MemoryAloud.NAME.lowercase(), "remember" in MemoryAloud.NAME.lowercase())
@@ -64,23 +82,6 @@ class MemoryAloudTest {
         assertEquals("Read them out", MemoryAloud.TURN_ON)
         assertEquals("Keep them on my screen", MemoryAloud.TURN_OFF)
         assertTrue(MemoryAloud.TURN_ON != MemoryAloud.TURN_OFF)
-    }
-
-    @Test
-    fun `the row now says the typed Read aloud is covered too`() {
-        // The owner's decision of 2026-11-06: the same switch covers "Read
-        // aloud" on a typed answer, on this phone while it is unlocked. The row
-        // he reads must say so - it used to say "only the mic".
-        val on = MemoryAloud.describe(on = true)
-        assertTrue(on, "Read aloud" in on)
-        assertTrue(on, "typed" in on.lowercase())
-        // ...and the one thing it still does not cover: a screen answer, which
-        // is his separate one-off tap (ReadAloud.ANYWAY), never this setting.
-        assertTrue(on, "anyway" in on.lowercase())
-        val off = MemoryAloud.describe(on = false)
-        assertTrue(off, "Read aloud" in off)
-        assertTrue("the note still says whose setting it is", "this phone" in MemoryAloud.NOTE.lowercase())
-        assertTrue(MemoryAloud.NOTE, "Read aloud" in MemoryAloud.NOTE)
     }
 
     @Test

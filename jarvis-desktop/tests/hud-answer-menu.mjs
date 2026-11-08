@@ -91,20 +91,51 @@ check("Right/Wrong use the SAME shell feedback path as before", () => {
     "an older PC without the route no longer removes the menu quietly");
 });
 
-check("Read out loud clicks the page's own speaker (no second voice path)", () => {
+check("Read out loud is ALWAYS shown for a finished answer (owner, 2026-11-07)", () => {
+  // Before this, the item was hidden unless the page's per-answer speaker
+  // existed. The owner asked for it to be present on every answer, and able to
+  // read THAT answer - so the page grew its own hook (below) and the item's
+  // visibility depends only on the answer existing.
+  assert.match(SECTION, /if \(readItem\) readItem\.hidden = !answer;/,
+    "Read out loud is still conditional on the per-answer speaker existing");
+  assert.doesNotMatch(SECTION, /readItem\.hidden = !\(speaker && answer\)/);
+  assert.match(SECTION, /item\("Read out loud", function \(button\) \{/,
+    "Read out loud does not take the item button, so it cannot show a receipt");
+});
+
+check("Read out loud uses the page's own speaker, else the page's own hook", () => {
   assert.match(SECTION, /querySelector\("\.speak-answer"\)/,
     "Read out loud does not look for the page's own per-answer speaker");
   assert.match(SECTION, /speaker\.click\(\)/,
     "Read out loud does not use the page's own speaker path");
+  assert.match(SECTION, /window\.__jarvisReadAnswer/,
+    "there is no fallback for an answer drawn without a speaker");
   assert.doesNotMatch(SECTION, /speechSynthesis|createElement\("audio"\)|new Audio\(/,
     "a second voice path was added where the page's own speaker already exists");
 });
 
-check("Copy answer uses the clipboard and confirms in place", () => {
+check("the page's __jarvisReadAnswer hook asks the privacy rule for THAT answer", () => {
+  const HTML = readFileSync(join(HERE, "..", "src", "jarvis_hud.html"), "utf8");
+  assert.match(HTML, /window\.__jarvisReadAnswer = function\(bubble\)/,
+    "the HUD page provides no per-answer read hook");
+  assert.match(HTML, /answerMayBeSpoken\(said\.route\)/,
+    "the hook does not ask private-speech.js for this answer's own route");
+  assert.match(HTML, /voice\.speak\(said\.text\)/,
+    "an allowed answer is not read through the page's one voice path");
+  assert.match(HTML, /ok: false, why:[\s\S]{0,200}It'?s on your screen/,
+    "a refused answer does not come back with the rule's own line as the receipt");
+});
+
+check("Copy answer confirms in place, and Right/Wrong do too", () => {
   assert.match(SECTION, /navigator\.clipboard\.writeText\(answer\)/);
-  assert.match(SECTION, /button\.textContent = "Copied\."/);
-  assert.match(SECTION, /button\.textContent = "Copy answer"/,
-    "Copied. never goes back to Copy answer");
+  assert.match(SECTION, /receipt\(button, "Copied\."\)/);
+  assert.match(SECTION, /function receipt\(button, text\)/);
+  assert.match(SECTION, /button\.dataset\.receiptLabel/,
+    "the receipt never puts the item's own label back");
+  assert.match(SECTION, /receipt\(next === "none" \? wrong : \(next === "right" \? right : wrong\),/,
+    "Right/Wrong have no visible receipt after a mark is recorded");
+  assert.match(SECTION, /"Cleared\."/);
+  assert.match(SECTION, /"Marked\."/);
 });
 
 check("one menu at a time; Esc closes and returns focus; outside click closes", () => {

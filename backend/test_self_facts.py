@@ -334,12 +334,30 @@ def the_answers_quote_the_measured_values():
                   ("on right now" if opposite else "off right now") in reply2
                   and reply != reply2, reply2)
 
-    with _Fixture(GROUND_TRUTH):
-        res = answered("Is read-aloud on right now? Answer in one sentence.")
-        check("... and the measured read-aloud row says on",
-              res is not None and "read-aloud is on" in res.reply
-              and "[voice].enabled = true" in res.reply,
-              res.reply if res else None)
+    # Wave-9 (2026-11-07): read-aloud has a switch of its own now
+    # (`jarvis_read_aloud.py`, /api/read-aloud, ON by default), so the row reads
+    # THAT value - not the [voice] section. The old assertion wants
+    # "read-aloud is on" plus "[voice].enabled = true"; the new one is the
+    # switch's own words, in both positions, and it is put back afterwards.
+    import jarvis_read_aloud as RA
+    was = RA.enabled()
+    try:
+        with _Fixture(GROUND_TRUTH):
+            RA.set_enabled(True)
+            res = answered("Is read-aloud on right now? Answer in one sentence.")
+            check("... and the measured read-aloud row says on",
+                  res is not None
+                  and "read replies out loud is on" in res.reply.lower()
+                  and "stop reading your replies out loud" in res.reply.lower(),
+                  res.reply if res else None)
+            RA.set_enabled(False)
+            off = answered("Is read-aloud on right now? Answer in one sentence.")
+            check("... and says off when the owner turned it off",
+                  off is not None
+                  and "read replies out loud is off" in off.reply.lower(),
+                  off.reply if off else None)
+    finally:
+        RA.set_enabled(was)
 
 
 # ---------------------------------------------------------------------------
@@ -367,9 +385,6 @@ def an_unreadable_value_is_never_guessed():
         ({"projects": {"count": None, "why": "store unreadable"}},
          "How many projects do I have? Answer in one sentence.",
          ["cannot read your projects", "will not guess"]),
-        ({"voice": {"enabled": None, "why": "no [voice] section"}},
-         "Is read-aloud on right now? Answer in one sentence.",
-         ["cannot read whether read-aloud is on", "will not guess"]),
         ({"stores": [{"id": "conversations", "count": None,
                       "why_not": "app lock is on"}]},
          "How many conversations are in my chat history? Answer in one sentence.",

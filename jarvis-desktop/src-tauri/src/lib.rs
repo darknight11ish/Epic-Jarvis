@@ -27,6 +27,7 @@ pub mod appearance;
 pub mod asks_first;
 pub mod attention;
 pub mod autostart;
+pub mod read_aloud;
 // The version handshake between this executable and the backend on this PC
 // (backend_self.rs; the owner's ask of 2026-11-03 that one Update click leaves
 // both halves in step, and that the two versions are read back in words).
@@ -1456,6 +1457,8 @@ pub fn run() {
             // Settings window only.
             antislop::get_antislop,
             antislop::set_antislop,
+            read_aloud::get_read_aloud,
+            read_aloud::set_read_aloud,
             // Hands-free mode (2026-11-04; JARVIS-API section 191).
             // Settings window only. The read is a read; ON raises ONE approval
             // card through the backend and the call returns when that card is

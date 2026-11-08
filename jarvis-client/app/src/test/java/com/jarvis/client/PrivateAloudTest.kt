@@ -291,9 +291,11 @@ class PrivateAloudTest {
     // --------------- the phone's remembered-facts setting (owner, 2026-11-05) --
 
     @Test
-    fun `the phone's memory setting is off by default, and needs the talk button and an unlocked press`() {
-        // The shipped default, said in code: OFF.
-        assertFalse(PrivateAloud.MEMORY_ALOUD_DEFAULT)
+    fun `the phone's memory setting is on by default, and needs an unlocked press`() {
+        // The shipped default, said in code: ON since the owner's decision of
+        // 2026-11-07 ("i wanted to read everything out loud ... unless it's
+        // extremely sensitive information").
+        assertTrue(PrivateAloud.MEMORY_ALOUD_DEFAULT)
         val h = heard("quick_message")
         assertEquals("quick_message", h.mode)
         // The PC's reply for this clip: memory_aloud false because the talk
@@ -302,19 +304,20 @@ class PrivateAloudTest {
         val facts = header("plain", injected = 3, sensitive = 0)
         // Off: the answer that used 3 remembered facts stays on screen.
         assertFalse(may(h, facts))
-        // The setting alone is NOT enough...
+        // The setting alone is NOT enough on a phone that was locked...
         assertFalse(may(h, facts, phoneMemoryAloud = true))
-        // ...nor the setting plus an unlocked phone on some other path...
-        assertFalse(may(h, facts, phoneMemoryAloud = true, unlockedAtPress = true))
-        // ...nor the setting plus the talk button on a phone that was locked
-        // when he pressed it...
-        assertFalse(may(h, facts, phoneMemoryAloud = true, talkButton = true))
-        // ...all three hold, and it is read aloud.
-        assertTrue(
-            may(h, facts, phoneMemoryAloud = true, talkButton = true, unlockedAtPress = true),
+        // ...and it is enough on an unlocked phone - no talk-button condition
+        // any more (2026-11-07), so Live and "hey Jarvis" are covered too.
+        assertTrue(may(h, facts, phoneMemoryAloud = true, unlockedAtPress = true))
+        // A screen read still keeps it on screen even with all of that.
+        assertFalse(
+            may(
+                h, facts, live.copy(screenRuns = 1),
+                phoneMemoryAloud = true, unlockedAtPress = true,
+            ),
         )
-        // A second answer with no remembered facts is unaffected either way.
-        assertTrue(may(h, header("plain"), phoneMemoryAloud = true, talkButton = true, unlockedAtPress = true))
+        // An answer with no remembered facts is unaffected either way.
+        assertTrue(may(h, header("plain"), phoneMemoryAloud = true, unlockedAtPress = true))
     }
 
     @Test
@@ -403,18 +406,21 @@ class PrivateAloudTest {
     }
 
     @Test
-    fun `the phone's setting never covers hey Jarvis or Jarvis Live - only the talk button`() {
+    fun `the phone's setting covers every voice answer - mic, hey Jarvis and Live`() {
         val facts = header("plain", injected = 3, sensitive = 0)
-        // Neither path is a mic press, so the turn carries talkButton = false
-        // and the setting cannot lift the memory rule for it - even on, and
-        // even on a phone that was unlocked.
-        assertFalse(
+        // A "hey Jarvis" or Jarvis Live turn carries talkButton = false. Since
+        // the owner's decision of 2026-11-07 that is no longer a blocker: on an
+        // unlocked phone, the setting lifts the memory rule for it too.
+        assertTrue(
             may(heard("quick_message"), facts, phoneMemoryAloud = true, talkButton = false, unlockedAtPress = true),
         )
-        // The caller only ever sets talkButton when BOTH the request's source
-        // is the talk button AND the PC's own reply says `quick_message`; a
-        // wake-word or Live reply carries another mode, so neither can be
-        // mistaken for the press.
+        // A LOCKED phone is still a hard refusal on every path.
+        assertFalse(
+            may(heard("quick_message"), facts, phoneMemoryAloud = true, talkButton = false, unlockedAtPress = false),
+        )
+        // The caller still only sets talkButton for the press itself, which is
+        // what the WORDS say about the rule (and what the refusal hints use);
+        // the rule no longer depends on it.
         assertEquals("quick_message", PrivateAloud.QUICK_MESSAGE)
         assertEquals("owner", heard("plain_question").mode)
         assertTrue(heard("quick_message").mode == PrivateAloud.QUICK_MESSAGE)

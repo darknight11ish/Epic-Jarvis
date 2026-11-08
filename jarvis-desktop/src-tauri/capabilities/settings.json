@@ -42,6 +42,8 @@
     "pictures-settings",
     "focus-presets",
     "version-handshake",
-    "core:webview:allow-set-webview-zoom"
+    "core:webview:allow-set-webview-zoom",
+    "read-aloud-read",
+    "read-aloud-write"
   ]
 }

@@ -493,13 +493,16 @@ SUBSYSTEMS = (
             "jarvis_turn", "jarvis_live", "jarvis_live_turn",
             "jarvis_live_stream", "jarvis_live_photo_test", "jarvis_handsfree",
             "jarvis_stopword",
+            # The automatic read-aloud switch (Wave-9, 2026-11-07): the PC/phone
+            # setting the HUD/quickbar obey, with one GET/POST route.
+            "jarvis_read_aloud",
         ),
         "paths": ("backend/rebuilt/jarvis_voice.py",),
         "key_modules": ("jarvis_speech", "jarvis_wakeword", "jarvis_live",
                         "jarvis_voices"),
         "tests": ("backend/test_speech.py", "backend/test_wakeword.py",
                   "backend/test_live.py", "backend/test_voice_flow.py",
-                  "backend/test_voices.py"),
+                  "backend/test_voices.py", "backend/test_read_aloud.py"),
         "docs": ("docs/DESIGN-VOICE-BARGE-IN.md", "docs/VOICESTUDIO.md", "docs/ARCHITECTURE.md"),
     },
     {

@@ -6616,6 +6616,36 @@ function offerSpeakButton(bubble, text, route){
   paintSpeakButton(bubble);
 }
 
+/** Read ONE answer aloud, because the owner picked it from that answer's own
+ *  menu (hud_bootstrap.js section 6). Returns a Promise of {ok, why}: the menu
+ *  shows `why` as its receipt, the way "Copy answer" says "Copied.".
+ *
+ *  THE PRIVACY RULE IS ASKED FIRST, FOR THIS ANSWER, through the same
+ *  `answerMayBeSpoken` the speaker icons use (private-speech.js's
+ *  `mayReadAloud` on this answer's own route, failing closed). A refused
+ *  answer is never spoken, and the receipt is the rule's own fixed line. The
+ *  PC's automatic read-aloud SWITCH is deliberately not consulted here: the
+ *  owner picked this one answer, one tap, and the speaker icons already work
+ *  that way - the switch stops AUTOMATIC speech, never the owner's own tap.
+ */
+window.__jarvisReadAnswer = function(bubble){
+  const said = bubble ? ANSWER_SAID.get(bubble) : null;
+  if(!said || !String(said.text || "").trim()){
+    return Promise.resolve({ ok: false, why: "Nothing to read." });
+  }
+  return answerMayBeSpoken(said.route).then(may => {
+    if(!may){
+      // The rule's own fixed line, so the receipt and the speaker-icon path
+      // say one thing (private-speech.js PRIVATE_LINE).
+      return loadSpeechRule()
+        .then(rule => ({ ok: false, why: (rule && rule.PRIVATE_LINE) || "It's on your screen." }))
+        .catch(() => ({ ok: false, why: "It's on your screen." }));
+    }
+    voice.speak(said.text);
+    return { ok: true, why: "Reading." };
+  }).catch(() => ({ ok: false, why: "Could not read it." }));
+};
+
 /** Repaint every answer on the page from what it remembered. Used when the
  *  switch changes under a window that is already open, so turning it off
  *  removes every speaker at once and turning it on adds them back. */
@@ -7093,20 +7123,21 @@ async function send(){
     }
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     $("r-latency").textContent = Math.round(performance.now()-started) + " ms";
-    tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
-    // SHOWN either way; SAID only when the bar's rule allows it. The words are
-    // the rule's own (PRIVATE_LINE), so both windows say the same thing.
+    // TYPED QUESTIONS ARE SILENT BY DEFAULT (the owner's refinement of
+    // 2026-11-07: "if i write it with my keyboard I would like it not to be
+    // read out loud by Default"). This page's own chat box only ever sends a
+    // TYPED turn: its mic opens the quickbar's push-to-talk (hud_bootstrap.js
+    // section 2d), and voice answers are spoken there, under the PC's own
+    // "Read replies out loud" switch. So the old `voice.speak(full)` call is
+    // deliberately gone - nothing here speaks by itself. Every finished answer
+    // still gets its own speaker (when the owner's speaker switch is on) and
+    // the answer menu's "Read out loud"; both are the owner's own tap, one
+    // answer at a time, and both still ask the private-speech rule first.
     //
-    // WHEN IT MAY NOT BE SAID, THE LINE IS SPOKEN INSTEAD - it is NOT added as a
-    // message. `private-speech.js` is the authority (:41, PRIVATE_LINE at :68):
-    // "Otherwise Jarvis says one fixed line instead, `PRIVATE_LINE`, once", and
-    // the bar does exactly that - `speechQueue.push(PRIVATE_LINE)`, main.js:4642
-    // and :4728. Adding a system message instead is what hud.mjs caught: a system
-    // line is how this page draws an ERROR, so every private answer looked like a
-    // failure - "an error was shown for a good reply", 10 checks, for ever.
-    const rule = await loadSpeechRule();
-    const aloud = !rule || rule.mayReadAloud({ route: turnRoute || {}, toolsKnown: true });
-    voice.speak(aloud ? full : ((rule && rule.PRIVATE_LINE) || "It's on your screen."));
+    // The chat question is recorded as typed so an answer can never be spoken
+    // by a future path that forgets this rule.
+    S.askedByVoice = false;
+    tracePromise.then(t => { if(t){ attachRecall(userNode, t); showTrace(t); } });
   }catch(err){
     clearTimeout(watchdog); if(SEND_INFLIGHT === ctrl) SEND_INFLIGHT = null;
     // Do not leave a user turn with no answer in history: the next request

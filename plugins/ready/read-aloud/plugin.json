@@ -1,0 +1,7 @@
+{
+  "name": "read-aloud",
+  "summary": "the automatic read-aloud switch: GET/POST /api/read-aloud, so the Settings switch, the HUD page and chat/Live read and change the one value - ON by default, OFF at once, and a model answer can never toggle it.",
+  "module": "jarvis_read_aloud",
+  "install": "handler",
+  "stack_order": 162
+}
