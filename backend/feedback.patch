@@ -116,10 +116,10 @@
 +                from urllib.parse import parse_qs
 +                tid = (parse_qs(self.path.split("?", 1)[1]).get("turn_id") or [""])[0] \
 +                    if "?" in self.path else ""
-+                got = jarvis_feedback.mark_of(tid)
-+                if got is None:
++                state = jarvis_feedback.state_of(tid)
++                if state is None:
 +                    return self._send(404, {"error": "no answer with that id on this machine"})
-+                return self._send(200, {"turn_id": tid, "mark": got})
++                return self._send(200, {"turn_id": tid, **state})
 +            except Exception as exc:
 +                return self._send(503, {"available": False,
 +                                        "error": f"{type(exc).__name__}: {exc}"})
@@ -166,7 +166,7 @@
 +                    return self._send(200, {"available": True, "pending": rows,
 +                                            "setup": setup})
                  if path == "/api/memory/facts":
-@@ -2079,6 +2121,32 @@
+@@ -2079,6 +2121,37 @@
                  return self._send(500, {"error": f"{type(exc).__name__}: {exc}"})
              return self._send(code, out)
  
@@ -174,8 +174,11 @@
 +            # One turn id, one mark. There is deliberately no list form -
 +            # jarvis_feedback.mark() refuses anything but a single id - so no
 +            # client can build a "mark all": that would move every counter at
-+            # once on one tap. A mark never changes memory; at most it raises
-+            # ONE "retire this?" card in the ordinary review queue.
++            # once on one tap. A mark never changes memory by itself: a wrong
++            # one may carry a why tag and the owner's own correction words, and
++            # that asks for ONE card in the ordinary memory review queue - an
++            # UPDATE card when words were typed, a FORGET card when not. Nothing
++            # changes until a person answers the card.
 +            if not _origin_ok(self):
 +                return self._send(403, {"error": "cross-origin request refused"})
 +            if not _token_ok(self):
@@ -188,7 +191,9 @@
 +                return self._send(400, {"error": "need an object"})
 +            try:
 +                import jarvis_feedback
-+                out = jarvis_feedback.mark(body.get("turn_id"), body.get("mark"))
++                out = jarvis_feedback.mark(body.get("turn_id"), body.get("mark"),
++                                           reason=body.get("reason"),
++                                           correction=body.get("correction"))
 +            except Exception as exc:
 +                return self._send(503, {"error": f"{type(exc).__name__}: {exc}"})
 +            code = int(out.pop("status", 200))
@@ -199,7 +204,7 @@
          if route in ("/api/memory/forget", "/api/memory/edit",
                       "/api/memory/learning", "/api/memory/sleep_time"):
              if not _origin_ok(self):
-@@ -2826,6 +2894,20 @@
+@@ -2826,6 +2899,20 @@
          try:
              if first_error is not None:
                  raise first_error
