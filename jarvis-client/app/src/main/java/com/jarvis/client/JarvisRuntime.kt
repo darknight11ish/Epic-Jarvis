@@ -13,6 +13,7 @@ import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.MarkReceipt
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.onOk
@@ -11780,6 +11781,66 @@ object JarvisRuntime {
             } else {
                 when (result) {
                     is ApiResult.Ok -> s.copy(mark = next, busy = false)
+                    is ApiResult.Failed -> when (result.error) {
+                        ApiError.NotFound, ApiError.NotAvailable ->
+                            s.copy(busy = false, unavailable = true)
+                        else -> s.copy(busy = false)
+                    }
+                }
+            }
+        }
+        if (result is ApiResult.Failed &&
+            result.error != ApiError.NotFound && result.error != ApiError.NotAvailable
+        ) {
+            _notice.value = "That mark did not reach the desktop. " + describe(result.error)
+        }
+        return result
+    }
+
+    /**
+     * The Right/Wrong v2 send (Wave 10, 2026-11-08): the owner's reason and/or
+     * their own correction words, from the answer menu's Wrong sheet.
+     *
+     * [body] is the exact request built by
+     * [com.jarvis.client.net.WrongFeedback.request] - the ONE place a v2 body
+     * is built - so the shape the sheet shows and the shape posted here cannot
+     * drift apart. The SAME rules as [markAnswer] hold: nothing is sent while
+     * the link is down or stale, one send per answer at a time, and a PC that
+     * cannot take marks (404/503) turns the controls quietly unavailable
+     * instead of showing an error wall.
+     *
+     * The answer is the PC's [MarkReceipt]: `said` is the PC's own receipt
+     * sentence for the sheet to show word for word, and `card_raised` says ONE
+     * card is waiting on the PC about this mark - the phone never answers or
+     * approves it. A mark changes no memory by itself.
+     */
+    suspend fun markWrong(turnId: String, body: String): ApiResult<MarkReceipt> {
+        actionBlocker()?.let {
+            _notice.value = it
+            return ApiResult.Failed(ApiError.Unreachable(it))
+        }
+        var claimed = false
+        _answerMark.update { s ->
+            val mine = s?.takeIf { it.turnId == turnId }
+            if (mine?.busy == true || mine?.unavailable == true) {
+                claimed = false
+                s
+            } else {
+                claimed = true
+                // The sheet can only ever send a WRONG mark, so the state it
+                // claims is that, whatever the old mark was: the PC is being
+                // told "wrong" again, now with the owner's reason.
+                AnswerMarkState(turnId, mine?.mark ?: AnswerMark.NONE, busy = true)
+            }
+        }
+        if (!claimed) return ApiResult.Failed(ApiError.AlreadyHandled)
+        val result = api.markAnswerWithFeedback(body)
+        _answerMark.update { s ->
+            if (s == null || s.turnId != turnId) {
+                s
+            } else {
+                when (result) {
+                    is ApiResult.Ok -> s.copy(mark = AnswerMark.WRONG, busy = false)
                     is ApiResult.Failed -> when (result.error) {
                         ApiError.NotFound, ApiError.NotAvailable ->
                             s.copy(busy = false, unavailable = true)

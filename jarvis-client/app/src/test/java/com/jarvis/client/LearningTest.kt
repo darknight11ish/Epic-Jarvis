@@ -4,12 +4,16 @@ import com.jarvis.client.net.AnswerFeedback
 import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.FeedbackReason
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.net.MarkReceipt
 import com.jarvis.client.net.MemoryCardKind
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ModelSpeed
 import com.jarvis.client.net.ModelsInfo
+import com.jarvis.client.net.WrongFeedback
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -102,6 +106,126 @@ class LearningTest {
         assertNull(Feedback.markBody("", AnswerMark.RIGHT))
         // A quote in the id must never reach the JSON.
         assertNull(Feedback.markBody("$id32\",\"mark\":\"right", AnswerMark.WRONG))
+        // ...and the same rule holds when the v2 fields are carried.
+        assertNull(
+            Feedback.markBody(
+                "not-an-id", AnswerMark.WRONG,
+                FeedbackReason.WRONG_FACT, "the correction",
+            ),
+        )
+    }
+
+    // ------------------------------------- the v2 body: reason + correction --
+    // Wave 10, the owner's choice of 2026-11-07 ("Mark + why + save my
+    // correction"). The Lead's contract: the old body stays valid and is sent
+    // byte for byte when no reason and no correction were chosen.
+
+    @Test
+    fun `no reason and no correction is still the old body, byte for byte`() {
+        for (mark in listOf(AnswerMark.WRONG, AnswerMark.RIGHT, AnswerMark.NONE)) {
+            assertEquals(
+                """{"turn_id":"$id32","mark":"${mark.wire}"}""",
+                Feedback.markBody(id32, mark, null, ""),
+            )
+        }
+        // A correction of spaces only is "nothing said": it must not grow the
+        // body the PC's old shape does not know.
+        assertEquals(
+            """{"turn_id":"$id32","mark":"wrong"}""",
+            Feedback.markBody(id32, AnswerMark.WRONG, null, "   "),
+        )
+    }
+
+    @Test
+    fun `a reason alone carries the reason and an empty correction`() {
+        val body = obj(
+            Feedback.markBody(id32, AnswerMark.WRONG, FeedbackReason.WRONG_FACT)!!,
+        )
+        assertEquals(setOf("turn_id", "mark", "reason", "correction"), body.keys)
+        assertEquals(id32, (body["turn_id"] as JsonPrimitive).content)
+        assertEquals("wrong", (body["mark"] as JsonPrimitive).content)
+        assertEquals("wrong_fact", (body["reason"] as JsonPrimitive).content)
+        assertEquals("", (body["correction"] as JsonPrimitive).content)
+    }
+
+    @Test
+    fun `every one of the five reasons uses the PC's own wire word`() {
+        val expected = mapOf(
+            FeedbackReason.WRONG_FACT to "wrong_fact",
+            FeedbackReason.OUTDATED to "outdated",
+            FeedbackReason.MISUNDERSTOOD to "misunderstood",
+            FeedbackReason.TOO_LONG to "too_long",
+            FeedbackReason.TOO_SENSITIVE to "too_sensitive",
+        )
+        for ((reason, wire) in expected) {
+            val body = obj(Feedback.markBody(id32, AnswerMark.WRONG, reason)!!)
+            assertEquals(wire, (body["reason"] as JsonPrimitive).content)
+        }
+        assertEquals(5, expected.size)
+    }
+
+    @Test
+    fun `a correction alone is sent with an empty reason, and both go together`() {
+        val only = obj(
+            Feedback.markBody(id32, AnswerMark.WRONG, null, "it was 2024, not 2023")!!,
+        )
+        assertEquals("", (only["reason"] as JsonPrimitive).content)
+        assertEquals("it was 2024, not 2023", (only["correction"] as JsonPrimitive).content)
+        val both = obj(
+            Feedback.markBody(
+                id32, AnswerMark.WRONG, FeedbackReason.OUTDATED, "it was 2024, not 2023",
+            )!!,
+        )
+        assertEquals("outdated", (both["reason"] as JsonPrimitive).content)
+        assertEquals("it was 2024, not 2023", (both["correction"] as JsonPrimitive).content)
+    }
+
+    @Test
+    fun `the correction cannot break out of its JSON string`() {
+        val words = "she said \"no\" and \\ then a newline"
+        val body = obj(Feedback.markBody(id32, AnswerMark.WRONG, null, words)!!)
+        // Parsed back, it is exactly the words - not a broken body, not a
+        // second field, not an injected mark.
+        assertEquals(words, (body["correction"] as JsonPrimitive).content)
+        assertEquals(setOf("turn_id", "mark", "reason", "correction"), body.keys)
+    }
+
+    @Test
+    fun `the correction is capped at the PC's 500 characters in the body too`() {
+        val long = "x".repeat(600)
+        val body = obj(Feedback.markBody(id32, AnswerMark.WRONG, null, long)!!)
+        assertEquals(
+            WrongFeedback.MAX_CORRECTION,
+            (body["correction"] as JsonPrimitive).content.length,
+        )
+    }
+
+    // ------------------------------------------- the mark's receipt (v2) --
+    // The route keeps `ok` and adds `said` (the PC's own sentence) and
+    // `card_raised` (ONE card is waiting on the PC).
+
+    @Test
+    fun `the receipt reads said and card_raised, and ignores the old fields`() {
+        val receipt = Feedback.receipt(
+            obj("""{"ok": true, "turn_id": "$id32", "mark": "wrong", "was": "none",
+                    "changed": true, "facts": [], "retire_cards_raised": 1,
+                    "said": "  Saved your correction.  ", "card_raised": true}"""),
+        )
+        assertEquals("Saved your correction.", receipt.said)
+        assertEquals(true, receipt.cardRaised)
+    }
+
+    @Test
+    fun `an older PC's answer has no receipt claims in it`() {
+        val receipt = Feedback.receipt(obj("""{"ok": true, "turn_id": "$id32", "mark": "wrong"}"""))
+        assertEquals("", receipt.said)
+        assertEquals(false, receipt.cardRaised)
+        // Shapes this cannot read say nothing rather than guessing.
+        assertEquals(MarkReceipt(), Feedback.receipt(null))
+        assertEquals(
+            MarkReceipt(),
+            Feedback.receipt(obj("""{"said": null, "card_raised": "yes"}""")),
+        )
     }
 
     // ---------------------------------------------------------- next mark --

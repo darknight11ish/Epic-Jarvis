@@ -13,6 +13,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.widthIn
 import com.jarvis.client.net.AnswerFeedback
 import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.net.FeedbackReason
+import com.jarvis.client.net.MarkReceipt
+import com.jarvis.client.net.WrongFeedback
 import com.jarvis.client.ui.parts.liveStatus
 import androidx.compose.foundation.gestures.DraggableState
 import androidx.compose.foundation.gestures.Orientation
@@ -151,6 +154,7 @@ import com.jarvis.client.ui.parts.MindIcon
 import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
+import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.RemindersIcon
 import com.jarvis.client.ui.parts.Rule
@@ -4595,7 +4599,18 @@ private fun MessageMenu(
     onDismiss: () -> Unit,
 ) {
     val chrome = LocalChrome.current
+    // Right/Wrong v2 (Wave 10, the owner's choice of 2026-11-07: "Mark + why +
+    // save my correction"). Tapping Wrong opens the compact sheet IN THIS
+    // dialog - the same one-surface swap [HomeMoreMenu] uses for its Modes
+    // sub-sheet - and the menu's own dismiss still closes everything. The
+    // sheet sends nothing until one of its two submit controls is tapped; a
+    // dismiss is a dismiss, never a mark.
+    var wrongFor by remember(text) { mutableStateOf<String?>(null) }
     Dialog(onDismissRequest = onDismiss) {
+        val openWrong = wrongFor
+        if (openWrong != null) {
+            WrongFeedbackSheet(turnId = openWrong, canMark = canMark, onClose = onDismiss)
+        } else {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -4635,7 +4650,18 @@ private fun MessageMenu(
             }
 
             if (feedback != null) {
-                AnswerMarkRows(feedback, canMark, onMark)
+                AnswerMarkRows(feedback, canMark) { turnId, tapped ->
+                    // Wave 10: a Wrong tap on an answer that is not already
+                    // wrong opens the reason sheet. Tapping Wrong on an
+                    // already-wrong answer still takes it back at once, as it
+                    // always has - the sheet is for saying WHY, not for
+                    // removing a mark.
+                    if (tapped == AnswerMark.WRONG && feedback.mark != AnswerMark.WRONG) {
+                        wrongFor = turnId
+                    } else {
+                        onMark(turnId, tapped)
+                    }
+                }
                 Gap(8)
                 Rule()
                 Gap(4)
@@ -4732,6 +4758,7 @@ private fun MessageMenu(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Quiet(MoreMenuWords.CLOSE, color = chrome.textMid, onClick = onDismiss)
             }
+        }
         }
     }
 }
@@ -4850,6 +4877,194 @@ private fun MarkToggle(
                 )
                 .padding(horizontal = 12.dp, vertical = 6.dp),
         )
+    }
+}
+
+/**
+ * "Why was it wrong?" - the compact Wrong sheet (Wave 10, the owner's choice
+ * of 2026-11-07: "Mark + why + save my correction").
+ *
+ * Opened from [MessageMenu] when Wrong is tapped on an answer that is not
+ * already wrong; it replaces the menu's own content in the same [Dialog] (the
+ * swap [HomeMoreMenu] uses for its Modes sub-sheet), so there is still ONE
+ * surface and ONE Back. It is dismissable and sends NOTHING until one of its
+ * two submit controls is tapped:
+ *
+ *  - five reason chips - the owner's own list, word for word
+ *    ([FeedbackReason]);
+ *  - an optional, one-line "What should I have said?" box, capped at the PC's
+ *    500 characters while typed and again in the body;
+ *  - **Just mark it wrong**, which sends today's body, unchanged;
+ *  - **Send**, which sends the same route with the chosen reason and/or
+ *    correction.
+ *
+ * Both submit paths go through the ONE pure function [WrongFeedback.request];
+ * CANCEL goes through it too and comes back [WrongFeedback.Request.Nothing],
+ * so no dismiss-shaped path can send anything. The PC's own answer is shown
+ * as the receipt, word for word, with its fixed fallback only when an older
+ * PC sends none ([WrongFeedback.receiptWords]). A mark never changes memory,
+ * raises no approval here and approves nothing: if the PC queues ONE card
+ * about it, that card is answered on the PC (the sheet says so through the
+ * PC's own `said` or its own fixed line).
+ */
+@Composable
+private fun WrongFeedbackSheet(
+    turnId: String,
+    canMark: Boolean,
+    onClose: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var reason by remember(turnId) { mutableStateOf<FeedbackReason?>(null) }
+    var correction by remember(turnId) { mutableStateOf("") }
+    var sending by remember(turnId) { mutableStateOf(false) }
+    var receipt by remember(turnId) { mutableStateOf<MarkReceipt?>(null) }
+    var problem by remember(turnId) { mutableStateOf<String?>(null) }
+
+    // The ONE place a control becomes a request, and a request becomes a send.
+    // `WrongFeedback.request` decides, so the screen holds no second copy of
+    // "what may be sent": a dismiss is Nothing, a dead link is Nothing, and
+    // only its Send bodies reach the runtime below.
+    fun act(tap: WrongFeedback.Tap) {
+        val request = WrongFeedback.request(
+            tap,
+            turnId,
+            WrongFeedback.Draft(reason = reason, correction = correction),
+            canSend = canMark,
+        )
+        when (request) {
+            WrongFeedback.Request.Nothing -> if (tap == WrongFeedback.Tap.CANCEL) onClose()
+            is WrongFeedback.Request.Send -> {
+                if (sending || receipt != null) return
+                sending = true
+                problem = null
+                scope.launch {
+                    when (val result = com.jarvis.client.JarvisRuntime.markWrong(turnId, request.body)) {
+                        is com.jarvis.client.net.ApiResult.Ok -> receipt = result.value
+                        is com.jarvis.client.net.ApiResult.Failed ->
+                            problem = com.jarvis.client.JarvisRuntime.noticeFor(result.error)
+                    }
+                    sending = false
+                }
+            }
+        }
+    }
+
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(chrome.surface1)
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        Text(
+            WrongFeedback.TITLE,
+            style = MaterialTheme.typography.titleMedium,
+            color = chrome.textHi,
+            modifier = Modifier.semantics { heading() },
+        )
+        Gap(4)
+        Text(
+            WrongFeedback.SUBTITLE,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textMid,
+        )
+        Gap(8)
+        Rule()
+        Gap(4)
+
+        Text(
+            WrongFeedback.WHY,
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.textMid,
+        )
+        Gap(6)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            for (option in FeedbackReason.values()) {
+                OptionChip(
+                    label = option.label,
+                    isSelected = reason == option,
+                    enabled = !sending && receipt == null,
+                ) {
+                    reason = WrongFeedback.toggle(reason, option)
+                }
+            }
+        }
+        Gap(12)
+
+        // ONE line, the owner's own words: capped as it is typed, so the
+        // counter and the body can never disagree.
+        TextInput(
+            value = correction,
+            onValueChange = { correction = WrongFeedback.cap(it) },
+            label = WrongFeedback.CORRECTION_LABEL,
+            placeholder = WrongFeedback.CORRECTION_HINT,
+            supportingText = WrongFeedback.remainingLabel(correction),
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        )
+
+        val said = WrongFeedback.receiptWords(receipt)
+        if (said != null) {
+            Gap(8)
+            Text(
+                said,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textHi,
+                modifier = Modifier.liveStatus(),
+            )
+        }
+        if (problem != null) {
+            Gap(4)
+            Text(
+                problem.orEmpty(),
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.badInk,
+                modifier = Modifier.liveStatus(),
+            )
+        }
+        if (!canMark && receipt == null) {
+            Gap(4)
+            Text(
+                WrongFeedback.OFFLINE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
+        }
+
+        Gap(8)
+        Rule()
+        Gap(4)
+        if (receipt != null) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Quiet(WrongFeedback.CLOSE, color = chrome.textMid, onClick = onClose)
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Quiet(
+                    WrongFeedback.CANCEL,
+                    color = chrome.textMid,
+                    onClick = { act(WrongFeedback.Tap.CANCEL) },
+                )
+                Spacer(Modifier.weight(1f))
+                Quiet(
+                    WrongFeedback.JUST_WRONG,
+                    color = chrome.textHi,
+                    enabled = canMark && !sending,
+                    onClick = { act(WrongFeedback.Tap.JUST_WRONG) },
+                )
+                Spacer(Modifier.width(8.dp))
+                Primary(
+                    WrongFeedback.SUBMIT,
+                    enabled = canMark && !sending,
+                    busy = sending,
+                    onClick = { act(WrongFeedback.Tap.SUBMIT) },
+                )
+            }
+        }
     }
 }
 
