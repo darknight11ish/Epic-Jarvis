@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b8a9406907fc38a5fc89ed0e7826d1c93cdd2018",
- "built_at": "2026-11-07T11:16:03-08:00",
+ "ref": "98812b9fc412adc83b9cf0baa3022814ea15064e",
+ "built_at": "2026-11-07T15:37:10-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3771,6 +3771,7 @@
     "backend/test_focus.py",
     "backend/test_focus_brief.py",
     "backend/test_folder_restrictions.py",
+    "backend/test_folders_chat.py",
     "backend/test_forecast.py",
     "backend/test_forget_range.py",
     "backend/test_form_review.py",
@@ -4062,6 +4063,7 @@
     "backend/test_secrets.py",
     "backend/test_security_pc.py",
     "backend/test_self_answers.py",
+    "backend/test_self_awareness.py",
     "backend/test_self_code.py",
     "backend/test_self_facts.py",
     "backend/test_self_improve.py",
@@ -4211,7 +4213,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 649,
+   "file_count": 651,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4479,6 +4481,7 @@
     "changelog.d/2026-11-07-self-knowledge-honesty.md",
     "changelog.d/2026-11-07-three-gpu-coding-preset.md",
     "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
+    "changelog.d/2026-11-07-wave-8-2-full-self-awareness.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4611,6 +4614,7 @@
     "decisions.d/2026-11-07-github-self-knowledge-catalogue-not-lane-system.md",
     "decisions.d/2026-11-07-gpu-pin-11434-to-headless.md",
     "decisions.d/2026-11-07-repo-watcher.md",
+    "decisions.d/2026-11-07-self-awareness-contract-and-change-journal.md",
     "decisions.d/2026-11-07-self-code-map-from-main.md",
     "decisions.d/2026-11-07-self-knowledge-honesty.md",
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
@@ -5059,7 +5063,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 807,
+   "file_count": 809,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6123,6 +6127,51 @@
  ],
  "recent_commits": [
   {
+   "sha": "98812b9fc412adc83b9cf0baa3022814ea15064e",
+   "date": "2026-11-07",
+   "subject": "feat(awareness): the folder list through chat - list it, and add one with the same card"
+  },
+  {
+   "sha": "3b34570d1bf9a07fcfbad42d88874acf53ed8766",
+   "date": "2026-11-07",
+   "subject": "fix(notes): the Notion/file answers name the real steps - and the folder-list prerequisite"
+  },
+  {
+   "sha": "819de11d4ebb6c23554edda4dda5b606ba6572e8",
+   "date": "2026-11-07",
+   "subject": "fix(records): quote the register's real row count in the About page"
+  },
+  {
+   "sha": "960702dcec3b65c49a2f8b704c10f70afab40fcd",
+   "date": "2026-11-07",
+   "subject": "fix(awareness): keep the journal and page answers side-effect free"
+  },
+  {
+   "sha": "1f837d41f22dc1549a0ec1721c9e18362c94caf3",
+   "date": "2026-11-07",
+   "subject": "test(awareness): align the suites the new answers deliberately change"
+  },
+  {
+   "sha": "baec446a83b74d634a02dd855f56471cdb646337",
+   "date": "2026-11-07",
+   "subject": "Merge remote-tracking branch 'origin/main' into feat/wave82-total-awareness"
+  },
+  {
+   "sha": "888b799777aac46750da0aa12bc59129543310aa",
+   "date": "2026-11-07",
+   "subject": "Merge pull request #1212 from darknight11ish/fix/wave8-followups-2026-11-07"
+  },
+  {
+   "sha": "cfeb76e1646a5ce5fe11efd70630570d7fb06ad2",
+   "date": "2026-11-07",
+   "subject": "feat(awareness): full self-awareness and a local change journal"
+  },
+  {
+   "sha": "cd463bade671bceb3f988d921a56701dde33b640",
+   "date": "2026-11-07",
+   "subject": "chore(self-code): regenerate the map for the Wave 8.1 record fragments"
+  },
+  {
    "sha": "b8a9406907fc38a5fc89ed0e7826d1c93cdd2018",
    "date": "2026-11-07",
    "subject": "ci(audit,release): checkout full history in audit job and set targetCommitish on client-latest"
@@ -6176,58 +6225,13 @@
    "sha": "e4c449ca68e85e0f45d3b4738eb45b233118040b",
    "date": "2026-11-07",
    "subject": "fix(cloud): the chosen provider answers, chat can see and switch it, and every switch answers about itself"
-  },
-  {
-   "sha": "e18861f85ea70573bc2d7a827275a81f844c4914",
-   "date": "2026-11-07",
-   "subject": "integration: cloud provider routing follows the choice + privacy backstop (Q1/Q7)"
-  },
-  {
-   "sha": "443e25de186042263abba29206369dd0b2331348",
-   "date": "2026-11-07",
-   "subject": "fix(cloud): the chosen provider answers, chat can see and switch it, and every switch answers about itself"
-  },
-  {
-   "sha": "83278a82331533e8c12df093ccca1d09892996e8",
-   "date": "2026-11-07",
-   "subject": "integration: docs/README count 416 -> 417 (one new doc in this wave: SELF-CODE-MAP.md; size intentionally untouched)"
-  },
-  {
-   "sha": "b3d440e1f329b112c31b647e0e91a7f74d10d7d0",
-   "date": "2026-11-07",
-   "subject": "integration: GitHub self-knowledge G1-G8 (Q6, LANE_SYSTEM untouched)"
-  },
-  {
-   "sha": "c95479a664c038143ca453ba50134fabe93370b1",
-   "date": "2026-11-07",
-   "subject": "integration: repo watcher fixups (claims + job creation)"
-  },
-  {
-   "sha": "262eb3a9127ffc12fcd53bb1099fce7be19fee6b",
-   "date": "2026-11-07",
-   "subject": "integration: chat/Live change parity - 60 tool switches, 116-option suite, LP-3 (Q2)"
-  },
-  {
-   "sha": "d733cf609315fee62abc820a12a786cb41793c28",
-   "date": "2026-11-07",
-   "subject": "integration: self-code map beside-file (Q5)"
-  },
-  {
-   "sha": "ad4df438aff50731716af0170efe46434bd62dcf",
-   "date": "2026-11-07",
-   "subject": "integration: seven #1209 audit fixes"
-  },
-  {
-   "sha": "53c7069d0005d423a450bb731962dea4dd72ab43",
-   "date": "2026-11-07",
-   "subject": "integration: deterministic cloud-escalation chat switch"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1376
+   "files": 1378
   },
   {
    "path": "jarvis-desktop/",
@@ -6257,7 +6261,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 222
+   "files": 223
   },
   {
    "path": "videos/",
@@ -6267,7 +6271,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 135
+   "files": 136
   },
   {
    "path": "plugins/",
@@ -6341,8 +6345,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5464,
-  "covered": 4999,
+  "tracked_files": 5468,
+  "covered": 5003,
   "excluded": 465,
   "subsystems": 27
  },

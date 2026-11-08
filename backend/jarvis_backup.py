@@ -775,6 +775,12 @@ NOT_BACKED_UP_PATHS = {
     # restored beside the chats from an earlier backup would claim deletions the
     # restored history contradicts.
     "purge-audit.jsonl": "a trail of deletions, never content; a stale one would claim deletions the restored history contradicts",
+    # The self-awareness change journal (jarvis_quick.py, Wave 8.2, 2026-11-07):
+    # a bounded local record (500 rows) of what changed on this PC - keys, old
+    # and new values, times. It carries no owner content and is rebuilt from
+    # the live state, so a restore does not need it and a stale copy would only
+    # claim changes the restored state contradicts.
+    "changes.jsonl": "a bounded local record of what changed, rebuilt from the live state; no owner content",
 }
 
 #: The settings files the `*.json` glob cannot reach, because their extension is

@@ -178,6 +178,11 @@ OWNER_QUESTION_EXCEPTIONS = {
     # explained by the other eight, and the radar's real chat lookup is its own
     # grammar (2026-10-31 ruling 3), not a fall-through.
     ("price-radar", "how do I turn on {}"): {"price_radar_enable"},
+    # Wave 8.2 (2026-11-07): once a row's words are also a TOOL switch's, the
+    # new `tool_switch_state` answer owns "is it on" and reads the same switch
+    # the guide's state answer would. The other eight questions still explain
+    # the row, and the switch's value is checked in test_self_awareness.py.
+    ("web-search", "is {} on"): {"tool_switch_state"},
 }
 
 
@@ -783,18 +788,26 @@ def t_a_model_turn_gets_the_facts_with_no_card():
 
 # -------------------------------------------- 6. what can I change? unchanged
 
-def t_what_can_i_change_is_still_the_exact_answer():
+def t_what_can_i_change_is_the_full_changeable_answer():
+    # Wave 8.2 (2026-11-07): the owner asked for FULL awareness of everything
+    # changeable, so the bare question gets `changeable_overview` (settings AND
+    # tools AND presets/models AND accounts). The settings-only words remain
+    # behind their own intent for every phrase that names settings.
     got = match("what can I change")
-    check("'what can I change' is still the settings help", got is not None
-          and got.name == "settings_help", got.name if got else "the model")
+    check("'what can I change' gets the full changeable answer", got is not None
+          and got.name == "changeable_overview", got.name if got else "the model")
     out = say(got)
-    want = R.changeable_words()
-    check("...and its answer is still changeable_words, exactly", out is not None
-          and out.reply == want)
-    count = R.changeable_settings()["count"]
-    check("...which still names the real count and the card/undo rule",
-          out is not None and str(count) in out.reply and "undo" in out.reply.lower(),
-          out.reply[:120] if out else None)
+    # The wider answer counts EVERY setting (bool + choice + number), which is
+    # the count it prints; changeable_settings()["count"] is the older, spoken-
+    # settings-only count, so it is not the number to check against here.
+    count = (len(R.BOOL_SETTINGS) + len(R.CHOICE_SETTINGS)
+             + len(R.NUMBER_SETTINGS))
+    check("...which names the real settings count, the tools and the card rule",
+          out is not None and str(count) in out.reply
+          and "tools" in out.reply.lower() and "card" in out.reply.lower(),
+          out.reply[:160] if out else None)
+    check("...and the settings-only words still exist behind their own intent",
+          bool(R.changeable_words()))
 
 
 def t_every_feature_has_a_matrix_row_and_a_reason():
@@ -2580,7 +2593,7 @@ if __name__ == "__main__":
                t_the_documented_listing_call_is_never_refused,
                t_a_model_turn_can_list_the_groups_with_no_refusal,
                t_a_model_turn_gets_the_facts_with_no_card,
-               t_what_can_i_change_is_still_the_exact_answer,
+               t_what_can_i_change_is_the_full_changeable_answer,
                t_every_feature_has_a_matrix_row_and_a_reason,
                t_the_matrix_tables_link_to_real_controls,
                t_the_matrix_reports_the_switch_and_adjust_counts_honestly,

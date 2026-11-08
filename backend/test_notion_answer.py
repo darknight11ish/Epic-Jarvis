@@ -196,6 +196,11 @@ def t_close_phrasings_and_the_follow_up():
         "what is the best way to convert my notion notes to obsidian",
         "I want to move all my notion notes into obsidian",
         "can you help me import my notion export into obsidian",
+        # The owner's phone finding, 2026-11-07: two sentences and the word
+        # "download" must still get the real Notion answer, never the model's
+        # false "I don't have a direct tool".
+        "Can you process a download into Obsidian Notes? It's the Markdown Notes from my Notion export.",
+        "it's the markdown notes from my notion export",
     )
     for s in said:
         i = Q.match(s)
@@ -212,6 +217,18 @@ def t_close_phrasings_and_the_follow_up():
         i = Q.match(s)
         check(f"{s!r} is answered without the model",
               i is not None and i.name == "notion_export" and i.f.get("step") == "import", i)
+    # A file the owner does NOT call Notion still gets a true answer: read it,
+    # and writing the note raises one card. Never a model denial.
+    i = Q.match("can you process a download into obsidian notes?")
+    check("a generic download->Obsidian ask is answered here, not by the model",
+          i is not None and i.name == "file_to_obsidian_help", i)
+    r = Q.answer("can you process a download into obsidian notes?", sched=_Sched())
+    check("... saying a file can be read and a written note needs one card",
+          r is not None and "read" in r.reply.lower() and "card" in r.reply.lower(),
+          r and r.reply)
+    check("... and it does not claim a conversion happened",
+          r is not None and "done" not in r.reply.lower(), r and r.reply)
+
     r = Q.answer("import my notion export", sched=_Sched())
     check("... with the picker's own steps", r is not None and r.reply == Q.NOTION_PICK_WORDS,
           r and r.reply)

@@ -2,7 +2,12 @@
 
     python backend/test_settings_help.py
 
-THE OWNER'S DECISION (2026-10-10)
+THE OWNER'S DECISION (2026-10-10), WIDENED ON 2026-11-07
+    The bare "what can I change?" now answers the wider `changeable_overview`
+    (settings, tool switches, presets, models, approval policy, accounts,
+    plug-ins, manner) because the owner asked for full awareness of everything
+    changeable; everything that names SETTINGS still gets the settings-only
+    answer this suite was written for.
     He asked to change every setting by talking to Jarvis. Most of that already
     worked - "turn off web search" and ten more phrases act through
     jarvis_settings_registry.BOOL_SETTINGS, and each setting's own setter
@@ -43,6 +48,11 @@ def check(name, cond, detail=""):
 # --------------------------------------------------------------------------
 
 print("--- the question is ours to answer ---")
+# Wave 8.2 (2026-11-07): the owner asked for FULL awareness of everything
+# changeable, so the two bare forms now get `changeable_overview` (settings
+# AND tools AND presets/models AND accounts). The settings-only answer keeps
+# every phrase that names settings, and remains behind `settings_help`.
+FULL = ("what can I change", "what can I change?")
 for phrase in ("what can I change",
                "what can I change?",
                "what settings can I change",
@@ -54,9 +64,10 @@ for phrase in ("what can I change",
                "list the settings",
                "what can I change in settings"):
     m = Q.match(phrase)
+    want = "changeable_overview" if phrase in FULL else "settings_help"
     check(f"'{phrase}' is answered here",
-          m is not None and m.name == "settings_help",
-          f"got {m.name if m else 'the model'}")
+          m is not None and m.name == want,
+          f"got {m.name if m else 'the model'}, wanted {want}")
 print()
 
 # --------------------------------------------------------------------------
@@ -66,7 +77,9 @@ print()
 print("--- a loosening is still a card, and is not a 'change' ---")
 # These must keep their own intents. If "what can I change" had been written as
 # a loose pattern, one of these could be swallowed by it - and a phrase that
-# LOOSENS a rule must never be routed to a help answer.
+# LOOSENS a rule must never be routed to a help answer. (Wave 8.2's wider
+# changeable answer is deliberately narrow: it takes the bare question only,
+# never one of the action sentences below.)
 for phrase, want in (("turn on lights without asking", "settings_bool"),
                      ("turn off web search", "settings_bool"),
                      ("stop asking before jarvis reads my calendar", "settings_asks_first"),
