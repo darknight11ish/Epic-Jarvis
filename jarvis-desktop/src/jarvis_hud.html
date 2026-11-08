@@ -3295,6 +3295,27 @@ html[data-cal-view="day"] .cal-side{display:none;}
         </svg>
         <span class="rt-label">Calendar</span>
       </button>
+      <!-- The Brain WINDOW's own door in the left column (owner's Q5 ruling,
+           2026-11-07: both a top-menu word and a column button). It opens the
+           EXISTING Brain window through the shell's own open_fix_place
+           command (hud_bootstrap.js's openBrainAt), exactly as the tray's "Open
+           the Brain" row and a chat answer's open_brain route do - one opener,
+           not a second window. THE WORD IS UNAMBIGUOUS IN THE HUD: the rail's
+           own "Brain" VIEW is relabelled "Galaxy" by the shell (see
+           relabelBrainTab), so "Brain" means this window here. Hidden until the
+           shell is there, like #rail-faces and #rail-live: a plain browser has
+           no command to send. -->
+      <button type="button" class="rail-toolbar-btn" id="rail-brain-window"
+              title="Brain window: memory, models, skills, history and tutorials"
+              aria-label="Open the Brain window" hidden>
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <rect x="3.5" y="4.5" width="17" height="13" rx="2"/>
+          <path d="M8 21h8M12 17.5V21"/>
+          <path d="M8 9.2c1.4-1.7 2.7 1.7 4 0M12 12.4c1.3-1.5 2.5 1.5 3.8 0"/>
+        </svg>
+        <span class="rt-label">Brain</span>
+      </button>
       <!-- Why Live did not start, for a screen reader. The button's title
            carries the on/off wording; the READABLE refusal is the stage's
            #live-refusal popup (the owner's field bug of 2026-10-27), and this
@@ -3559,6 +3580,14 @@ html[data-cal-view="day"] .cal-side{display:none;}
         <button type="button" class="stage-tab stage-word" id="stage-presets"
                 title="Presets: model presets, personalities and HUD layouts"
                 aria-haspopup="menu" aria-expanded="false">Presets</button>
+        <!-- The Brain WINDOW's own word in the HUD's top menu bar (owner's
+             Q5 ruling, 2026-11-07). Not a tab and it selects no panel: it
+             opens the existing Brain window through the same opener the column
+             button above uses. Hidden until the shell is there, like the column
+             button; the stage's own five tabs keep their ids and their order. -->
+        <button type="button" class="stage-tab stage-word" id="stage-brain-window"
+                title="Brain window: memory, models, skills, history and tutorials"
+                aria-label="Open the Brain window" hidden>Brain</button>
       </div>
     </div>
 

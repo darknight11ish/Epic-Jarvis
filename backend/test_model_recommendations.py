@@ -139,7 +139,11 @@ MODELS = [
     {"ref": "acme/NewModel-GGUF", "source": "huggingface",
      "params": 8_000_000_000, "bytes_": 4 * 2 ** 30, "context": 131072,
      "quant": "Q4_K_M", "trending": 10, "bench": {"humaneval+": 0.5},
-     "tags": ["text-generation", "gguf", "license:apache-2.0"]},
+     "released_at": 1_780_000_000,
+     # The three capability words are the catalogue's own (2026-11-07), and the
+     # licence tag is still read the way it always was.
+     "tags": ["text-generation", "gguf", "license:apache-2.0",
+              "vision", "function-calling", "code"]},
     {"ref": "tiny:1b", "source": "ollama", "params": 1_000_000_000,
      "size_gb": 1.0, "context": 8192, "trending": 2},
     # THE FIELD TEST'S SHAPE (2026-10-28): an absent `bytes_` became 0.0 in
@@ -175,7 +179,9 @@ def t_the_check_caches_candidates_and_never_downloads():
     check("a candidate carries exactly the contract fields",
           set(first) == {"ref", "name", "family", "params_b", "quant", "size_gb",
                          "context_tokens", "licence", "provider", "fit",
-                         "source_url", "why"},
+                         "source_url", "why",
+                         "vram_need_gb", "fit_pooled", "pooled_vram_gb",
+                         "capabilities", "released_at"},
           sorted(first))
     check("... its fit is one of the three words",
           first["fit"] in ("fits", "tight", "no"), first["fit"])
@@ -205,6 +211,69 @@ def t_the_check_caches_candidates_and_never_downloads():
     check("a later GET reads the cached check without touching the network",
           again["checked_at"] == T0 and len(again["candidates"]) == 2
           and again["candidates"] == out["candidates"], again)
+
+
+def t_the_filter_fields_are_the_catalogue_s_own_and_never_guessed():
+    """The Brain's model filter bar reads these five fields (Q4, 2026-11-07).
+
+    Each comes from the catalogue row, and each is ABSENT rather than guessed
+    when the row does not carry it: a capability the row's tags never mention,
+    a date the listing never gave, a pooled fit with no measured cards. The
+    owner's two hardware-fit questions ("fits one card" vs "fits the cards
+    together") are both answered, from the same 85%/100% bands."""
+    path = fresh("filters")
+    code, out = M.check_models(path=path, gpus=GPUS, discover=lambda: list(MODELS),
+                               estimate=lambda m: 6000, clock=lambda: T0)
+    check("the filtered check answers 200", code == 200, out)
+    first = out["candidates"][0]
+    check("the estimated need is carried in GB, from the same estimate the fit used",
+          first["vram_need_gb"] == round(6000 / 1024.0, 2), first.get("vram_need_gb"))
+    check("the fit is also answered for all the cards pooled",
+          first["fit_pooled"] in ("fits", "tight", "no"), first.get("fit_pooled"))
+    check("... and the measured cards' sum is carried, so the pooled words can be checked",
+          first["pooled_vram_gb"] == 20.0, first.get("pooled_vram_gb"))
+    check("the capability tags are the row's own words, in the owner's fixed order",
+          first["capabilities"] == ["vision", "tools", "coding"], first.get("capabilities"))
+    check("the catalogue's own date is carried, as seconds",
+          first["released_at"] == 1_780_000_000, first.get("released_at"))
+    check("a row whose tags mention no capability carries none, never a guess",
+          {c["ref"]: c["capabilities"] for c in out["candidates"]}["tiny:1b"] == [],
+          out["candidates"])
+    check("a row the listing gave no date carries None, never the check's clock",
+          {c["ref"]: c["released_at"] for c in out["candidates"]}["tiny:1b"] is None,
+          out["candidates"])
+
+    big = {"ref": "acme/Big-GGUF", "source": "huggingface",
+           "params": 24_000_000_000, "bytes_": 15 * 2 ** 30,   # weights 15 GB, need 16.6 GB: > one card, < the 20 GB pool
+           "context": 32768, "tags": ["license:apache-2.0"]}
+    path2 = fresh("pooled")
+    code2, out2 = M.check_models(path=path2, gpus=GPUS, discover=lambda: [big],
+                                 estimate=lambda m: 17_000, clock=lambda: T0)
+    check("a model too big for one card is still judged against the pool",
+          code2 == 200 and out2["candidates"], out2)
+    row = out2["candidates"][0]
+    check("... it does not fit one card", row["fit"] == "no", row["fit"])
+    check("... but it fits the cards together, so the pooled word says so",
+          row["fit_pooled"] == "fits", row["fit_pooled"])
+    check("... and the why says it, in the same words the filter uses",
+          "fits pooled" in row["why"], row["why"])
+
+    # A row written by an older check has no new fields at all.
+    old = {"checked_at": T0, "gpus": GPUS, "skipped_no_size": 0,
+           "benchmarked": {},
+           "candidates": [{"ref": "old:1b", "name": "old", "family": "old",
+                           "params_b": 1.0, "quant": "Q4_K_M", "size_gb": 1.0,
+                           "context_tokens": 8192, "licence": None,
+                           "provider": "Ollama's library", "fit": "fits",
+                           "source_url": "https://ollama.com/library/old",
+                           "why": ""}]}
+    path3 = fresh("old-store")
+    path3.write_text(json.dumps(old), encoding="utf-8")
+    row = M.recommendations_view(path=path3, gpus=GPUS)["candidates"][0]
+    check("an older cached row still reads, and its new fields are honestly absent",
+          row["vram_need_gb"] is None and row["fit_pooled"] is None
+          and row["pooled_vram_gb"] is None and row["capabilities"] == []
+          and row["released_at"] is None, row)
 
 
 def t_check_refuses_when_no_card_was_measured_and_does_no_lookup():
@@ -950,6 +1019,7 @@ def main() -> int:
         t_the_cards_are_mapped_to_the_preset_lanes_and_intake_is_honest,
         t_the_read_answer_is_the_contract_shape_and_touches_no_network,
         t_the_check_caches_candidates_and_never_downloads,
+        t_the_filter_fields_are_the_catalogue_s_own_and_never_guessed,
         t_check_refuses_when_no_card_was_measured_and_does_no_lookup,
         t_check_refuses_honestly_without_the_catalogue_module,
         t_the_check_answer_has_no_fit_claim_without_an_estimate,
