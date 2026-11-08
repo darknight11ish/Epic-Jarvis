@@ -36344,3 +36344,71 @@ right now?", "Is background learning on right now?", "Is the one moment message
 on right now?", and the six safety sentences above. Each should now be answered
 in one short sentence with the measured value (or the honest "I cannot read ..."
 if that source is off) and carry `quick` in `X-Jarvis-Route`, with no model call.
+
+## 201. The automatic read-aloud switch (2026-11-07)
+
+`GET /api/read-aloud` and `POST /api/read-aloud {"on": bool}` read and set the
+PC's own answer-speech switch. It is ON by default (the pre-2026-11-07 behaviour
+of the HUD's voice answers), OFF at once with no approval card in either
+direction, and a model answer can never set it: the chat/Live sentences below
+go through `jarvis_quick`'s own deterministic door. It is **PC-only**
+(`tools/check_parity.py` classifies it `deliberate`; ARCHITECTURE section 8):
+the route controls the desktop HUD's speakers for voice-turn answers, while the
+phone has its own on-device remembered-answer switch and its own per-answer
+Read out loud, and never calls this route.
+
+What the two apps do with it: the desktop HUD speaks a **voice-turn** answer
+when the switch is ON; a **typed** answer is never spoken automatically on
+either app (the phone already worked this way). Every finished answer on the
+desktop keeps a "Read out loud" item in its own answer menu beside Right/Wrong,
+with a receipt; the phone has the same item in its message menu, reading that
+answer through `/api/voice/say` under the existing lock rules. The
+`private-speech` rule still wins over the switch: a sensitive saved fact, a
+private tool and an answer about the owner's screen are never read aloud by the
+automatic path.
+
+Chat and Jarvis Live own sentences (deterministic; no model, no card):
+"stop reading your replies out loud", "read your replies out loud",
+"are you reading replies aloud?".
+
+## 202. The five-suite benchmark through chat (2026-11-07)
+
+`jarvis_bench.py` runs five suites on a throwaway model server (port 11451+,
+never a live lane): speed (decode/prompt tok/s, cold load, VRAM, spill; a
+promotion-grade result needs `size == size_vram`), coding (six fixed tasks with
+automated checks), general (six exact answers), tool-calling (right tool and
+arguments), and vision/OCR (a model without vision is SKIPPED, never counted as
+a pass). A run may pause the lane it needs when the owner starts it and warms
+the active preset back afterwards; scheduled runs are idle-only; a streaming
+turn is the one busy refusal. Results are stored per model + quantisation +
+context + digest + date in `bench-scores.jsonl` with `measured_on:this_pc`.
+
+There is no new HTTP route for the suites in this wave; the chat/Live door calls
+`jarvis_bench.start_suites` through the owner's own sentences: "run the full
+benchmark", "run all the benchmark suites", "benchmark your quality and speed",
+"measure your quality and speed". "How is the benchmark going?" reads the suite
+run's own progress and "stop the benchmark" asks it to stop after the suite in
+flight. The speed-only sentences ("run a benchmark") keep the older one-suite
+speed bench.
+
+The pooled lane now carries three modes - `coding` (the shipped default, byte-identical to before), `deep_think` (`gemma4:31b-it-qat`) and `creative` (`orcarouter/Qwen3.8-27B-Uncensored:q4_K_M`) - each with its own measured window and sentence. None of the two new modes is offered as a preset: no measured promotion exists yet, and a test pins that.
+
+The measure-first promotion harness is the owner's Q2 ruling as code:
+`PROMOTION_PAIRS` names the two candidate/incumbent pairs, `promotion_plan`,
+`promotion_checks` and `promotion_verdict` apply zero-spill, domain-rubric
+non-regression and speed-floor checks, and `applied` is always false - no
+preset default changes without a measured result and the ordinary card.
+
+## 203. The hardware-aware model recommender (2026-11-07)
+
+`backend/jarvis_model_recommender.py` reads the real hardware profile (cards,
+per-card and pooled VRAM, RAM, CPU), names a tier (CPU-only, single 8 GB,
+single 12-16 GB, multi-GPU 20-28 GB pool, workstation 32 GB+, or the honest
+`other`), and offers rows labelled `MEASURED ON THIS PC`, `MEASURED ON
+DIFFERENT CARDS` or `ESTIMATED FIT` - a row is only "measured on this PC" when a
+local scorecard's card set matches this machine. It never offers a non-fitting
+model, it warns when a stored run spilled, and the chat answer "what model
+should this PC run?" is deterministic. `GET /api/models/recommendations`
+carries the panel as its optional `recommender` key (omitted honestly by a PC
+without the module); the Brain draws it in Models as "What this PC should run".
+

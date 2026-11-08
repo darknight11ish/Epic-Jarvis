@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "5157ea5b182f46478320b39ebe78961de5644500",
- "built_at": "2026-11-07T19:08:28-08:00",
+ "ref": "2a07bf3cc08d6698e682da91c5ddd2464929c55c",
+ "built_at": "2026-11-07T19:13:24-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3683,6 +3683,7 @@
     "backend/test_base_matches_repo.py",
     "backend/test_base_regeneration.py",
     "backend/test_bench.py",
+    "backend/test_bench_chat.py",
     "backend/test_bench_suites.py",
     "backend/test_better_voice.py",
     "backend/test_between_us.py",
@@ -4235,7 +4236,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 656,
+   "file_count": 657,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6151,6 +6152,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "2a07bf3cc08d6698e682da91c5ddd2464929c55c",
+   "date": "2026-11-07",
+   "subject": "feat(chat): the five-suite benchmark has a door - run the full benchmark by asking"
+  },
+  {
    "sha": "5157ea5b182f46478320b39ebe78961de5644500",
    "date": "2026-11-07",
    "subject": "chore(self-code): regenerate the map for the recommender panel and its suite"
@@ -6244,18 +6250,13 @@
    "sha": "eace57f9043097d7b085ba47d7bfc50749b5dd17",
    "date": "2026-11-07",
    "subject": "chore(self-code): regenerate the map with the new folder-chat suite in it"
-  },
-  {
-   "sha": "98812b9fc412adc83b9cf0baa3022814ea15064e",
-   "date": "2026-11-07",
-   "subject": "feat(awareness): the folder list through chat - list it, and add one with the same card"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1385
+   "files": 1386
   },
   {
    "path": "jarvis-desktop/",
@@ -6369,8 +6370,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5491,
-  "covered": 5026,
+  "tracked_files": 5492,
+  "covered": 5027,
   "excluded": 465,
   "subsystems": 27
  },
