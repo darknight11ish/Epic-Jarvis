@@ -632,10 +632,9 @@ if (K) {
       // the answer to finish (not for speech - there must be none), then hold
       // both halves: no per-answer speaker (the icons switch is off) and
       // nothing in the spoken record.
-      await page.waitForFunction(() => {
-        const b = document.querySelector("#log .msg.jarvis");
-        return Boolean(b) && b.dataset.state === "done";
-      }, null, { timeout: 8000 });
+      await page.waitForFunction(
+        () => Boolean(document.querySelector('#log .msg.jarvis[data-state="done"]')),
+        null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
         spoken: window.__spoken.slice(),
@@ -719,10 +718,9 @@ if (K) {
       // A typed answer makes no automatic speech attempt, so there is no kept
       // line to wait for; the two properties that matter are still measured:
       // no speaker offered, and nothing spoken.
-      await page.waitForFunction(() => {
-        const b = document.querySelector("#log .msg.jarvis");
-        return Boolean(b) && b.dataset.state === "done";
-      }, null, { timeout: 8000 });
+      await page.waitForFunction(
+        () => Boolean(document.querySelector('#log .msg.jarvis[data-state="done"]')),
+        null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
         spoken: window.__spoken.slice(),
@@ -759,10 +757,9 @@ if (K) {
         }],
       });
       await send(page, "when is my appointment", 1);
-      await page.waitForFunction(() => {
-        const b = document.querySelector("#log .msg.jarvis");
-        return Boolean(b) && b.dataset.state === "done";
-      }, null, { timeout: 8000 });
+      await page.waitForFunction(
+        () => Boolean(document.querySelector('#log .msg.jarvis[data-state="done"]')),
+        null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
         spoken: window.__spoken.slice(),
