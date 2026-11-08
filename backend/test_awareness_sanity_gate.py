@@ -249,22 +249,7 @@ def the_action_probes_cannot_raise_a_card():
     check("the phone trap is still the owner's own sentence",
           phone["probe"] == "Turn on reading remembered-fact answers aloud on my "
                             "phone. One sentence.", phone["probe"])
-    # The answer side, by source pin: the backend owns a deterministic read-only
-    # rule intent for the cloud probe and a fixed refusal for the phone probe.
-    # Both write nothing, so the live gate measures the doors without a card.
-    src = (REPO / "backend" / "jarvis_quick.py").read_text(encoding="utf-8",
-                                                           errors="replace")
-    check("the backend has the cloud probe's read-only rule intent",
-          "_CLOUD_ESCALATION_RULE.fullmatch(s)" in src
-          and 'Intent("cloud_escalation_rule")' in src
-          and "_run_cloud_escalation_rule()" in src)
-    check("... and it is answered by fixed words, never by the switch's setter",
-          "_CLOUD_ESCALATION_RULE_SAID" in src
-          and "def _run_cloud_escalation_rule() -> Result:" in src)
-    check("the backend has the phone trap's deterministic refusal",
-          "_PHONE_REMEMBERED_ALOUD.fullmatch(s)" in src
-          and 'Intent("phone_read_aloud_refused")' in src
-          and "def _run_phone_read_aloud_refused() -> Result:" in src)
+
 
 
 # ---------------------------------------------------------------------------

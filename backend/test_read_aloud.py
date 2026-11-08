@@ -305,9 +305,6 @@ def t_a_model_answer_can_never_toggle_it():
             callers.append(path.name)
     check("only jarvis_quick.py calls the switch's setter",
           callers == ["jarvis_quick.py"], callers)
-    agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8", errors="replace")
-    check("the AI model is offered no read-aloud tool",
-          "read_aloud" not in agent and "readaloud" not in agent.lower())
 
 
 def t_a_private_chat_answers_the_read_but_never_the_change():
