@@ -36,6 +36,10 @@ use tauri_plugin_store::StoreExt;
 pub const STORE_KEY: &str = "hud_layout";
 /// The last layout that passed validation, kept so a bad hand-edit is not fatal.
 pub const LAST_GOOD_KEY: &str = "hud_layout_last_good";
+/// The Tauri event `set_hud_layout` announces a saved document on, so an open
+/// HUD window can paint it without being reloaded (2026-11-08). The injected
+/// bootstrap listens for exactly this name (`hud_bootstrap.js` section 7).
+pub const HUD_LAYOUT_CHANGED: &str = "jarvis:hud-layout-changed";
 /// The version of the document shape this build reads and writes.
 pub const LAYOUT_VERSION: u64 = 1;
 /// The named regions a card can live in (ruling 23).
@@ -427,6 +431,16 @@ pub fn get_hud_layout(app: AppHandle) -> LayoutAnswer {
 /// Save a validated layout. A document that fails validation is REFUSED and
 /// the last good copy is left untouched (so a hand-edited settings file can
 /// never destroy the owner's layout).
+///
+/// THE ONE SAVE ALSO PAINTS AN OPEN HUD WINDOW (2026-11-08). The owner's report
+/// was that changing the layout did nothing: the page only applied the document
+/// it read at start-up, and the window is long-lived, so the Settings picker's
+/// choice and the Presets menu's choice were both invisible until the window was
+/// reloaded. This is the one place all the doors meet (the HUD's own menu, the
+/// Settings picker, Reset), so the validated document saved here is announced to
+/// the HUD window on `jarvis:hud-layout-changed`; the injected bootstrap applies
+/// it with the same code it uses for the start-up read. Nothing is emitted when
+/// that window is closed - it reads the store when it next opens.
 #[tauri::command]
 pub fn set_hud_layout(app: AppHandle, layout: serde_json::Value) -> Result<LayoutAnswer, String> {
     let clean = sanitise(&layout)?;
@@ -438,6 +452,11 @@ pub fn set_hud_layout(app: AppHandle, layout: serde_json::Value) -> Result<Layou
     store
         .save()
         .map_err(|e| format!("could not save the HUD layout: {e}"))?;
+    if let Some(hud) = app.get_webview_window("hud") {
+        // Best effort: a save that reached the store is still a save when the
+        // window cannot be told (the next open reads it).
+        let _ = hud.emit(HUD_LAYOUT_CHANGED, clean.clone());
+    }
     Ok(LayoutAnswer {
         layout: Some(clean),
         source: "saved".to_string(),
