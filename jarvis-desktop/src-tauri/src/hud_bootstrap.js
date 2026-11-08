@@ -2350,6 +2350,42 @@
     if (p && p.catch) p.catch(function () {});
   }
 
+  /* ---------------------------------------------------------------- *
+   * The Brain WINDOW's two doors in this page (owner's Q5 ruling, 2026-11-07)
+   *
+   * BOTH the HUD's top menu bar word (#stage-brain-window) and its left column
+   * rail button (#rail-brain-window) call THIS one opener, which is the door
+   * the shell already has: `open_fix_place {place: "brain"}`, the same command
+   * the tray's "Open the Brain" row and a chat answer's open_brain route use.
+   * There is no second window and no new command.
+   *
+   * They are page markup, hidden in a plain browser (no shell, no command),
+   * and revealed here only when the shell exists - the same rule as
+   * #rail-faces and #rail-live. Nothing is removed: the rail's own "Brain"
+   * VIEW (data-view="brain", the Galaxy map) keeps its id and its behaviour,
+   * and relabelBrainTab above already renamed its visible label to "Galaxy",
+   * so the word "Brain" in this HUD now means exactly one thing.
+   * ---------------------------------------------------------------- */
+  function openBrainWindowFromHud(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    openBrainAt("brain");
+  }
+
+  function wireBrainWindowDoors() {
+    var ids = ["rail-brain-window", "stage-brain-window"];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (!el) continue;
+      el.hidden = false;
+      el.addEventListener("click", openBrainWindowFromHud);
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireBrainWindowDoors, { once: true });
+  } else {
+    wireBrainWindowDoors();
+  }
+
   /** The areas this PAGE can switch: the ones the Rust table can send as a
    *  HUD view/tab/panel. Kept as one array so `tests/hud-nav.mjs` can hold it
    *  to `hud_nav.rs`'s table. */

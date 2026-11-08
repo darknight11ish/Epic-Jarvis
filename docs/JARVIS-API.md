@@ -29085,7 +29085,10 @@ and no candidates. The shape:
                  "family": "model", "params_b": 8.0, "quant": "Q4_K_M",
                  "size_gb": 4.0, "context_tokens": 131072,
                  "licence": "apache-2.0", "provider": "Hugging Face",
-                 "fit": "fits",
+                 "fit": "fits", "fit_pooled": "fits",
+                 "vram_need_gb": 5.86, "pooled_vram_gb": 20.0,
+                 "capabilities": ["vision", "tools", "coding"],
+                 "released_at": 1780000000,
                  "source_url": "https://huggingface.co/owner/model-GGUF",
                  "why": "estimated to need about 5.9 GB, which the measured ..."}],
  "skipped_no_size": 0,
@@ -29103,6 +29106,30 @@ and no candidates. The shape:
 about (`model`, `lane` or `context`); `preset` names the row itself. `fit` is
 `fits` / `tight` / `no`, from the measured card sizes and the candidate's
 **estimated** need (the only estimate in the answer, labelled in `why`).
+
+**The five filter fields (2026-11-07, the Brain's model filter bar).** The
+owner's Q4 ruling asked for a full filter set on Brain -> Models -> "Check for
+new models", so a candidate now carries what those filters read, each from the
+catalogue row rather than a guess:
+
+- `fit` is the fit on ONE measured card (`fits` / `tight` / `no`) and
+  `fit_pooled` is the same judgement for the cards' memory **together** (the
+  same 85%/100% bands), so "fits 1 card" and "fits 2-3 cards pooled" can never
+  mean different things;
+- `vram_need_gb` is the estimated need the fit was computed from, and
+  `pooled_vram_gb` is the measured sum the pooled word was computed against -
+  both `null` when there was nothing to measure;
+- `capabilities` is a subset of the one vocabulary `vision`, `tools`, `coding`,
+  `reasoning`, `uncensored`, matched on WHOLE words in the row's own tags, ref
+  and family - a tag the catalogue does not carry is absent, never assumed;
+- `released_at` is the catalogue's own release/update moment in seconds, or
+  `null` when the listing gave none (the "Newest" sort then puts that row last,
+  never inventing a date).
+
+The Brain hides a row that does not fit this PC **by default** and never draws
+a working Download for one: `fit_pooled`/`vram_need_gb` are what its
+"Show non-fitting (view-only)" mode explains. No new route, no card, no
+download is added by any of this.
 
 **A candidate with no real public size is not a candidate.** The catalogue's
 `Model.as_dict()` writes `size_gb` as `0.0` when the listing gave no `bytes_`,
