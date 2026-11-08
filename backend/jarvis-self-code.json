@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "648543de22c5584ad19ae6f997e6aa13f93609c6",
- "built_at": "2026-11-07T19:08:19-08:00",
+ "ref": "5157ea5b182f46478320b39ebe78961de5644500",
+ "built_at": "2026-11-07T19:08:28-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6151,6 +6151,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "5157ea5b182f46478320b39ebe78961de5644500",
+   "date": "2026-11-07",
+   "subject": "chore(self-code): regenerate the map for the recommender panel and its suite"
+  },
+  {
    "sha": "648543de22c5584ad19ae6f997e6aa13f93609c6",
    "date": "2026-11-07",
    "subject": "feat(brain): wire Lane 3's hardware-aware recommender into Brain -> Models (Wave-9 Lane 2b)"
@@ -6244,11 +6249,6 @@
    "sha": "98812b9fc412adc83b9cf0baa3022814ea15064e",
    "date": "2026-11-07",
    "subject": "feat(awareness): the folder list through chat - list it, and add one with the same card"
-  },
-  {
-   "sha": "3b34570d1bf9a07fcfbad42d88874acf53ed8766",
-   "date": "2026-11-07",
-   "subject": "fix(notes): the Notion/file answers name the real steps - and the folder-list prerequisite"
   }
  ],
  "top_level": [

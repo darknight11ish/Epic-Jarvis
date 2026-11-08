@@ -23888,6 +23888,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_bench_history()
     if n == "bench_run":
         return _run_bench_run()
+    if n == "bench_suites":
+        return _run_bench_suites()
     if n == "bench_progress":
         return _run_bench_progress()
     if n == "bench_stop":
@@ -26099,6 +26101,14 @@ _AW_BENCH_RUN = re.compile(
     r"the\s+running\s+model|this\s+model)"
     r"|(?:run|take)\s+a\s+(?:speed|tok/s)\s+test", re.I)
 
+_AW_BENCH_SUITES = re.compile(
+    r"(?:run|start|do|take)\s+(?:the\s+|a\s+|all\s+(?:of\s+)?the\s+)?"
+    r"(?:full\s+|complete\s+|quality\s+)?benchmark\s+(?:suites?|set)"
+    r"|(?:run|start)\s+(?:the\s+|a\s+)?(?:full|complete|quality)\s+benchmark"
+    r"|benchmark\s+(?:your\s+)?(?:quality|quality\s+and\s+speed|speed\s+and\s+quality)"
+    r"|measure\s+(?:your\s+)?(?:quality|quality\s+and\s+speed|coding\s+and\s+general)"
+    r"|(?:run|start)\s+all\s+(?:the\s+)?benchmark\s+suites?", re.I)
+
 _AW_BENCH_PROGRESS = re.compile(
     r"how(?:'s|\s+is)\s+the\s+benchmark\s+(?:going|doing|coming\s+along)"
     r"|benchmark\s+(?:status|progress|state)"
@@ -26562,7 +26572,7 @@ def _run_bench_run() -> Result:
         os.makedirs(_awareness_dir(), exist_ok=True)
         with open(_bench_state_path(), "w", encoding="utf-8") as fh:
             json.dump({"run_id": run_id, "model": model, "lane": lane,
-                       "at": int(time.time())}, fh)
+                       "kind": "speed", "at": int(time.time())}, fh)
     except Exception:
         pass
     said = (f"Measuring {model} now on the {lane} lane - run {run_id}. "
@@ -26574,6 +26584,63 @@ def _run_bench_run() -> Result:
     return Result(said, "bench_run")
 
 
+def _run_bench_suites() -> Result:
+    """Start ONE five-suite run of the current model through jarvis_bench itself.
+
+    The five suites are the owner's ask of 2026-11-07 (speed, coding, general,
+    tool-calling, vision). The run happens on the throwaway model server, never
+    on the live lanes; an owner run may pause the lane it needs and jarvis_bench
+    warms the active preset back afterwards. The model is read from the same
+    record the speed bench uses, never guessed.
+    """
+    import jarvis_bench as B
+    model = _model_record() or ""
+    if not model:
+        try:
+            import jarvis_presets as P
+            model = str((_preset_row(str(P.choice() or "")) or {}).get("model") or "")
+        except Exception:
+            model = ""
+    if not model:
+        return Result("Nothing was measured: I cannot read which model is running on "
+                      "this PC right now, and I will not guess one.", "bench_suites")
+    lane = "everyday"
+    try:
+        import jarvis_presets as P
+        pid = str(P.choice() or "").lower()
+    except Exception:
+        pid = ""
+    if "coding" in pid:
+        lane = "coding"
+    body = {"model": model, "lane": lane, "mode": "owner",
+            "confirm": {"model": model, "lane": lane, "may_evict": True}}
+    try:
+        code, out = B.start_suites(body)
+    except Exception as exc:                       # noqa: BLE001 - said plainly
+        return Result(f"Nothing was measured: the suite runner could not start "
+                      f"({type(exc).__name__}).", "bench_suites")
+    out = out if isinstance(out, dict) else {}
+    if code != 200:
+        said = str(out.get("error") or out.get("sentence") or "the run was refused")
+        return Result("Nothing was measured: " + said.rstrip(".") + ".",
+                      "bench_suites")
+    run_id = str(out.get("run_id") or "")
+    try:
+        os.makedirs(_awareness_dir(), exist_ok=True)
+        with open(_bench_state_path(), "w", encoding="utf-8") as fh:
+            json.dump({"run_id": run_id, "model": model, "lane": lane,
+                       "kind": "suites", "at": int(time.time())}, fh)
+    except Exception:
+        pass
+    return Result(
+        f"Started the five-suite benchmark on {model}: speed, coding, general, "
+        "tool-calling and vision. A model that cannot see pictures skips the "
+        "vision suite and says so; nothing is counted as a pass that was skipped. "
+        "It runs on a throwaway model server and may pause the lane it needs, then "
+        "put the active preset back. Ask \"how is the benchmark going?\" for "
+        "progress and the numbers when it finishes.", "bench_suites")
+
+
 def _run_bench_progress() -> Result:
     state = _bench_progress_snapshot()
     if not state:
@@ -26581,9 +26648,10 @@ def _run_bench_progress() -> Result:
                       'this chat. Say "run a benchmark" and I will measure the '
                       "current model.", "bench_progress")
     run_id = str(state.get("run_id") or "")
+    kind = str(state.get("kind") or "speed")
     try:
         import jarvis_bench as B
-        code, out = B.view(run_id)
+        code, out = (B.suite_view(run_id) if kind == "suites" else B.view(run_id))
     except Exception as exc:                       # noqa: BLE001 - said plainly
         return Result(f"I cannot read that benchmark run right now "
                       f"({type(exc).__name__}).", "bench_progress")
@@ -26615,9 +26683,10 @@ def _run_bench_stop() -> Result:
         return Result("There is no benchmark run from this chat to stop.",
                       "bench_stop")
     run_id = str(state.get("run_id") or "")
+    kind = str(state.get("kind") or "speed")
     try:
         import jarvis_bench as B
-        code, out = B.cancel(run_id)
+        code, out = (B.cancel_suite(run_id) if kind == "suites" else B.cancel(run_id))
     except Exception as exc:                       # noqa: BLE001 - said plainly
         return Result(f"I could not stop it ({type(exc).__name__}).", "bench_stop")
     out = out if isinstance(out, dict) else {}
@@ -26899,6 +26968,8 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
 
     if _AW_PRESET_CURRENT.fullmatch(low):
         return Intent("preset_current")
+    if _AW_BENCH_SUITES.fullmatch(low):
+        return Intent("bench_suites")
     if _AW_BENCH_RUN.fullmatch(low):
         return Intent("bench_run")
     if _AW_BENCH_PROGRESS.fullmatch(low):
