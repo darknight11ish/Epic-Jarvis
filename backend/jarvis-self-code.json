@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "f4d8087e59717924406c6ae75a7d390beda2c606",
- "built_at": "2026-11-07T19:04:13-08:00",
+ "ref": "648543de22c5584ad19ae6f997e6aa13f93609c6",
+ "built_at": "2026-11-07T19:08:19-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3017,6 +3017,7 @@
     "jarvis-desktop/tests/model-advisor.mjs",
     "jarvis-desktop/tests/model-chat.mjs",
     "jarvis-desktop/tests/model-filters.mjs",
+    "jarvis-desktop/tests/model-recommender.mjs",
     "jarvis-desktop/tests/models-cache.mjs",
     "jarvis-desktop/tests/notes-edit.mjs",
     "jarvis-desktop/tests/notes-rename-move.mjs",
@@ -3125,7 +3126,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1227,
+   "file_count": 1228,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -6150,6 +6151,21 @@
  ],
  "recent_commits": [
   {
+   "sha": "648543de22c5584ad19ae6f997e6aa13f93609c6",
+   "date": "2026-11-07",
+   "subject": "feat(brain): wire Lane 3's hardware-aware recommender into Brain -> Models (Wave-9 Lane 2b)"
+  },
+  {
+   "sha": "038dfada30d940c39e45b67558fd06346ea9c5d5",
+   "date": "2026-11-07",
+   "subject": "chore(parity): classify the desktop-only /api/read-aloud switch with its reason"
+  },
+  {
+   "sha": "e68669d8ff602dbeadcab52e2dc32a87b374b631",
+   "date": "2026-11-07",
+   "subject": "chore(self-code): regenerate the map after the Wave-9 lane merges"
+  },
+  {
    "sha": "f4d8087e59717924406c6ae75a7d390beda2c606",
    "date": "2026-11-07",
    "subject": "chore(self-code): regenerate the map after the three Wave-9 lanes merged"
@@ -6233,21 +6249,6 @@
    "sha": "3b34570d1bf9a07fcfbad42d88874acf53ed8766",
    "date": "2026-11-07",
    "subject": "fix(notes): the Notion/file answers name the real steps - and the folder-list prerequisite"
-  },
-  {
-   "sha": "819de11d4ebb6c23554edda4dda5b606ba6572e8",
-   "date": "2026-11-07",
-   "subject": "fix(records): quote the register's real row count in the About page"
-  },
-  {
-   "sha": "960702dcec3b65c49a2f8b704c10f70afab40fcd",
-   "date": "2026-11-07",
-   "subject": "fix(awareness): keep the journal and page answers side-effect free"
-  },
-  {
-   "sha": "1f837d41f22dc1549a0ec1721c9e18362c94caf3",
-   "date": "2026-11-07",
-   "subject": "test(awareness): align the suites the new answers deliberately change"
   }
  ],
  "top_level": [
@@ -6259,7 +6260,7 @@
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1235
+   "files": 1236
   },
   {
    "path": "jarvis-client/",
@@ -6368,8 +6369,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5490,
-  "covered": 5025,
+  "tracked_files": 5491,
+  "covered": 5026,
   "excluded": 465,
   "subsystems": 27
  },
