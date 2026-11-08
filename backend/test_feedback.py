@@ -148,10 +148,23 @@ def t_only_ids_are_kept():
     check("free text handed in as an id is not stored",
           "penicillin" not in dump and "DROP TABLE" not in dump)
     allowed = {"turn_id", "created", "item", "id", "mark", "marked", "fact_id",
-               "proposal_id", "helpful", "harmful", "raised"}
+               "proposal_id", "helpful", "harmful", "raised",
+               # Right/Wrong v2 (2026-11-08): the owner's own why tag and
+               # correction words, kept with the mark; and the two note kinds.
+               "reason", "correction", "kind", "text"}
     extra = {t: [x for x in v if x not in allowed] for t, v in cols.items()}
-    check("no table has a column that could hold a question or an answer",
+    check("every column is an id, a number, a mark, or the OWNER'S own words "
+          "typed on the mark - no column for a question, an answer or model output",
           not any(extra.values()), repr(extra))
+    text_cols = sorted((t, c) for t, v in cols.items() for c in v
+                       if c in ("reason", "correction", "kind", "text",
+                                "question", "answer", "prompt", "reply"))
+    check("the only free-text columns are the v2 mark's why/correction and the "
+          "note's kind/text", text_cols == [("marks", "correction"),
+                                            ("marks", "reason"),
+                                            ("notes", "kind"),
+                                            ("notes", "reason"),
+                                            ("notes", "text")], repr(text_cols))
     many = F.record_turn([f"mem:{i}" for i in range(500)])
     c = sqlite3.connect(os.environ["JARVIS_FEEDBACK_DB"])
     try:
@@ -342,8 +355,13 @@ def t_nothing_leaves_and_the_model_cannot_mark():
     check("the module imports no network code at all",
           not mods & {"urllib", "requests", "http", "socket", "ssl", "urllib3"},
           repr(sorted(mods)))
-    check("and never retires or deletes anything itself",
-          ".retire(" not in src and "DELETE" not in src)
+    # Right/Wrong v2 (2026-11-08): the correction/f forget cards are QUEUED by
+    # this module but the accept rule lives in jarvis_extract's own review queue
+    # (`_accept` / `_accept_retire`), so a mark still cannot change memory by
+    # itself: no retire, no supersede, no delete in this file.
+    check("a mark queues a card but never retires, deletes or corrects a fact itself",
+          ".retire(" not in src and "DELETE" not in src
+          and "supersedes=" not in src and "store.add(" not in src)
 
 
 # ---- the review-queue half: jarvis_extract with feedback.patch --------------
