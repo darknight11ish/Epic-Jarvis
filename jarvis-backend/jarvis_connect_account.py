@@ -19,9 +19,18 @@ WHAT IT IS, AND IS NOT
 
 This module is the SERVICE TABLE and the CARD STATE MACHINE for connecting one
 account, plus the one real test per service. It holds no UI, opens no route by
-itself (the host half is `jarvis_connect_account_wiring.py`) and writes nothing
-except through `jarvis_token_store.store_secret` - Credential Manager, and
+itself (the host half is `jarvis_connect_account_wiring.py`) and stores a value
+only through `jarvis_token_store.store_secret` - Credential Manager, and
 nowhere else.
+
+ONE NON-SECRET FILE, ADDED 2026-11-08. The one real test's verdict is also
+written to `connect-receipts.json` in the Jarvis settings folder (service, when
+it ran, whether it passed, the verifier's own words, and which environment
+variables still win). It is NOT a place a value can live: no value, no token and
+no part of one is ever in it. It exists because the owner's 2026-11-08 report
+was a chat turn that had no true receipt to read and let the model claim
+"cloning, pushing, and pulling" - `jarvis_quick.py` now answers that turn from
+this file (`receipt` / `receipt_words` below).
 
 Two doors raise the same card, so the model is never the one answering:
 
@@ -37,7 +46,8 @@ WHAT IS NEVER DONE, AND EACH IS TESTED
     NAMES, the store entry NAMES and the verify verdict - never a value. The
     one function that sees a value is `save_card`, which hands it straight to
     `store_secret` and to the verifier and keeps no copy (Python cannot wipe
-    memory; see the honest limits below).
+    memory; see the honest limits below). The one file this module writes
+    (`connect-receipts.json`, 2026-11-08) holds verdicts and timestamps only.
   * There is no plaintext fallback. If Credential Manager refuses, the receipt
     says so and NOTHING is written to a file, an environment variable, a
     database, a log or the clipboard. The whole point of the store is that a
@@ -82,6 +92,7 @@ from __future__ import annotations
 import base64
 import collections
 import json
+import os
 import re
 import secrets
 import threading
@@ -91,6 +102,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 
 #: How long the owner has to fill in a connect card and submit it. Shorter
@@ -661,6 +673,159 @@ def _winning_source(service_id: str) -> Dict[str, str]:
     return out
 
 
+# --------------------------------------------------------------------------
+#   The last receipt per service: what the ONE test proved, and when
+#   (added 2026-11-08, the owner's GitHub-token honesty report)
+# --------------------------------------------------------------------------
+#
+# WHY THIS EXISTS. The owner's report of 2026-11-08: he saved a GitHub token on
+# the connect card (one real test ran), typed "i added a token" in chat, and the
+# local model answered "I've tested the token and it works. I can now access
+# your GitHub repositories and perform actions like cloning, pushing, and
+# pulling code" - then contradicted itself. The card's receipt existed only for
+# the card's own answer; a later chat turn had nothing true to read, so the
+# model filled the gap. This is that missing record, and nothing more.
+#
+# WHAT IS WRITTEN, AND WHAT IS NEVER WRITTEN. One small JSON object per service:
+# the service id and label, when the test ran, whether it passed, the verifier's
+# own words and which environment variables still win. Those are the fields the
+# card already prints. NO VALUE, no token, no credential and no part of one is
+# ever written - `save_card` hands a value to the store and the verifier and
+# keeps no copy, so none reaches this code. A verdict is not a secret.
+
+RECEIPTS_NAME = "connect-receipts.json"
+#: More than the service table has, so a future service cannot grow this file
+#: without bound. The oldest receipt is dropped past this.
+MAX_RECEIPTS = 24
+
+
+def _config_dir() -> Path:
+    """The Jarvis settings folder.
+
+    The environment comes FIRST, unlike the older modules: every backend suite
+    that saves a card points `OPENJARVIS_CONFIG_DIR` at its own temp folder
+    before importing, and this file must land there rather than in the owner's
+    real config folder during a test run.
+    """
+    for name in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"):
+        raw = os.environ.get(name)
+        if raw:
+            return Path(raw)
+    try:
+        import jarvis_framework
+        return Path(jarvis_framework.CONFIG_DIR)
+    except Exception:                       # noqa: BLE001 - older PC
+        pass
+    return Path.home() / ".openjarvis"
+
+
+def receipts_path() -> Path:
+    """`connect-receipts.json` in the Jarvis settings folder."""
+    return _config_dir() / RECEIPTS_NAME
+
+
+def receipts() -> Dict[str, dict]:
+    """{service_id: the last receipt}. A missing or damaged file reads {}", never
+    a guess: saying "no record" is true, inventing one would not be."""
+    try:
+        doc = json.loads(receipts_path().read_text(encoding="utf-8"))
+    except Exception:                       # noqa: BLE001 - absent/damaged file
+        return {}
+    if not isinstance(doc, dict):
+        return {}
+    return {str(k): v for k, v in doc.items() if isinstance(v, dict)}
+
+
+def receipt(service_id: str) -> Optional[dict]:
+    """The last recorded test receipt for one service, or None."""
+    row = receipts().get(str(service_id or ""))
+    return dict(row) if isinstance(row, dict) else None
+
+
+def record_receipt(receipt: dict, *, saved_at: float) -> bool:
+    """Remember ONE save's verdict, atomically. Returns whether it was written.
+
+    Never raises: a receipt that cannot be written must not turn a successful
+    save (the value IS in Credential Manager) into an error, and the chat then
+    honestly says it has no record of the test. The row is rebuilt from the
+    fields below and nothing else, so a caller cannot slip a value into the
+    file by adding a key to `receipt`.
+    """
+    sid = str((receipt or {}).get("service") or "").strip()
+    if not sid:
+        return False
+    words = str((receipt or {}).get("verify_words") or "").strip()
+    row = {
+        "service": sid,
+        "service_label": str((receipt or {}).get("service_label") or sid),
+        "saved_at": float(saved_at),
+        "verified": (receipt or {}).get("verified") is True,
+        # "the one test ran": a verdict with no words is not a test result, and
+        # the chat must say "the test was not run" rather than guess.
+        "test_ran": bool(words),
+        "verify_words": words,
+        "environment_wins_for": [str(n) for n in
+                                 ((receipt or {}).get("environment_wins_for") or ())],
+    }
+    try:
+        with _LOCK:
+            doc = receipts()
+            doc[sid] = row
+            if len(doc) > MAX_RECEIPTS:
+                oldest = sorted(doc, key=lambda k: float(doc[k].get("saved_at") or 0))
+                for key in oldest[: len(doc) - MAX_RECEIPTS]:
+                    doc.pop(key, None)
+            path = receipts_path()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_name(path.name + ".tmp")
+            tmp.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+            os.replace(tmp, path)
+        return True
+    except Exception:                       # noqa: BLE001 - a save still succeeded
+        return False
+
+
+def receipt_words(service_id: str) -> str:
+    """What the last recorded test proved, in plain words - or "" when there is
+    no record. NEVER says "connected" beyond what the verifier said, and never
+    mentions a value. The caller adds the capability sentence it owns."""
+    row = receipt(service_id)
+    if not row:
+        return ""
+    sid = str(service_id or "")
+    label = str(row.get("service_label") or (SERVICES[sid].name if sid in SERVICES
+                                             else sid))
+    try:
+        when = time.strftime("%H:%M on %d %b",
+                             time.localtime(float(row.get("saved_at") or 0)))
+    except Exception:                       # noqa: BLE001 - clock unreadable
+        when = "an unknown time"
+    words = str(row.get("verify_words") or "").strip()
+    ran = bool(row.get("test_ran")) and bool(words)
+    if not ran:
+        return (f"Your {label} details were saved on this PC at {when}, but the one "
+                "test was not run, so I cannot say whether they work.")
+    if row.get("verified") is True:
+        said = (f"Your {label} details are saved on this PC, and the one test it ran "
+                f"at {when} passed: {words}.")
+        if sid == "github":
+            # What one GET /user proves, and exactly that much: the token is a
+            # real GitHub token for this account. It proves nothing about what
+            # the owner's GitHub permissions allow, and nothing about code.
+            said = (f"Your GitHub token is saved on this PC, and the one test it ran at "
+                    f"{when} passed: {words} - that proves the token identifies your "
+                    "GitHub account, nothing more.")
+    else:
+        said = (f"Your {label} details were saved on this PC at {when}, but the one "
+                f"test it ran did NOT pass: {words}. Nothing is reading it until that "
+                "works.")
+    env_names = [str(n) for n in (row.get("environment_wins_for") or ()) if str(n)]
+    if env_names:
+        said += (" The value in use comes from " + " and ".join(env_names) +
+                 " in this PC's environment, which wins over what was saved.")
+    return said
+
+
 def save_card(card_id: str, values: object, *,
               clock: Callable[[], float] = time.time) -> dict:
     """Save ONE card's values into Credential Manager, then run its real test.
@@ -685,7 +850,10 @@ def save_card(card_id: str, values: object, *,
       5. the test runs with the values the feature will actually use (an
          environment variable still wins, and the receipt says so);
       6. the receipt names the store entries, the source that won and the
-         verdict - never a value.
+         verdict - never a value;
+      7. the verdict is also remembered in `connect-receipts.json` (2026-11-08),
+         so the chat turn AFTER this save can say what was tested and exactly
+         what it proved instead of letting the model guess. No value is written.
     """
     cid = str(card_id or "")
     now = clock()
@@ -766,6 +934,10 @@ def save_card(card_id: str, values: object, *,
             "Saved. " + " and ".join(names) + " is set in this PC's environment and "
             "still WINS over what was just saved - clear it (and start Jarvis again) "
             "to use this value instead.")
+    # The record a LATER chat turn reads (2026-11-08). A failed write is not a
+    # failed save: the value is in Credential Manager, and the chat says it has
+    # no record rather than pretending there is one.
+    record_receipt(receipt, saved_at=now)
     return receipt
 
 

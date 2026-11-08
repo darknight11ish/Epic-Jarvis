@@ -12812,6 +12812,92 @@ _GITHUB_ASKS = re.compile(
     r"|which\s+(?:github\s+)?(?:tools|actions)\s+ask\s+(?:you\s+)?first\b.*")
 
 
+# --------------------------------------------------------------------------
+#   The turn AFTER the connect card saved a GitHub token (2026-11-08)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S REPORT. On the CODING preset he saved a GitHub token on the
+# connect card (the host ran its ONE real test), typed "i added a token", and the
+# model answered "I've tested the token and it works. I can now access your
+# GitHub repositories and perform actions like cloning, pushing, and pulling
+# code" - then contradicted itself. Nothing in the fast path claimed those
+# sentences, so the model was the only answer and it had no receipt to read.
+#
+# WHAT THESE SHAPES DO. They answer from the host's recorded test receipt, which
+# `jarvis_connect_account.record_receipt` writes when the card saves
+# (`connect-receipts.json`: service, when, pass/fail, the verifier's own words -
+# never a value). The capability words come from
+# `jarvis_feature_guide.SELF_FACTS["github_connect"]`, the SAME bounded digest
+# the model's `self_portrait` tool result carries, so the deterministic answer
+# and a model turn cannot say different things. Read-only: no card, no network,
+# no model, no write.
+_GITHUB_TOKEN_ADDED = re.compile(
+    r"(?:i\s+)?(?:just\s+|now\s+)?(?:added|saved|pasted|entered|typed|put\s+in|"
+    r"submitted)\s+(?:a\s+|the\s+|my\s+)?(?:new\s+)?(?:github\s+)?token"
+    r"(?:\s+(?:in|on)\s+(?:the\s+|that\s+)?(?:card|chat|hud))?\s*\??"
+    # FIRST PERSON only: "set up github" is still the connect-card ask, so the
+    # "i connected/set up" form requires the "i"; the imperative keeps its own path.
+    r"|i\s+(?:just\s+|now\s+)?(?:connected|set\s+up|linked)\s+(?:my\s+|the\s+)?github\s*\??"
+    r"|i(?:'ve|\s+have)\s+(?:just\s+)?(?:connected|set\s+up|linked)\s+"
+    r"(?:my\s+|the\s+)?github\s*\??"
+    r"|github\s+is\s+(?:now\s+)?(?:connected|linked|working)\s*\??"
+    r"|(?:the\s+|my\s+)?(?:github\s+)?token\s+(?:is\s+|was\s+)?(?:added|saved)\s*\??")
+_GITHUB_TEST_PROVED = re.compile(
+    r"did\s+(?:the\s+|my\s+|your\s+)?(?:github\s+)?token\s+"
+    r"(?:work|get\s+tested|test|verify|validate|pass)\s*\??"
+    r"|does\s+(?:the\s+|my\s+|your\s+)?(?:github\s+)?token\s+"
+    r"(?:work|test|verify|validate|pass)\s*\??"
+    r"|was\s+(?:the\s+|my\s+)?(?:github\s+)?token\s+"
+    r"(?:tested|verified|validated|checked)\s*\??"
+    r"|is\s+(?:the\s+|my\s+)?github\s+token\s+(?:valid|working)\s*\??"
+    r"|did\s+(?:the\s+|my\s+|that\s+)?(?:github\s+)?test\s+"
+    r"(?:work|pass|run|succeed|prove)\s*\??"
+    r"|did\s+you\s+(?:test|check|verify|validate)\s+(?:the\s+|my\s+)?"
+    r"(?:github\s+)?token\s*\??"
+    r"|what\s+did\s+(?:the\s+|my\s+|that\s+)?(?:github\s+)?test\s+"
+    r"(?:prove|say|show|find|report)\s*\??"
+    r"|what\s+(?:did|does)\s+(?:it|that|the\s+test)\s+prove\s*\??"
+    r"|what\s+(?:was|is)\s+(?:the\s+|my\s+)?github\s+test\s+result\s*\??")
+#: "is github connected?" is the receipt question (the owner's own words).
+#: "is github SET UP?" keeps the older connect path, which runs a real test when
+#: asked - that is the documented answer and still honest, so it is not claimed
+#: here (the connect suite pins it).
+_GITHUB_CONNECT_STATE = re.compile(
+    r"is\s+(?:my\s+|the\s+|your\s+)?github\s+(?:now\s+)?"
+    r"(?:connected|linked|working|ready)\s*\??"
+    r"|is\s+(?:my\s+|the\s+|your\s+)?github\s+token\s+"
+    r"(?:saved|working|valid|connected)\s*\??"
+    r"|(?:do\s+you|have\s+you)\s+(?:have|got)\s+(?:my\s+|the\s+)?github\s+"
+    r"(?:connected|linked|working|token)\s*\??"
+    r"|do\s+you\s+have\s+(?:my\s+|the\s+)?github\s+token\s*\??"
+    r"|are\s+you\s+(?:connected|linked)\s+to\s+(?:my\s+|the\s+)?github\s*\??")
+#: A clone/push/pull VERB plus a GitHub/code context word, so "can you push a
+#: notification to my phone" keeps its own path. The answer is the never-list.
+_GITHUB_CODE_CONTEXT = re.compile(
+    r"\b(?:github|repos?(?:itory|itories)?|code|commit|branch|project)\b")
+_GITHUB_CODE_VERB = re.compile(
+    r"\bclone(?:s|d|ing)?\b"
+    r"|\b(?:push|pushed|pushes|pushing|pull|pulled|pulls|pulling)\b(?!\s+up\b)")
+
+
+def _github_connect_receipt_intent(s: str) -> Optional[Intent]:
+    """The post-save receipt shapes, or None. Whole sentences only."""
+    low = s.strip()
+    if not low:
+        return None
+    if (_GITHUB_TOKEN_ADDED.fullmatch(low) or _GITHUB_TEST_PROVED.fullmatch(low)
+            or _GITHUB_CONNECT_STATE.fullmatch(low)):
+        return Intent("github_connect_receipt", {"shape": "status"})
+    if _GITHUB_CODE_VERB.search(low) and _GITHUB_CODE_CONTEXT.search(low):
+        # "can you clone ...", "do you push code?", and a bare "clone my repo"
+        # all get the never-list: there is no clone/push/pull action to run, so
+        # a deterministic answer that says so is right whether it was a question
+        # about ability or a request to do it. A sentence with no GitHub/code
+        # context ("push a notification to my phone") is not claimed here.
+        return Intent("github_connect_receipt", {"shape": "never"})
+    return None
+
+
 def _github_module():
     """jarvis_github when this PC has it, else None."""
     try:
@@ -12858,6 +12944,12 @@ def _self_github(s: str) -> Optional[Intent]:
     Whole-sentence shapes only, in the order a person would be surprised to
     see them interchanged. A sentence this does not claim keeps its old path.
     """
+    # FIRST, so the post-save receipt (and the clone/push/pull never-list) wins
+    # over the newer store answers below and over the model: this is the
+    # owner's 2026-11-08 sentence and it must answer the same on every preset.
+    got = _github_connect_receipt_intent(s)
+    if got is not None:
+        return got
     if _GITHUB_OWN_REPO.fullmatch(s):
         return Intent("github_self", {"shape": "repo"})
     if _GITHUB_OWN_CI.fullmatch(s):
@@ -19785,6 +19877,98 @@ def _github_asks_words() -> str:
               "api.github.com. That cannot be loosened from an app.")
 
 
+#: The same capability words as `jarvis_feature_guide.SELF_FACTS
+#: ["github_connect"]` (the digest the model's self_portrait result carries),
+#: kept as a fallback so a PC missing that row still answers honestly rather
+#: than overclaiming. ONE source of truth when the row is there.
+GITHUB_CAPABILITY_FALLBACK = (
+    "A GitHub token saved on the connect card is tested once with one GitHub "
+    "request - that proves the token identifies your GitHub account, nothing more. "
+    "It lets me search GitHub, see private repositories and watch CI. With the "
+    "GitHub tools switched on I can also read your repositories, pull requests, "
+    "issues, CI status and one file, comment, open an issue and re-run a workflow - "
+    "each on its own approval card. I can never clone, push or pull code, and never "
+    "merge, commit, close or delete anything.")
+GITHUB_NEVER_FALLBACK = (
+    "No - I can never clone, push or pull code, and never merge, commit, close or "
+    "delete anything on GitHub: there is no action, card or endpoint for those. "
+    "What a saved token does let me do: search GitHub, see private repositories and "
+    "watch CI; and with the GitHub tools switched on, read your repositories, pull "
+    "requests, issues, CI status and one file, comment, open an issue and re-run a "
+    "workflow - each on its own approval card.")
+GITHUB_SHORT_FALLBACK = (
+    "It lets me search GitHub, see private repositories and watch CI; with the "
+    "GitHub tools switched on, it can also read your repositories, pull requests, "
+    "issues, CI status and one file, comment, open an issue and re-run a workflow - "
+    "each on its own approval card. I can never clone, push or pull code, and never "
+    "merge, commit, close or delete anything.")
+
+
+def _github_capability_words(which: str = "sentence") -> str:
+    """The honest GitHub capability words, from the feature guide's own row.
+
+    `which` is "sentence" (the owner-facing capability half) or "never" (the
+    clone/push/pull answer). One source with the digest the model reads; the
+    fixed fallback is only for an older PC with no such row.
+    """
+    try:
+        import jarvis_feature_guide as FG
+        row = FG.self_fact("github_connect") or {}
+        said = str(row.get(which) or row.get("sentence") or "").strip()
+    except Exception:                       # noqa: BLE001 - older PC
+        said = ""
+    if said:
+        return said
+    if which == "never":
+        return GITHUB_NEVER_FALLBACK
+    if which == "short":
+        return GITHUB_SHORT_FALLBACK
+    return GITHUB_CAPABILITY_FALLBACK
+
+
+def _run_github_connect_receipt(f: dict) -> Result:
+    """The turn after a connect-card save, answered ONLY from the host receipt.
+
+    `jarvis_connect_account` wrote what the card's ONE real test said (service,
+    timestamp, verdict words) when it saved. This runner says exactly that,
+    then the honest capability list from the feature guide's own row - nothing
+    the receipt does not support, no value, no token, no model. When there is no
+    record it says so and, if a token is saved, sends the owner through the card
+    again rather than guessing what the test might have said.
+    """
+    shape = str(f.get("shape") or "")
+    if shape == "never":
+        return Result(_github_capability_words("never"), "github_connect_receipt")
+    head = ""
+    have = False
+    try:
+        import jarvis_connect_account as C
+        have = C.receipt("github") is not None
+        head = C.receipt_words("github")
+    except Exception:                       # noqa: BLE001 - older PC
+        have, head = False, ""
+    if not have:
+        GH = _github_module()
+        saved = False
+        if GH is not None:
+            try:
+                saved = bool(GH.connected())
+            except Exception:               # noqa: BLE001 - unreadable is unknown
+                saved = False
+        if saved:
+            head = ("A GitHub token is saved on this PC, but I have no record of the one "
+                    "test that checks it, so I will not say whether it works. Save it "
+                    "again through the \"connect my GitHub\" card and that test runs once "
+                    "- then I can tell you exactly what it proved.")
+        else:
+            head = ("Nothing is saved yet: there is no GitHub token on this PC, so I "
+                    "cannot read or act on your GitHub at all. Say \"connect my GitHub\" "
+                    "and one card appears for a personal access token, typed on that card "
+                    "and never in chat; saving it runs one real test.")
+    return Result((head + " " + _github_capability_words("short")).strip(),
+                  "github_connect_receipt")
+
+
 def _run_github_self(f: dict) -> Result:
     """The GitHub questions the model used to invent answers to (2026-11-07).
 
@@ -24107,6 +24291,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_connected(intent)
     if n == "github_self":
         return _run_github_self(f)
+    # The turn after a connect-card save (2026-11-08, the owner's GitHub-token
+    # honesty report): answered ONLY from the host's recorded test receipt and
+    # the feature guide's own capability words - no model, no network, no card.
+    if n == "github_connect_receipt":
+        return _run_github_connect_receipt(f)
     if n == "accounts_answer":
         return _run_accounts_answer(f)
     if n == "self_refresh":
@@ -24733,6 +24922,10 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # PC's own settings file, so a private chat gets the real answer instead of
     # a model's guess. The CHANGE (`read_aloud_set`) is deliberately NOT here.
     "self_read_aloud",
+    # The connect-card receipt answer (2026-11-08): fixed local words built from
+    # ONE non-secret verdict file - nothing leaves this PC and nothing is
+    # written, so a private chat gets the truth rather than a model's overclaim.
+    "github_connect_receipt",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
@@ -24902,6 +25095,10 @@ READ_ONLY_INTENTS = frozenset({
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
     "github_self", "accounts_answer",
+    # The connect-card receipt answer (2026-11-08): it reads ONE non-secret
+    # verdict file (service, timestamp, pass/fail words - never a value) and
+    # changes nothing, so "cancel that" must not lose its record to it.
+    "github_connect_receipt",
     # The six subsystems that only the model answered (2026-11-04): each reads
     # a real state - the preset/hardware readers, the speed record, the memory
     # store, the disk reader, the two schedulers - and changes nothing, so none

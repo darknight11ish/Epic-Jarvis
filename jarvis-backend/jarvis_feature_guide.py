@@ -3924,7 +3924,8 @@ def abilities_directory() -> list:
 # from features/features.json and their count is pinned by several checkers.
 # These four facts are about how Jarvis talks about itself, not new features,
 # so they live here and are held by `backend/test_self_answers.py`.
-SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history")
+SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history",
+                 "github_connect")
 
 SELF_FACTS = {
     "approval_policy": {
@@ -3989,6 +3990,54 @@ SELF_FACTS = {
                      "for how long it is kept, and Forget a time frame for deleting a "
                      "range. Where: Settings, Security, on the PC, and the phone's History "
                      "and Privacy screens. Turning history back on asks on a card first."),
+    },
+    # THE OWNER'S 2026-11-08 REPORT, added 2026-11-08. He saved a GitHub token on
+    # the connect card (the host ran ONE real test: `GET /user`), typed "i added a
+    # token", and the CODING-preset model answered "I've tested the token and it
+    # works. I can now access your GitHub repositories and perform actions like
+    # cloning, pushing, and pulling code" - then contradicted itself. This family
+    # is the bounded self-digest the model's `self_portrait` tool result carries,
+    # so a model turn that is asked about the token has the real surface and the
+    # real never-list instead of an invented one. `jarvis_quick.py` answers the
+    # same words deterministically from the saved test receipt, before any model.
+    "github_connect": {
+        "family": "github_connect",
+        "digest": ("A GitHub token saved through the connect card is tested ONCE with "
+                   "one GitHub request; that one test proves the token identifies your "
+                   "GitHub account and nothing more. A saved token lets Jarvis search "
+                   "GitHub, see private repositories and watch CI. With the GitHub tools "
+                   "switched on it can also read your repositories, pull requests, issues, "
+                   "CI status and one file, comment, open an issue and re-run a workflow - "
+                   "each on its own approval card. It can NEVER clone, push or pull code, "
+                   "and never merge, commit, close or delete anything: there is no action, "
+                   "card or endpoint for those."),
+        "sentence": ("A GitHub token saved on the connect card is tested once with one "
+                     "GitHub request - that proves the token identifies your GitHub "
+                     "account, nothing more. It lets me search GitHub, see private "
+                     "repositories and watch CI. With the GitHub tools switched on I can "
+                     "also read your repositories, pull requests, issues, CI status and "
+                     "one file, comment, open an issue and re-run a workflow - each on "
+                     "its own approval card. I can never clone, push or pull code, and "
+                     "never merge, commit, close or delete anything."),
+        # The capability half alone, for the deterministic chat answer after a
+        # connect-card save: short, and the same words as `sentence`'s second
+        # half. One source of truth for both.
+        "short": ("It lets me search GitHub, see private repositories and watch CI; "
+                  "with the GitHub tools switched on, it can also read your "
+                  "repositories, pull requests, issues, CI status and one file, "
+                  "comment, open an issue and re-run a workflow - each on its own "
+                  "approval card. I can never clone, push or pull code, and never "
+                  "merge, commit, close or delete anything."),
+        # The same never-list, said as the answer to "can you clone/push/pull?".
+        # Kept here so the fixed answer, the model's digest and the chat receipt
+        # answer cannot drift apart.
+        "never": ("No - I can never clone, push or pull code, and never merge, commit, "
+                  "close or delete anything on GitHub: there is no action, card or "
+                  "endpoint for those. What a saved token does let me do: search GitHub, "
+                  "see private repositories and watch CI; and with the GitHub tools "
+                  "switched on, read your repositories, pull requests, issues, CI status "
+                  "and one file, comment, open an issue and re-run a workflow - each on "
+                  "its own approval card."),
     },
 }
 

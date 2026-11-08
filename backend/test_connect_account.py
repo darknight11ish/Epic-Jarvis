@@ -24,7 +24,10 @@ check below:
   * THE VALUE GOES TO CREDENTIAL MANAGER AND NOWHERE ELSE. The suite's fake
     store records every write; a store that refuses produces an error that says
     so and writes nothing; the module's own source is read (by AST) to prove it
-    imports no file, clipboard, sqlite or logging module and calls no `open()`.
+    imports no clipboard, sqlite, logging or subprocess module, calls no
+    `open()`, and has exactly ONE file-writer - the non-secret test receipt
+    (`connect-receipts.json`, 2026-11-08) that a later chat turn reads. The
+    receipt's own checks prove it carries the verdict and never a value.
   * A VERIFIER THAT FAILS IS NEVER REPORTED AS CONNECTED. Pass and fail are both
     driven through the injected request hook, for all three services.
   * "IS MY CALENDAR CONNECTED?" IS ANSWERED FROM THE STORE AND THAT TEST, and
@@ -78,10 +81,20 @@ from __future__ import annotations
 import ast
 import json
 import os
+import shutil
 import sys
+import tempfile
 import threading
 import unicodedata
 from pathlib import Path
+
+# The receipt file (2026-11-08) lands in the Jarvis settings folder, which the
+# environment names. Point it at this suite's own temp folder BEFORE anything
+# imports jarvis_framework: a test run must never write into the owner's config.
+_TMP = Path(tempfile.mkdtemp(prefix="jarvis-connect-account-"))
+os.environ["OPENJARVIS_CONFIG_DIR"] = str(_TMP / "config")
+os.environ["JARVIS_CONFIG_DIR"] = str(_TMP / "config")
+(_TMP / "config").mkdir(parents=True, exist_ok=True)
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -603,9 +616,16 @@ def t_an_unknown_or_expired_card_is_refused():
 
 
 def t_the_module_cannot_write_a_file_or_reach_a_clipboard():
-    """By its own AST, the same way the secret hand-off suite proves it: the
-    module imports no storage, clipboard, database or logging library, and it
-    calls no `open()` and no `eval`/`exec`."""
+    """By its own AST: the module cannot put a VALUE anywhere but Credential
+    Manager, and cannot reach a clipboard, a database, a log or a subprocess.
+
+    It DOES write exactly one file since 2026-11-08 - `connect-receipts.json`,
+    the non-secret test verdict a later chat turn reads (the owner's GitHub
+    overclaim report). So the check is no longer "no file at all": it is "no
+    file-write primitive that could carry a value, and the ONE writer is the
+    receipt helper". A value only ever arrives as `save_card`'s `values`
+    argument, which is handed to the store and the verifier and never written.
+    """
     tree = ast.parse((HERE / "jarvis_connect_account.py").read_text(encoding="utf-8"))
     imports = set()
     for node in ast.walk(tree):
@@ -615,17 +635,32 @@ def t_the_module_cannot_write_a_file_or_reach_a_clipboard():
             imports.add(node.module.split(".")[0])
     forbidden = {"sqlite3", "logging", "pickle", "shelve", "tkinter", "pyperclip",
                  "clipboard", "subprocess", "shutil"}
-    check("the module imports nothing that could write a file or a clipboard",
+    check("the module imports nothing that could write a clipboard or a database",
           not (imports & forbidden), f"{sorted(imports & forbidden)}")
     check("... and the only storing module it names is jarvis_token_store",
           {m for m in imports if m.startswith("jarvis_")} <=
           {"jarvis_token_store", "jarvis_calendar", "jarvis_research",
-           "jarvis_local_http", "jarvis_scrub", "jarvis_accounts"},
+           "jarvis_local_http", "jarvis_scrub", "jarvis_accounts",
+           # A settings-folder PATH only (the receipt file, 2026-11-08): it
+           # stores nothing; Credential Manager is still the only value store.
+           "jarvis_framework"},
           f"{sorted(m for m in imports if m.startswith('jarvis_'))}")
     calls = {n.func.id for n in ast.walk(tree)
              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
     check("it calls no open() and no eval/exec",
           not (calls & {"open", "eval", "exec", "compile"}), f"{sorted(calls)}")
+    # The ONE file writer, named: `record_receipt`'s own Path.write_text. Any
+    # second file-writing call in this module would be a new place a value
+    # could leak into, so the count is pinned rather than described.
+    writers = [n for n in ast.walk(tree)
+               if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+               and n.func.attr in ("write_text", "write_bytes")]
+    check("... and it has exactly ONE file-writing call: the receipt writer",
+          len(writers) == 1, f"{len(writers)}")
+    names = {n.func.attr for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+    check("the receipt file is written atomically (write + replace), never in place",
+          "replace" in names and "write_text" in names, f"{sorted(names & {'replace', 'write_text', 'write'})}")
 
 
 def t_no_answer_ever_carries_the_value():
@@ -1460,52 +1495,107 @@ def t_the_accounts_route_is_read_by_another_machine_and_carries_no_value():
           shelf.wrote(RES.TOKEN_TARGET) == [])
 
 
+def t_a_save_records_the_non_secret_receipt_a_later_chat_reads():
+    """2026-11-08: the ONE test's verdict is remembered, so the chat turn after
+    the save answers from it - and the record carries no value."""
+    shelf = StoreShelf()
+    fake = FakeHttp({"api.github.com/user": (200, json.dumps({"login": "owner"}))})
+    try:
+        C.receipts_path().unlink()
+    except OSError:
+        pass
+
+    def run():
+        card = C.raise_card("github", "")
+        out = with_http(fake, lambda: C.save_card(card["card_id"], {"token": CANARY}))
+        row = C.receipt("github")
+        check("a save records the one test's verdict for a later chat turn",
+              row is not None and row.get("verified") is True, f"{row}")
+        check("... with the verifier's own words and when it ran, and no value",
+              row is not None and "GitHub accepted the token" in row.get("verify_words", "")
+              and float(row.get("saved_at") or 0) > 0
+              and CANARY not in json.dumps(row), f"{row}")
+        raw = C.receipts_path().read_text(encoding="utf-8")
+        check("... and the receipt file itself holds no value",
+              CANARY not in raw, raw[:400])
+        words = C.receipt_words("github")
+        check("the chat words are built from that record",
+              "GitHub accepted the token" in words and "nothing more" in words, words)
+
+    fresh_cards(lambda: without_env(lambda: with_store(shelf, run)))
+
+    # A FAILED test is recorded too: the chat must be able to say "did NOT pass".
+    shelf2 = StoreShelf()
+    fake_bad = FakeHttp({"api.github.com/user": (401, "{}")})
+
+    def run_failed():
+        card = C.raise_card("github", "")
+        with_http(fake_bad, lambda: C.save_card(card["card_id"], {"token": CANARY}))
+        row = C.receipt("github")
+        check("a FAILED test is recorded, not dropped",
+              row is not None and row.get("verified") is False
+              and "401" in row.get("verify_words", ""), f"{row}")
+        words = C.receipt_words("github")
+        check("... and the chat words say it did not pass",
+              "did NOT pass" in words and "HTTP 401" in words, words)
+        check("... the failed record still carries no value",
+              CANARY not in json.dumps(row) and CANARY not in C.receipts_path().read_text(
+                  encoding="utf-8"), f"{row}")
+
+    fresh_cards(lambda: without_env(lambda: with_store(shelf2, run_failed)))
+
+
 if __name__ == "__main__":
-    for fn in (
-        t_every_service_field_maps_to_a_real_store_entry,
-        t_the_new_entries_are_read_through_resolve_secret,
-        t_a_saved_value_is_registered_with_the_scrubber,
-        t_the_card_carries_no_value_and_no_extra_surface,
-        t_the_models_note_is_cleaned_and_capped,
-        t_the_models_note_cannot_reorder_itself,
-        t_pending_cards_are_bounded_and_expire,
-        t_pending_cards_are_newest_first,
-        t_a_save_writes_each_value_to_its_own_entry_then_verifies,
-        t_a_refused_store_saves_nothing_anywhere,
-        t_a_card_only_takes_its_own_fields,
-        t_an_unknown_or_expired_card_is_refused,
-        t_an_expired_card_cannot_be_saved,
-        t_two_saves_of_one_card_at_once_write_once,
-        t_the_module_cannot_write_a_file_or_reach_a_clipboard,
-        t_no_answer_ever_carries_the_value,
-        t_an_environment_variable_that_still_wins_is_named,
-        t_the_ics_verifier,
-        t_the_caldav_verifier,
-        t_the_caldav_verifier_fails_closed_without_the_plain_http_rule,
-        t_the_github_verifier,
-        t_status_is_built_from_the_store_and_the_test,
-        t_the_model_tool_raises_the_same_card_and_refuses_a_value,
-        t_the_quick_path_answers_the_owners_sentences,
-        t_a_not_connected_answer_keeps_the_settings_jump,
-        t_the_route_is_this_pc_only_and_never_echoes_the_body,
-        t_the_route_refuses_another_machine_before_it_reads_the_body,
-        t_the_route_is_installed_through_the_secret_handoff_entry_point,
-        t_the_required_credential_manager_check_covers_the_new_entries,
-        t_this_adds_no_key_route_and_no_key_service,
-        t_disconnect_removes_exactly_its_own_entries,
-        t_a_refusing_store_removes_nothing,
-        t_an_unknown_service_refuses_by_name,
-        t_removability_says_the_honest_way,
-        t_the_accounts_route_is_read_by_another_machine_and_carries_no_value,
-    ):
-        print(f"\n--- {fn.__name__} ---")
-        try:
-            fn()
-        except Exception as exc:
-            import traceback
-            FAILED.append(fn.__name__)
-            print(f"FAIL  {fn.__name__} RAISED {type(exc).__name__}: {exc}")
-            traceback.print_exc()
+    try:
+        for fn in (
+            t_a_save_records_the_non_secret_receipt_a_later_chat_reads,
+            t_every_service_field_maps_to_a_real_store_entry,
+            t_the_new_entries_are_read_through_resolve_secret,
+            t_a_saved_value_is_registered_with_the_scrubber,
+            t_the_card_carries_no_value_and_no_extra_surface,
+            t_the_models_note_is_cleaned_and_capped,
+            t_the_models_note_cannot_reorder_itself,
+            t_pending_cards_are_bounded_and_expire,
+            t_pending_cards_are_newest_first,
+            t_a_save_writes_each_value_to_its_own_entry_then_verifies,
+            t_a_refused_store_saves_nothing_anywhere,
+            t_a_card_only_takes_its_own_fields,
+            t_an_unknown_or_expired_card_is_refused,
+            t_an_expired_card_cannot_be_saved,
+            t_two_saves_of_one_card_at_once_write_once,
+            t_the_module_cannot_write_a_file_or_reach_a_clipboard,
+            t_no_answer_ever_carries_the_value,
+            t_an_environment_variable_that_still_wins_is_named,
+            t_the_ics_verifier,
+            t_the_caldav_verifier,
+            t_the_caldav_verifier_fails_closed_without_the_plain_http_rule,
+            t_the_github_verifier,
+            t_status_is_built_from_the_store_and_the_test,
+            t_the_model_tool_raises_the_same_card_and_refuses_a_value,
+            t_the_quick_path_answers_the_owners_sentences,
+            t_a_not_connected_answer_keeps_the_settings_jump,
+            t_the_route_is_this_pc_only_and_never_echoes_the_body,
+            t_the_route_refuses_another_machine_before_it_reads_the_body,
+            t_the_route_is_installed_through_the_secret_handoff_entry_point,
+            t_the_required_credential_manager_check_covers_the_new_entries,
+            t_this_adds_no_key_route_and_no_key_service,
+            t_disconnect_removes_exactly_its_own_entries,
+            t_a_refusing_store_removes_nothing,
+            t_an_unknown_service_refuses_by_name,
+            t_removability_says_the_honest_way,
+            t_the_accounts_route_is_read_by_another_machine_and_carries_no_value,
+        ):
+            print(f"\n--- {fn.__name__} ---")
+            try:
+                fn()
+            except Exception as exc:
+                import traceback
+                FAILED.append(fn.__name__)
+                print(f"FAIL  {fn.__name__} RAISED {type(exc).__name__}: {exc}")
+                traceback.print_exc()
+    finally:
+        # The receipt file (2026-11-08) lives in this suite's own temp folder.
+        shutil.rmtree(_TMP, ignore_errors=True)
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
