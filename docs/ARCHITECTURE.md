@@ -4925,12 +4925,27 @@ what is missing is only the Settings screen agreeing about who turned it off.
   "Wi-Fi reconnect" via `jarvis-desktop/src/wifi-reconnect-settings.js` and
   `jarvis-desktop/src-tauri/src/wifi_reconnect.rs`. `tools/check_parity.py`
   carries the route as `deliberate` and this bullet is the reason. The phone
-  neither calls it nor shows the setting. Its permission shape is section 3's:
-  the owner's explicit default-ON ask makes this ONE narrow standing action (a
-  saved, password-protected profile, only while offline, never mid-turn), and
-  every attempt is reported; it is not a general "change my network" permission
-  and no card is raised per attempt (a card every 2 hours is not answerable).
-  JARVIS-API section 204 records the route.
+  neither calls it nor shows the setting. Its permission shape is section 3's,
+  as the owner's ruling Q4 (2026-11-08) settled it: APPROVED as a bounded,
+  default-ON, PC-only maintenance feature with ZERO per-attempt cards - but the
+  SWITCH follows the ordinary card rule: turning it ON raises exactly ONE
+  `change_own_config` card and nothing changes until that card is answered,
+  while turning it OFF is instant and cardless. The ruling's six mandatory
+  guardrails are enforced in `backend/jarvis_wifi.py` and proved in its suite:
+  (1) saved password-protected profiles only, with the authentication allow-list
+  exactly `WPA2PSK`/`WPA3SAE`/`WPA2`/`WPA3` and Open/WEP/802.1X hard-refused, and
+  no `key=clear` ever passed; (2) strictly offline-only - switch ON, Lockdown
+  readable and OFF, no working internet on this Wi-Fi, and the owner did not turn
+  the radio/adapter off (an unreadable radio or Lockdown fails SAFE); (3) at most
+  the top 3 saved profiles that are actually broadcasting in range, each verified
+  for 10 seconds, stopping at the first success; (4) the switch in Settings, chat
+  and Jarvis Live behind the one card described above, which a model answer can
+  never reach; (5) a full Change Journal receipt per attempt - `timestamp`,
+  `profile_name`, `auth_type`, `result: connected | still_offline` - so "did you
+  reconnect my wifi?" has a real deterministic answer; (6) a decision record.
+  It is not a general "change my network" permission, and no card is raised per
+  attempt (a card every 2 hours is not answerable). JARVIS-API section 204
+  records the route and the guardrails.
 
 
 ## 9. Where the backend lives

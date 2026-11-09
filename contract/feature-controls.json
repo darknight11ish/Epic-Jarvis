@@ -10433,6 +10433,29 @@
       "status": "enforced",
       "owner": "none-needed",
       "reason": "switch present on the desktop Settings page"
+    },
+    {
+      "key": "wifi_auto_reconnect",
+      "names": [
+        "auto wifi reconnect",
+        "automatic wifi reconnect",
+        "auto wi-fi reconnect",
+        "automatic wi-fi reconnect",
+        "wi-fi reconnect",
+        "the wi-fi reconnect",
+        "wifi reconnect",
+        "reconnect wi-fi automatically",
+        "automatic wi-fi reconnection"
+      ],
+      "section": "wifi-reconnect",
+      "desktop_row": null,
+      "turn_on": "turn on auto wifi reconnect",
+      "turn_off": "turn off auto wifi reconnect",
+      "resolved": true,
+      "status": "pc-only",
+      "owner": "gpu-pinning",
+      "reason": "PC-only by nature (ARCHITECTURE section 8, ruling Q4): reconnecting THIS PC's Wi-Fi from the phone is refused by the route (it refuses every device but this PC), so the desktop Settings switch and the PC's own typed sentences are its only controls. The phone neither shows nor changes it.",
+      "label_note": "PC-only setting: the switch is on the desktop, and the phone's typed sentence is refused by the route rather than acted on."
     }
   ],
   "setting_rows": [

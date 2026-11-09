@@ -28,28 +28,47 @@ omission:
     is streaming or a multi-step task is running (idle-only);
   * it never runs more often than the owner asked (one check per 2 hours, one
     bounded attempt inside that check);
-  * it never shows or logs a network name: the PC's own profile names stay in
-    Windows' profile store, and this module's records name a profile only by
-    its position in the list it read ("saved profile 2");
+  * the Change Journal receipt (ruling Q4.5) carries the profile NAME and
+    canonical authentication type, because Jarvis must answer "did you
+    reconnect my wifi?" - and it carries no password, no key and no BSSID;
+    every other record names a profile by its position in the list ("saved
+    profile 2");
   * a model answer can never toggle it: the only writers are the Settings
     switch (through the route below) and the deterministic chat/Live sentences
     in `jarvis_quick.py`, which call the switch's own setter here.
 
-PERMISSION SHAPE - AND THE HONEST ARGUMENT (2026-11-08). The owner asked for a
-feature that is ON by default and acts on its own every 2 hours. This module
-treats that ONE narrow action - "ask Windows to connect to a saved,
-password-protected Wi-Fi profile while this PC has no internet" - as a STANDING
-ACTION the owner explicitly enabled by asking for it and can turn off at once.
-It raises NO card per attempt, because a card every 2 hours is not a question a
-person can answer (the owner is often not at the PC precisely when it is
-offline, and the request is to repair itself). The `wifi_reconnect_set` intent
-and the Settings switch are the owner's control, and every attempt is logged and
-reported. This is the same shape as the shipped read-aloud switch (ON by
-default, cardless both ways, because OFF never loosens anything and ON restores
-the shipped default) and the model lane's automatic restart (bounded, reported).
+PERMISSION SHAPE - THE OWNER'S RULING Q4 (2026-11-08). APPROVED as a bounded,
+default-ON, PC-only maintenance feature with ZERO per-attempt cards: a card
+every 2 hours is not a question a person can answer, and if the PC is offline a
+phone over the private link cannot reach it to tap one. The ruling requires SIX
+guardrails, and this module enforces each in one place:
+
+  1. SAVED PASSWORD-PROTECTED PROFILES ONLY - the authentication must be one of
+     `WPA2PSK`, `WPA3SAE`, `WPA2`, `WPA3` AND the profile must carry a stored
+     key; Open/None/WEP/802.1X are hard-refused. `key=clear` is never passed.
+  2. STRICTLY OFFLINE-ONLY: (a) the switch ON, (b) Lockdown readable and OFF,
+     (c) the PC has no working internet on this Wi-Fi, and (d) the owner did not
+     turn Wi-Fi off (adapter disabled or radio off - never switched back on; an
+     unreadable radio skips).
+  3. BOUNDED: only the TOP 3 saved password-protected profiles that are
+     currently broadcasting in range, each verified for 10 seconds, stopping at
+     the FIRST success.
+  4. THE SWITCH: default ON as the owner asked; changing it is one
+     `change_own_config` card to turn it ON and instant/cardless to turn it OFF
+     (`request_enabled`, the one path Settings, Chat and Live share). A model
+     answer can never reach it.
+  5. FULL AUDIT RECEIPT: every attempt writes `timestamp`, `profile_name`,
+     `auth_type`, `result: connected | still_offline` to the project's own
+     audit/status log and to this module's bounded receipts, so "did you
+     reconnect my wifi?" has a real answer. Never a key.
+  6. DECISION RECORD: the bounded exception is recorded in the project's own
+     decisions record by the Lead (the wording is the Lead's to write; this
+     module does not write records).
+
 WHAT IT IS NOT: a general "change my network" permission. It never touches a
-network that is not saved and password-protected, it never runs while the PC is
-online, it never runs mid-turn, and OFF stops it immediately.
+network that is not saved and password-protected, it never switches the radio
+on, it never runs while the PC is online, while Lockdown is on, mid-turn, or on
+a network that is not currently in range - and OFF stops it immediately.
 
 WHERE STATE LIVES: `wifi_reconnect.json` in the Jarvis settings folder (the one
 every other module uses, so a backup carries it and a test can point
@@ -100,8 +119,20 @@ CHECK_INTERVAL_S = 2 * 60 * 60
 #: take before it is called "not reconnected". Bounded on purpose: no hammering,
 #: and the whole cycle stays well inside the 2-hour window.
 MAX_PROFILES_PER_CYCLE = 3
-ATTEMPT_SETTLE_S = 20.0
+#: The ruling Q4 (2026-11-08): verify each attempt for 10 seconds, not 20.
+ATTEMPT_SETTLE_S = 10.0
 ATTEMPT_POLL_S = 2.0
+
+#: The setting's registry key (owner ruling Q4), and the ONE gate action a
+#: switch change uses: turning it ON is one `change_own_config` card; OFF is
+#: immediate and cardless. A model answer can never reach either.
+SETTING_KEY = "wifi_auto_reconnect"
+ACTION_ON = "change_own_config"
+
+#: Ruling Q4 guardrail 1: the ONLY authentication values a candidate may
+#: carry, canonicalised to WLAN-API names. Everything else - Open, None,
+#: WEP, 802.1X/Enterprise - is hard-refused before any connect is considered.
+ALLOWED_AUTH = ("WPA2PSK", "WPA3SAE", "WPA2", "WPA3")
 
 #: After a cycle that could not reconnect, the next one is still only after the
 #: full interval - the owner asked for two-hourly, not for a tighter retry.
@@ -158,15 +189,41 @@ ALREADY_ON = "The auto Wi-Fi reconnect is already on. Nothing was changed."
 ALREADY_OFF = "The auto Wi-Fi reconnect is already off. Nothing was changed."
 ABOUT = (
     "The auto Wi-Fi reconnect keeps this desktop's internet link repaired on "
-    "its own. While this PC is offline, every 2 hours it asks Windows to "
+    "its own. While this PC has no internet, every 2 hours it asks Windows to "
     "connect to a Wi-Fi network this PC has already saved and whose password is "
     "already stored - never an open network, never a new one, and it never asks "
-    "you for a password. It tries at most 3 saved networks per check, waits "
-    "about 20 seconds for each, stops as soon as the internet is back, and says "
-    "what it did. It does nothing while the PC is online, while Jarvis is "
-    "answering you, or while a task is running. It is on by default and you can "
-    "turn it off in Settings or by asking me."
+    "you for a password. It only tries saved password-protected networks that "
+    "are actually broadcasting in range, at most 3 of them, waits 10 seconds for "
+    "each, stops as soon as the internet is back, and says what it did. It does "
+    "nothing while the PC is online, while Lockdown is on, while the Wi-Fi was "
+    "turned off by you, while Jarvis is answering you, or while a task is "
+    "running. It is on by default and you can turn it off in Settings or by "
+    "asking me."
 )
+SKIP_LOCKDOWN = ("Lockdown is on, and nothing that touches the network runs "
+                 "while Lockdown is on. No Wi-Fi attempt was made.")
+SKIP_LOCKDOWN_UNKNOWN = ("I could not read whether Lockdown is on, so I will "
+                         "not change the network. No Wi-Fi attempt was made.")
+SKIP_RADIO_OFF = ("The Wi-Fi was turned off (the adapter or the radio is "
+                  "disabled), so Jarvis will not turn it back on. No attempt "
+                  "was made.")
+SKIP_RADIO_UNKNOWN = ("I could not read the Wi-Fi radio state, so I will not "
+                      "change the network. No Wi-Fi attempt was made.")
+SKIP_NO_SCAN = ("I could not read which Wi-Fi networks are in range "
+                "(Windows needs Location services on for that), so I will not "
+                "try anything. No Wi-Fi attempt was made.")
+NO_IN_RANGE = ("The auto Wi-Fi reconnect is on, but none of this PC's saved "
+               "password-protected networks is broadcasting in range just now. "
+               "Nothing was tried.")
+ON_CARD = ("Turn on the auto Wi-Fi reconnect. While it is on, every 2 hours, "
+           "only when this PC has no internet, Jarvis may ask Windows to "
+           "reconnect to a saved password-protected Wi-Fi network that is in "
+           "range - never an open or new network, never a password, never "
+           "while Lockdown is on, and never while Jarvis is answering you. It "
+           "can drop the private link for a few seconds while Windows "
+           "reconnects.")
+WAITING_CARD = ("A card is waiting in the Jarvis bar. The auto Wi-Fi reconnect "
+                "stays off until you approve it.")
 NO_SAVED = (
     "The auto Wi-Fi reconnect is on, but this PC has no saved password-protected "
     "Wi-Fi network to try - Windows has no profile with a stored key on it, so "
@@ -359,10 +416,11 @@ def state() -> dict:
 def set_enabled(on: bool) -> dict:
     """Turn the auto Wi-Fi reconnect on or off, and say what really happened.
 
-    Cardless in BOTH directions, and that is a decision (see this module's
-    header): OFF removes an automatic action and so cannot loosen anything; ON
-    restores the owner's own shipped default. The change is written atomically,
-    the previous value is read before it, and OFF stops the watcher's next pass
+    The RAW writer, and deliberately not the door: `request_enabled()` is what
+    Settings, Chat and Live call, because RULING Q4.4 makes turning it ON one
+    `change_own_config` card while OFF stays instantaneous. This function is
+    called by that door (and by the suite) and writes atomically; the previous
+    value is read before the write, and OFF stops the watcher's next pass
     immediately (the loop re-reads this file before acting).
     """
     if not isinstance(on, bool):
@@ -473,6 +531,20 @@ class Local:
         """(ok, detail) - ask Windows to join the saved profile `name`."""
         raise NotImplementedError
 
+    def in_range(self):
+        """The SSIDs currently broadcasting, or None when they cannot be read.
+
+        Ruling Q4 guardrail 3: only the top 3 saved password-protected profiles
+        THAT ARE IN RANGE may be tried. None is a real answer (Location off, the
+        WLAN service down) and the caller treats it as "do not try anything",
+        never as "nothing is in range".
+        """
+        raise NotImplementedError
+
+    def radio(self) -> dict:
+        """{"present", "admin_disabled", "radio_on"} - the duty to read (d)."""
+        raise NotImplementedError
+
 
 def _child_env() -> dict:
     """A narrow environment for the child programs - never the whole parent."""
@@ -523,16 +595,65 @@ def _parse_profiles(text: str) -> list:
     return [{"name": n} for n in names]
 
 
-def _parse_profile_detail(text: str) -> dict:
-    """`netsh wlan show profile name=…` -> the two facts that matter.
+def _auth_type(text: str) -> str:
+    """Canonical password-protected auth type, or "" when it is refused.
 
-    `secure` requires BOTH a stored key (`Security key: Present`) and a
-    Personal/PSK authentication - an OPEN profile has no key and is never a
-    candidate. `auto` is Windows' own "Connect automatically" flag; it is
-    reported, not required (the owner's feature may connect a manual profile
-    only when offline, which is the same choice Windows' own UI makes).
+    RULING Q4 GUARDRAIL 1 (2026-11-08): the allow-list is EXACTLY
+    `WPA2PSK`, `WPA3SAE`, `WPA2`, `WPA3`. Windows prints these as
+    "WPA2-Personal", "WPA3-Personal", "WPA2-Enterprise" and so on, so this
+    maps the NETSH wording onto the ruling's names and returns "" for every
+    other value - Open, None, WEP, 802.1X/Enterprise - which the caller then
+    hard-refuses. It is a pure function: no key, no network, no state.
     """
-    secure = False
+    low = str(text or "").strip().lower()
+    if not low:
+        return ""
+    # Enterprise is 802.1X, never a stored personal key: refuse it before the
+    # plain WPA2/WPA3 words below could match the "wpa2"/"wpa3" half.
+    if "enterprise" in low or "802.1x" in low:
+        return ""
+    if "open" in low or low in ("none", "no authentication"):
+        return ""
+    if "wpa2" in low and ("psk" in low or "personal" in low):
+        return "WPA2PSK"
+    if "wpa3" in low and ("sae" in low or "personal" in low):
+        return "WPA3SAE"
+    if low in ("wpa2", "wpa2-psk", "wpa2psk"):
+        return "WPA2"
+    if low in ("wpa3", "wpa3-sae", "wpa3sae"):
+        return "WPA3"
+    return ""
+
+
+def _parse_profile_ssids(text: str) -> list:
+    """`netsh wlan show profile name=…` -> the SSIDs the profile carries.
+
+    Ruling Q4 guardrail 3 matches a saved profile against the networks that
+    are actually broadcasting; a profile's own `SSID name` line is the exact
+    spelling to match, and a profile may carry more than one. No key is read
+    anywhere in this parser.
+    """
+    found = []
+    for line in str(text or "").splitlines():
+        match = re.match(r"\s*SSID name\s*:\s*(.+?)\s*$", line)
+        if not match:
+            continue
+        name = match.group(1).strip().strip('"')
+        if name and name not in found:
+            found.append(name)
+    return found
+
+
+def _parse_profile_detail(text: str) -> dict:
+    """`netsh wlan show profile name=…` -> the facts that matter, no key.
+
+    `secure` is true only when the profile has BOTH a stored key
+    (`Security key: Present`) and an authentication in the ruling's
+    allow-list. `auth_type` is the canonical `WPA2PSK`/`WPA3SAE`/`WPA2`/
+    `WPA3`, or "" - the Change Journal receipt records it, never a key.
+    `auto` is Windows' own "Connect automatically" flag; it is reported, not
+    required.
+    """
     auto = False
     auth = ""
     has_key = False
@@ -544,12 +665,29 @@ def _parse_profile_detail(text: str) -> dict:
             auth = low.split(":", 1)[-1].strip()
         elif low.lower().startswith("connection mode"):
             auto = "connect automatically" in low.lower()
-    if has_key and auth:
-        auth_low = auth.lower()
-        secure = ("personal" in auth_low or "psk" in auth_low
-                  or "sae" in auth_low)
-    return {"secure": bool(secure), "auto": bool(auto),
-            "authentication": auth}
+    kind = _auth_type(auth)
+    secure = bool(has_key and kind in ALLOWED_AUTH)
+    return {"secure": secure, "auto": bool(auto), "auth_type": kind,
+            "authentication": auth, "ssids": _parse_profile_ssids(text)}
+
+
+def _parse_networks(text: str) -> list:
+    """`netsh wlan show networks` -> [SSID, ...] currently broadcasting.
+
+    Ruling Q4 guardrail 3: only the top 3 saved password-protected profiles
+    THAT ARE IN RANGE may be tried. A hidden network has no SSID line to
+    match, so it is simply not in range for this purpose. A listing that
+    cannot be read is `None` upstream, never guessed.
+    """
+    out = []
+    for line in str(text or "").splitlines():
+        match = re.match(r"\s*SSID\s+\d+\s*:\s*(.*?)\s*$", line)
+        if not match:
+            continue
+        name = match.group(1).strip()
+        if name and name not in out:
+            out.append(name)
+    return out
 
 
 class _RealLocal(Local):
@@ -567,9 +705,12 @@ class _RealLocal(Local):
             c2, detail = _run_argv(
                 ["netsh", "wlan", "show", "profile", f"name={name}"], 20.0)
             facts = (_parse_profile_detail(detail) if c2 == 0
-                     else {"secure": False, "auto": False, "authentication": ""})
+                     else {"secure": False, "auto": False, "auth_type": "",
+                           "authentication": "", "ssids": []})
             out.append({"name": name, "secure": bool(facts["secure"]),
-                        "auto": bool(facts["auto"])})
+                        "auto": bool(facts["auto"]),
+                        "auth_type": str(facts.get("auth_type") or ""),
+                        "ssids": list(facts.get("ssids") or [])})
         return out
 
     def connection(self) -> dict:
@@ -619,6 +760,59 @@ class _RealLocal(Local):
             ["netsh", "wlan", "connect", f"name={name}"], 30.0)
         return code == 0, (text or "").strip()[:200]
 
+    def in_range(self):
+        """The networks Windows is currently broadcasting, or None.
+
+        `netsh wlan show networks` (no `mode=bssid`, so no BSSID reaches this
+        module). On a Windows 11 PC with Location services off this command is
+        refused - measured on the owner's PC 2026-11-08 - and that becomes None,
+        which `check_once` reports honestly instead of connecting blind.
+        """
+        code, text = _run_argv(["netsh", "wlan", "show", "networks"], 20.0)
+        if code != 0:
+            return None
+        return _parse_networks(text)
+
+    def radio(self) -> dict:
+        """Was the Wi-Fi turned off by the owner? Read; never switched back on.
+
+        Two facts, one call each:
+          * the adapter's own state (`Get-NetAdapter`: "Disabled" means the owner
+            disabled the device);
+          * the radio state from `netsh wlan show interfaces` ("Software Off" /
+            "Hardware Off" / "On"), which on this PC needs Location services.
+        An unreadable radio is `radio_on: None` - the caller then does nothing
+        rather than guessing that Wi-Fi is fine.
+        """
+        out = {"present": False, "admin_disabled": False, "radio_on": None}
+        script = ("$ErrorActionPreference='Stop';"
+                  "$w=@(Get-NetAdapter -Name 'Wi-Fi*' -ErrorAction SilentlyContinue);"
+                  "$o=[pscustomobject]@{present=($w.Count -gt 0);"
+                  "status=(@($w | Select-Object -First 1 -ExpandProperty Status) "
+                  "-join '')};$o | ConvertTo-Json -Compress")
+        code, text = _run_argv(
+            ["powershell.exe", "-NoProfile", "-NonInteractive",
+             "-ExecutionPolicy", "Bypass", "-Command", script], 20.0)
+        if code == 0:
+            try:
+                doc = json.loads(text.strip() or "{}")
+            except Exception:
+                doc = {}
+            out["present"] = bool(doc.get("present"))
+            status = str(doc.get("status") or "").strip().lower()
+            out["admin_disabled"] = status in ("disabled", "disconnected disabled")
+        c2, radio_text = _run_argv(["netsh", "wlan", "show", "interfaces"], 20.0)
+        if c2 == 0:
+            for line in str(radio_text or "").splitlines():
+                low = line.strip().lower()
+                if not low.startswith("radio status"):
+                    continue
+                if "hardware off" in low or "software off" in low:
+                    out["radio_on"] = False
+                elif "on" in low:
+                    out["radio_on"] = True
+        return out
+
 
 def net_probe(*, host: str = PROBE_HOST, port: int = PROBE_PORT,
               timeout: float = PROBE_TIMEOUT_S) -> bool:
@@ -646,6 +840,23 @@ CLASS_WIFI_NO_INTERNET = "wifi_no_internet"
 CLASS_UPSTREAM = "upstream_down"
 CLASS_NO_ADAPTER = "no_wifi_adapter"
 CLASS_UNKNOWN = "unknown"
+
+
+def _lockdown_on():
+    """Is Lockdown ON? True / False, or None when this build cannot read it.
+
+    Ruling Q4 guardrail 2(b): no attempt while Lockdown is on. `None` fails
+    SAFE - an unreadable Lockdown is treated as "do not act" by `check_once`, so
+    a missing owner-only module can never turn into a network change.
+    """
+    try:
+        import jarvis_asks_first  # type: ignore
+    except Exception:
+        return None
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return None
 
 
 def diagnose(*, local: Local, probe=None, now=None) -> dict:
@@ -726,7 +937,9 @@ def profiles(*, local: Local = None) -> list:
         if not name:
             continue
         out.append({"name": name, "secure": bool(row.get("secure")),
-                    "auto": bool(row.get("auto")), "id": index})
+                    "auto": bool(row.get("auto")),
+                    "auth_type": str(row.get("auth_type") or ""),
+                    "ssids": list(row.get("ssids") or []), "id": index})
     return out
 
 
@@ -737,6 +950,31 @@ def _usable(rows) -> list:
 
 def _usable_count(rows) -> int:
     return len(_usable(rows))
+
+
+def in_range_candidates(rows, visible, current: str = "") -> list:
+    """The top `MAX_PROFILES_PER_CYCLE` saved+secure profiles that are IN RANGE.
+
+    Ruling Q4 guardrail 3, the whole of it: a profile is a candidate only when
+    it is saved, password-protected (the ruling's auth allow-list, enforced by
+    `_usable`), AND its SSID is among the networks Windows currently sees. A
+    profile outside that intersection is never tried, even if it was tried
+    before. The network in use is tried first among those in range.
+    """
+    usable = _usable(rows)
+    seen = {str(name).strip().casefold() for name in (visible or ())
+            if str(name).strip()}
+    if not seen:
+        return []
+    picked = []
+    for row in usable:
+        names = [str(row.get("name") or "")]
+        names.extend(str(s) for s in (row.get("ssids") or ()))
+        if any(name.strip().casefold() in seen for name in names if name.strip()):
+            picked.append(row)
+    picked.sort(key=lambda row: (0 if row.get("name") == current else 1,
+                                 int(row.get("id") or 0)))
+    return picked[:MAX_PROFILES_PER_CYCLE]
 
 
 def candidate_order(rows, current: str = "") -> list:
@@ -840,26 +1078,100 @@ def _record(doc, *, kind: str, words: str, when: float, extra: dict = None) -> d
     return doc
 
 
+def _receipt(doc, *, timestamp, profile_name, auth_type, result) -> dict:
+    """One Change Journal receipt for ONE real attempt. Never a key.
+
+    Ruling Q4 guardrail 5 requires exactly `timestamp`, `profile_name`,
+    `auth_type` and `result: connected | still_offline`, so Jarvis can answer
+    "did you reconnect my wifi?". It goes to the project's own status/audit log
+    (`jarvis_framework.audit_log`, the trail every acting module uses) and to the
+    bounded receipts list in this module's state file, which the chat answer
+    reads. The profile name IS the receipt's own field (the ruling wants it);
+    the authentication is the canonical `WPA2PSK`/`WPA3SAE`/`WPA2`/`WPA3` - no
+    password, no key, no BSSID, ever.
+    """
+    row = {"timestamp": timestamp,
+           "profile_name": str(profile_name or ""),
+           "auth_type": str(auth_type or ""),
+           "result": "connected" if result == "connected" else "still_offline"}
+    recs = doc.get("receipts") if isinstance(doc.get("receipts"), list) else []
+    doc["receipts"] = (recs + [dict(row)])[-50:]
+    _audit("wifi.reconnect_attempt", dict(row))
+    _publish({"state": "receipt", "receipt": dict(row)})
+    return doc
+
+
+def receipts() -> list:
+    """The bounded Change Journal receipts, newest last. A read; never raises."""
+    found, doc = _on_disk()
+    rows = doc.get("receipts") if isinstance(doc, dict) else None
+    if not isinstance(rows, list):
+        return []
+    return [dict(r) for r in rows if isinstance(r, dict)]
+
+
+def did_words(now=None) -> str:
+    """The chat/Live answer to "did you reconnect my wifi?", from the receipts."""
+    rows = receipts()
+    if not rows:
+        return ("I have not tried to reconnect your Wi-Fi - there is no attempt "
+                "in my record yet.")
+    last = rows[-1]
+    when = _when_words(last.get("timestamp"))
+    name = str(last.get("profile_name") or "")
+    auth = str(last.get("auth_type") or "password-protected")
+    who = f"\"{name}\"" if name else "a saved network"
+    if last.get("result") == "connected":
+        return ("Yes - my last attempt reconnected " + who + " (" + auth + ")" +
+                (f" at {when}." if when else "."))
+    return ("No - my last attempt" + (f" at {when}" if when else "") +
+            " tried " + who + " (" + auth + ") and the internet stayed offline.")
+
+
+def _finish(doc, when, *, kind: str, words: str, persist: bool,
+            ran: bool = True, **extra) -> dict:
+    """Record one finished check (no attempt), save it, and return its answer."""
+    doc = _record(doc, kind=kind, words=words, when=when)
+    doc["last_check_at"] = when
+    if persist:
+        with _LOCK:
+            _write(doc)
+    out = {"ok": True, "ran": ran, "class": kind, "dry_run": dry_run(),
+           "words": words}
+    out.update(extra)
+    return out
+
+
 def check_once(*, now=None, local: Local = None, probe=None,
-               busy=None, persist: bool = True, sleep=None) -> dict:
+               busy=None, persist: bool = True, sleep=None,
+               lockdown=None, in_range=None, radio=None) -> dict:
     """Run ONE 2-hourly check. Returns the record it wrote (or would write).
 
-    THE ORDER IS THE SAFETY, top to bottom:
+    THE ORDER IS THE SAFETY, and every condition is the ruling's own (Q4,
+    2026-11-08; the six guardrails):
       1. the switch is read first - OFF returns at once, touches nothing;
       2. the 2-hour spacing is read from the state file (sleep/resume safe);
       3. a busy check: an answer streaming, standby, or a task running means
          this cycle is SKIPPED and said so - never a network change mid-turn;
-      4. the diagnosis: ONLINE does nothing; UPSTREAM (Wi-Fi fine, VPN/internet
+      4. (b) LOCKDOWN must be readable and OFF; an unreadable Lockdown fails
+         SAFE (skip), because Lockdown is a promise about ways out;
+      5. the diagnosis: ONLINE does nothing; UPSTREAM (Wi-Fi fine, VPN/internet
          broken) does nothing to Wi-Fi and says why; only a genuinely broken
          Wi-Fi link goes on;
-      5. the saved store is read (read-only) and only `secure` profiles are
-         candidates; a PC with none says so;
-      6. at most `MAX_PROFILES_PER_CYCLE` attempts, each bounded; the first one
-         that brings the internet back stops the cycle.
-    A DRY RUN does 1-5, writes the plan, and never calls `connect()`.
+      6. (d) the RADIO: if the owner turned Wi-Fi off (adapter disabled or radio
+         off), NOTHING is switched back on - the skip is said in his words. An
+         unreadable radio skips too (never guess);
+      7. (3) IN-RANGE: the saved store is read (read-only) and only saved,
+         password-protected profiles whose SSID Windows currently sees are
+         candidates - the top 3, never one that is out of range;
+      8. (3) at most `MAX_PROFILES_PER_CYCLE` attempts, each verified for 10 s,
+         stopping IMMEDIATELY when one connects; every attempt writes the
+         Change Journal receipt (5).
+    A DRY RUN does 1-7, writes the plan, and never calls `connect()`.
 
-    `now`, `local`, `probe` and `busy` exist so the suite can drive every branch
-    with no network, no Windows call and no clock.
+    `now`, `local`, `probe`, `busy`, `lockdown`, `in_range` and `radio` exist so
+    the suite can drive every branch with no network, no Windows call, no clock
+    and no card.
     """
     when = _now(now)
     on = enabled()
@@ -876,13 +1188,16 @@ def check_once(*, now=None, local: Local = None, probe=None,
     blocked = (busy() if callable(busy) else _busy_words())
     if blocked:
         words = f"Check skipped: {blocked}, and Jarvis never changes the network then."
-        doc = _record(doc, kind="skipped", words=words, when=when)
-        doc["last_check_at"] = when
-        if persist:
-            with _LOCK:
-                _write(doc)
-        return {"ok": True, "ran": False, "class": "skipped",
-                "dry_run": dry_run(), "words": words}
+        return _finish(doc, when, kind="skipped", words=words,
+                       persist=persist, ran=False)
+    # (b) Lockdown: never a way out while it is on; unreadable fails SAFE.
+    locked = lockdown() if callable(lockdown) else _lockdown_on()
+    if locked is None:
+        return _finish(doc, when, kind="skipped_lockdown_unknown",
+                       words=SKIP_LOCKDOWN_UNKNOWN, persist=persist, ran=False)
+    if locked:
+        return _finish(doc, when, kind="skipped_lockdown",
+                       words=SKIP_LOCKDOWN, persist=persist, ran=False)
     real = local or _RealLocal()
     try:
         facts = diagnose(local=real, probe=probe, now=when)
@@ -891,36 +1206,52 @@ def check_once(*, now=None, local: Local = None, probe=None,
                  "words": f"The Wi-Fi state could not be read ({type(exc).__name__})."}
     dry = dry_run()
     if not facts.get("wifi_broken"):
-        doc = _record(doc, kind=str(facts.get("class") or CLASS_UNKNOWN),
-                      words=str(facts.get("words") or ""), when=when)
-        doc["last_check_at"] = when
-        if persist:
-            with _LOCK:
-                _write(doc)
-        return {"ok": True, "ran": True, "class": facts.get("class"),
-                "dry_run": dry, "online": facts.get("class") == CLASS_ONLINE,
-                "words": str(facts.get("words") or "")}
+        return _finish(doc, when, kind=str(facts.get("class") or CLASS_UNKNOWN),
+                       words=str(facts.get("words") or ""), persist=persist,
+                       online=facts.get("class") == CLASS_ONLINE)
+    # (d) the radio: the owner may have turned Wi-Fi off on purpose.
+    try:
+        rad = radio() if callable(radio) else real.radio()
+    except Exception:
+        rad = {"present": True, "admin_disabled": False, "radio_on": None}
+    rad = rad if isinstance(rad, dict) else {}
+    if not rad.get("present", True):
+        return _finish(doc, when, kind="skipped_no_adapter",
+                       words=NOT_WINDOWS, persist=persist, ran=False)
+    if rad.get("admin_disabled") or rad.get("radio_on") is False:
+        return _finish(doc, when, kind="skipped_radio_off",
+                       words=SKIP_RADIO_OFF, persist=persist, ran=False)
+    if rad.get("radio_on") is None:
+        return _finish(doc, when, kind="skipped_radio_unknown",
+                       words=SKIP_RADIO_UNKNOWN, persist=persist, ran=False)
+    # (3) only saved password-protected profiles that are broadcasting in range.
+    try:
+        visible = in_range() if callable(in_range) else real.in_range()
+    except Exception:
+        visible = None
+    if visible is None:
+        return _finish(doc, when, kind="skipped_no_scan", words=SKIP_NO_SCAN,
+                       persist=persist, ran=False)
     rows = profiles(local=real)
-    candidates = candidate_order(rows, current=str(facts.get("profile") or ""))
+    current = str(facts.get("profile") or "")
+    candidates = in_range_candidates(rows, visible, current=current)
     if not candidates:
-        words = NO_SAVED
-        doc = _record(doc, kind="no_saved_profiles", words=words, when=when)
-        doc["last_check_at"] = when
-        if persist:
-            with _LOCK:
-                _write(doc)
-        return {"ok": True, "ran": True, "class": "no_saved_profiles",
-                "dry_run": dry, "words": words}
-    planned = plan(rows, current=str(facts.get("profile") or ""))
+        words = NO_SAVED if not _usable(rows) else NO_IN_RANGE
+        kind = ("no_saved_profiles" if not _usable(rows)
+                else "no_candidates_in_range")
+        return _finish(doc, when, kind=kind, words=words, persist=persist)
+    planned = plan(rows, current=current)
     attempts = []
     final_words = ""
     reconnected = False
     for row in candidates[:MAX_PROFILES_PER_CYCLE]:
         ident = int(row.get("id") or 0)
-        what = ("the network this PC is on now" if row.get("name") ==
-                str(facts.get("profile") or "") else f"saved profile {ident}")
+        name = str(row.get("name") or "")
+        auth = str(row.get("auth_type") or "")
+        what = f"saved profile {ident} ({auth or 'password-protected'})"
         if dry:
             attempts.append({"id": ident, "attempt": "would-connect",
+                             "profile_name": name, "auth_type": auth,
                              "dry_run": True,
                              "words": f"Dry run: would ask Windows to connect to {what}."})
             final_words = ("Dry run: Jarvis would soon try " +
@@ -929,26 +1260,31 @@ def check_once(*, now=None, local: Local = None, probe=None,
             break
         ok, detail = False, ""
         try:
-            ok, detail = real.connect(str(row.get("name") or ""))
+            ok, detail = real.connect(name)
         except Exception as exc:
             detail = f"{type(exc).__name__}"
         attempts.append({"id": ident, "attempt": "connect",
-                         "ok": bool(ok),
+                         "ok": bool(ok), "profile_name": name,
+                         "auth_type": auth,
                          "words": f"Asked Windows to connect to {what}."})
         reconnected = _settle(real, probe=probe, sleep=sleep)
+        result = "connected" if reconnected else "still_offline"
+        doc = _receipt(doc, timestamp=when, profile_name=name,
+                       auth_type=auth, result=result)
         if reconnected:
             final_words = ("The desktop's Wi-Fi was down; Jarvis reconnected to "
-                           "a saved password-protected network this PC already "
-                           "knew and the internet is back.")
+                           "a saved password-protected network in range and the "
+                           "internet is back.")
             break
     if not final_words:
         final_words = (
             "The desktop's Wi-Fi is still down; Jarvis tried "
-            + str(len(attempts)) + " saved password-protected network(s) and "
-              "none brought the internet back. It will try again in 2 hours.")
+            + str(len(attempts)) + " saved password-protected network(s) in "
+              "range and none brought the internet back. It will try again in "
+              "2 hours.")
     record = {"ok": True, "ran": True, "class": "attempted",
-              "dry_run": dry, "attempts": attempts, "reconnected": bool(reconnected),
-              "words": final_words}
+              "dry_run": dry, "attempts": attempts,
+              "reconnected": bool(reconnected), "words": final_words}
     doc = _record(doc, kind="attempted", words=final_words, when=when,
                   extra={"attempt": len(attempts), "dry_run": bool(dry),
                          "online": bool(reconnected)})
@@ -1072,6 +1408,90 @@ def _audit(event: str, detail: dict) -> None:
 
 
 # --------------------------------------------------------------------------
+#   The switch: ON is ONE `change_own_config` card, OFF is immediate (Q4.4)
+# --------------------------------------------------------------------------
+
+def _gate(action: str, detail: dict, prompt: str):
+    """`jarvis_gate.check()`, failing CLOSED on any error - the same shape
+    `jarvis_big_coder._gate` uses. `change_own_config` is tier "ask": the call
+    blocks until the owner answers the card, and the answer is the permission.
+    """
+    class _Refused:
+        allowed = False
+        outcome = "refused"
+
+        def __init__(self, reason):
+            self.reason = reason
+    try:
+        import jarvis_gate  # type: ignore
+    except Exception as exc:
+        return _Refused(f"the approval gate is not available here ({exc})")
+    try:
+        return jarvis_gate.check(action, detail, prompt=prompt)
+    except Exception as exc:
+        return _Refused(f"the approval gate failed ({exc})")
+
+
+def request_enabled(on, *, gate=None, write=None, peer=None,
+                    local=None) -> tuple:
+    """One switch change, through the ONE path Settings, Chat and Live share.
+
+    RULING Q4 GUARDRAIL 4 (2026-11-08): turning it ON raises exactly ONE
+    `change_own_config` card and nothing is written until the owner answers it;
+    turning it OFF is instant and cardless (taking an ability away is always
+    safe). A model answer can never reach this: the only callers are the
+    Settings route (which refuses every other device) and the deterministic
+    chat/Live sentences.
+    """
+    if not isinstance(on, bool):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    if not on:
+        if not enabled():
+            return 200, {"ok": True, "enabled": False, "changed": False,
+                         "words": ALREADY_OFF, "message": ALREADY_OFF}
+        try:
+            out = (write or set_enabled)(False)
+        except Exception as exc:                 # noqa: BLE001 - said, not swallowed
+            return 503, {"ok": False, "error": type(exc).__name__,
+                         "message": "the auto Wi-Fi reconnect setting could not be saved"}
+        out = out if isinstance(out, dict) else {}
+        out.update({"ok": True, "enabled": False, "changed": True,
+                    "words": SET_OFF, "message": SET_OFF})
+        return 200, out
+    if enabled():
+        return 200, {"ok": True, "enabled": True, "changed": False,
+                     "words": ALREADY_ON, "message": ALREADY_ON}
+    verdict = (gate or _gate)(ACTION_ON,
+                              {"text": ON_CARD, "setting": SETTING_KEY},
+                              ON_CARD)
+    if not getattr(verdict, "allowed", False):
+        waiting = bool(getattr(verdict, "waiting", False) or
+                       str(getattr(verdict, "outcome", "")).lower() in
+                       ("waiting", "pending", "asked", "ask"))
+        if waiting:
+            return 202, {"ok": False, "enabled": False, "changed": False,
+                         "waiting": True, "words": WAITING_CARD,
+                         "message": WAITING_CARD}
+        reason = str(getattr(verdict, "reason", "") or "").strip()
+        said = reason or ("The approval card was not approved, so the auto Wi-Fi "
+                          "reconnect stayed off. Nothing was changed.")
+        return 403, {"ok": False, "enabled": False, "changed": False,
+                     "waiting": False, "error": said, "words": said}
+    try:
+        out = (write or set_enabled)(True)
+    except Exception as exc:                     # noqa: BLE001 - said, not swallowed
+        return 503, {"ok": False, "enabled": False,
+                     "error": type(exc).__name__,
+                     "message": "the auto Wi-Fi reconnect setting could not be saved"}
+    out = out if isinstance(out, dict) else {}
+    _audit("wifi_reconnect_set",
+           {"enabled": True, "card": getattr(verdict, "request_id", None)})
+    out.update({"ok": True, "enabled": True, "changed": True,
+                "waiting": False, "words": SET_ON, "message": SET_ON})
+    return 200, out
+
+
+# --------------------------------------------------------------------------
 #   The route (GET the state, POST one switch change) - installed by the loader
 # --------------------------------------------------------------------------
 
@@ -1100,8 +1520,10 @@ def handle_post(route: str, body: object, *, peer: str = "127.0.0.1") -> tuple:
     """POST /api/wifi-reconnect {"enabled": true|false} -> (200, the new state).
 
     One setting only; anything else is a 400 rather than a silent ignore, so a
-    caller with a typo finds out. Cardless in both directions (see the module
-    header), and a failed save is reported as not saved.
+    caller with a typo finds out. The change goes through `request_enabled`:
+    ON is ONE `change_own_config` card (ruling Q4.4) and blocks until it is
+    answered; OFF is instant and cardless. A failed save is reported as not
+    saved.
     """
     if route != ROUTE_PATH:
         return 404, {"ok": False, "error": "not_found"}
@@ -1118,13 +1540,11 @@ def handle_post(route: str, body: object, *, peer: str = "127.0.0.1") -> tuple:
                      "message": f"the auto Wi-Fi reconnect has no setting called "
                                 f"{unknown[0]}"}
     try:
-        out = set_enabled(body.get("enabled"))
-    except ValueError as exc:
-        return 400, {"ok": False, "error": "bad_value", "message": str(exc)}
+        code, out = request_enabled(body.get("enabled"))
     except Exception as exc:                     # noqa: BLE001 - said, not swallowed
         return 503, {"ok": False, "error": type(exc).__name__,
                      "message": "the auto Wi-Fi reconnect setting could not be saved"}
-    return (200 if out.get("ok") else 503), out
+    return code, out
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:

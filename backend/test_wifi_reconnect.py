@@ -118,14 +118,19 @@ class FakeLocal(W.Local):
     """Every Windows read/write the module needs, recorded and never real."""
 
     def __init__(self, rows=None, facts=None, connect_result=(True, "connected"),
-                 after_connect=None):
+                 after_connect=None, visible=None, radio_facts=None):
         self.rows = list(rows or [])
         self.facts = dict(facts or {"adapter": True, "up": True,
                                     "profile": "Home", "ipv4": "Internet"})
         self.connect_result = connect_result
         self.after_connect = dict(after_connect or {})
+        self.visible = (list(visible) if visible is not None else None)
+        self.radio_facts = dict(radio_facts or {"present": True,
+                                                "admin_disabled": False,
+                                                "radio_on": True})
         self.connects = []
         self.profile_reads = 0
+        self.range_reads = 0
 
     def profiles(self):
         self.profile_reads += 1
@@ -139,10 +144,32 @@ class FakeLocal(W.Local):
         self.facts.update(self.after_connect)
         return self.connect_result
 
+    def radio(self):
+        return dict(self.radio_facts)
+
+    def in_range(self):
+        self.range_reads += 1
+        if self.visible is not None:
+            return list(self.visible)
+        return [str(r.get("name") or "") for r in self.rows
+                if r.get("secure") and r.get("name")]
+
 
 def _profiles(*specs):
     return [{"name": name, "secure": secure, "auto": auto}
             for name, secure, auto in specs]
+
+
+def _check(**kwargs):
+    """`W.check_once` with the two owner-only reads injected as "safe".
+
+    Lockdown is a way-out promise: the real reader lives in the owner-only
+    `jarvis_asks_first.py`, which a hermetic suite does not have, and an
+    UNREADABLE Lockdown fails SAFE (skip). So every ordinary check here says
+    "Lockdown is readable and OFF"; the guardrail cases override it explicitly.
+    """
+    kwargs.setdefault("lockdown", lambda: False)
+    return W.check_once(**kwargs)
 
 
 def _match(sentence: str):
@@ -306,7 +333,7 @@ def the_check() -> None:
     fake = FakeLocal(rows=_profiles(("Home", True, True)),
                      facts={"adapter": True, "up": False, "profile": "",
                             "ipv4": ""})
-    got = W.check_once(now=now, local=fake, probe=lambda: False)
+    got = _check(now=now, local=fake, probe=lambda: False)
     check("OFF stops the check before anything is read",
           got["ran"] is False and fake.profile_reads == 0 and not fake.connects)
 
@@ -314,13 +341,13 @@ def the_check() -> None:
     fake = FakeLocal(rows=_profiles(("Home", True, True)),
                      facts={"adapter": True, "up": False, "profile": "",
                             "ipv4": ""})
-    got = W.check_once(now=now, local=fake, probe=lambda: False)
+    got = _check(now=now, local=fake, probe=lambda: False)
     check("inside the two hours nothing runs", got["ran"] is False)
 
     _reset(enabled=True)
     fake = FakeLocal(facts={"adapter": True, "up": True, "profile": "Home",
                             "ipv4": "Internet"})
-    got = W.check_once(now=now, local=fake, probe=lambda: True)
+    got = _check(now=now, local=fake, probe=lambda: True)
     check("online does nothing and says so",
           got["class"] == W.CLASS_ONLINE and not fake.connects)
     check("the online check still moves the clock",
@@ -330,7 +357,7 @@ def the_check() -> None:
     fake = FakeLocal(rows=_profiles(("Home", True, True)),
                      facts={"adapter": True, "up": True, "profile": "Home",
                             "ipv4": "Internet"})
-    got = W.check_once(now=now, local=fake, probe=lambda: False)
+    got = _check(now=now, local=fake, probe=lambda: False)
     check("Wi-Fi fine + probe failed: upstream, and the Wi-Fi is NOT reconnected",
           got["class"] == W.CLASS_UPSTREAM and not fake.connects)
 
@@ -340,7 +367,7 @@ def the_check() -> None:
                             "ipv4": ""},
                      after_connect={"up": True, "ipv4": "Internet",
                                     "profile": "Home"})
-    got = W.check_once(now=now, local=fake, probe=lambda: True,
+    got = _check(now=now, local=fake, probe=lambda: True,
                        sleep=lambda _s: None)
     check("a disconnected Wi-Fi is reconnected using the saved profile",
           got["reconnected"] is True and fake.connects == ["Home"])
@@ -352,7 +379,7 @@ def the_check() -> None:
     _reset(enabled=True)
     fake = FakeLocal(rows=[], facts={"adapter": True, "up": False,
                                      "profile": "", "ipv4": ""})
-    got = W.check_once(now=now, local=fake, probe=lambda: False)
+    got = _check(now=now, local=fake, probe=lambda: False)
     check("a PC with no saved password-protected profile says so and does nothing",
           got["class"] == "no_saved_profiles" and not fake.connects
           and "no saved" in got["words"].lower())
@@ -361,7 +388,7 @@ def the_check() -> None:
     fake = FakeLocal(rows=_profiles(("Home", True, True)),
                      facts={"adapter": True, "up": False, "profile": "",
                             "ipv4": ""}, connect_result=(True, "ok"))
-    got = W.check_once(now=now, local=fake, probe=lambda: False,
+    got = _check(now=now, local=fake, probe=lambda: False,
                        sleep=lambda _s: None)
     check("a link that never comes back is bounded to one saved profile",
           got["reconnected"] is False and len(fake.connects) == 1)
@@ -372,7 +399,7 @@ def the_check() -> None:
     fake = FakeLocal(rows=_profiles(("Home", True, True)),
                      facts={"adapter": True, "up": False, "profile": "",
                             "ipv4": ""})
-    got = W.check_once(now=now, local=fake, probe=lambda: False,
+    got = _check(now=now, local=fake, probe=lambda: False,
                        busy=lambda: "a task is running")
     check("a busy moment SKIPS the cycle and never touches the network",
           got["class"] == "skipped" and not fake.connects)
@@ -385,7 +412,7 @@ def the_check() -> None:
                             "ipv4": ""})
     os.environ["JARVIS_WIFI_DRY_RUN"] = "1"
     try:
-        got = W.check_once(now=now, local=fake, probe=lambda: False)
+        got = _check(now=now, local=fake, probe=lambda: False)
         check("dry run never calls Windows' connect",
               not fake.connects and got["dry_run"] is True)
         check("dry run says what it would do, without a network name",
@@ -405,21 +432,24 @@ def the_check() -> None:
     original_audit = W._audit
     W._audit = lambda event, detail: audited.append((event, detail))  # type: ignore[assignment]
     try:
-        W.check_once(now=now, local=fake, probe=lambda: False,
+        _check(now=now, local=fake, probe=lambda: False,
                      sleep=lambda _s: None)
     finally:
         W._audit = original_audit  # type: ignore[assignment]
     lines = [e for e, _d in audited if e == "wifi_reconnect_attempt"]
     check("every real attempt writes one durable log line", len(lines) == 1)
-    check("that log line carries counts and no name",
-          audited and "Home" not in str(audited))
+    # Ruling Q4.5 later made the profile name a REQUIRED receipt field, so this
+    # old pin now proves the other half: counts and no key/password in the line.
+    check("that log line carries counts and no key or password",
+          audited and not any(word in str(audited).lower()
+                              for word in ("key", "password")))
 
     # The clock is the file's: a second call at the same instant is not due.
     _reset(enabled=True, last_check_at=now)
     fake = FakeLocal(rows=_profiles(("Home", True, True)),
                      facts={"adapter": True, "up": False, "profile": "",
                             "ipv4": ""})
-    got = W.check_once(now=now, local=fake, probe=lambda: False)
+    got = _check(now=now, local=fake, probe=lambda: False)
     check("the 2-hour spacing holds across calls", got["ran"] is False)
 
 
@@ -529,9 +559,9 @@ def the_chat_sentences() -> None:
     cases = [
         ("is the auto wi-fi reconnect on?", "self_wifi_reconnect"),
         ("is the automatic WiFi reconnect enabled?", "self_wifi_reconnect"),
-        ("turn off the auto wi-fi reconnect", "wifi_reconnect_set"),
-        ("disable the automatic wifi reconnect", "wifi_reconnect_set"),
-        ("turn on the auto wi-fi reconnect", "wifi_reconnect_set"),
+        ("turn off the auto wi-fi reconnect", "settings_bool"),
+        ("disable the automatic wifi reconnect", "settings_bool"),
+        ("turn on the auto wi-fi reconnect", "settings_bool"),
         ("what does the wi-fi reconnect do?", "wifi_reconnect_about"),
         ("what is the automatic wifi reconnect?", "wifi_reconnect_about"),
         ("when will it try the wi-fi again?", "wifi_reconnect_when"),
@@ -554,6 +584,8 @@ def the_chat_sentences() -> None:
     on_intent = Q.match("turn off the auto wi-fi reconnect")
     check("the change sentence carries its action",
           on_intent is not None and on_intent.f.get("on") is False)
+    check("the change is registered in the settings registry (Q4.4)",
+          on_intent is not None and on_intent.name == "settings_bool")
 
 
 # --------------------------------------------------------------------------
@@ -608,8 +640,9 @@ def the_source_pins() -> None:
           not any("disconnect" in a for a in flat)
           and calls[-1] == ["netsh", "wlan", "connect", "name=Home"])
     check("the real connect is reported by its exit code", ok is True)
-    check("the profile rows carry four documented fields and nothing else",
-          rows and set(rows[0]) == {"name", "secure", "auto"}
+    check("the profile rows carry the documented fields and nothing else",
+          rows and set(rows[0]) == {"name", "secure", "auto", "auth_type",
+                                    "ssids"}
           and rows[0]["secure"] is True)
 
     # A module-level read-only field set: `profiles()` never invents a key field.
@@ -619,7 +652,7 @@ def the_source_pins() -> None:
           and set(W._parse_profile_detail(
               "    Security key            : Present\n"
               "    Authentication          : WPA2-Personal\n")) ==
-          {"secure", "auto", "authentication"})
+          {"secure", "auto", "auth_type", "authentication", "ssids"})
 
     # A check with the injected fake must never reach a real program.
     _reset(enabled=True)
@@ -629,11 +662,213 @@ def the_source_pins() -> None:
         fake = FakeLocal(rows=_profiles(("Home", True, True)),
                          facts={"adapter": True, "up": False, "profile": "",
                                 "ipv4": ""})
-        W.check_once(now=1_800_000_000.0, local=fake, probe=lambda: False,
+        _check(now=1_800_000_000.0, local=fake, probe=lambda: False,
                      sleep=lambda _s: None)
     finally:
         W._run_argv = original  # type: ignore[assignment]
     check("a fake-driven check spawns no program at all", calls == [])
+
+
+# --------------------------------------------------------------------------
+#   The six mandatory guardrails (owner ruling Q4, 2026-11-08)
+# --------------------------------------------------------------------------
+
+def the_guardrails() -> None:
+    """Each mandatory guardrail, proved by CALLING the module (no Windows call)."""
+    # ---- 1. saved password-protected only: the ruling's exact allow-list ----
+    for text, want in [("WPA2-Personal", "WPA2PSK"),
+                       ("WPA3-Personal", "WPA3SAE"), ("WPA2", "WPA2"),
+                       ("WPA3", "WPA3"), ("Open", ""), ("None", ""),
+                       ("WPA2-Enterprise", ""), ("WEP", ""), ("", "")]:
+        check("auth allow-list: " + repr(text) + " -> " + repr(want),
+              W._auth_type(text) == want, W._auth_type(text))
+    check("the allow-list is EXACTLY the ruling's four",
+          W.ALLOWED_AUTH == ("WPA2PSK", "WPA3SAE", "WPA2", "WPA3"))
+    good = W._parse_profile_detail(
+        "    Security key            : Present\n"
+        "    Authentication          : WPA2-Personal\n")
+    check("a stored-key WPA2-Personal profile is a candidate",
+          good["secure"] is True and good["auth_type"] == "WPA2PSK")
+    for auth in ("Open", "None", "WEP", "WPA2-Enterprise"):
+        facts = W._parse_profile_detail(
+            "    Security key            : Present\n"
+            f"    Authentication          : {auth}\n")
+        check("refused profile auth: " + auth, facts["secure"] is False)
+    rows = [{"name": "Cafe", "secure": False, "auth_type": "", "ssids": ["Cafe"],
+             "id": 1},
+            {"name": "Home", "secure": True, "auth_type": "WPA2PSK",
+             "ssids": ["Home"], "id": 2}]
+    check("an OPEN saved profile is never a candidate",
+          [r["name"] for r in W.in_range_candidates(rows, ["Cafe", "Home"])] ==
+          ["Home"])
+
+    # ---- 3. bounded in-range candidates: top 3, 10 s, stop at first success ----
+    check("each attempt is verified for 10 seconds (not 20)",
+          W.ATTEMPT_SETTLE_S == 10.0)
+    _reset(enabled=True)
+    rows = [{"name": f"Net{i}", "secure": True, "auto": True,
+             "auth_type": "WPA2PSK", "ssids": [f"Net{i}"], "id": i}
+            for i in range(1, 6)]
+    fake = FakeLocal(rows=rows,
+                     facts={"adapter": True, "up": False, "profile": "",
+                            "ipv4": ""},
+                     visible=["Net4", "Net2", "Net1"],
+                     after_connect={"up": True, "ipv4": "Internet",
+                                    "profile": "Net1"})
+    got = _check(now=1_800_000_000.0, local=fake,
+                 probe=lambda: True, sleep=lambda _s: None)
+    check("only in-range saved profiles are tried, the top 3 at most",
+          len(fake.connects) <= 3
+          and all(name in ("Net1", "Net2", "Net4") for name in fake.connects),
+          fake.connects)
+    check("the loop stops at the FIRST success",
+          got.get("reconnected") is True and len(fake.connects) == 1,
+          fake.connects)
+
+    _reset(enabled=True)
+    fake = FakeLocal(rows=[{"name": "Home", "secure": True, "auto": True,
+                            "auth_type": "WPA2PSK", "ssids": ["Home"],
+                            "id": 1}],
+                     facts={"adapter": True, "up": False, "profile": "",
+                            "ipv4": ""},
+                     visible=["SomeOtherNetwork"])
+    got = _check(now=1_800_000_000.0, local=fake, probe=lambda: False,
+                 sleep=lambda _s: None)
+    check("a saved profile that is OUT OF RANGE is never tried",
+          got["class"] == "no_candidates_in_range" and not fake.connects)
+
+    # ---- 2. strictly offline-only trigger: Lockdown OFF, radio on, scan read ----
+    def offline_fake(**kw):
+        return FakeLocal(rows=[{"name": "Home", "secure": True, "auto": True,
+                                "auth_type": "WPA2PSK", "ssids": ["Home"],
+                                "id": 1}],
+                         facts={"adapter": True, "up": False, "profile": "",
+                                "ipv4": ""}, **kw)
+
+    cases = [
+        ({"lockdown": lambda: True}, "skipped_lockdown"),
+        ({"lockdown": lambda: None}, "skipped_lockdown_unknown"),
+        ({"radio": lambda: {"present": True, "admin_disabled": True,
+                            "radio_on": True}}, "skipped_radio_off"),
+        ({"radio": lambda: {"present": True, "admin_disabled": False,
+                            "radio_on": False}}, "skipped_radio_off"),
+        ({"radio": lambda: {"present": True, "admin_disabled": False,
+                            "radio_on": None}}, "skipped_radio_unknown"),
+        ({"in_range": lambda: None}, "skipped_no_scan"),
+    ]
+    for overrides, want in cases:
+        _reset(enabled=True)
+        fake = offline_fake(visible=["Home"])
+        got = _check(now=1_800_000_000.0, local=fake, probe=lambda: True,
+                     sleep=lambda _s: None, **overrides)
+        check("offline-only gate: " + want,
+              got["class"] == want and not fake.connects, got.get("class"))
+
+    # ---- 5. the Change Journal receipt ----
+    _reset(enabled=True)
+    fake = FakeLocal(rows=[{"name": "Home", "secure": True, "auto": True,
+                            "auth_type": "WPA2PSK", "ssids": ["Home"],
+                            "id": 1}],
+                     facts={"adapter": True, "up": False, "profile": "",
+                            "ipv4": ""},
+                     visible=["Home"], after_connect={"up": True,
+                                                      "ipv4": "Internet",
+                                                      "profile": "Home"})
+    audited = []
+    original_audit = W._audit
+    W._audit = lambda event, detail: audited.append((event, dict(detail)))  # type: ignore[assignment]
+    try:
+        _check(now=1_800_000_000.0, local=fake, probe=lambda: True,
+               sleep=lambda _s: None)
+    finally:
+        W._audit = original_audit  # type: ignore[assignment]
+    rows = W.receipts()
+    check("every attempt writes a receipt with the ruling's four fields",
+          rows and set(rows[-1]) == {"timestamp", "profile_name", "auth_type",
+                                     "result"}
+          and rows[-1]["profile_name"] == "Home"
+          and rows[-1]["auth_type"] == "WPA2PSK"
+          and rows[-1]["result"] == "connected", rows[-1] if rows else None)
+    lines = [d for e, d in audited if e == "wifi.reconnect_attempt"]
+    check("the receipt also reaches the project's audit log", len(lines) == 1)
+    check("no key or password can appear in a receipt",
+          not any(word in str(rows).lower()
+                  for word in ("key", "password", "passphrase")))
+    check("Jarvis can answer 'did you reconnect my wifi?' from the receipts",
+          W.did_words().startswith("Yes - my last attempt reconnected"))
+
+    _reset(enabled=True)
+    fake = FakeLocal(rows=[{"name": "Home", "secure": True, "auto": True,
+                            "auth_type": "WPA2PSK", "ssids": ["Home"],
+                            "id": 1}],
+                     facts={"adapter": True, "up": False, "profile": "",
+                            "ipv4": ""},
+                     visible=["Home"])
+    _check(now=1_800_000_000.0, local=fake, probe=lambda: False,
+           sleep=lambda _s: None)
+    check("a failed attempt's receipt says still_offline",
+          W.receipts()[-1]["result"] == "still_offline")
+    check("the answer says no when the last attempt failed",
+          W.did_words().startswith("No - my last attempt"))
+
+    # ---- 4. the switch: ON is ONE change_own_config card, OFF is instant ----
+    class Verdict:
+        def __init__(self, allowed, waiting=False, reason="", request_id=None):
+            self.allowed = allowed
+            self.waiting = waiting
+            self.reason = reason
+            self.request_id = request_id
+
+    calls = []
+
+    def denied(action, detail, prompt):
+        calls.append((action, dict(detail), prompt))
+        return Verdict(False, reason="turned down")
+
+    _reset(enabled=False)
+    code, out = W.request_enabled(True, gate=denied)
+    check("turning it ON asks exactly ONE change_own_config card",
+          code == 403 and calls and calls[-1][0] == "change_own_config",
+          (code, calls))
+    check("the card's own words say what the switch does",
+          "auto Wi-Fi reconnect" in calls[-1][2]
+          and "while it is on" in calls[-1][2].lower())
+    check("a refused card changes nothing", W.enabled() is False
+          and out.get("enabled") is False)
+
+    _reset(enabled=False)
+    code, out = W.request_enabled(
+        True, gate=lambda *a: Verdict(False, waiting=True))
+    check("a waiting card answers 'a card is waiting' and writes nothing",
+          code == 202 and out.get("waiting") is True
+          and "card is waiting" in out.get("words", "") and W.enabled() is False)
+
+    _reset(enabled=False)
+    code, out = W.request_enabled(
+        True, gate=lambda *a: Verdict(True, request_id="abc"))
+    check("an approved card turns it ON, and the words say so",
+          code == 200 and out.get("enabled") is True and W.enabled() is True
+          and "on now" in out.get("words", ""))
+
+    _reset(enabled=True)
+    code, out = W.request_enabled(False, gate=lambda *a: (_ for _ in ()).throw(
+        AssertionError("OFF must not raise a card")))
+    check("turning it OFF is instant, cardless and reported",
+          code == 200 and out.get("enabled") is False and W.enabled() is False
+          and "off now" in out.get("words", ""))
+
+    # the route uses the same door: a mocked gate proves POST ON is carded
+    _reset(enabled=False)
+    original_gate = W._gate
+    W._gate = lambda *a: Verdict(False, reason="turned down")  # type: ignore[assignment]
+    try:
+        code, out = W.handle_post(W.ROUTE_PATH, {"enabled": True})
+    finally:
+        W._gate = original_gate  # type: ignore[assignment]
+    check("POST /api/wifi-reconnect ON goes through the card",
+          code == 403 and W.enabled() is False)
+    code, out = W.handle_post(W.ROUTE_PATH, {"enabled": False})
+    check("POST OFF is instant", code == 200 and W.enabled() is False)
 
 
 # --------------------------------------------------------------------------
@@ -652,6 +887,7 @@ def main() -> int:
         ("the watcher", the_watcher),
         ("the chat sentences", the_chat_sentences),
         ("the source pins", the_source_pins),
+        ("the guardrails", the_guardrails),
     ]:
         print(f"\n-- {name} --")
         try:
