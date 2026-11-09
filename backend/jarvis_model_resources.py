@@ -60,6 +60,12 @@ CHOICE_FILE = "presets-choice.json"
 LEGACY_CHOICE_FILE = "preset-choice.json"
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 
+#: The GPU record's own field naming the memory Jarvis's own processes hold. It
+#: is machine data - the desktop's model-resources.js reads the same key - so it
+#: is named once here and never written into a sentence the owner reads; the
+#: sentence names the number instead.
+JARVIS_MB_FIELD = "jarvis_mb"
+
 #: Fallback lane table, used only when `jarvis_presets` cannot be imported
 #: (a clone or a suite). It mirrors that module's own LANES; the live PC's
 #: table always wins.
@@ -224,7 +230,8 @@ def _lane_ps(url: str, get_json: Callable = _get_json) -> dict:
                 "on_card_percent": percent,
             })
     return {"url": url, "ok": code == 200, "code": code, "models": models,
-            "error": "" if code == 200 else (error or f"HTTP {code}")}
+            "error": "" if code == 200 else (
+                error or f"the PC's own service answered with error number {code}")}
 
 
 def _number(value) -> Optional[float]:
@@ -727,8 +734,9 @@ def _headline_words(active: dict, lanes, gpus, jarvis: dict) -> list:
         if not total:
             continue
         bit = f"card {gpu['index']} has {free or 'an unknown amount'} free of {total}"
-        if gpu.get("jarvis_mb") is not None:
-            bit += f" (Jarvis's models use {gb_words(gpu['jarvis_mb'])})"
+        used = gb_words(gpu.get(JARVIS_MB_FIELD))
+        if used:
+            bit += f" (Jarvis's models use {used})"
         card_bits.append(bit)
     if card_bits:
         words.append("Cards: " + "; ".join(card_bits) + ".")

@@ -512,6 +512,12 @@ def handle_post(path: str, body, *, peer=None, local=None, gate=None) -> tuple:
 MAX_RECENT_BULLET_CHARS = 400
 MAX_RECENT_BULLETS = 20
 
+#: The machine-readable name of the record this read carries, for the answer's
+#: `source` field (JARVIS-API section 206). Kept as its own constant rather than
+#: a literal beside the answer's plain words: it names a module, not something
+#: the owner reads.
+SOURCE_NAME = "jarvis_recent_changes.py"
+
 
 def _recent_changes_answer() -> tuple:
     """(status, answer) for "What's new in Jarvis", from the module itself.
@@ -549,7 +555,7 @@ def _recent_changes_answer() -> tuple:
     return 200, {"ok": True, "available": True, "version": version,
                  "bullets": bullets,
                  "empty_words": empty[:MAX_RECENT_BULLET_CHARS],
-                 "source": "jarvis_recent_changes.py"}
+                 "source": SOURCE_NAME}
 
 
 def handle_get(path: str, query: str = "", *, peer=None, local=None) -> tuple:

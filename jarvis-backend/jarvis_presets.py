@@ -1580,7 +1580,7 @@ def _switch_for_the_owner(ref: str) -> dict:
         return {"ok": False, "ref": ref,
                 "reason": "could not write the model state file; nothing changed"}
     out = {"ok": True, "ref": ref, "previous": cur, "no_card": True,
-           "revert_with": "jarvis_models.rollback()",
+           "revert_with": "the model's own rollback",
            "reason": f"local lane now uses {ref}"}
     try:
         import jarvis_tripwire
