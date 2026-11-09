@@ -75,7 +75,7 @@ these needed no change at all):
 
   ALREADY CARDLESS on both roads, so listing them in the allow-list would
   claim a fence that does not exist:
-    * read_aloud - `backend/jarvis_read_aloud.py:181` `set_enabled()` writes
+    * read_aloud - `backend/jarvis_read_aloud.py:181` the setter writes
       and publishes; there is no `jarvis_gate` call anywhere in that file.
     * voice (the built-in voice picker) - `backend/jarvis_voices.py:678`
       `set_speaker()` says "at once, no card either way". (The voice CHECK,
@@ -226,7 +226,7 @@ EXCLUDED_UI_ACTIONS: Mapping[str, str] = {
 #: the line that decides it, read 2026-11-09.
 ALREADY_CARDLESS_UI: Mapping[str, Mapping[str, str]] = {
     "read_aloud": {
-        "evidence": "backend/jarvis_read_aloud.py:181 set_enabled(); the file "
+        "evidence": "backend/jarvis_read_aloud.py:181 the setter; the file "
                     "contains no jarvis_gate call (POST route at :297)",
         "note": "one write and one event, from either app or by voice",
     },

@@ -243,6 +243,14 @@ ENVIRONMENT_SKIPS = {
     # "does not exist on this machine", runs its synthetic half and says so.
     # A machine limit, not a missing guard - the same shape as test_data_backup.
     "backend/test_feedback_migration.py": ("does not exist on this machine",),
+    # The drag-and-drop suite (Wave 12, 2026-11-09) drives the REAL MarkItDown
+    # converter in a child process when it can, and says so plainly when the
+    # Python running the claims check has no MarkItDown installed. That is a
+    # limitation of that Python environment, not a missing guard: the rest of
+    # the suite still proves the one-file attachment path, the cap and the
+    # refusals. Measured in the REQUIRED backend job's own environment on
+    # 2026-11-09, where the optional package is absent.
+    "backend/test_attached_file.py": ("markitdown is not installed",),
 }
 
 #: The summary line a suite may print for itself - `N passed, M skipped,
