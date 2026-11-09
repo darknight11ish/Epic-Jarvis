@@ -119,6 +119,14 @@ data class BrainSnapshot(
     val fetchedAtMs: Long = 0L,
     val computeRead: SectionRead = SectionRead.Reading,
     val memoryRead: SectionRead = SectionRead.Reading,
+    /**
+     * The ONE learning-fault banner (2026-11-09, JARVIS-API.md section 213):
+     * the PC's own sentence when a batch learning check failed, or a body
+     * with `active: false`. Never a fact's words, and not hidden with the
+     * memory lists - it says nothing about what Jarvis knows.
+     */
+    val memoryFault: kotlinx.serialization.json.JsonObject? = null,
+    val memoryFaultRead: SectionRead = SectionRead.Reading,
     val ledgerRead: SectionRead = SectionRead.Reading,
     val skillsRead: SectionRead = SectionRead.Reading,
     val initiativeRead: SectionRead = SectionRead.Reading,
@@ -5065,6 +5073,7 @@ object JarvisRuntime {
                 val models = async { refreshModels() }
                 val compute = async { api.probe("/api/compute").asSection() }
                 val memory = async { api.probe(MemoryCards.PENDING_PATH).asSection() }
+                val memoryFault = async { api.memoryFault().asSection() }
                 val ledger = async { api.probe("/api/ledger").asSection() }
                 val skills = async { api.probe(com.jarvis.client.net.Skills.PATH).asSection() }
                 val initiative = async { api.probe("/api/initiative").asSection() }
@@ -5076,6 +5085,7 @@ object JarvisRuntime {
                 val deepRead = async { refreshDeep() }
                 val (computeData, computeRead) = compute.await()
                 val (memoryData, memoryRead) = memory.await()
+                val (faultData, faultRead) = memoryFault.await()
                 val (ledgerData, ledgerRead) = ledger.await()
                 val (skillsData, skillsRead) = skills.await()
                 val (initiativeData, initiativeRead) = initiative.await()
@@ -5103,6 +5113,8 @@ object JarvisRuntime {
                         fetchedAtMs = now,
                         computeRead = computeRead,
                         memoryRead = memoryRead,
+                        memoryFault = faultData,
+                        memoryFaultRead = faultRead,
                         ledgerRead = ledgerRead,
                         skillsRead = skillsRead,
                         initiativeRead = initiativeRead,
@@ -7009,6 +7021,32 @@ object JarvisRuntime {
         before: Double? = null,
         limit: Int = com.jarvis.client.net.AutoLearn.PAGE,
     ): ApiResult<JsonObject> = api.autoFacts(before, limit)
+
+    /**
+     * `GET /api/memory/fault` - the ONE learning-fault banner (2026-11-09,
+     * docs/JARVIS-API.md section 213). A read: never held. It carries the
+     * PC's own sentence, a count and times, never a fact's words.
+     */
+    suspend fun memoryFault(): ApiResult<JsonObject> = api.memoryFault()
+
+    /**
+     * "Retry now" on the one learning-fault banner: re-runs the PC's own
+     * batch check. It approves nothing, saves nothing and decides no
+     * proposal, so it is NOT held on a stale link - a retry that refused
+     * because the event stream was catching up would be the one thing the
+     * owner cannot do exactly when something is wrong. @return the PC's
+     * answer: its fault state now, and the sentence to show.
+     */
+    suspend fun retryMemoryFault(): com.jarvis.client.net.MemoryFault.Reply =
+        when (val r = api.retryMemoryFault()) {
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryFault.reply(r.value)
+            is ApiResult.Failed -> com.jarvis.client.net.MemoryFault.Reply(
+                active = null,
+                fault = null,
+                outcome = com.jarvis.client.net.MemoryFault.retryFailure(r.error)
+                    ?: ("Not retried. " + describe(r.error)),
+            )
+        }
 
     /**
      * "Learn automatically" or "Also remember sensitive topics

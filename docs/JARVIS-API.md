@@ -37920,3 +37920,113 @@ fake token. The first real `POST /user/repos` with the owner's own token, the re
 body, GitHub's real refusal for a name that is already taken, and whether his token has
 the `repo`/`public_repo` permission the create needs are only provable on his PC, with his
 token, once he asks for a repository. That is a field-test row, never a pass.
+
+## 213. A failed learning check is ONE banner, not 200 cards (2026-11-09)
+
+**The measured finding this answers** (`.dsh-scratch`/`D:\jarvis-scratch` research of
+2026-11-09; the section on "the finding I would lead with, because it is a fault and not a
+decision"). When one of automatic learning's THREE batch checks fails - a damaged or
+unreadable `auto-learning.json`, no local model (`OLLAMA_URL` not loopback), a cloud model
+name, or a missing `jarvis_intake.py` - `after_pass` writes the SAME reason onto every
+proposal in the pass. A damaged settings file reads as "off", so from then on every fact is
+a card, every pass, until the file is rewritten - and the review queue holds 200. One bad
+write therefore looked exactly like "Jarvis has become paranoid", and the owner's only cure
+was a card. That is a fault, not a decision: it now gets one record, one banner and one
+button.
+
+**What is a fault, and what is the owner's own choice.** The two plain settings sentences -
+"automatic learning is off" and "background learning is off" - are his switches, so those
+proposals stay cards exactly as before. A DAMAGED settings file, a model check that fails,
+and a missing intake module are machinery failing, and those are the fault. A per-fact
+reason is never a fault and never hidden: a sensitive topic, a correction, a fact that
+would replace a stored one, words that are not the owner's, a topic card, and "could not be
+saved automatically" all keep their own cards.
+
+**The record.** `jarvis_auto_learn.py` writes `memory-fault.json` beside
+`auto-learning.json` and `learning-stats.json` in the config folder
+(`~/.openjarvis`), atomically (temp file, then `os.replace`). It holds only
+`{version, reason, count, at, since, tries, last_try_at, last_result}` - the check's own
+fixed sentence, times, and the number of cards it parked. **No fact's words can reach it**:
+the reason is one of the check functions' own strings, and nothing here reads a proposal's
+text. A record that cannot be written is reported as `written: false` and **hides nothing** -
+the cards are shown instead, because a suppression with no banner to explain it would be
+worse than the cards.
+
+**The two routes** (both behind the same auth as every memory route: `_origin_ok`, then
+`_token_ok`; apps send `X-Jarvis-Client: hud`; no tier, no approval card, no new
+permission).
+
+- `GET /api/memory/fault` - the banner both apps read:
+  `{"active": bool, "reason", "headline", "count", "since", "at", "tries",
+  "last_try_at", "last_result", "recorded", "why"}`. `headline` is the PC's own sentence
+  for the banner ("Jarvis could not check the facts it was about to save: ... This is the
+  check failing, not your facts."). `active` is `false` when there is no fault; a record
+  that cannot be READ is also `active: false` (fail visible - the cards show) with `why`
+  saying so. A read changes nothing.
+- `POST /api/memory/fault/retry` - the one button, body `{}`:
+  `{"ok", "cleared", "fault", "outcome"}`. It re-runs ONLY the three batch checks
+  (`check_settings`, `check_intake`, `check_local_model`) through the same functions and
+  the same in-process `model`/`ollama` handles the learning pass uses - no new route for a
+  model, no cloud call, no outside text, and none of the three checks calls a model at all.
+  It approves nothing, saves nothing and decides no proposal; the cards stay exactly where
+  they were. When the check passes it removes the record and `outcome` is the PC's own
+  sentence ("The check works again, so the warning is cleared. Nothing was saved or
+  approved by this: your facts are still waiting where they were."); if learning was
+  switched OFF instead, it says that ("Learning is off on this PC, so there is no check to
+  run. Nothing was saved or approved.") rather than claiming a check passed. When it still
+  fails it KEEPS the record, adds one try, stores the reason in `last_result`, and
+  `outcome` says "The check still fails: <reason>. Nothing was saved or approved." It
+  answers 200 either way - a check that still fails is an answer, not an error. With no
+  active fault it is a no-op that says so.
+
+**The suppression boundary, exactly.** `jarvis_auto_learn.visible_pending()` is called from
+`jarvis_extract.pending()`, so the one pending read every client makes (the Brain and the
+phone, `/api/memory/facts`' pending count and the HUD's proposal event) stops returning the
+parked cards. A row is hidden only when its `auto_learn_notes` reason is EXACTLY the
+fault's reason **and** it has no sensitive label and no topic question - so a sensitive
+card, a correction, a "not in your own words" card and a topic card are never hidden. The
+proposal is not decided, retired or saved: it stays `pending`, and **when the fault clears
+those cards come back** (fail-closed, and the banner said so). The queue cap still counts
+them, because they are still in the queue. While the fault is active a per-fact card with a
+different reason still appears; a new pass that fails the same check parks its cards under
+the same one record, and `count` is the number the store really holds for that reason.
+
+**What each app shows, and where.** Neither app invents a word of it - both draw the PC's
+own `headline`/`reason`, and after a press the PC's own `outcome`.
+
+- Desktop: the Brain window, Memory tab, the "Waiting for you" card - ONE warn-toned banner
+  at the top with the PC's sentence and one "Retry now" button; no new screen, no new card
+  in the queue. It reads `GET /api/memory/fault` through the Brain's `brain_read`
+  allowlist (section "memory_fault" in `brain/routes.rs`), and the button is one Tauri
+  command, `brain_memory_fault_retry` (`src-tauri/src/brain/auto_learn.rs`). It is the one
+  write in that file deliberately NOT held on a stale link: it approves and saves nothing,
+  it only asks the PC what its check says now.
+- Phone: Mind, "Memory awaiting review" - the same ONE banner and the same one "Retry now",
+  reading the PC's `/api/memory/fault` and posting `/api/memory/fault/retry`
+  (`net/MemoryFault.kt`, `JarvisApi.retryMemoryFault`, `JarvisRuntime.retryMemoryFault`).
+  The phone adds no local logic: it renders the PC's sentence, and after a press the PC's
+  `outcome` (the banner stays, without a button, once a retry clears it).
+
+**How it is held.** `python -B backend/test_memory_fault.py` - 51 checks: a synthetic batch
+failure writes ONE record and hides exactly its cards (through the SHIPPED
+`jarvis_extract.pending()`, built by applying the patch's own hunk to the published base
+with `git apply`), a sensitive card and a sensitive-labelled card that happens to carry the
+fault's reason still appear, the owner's own "off" is not a fault, a retry clears only when
+the check passes and writes no fact and decides no proposal, a retry that still fails keeps
+the record with `tries` and its reason, no fact's words are in the record (also after a
+failed retry), a record that cannot be written hides nothing, and both routes answer what
+they document. `node jarvis-desktop/tests/memory-fault.mjs` - the banner renders the PC's
+words as text, exactly one button calls exactly one command, the PC's outcome is shown, and
+a cleared retry leaves the sentence without a button. `jarvis-client`'s
+`MemoryFaultTest` - the routes and words, the shapes, only an exactly-true `active` is a
+banner, a retry keeps or clears with the PC's own sentence, and the failure lines. The
+patch itself is proved forwards and backwards byte for byte by
+`backend/test_auto_learn.py`, and the twin `jarvis-backend/jarvis_auto_learn.py` is
+byte-equal (the two-file rule).
+
+**NOT-TESTABLE here, said plainly.** No test ran on the owner's own PC against a real
+damaged `auto-learning.json` or a live learning lane: every batch failure above is
+synthetic (a non-loopback address, a written bad file). The route's auth is the existing
+shared memory block, not a new check proved here. Both app screens were exercised against
+the desktop's mock browser and the phone's JVM contract only - not driven on real hardware
+with a real fault. Those are field-test rows, never a pass.

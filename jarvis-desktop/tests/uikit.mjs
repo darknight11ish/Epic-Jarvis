@@ -620,6 +620,12 @@ export const UPDATE_BOTH = {
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, eraseNotClean, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails, updateBoth,
+  // 2026-11-09: the one learning-fault banner's "Retry now". `answers` are
+  // the PC's own replies in order (the last one repeats); `calls` records
+  // every press. An answer's `fault` REPLACES the scenario's
+  // `brain.memory_fault`, so a retry that clears the fault is one whose
+  // answer carries `{active: false}` and the next read sees it.
+  faultRetry,
   altSpace, reclaimAltSpace, bigCoder, chatHistory,
   tutorials, faq, hudLayout, advisor, versionSync, recentChanges }) {
   const listeners = {};
@@ -3126,6 +3132,23 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (args.seen === true) a.unseen = [];
             return { ids: args.seen === true ? [] : ids };
           }
+          // 2026-11-09: "Retry now" on the one learning-fault banner
+          // (brain/auto_learn.rs). `answers` are the PC's own replies in order,
+          // the last repeating; an answer's `fault` replaces the scenario's
+          // read so the next `brain_read` sees what the retry left behind.
+          case "brain_memory_fault_retry": {
+            const st = window.__faultRetry;
+            st.calls += 1;
+            const next = st.answers.length > 1 ? st.answers.shift() : st.answers[0];
+            const answer = JSON.parse(JSON.stringify(next || {
+              ok: true, cleared: false,
+              fault: { active: false },
+              outcome: "There was no learning fault to retry." }));
+            if (answer.fault !== undefined && window.__brain) {
+              window.__brain.memory_fault = answer.fault;
+            }
+            return answer;
+          }
           case "brain_history_list": {
             const h = window.__history;
             h.reads.push(args.kind ? { before: args.before, limit: args.limit, kind: args.kind }
@@ -3829,6 +3852,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               sensitive_waiting: false, ...((auto && auto.status) || {}) },
   }));
   Object.assign(window.__auto, { reads: [], statusReads: 0, switches: [], unseenCalls: [] });
+  // 2026-11-09: the one learning-fault banner's "Retry now" (brain.js
+  // retryMemoryFault, src-tauri/src/brain/auto_learn.rs). Unset, the command
+  // answers the PC's "no fault to retry" - a scenario that never presses it
+  // never sees a banner.
+  window.__faultRetry = JSON.parse(JSON.stringify({
+    answers: [], calls: 0, ...(faultRetry || {}) }));
   // "Always keep in mind" (brain/profile.rs). Unset, the command answers
   // null - as before the list existed - so a scenario that does not name it
   // draws no Pin buttons. `facts` is [{id, text, added}]; `refuse` is the

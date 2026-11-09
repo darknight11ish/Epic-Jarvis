@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 d3eef0a7bb33eaff926d53cd3ecc52c3c56f66cfb17dee6d911e23f3aae05056); the apps' Features pages read their own
+`features/features.json` (sha256 5ca89aeea55117fea570c9fa6bc154dbf362934b3a8a57d0af900d696aafd0cc); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "d3eef0a7bb33eaff926d53cd3ecc52c3c56f66cfb17dee6d911e23f3aae05056"
+SOURCE_SHA256 = "5ca89aeea55117fea570c9fa6bc154dbf362934b3a8a57d0af900d696aafd0cc"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -380,7 +380,7 @@ FEATURES = (
         "what": "One place for everything Jarvis knows and how it learns.",
         "where": "Brain, Memory.",
         "asks": "No card.",
-        "limit": "The lists hide while \"Hide memory lists and chat history\" is on.",
+        "limit": "The lists hide while \"Hide memory lists and chat history\" is on. If a check Jarvis learns with fails, one banner with \"Retry now\" appears instead of a card per fact.",
         "surface": "both",
         "covers": ["brain.tab.memory", "memory"],
     },

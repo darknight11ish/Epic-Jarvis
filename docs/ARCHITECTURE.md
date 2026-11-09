@@ -2106,6 +2106,25 @@ lock would ask again (talking does not count as being at the PC), or, the
 looser choice, only when Windows itself locks - that one raises an approval
 card; going back is immediate (owner, 2026-09-28).
 
+**A failed check is a fault, not a decision (2026-11-09).** When one of the
+three batch checks fails - a damaged or unreadable `auto-learning.json`, a
+learning model that is not on this PC, or a missing `jarvis_intake.py` -
+`after_pass` used to write the same reason onto every proposal in the pass, so
+one broken check could read as up to 200 facts waiting for a decision.
+`jarvis_auto_learn.py` now records ONE fault (`memory-fault.json`, beside the
+learning state, written atomically; the reason is one of the checks' own
+sentences, plus times and a count - never a fact's words), and
+`jarvis_extract.pending()` leaves the cards it parked out of the review queue
+while it is active. A per-fact card - sensitive, a correction, not in the
+owner's words - keeps its own reason and is never hidden, and the owner's own
+"automatic learning is off" is his choice, not a fault, so those cards stay.
+Both apps show the PC's own sentence and ONE button, "Retry now"
+(`GET /api/memory/fault`, `POST /api/memory/fault/retry`, docs/JARVIS-API.md
+§213); the retry re-runs the three checks through the same functions and
+in-process handles the learner uses, and approves, saves and decides nothing,
+so a fault that clears brings the parked cards back undecided. A record that
+cannot be written hides nothing: the cards are shown instead.
+
 **Jarvis's own words are never the owner's.** Since 2026-09-25 an app sends
 the last sentence of a spoken answer the owner cut off (`interrupted` on the
 next question, JARVIS-API §17 part 7). It is not learned from: the PC tells

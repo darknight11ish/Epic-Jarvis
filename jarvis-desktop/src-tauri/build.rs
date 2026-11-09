@@ -288,6 +288,10 @@ fn main() {
             // "Save facts even when Jarvis had to reword them" (2026-11-02).
             // Its own command and its own route; ON is one approval card.
             "brain_memory_learning_paraphrase",
+            // The ONE learning-fault banner's button (2026-11-09): re-runs
+            // the PC's own batch check. It approves nothing, saves nothing
+            // and raises no card, so it is not held on a stale link.
+            "brain_memory_fault_retry",
             // How many facts were saved automatically while the Brain was
             // closed - ids only, never the words. Brain only.
             "brain_memory_saved_unseen",

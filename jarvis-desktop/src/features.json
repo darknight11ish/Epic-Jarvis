@@ -612,7 +612,7 @@
     "what": "One place for everything Jarvis knows and how it learns.",
     "where": "Brain, Memory.",
     "asks": "No card.",
-    "limit": "The lists hide while \"Hide memory lists and chat history\" is on.",
+    "limit": "The lists hide while \"Hide memory lists and chat history\" is on. If a check Jarvis learns with fails, one banner with \"Retry now\" appears instead of a card per fact.",
     "surface": "both",
     "covers": [
       "brain.tab.memory",

@@ -551,3 +551,52 @@ export function refreshRows(shown, page, pageSize, moreBefore) {
 export function cardReason(p) {
   return cardLines(p).reason || "";
 }
+
+/* ==========================================================================
+   A learning fault: ONE banner with "Retry now" (2026-11-09)
+
+   When one of automatic learning's batch checks fails - a damaged
+   auto-learning.json, no local model, a cloud model name, a missing
+   jarvis_intake.py - the PC used to write the same reason onto every fact in
+   the pass, so one broken check looked like up to 200 decisions. The PC now
+   records ONE fault (`GET /api/memory/fault`) and leaves the cards it parked
+   out of the pending read; both apps draw its own sentence and one button.
+
+   THIS WINDOW INVENTS NO WORD OF IT. `headline` and `reason` are the PC's
+   own text; `outcome` after a retry is the PC's own sentence. The only words
+   here are the button's, which the phone uses too. Nothing here approves,
+   saves or decides anything: the retry only asks the PC to re-run its check.
+   ========================================================================== */
+
+/** The one button on the fault banner. The phone says the same two words. */
+export const FAULT_RETRY_LABEL = "Retry now";
+
+/** What the button does, as a tooltip - plain, and true. */
+export const FAULT_RETRY_TITLE =
+  "Re-runs the check that failed. It approves nothing and saves nothing - " +
+  "your facts still wait where they were.";
+
+/**
+ * The active fault, or null.
+ *
+ * `GET /api/memory/fault` answers `{active, reason, headline, count, since,
+ * at, tries, last_try_at, last_result, recorded, why}`. Only an `active` of
+ * exactly true is a fault: a missing field is not one, and a PC that could
+ * not read its own record says so in `why` rather than pretending. The
+ * headline is the PC's own sentence; if an older PC sends none, its `reason`
+ * is shown instead so the banner still explains itself.
+ */
+export function readFault(v) {
+  if (!v || typeof v !== "object" || v.active !== true) return null;
+  const reason = text(v.reason).trim();
+  const headline = text(v.headline).trim();
+  if (!reason && !headline) return null;
+  return {
+    reason,
+    headline: headline || reason,
+    count: Number.isInteger(v.count) && v.count > 0 ? v.count : 0,
+    tries: Number.isInteger(v.tries) && v.tries > 0 ? v.tries : 0,
+    lastResult: text(v.last_result).trim(),
+    recorded: v.recorded === true,
+  };
+}
