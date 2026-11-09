@@ -9333,8 +9333,10 @@ async function initPoll(){
     // the decision failed to send. One place decides memory, with all of
     // that: the Brain. This page only says how many are waiting and where.
     // (A plain read: it does not ask for the overnight-tidy card, so it does
-    // not use that card up - see memory-pane.patch.)
-    const m = await jfetch("/api/memory/pending", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
+    // not use that card up - see memory-pane.patch. It DOES ask for retire
+    // cards, ruling Q7 on 2026-11-08: the badge count and the drawer list both
+    // include a "Forget that fact" card, so they can never disagree.)
+    const m = await jfetch("/api/memory/pending?retire_cards=1", {cache:"no-store", headers:{"X-Jarvis-Client":"hud"}});
     if(m.ok){
       const j = await m.json();
       const n = (j.pending || []).length;

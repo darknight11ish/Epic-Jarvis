@@ -425,6 +425,30 @@ Drop `$env:JARVIS_SKIP_WINDOW_TESTS="1";` from that line to run the probe too.
 `*>&1` merges stderr as well, so the SKIPPED lines are in the log as well as on
 the screen.
 
+## Build caches live in ONE place - never per worktree
+
+Decided by the owner's ruling Q4 on 2026-11-08, after six worktrees' own
+`src-tauri/target` directories (about 25 GB) took `C:` down to 1.35 GB free and
+tripped Syncthing's "< 1% free" database halt.
+
+- **One shared cache.** Every command, and every subagent prompt, that runs
+  `cargo` or Gradle sets one shared location first. `D:` exists on the owner's
+  PC and has room:
+  `$env:CARGO_TARGET_DIR = "D:\jarvis-cache\cargo-target"` and
+  `$env:GRADLE_USER_HOME = "D:\jarvis-cache\gradle"`. If `D:` is unavailable,
+  use ONE shared folder under the profile (`$env:USERPROFILE\.jarvis-cargo-target`)
+  - never the per-worktree default.
+- **A lane cleans up after itself.** Any subagent that still creates a
+  per-worktree `src-tauri/target` or `jarvis-client/app/build` deletes it before
+  it reports completion.
+- **Check before a verification wave.** `(Get-PSDrive C).Free / 1GB` below 15 GB:
+  purge `.dsh-scratch\*\*\src-tauri\target` and
+  `.dsh-scratch\*\*\jarvis-client\app\build` first.
+- **The self-code map is written with its twin.** `tools/gen_self_code_map.py`
+  writes `backend/jarvis-self-code.json` AND `jarvis-backend/jarvis-self-code.json`
+  in the same run, and its `--check` refuses when the two differ, so the twin can
+  no longer fall one byte behind (the #1214 slip, 2026-11-09).
+
 ## Do not regenerate the size on `docs/README.md` - just bump the count
 
 **The owner's rule, 2026-10-13.** `docs/README.md` opens by stating how many

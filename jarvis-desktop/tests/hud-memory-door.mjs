@@ -93,11 +93,14 @@ check("every desktop read of the queue asks for retire cards (Q2 section 1.5)", 
   assert.match(routes,
     /"\/api\/memory\/pending\?retire_cards=1&sleep_offer=1(&merge_cards=1)?"/,
     "the Brain's pending read stopped asking for retire cards");
-  // ...and the HUD page's own two list reads do too. Its older BANNER read is
-  // the bare path, but the HUD window reaches the PC only through hud_proxy,
-  // which rebuilds a bare read as the retire-aware refresh - so the flag is on
-  // every desktop fetch of this queue even where the page does not type it.
+  // ...and the HUD page's own three reads do too. Since ruling Q7 (2026-11-08)
+  // the count-only banner read types the flag as well, so no desktop fetch of
+  // this queue leaves a retire card out; hud_proxy still rebuilds a bare read
+  // as the retire-aware refresh as a belt-and-braces guard.
   assert.match(DOOR, /retire_cards=1/);
+  const hudPage = readFileSync(join(HERE, "..", "src", "jarvis_hud.html"), "utf8");
+  assert.match(hudPage, /jfetch\("\/api\/memory\/pending\?retire_cards=1"/,
+    "the HUD's count-only pending read stopped asking for retire cards");
   const proxy = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
   assert.match(proxy, /MEMORY_PENDING_RETIRE_QUERY: &str = "retire_cards=1"/);
   assert.match(proxy,

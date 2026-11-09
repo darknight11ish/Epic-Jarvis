@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "e7f289959813840327eaabfdc6c5e70a0bc73df4",
- "built_at": "2026-11-08T18:17:59-08:00",
+ "ref": "027ed3d0ff54af3ae6bc8d7b84a0d9fdba251c9e",
+ "built_at": "2026-11-08T18:27:15-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6180,6 +6180,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "027ed3d0ff54af3ae6bc8d7b84a0d9fdba251c9e",
+   "date": "2026-11-08",
+   "subject": "fix(wave10): wire the Wi-Fi switch into change-by-asking and move the four count pins to 39"
+  },
+  {
+   "sha": "5def74ef37a11b95cb94e87f53e14fd46183387a",
+   "date": "2026-11-08",
+   "subject": "chore(wave10): regenerate recent-changes and the self-code map after the Wave-9 merge"
+  },
+  {
    "sha": "e7f289959813840327eaabfdc6c5e70a0bc73df4",
    "date": "2026-11-08",
    "subject": "fix(wave10): close the three required-job reds the verifier found"
@@ -6268,16 +6278,6 @@
    "sha": "30a106f13eb2c72b4b37e5f76312440fd68bebc5",
    "date": "2026-11-08",
    "subject": "chore(self-code): regenerate the map after the Q3 preset-independence work"
-  },
-  {
-   "sha": "fedb3a826bbf1d05e41ffff682895e169bee595a",
-   "date": "2026-11-08",
-   "subject": "docs(api): the two feedback cards, their owner-chosen labels and which one is hidden"
-  },
-  {
-   "sha": "daba2475338b584d77f3b675b7b1219f450fed2d",
-   "date": "2026-11-08",
-   "subject": "merge: bring fix/wave10-preset-independence up to integration head (wifi guardrails + desktop/phone alignment + records + map)"
   }
  ],
  "top_level": [

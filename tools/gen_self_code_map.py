@@ -32,8 +32,9 @@ nothing is dropped silently. The map file itself is skipped: it is the output.
 
 WHAT IT DELIBERATELY DOES NOT DO: it does not read whole code bodies into the
 map (only a module's first docstring sentence), it does not run anything it
-maps, it opens no socket, it writes nothing but the map, and it has no absolute
-path anywhere in its output. It walks the INDEX - the files a commit would carry
+maps, it opens no socket, it writes nothing but the map and its published base
+twin (the same bytes, in the same run - ruling Q4, 2026-11-08), and it has no
+absolute path anywhere in its output. It walks the INDEX - the files a commit would carry
 - so a brand-new file has to be staged (`git add`, or `git add -N` to record
 only its path) before it is part of the tree the map describes, exactly as a
 commit requires. Untracked scratch (a suite's temporary database, an agent's
@@ -62,6 +63,12 @@ REPO = Path(__file__).resolve().parent.parent
 #: beside itself on the owner's PC.
 MAP_REL = "backend/jarvis-self-code.json"
 MAP_NAME = "jarvis-self-code.json"
+
+#: The published base's copy of the same map. Ruling Q4 (2026-11-08): the
+#: generator writes BOTH files in one run, so the twin can never fall one byte
+#: behind when only the repository copy is regenerated and committed - the slip
+#: #1214's audit job caught on 2026-11-09 and that cost a full CI cycle.
+TWIN_REL = "jarvis-backend/jarvis-self-code.json"
 
 #: The public repository the map says Jarvis's code lives in. This is the one
 #: fact the live backend got wrong before the map existed.
@@ -1252,7 +1259,17 @@ def main(argv=None) -> int:
     if not out.is_absolute():
         out = REPO / out
     if args.check:
-        return check(REPO, out)
+        rc = check(REPO, out)
+        if rc == 0 and not args.map_out:
+            # Ruling Q4 (2026-11-08): a map that matches the tree but whose
+            # published base twin differs is the same failure in a new shape, so
+            # --check refuses it too instead of leaving it for the audit job.
+            twin = REPO / TWIN_REL
+            if not twin.exists() or twin.read_bytes() != out.read_bytes():
+                print(f"the map and {TWIN_REL} differ - run "
+                      "`py -3 tools/gen_self_code_map.py` to write both in one run.")
+                return 1
+        return rc
     try:
         text = generate(REPO)
     except CoverageError as exc:
@@ -1263,11 +1280,20 @@ def main(argv=None) -> int:
         return 1
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_bytes(text.encode("utf-8"))
+    twin = None
+    if not args.map_out:
+        # The base's copy, in the SAME run as the repository copy (ruling Q4,
+        # 2026-11-08): one command, both files, always the same bytes.
+        twin = REPO / TWIN_REL
+        twin.parent.mkdir(parents=True, exist_ok=True)
+        twin.write_bytes(text.encode("utf-8"))
     doc = json.loads(text)
     cov = doc["coverage"]
     print(f"wrote {out.name}: {cov['subsystems']} subsystems, "
           f"{cov['covered']} files covered, {cov['excluded']} excluded by name, "
           f"{cov['tracked_files']} tracked in total.")
+    if twin is not None:
+        print(f"also wrote {TWIN_REL} (the published base twin, the same bytes).")
     for row in doc["excluded_patterns"]:
         print(f"  excluded {row['count']:>4}  {row['why']}")
     return 0
