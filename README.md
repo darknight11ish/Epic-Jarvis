@@ -86,9 +86,9 @@ Some abilities are **off until you switch them on**, each with its own approval 
 - **The Coding preset now runs.** Its 30B model loads across both cards in a measured 32,768-token window, at about 80 tokens a second on short prompts, with 323.5 MiB in system RAM inside a 352 MiB cap. 16,384 is still the largest window with zero spill, and nobody has yet filled the longer window in a real 15-minute coding session.
 - **Ready to add: three drop-in modules.** **Habit check-ins** (one tap a day, no streaks, scores or praise) and a **1-5 mood log** with optional words are built and tested, and neither store is ever learned from. The habit and mood modules have **no screen in either app and no chat sentence that reaches them yet** - they are routes only - so today they are ready rather than usable. The PC's **Skills** menu installs a `SKILL.md` from a folder or a `.zip`, imports from `%USERPROFILE%\.hermes\skills`, turns one off and on, and edits one - each install, turn-on and edit behind one card - and, once added, its screen is **Settings → Skills**. All three are folders under `plugins/ready/`, added with `scripts\add-plugin.ps1` and a restart, and none is a marketplace: nothing is downloaded from a store.
 
-**In the 2026-11-05 to 2026-11-09 updates (Wave 10, Wave 11 and Wave 12).** Wave 10/11 are the open PR
-#1216 (merging now); Wave 12 is built and verified locally and its single PR is next. The live install is
-still the 9 November Wave-9 build (desktop and backend 0.2.440, phone 0.2.4016) until those deploy - every
+**In the 2026-11-05 to 2026-11-09 updates (Wave 10, Wave 11 and Wave 12).** Wave 10 and Wave 11 merged on
+9 November; Wave 12 is built and verified locally and its single PR is next. The live install is
+still the 9 November Wave-9 build (desktop and backend 0.2.440, phone 0.2.4016) until the deploy - every
 line below is built and tested, and the ones with no hands-on pass say so in **Honest limits**.
 
 - **Brain → Model tells the truth about this PC.** A "Loaded now / Resources" plate shows what is really

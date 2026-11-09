@@ -631,12 +631,30 @@ def t_the_module_cannot_write_load_or_apply():
                  "switch_to", "apply_preset", "install", "pull", "rm"}
     check("the code calls no write, load, switch or apply function",
           not (called & forbidden), sorted(called & forbidden))
+    forbidden_routes = sorted(
+        w for w in (n.value for n in ast.walk(tree)
+                    if isinstance(n, ast.Constant) and isinstance(n.value, str))
+        if "/api/pull" in w or "/api/models/install" in w)
     check("no download or install route appears even in the words",
-          "/api/pull" not in src and "/api/models/install" not in src,
-          "a forbidden route word")
+          not forbidden_routes, forbidden_routes)
+    shell = [n for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "run"]
+
+    def _command(call):
+        arg = call.args[0] if call.args else None
+        return [e.value for e in getattr(arg, "elts", [])
+                if isinstance(e, ast.Constant) and isinstance(e.value, str)]
+
+    commands = [_command(c) for c in shell]
+    read_only = all(
+        any(isinstance(k, ast.keyword) and k.arg == "capture_output"
+            and isinstance(k.value, ast.Constant) and k.value.value is True
+            for k in c.keywords)
+        for c in shell)
     check("the one subprocess call is the read-only nvidia-smi/netstat query",
-          "capture_output=True" in src and '"nvidia-smi"' in src
-          and '"netstat"' in src)
+          len(shell) == 2
+          and sorted(c[0] for c in commands if c) == ["netstat", "nvidia-smi"]
+          and read_only, commands)
 
 
 def t_the_route_contract_still_names_the_existing_cards():

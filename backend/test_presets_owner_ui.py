@@ -407,35 +407,77 @@ def t_model_path_still_raises_one_ask_card():
 
 
 def t_the_body_cannot_ask_for_the_uncarded_road():
-    import re
-    source = (HERE / "jarvis_presets.py").read_text(encoding="utf-8")
+    """No request field can ask for it: the ONLY ways in are two Python calls.
+
+    `ast` nodes, not source text: a call with `owner_ui=<literal True>` is
+    found structurally, and a library read that spells the name as a string
+    (`body.get("owner_ui")`, `body["owner_ui"]`, headers...) is what would make
+    a request field able to switch the card off - so there must be none.
+    """
+    import ast
+    tree = ast.parse((HERE / "jarvis_presets.py").read_text(encoding="utf-8"))
+    field_reads = [
+        n for n in ast.walk(tree)
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr in ("get", "pop", "setdefault", "getlist")
+            and any(isinstance(a, ast.Constant) and a.value == "owner_ui"
+                    for a in n.args))
+        or (isinstance(n, ast.Subscript)
+            and isinstance(n.slice, ast.Constant) and n.slice.value == "owner_ui")
+    ]
     check("no request field is ever read for the uncarded road",
-          'body.get("owner_ui")' not in source
-          and "body['owner_ui']" not in source,
-          "a body field could switch the card off")
-    calls = re.findall(r"(?:_apply_body\(body, owner_ui=True"
-                       r"|apply_preset\([^\n]*owner_ui=True)", source)
-    check("the uncarded road has exactly two code callers: the route wrapper "
+          not field_reads, field_reads)
+    roads = []
+    for top in tree.body:
+        if not isinstance(top, ast.FunctionDef):
+            continue
+        for n in ast.walk(top):
+            if not isinstance(n, ast.Call):
+                continue
+            name = getattr(n.func, "id", getattr(n.func, "attr", ""))
+            if name not in ("_apply_body", "apply_preset"):
+                continue
+            for kw in n.keywords:
+                if (kw.arg == "owner_ui"
+                        and isinstance(kw.value, ast.Constant)
+                        and isinstance(kw.value.value, bool)):
+                    roads.append((top.name, name, kw.value.value))
+    uncarded = [r for r in roads if r[2] is True]
+    check("the uncarded road has exactly two literal callers: the route wrapper "
           "and the receipt restorer",
-          len(calls) == 2
-          and "_apply_body(body, owner_ui=True)" in source
-          and "apply_preset(preset_id, owner_ui=True)" in source, calls)
+          sorted(uncarded) == sorted([("install", "_apply_body", True),
+                                     ("restore_from_before", "apply_preset", True)]),
+          roads)
     check("the public entry point is the carded road",
-          "return _apply_body(body, owner_ui=False)" in source)
+          ("apply_from_body", "_apply_body", False) in roads, roads)
 
 
 def t_the_shipped_switch_to_still_asks():
-    base = (HERE.parent / "jarvis-backend" / "jarvis_models.py").read_text(
-        encoding="utf-8")
-    start = base.find("def switch_to(")
-    end = base.find("def _probe_asker(", start)
-    block = base[start:end]
+    import ast
+    import tomllib
+    base = ast.parse((HERE.parent / "jarvis-backend" / "jarvis_models.py").read_text(
+        encoding="utf-8"))
+    switch = next((n for n in ast.walk(base)
+                   if isinstance(n, ast.FunctionDef) and n.name == "switch_to"), None)
+    gates = []
+    if switch is not None:
+        for n in ast.walk(switch):
+            if (isinstance(n, ast.Call)
+                    and getattr(n.func, "id", getattr(n.func, "attr", "")) == "_gate"
+                    and any(isinstance(a, ast.Constant) and a.value == "switch_model"
+                            for a in n.args)):
+                gates.append(n)
     check("the shipped switch_to still raises its switch_model card",
-          start > 0 and '_gate("switch_model"' in block
-          and "tier \"ask\"" in base, block[:200])
+          switch is not None and len(gates) == 1, len(gates))
+    cfg = tomllib.loads((HERE / "rebuilt" / "jarvis-framework.toml").read_text(
+        encoding="utf-8"))
+    check("the shipped tier for switch_model is still ask",
+          cfg["autonomy"]["tiers"].get("switch_model") == "ask",
+          cfg["autonomy"]["tiers"].get("switch_model"))
+    presets = ast.parse((HERE / "jarvis_presets.py").read_text(encoding="utf-8"))
     check("the owner-click path writes the model state and never calls the gate",
-          "def _switch_for_the_owner" in (HERE / "jarvis_presets.py").read_text(
-              encoding="utf-8"))
+          any(isinstance(n, ast.FunctionDef) and n.name == "_switch_for_the_owner"
+              for n in ast.walk(presets)))
 
 
 # --------------------------------------------------------------------------
@@ -507,9 +549,26 @@ def t_the_cloud_preset_still_raises_its_card():
 
 def t_every_preset_on_the_contract_is_covered():
     """The rule is decided by `heavy_mode`, not by a list of ids."""
-    source = (HERE / "jarvis_presets.py").read_text(encoding="utf-8")
-    check("the uncarded decision is `owner_ui and not heavy`",
-          "direct_owner = bool(owner_ui) and not heavy" in source, source[:0])
+    import ast
+    tree = ast.parse((HERE / "jarvis_presets.py").read_text(encoding="utf-8"))
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "apply_preset"), None)
+    direct = None
+    if fn is not None:
+        for n in ast.walk(fn):
+            if (isinstance(n, ast.Assign) and len(n.targets) == 1
+                    and isinstance(n.targets[0], ast.Name)
+                    and n.targets[0].id == "direct_owner"):
+                direct = n.value
+                break
+    decided = isinstance(direct, ast.BoolOp) and isinstance(direct.op, ast.And) and (
+        any(isinstance(v, ast.Call) and getattr(v.func, "id", "") == "bool"
+            and any(isinstance(a, ast.Name) and a.id == "owner_ui" for a in v.args)
+            for v in direct.values)
+        and any(isinstance(v, ast.UnaryOp) and isinstance(v.op, ast.Not)
+                and isinstance(v.operand, ast.Name) and v.operand.id == "heavy"
+                for v in direct.values))
+    check("the uncarded decision is `owner_ui and not heavy`", decided)
     check("Coding is the one heavy preset today, so it is the one kept carded",
           [p.id for p in P.PRESETS if p.heavy_mode] == ["coding"]
           and len(P.PRESETS) == 9,
