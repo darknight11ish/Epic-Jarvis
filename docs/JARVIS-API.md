@@ -35537,6 +35537,12 @@ deflecting.
 
 ## 190. Your own GitHub: read it, and three small actions on it - each one card, and it can never merge, push or close (backend, both apps' chat, added 2026-11-03)
 
+**Updated 2026-11-09:** there is one more tool and one more carded action now -
+`github_create_repo`, which creates ONE new, empty repository on the owner's own
+account. §209 is its record, including why the phone deliberately gets no screen
+for it. Everything below describes the 2026-11-03 slice and stays as it was
+written.
+
 The owner's decision of 2026-11-03: *"GitHub tools = Read + actions"* - Jarvis may READ his GitHub (repositories, open pull requests, issues, CI status, files in a repo) and take a few ACTIONS (comment on an issue or pull request, open an issue, re-run a workflow), **each action behind its own approval card, never merge and never push**.
 
 ### 190.1 What exists, and what each one does
