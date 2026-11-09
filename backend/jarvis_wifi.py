@@ -381,6 +381,7 @@ def set_enabled(on: bool) -> dict:
                           "this PC - nothing changed.")}
     changed = before != on
     _publish({"enabled": bool(on), "changed": changed})
+    _audit("wifi_reconnect_set", {"enabled": bool(on), "changed": bool(changed)})
     said = ((SET_ON if on else SET_OFF) if changed
             else (ALREADY_ON if on else ALREADY_OFF))
     out = state()
@@ -962,6 +963,9 @@ def check_once(*, now=None, local: Local = None, probe=None,
             _write(doc)
     _publish({"state": "attempted", "reconnected": bool(reconnected),
               "dry_run": bool(dry), "words": final_words})
+    _audit("wifi_reconnect_attempt",
+           {"attempts": len(attempts), "reconnected": bool(reconnected),
+            "dry_run": bool(dry), "class": "attempted"})
     return record
 
 
@@ -1049,6 +1053,20 @@ def _publish(data: dict) -> None:
     try:
         import jarvis_events  # type: ignore
         jarvis_events.BUS.publish("wifi_reconnect", data)
+    except Exception:
+        pass
+
+
+def _audit(event: str, detail: dict) -> None:
+    """Write one line to the project's own audit log. Never raises, never a name.
+
+    `jarvis_framework.audit_log` is the audit trail every acting module uses
+    (`jarvis_big_coder._audit` has the same shape). The state file's own history
+    is the second copy; a test/PC without the framework still works.
+    """
+    try:
+        import jarvis_framework  # type: ignore
+        jarvis_framework.audit_log(event, detail)
     except Exception:
         pass
 
