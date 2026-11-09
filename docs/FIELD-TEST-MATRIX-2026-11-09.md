@@ -14,13 +14,15 @@ intact and untouched. Until a row is driven it reads **NOT RUN YET**, which is
 also not a pass.
 
 **State at opening:** the live install is Wave 9 (`0.2.440` / phone `0.2.4016`).
-The Wave-10/11 build is in PR #1216 (merging), the Wave-12 build is in the local
-`integration/wave12-2026-11-09` branch awaiting its PR, Wave 13 is not started.
-So every row below is **NOT RUN YET**; nothing here is claimed as tested.
+PR #1216 (Waves 10/11) merged on 2026-11-09 03:33 PT; Wave 12 is rebased onto that
+`main` and awaiting its single PR; Wave 13 is being built in three local lanes
+(Reminders, GitHub truth, Creator Mode). The deploy of the merged Wave-10/11 tree
+to the PC, the desktop and the phone is running now. So every row below is
+**NOT RUN YET**; nothing here is claimed as tested.
 
 | # | feature | wave | desktop | phone | verdict | evidence |
 |---|---|---|---|---|---|---|
-| 1 | Brain → Model "Loaded now / Resources" truth + Compute panel names the real cards | 11 | NOT RUN YET | n/a (PC-only plate) | NOT RUN YET | — |
+| 1 | Brain → Model "Loaded now / Resources" truth + Compute panel names the real cards | 11/12 | NOT RUN YET | n/a (PC-only plate) | NOT RUN YET | — |
 | 2 | Lane truth (dead pooled lane falls back; explicit num_ctx; warm guard) | 11 | NOT RUN YET | NOT RUN YET | NOT RUN YET | — |
 | 3 | "Hide advanced" label, HUD local-session line gone, foldable model filters | 11 | NOT RUN YET | n/a | NOT RUN YET | — |
 | 4 | Auto Wi-Fi reconnect (switch, journal, honest "did you reconnect?") | 11 | NOT RUN YET | NOT RUN YET | NOT RUN YET | — |
@@ -43,6 +45,7 @@ So every row below is **NOT RUN YET**; nothing here is claimed as tested.
 | 21 | GitHub truth + card-gated `github_create_repo` ("Fitness Band") | 13 | NOT RUN YET | n/a unless a screen is added | NOT RUN YET | — |
 | 22 | Creator mode: stage a plug-in or skill, scan it, ONE PC-only install card, install ≠ enable | 13 | NOT RUN YET | n/a (PC-only) | NOT RUN YET | — |
 | 23 | The two queue items: Jarvis-takeover design lane (no user surface yet) | next | n/a | n/a | NOT TESTABLE YET | — |
+| 24 | Brain → Model "Measured results" card reads the real benchmark / five-suite scorecard stores and says so when there is nothing measured | 12 | NOT RUN YET | n/a (PC-only plate) | NOT RUN YET | — |
 
 **Owner device:** phone `f0a5b32b` (attached 2026-11-09 02:12 PT); Windows 11 PC
 with the desktop app. **Builds to write in when the sweep starts:** the
