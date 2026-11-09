@@ -59,6 +59,9 @@ claimed beyond what that run measured.
 FAIL means a real app was driven and the result was wrong. Neither is a pass.
 **Measured on:** desktop 0.2.441 / backend 0.2.441 / phone 0.2.4028 (attached `f0a5b32b`), runtime tree
 identical to `2644d57a2`; acceptance 24 rows: 23 PASS / 1 FAIL / 0 BLOCKED.
+**The merged tree's own main CI confirms the deploy's same-tree waiver:** run `42609957379` on
+`2644d57a2` completed **SUCCESS at 2026-11-09 04:55:55 PT**, every job green including `audit` - so the
+wave-10/11 deploy tested a tree a full green run of its own had passed, not only the pull-request run.
 
 **Owner device:** phone `f0a5b32b` (attached 2026-11-09 02:12 PT); Windows 11 PC
 with the desktop app. **Builds to write in when the sweep starts:** the
