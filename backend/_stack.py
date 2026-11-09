@@ -713,7 +713,21 @@ RATCHET = {
     #: file, the same reason, and pinned in tools/check_patch_original_text.py
     #: (1 hunk / 6 lines) as the twenty-fourth exception. A ratchet: it may
     #: still only go down.
-    "jarvis_skills.py": 6,
+    #: RAISED 2026-11-09, 6 -> 11, for `skill-scan-wiring.patch` (the F5 delivery
+    #: route: the wave-12 skill-scan work lived in the published base and in no
+    #: patch, so no patch run could carry it to a live install). Its FIVE hunks
+    #: all read the OWNER's own `jarvis_skills.py` - `is_bundled_script()`'s tail
+    #: and `vet()`'s opening and report dict, `install()`'s return,
+    #: `_pin_skill()`'s end, `uninstall()`'s index write - and that file is one of
+    #: the five the patcher edits, so the walk has no stand-in for those lines and
+    #: nothing earlier in the stack could have written them. Honest rather than
+    #: drift: the same file, the same reason, measured (not argued) by
+    #: `_stack.materialised("jarvis_skills.py")`, whose `by_patch` names it at 5
+    #: hunks / 33 lines. Pinned at the same 5 hunks / 33 lines in
+    #: `tools/check_patch_original_text.py`. A ratchet: it may still only go down,
+    #: and the day the walk seeds a target from `jarvis-backend/` this goes with
+    #: the rest.
+    "jarvis_skills.py": 11,
 }
 
 

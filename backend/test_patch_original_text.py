@@ -190,8 +190,20 @@ def t_the_late_patches_are_pinned_and_not_new():
     # wraps, the boot block's pump lines and the cloud relay's chunk loop); its
     # other two anchor on text earlier patches wrote and cost nothing. The walk
     # prints 29, and backend/_stack.py's jarvis_hud.py RATCHET moves 68 -> 72.
-    check("the twenty-nine exceptions the tool's docstring names are the "
-          "twenty-nine the walk finds", len(late) == 29,
+    # 2026-11-09: THIRTY. skill-scan-wiring.patch is the F5 delivery route - the
+    # wave-12 skill-scan work (DEF-049's four checks and Gemini's Q3 lock row)
+    # lived in the published base and in no `.patch`, so no patch run could carry
+    # it to a live install, and `jarvis_skills.py` is one of the five files the
+    # deploy never copies. ALL FIVE of its hunks read the owner's own
+    # jarvis_skills.py - `is_bundled_script()`'s tail, `vet()`'s opening line and
+    # its report dict, `install()`'s return, `_pin_skill()`'s end and
+    # `uninstall()`'s index write - and nothing earlier in the stack writes any
+    # of them. Honest rather than drift, for the same reason
+    # skill-install-note.patch and packs-tamper-on-load.patch already are. The
+    # walk prints 30, and backend/_stack.py's jarvis_skills.py RATCHET moves
+    # 6 -> 11.
+    check("the thirty exceptions the tool's docstring names are the "
+          "thirty the walk finds", len(late) == 30,
           f"the walk found {len(late)}: {late}")
 
 
