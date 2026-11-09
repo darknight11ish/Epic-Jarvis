@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.net.AnswerMarkDetails
 import com.jarvis.client.net.FeedbackReason
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.MarkReceipt
@@ -264,5 +265,57 @@ class WrongFeedbackTest {
                 assertEquals(AnswerMark.WRONG.wire, field(request.body, "mark"))
             }
         }
+    }
+
+    // ---- re-showing a saved why (Wave 10 Q2.1) ----------------------------
+
+    @Test
+    fun `a saved why re-shows in the owner's own words, never a wire word`() {
+        val details = AnswerMarkDetails(
+            id32,
+            AnswerMark.WRONG,
+            FeedbackReason.WRONG_FACT,
+            "I run a 2060, not a 2080.",
+        )
+        assertEquals(
+            "You marked this answer wrong. You picked: wrong fact. " +
+                "You wrote: \"I run a 2060, not a 2080.\"",
+            WrongFeedback.savedWords(details),
+        )
+        assertTrue("the raw wire word is shown", "wrong_fact" !in WrongFeedback.savedWords(details)!!)
+        assertEquals("Change the reason", WrongFeedback.EDIT_WHY)
+
+        assertEquals(
+            "You marked this answer wrong. You picked: wrong fact.",
+            WrongFeedback.savedWords(details.copy(correction = "")),
+        )
+        assertEquals(
+            "You marked this answer wrong. You wrote: \"I run a 2060, not a 2080.\"",
+            WrongFeedback.savedWords(details.copy(reason = null)),
+        )
+        assertNull(WrongFeedback.savedWords(null))
+        assertNull(WrongFeedback.savedWords(details.copy(mark = AnswerMark.RIGHT)))
+        assertNull(WrongFeedback.savedWords(details.copy(reason = null, correction = "")))
+    }
+
+    @Test
+    fun `the saved why prefills the sheet, and its draft sends the v2 body`() {
+        val details = AnswerMarkDetails(id32, AnswerMark.WRONG, FeedbackReason.OUTDATED, "Leeds, not York")
+        assertEquals(
+            WrongFeedback.Draft(FeedbackReason.OUTDATED, "Leeds, not York"),
+            WrongFeedback.prefill(details),
+        )
+        assertEquals(WrongFeedback.Draft(), WrongFeedback.prefill(null))
+
+        val request = WrongFeedback.request(
+            WrongFeedback.Tap.SUBMIT,
+            id32,
+            WrongFeedback.prefill(details),
+            canSend = true,
+        )
+        assertTrue(request is WrongFeedback.Request.Send)
+        val body = (request as WrongFeedback.Request.Send).body
+        assertEquals("outdated", field(body, "reason"))
+        assertEquals("Leeds, not York", field(body, "correction"))
     }
 }

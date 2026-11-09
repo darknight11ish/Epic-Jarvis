@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.jarvis.client.data.ClientSettings
 import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.net.FeedbackReason
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Briefing
@@ -299,6 +300,27 @@ class ApiContractTest {
         val out = api.markAnswer("not-an-id", AnswerMark.WRONG)
         assertTrue(out is ApiResult.Failed)
         assertEquals(0, server.requestCount)
+    }
+
+    /**
+     * Wave-10 contract v2 (Q2.1): the saved mark and why are read with the
+     * EXISTING route, as a GET with the answer's id - never a new path.
+     */
+    @Test
+    fun theSavedMarkIsReadWithTheAnswerId() = runBlocking {
+        routes["/api/feedback/mark"] = ok(
+            """{"turn_id":"$TURN","mark":"wrong","reason":"outdated","correction":"I run a 2060"}""",
+        )
+        val out = api.markState(TURN)
+        assertTrue("read failed: $out", out is ApiResult.Ok)
+        val details = (out as ApiResult.Ok).value
+        assertEquals(AnswerMark.WRONG, details.mark)
+        assertEquals(FeedbackReason.OUTDATED, details.reason)
+        assertEquals("I run a 2060", details.correction)
+        val req = server.takeRequest(10, TimeUnit.SECONDS)!!
+        assertEquals("GET", req.method)
+        assertEquals("/api/feedback/mark?turn_id=$TURN", req.path)
+        assertEquals("hud", req.getHeader("X-Jarvis-Client"))
     }
 
     /**

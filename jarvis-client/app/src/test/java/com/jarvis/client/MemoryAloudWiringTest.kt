@@ -11,8 +11,9 @@ import org.junit.Test
 
 /**
  * The wiring pins for the owner's setting of 2026-11-05 (the phone may read
- * out an answer that uses what Jarvis remembers, on its own talk button while
- * it is unlocked, off by default).
+ * out an answer that uses what Jarvis remembers). It is ON by default since
+ * the owner's decision of 2026-11-07, it covers every voice answer on this
+ * phone, and the PC now has its own separate read-aloud switch (Wave 9).
  *
  * The decision itself is pure and lives in `PrivateAloud` (`PrivateAloudTest`
  * and `MemoryAloudTest` hold every branch and every sentence). What cannot be
@@ -185,5 +186,15 @@ class MemoryAloudWiringTest {
         assertEquals(PrivateAloud.MEMORY_ON_SCREEN, PrivateAloud.refusalLine(PrivateAloud.Refusal.MEMORY))
         assertEquals(PrivateAloud.ON_SCREEN, PrivateAloud.refusalLine(PrivateAloud.Refusal.TOOL))
         assertEquals(MemoryAloud.NAME, "Read out answers that use what Jarvis remembers")
+    }
+
+    @Test
+    fun `the settings row draws the one-line default subtitle, and no banner (Q7)`() {
+        val plate = code(text("ui/screens/VoiceSwitchesPlate.kt"))
+        assertTrue("the row's name is gone", "MemoryAloud.NAME" in plate)
+        assertTrue("Q7's subtitle is not drawn", "MemoryAloud.SUBTITLE" in plate)
+        // One line under the name - not a card/banner with its own controls.
+        assertFalse("a banner was added instead of a subtitle", "Banner" in plate)
+        assertTrue(MemoryAloud.SUBTITLE, "On by default" in MemoryAloud.SUBTITLE)
     }
 }
