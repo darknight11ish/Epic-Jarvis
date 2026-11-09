@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "2f9b922ad6145442f1121025cdf900baccb7d0d0",
- "built_at": "2026-11-08T17:31:56-08:00",
+ "ref": "056f2a52b5ef0b0c2015a5af6cdb1c523fb246f0",
+ "built_at": "2026-11-08T17:33:17-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4665,6 +4665,7 @@
     "decisions.d/2026-11-07-self-code-map-from-main.md",
     "decisions.d/2026-11-07-self-knowledge-honesty.md",
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
+    "decisions.d/2026-11-08-deterministic-self-state-answers.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
     "decisions.d/README.md",
@@ -5112,7 +5113,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 814,
+   "file_count": 815,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6179,6 +6180,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "056f2a52b5ef0b0c2015a5af6cdb1c523fb246f0",
+   "date": "2026-11-08",
+   "subject": "docs(records): the Q3 deterministic-answers decision, and C120 points at it"
+  },
+  {
+   "sha": "9fb9f144c4aad8f4f4d3fef5cab8c7132d82ff12",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): regenerate the map and its base twin on the final Wave-10 tree"
+  },
+  {
    "sha": "2f9b922ad6145442f1121025cdf900baccb7d0d0",
    "date": "2026-11-08",
    "subject": "Merge branch 'fix/wave10-preset-independence-2026-11-08' into integration/wave10-2026-11-08"
@@ -6267,16 +6278,6 @@
    "sha": "04c42da846b1253bc1f5beb3be5fdf25c192576f",
    "date": "2026-11-08",
    "subject": "Merge branch 'fix/wave10-desktop-align-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "0020f1f2e1b9f02e440112f2b778b2b277e5301f",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map after the Wave-10 tree"
-  },
-  {
-   "sha": "515e060fea990b6b66bc599d369b5543babc742f",
-   "date": "2026-11-08",
-   "subject": "fix(wifi): align the auto Wi-Fi reconnect with the owner's Q4 guardrails"
   }
  ],
  "top_level": [
@@ -6323,7 +6324,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 139
+   "files": 140
   },
   {
    "path": "plugins/",
@@ -6397,8 +6398,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5520,
-  "covered": 5054,
+  "tracked_files": 5521,
+  "covered": 5055,
   "excluded": 466,
   "subsystems": 27
  },
