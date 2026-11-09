@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "daba2475338b584d77f3b675b7b1219f450fed2d",
- "built_at": "2026-11-08T16:58:24-08:00",
+ "ref": "2f9b922ad6145442f1121025cdf900baccb7d0d0",
+ "built_at": "2026-11-08T17:31:56-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3801,6 +3801,7 @@
     "backend/test_feature_list.py",
     "backend/test_feature_question_answers.py",
     "backend/test_feedback.py",
+    "backend/test_feedback_migration.py",
     "backend/test_feedback_v2.py",
     "backend/test_field_test_binaries.py",
     "backend/test_file_guardian.py",
@@ -4256,7 +4257,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 664,
+   "file_count": 665,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6178,6 +6179,71 @@
  ],
  "recent_commits": [
   {
+   "sha": "2f9b922ad6145442f1121025cdf900baccb7d0d0",
+   "date": "2026-11-08",
+   "subject": "Merge branch 'fix/wave10-preset-independence-2026-11-08' into integration/wave10-2026-11-08"
+  },
+  {
+   "sha": "752e70703bc865beec086199eb6a74c2d239c9e6",
+   "date": "2026-11-08",
+   "subject": "fix(determinism): keep self-fact nouns out of the Q3.3 unknown-name fallback"
+  },
+  {
+   "sha": "3f209a93538d0022bffe9e7a9fb2dffae1049842",
+   "date": "2026-11-08",
+   "subject": "docs(records): Wave-10 claims - Q2 app alignment, F2 mid-answer stop, Q3 preset independence, Q4 guardrails, feedback.db migration"
+  },
+  {
+   "sha": "e9c32cbceb973c5a64769d75b2d5c1ecd2eab733",
+   "date": "2026-11-08",
+   "subject": "Merge branch 'fix/wave10-source-pins-2026-11-08' into integration/wave10-2026-11-08"
+  },
+  {
+   "sha": "ae021729b923714d7327840d9bbbc03ad67cf287",
+   "date": "2026-11-08",
+   "subject": "fix(feature-guide): the auto Wi-Fi reconnect switch gets its state reader"
+  },
+  {
+   "sha": "112514e82b9da96b1c399579e12ecab236b61213",
+   "date": "2026-11-08",
+   "subject": "test(wave10): run the agent for real instead of pinning its source text"
+  },
+  {
+   "sha": "cf94ead2c81d5f6131cdcee39ef54fb03dcef188",
+   "date": "2026-11-08",
+   "subject": "docs(changelog): Wave 10 covers the rest of the batch - Q2 re-show and card labels, F2 mid-answer stop, Q3 preset independence, Q4 guardrails, F3 descriptions, Q7 subtitle"
+  },
+  {
+   "sha": "1942c00046cc4cd7dfbfd6570b3e2e9fe7daf7d0",
+   "date": "2026-11-08",
+   "subject": "Merge branch 'fix/wave10-catalogue-and-migration-2026-11-08' into integration/wave10-2026-11-08"
+  },
+  {
+   "sha": "6becb98cce721972e0860655f8b7d06be85a8f9a",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): regenerate the map for the migration smoke test"
+  },
+  {
+   "sha": "6918d544e6d8ebb860f5cf4e6c2381c0588e45e5",
+   "date": "2026-11-08",
+   "subject": "test(feedback): migration smoke on a copy of the live feedback.db (Q2)"
+  },
+  {
+   "sha": "d405ce4d8865c22b0ee6c3cee82fba600a9feb74",
+   "date": "2026-11-08",
+   "subject": "fix(features): the four stale read-aloud descriptions describe the shipped switch"
+  },
+  {
+   "sha": "30a106f13eb2c72b4b37e5f76312440fd68bebc5",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): regenerate the map after the Q3 preset-independence work"
+  },
+  {
+   "sha": "fedb3a826bbf1d05e41ffff682895e169bee595a",
+   "date": "2026-11-08",
+   "subject": "docs(api): the two feedback cards, their owner-chosen labels and which one is hidden"
+  },
+  {
    "sha": "daba2475338b584d77f3b675b7b1219f450fed2d",
    "date": "2026-11-08",
    "subject": "merge: bring fix/wave10-preset-independence up to integration head (wifi guardrails + desktop/phone alignment + records + map)"
@@ -6211,78 +6277,13 @@
    "sha": "515e060fea990b6b66bc599d369b5543babc742f",
    "date": "2026-11-08",
    "subject": "fix(wifi): align the auto Wi-Fi reconnect with the owner's Q4 guardrails"
-  },
-  {
-   "sha": "e139332c79418b8b18396e4df78fb760f9910c8f",
-   "date": "2026-11-08",
-   "subject": "fix(desktop): Wave-10 Q2 alignment - re-show a saved why, label the review cards, ask for retire cards, and per-button receipts"
-  },
-  {
-   "sha": "b8837d8c1258c2e30ee1bd0e2024bd6be8b3acc0",
-   "date": "2026-11-08",
-   "subject": "Merge branch 'fix/wave10-phone-align-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "e38d3550667b12191b7442c5c402a337c4c55ec3",
-   "date": "2026-11-08",
-   "subject": "Merge branch 'fix/wave10-read-aloud-stop-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "a8a3b0ab44b98a31f23bfcb58a9044ef610bc800",
-   "date": "2026-11-08",
-   "subject": "feat(phone): Wave-10 Q2 alignment, F5 comments and the Q7 subtitle"
-  },
-  {
-   "sha": "49959c158023169a277eee37414642d15c5815e3",
-   "date": "2026-11-08",
-   "subject": "fix(read-aloud): OFF stops speech immediately, mid-answer (Wave-10 Q5/F2) + F1 doc body"
-  },
-  {
-   "sha": "99d09dd68549843bd584a43e423fc6684a29ae56",
-   "date": "2026-11-08",
-   "subject": "docs(about): re-derive the claims totals after the Wave-10 rows"
-  },
-  {
-   "sha": "d65395849d40738e6586c712ce237c0a7bf86cdb",
-   "date": "2026-11-08",
-   "subject": "docs(records): Wave 10 changelog, decision, claims and the connect-account receipt doc"
-  },
-  {
-   "sha": "d99d1978143742459b95775bb4ce923fbc2e7d06",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map after the determinism merge"
-  },
-  {
-   "sha": "433f4e10866dd780c46edcb21f74f3af1dc92e62",
-   "date": "2026-11-08",
-   "subject": "merge: task-20 determinism phase A (read-aloud corpus, preset/Live proofs, 49-row sweep)"
-  },
-  {
-   "sha": "481923459c26aede1271c0a3aa356d4adbd2d7ac",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): the generated map covers the determinism corpus fixture"
-  },
-  {
-   "sha": "172d5564264d3e764bd5f7735696e24cd11e84f0",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): give jarvis_wifi a subsystem and regenerate the map"
-  },
-  {
-   "sha": "57b8fc545f03b765cb5f940493d0f927f7698f77",
-   "date": "2026-11-08",
-   "subject": "merge: task-21 feature-question echo fix (no model echo)"
-  },
-  {
-   "sha": "e1874cc17dc73bf4d3c9340506378060ef21d788",
-   "date": "2026-11-08",
-   "subject": "fix(determinism): the owner's factual sentences are answered before the model, proved"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1395
+   "files": 1396
   },
   {
    "path": "jarvis-desktop/",
@@ -6396,8 +6397,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5519,
-  "covered": 5053,
+  "tracked_files": 5520,
+  "covered": 5054,
   "excluded": 466,
   "subsystems": 27
  },
