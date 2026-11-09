@@ -86,6 +86,7 @@ import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 // commands (brain/tutorials.rs), progress kept on this PC (JARVIS-API 114).
 import { showTutorials, TUTORIALS_PLACE } from "./tutorials.js";
 import { tellChatsGone } from "./chat-history.js";
+import * as Resources from "./model-resources.js";
 // Brain -> History -> "Forget a time frame": its own module too.
 import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
 import { BRAIN_PLACE_KEY, HISTORY_CHANGED, HISTORY_PLACE, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
@@ -699,7 +700,8 @@ const VIEW_SECTIONS = {
   // The model advisor's last answer, for showing it when the view opens rather
   // than a blank panel: the GET is a read of what the PC last worked out, dated
   // by its own `checked_at`. A fresh check is the POST behind the one button.
-  faculties: ["models", "model_recommendations", "compute", "skills", "memory", "memory_pending"],
+  faculties: ["models", "model_recommendations", "model_resources", "compute",
+              "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
   memory: ["memory_facts", "memory_pending", "memory_entities"],
@@ -783,6 +785,7 @@ const dom = {
   traceClear: $("trace-clear"),
 
   models: $("models"),
+  resources: $("resources"),
   compute: $("compute"),
   skills: $("skills"),
   memory: $("memory"),
@@ -1347,6 +1350,7 @@ function render(name) {
       break;
     case "faculties":
       renderModels();
+      renderResources();
       renderCompute();
       renderSkills();
       renderMemory();
@@ -2749,6 +2753,59 @@ async function modelAction(action, reference) {
 }
 
 /**
+ * "Loaded now / Resources" (owner's ask, 2026-11-08): what is loaded into
+ * Jarvis right now - the model, its lane, its context size, its spill and the
+ * cards carrying it - plus each graphics card's free memory and Jarvis's own
+ * RAM/processor use. The words live in `model-resources.js` so they are proved
+ * without a browser; this function only draws them, and never invents a
+ * number: an unreachable lane or an unreadable process says so.
+ */
+function renderResources() {
+  const live = sectionState("model_resources");
+  const body = state.data.model_resources;
+  dom.resources.replaceChildren();
+  if (!body || body.available === false) {
+    const why = String((body && body.why) || "");
+    const reading = live.kind === "reading";
+    const node = el("p", "empty", reading ? "Reading…" : (why || "This PC has not said what is loaded right now."));
+    if (live.kind === "failed") node.append(" ", retryButton("model_resources"));
+    dom.resources.append(node);
+    return;
+  }
+  const plate = Resources.plateModel(body);
+  const dl = el("dl", "kv");
+  const add = (k, v) => {
+    if (v === undefined || v === null || v === "") return;
+    dl.append(el("dt", "", k), el("dd", "", String(v)));
+  };
+  const active = body.active_lane || {};
+  add("Chat lane", active.words || "");
+  if (plate.lanes.length) {
+    for (const lane of plate.lanes) {
+      if (lane.state === "loaded") add("Loaded on " + lane.title, lane.words);
+    }
+    const quiet = plate.lanes.filter((lane) => lane.state !== "loaded");
+    if (quiet.length) {
+      add("Other lanes", quiet.map((lane) => `${lane.title}: ${lane.words}`).join("; "));
+    }
+  }
+  if (!plate.lanes.some((lane) => lane.state === "loaded")) {
+    add("Loaded now", "Nothing is loaded into Jarvis right now.");
+  }
+  for (const line of plate.gpus) add("Card", line);
+  for (const line of plate.share) add("Jarvis's models", line);
+  add("Jarvis itself", plate.jarvis);
+  if (plate.readAt) add("Read at", `${plate.readAt} (this read)`);
+  if (dl.childElementCount) dom.resources.append(dl);
+  for (const warning of plate.warnings) {
+    dom.resources.append(el("p", "banner", warning));
+  }
+  dom.resources.append(
+    el("p", "note", "Read-only: this plate only looked. Nothing here loads, switches or starts a model.")
+  );
+}
+
+/**
  * The compute plan. Reads the keys `jarvis_compute.Plan.as_dict()` really
  * sends - text_model, text_on, vision_resident, tts_resident, simulated,
  * prefer, devices[], why, total_mb (backend/rebuilt/jarvis_compute.py) -
@@ -2778,43 +2835,75 @@ function renderCompute() {
     return on.replace(/cuda:(\d+)/g, "graphics card $1").replace(/\+/g, " + ");
   };
 
-  add("Model", body.text_model);
-  add("Runs on", where(body.text_on));
-  add("Picture model", yesNo(body.vision_resident));
-  add("Voice model", yesNo(body.tts_resident));
-  add("Aims for", body.prefer === "speed" ? "speed" : body.prefer === "capability"
-    ? "capability (spread over every card)" : body.prefer);
-  const devices = Array.isArray(body.devices) ? body.devices : [];
-  devices.forEach((d) => {
-    if (!d || typeof d !== "object") return;
-    const free = d.free_mb != null ? `${gb(d.free_mb)} free of ` : "";
-    add(`Card ${d.index ?? ""}`.trim(),
-      `${d.name || "graphics card"} - ${free}${d.total_mb != null ? gb(d.total_mb) : "?"}`);
-  });
-  if (!devices.length && Number(body.total_mb) > 0) add("Graphics memory", gb(body.total_mb));
-  add("Why", body.why);
-  if (body.simulated === true) {
-    add("Measured?", "No - no graphics card could be asked, so this is a guess");
+  // The truth first (2026-11-09). The owner saw "Runs on graphics card 2" while
+  // the Coding preset's pooled lane held the coder across all three cards: the
+  // plan's one `cuda:N` is a layout, never what is loaded now. When the PC's
+  // own resources read answers, IT names the loaded model, its context, its
+  // spill and the cards - and the plan's rows are labelled as the plan.
+  const truth = Resources.computeModel(state.data.model_resources);
+  if (truth.available && truth.loaded.length) {
+    for (const line of truth.loaded) {
+      add("Loaded now", `${line.model} on ${line.cards}`);
+      add("Context", line.context);
+      if (Number.isFinite(line.percent)) {
+        const spill = line.spill == null ? null : Number(line.spill);
+        add("Video memory", spill && spill > 0
+          ? `${line.percent}% on the cards; ${Math.round(spill / (1024 ** 2)).toLocaleString("en-US")} MiB spilled into system RAM`
+          : `${line.percent}% on the cards, nothing spilled into system RAM`);
+      }
+    }
+    for (const line of truth.gpus) add("Card", line);
+    for (const line of truth.share) add("Jarvis's models", line);
+    add("Jarvis itself", truth.jarvis);
+    add("Read at", truth.readAt ? `${truth.readAt} (this read)` : "");
+  } else if (truth.available) {
+    add("Loaded now", "Nothing is loaded into Jarvis right now.");
+    for (const line of truth.gpus) add("Card", line);
+    add("Read at", truth.readAt ? `${truth.readAt} (this read)` : "");
   }
 
-  // Older / other backends.
-  add("Plan", body.mode || body.strategy);
-  add("GPU", body.gpu || body.device);
-  add(
-    "VRAM",
-    body.vram_total_mb
+  // The plan's own rows. With no resources answer (an older backend) the plan
+  // is all there is, and it says so; with one, every plan row is labelled
+  // "Plan" so a layout can never be read as the loaded truth again.
+  const planPrefix = truth.available ? "Plan: " : "";
+  add(planPrefix + "model", body.text_model);
+  add(planPrefix + (truth.available ? "layout" : "Runs on"), where(body.text_on));
+  add(planPrefix + "picture model", yesNo(body.vision_resident));
+  add(planPrefix + "voice model", yesNo(body.tts_resident));
+  add(planPrefix + "aims for", body.prefer === "speed" ? "speed" : body.prefer === "capability"
+    ? "capability (spread over every card)" : body.prefer);
+  const devices = Array.isArray(body.devices) ? body.devices : [];
+  if (!truth.available) {
+    devices.forEach((d) => {
+      if (!d || typeof d !== "object") return;
+      const free = d.free_mb != null ? `${gb(d.free_mb)} free of ` : "";
+      add(`Card ${d.index ?? ""}`.trim(),
+        `${d.name || "graphics card"} - ${free}${d.total_mb != null ? gb(d.total_mb) : "?"}`);
+    });
+    if (!devices.length && Number(body.total_mb) > 0) add("Graphics memory", gb(body.total_mb));
+  }
+  add(planPrefix + "why", body.why);
+  if (body.simulated === true) {
+    add("Plan measured?", "No - no graphics card could be asked, so this is a guess");
+  }
+  if (!truth.available) {
+    add("Read at", state.readAt.compute ? asOfWords(state.readAt.compute) : "");
+    // Older / other backends: the old names stay readable, labelled as a plan.
+    add("Plan", body.mode || body.strategy);
+    add("GPU", body.gpu || body.device);
+    add("VRAM", body.vram_total_mb
       ? `${((body.vram_used_mb || 0) / 1024).toFixed(1)} / ${(body.vram_total_mb / 1024).toFixed(1)} GB`
-      : body.vram
-  );
-  add("Layers on GPU", body.gpu_layers ?? body.n_gpu_layers);
-  add("Context", body.context ?? body.n_ctx);
-  add("Note", body.note || body.reason);
+      : body.vram);
+    add("Layers on GPU", body.gpu_layers ?? body.n_gpu_layers);
+    add("Context", body.context ?? body.n_ctx);
+    add("Note", body.note || body.reason);
+  }
   if (!dl.childElementCount) {
     return dom.compute.append(el("p", "empty", "No compute plan reported."));
   }
   dom.compute.append(dl);
   const firstMb = Number(devices[0]?.total_mb ?? body.total_mb ?? 0);
-  if (firstMb >= 15360 && firstMb <= 35000) {
+  if (!truth.available && firstMb >= 15360 && firstMb <= 35000) {
     dom.compute.append(
       el("p", "note model-preset-suggestion", "Your card can hold the 14B at 32K — try the Smartest preset in Settings > Hardware and models.")
     );

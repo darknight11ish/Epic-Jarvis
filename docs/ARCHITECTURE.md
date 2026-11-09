@@ -3535,7 +3535,9 @@ owner's 2026-09-20 decision makes the phone's install a name TYPED by hand - a
 list of what could be installed is exactly the thing kept off it, and a phone
 version of this screen would be that list. The benchmark is the other half of
 the reason: it measures the PC's own graphics cards, which the phone cannot run
-or see. So the five routes the advisor uses (`GET /api/models/recommendations`,
+or see. So the six routes the advisor uses (`GET /api/models/recommendations`,
+`GET /api/models/resources` (added 2026-11-09: the loaded-model/resources
+read, PC-only for the same reason),
 `POST /api/models/check`, `POST /api/models/benchmark`, `POST
 /api/presets/recommend`, `POST /api/presets/recommend/opinion`) are
 `deliberate` in `tools/check_parity.py`, and neither app claims a phone half.
@@ -4669,8 +4671,9 @@ standing rule rather than a missing phone screen** (2026-10-28; their words:
 local ai models being used) with a one click check for new models button and it
 will look on hugging face for newer potentially better models ... then it will
 recommend changing the presets based on the local gpus and what model goes
-where"*; `docs/JARVIS-API.md` section 160). The five routes
-(`GET /api/models/recommendations`, `POST /api/models/check`,
+where"*; `docs/JARVIS-API.md` section 160). The six routes
+(`GET /api/models/recommendations`, `GET /api/models/resources` (added
+2026-11-09: the loaded-model/resources read), `POST /api/models/check`,
 `POST /api/models/benchmark`, `POST /api/presets/recommend` and
 `POST /api/presets/recommend/opinion`) are PC-only in the backend itself: each
 one answers 403 from any device but this PC, checked with
@@ -4924,6 +4927,8 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **The per-repository GitHub watcher has no screen in either app, on purpose (2026-11-07).** It is controlled entirely by one sentence in chat and in Jarvis Live - the same matcher, the same runner, the same store - and what it would have said is read from the existing `GET /api/watch/decisions` route. So neither app gains a page, a toggle or a card: adding a screen to only one of them would be the one-sided case, and adding the same screen to both would duplicate a control the owner asked to be conversational ("through jarvis live and chat").
 
+
+- **The Brain's "Loaded now / Resources" plate is the PC's alone, and that is one-sided on purpose (2026-11-09).** The owner asked the Model pane to say what is loaded into Jarvis right now, how much memory it uses of each graphics card, what else of the computer it is using, and what the context size is (JARVIS-API section 160.1; `GET /api/models/resources`). The answer is measured from the PC itself - each Ollama lane's own `/api/ps`, `nvidia-smi`'s card and compute-process rows, and the web server process's own memory and processor numbers - so the backend serves it PC-only (`jarvis_owner_check.from_this_pc` refuses another device with 403 before the read), and `tools/check_parity.py` classifies the route `deliberate` with this reason. There is no phone plate: the phone already lists the installed models it can switch between, and a phone screen of the PC's cards and processes would be a second, staler copy of facts only the PC can measure - not a parity gap. Both apps are unchanged in what they can do; the desktop gains the plate and the corrected COMPUTE panel words, and nothing here raises a card, loads a model or changes a setting.
 
 - **The automatic read-aloud switch is PC-only, and the phone has its own on-device switch - one-sided on purpose (2026-11-07).** The owner asked for a real control over Jarvis reading replies aloud: typed answers stay silent by default, voice answers are spoken, and an answer that uses what Jarvis remembers is read aloud by default in Jarvis Live too, unless it is extremely sensitive. The PC half is the backend-owned `GET/POST /api/read-aloud` switch (ON by default), wired from brain to mouth by the ready plug-in `plugins/ready/read-aloud` (`backend/jarvis_read_aloud.py`, `backend/test_read_aloud.py`): the Settings switch, the chat/Live sentences and the HUD quickbar all speak the same state, and a model answer can never toggle it. The phone half is its own local switch (`MemoryAloud`, `PrivateAloud`, default ON including "hey Jarvis"/Live), its own chat sentences and its own per-answer Read out loud in the message menu; the phone never calls `/api/read-aloud`. That is deliberate: the PC route controls the PC's speakers, and a phone change must not silence or unmute the desktop by accident. `tools/check_parity.py` classifies `/api/read-aloud` as `deliberate` with that reason; what is one-sided is the *switch's owner*, not the permission, and both apps still show every answer and the same sensitive-answer rule.
 

@@ -29176,13 +29176,14 @@ computed from the measured numbers. This section documents the backend contract
 and the desktop Brain panel built against it (`brain.js`, `model-advisor.js`,
 the `brain_model_recommend` command).
 
-**Five routes, all PC-only.** Each answers 403 from any device but this PC,
+**Six routes, all PC-only.** Each answers 403 from any device but this PC,
 checked with `jarvis_owner_check.from_this_pc` before a body is read. This is
 the standing rule that the phone must not grow a model catalogue
 (`docs/ARCHITECTURE.md` §8), not a missing phone screen.
 
 ```
 GET  /api/models/recommendations
+GET  /api/models/resources                what is loaded now + cards + Jarvis
 POST /api/models/check                    {}
 POST /api/models/benchmark                {"ref": "<installed model>"}
 POST /api/presets/recommend               {}
@@ -29354,6 +29355,106 @@ no network, so the suite injects the catalogue pass. The shape and the refusal
 paths are tested; the first real click on the owner's PC is the field test. And
 no model's QUALITY is measured by any of this - the feature compares tokens per
 second, video memory and context window, and says exactly that.
+
+### 160.1 What is loaded right now, and what it costs: `GET /api/models/resources` (added 2026-11-09)
+
+The owner's ask of 2026-11-08, from two Brain -> Model screenshots: *"the model
+section should tell me whats currently loaded into jarvis, how much memory is
+jarvis using of each gpu, how much other computer resources jarvis is uses
+besides vram on the gpus, what the context size is, and any other important
+info"* - and, because the COMPUTE panel said "Runs on graphics card 2" while
+the Coding preset's pooled three-card lane held the coder across all three
+cards, *"i have the coding preset loaded into jarvis right now, and it still
+says this"*.
+
+It is a READ, served by the SAME already-installed PC-only wrapper as
+`/api/models/recommendations` (`jarvis_model_recommendations.install()`), so it
+adds no permission, no install call, no card and no second HTTP stack. It runs
+`jarvis_model_resources.collect()`: every known local lane's own `/api/ps` (a
+read that loads nothing), `nvidia-smi`'s card rows and compute-process rows,
+`netstat` for the lane listeners, and the operating system's numbers for
+Jarvis's own process. It writes nothing and starts nothing.
+
+```json
+{"available": true,
+ "read_at": 1762750000, "read_at_words": "21:52:03",
+ "active_lane": {"url": "http://127.0.0.1:11450",
+                 "source": "presets-active-lane.json", "fallback": false,
+                 "file": "C:\\Users\\...\\.openjarvis\\presets-active-lane.json",
+                 "preset": "coding", "preset_title": "Coding",
+                 "words": "Chat is using the \"Coding\" preset's lane: ..."},
+ "lanes": [{"key": "pooled", "label": "the Coding preset's lane (all three cards)",
+            "url": "http://127.0.0.1:11450", "port": 11450,
+            "preset_ids": ["coding"], "preset_titles": ["Coding"],
+            "is_chat_lane": true, "state": "loaded",
+            "model": "qwen3-coder-30b-a3b-ud-q3-k-xl:latest",
+            "context_length": 8192, "size_bytes": 14497590799,
+            "size_vram_bytes": 14497590799, "spill_bytes": 0,
+            "on_card_percent": 100, "gpu_indices": [0, 1, 2],
+            "words": "... 8,192 tokens of context, 13.5 GiB in video memory, 100% on all three graphics cards (0, 1, 2)"}],
+ "gpus": [{"index": 0, "uuid": "GPU-...", "name": "NVIDIA GeForce RTX 2060",
+           "total_mb": 12288, "used_mb": 6064, "free_mb": 6224,
+           "display_active": false, "jarvis_mb": null, "other_mb": null}],
+ "gpu_share": {"known": false,
+               "why": "the graphics driver does not report how much video memory each program is using, so Jarvis's share of each card is not guessed",
+               "loaded_vram_gib": 13.5, "cards": [0, 1, 2]},
+ "jarvis": {"available": true, "pid": 3420, "rss_mb": 210.5, "private_mb": 195.2,
+            "cpu_seconds": 321.4, "cpu_percent": 3.0, "handles": 812,
+            "uptime_s": 13400,
+            "model_servers": [{"pid": 18496, "rss_mb": 4800.3, "available": true}],
+            "model_servers_rss_mb": 4800.3,
+            "words": "Jarvis itself is using 211 MiB of RAM and 3.0% of the processor on average since it started."},
+ "warnings": [], "notes": ["Read-only: this answer only looked. ..."],
+ "words": ["Chat is using the \"Coding\" preset's lane: ...", "..."]}
+```
+
+Field rules, each proved by `backend/test_model_resources.py`:
+
+- **The chat lane is the PRODUCT's lane rule**, not `/api/presets`' lane
+  concept and not a module constant: the loopback `base_url` in
+  `presets-active-lane.json` under the config folder (`OPENJARVIS_CONFIG_DIR`,
+  else `~/.openjarvis`), exactly what `jarvis_hud.active_ollama_url()` returns;
+  `source` and `fallback` say which branch ran, and a non-loopback value is
+  ignored the same way the product ignores it.
+- **A lane is `loaded`, `not_loaded` or `unreachable`, and the words say
+  which.** A lane that does not answer is "not running - nothing answers on
+  port N"; a lane with an empty `/api/ps` is "nothing loaded". Neither ever
+  reports a 0 as a fact about memory.
+- **`context_length` is the context the lane is really serving** (Ollama's own
+  `/api/ps` field), `null` when the lane does not report it - never a 0.
+- **Spill is told, not hidden:** `spill_bytes = size - size_vram` and
+  `on_card_percent` are computed from the lane's own numbers; a partial load
+  carries them so a screen can say "74% on the cards, N MiB spilled into system
+  RAM".
+- **Cards per lane** come from the model server's own compute-process GPU rows
+  (`llama-server.exe`/`ollama.exe`), because the Ollama listener spawns the
+  runner under a different pid. With exactly one loaded lane they are that
+  lane's cards; with two loaded lanes the split cannot be told from these reads
+  and the lane's `gpu_indices` is left empty - never guessed.
+- **`jarvis_mb`/`other_mb` are `null` when the driver does not report
+  per-program video memory.** This PC's Windows driver answers `[N/A]` for
+  `used_memory` on every compute-apps row, so `gpu_share.known` is `false`, the
+  loaded model's total video memory (`gpu_share.loaded_vram_gib`, Ollama's own
+  measured `size_vram`) is shown instead, and `notes` says exactly why the
+  per-card split is missing. A driver that reports it gets `known: true` and a
+  per-card `jarvis_mb`, proved with a fixture.
+- **`jarvis` is the web server's own process** (`os.getpid()`): resident
+  memory, private memory, processor seconds and an average percent, handles and
+  uptime, read with the Windows process APIs. `available: false` plus `why`
+  when it cannot be read; the words never invent a 0. The Ollama model servers
+  it runs are listed with their own resident memory, because that is where a
+  spilled model's RAM lives.
+- **`read_at`/`read_at_words`** date the read. The Brain's COMPUTE panel uses
+  them so its free-memory numbers are marked as this read, not as a cached
+  plan.
+- **`words`** is a plain-sentence fallback for any screen that cannot draw the
+  rows; the Brain pane draws the structured fields through
+  `model-resources.js` (`plateModel`, `computeModel`), where every sentence is
+  proved by `jarvis-desktop/tests/model-resources.mjs`.
+
+The route is PC-only and `GET`-only: a phone is refused 403 before the read
+(same rule and sentence as its neighbours), and nothing here is on the phone's
+radar - see `docs/ARCHITECTURE.md` §8 for that one-sided decision and why.
 
 ## 161. Google Calendar, both ways: a private iCal link or a real Google sign-in over loopback (added 2026-10-28)
 

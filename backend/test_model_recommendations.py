@@ -24,7 +24,7 @@ WHAT EACH BLOCK PROVES
   * the owner's opinion is a deterministic rule (keep/lower/raise/quality/note)
     that changes the suggestion without inventing a measurement: same inputs,
     same answer, and "raise" cannot conjure a number that was never measured.
-  * ALL five routes are PC-only: a phone's peer is refused 403 before the body
+  * ALL six routes are PC-only: a phone's peer is refused 403 before the body
     is read, and origin/token are the server's own checks.
   * the EXISTING carded routes are still the only way to act: the module holds
     no install and no apply handler, and the published base still serves
@@ -847,7 +847,7 @@ def t_an_unknown_opinion_is_recorded_and_changes_nothing():
 
 
 # --------------------------------------------------------------------------
-#   The wiring: five routes, PC only
+#   The wiring: six routes, PC only
 # --------------------------------------------------------------------------
 
 class FakeHandler:
@@ -914,7 +914,7 @@ def t_the_routes_are_pc_only_before_the_body_is_read():
 
 def t_the_routes_dispatch_and_everything_else_is_untouched():
     saved = (M.check_models, M.run_benchmark, M.record_opinion, M.presets_only,
-             M.recommendations_view)
+             M.recommendations_view, M.resources_view)
     seen = {}
 
     def fake(name, answer):
@@ -928,6 +928,7 @@ def t_the_routes_dispatch_and_everything_else_is_untouched():
     M.record_opinion = fake("opinion", None)
     M.presets_only = fake("presets", None)
     M.recommendations_view = fake("recommendations", None)
+    M.resources_view = fake("resources", None)
     try:
         cls, _ = wired(body=b'{"ref": "cur:9b"}')
         h = cls("/api/models/benchmark")
@@ -946,6 +947,12 @@ def t_the_routes_dispatch_and_everything_else_is_untouched():
         check("POST /api/presets/recommend reaches presets_only", "presets" in seen)
         h = cls("/api/models/recommendations"); h.do_GET()
         check("GET reaches the read answer", "recommendations" in seen)
+        h = cls("/api/models/resources"); h.do_GET()
+        check("GET /api/models/resources reaches the loaded-now read",
+              "resources" in seen, seen)
+        check("... and it is a GET route, never a write",
+              M.PATH_RESOURCES in M.GET_PATHS
+              and M.PATH_RESOURCES not in M.POST_PATHS)
         h = cls("/api/approve"); h.do_POST()
         check("another POST route still goes to the original handler",
               h.calls == [("POST", "/api/approve")] and "check" not in h.sent,
@@ -961,7 +968,7 @@ def t_the_routes_dispatch_and_everything_else_is_untouched():
         check("a body that is not an object is 400", h.do_POST() == 400, h.sent)
     finally:
         (M.check_models, M.run_benchmark, M.record_opinion, M.presets_only,
-         M.recommendations_view) = saved
+         M.recommendations_view, M.resources_view) = saved
     check("install() advertises itself and is safe to call twice",
           "recommendations" in M.install(FakeHandler,
                                          origin_ok=lambda h: True,
@@ -1004,8 +1011,8 @@ def t_this_module_holds_no_download_and_no_apply():
     check("neither existing route has a handler in this module",
           M.INSTALL_ROUTE not in M.GET_PATHS + M.POST_PATHS
           and M.APPLY_ROUTE not in M.GET_PATHS + M.POST_PATHS)
-    check("the five routes are exactly the contract's",
-          M.GET_PATHS == ("/api/models/recommendations",)
+    check("the six routes are exactly the contract's",
+          M.GET_PATHS == (M.PATH_RECOMMENDATIONS, M.PATH_RESOURCES)
           and M.POST_PATHS == ("/api/models/check", "/api/models/benchmark",
                                "/api/presets/recommend",
                                "/api/presets/recommend/opinion"),

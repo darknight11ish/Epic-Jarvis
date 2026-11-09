@@ -14,6 +14,7 @@ WHAT THE OWNER ASKED FOR (2026-10-28, their own words)
 So this module is the READING half of that, and only the reading half:
 
     GET  /api/models/recommendations          what is cached + what is measured
+    GET  /api/models/resources               what is LOADED right now + cards + Jarvis
     POST /api/models/check                    one click: look, cache, answer
     POST /api/models/benchmark   {"ref"}      measure an INSTALLED model here
     POST /api/presets/recommend  {}           changes justified by measurements
@@ -39,7 +40,7 @@ same thing asking it a question does - and that is said plainly in the answer.
 
 DESKTOP-ONLY, ON PURPOSE. The owner's standing rule is that the phone must not
 grow a model catalogue (CLAUDE.md; the install-from-phone amendment of
-2026-09-20 allows a TYPED ref and nothing to browse). All five routes here
+2026-09-20 allows a TYPED ref and nothing to browse). All six routes here
 refuse another device with 403 before reading a body, using the project's ONE
 rule: `jarvis_owner_check.from_this_pc(peer, local)` - the same call
 `jarvis_brain_reads`, `jarvis_media_index` and the other PC-only routes wrap.
@@ -194,11 +195,17 @@ from typing import Callable, Optional
 # --------------------------------------------------------------------------
 
 PATH_RECOMMENDATIONS = "/api/models/recommendations"
+#: The Brain's "Loaded now / Resources" plate (2026-11-09): what is loaded right
+#: now, with its context size, its spill and the cards carrying it, plus each
+#: card's memory and Jarvis's own RAM/CPU. Served by `jarvis_model_resources`;
+#: routed through THIS module's already-installed PC-only wrapper so the plate
+#: needs no new permission, no new install call and no second HTTP stack.
+PATH_RESOURCES = "/api/models/resources"
 PATH_CHECK = "/api/models/check"
 PATH_BENCHMARK = "/api/models/benchmark"
 PATH_PRESET_RECOMMEND = "/api/presets/recommend"
 PATH_OPINION = "/api/presets/recommend/opinion"
-GET_PATHS = (PATH_RECOMMENDATIONS,)
+GET_PATHS = (PATH_RECOMMENDATIONS, PATH_RESOURCES)
 POST_PATHS = (PATH_CHECK, PATH_BENCHMARK, PATH_PRESET_RECOMMEND, PATH_OPINION)
 
 #: The EXISTING carded routes recommendations point AT, never through. Named
@@ -1539,7 +1546,7 @@ def presets_only(*, path: Optional[Path] = None,
 
 
 # --------------------------------------------------------------------------
-#   Wiring: five routes, PC only, and nothing else touched
+#   Wiring: six routes, PC only, and nothing else touched
 # --------------------------------------------------------------------------
 
 def _peer_local(handler) -> tuple:
@@ -1554,9 +1561,29 @@ def _peer_local(handler) -> tuple:
     return peer, local
 
 
+def resources_view() -> dict:
+    """The Brain's "Loaded now / Resources" plate: what is loaded, on which
+    cards, at which context, and what Jarvis itself is using.
+
+    Read-only and network-free beyond each local lane's own `/api/ps` (a read
+    that loads nothing). The module is imported lazily so a PC without it - or
+    a clone - answers `available: false` in words instead of failing the route.
+    Nothing here downloads, switches, applies or starts anything.
+    """
+    try:
+        import jarvis_model_resources  # type: ignore
+        answer = jarvis_model_resources.collect()
+    except Exception as exc:  # noqa: BLE001 - a read never takes the pane down
+        return {"available": False,
+                "why": f"the loaded-now read failed: {type(exc).__name__}"}
+    if not isinstance(answer, dict):
+        return {"available": False, "why": "the loaded-now read returned no answer"}
+    return answer
+
+
 def install(handler_cls, *, origin_ok, token_ok, read_body,
             from_this_pc=None) -> str:
-    """Wrap `handler_cls` with the five routes above, after the server's own
+    """Wrap `handler_cls` with the six routes above, after the server's own
     origin and token checks. Every other request goes to the original handler
     untouched. Returns the banner line.
 
@@ -1572,7 +1599,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
     get0 = getattr(handler_cls, "do_GET", None)
     post0 = getattr(handler_cls, "do_POST", None)
     if getattr(post0, "_jarvis_model_recommendations", False):
-        return "  models     recommendations already on (five PC-only routes)"
+        return "  models     recommendations already on (six PC-only routes)"
 
     def _pc(handler) -> bool:
         check = from_this_pc
@@ -1612,6 +1639,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
         if not _allowed(self):
             return None
         try:
+            if route == PATH_RESOURCES:
+                return self._send(200, resources_view())
             return self._send(200, recommendations_view())
         except Exception as exc:
             return self._send(503, {"ok": False, "error": type(exc).__name__})
@@ -1654,4 +1683,5 @@ def install(handler_cls, *, origin_ok, token_ok, read_body,
     do_POST._jarvis_model_recommendations = True
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
-    return "  models     recommendations ready at /api/models/recommendations (PC only)"
+    return ("  models     recommendations ready at /api/models/recommendations "
+            "and /api/models/resources (PC only)")
