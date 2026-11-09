@@ -178,6 +178,14 @@ CLASSIFICATION = {
     # ready plug-in; desktop: src/read-aloud.js + src-tauri/src/read_aloud.rs.
     "/api/read-aloud": ("deliberate", "The automatic read-aloud switch controls the DESKTOP HUD's own speakers for voice-turn answers; it is PC-only. The phone has its own on-device switch for remembered answers (MemoryAloud) and its own per-answer Read out loud action, and never calls this route, so no phone change can silence or unmute the PC by accident (ARCHITECTURE section 8, JARVIS-API read-aloud section)."),
 
+    # The auto Wi-Fi reconnect (2026-11-08; the owner's ask that it default on
+    # and be changeable in Settings or chat): PC-only. It reads/repairs THIS
+    # desktop's own Windows Wi-Fi profile store (netsh wlan) and can change which
+    # saved password-protected network the PC joins while it is offline - a phone
+    # cannot act on the PC's link and must not be able to change it from away.
+    # Backend: jarvis_wifi.py, installed by the wifi-reconnect ready plug-in;
+    # desktop: src/wifi-reconnect-settings.js + src-tauri/src/wifi_reconnect.rs.
+    "/api/wifi-reconnect": ("deliberate", "The auto Wi-Fi reconnect repairs THIS desktop's own Wi-Fi link: it reads Windows' saved profile store and may reconnect a saved password-protected network while the PC is offline. A phone cannot act on the PC's link, so the route refuses every other device and the phone neither shows nor calls it (ARCHITECTURE section 8, JARVIS-API section 204)."),
     "/api/appearance": ("ported", ""),
     # Send ONE file from the PC to the phone (2026-10-31, the owner's ask;
     # Gemini Q7; JARVIS-API section 172). Backend: jarvis_send_file.py.

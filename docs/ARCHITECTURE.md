@@ -4911,6 +4911,28 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **The automatic read-aloud switch is PC-only, and the phone has its own on-device switch - one-sided on purpose (2026-11-07).** The owner asked for a real control over Jarvis reading replies aloud: typed answers stay silent by default, voice answers are spoken, and an answer that uses what Jarvis remembers is read aloud by default in Jarvis Live too, unless it is extremely sensitive. The PC half is the backend-owned `GET/POST /api/read-aloud` switch (ON by default), wired from brain to mouth by the ready plug-in `plugins/ready/read-aloud` (`backend/jarvis_read_aloud.py`, `backend/test_read_aloud.py`): the Settings switch, the chat/Live sentences and the HUD quickbar all speak the same state, and a model answer can never toggle it. The phone half is its own local switch (`MemoryAloud`, `PrivateAloud`, default ON including "hey Jarvis"/Live), its own chat sentences and its own per-answer Read out loud in the message menu; the phone never calls `/api/read-aloud`. That is deliberate: the PC route controls the PC's speakers, and a phone change must not silence or unmute the desktop by accident. `tools/check_parity.py` classifies `/api/read-aloud` as `deliberate` with that reason; what is one-sided is the *switch's owner*, not the permission, and both apps still show every answer and the same sensitive-answer rule.
 
+- **The auto Wi-Fi reconnect is the PC's, and only the PC's** (2026-11-08; the
+  owner's ask: *"add a feature to jarvis that defaults on but can be changed in
+  settings or chat with jarvis, that jarvis if its running on a desktop and the
+  desktop has lost internet connection, that it will tell the desktop to try to
+  reconnect to password protected networks (that have already been connected to
+  in the past on that desktop) every 2 hours on its own if its still offline"*).
+  Changing a DESKTOP's Wi-Fi link is not something the phone can do or should
+  try: it would be acting on a machine it cannot see, on a network it is not on.
+  So `GET`/`POST /api/wifi-reconnect` (`backend/jarvis_wifi.py`, installed by
+  `plugins/ready/wifi-reconnect/`) refuse any device other than this PC
+  (`_from_this_pc`), and the switch is drawn in Settings - "On this PC" ->
+  "Wi-Fi reconnect" via `jarvis-desktop/src/wifi-reconnect-settings.js` and
+  `jarvis-desktop/src-tauri/src/wifi_reconnect.rs`. `tools/check_parity.py`
+  carries the route as `deliberate` and this bullet is the reason. The phone
+  neither calls it nor shows the setting. Its permission shape is section 3's:
+  the owner's explicit default-ON ask makes this ONE narrow standing action (a
+  saved, password-protected profile, only while offline, never mid-turn), and
+  every attempt is reported; it is not a general "change my network" permission
+  and no card is raised per attempt (a card every 2 hours is not answerable).
+  JARVIS-API section 204 records the route.
+
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

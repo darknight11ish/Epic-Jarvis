@@ -588,6 +588,13 @@ fn main() {
             // rule keeps a private answer on screen whatever it says.
             "get_read_aloud",
             "set_read_aloud",
+            // The auto Wi-Fi reconnect (2026-11-08; JARVIS-API section 204,
+            // backend/jarvis_wifi.py). Settings only: the switch, the PC's own
+            // sentence and its last result. PC-only by the backend's own rule;
+            // the page never shows a network name or a key, and never asks the
+            // PC to connect to anything.
+            "get_wifi_reconnect",
+            "set_wifi_reconnect",
             // Hands-free mode (2026-11-04; JARVIS-API section 191,
             // backend/jarvis_handsfree.py). The read is a read; ON raises ONE
             // `handsfree_enable` approval card through the backend and the call

@@ -10999,6 +10999,20 @@
       "in_phone_settings": true
     },
     {
+      "id": "wifi-reconnect",
+      "names": [
+        "wi-fi reconnect",
+        "wifi reconnect",
+        "the auto wi-fi reconnect",
+        "reconnect wi-fi automatically",
+        "automatic wi-fi reconnection"
+      ],
+      "app": "desktop",
+      "where": "settings",
+      "in_desktop_settings": true,
+      "in_phone_settings": false
+    },
+    {
       "id": "voices",
       "names": [
         "jarvis's voice",

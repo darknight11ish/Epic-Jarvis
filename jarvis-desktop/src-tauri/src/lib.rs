@@ -28,6 +28,12 @@ pub mod asks_first;
 pub mod attention;
 pub mod autostart;
 pub mod read_aloud;
+// The auto Wi-Fi reconnect (2026-11-08; the owner's ask that it default on and be
+// changeable in Settings or chat): every 2 hours while this PC has no internet,
+// try a saved password-protected Wi-Fi network it already knows. Settings only,
+// the switch and the PC's own sentence; the attempt itself belongs to the PC's
+// own backend (jarvis_wifi.py), never to this app.
+pub mod wifi_reconnect;
 // The version handshake between this executable and the backend on this PC
 // (backend_self.rs; the owner's ask of 2026-11-03 that one Update click leaves
 // both halves in step, and that the two versions are read back in words).
@@ -1459,6 +1465,13 @@ pub fn run() {
             antislop::set_antislop,
             read_aloud::get_read_aloud,
             read_aloud::set_read_aloud,
+            // The auto Wi-Fi reconnect switch (2026-11-08): GET/POST
+            // /api/wifi-reconnect through jarvis_wifi.py. A read and ONE change,
+            // cardless in both directions: OFF stops the two-hourly attempt at
+            // once; ON restores the shipped default the owner asked for. The
+            // page never shows a network name and never connects anything.
+            wifi_reconnect::get_wifi_reconnect,
+            wifi_reconnect::set_wifi_reconnect,
             // Hands-free mode (2026-11-04; JARVIS-API section 191).
             // Settings window only. The read is a read; ON raises ONE approval
             // card through the backend and the call returns when that card is

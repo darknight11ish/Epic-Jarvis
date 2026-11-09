@@ -292,6 +292,18 @@ SECTIONS: tuple = (
     Section("learning", ("learning", "the learning switches", "background learning",
                          "automatic learning", "learn automatically",
                          "what jarvis learns")),
+    # "Wi-Fi reconnect" (2026-11-08, the owner's ask: a feature that defaults on,
+    # changeable in Settings or chat, that every 2 hours while this PC has no
+    # internet asks Windows to reconnect to a saved password-protected Wi-Fi
+    # network it already knows). DESKTOP ONLY by nature: it repairs THIS PC's own
+    # Wi-Fi link, so the phone neither shows nor changes it (ARCHITECTURE section
+    # 8; tools/check_parity.py carries the route as deliberate). The card is
+    # drawn by wifi-reconnect-settings.js from the same route the chat sentences
+    # read and write.
+    Section("wifi-reconnect", ("wi-fi reconnect", "wifi reconnect",
+                               "the auto wi-fi reconnect",
+                               "reconnect wi-fi automatically",
+                               "automatic wi-fi reconnection"), app="desktop"),
     Section("voices", ("jarvis's voice", "jarvis's voices", "custom voices",
                        "how jarvis sounds")),
     Section("web-search", ("web search", "search settings", "the search provider")),
