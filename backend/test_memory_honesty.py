@@ -488,7 +488,11 @@ def t_the_hud_does_not_use_up_the_sleep_card():
     # that list (on the explicit Memory-tab entry, never from the 30-second
     # banner read), and only that list may show it. The banner's own plain
     # read still never gets or uses up the day's offer.
-    _banner = re.search(r'jfetch\("/api/memory/pending"[^\n]*', hud_src)
+    # The banner read now carries `retire_cards=1` (Wave 10 Q7: one uniform
+    # pending read for the badge and the Memory drawer), so the regex must allow
+    # a query string; the day's `sleep_offer` must still come ONLY from the
+    # Memory-tab list, never from this 30-second banner read.
+    _banner = re.search(r'jfetch\("/api/memory/pending[^"]*"[^\n]*', hud_src)
     check("the HUD banner's plain read never gets the card",
           _banner is not None and "sleep_offer" not in _banner.group(0))
     check("the HUD asks for it only from the Memory-tab list that shows it",

@@ -13382,6 +13382,14 @@ def _github_connect_receipt_intent(s: str) -> Optional[Intent]:
     low = s.strip()
     if not low:
         return None
+    # A "tell me when ..." watch sentence is jarvis_tellme's own, including the
+    # PR-URL shape ("tell me when https://github.com/o/r/pull/9 is merged").
+    # The "/pull/" in that URL must never be read as the clone/push/pull
+    # never-list below - that would replace a real watch with a capability
+    # answer. The tellme matchers run later and already own these openers.
+    if re.match(r"^(?:urgently\s+)?(?:please\s+)?(?:tell\s+me|let\s+me\s+know)\b",
+                low, re.I):
+        return None
     if _GITHUB_TOKEN_ADDED.fullmatch(low) or _GITHUB_TEST_PROVED.fullmatch(low):
         return Intent("github_connect_receipt", {"shape": "status"})
     if _GITHUB_CONNECT_STATE.fullmatch(low):

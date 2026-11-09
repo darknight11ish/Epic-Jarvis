@@ -274,8 +274,14 @@ class FindAnythingTest {
             // hands-free row is the Android lane's separate change, and until it
             // lands OpenPlace.kt answers "only in Jarvis on your PC" for this id.
             // It is still a name the catalogue carries, so the count moves.
+            // 132 -> 133 (2026-11-08, the Wave-10 Wi-Fi guardrails): the new
+            // `settings.wifi-reconnect` card is DESKTOP ONLY (the phone neither
+            // shows nor changes the PC's own Wi-Fi link), so `phone` is false and
+            // there is no phone place to add. It is still a name the catalogue
+            // carries, so the count moves with it - the same reason the three
+            // desktop-only rows above moved it.
             "the catalogue must still carry the names at all",
-            132,
+            133,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
