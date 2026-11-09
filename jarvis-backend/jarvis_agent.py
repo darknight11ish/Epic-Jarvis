@@ -14375,6 +14375,80 @@ def _pooled_num_ctx(ollama_url) -> Optional[int]:
         return None
 
 
+#: How the last pooled-lane preload went (for the tests, and for anyone
+#: asking): state "warmed" | "already" | "off" | "failed", that model and
+#: window, and why. Mirrors WARM_LAST one lane over.
+POOLED_PRELOAD_LAST: dict = {}
+_POOLED_PRELOAD_LOCK = threading.Lock()
+#: One plain line when the preload could not be sent. The turn still runs, at
+#: whatever window Ollama chose - and this says so rather than passing silently.
+POOLED_PRELOAD_FAILED_LINE = ("The pooled lane did not take its {ctx:,}-token window "
+                              "({why}); this answer still ran, at whatever window "
+                              "Ollama chose.")
+
+
+def _pooled_preload_record(state: str, why: str, model: str, ctx) -> dict:
+    out = {"state": state, "why": why, "model": str(model or ""), "ctx": ctx,
+           "at": time.time()}
+    with _POOLED_PRELOAD_LOCK:
+        POOLED_PRELOAD_LAST.clear()
+        POOLED_PRELOAD_LAST.update(out)
+    return dict(out)
+
+
+def pooled_preload(ollama_url: str, model: str) -> dict:
+    """F2 (2026-11-09): make the POOLED lane's runner resident at the window the
+    chat request names, BEFORE the /v1/chat/completions turn is dispatched.
+
+    Why this exists, measured live on the 0.2.441 install at 2026-11-09 04:00
+    PT: `/v1/chat/completions` IGNORES a top-level `options` field when it
+    spawns a runner, so a COLD pooled turn loaded the 30B at Ollama's own
+    default (8192 here) even though `chat_body` sent `options.num_ctx` =
+    49,152 - the request naming the window made no difference. Ollama's NATIVE
+    `/api/generate` DOES honour `options.num_ctx` and keeps that runner
+    resident: it is exactly the call the Q8 warm measured at 49,152 tokens /
+    0 spill on this PC, and the one `warm_everyday` already uses.
+
+    So: read the lane's own `/api/ps`, and only when this model is not resident
+    there, or is resident below the lane's configured window, send that native
+    load first. The /v1 turn then reuses the resident runner. When `/api/ps`
+    cannot be read the preload is sent anyway - a model already at the named
+    window is not reloaded - so the guarantee is not traded for a probe.
+
+    Only the pooled lane, the one `jarvis_presets.lane_num_ctx` names; every
+    other lane answers "off" without a request, so the everyday and coding
+    lanes keep today's behaviour byte for byte. Never starts, pauses or stops a
+    lane, never changes a setting, never raises. `POOLED_PRELOAD_LAST` keeps
+    how it went; a "failed" one is said by the caller in one plain line and the
+    real turn still goes.
+    """
+    ctx = _pooled_num_ctx(ollama_url)
+    if not ctx:
+        return _pooled_preload_record("off", "not the pooled lane", model, None)
+    url = str(ollama_url).rstrip("/")
+    why = "no model loaded"
+    try:
+        ps = _get_json(f"{url}/api/ps", timeout=1.0)
+        rows = [r for r in (ps or {}).get("models") or [] if isinstance(r, dict)]
+    except Exception:
+        rows, why = [], "could not read /api/ps"
+    for row in rows:
+        if _same_model(row.get("name") or row.get("model"), model):
+            size = int(row.get("context_length") or 0)
+            if size >= int(ctx):
+                return _pooled_preload_record("already", "", model, ctx)
+            why = f"loaded at {size:,}"
+            break
+    try:
+        _get_json(f"{url}/api/generate",
+                  {"model": model, "options": {"num_ctx": int(ctx)}},
+                  timeout=WARM_TIMEOUT)
+    except Exception as exc:
+        kind = f"HTTP {exc.code}" if getattr(exc, "code", None) else type(exc).__name__
+        return _pooled_preload_record("failed", f"{why}; {kind}", model, ctx)
+    return _pooled_preload_record("warmed", why, model, ctx)
+
+
 def chat_body(model: str, messages: list, opts: dict, tools=None, *,
               spoken: bool = False, question: str = "", role: str = "everyday",
               ollama_url: Optional[str] = None,
@@ -15216,6 +15290,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         return max(512, n_ctx - opts["max_tokens"] - _TEMPLATE_CHAT_OVERHEAD
                    - estimate_tokens(offer["schemas"]))
 
+    # F2 (2026-11-09): a failed pooled preload is said once per turn, not once
+    # per round; POOLED_PRELOAD_LAST keeps the record either way.
+    preload_note = {"said": False}
+
     def one_round(offer_tools: bool) -> _Round:
         global _reasoning_field_refused
         rnd = _Round()
@@ -15348,6 +15426,22 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 else:
                     emit(clean)
 
+        # F2 (2026-11-09), immediately before the dispatch: on the pooled lane
+        # the body's own `options` is not enough, because /v1 ignores it when it
+        # spawns a runner. Warm the lane at the window it names first, so a COLD
+        # turn does not silently run at 8192. Once the runner is resident its
+        # own /api/ps answer makes the next round's check a read and no call;
+        # every non-pooled lane returns at once, without a request.
+        _preload = pooled_preload(cur["url"], cur["model"])
+        if (_preload.get("state") == "failed" and announce is not None
+                and not preload_note["said"]):
+            preload_note["said"] = True
+            try:
+                announce(POOLED_PRELOAD_FAILED_LINE.format(
+                    ctx=int(_preload.get("ctx") or 0),
+                    why=_preload.get("why") or "no reason"))
+            except Exception:
+                pass
         if post is not None:
             whole = dict(body, stream=False)
             # Only a stream takes stream_options; a whole reply has `usage`.
