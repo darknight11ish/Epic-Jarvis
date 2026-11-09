@@ -21451,7 +21451,7 @@ def _github_create_repo_words() -> str:
     return ("Yes - creating ONE new, empty repository on your own GitHub account is a "
             "real action I have, and it always waits for your own approval card "
             "first. The card shows the exact name and whether it is private; nothing "
-            "is sent to GitHub until you say yes. It creates the repository on your "
+            "is sent to GitHub until you approve that card. It creates the repository on your "
             "own account only - never an organization's - and nothing is pushed into "
             "it, no code and no files. It also needs a GitHub token saved on this PC "
             "through the connect card. " + tool + " A name may use only letters, "

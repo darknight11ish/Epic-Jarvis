@@ -659,6 +659,34 @@
       "read": false
     },
     {
+      "name": "the tool github_create_repo ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "github_create_repo"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "github_create_repo"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool web_search ran",
       "heard": {
         "private_aloud": false,
