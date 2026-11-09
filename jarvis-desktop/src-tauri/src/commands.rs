@@ -2726,6 +2726,66 @@ pub async fn mark_answer(
     Ok(serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({ "ok": true })))
 }
 
+/// The URL one saved mark is read from: `/api/feedback/mark?turn_id=<id>`.
+///
+/// ONE builder so the id is validated in ONE place, exactly as [`mark_answer`]
+/// validates it before a write. Only the 32 lower-case hex characters
+/// `jarvis_feedback.record_turn` hands out pass; anything else is refused
+/// before a request leaves this app.
+pub(crate) fn feedback_mark_path(base: &str, turn_id: &str) -> Result<String, String> {
+    if !valid_turn_id(turn_id) {
+        return Err("that answer has no valid id to read a mark for".to_string());
+    }
+    Ok(format!("{base}/api/feedback/mark?turn_id={turn_id}"))
+}
+
+/// The saved mark on ONE answer: `GET /api/feedback/mark?turn_id=...`.
+///
+/// Wave 10, 2026-11-08 (the owner's ruling Q2 section 1.5): when the HUD
+/// re-opens an answer's menu it re-shows the reason and the owner's own
+/// correction words, so the page needs the stored mark without holding the
+/// token. It rides the SAME shell family as [`mark_answer`] - one id, the token
+/// added in Rust, no list form - and it only reads: nothing is written,
+/// nothing is approved, no card is raised.
+///
+/// A backend without the route or the module answers 404/501/503, which comes
+/// back as `{"available": false}` so the page can show no saved why rather than
+/// an error. A 200 is the PC's own `{turn_id, mark, reason, correction}` and
+/// reaches the page unchanged; the page checks every field it draws.
+#[tauri::command]
+pub async fn get_feedback_mark(
+    app: AppHandle,
+    turn_id: String,
+) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let url = feedback_mark_path(&base, &turn_id)?;
+    let response = jarvis_client(Some(APPROVAL_TIMEOUT))?
+        .get(url)
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| {
+            if e.is_connect() {
+                format!("could not reach the Jarvis server at {base}")
+            } else {
+                format!("the saved mark could not be read: {e}")
+            }
+        })?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    if matches!(status, 404 | 501 | 503) {
+        return Ok(serde_json::json!({ "available": false, "status": status }));
+    }
+    if !(200..300).contains(&status) {
+        return Err(format!(
+            "the server answered HTTP {status}: {}",
+            text.trim()
+        ));
+    }
+    Ok(serde_json::from_str(&text)
+        .unwrap_or_else(|_| serde_json::json!({ "ok": true, "mark": "none" })))
+}
+
 /// Cancels the stream in flight, if there is one.
 ///
 /// Dropping the `pump_chat` future closes the HTTP connection, so the server
@@ -8508,6 +8568,28 @@ mod wave10_mark_answer_tests {
             assert!(
                 mark_answer_body(TURN, "wrong", None, Some(bad.to_string()), None).is_err(),
                 "{bad} was accepted as a reason"
+            );
+        }
+    }
+
+    #[test]
+    fn the_saved_mark_read_is_one_validated_id() {
+        let base = "http://127.0.0.1:4719";
+        assert_eq!(
+            feedback_mark_path(base, TURN).unwrap(),
+            format!("{base}/api/feedback/mark?turn_id={TURN}")
+        );
+        for bad in [
+            "",
+            "not-an-id",
+            "0123456789abcdef0123456789abcde",
+            "0123456789ABCDEF0123456789ABCDEF",
+            "0123456789abcdef0123456789abcdef0",
+            "0123456789abcdef0123456789abcde'",
+        ] {
+            assert!(
+                feedback_mark_path(base, bad).is_err(),
+                "{bad:?} was accepted as an id to read a mark for"
             );
         }
     }

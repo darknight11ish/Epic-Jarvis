@@ -13,7 +13,7 @@
  * Run: node tests/hud-memory-door.mjs
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -84,6 +84,56 @@ check("hidden mode draws the owner-independent sentence and no card titles", () 
   // The rows are only built inside the not-hidden branch.
   assert.match(DOOR, /if\(!hidden\)\{[\s\S]*?MEMORY_DOOR\.rows/);
   assert.match(DOOR, /if\(!hidden\)\{[\s\S]*?listEl\.appendChild/);
+});
+
+check("every desktop read of the queue asks for retire cards (Q2 section 1.5)", () => {
+  // The Brain's own route names the flag in its literal...
+  const routes = readFileSync(
+    join(HERE, "..", "src-tauri", "src", "brain", "routes.rs"), "utf8");
+  assert.match(routes,
+    /"\/api\/memory\/pending\?retire_cards=1&sleep_offer=1(&merge_cards=1)?"/,
+    "the Brain's pending read stopped asking for retire cards");
+  // ...and the HUD page's own two list reads do too. Its older BANNER read is
+  // the bare path, but the HUD window reaches the PC only through hud_proxy,
+  // which rebuilds a bare read as the retire-aware refresh - so the flag is on
+  // every desktop fetch of this queue even where the page does not type it.
+  assert.match(DOOR, /retire_cards=1/);
+  const proxy = readFileSync(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"), "utf8");
+  assert.match(proxy, /MEMORY_PENDING_RETIRE_QUERY: &str = "retire_cards=1"/);
+  assert.match(proxy,
+    /None => Some\(format!\(\s*"\{MEMORY_PENDING_PATH\}\?\{MEMORY_PENDING_RETIRE_QUERY\}"\s*\)\)/,
+    "a bare desktop pending read is no longer rebuilt as the retire-aware refresh");
+  // A NEW call site added later must be on this list - the only files allowed
+  // to name the route are the page (whose bare read the proxy normalises), the
+  // proxy itself, and the Brain's route.
+  // lock/rules.rs names the route only in its own redaction TEST (proving the
+  // HUD's count read is not blanked while App lock is on); it fetches nothing.
+  const allowed = new Set([
+    "src/jarvis_hud.html",
+    "src-tauri/src/hud_proxy.rs",
+    "src-tauri/src/brain/routes.rs",
+    "src-tauri/src/lock/rules.rs",
+  ]);
+  const found = new Set();
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) { walk(p); continue; }
+      if (!/\.(js|html|rs)$/.test(name)) continue;
+      const text = readFileSync(p, "utf8");
+      // Only a path inside a STRING LITERAL is a built URL; a comment that
+      // merely names the route (auto-learn.js's prose) is not a call site.
+      if (!/["']\/api\/memory\/pending/.test(text)) continue;
+      const rel = p.slice(join(HERE, "..").length + 1).replace(/\\/g, "/");
+      found.add(rel);
+      assert.ok(allowed.has(rel),
+        `${rel} reads /api/memory/pending without being on the retire-aware list`);
+    }
+  };
+  walk(join(HERE, "..", "src"));
+  walk(join(HERE, "..", "src-tauri", "src"));
+  assert.deepEqual([...found].sort(), [...allowed].sort(),
+    "the set of files that read the memory queue changed - add the flag and this list");
 });
 
 check("the three copies of the HUD page are still byte-identical", () => {

@@ -1322,6 +1322,9 @@
     // read-aloud setting and privacy rule decide), so read the live DOM each
     // time the menu opens: the item appears only when the real speaker exists.
     tools.refresh();
+    // Wave 10 (Q2.1): ask what the PC already has saved for this answer, so
+    // the menu paints the saved mark/reason/words rather than starting blank.
+    if (tools.loadSavedMark) tools.loadSavedMark();
     tools.classList.add("is-open");
     tools.menu.hidden = false;
     tools.caret.setAttribute("aria-expanded", "true");
@@ -1408,6 +1411,15 @@
     var answer = "";
     var readItem = null;
     var copyItem = null;
+    // Wave 10 (Q2.1): what the PC already has saved for THIS answer - the mark
+    // it carries, the reason it was marked with, and the owner's own words.
+    // Read once per menu open through the shell (`get_feedback_mark`), so a
+    // re-opened menu shows them again instead of an empty sheet.
+    var savedMark = { mark: "none", reason: "", correction: "" };
+    var loadBusy = false;
+    // A mark sent in this session makes any read that was already in flight
+    // stale; the counter is how the read knows not to undo the owner's tap.
+    var sendCount = 0;
 
     function item(label, onPick, role) {
       var button = document.createElement("button");
@@ -1428,16 +1440,23 @@
     /** One item's own in-place receipt: "Copied."/"Marked."/"Reading." for a
      *  moment, then its label back. The owner's ask of 2026-11-07 - the same
      *  shape Copy answer has always had, so a tap visibly did something even
-     *  when the action itself is silent. Never a toast, never a new element. */
-    var receiptTimer = null;
+     *  when the action itself is silent. Never a toast, never a new element.
+     *
+     *  Wave-9 audit F4 (2026-11-08): the timer belongs to the BUTTON, not to
+     *  the menu. One shared timer was reset by every click, so a second item's
+     *  receipt either never went back to its own label or restored the wrong
+     *  button's words - the first receipt lingered and the other cleared it. */
     function receipt(button, text) {
       if (!button) return;
       if (button.dataset.receiptLabel === undefined) {
         button.dataset.receiptLabel = button.textContent;
       }
+      if (button.__jarvisReceiptTimer) clearTimeout(button.__jarvisReceiptTimer);
       button.textContent = text;
-      if (receiptTimer) clearTimeout(receiptTimer);
-      receiptTimer = setTimeout(function () {
+      button.__jarvisReceiptTimer = setTimeout(function () {
+        button.__jarvisReceiptTimer = null;
+        // Only this button's label comes back; a later receipt on the same
+        // button owns the text by then.
         button.textContent = button.dataset.receiptLabel;
       }, 1400);
     }
@@ -1454,6 +1473,43 @@
     function paintMarks() {
       right.setAttribute("aria-checked", String(current === "right"));
       wrong.setAttribute("aria-checked", String(current === "wrong"));
+    }
+
+    /** The mark the PC answered with, adopted as this menu's state (Q2.1). A
+     *  reply this cannot read changes nothing: no invented mark, no invented
+     *  words. Only the five reason tags the sheet knows are drawn. */
+    function adoptSaved(reply) {
+      if (!reply || typeof reply !== "object" || reply.available === false) return;
+      var mark = reply.mark === "right" || reply.mark === "wrong" ? reply.mark : "none";
+      savedMark = {
+        mark: mark,
+        reason: mark === "wrong" && reasonIsSaved(reply.reason) ? reply.reason : "",
+        correction: mark === "wrong" && typeof reply.correction === "string"
+          ? reply.correction.slice(0, CORRECTION_MAX) : ""
+      };
+      current = mark;
+      paintMarks();
+      paintTakeBack();
+      // A read that lands while the sheet is already open fills it - but never
+      // over words the owner has started typing.
+      if (sheetOpen && !sheetTouched) fillSheet();
+    }
+
+    /** Ask the shell for this answer's saved mark. One read per menu open; a
+     *  failure leaves the menu exactly as it was (a mark is never invented). */
+    function loadSavedMark() {
+      if (loadBusy || !shellInvoke) return;
+      loadBusy = true;
+      var at = sendCount;
+      shellInvoke("get_feedback_mark", { turnId: turnId }).then(function (reply) {
+        loadBusy = false;
+        // A mark sent while this read was in flight is newer than the read:
+        // never let a slow GET undo the owner's tap.
+        if (at !== sendCount) return;
+        adoptSaved(reply);
+      }, function () {
+        loadBusy = false;
+      });
     }
 
     /** The PC's own receipt sentence for the last wrong mark (Wave 10). It is
@@ -1487,11 +1543,16 @@
      * every earlier client sent (`{turnId, mark}`), so Right, taking a mark
      * back, and a plain "Just mark it wrong" all behave exactly as before.
      */
-    function send(mark, details) {
+    function send(mark, details, force) {
       if (busy || !shellInvoke) return Promise.resolve(null);
-      var next = current === mark ? "none" : mark;
+      // A tap on the mark already on takes it back - except from the sheet,
+      // where Submit/"Just mark it wrong" on an already-wrong answer mean
+      // "keep/update this wrong mark" and `force` says so.
+      var next = !force && current === mark ? "none" : mark;
+      sendCount += 1;
       busy = true;
       right.disabled = wrong.disabled = true;
+      if (sheetOpen && sheet.paintSubmit) sheet.paintSubmit();
       var args = { turnId: turnId, mark: next };
       if (details && Object.prototype.hasOwnProperty.call(details, "reason")) {
         args.reason = String(details.reason || "");
@@ -1506,6 +1567,22 @@
             return reply;
           }
           current = next;
+          // Wave 10 (Q2.1): keep the saved why/words in step with what was
+          // just sent, so re-opening this sheet in the same session shows them
+          // with no extra read.
+          if (next === "wrong") {
+            savedMark = {
+              mark: "wrong",
+              reason: typeof args.reason === "string" && reasonIsSaved(args.reason)
+                ? args.reason : "",
+              correction: typeof args.correction === "string"
+                ? args.correction.slice(0, CORRECTION_MAX) : ""
+            };
+          } else {
+            savedMark = { mark: next === "right" ? "right" : "none",
+              reason: "", correction: "" };
+          }
+          paintTakeBack();
           if (next === "wrong") {
             // The PC's own receipt sentence (Wave 10). `card_raised` is
             // tolerated and NOT acted on: the HUD approves nothing.
@@ -1532,6 +1609,7 @@
           busy = false;
           right.disabled = wrong.disabled = false;
           paintMarks();
+          if (sheetOpen && sheet.paintSubmit) sheet.paintSubmit();
           return reply;
         });
     }
@@ -1561,6 +1639,9 @@
     var normalItems = null;
     var sheetItems = [];
     var chosenReason = "";
+    // True once the owner picks a chip or types, so a saved-mark read that
+    // lands late never overwrites their words (Q2.1).
+    var sheetTouched = false;
 
     /** Put the normal menu items back: one menu, its original list. */
     function closeWrongSheet() {
@@ -1579,6 +1660,36 @@
       for (var i = 0; i < chips.length; i++) {
         chips[i].setAttribute("aria-pressed", String(chips[i].dataset.reason === chosenReason));
       }
+    }
+
+    /** Is this one of the five reason tags the sheet draws? A stored tag this
+     *  build does not know is not drawn as a chip - nothing is invented. */
+    function reasonIsSaved(id) {
+      for (var i = 0; i < REASONS.length; i++) {
+        if (REASONS[i].id === id) return true;
+      }
+      return false;
+    }
+
+    /** The saved mark's take-back control exists only while Wrong is marked. */
+    function paintTakeBack() {
+      if (!sheet || !sheet.takeBack) return;
+      sheet.takeBack.hidden = current !== "wrong";
+    }
+
+    /** Put the PC's saved why and the owner's own words back in the sheet
+     *  (Q2.1). Called when the sheet opens and when a read lands - the reason
+     *  chip it was saved with, and the exact correction line, not an empty
+     *  sheet. */
+    function fillSheet() {
+      if (!sheet) return;
+      chosenReason = savedMark.mark === "wrong" && reasonIsSaved(savedMark.reason)
+        ? savedMark.reason : "";
+      sheet.box.value = savedMark.mark === "wrong" ? savedMark.correction : "";
+      sheet.counter.textContent = String(sheet.box.value.length) + " / " + CORRECTION_MAX;
+      paintReasons();
+      sheet.paintSubmit();
+      paintTakeBack();
     }
 
     /** Build the sheet ONCE, detached until opened; opening resets its state. */
@@ -1609,6 +1720,7 @@
             if (event && event.stopPropagation) event.stopPropagation();
             // A local choice only - nothing is sent. Pressing the chosen chip
             // again clears it, so the sheet can go back to "no reason".
+            sheetTouched = true;
             chosenReason = chosenReason === reason.id ? "" : reason.id;
             paintReasons();
             paintSubmit();
@@ -1636,6 +1748,7 @@
       counter.setAttribute("aria-hidden", "true");
       sheet.appendChild(counter);
       box.addEventListener("input", function () {
+        sheetTouched = true;
         counter.textContent = String(box.value.length) + " / " + CORRECTION_MAX;
         paintSubmit();
       });
@@ -1654,6 +1767,23 @@
       cancel.type = "button";
       cancel.className = "jarvis-answer-sheet-action";
       cancel.textContent = "Cancel";
+      // Wave 10 (Q2.1): taking a wrong mark back used to be a second tap on
+      // Wrong. Now the sheet is the one place the saved why/words are shown,
+      // so the removal is its own explicit action here - shown only while a
+      // wrong mark is saved, never on an unmarked answer.
+      var take = document.createElement("button");
+      take.type = "button";
+      take.className = "jarvis-answer-sheet-action";
+      take.textContent = "Take the mark back";
+      take.hidden = true;
+      take.addEventListener("click", function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        send("wrong").then(function (reply) {
+          if (reply && reply.available === false) return;
+          if (current !== "wrong" && sheetOpen) closeWrongSheet();
+        });
+      });
+      actions.appendChild(take);
       actions.appendChild(submit);
       actions.appendChild(just);
       actions.appendChild(cancel);
@@ -1677,6 +1807,7 @@
       sheet.note = note;
       sheet.box = box;
       sheet.submit = submit;
+      sheet.takeBack = take;
 
       submit.addEventListener("click", function (event) {
         if (event && event.preventDefault) event.preventDefault();
@@ -1687,11 +1818,11 @@
             "Pick a reason or type what I should have said - or just mark it wrong.";
           return;
         }
-        // THE ONLY place a sheet submission sends anything.
-        busy = true;
-        paintSubmit();
+        // THE ONLY place a sheet submission sends anything. `send` owns the
+        // busy gate; setting it here first made the send bail out and the
+        // sheet always say "Could not send" (found and fixed with Q2.1).
         note.textContent = "";
-        send("wrong", { reason: reason, correction: correction }).then(function (reply) {
+        send("wrong", { reason: reason, correction: correction }, true).then(function (reply) {
           if (reply && reply.available === false) return;
           if (current === "wrong" && sheetOpen) {
             closeWrongSheet();
@@ -1707,9 +1838,7 @@
       just.addEventListener("click", function (event) {
         if (event && event.preventDefault) event.preventDefault();
         // EXACTLY today's mark: no reason, no correction - the old body.
-        busy = true;
-        paintSubmit();
-        send("wrong").then(function (reply) {
+        send("wrong", null, true).then(function (reply) {
           if (reply && reply.available === false) return;
           if (current === "wrong" && sheetOpen) {
             closeWrongSheet();
@@ -1725,7 +1854,7 @@
         closeWrongSheet();
         wrong.focus();
       });
-      sheetItems = [submit, just, cancel].concat(
+      sheetItems = [take, submit, just, cancel].concat(
         Array.prototype.slice.call(reasons.querySelectorAll(".jarvis-answer-reason"))
       );
     }
@@ -1734,10 +1863,14 @@
     function openWrongSheet() {
       if (!sheet) buildWrongSheet();
       chosenReason = "";
+      sheetTouched = false;
       paintReasons();
       sheet.box.value = "";
       sheet.counter.textContent = "0 / " + CORRECTION_MAX;
       sheet.note.textContent = "";
+      // Q2.1: the PC's saved reason and the owner's own correction words come
+      // back with the sheet - an answer marked earlier must not open empty.
+      fillSheet();
       if (!sheet.parentNode) menu.appendChild(sheet);
       menu.classList.add("is-sheet");
       sheetOpen = true;
@@ -1749,15 +1882,16 @@
       if (firstChip && firstChip.focus) firstChip.focus();
     }
 
-    /** The Wrong item: today's take-the-mark-back when already wrong; else the
-     *  sheet (Wave 10). It never marks anything by itself. */
+    /** The Wrong item: the reason sheet, always (Wave 10). When the answer is
+     *  already marked wrong the sheet re-shows the saved reason and words
+     *  (Q2.1), and its own "Take the mark back" action is how the mark is
+     *  removed - re-opening the menu never silently deletes a correction. It
+     *  never marks anything by itself. */
     function onWrongPicked() {
-      if (current === "wrong") {
-        send("wrong");
-        return;
-      }
       openWrongSheet();
     }
+
+    tools.loadSavedMark = loadSavedMark;
 
     var q = document.createElement("p");
     q.className = "jarvis-answer-question";

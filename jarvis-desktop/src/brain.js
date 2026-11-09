@@ -562,6 +562,7 @@ import {
 } from "./auto-learn.js";
 import {
   cardLines,
+  MEMORY_CARD_ACTIONS,
   plainDateOf,
   statusRows,
   WORDS as MEMORY_WORDS,
@@ -3516,19 +3517,28 @@ function renderProposals() {
 }
 
 /**
- * One review card. Three kinds, each labelled for what its buttons really do:
+ * One review card. Four kinds, each labelled for what its buttons really do:
  *
  * - an ordinary proposal: Keep / Discard, plus "Both are true" when the
  *   server says the card corrects an older fact and both can stand
  *   (`keep_both_ok`, memory-intake.patch);
+ * - a "what I should have said" card (`source == "feedback_correction"`,
+ *   feedback.patch, Wave 10): the owner marked an answer wrong AND typed the
+ *   words that should have been used, so accepting UPDATES the remembered fact
+ *   with those words (the old row is retired, its history kept). Its two
+ *   answers are "Update the fact" / "Keep it as it is";
  * - a "stop using this fact?" card (`source == "feedback_retire"`,
- *   feedback.patch): accepting RETIRES the fact it names, so its buttons say
- *   "Stop using this fact" / "Keep using it", never "Keep" - which on this
- *   card would do the opposite of what it says;
+ *   feedback.patch): no correction words were typed, so the only useful action
+ *   is FORGETTING the fact the answer leaned on - it stops being used and stays
+ *   in the history. Its buttons say "Forget that fact" / "Keep using it",
+ *   never "Keep", which on this card would do the opposite of what it says;
  * - any card whose text reads like a planted instruction (`flags`) carries
  *   a plain-words warning. The warning drops nothing; the owner decides.
  *
- * Still one card, one decision. Nothing here decides more than one.
+ * Both feedback cards draw their answer labels from ONE table
+ * (`MEMORY_CARD_ACTIONS`, memory-words.js), because the owner's ruling of
+ * 2026-11-08 (Q2 section 1.5) names the four strings exactly. Still one card,
+ * one decision, as every card here is.
  */
 function proposalRow(p) {
   const id = Number(p.id);
@@ -3536,52 +3546,67 @@ function proposalRow(p) {
   // answers - never Keep / Discard, never "Both are true".
   if (p.source === MERGE_SOURCE) return mergeRow(p, id);
   const flags = Array.isArray(p.flags) ? p.flags.filter((f) => f && typeof f === "object") : [];
+  const feedback = MEMORY_CARD_ACTIONS[p.source] || null;
   const retire = p.source === "feedback_retire";
+  const correctionCard = p.source === "feedback_correction";
   // Topic controls: a card that asks about a topic set to not learn keeps
   // its two decisions, worded for what they do ("Save under Unsorted" /
-  // "Skip it"); nothing else about the card changes.
-  const ask = retire ? null : Topics.askLabels(p);
+  // "Skip it"); a feedback card's own two answers are the ruling's words, so
+  // topics must never replace them.
+  const ask = feedback ? null : Topics.askLabels(p);
   const meta = retire
     ? [
         p.replaces_text || p.replaces ? `The fact: “${p.replaces_text || p.replaces}”` : "",
-        "Stopping it does not delete it: the fact stays in Jarvis's history, marked as no longer used.",
+        "Forgetting it does not delete it: the fact stays in Jarvis's history, marked as no longer used.",
         // The phone shows why this stayed a card on a retire card too
         // (MemoryCards.from); so does this window now (the memory review's
         // fit audit, 2026-09-27).
         ...reasonLines(p),
         ago(p.created),
       ]
-    : [
-        // Only a card that names the stored fact BY ID replaces anything:
-        // jarvis_extract._accept() retires by `replaces_id` and nothing else
-        // (memory-safety.patch). `replaces` alone is the model's own
-        // description of some fact, and a card with words but no id retires
-        // nothing - so it must not say it would. Same rule as the phone's
-        // MemoryCards.from. The stored fact's own words, when the server
-        // sent them, rather than the model's description of it.
-        p.replaces_id
-          ? `would replace: ${p.replaces_text || p.replaces || `fact #${p.replaces_id}`}`
-          : "",
-        p.verbatim ? "your own words" : "",
-        p.confidence != null ? `confidence ${Number(p.confidence).toFixed(2)}` : "",
-        p.source ? `from ${p.source}` : "",
-        // Why automatic learning left this one for your yes (section 2 of
-        // JARVIS-API.md section 19): "from pasted text", "sensitive:
-        // health"... in the PC's own words. Then, on its own line, the PC's
-        // "it sounds older than what Jarvis knows" warning with plain dates
-        // (memory-words.js cardLines; the memory review's I9).
-        ...reasonLines(p),
-        ago(p.created),
-      ];
-  const actions = retire
+    : correctionCard
+      ? [
+          p.replaces_text || p.replaces
+            ? `The fact this replaces: “${p.replaces_text || p.replaces}”`
+            : "",
+          "Updating it replaces that fact with the words you typed; the old words stay in the history.",
+          ...reasonLines(p),
+          ago(p.created),
+        ]
+      : [
+          // Only a card that names the stored fact BY ID replaces anything:
+          // jarvis_extract._accept() retires by `replaces_id` and nothing else
+          // (memory-safety.patch). `replaces` alone is the model's own
+          // description of some fact, and a card with words but no id retires
+          // nothing - so it must not say it would. Same rule as the phone's
+          // MemoryCards.from. The stored fact's own words, when the server
+          // sent them, rather than the model's description of it.
+          p.replaces_id
+            ? `would replace: ${p.replaces_text || p.replaces || `fact #${p.replaces_id}`}`
+            : "",
+          p.verbatim ? "your own words" : "",
+          p.confidence != null ? `confidence ${Number(p.confidence).toFixed(2)}` : "",
+          p.source ? `from ${p.source}` : "",
+          // Why automatic learning left this one for your yes (section 2 of
+          // JARVIS-API.md section 19): "from pasted text", "sensitive:
+          // health"... in the PC's own words. Then, on its own line, the PC's
+          // "it sounds older than what Jarvis knows" warning with plain dates
+          // (memory-words.js cardLines; the memory review's I9).
+          ...reasonLines(p),
+          ago(p.created),
+        ];
+  const actions = feedback
     ? [
-        button("Stop using this fact", async () => {
+        button(feedback.accept, async () => {
           await memoryWrite("brain_memory_decide", { id, accept: true },
-            "Jarvis will stop using that fact. It stays in the history.");
-        }, { title: "Jarvis stops recalling this fact. It is not deleted.", live: true }),
-        button("Keep using it", async () => {
+            retire ? "Forgotten. Jarvis stops using that fact; it stays in the history."
+                   : "Updated. The fact now says what you typed; the old words stay in the history.");
+        }, { title: retire ? "Jarvis stops using this fact. It stays in the history, not deleted."
+                           : "Replace the remembered fact with the words you typed.", live: true }),
+        button(feedback.discard, async () => {
           await memoryWrite("brain_memory_decide", { id, accept: false },
-            "Kept. Jarvis will go on using that fact.");
+            retire ? "Kept. Jarvis will go on using that fact."
+                   : "Kept. The fact is unchanged.");
         }, { title: "Leave the fact exactly as it is.", live: true }),
       ]
     : [
@@ -3602,12 +3627,13 @@ function proposalRow(p) {
         }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there.", live: true }),
       ];
   const item = row({
-    tag: retire ? "stop using?" : "proposed",
+    tag: retire ? "stop using?" : correctionCard ? "correction" : "proposed",
     state: retire || flags.length ? "bad" : "warn",
     title: String(p.text || "(no text)"),
     meta,
     actions,
   });
+
   if (flags.length) {
     const warn = el("div", "row-warning");
     warn.append(el("strong", "", "Careful: this reads like an instruction someone slipped in, not a fact about you. "));
