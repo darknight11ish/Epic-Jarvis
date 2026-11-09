@@ -67,9 +67,10 @@ internal fun WakeWordSwitchesCard(
     onHeardSound: ((Boolean) -> Unit)? = null,
     /**
      * "Read out answers that use what Jarvis remembers" - the owner's setting
-     * of 2026-11-05, on THIS phone only and OFF by default. Null only in a
-     * preview/test that does not own the setting; the real screen always
-     * passes it.
+     * of 2026-11-05, on THIS phone only and ON by default since his decision
+     * of 2026-11-07 (the PC now has its own read-aloud switch; this row is
+     * this phone's rule). Null only in a preview/test that does not own the
+     * setting; the real screen always passes it.
      */
     memoryAloud: Boolean? = null,
     onMemoryAloud: ((Boolean) -> Unit)? = null,
@@ -288,19 +289,26 @@ internal fun WakeWordSwitchesCard(
             }
         }
 
-        // THE OWNER'S OWN SETTING OF 2026-11-05, and this phone's alone. The
-        // PC's `memory_aloud` can never be true for a mic press (the talk
-        // button runs no voice check, his request of 2026-11-02), so an answer
-        // that used what Jarvis remembers always stayed on screen - even on
-        // his unlocked phone. He chose this switch for it. OFF by default, and
-        // the row says so; it covers only the mic on this phone while it is
-        // unlocked, and every sensitive/private rule still holds.
+        // THE OWNER'S OWN SETTING OF 2026-11-05, and this phone's alone. It
+        // became ON by default on 2026-11-07 ("i wanted to read everything out
+        // loud ... unless it's extremely sensitive information it's okay"), so
+        // it covers EVERY voice answer on this phone - the mic press, "hey
+        // Jarvis" and Jarvis Live - plus a typed answer read aloud. The PC's
+        // own read-aloud switch (Wave 9) is separate and unchanged by this
+        // row; every sensitive/private rule still holds. Q7 (2026-11-08): one
+        // subtle line says the default without a banner.
         if (memoryAloud != null && onMemoryAloud != null) {
             Gap(12)
             Text(
                 com.jarvis.client.voice.MemoryAloud.NAME,
                 style = MaterialTheme.typography.labelLarge,
                 color = chrome.textHi,
+            )
+            Gap(2)
+            Text(
+                com.jarvis.client.voice.MemoryAloud.SUBTITLE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
             )
             Gap(4)
             Text(

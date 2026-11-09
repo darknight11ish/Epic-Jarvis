@@ -233,6 +233,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions). `done` makes the animals' orb glow once - "a long answer is ready" (`face-moments.js`); the robot, which has no orb, brightens its eyes and fins once instead | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`); `done` makes the animal's orb glow once, the robot's eyes and fins (`face/AnimalNow.kt`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
+| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
 
 `devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
 a device was paired or removed, or the old shared key was retired or
@@ -36347,11 +36348,18 @@ if that source is off) and carry `quick` in `X-Jarvis-Route`, with no model call
 
 ## 201. The automatic read-aloud switch (2026-11-07)
 
-`GET /api/read-aloud` and `POST /api/read-aloud {"on": bool}` read and set the
-PC's own answer-speech switch. It is ON by default (the pre-2026-11-07 behaviour
-of the HUD's voice answers), OFF at once with no approval card in either
-direction, and a model answer can never set it: the chat/Live sentences below
-go through `jarvis_quick`'s own deterministic door. It is **PC-only**
+`GET /api/read-aloud` and `POST /api/read-aloud {"enabled": bool}` read and set
+the PC's own answer-speech switch. It is ON by default (the pre-2026-11-07
+behaviour of the HUD's voice answers), OFF at once with no approval card in
+either direction, and a model answer can never set it: the chat/Live sentences
+below go through `jarvis_quick`'s own deterministic door. **OFF is literal
+mid-answer** (the owner's Q5 ruling, 2026-11-08): on every set the backend
+publishes one `read_aloud` event (`{"enabled": bool}` only - never words), the
+desktop's one event stream carries it to every window, and the Jarvis bar stops
+the sentence in flight, empties its queue and settles the clip being made, so an
+OFF from Settings, chat or Live silences the answer already being spoken. (Before
+this it was read at the start of each voice turn, so one OFF stopped only the
+next answer.) It is **PC-only**
 (`tools/check_parity.py` classifies it `deliberate`; ARCHITECTURE section 8):
 the route controls the desktop HUD's speakers for voice-turn answers, while the
 phone has its own on-device remembered-answer switch and its own per-answer
@@ -36472,3 +36480,36 @@ Meshnet app, change any Windows setting, act while the link is healthy, act
 mid-turn, or raise a card per attempt. Each of those is a rule in the module's
 own header, and the audit trail is one calm sentence in the HUD/Settings line
 and the event stream (`wifi_reconnect`).
+
+**Ruling Q4 guardrails (2026-11-08).** The owner approved this as a bounded,
+default-ON, PC-only maintenance feature. There is **no card per attempt** (an
+offline PC cannot be reached by a phone to answer one); instead the ruling's six
+mandatory guardrails are enforced in the module and proved in its suite:
+
+1. **Saved password-protected profiles only** - the profile must carry a stored
+   key AND an authentication in the exact allow-list `WPA2PSK`, `WPA3SAE`,
+   `WPA2`, `WPA3`; Open, None, WEP and 802.1X/Enterprise are hard-refused, and
+   `key=clear` is never passed.
+2. **Strictly offline-only** - (a) the switch is ON, (b) Lockdown is readable
+   and OFF, (c) this Wi-Fi has no working internet, and (d) the owner did not
+   turn Wi-Fi off: an adapter disabled or radio off means NOTHING is switched
+   back on, and an unreadable radio or Lockdown fails SAFE (skip).
+3. **Bounded in-range attempts** - only the top 3 saved password-protected
+   profiles whose SSID `netsh wlan show networks` currently sees, each verified
+   for 10 seconds, stopping at the first success.
+4. **The switch** - ON by default as the owner asked; changing it is exactly ONE
+   `change_own_config` card to turn it ON (nothing is written until that card is
+   answered; a waiting card answers "a card is waiting") and instant/cardless to
+   turn it OFF. Settings, Chat and Jarvis Live all reach the same
+   `jarvis_wifi.request_enabled`; a model answer can never toggle it.
+5. **Full audit receipt** - every attempt writes `timestamp`, `profile_name`,
+   `auth_type`, `result: connected | still_offline` to the project's audit/status
+   log and to the module's bounded receipts (never a key), so the deterministic
+   sentence "did you reconnect my wifi?" is answered from that record.
+6. **Decision record** - `decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md`
+   (the Lead owns records).
+
+If the in-range scan or the radio state cannot be read (on a Windows 11 PC with
+Location services off, `netsh wlan show networks`/`show interfaces` are refused -
+measured 2026-11-08), the check says so in one calm line and **makes no attempt**;
+it never guesses that a network is in range.

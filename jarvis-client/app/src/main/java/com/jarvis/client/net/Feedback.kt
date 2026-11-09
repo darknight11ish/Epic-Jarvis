@@ -55,6 +55,32 @@ data class MarkReceipt(
 )
 
 /**
+ * The PC's SAVED mark on one answer, plus the owner's why (Wave 10, Q2.1).
+ *
+ * `GET /api/feedback/mark?turn_id=` answers `{turn_id, mark, reason,
+ * correction}` - the same mark `POST` records, and the reason/correction it
+ * stored with it. This is what the phone re-shows when an answer is shown
+ * again (a reopened answer menu, a restored answer) instead of offering an
+ * empty sheet: [reason] and [correction] are the owner's own choices, word
+ * for word, and empty when they picked nothing.
+ *
+ * Read-only: this model never writes anything. An older PC without the GET
+ * answers 404, which callers treat as "nothing saved" - never as an error,
+ * and never as an invented why.
+ */
+data class AnswerMarkDetails(
+    val turnId: String,
+    val mark: AnswerMark = AnswerMark.NONE,
+    val reason: FeedbackReason? = null,
+    val correction: String = "",
+) {
+    val isWrong: Boolean get() = mark == AnswerMark.WRONG
+
+    /** True when there is something to re-show beyond the mark itself. */
+    val hasWords: Boolean get() = reason != null || correction.isNotBlank()
+}
+
+/**
  * The Wrong sheet's pure rules: the five chips, the one-line correction and
  * the request it sends.
  *
@@ -169,4 +195,37 @@ object WrongFeedback {
         if (said.isNotEmpty()) return said
         return if (receipt.cardRaised) CARD_FALLBACK else SAID_FALLBACK
     }
+
+    // ---- re-showing a mark the PC already has (Wave 10 Q2.1) -------------
+
+    /** The row that opens this answer's saved why, so it can be changed. */
+    const val EDIT_WHY = "Change the reason"
+
+    /** The lead of [savedWords]; the rest is the owner's own choices. */
+    const val SAVED_LEAD = "You marked this answer wrong."
+
+    /**
+     * The plain one-line re-show for an answer the PC already has a why for,
+     * or null when nothing was saved (an unmarked answer, or an older PC).
+     *
+     * The words are the owner's own: the reason chip's label and their
+     * correction in quotes, exactly as the PC stored them. Nothing is guessed
+     * and no raw wire word (`wrong_fact`) is ever shown.
+     */
+    fun savedWords(details: AnswerMarkDetails?): String? {
+        if (details == null || !details.isWrong || !details.hasWords) return null
+        val said = details.reason?.let { "You picked: ${it.label}." }
+        val wrote = details.correction.trim().takeIf { it.isNotEmpty() }
+            ?.let { "You wrote: \"$it\"" }
+        return listOfNotNull(SAVED_LEAD, said, wrote).joinToString(" ")
+    }
+
+    /**
+     * The sheet draft to open with when the PC already saved a why. An empty
+     * draft when it saved none: the sheet then behaves exactly as it did.
+     */
+    fun prefill(details: AnswerMarkDetails?): Draft = Draft(
+        reason = details?.reason,
+        correction = details?.correction?.let { cap(it) } ?: "",
+    )
 }

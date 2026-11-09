@@ -11,22 +11,24 @@ package com.jarvis.client.voice
  * remembered facts, and his phone said only "It's on your screen." He chose a
  * setting on the PHONE for it: "read them aloud on my unlocked phone".
  *
- * What it does NOT do, and this is the half that matters:
- *  - it is OFF until he turns it on ([PrivateAloud.MEMORY_ALOUD_DEFAULT]); it
- *    is a promise this phone makes about its own button and its own "Read
- *    aloud" tap, never a new default;
- *  - it only ever covers the talk button on THIS phone while it was unlocked
- *    when he pressed it, or a TYPED answer read aloud on this phone while it is
- *    unlocked (the owner's decision of 2026-11-06) - not "hey Jarvis", not
- *    Jarvis Live;
+ * What it does and does not do, and this is the half that matters:
+ *  - it is ON by default ([PrivateAloud.MEMORY_ALOUD_DEFAULT]) since the
+ *    owner's decision of 2026-11-07 ("i wanted to read everything out loud ...
+ *    unless it's extremely sensitive information it's okay"); it is a promise
+ *    this phone makes about its own answers, and he can turn it off any time;
+ *  - it covers EVERY voice answer on THIS phone - the mic press, "hey Jarvis"
+ *    and Jarvis Live - plus a TYPED answer read aloud on this phone while it is
+ *    unlocked (the owner's decision of 2026-11-06);
  *  - a sensitive saved fact, an answer about his screen and a private tool
  *    still always stay on screen (`PrivateAloud`); the one exception the owner
  *    makes himself, per answer, is the one-off "Read it aloud anyway" action
  *    (`ReadAloud.ANYWAY`), which is his own tap and not this setting. Nothing
  *    about the 2026-09-24 sensitive-fact rule is loosened;
- *  - it uses the existing `/api/voice/say` and the existing answer. There is
- *    no new route, no new field and no PC setting: the desktop has no
- *    matching switch on purpose (`docs/ARCHITECTURE.md` section 8).
+ *  - it uses the existing `/api/voice/say` and the existing answer. The PC now
+ *    has its own read-aloud switch too (`GET/POST /api/read-aloud`, Wave 9);
+ *    that is the PC's rule for what IT reads, and this phone setting changes
+ *    nothing there. The two are separate on purpose (`docs/ARCHITECTURE.md`
+ *    section 8).
  *
  * The words here are the settings row's, in the app's plain-words style and
  * beside the other phone-only voice switches (`ui/screens/VoiceSwitchesPlate.kt`).
@@ -36,6 +38,13 @@ object MemoryAloud {
 
     /** The switch's name, in the owner's own words. */
     const val NAME = "Read out answers that use what Jarvis remembers"
+
+    /**
+     * Q7 (the owner's ruling, 2026-11-08): one subtle line under the switch's
+     * name, while the default is ON - so the row says the default without a
+     * banner and without a second card. Exactly his approved wording.
+     */
+    const val SUBTITLE = "On by default — toggle off anytime"
 
     /**
      * The line under the switch, in its two states. ON is the default since the

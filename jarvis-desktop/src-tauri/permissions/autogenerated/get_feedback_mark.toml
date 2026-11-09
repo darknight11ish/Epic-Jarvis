@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-feedback-mark"
+description = "Enables the get_feedback_mark command without any pre-configured scope."
+commands.allow = ["get_feedback_mark"]
+
+[[permission]]
+identifier = "deny-get-feedback-mark"
+description = "Denies the get_feedback_mark command without any pre-configured scope."
+commands.deny = ["get_feedback_mark"]

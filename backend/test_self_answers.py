@@ -374,7 +374,9 @@ def the_two_settings_numbers_reconcile():
     data = REG.changeable_settings()
     registry_rows = (len(REG.BOOL_SETTINGS) + len(REG.CHOICE_SETTINGS)
                      + len(REG.NUMBER_SETTINGS))
-    check("the registry's own row count is 49", registry_rows == 49,
+    # Wave-10 Q4 added `wifi_auto_reconnect` to BOOL_SETTINGS (the owner's
+    # six-guardrail ruling), so this derived count moves 49 -> 50 with it.
+    check("the registry's own row count is 50", registry_rows == 50,
           str(registry_rows))
     check("the spoken answer names how many of its count are those rows",
           f"{registry_rows} of them are the switches, named choices and numbers" in

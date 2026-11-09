@@ -6031,8 +6031,9 @@ def _read_aloud_set(s: str) -> Optional[Intent]:
 #: or chat with jarvis", with the switch itself, its default and its file owned by
 #: `jarvis_wifi.py` (GET/POST /api/wifi-reconnect). This file owns ONLY the
 #: sentences: they read the switch's own state, never the model's guess, and the
-#: change calls the module's own `set_enabled()` - the exact function the Settings
-#: switch's route calls.
+#: change calls the module's own `request_enabled()` - the exact function the
+#: Settings switch's route calls, where turning it ON is ONE `change_own_config`
+#: card (ruling Q4.4) and turning it OFF is instant.
 #:
 #: WHAT MAY MATCH, and nothing else: the feature by its Settings name ("auto
 #: wi-fi reconnect", "automatic wifi reconnect"), and the owner's own words about
@@ -6063,6 +6064,14 @@ _WIFI_STATE = re.compile(
     r"is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:switch\s+)?(?:on|off|enabled|disabled)"
     r"|is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:turned|switched)\s+(?:on|off)"
     r"|is\s+jarvis\s+(?:trying|going)\s+to\s+(?:reconnect|fix)\s+(?:the\s+|my\s+)?wi[\s-]?fi")
+#: "Did you reconnect my wifi?" (2026-11-08; ruling Q4.5: the Change Journal
+#: receipt exists so this question has a real answer, never a model's guess).
+_WIFI_DID = re.compile(
+    r"did\s+(?:you|jarvis)\s+(?:reconnect|connect|try\s+to\s+reconnect|try\s+reconnecting)\s+"
+    r"(?:my|the|this\s+pc's?)\s+wi[\s-]?fi(?:\s+(?:connection|network|link))?"
+    r"|have\s+(?:you|jarvis)\s+(?:reconnected|tried\s+to\s+reconnect)\s+"
+    r"(?:my|the|this\s+pc's?)\s+wi[\s-]?fi")
+
 
 
 def _wifi_reconnect_set(s: str) -> Optional[Intent]:
@@ -6075,7 +6084,9 @@ def _wifi_reconnect_set(s: str) -> Optional[Intent]:
 
 
 def _wifi_reconnect_read(s: str) -> Optional[Intent]:
-    """The read-only auto Wi-Fi reconnect questions: what it does, when it tries."""
+    """The read-only auto Wi-Fi reconnect questions: what, when, and did it."""
+    if _WIFI_DID.fullmatch(s):
+        return Intent("wifi_reconnect_did")
     if _WIFI_ABOUT.fullmatch(s):
         return Intent("wifi_reconnect_about")
     if _WIFI_WHEN.fullmatch(s):
@@ -23333,10 +23344,12 @@ def _run_phone_memory_aloud_command() -> Result:
 def _run_wifi_reconnect_set(f: dict) -> Result:
     """"Turn the auto Wi-Fi reconnect on/off" - one writer, the module's own setter.
 
-    The same function the Settings switch's route calls, so the answer is the
-    module's own sentence and a switch that could not be saved is never reported
-    as saved. Cardless in both directions; see `jarvis_wifi.py` for the argument
-    and its one narrow standing action (saved, password-protected profiles only).
+    The same door the Settings switch's route uses: `request_enabled()`.
+    RULING Q4.4 makes turning it ON exactly ONE `change_own_config` card (the
+    call returns after the owner answers it, or says a card is waiting when the
+    platform reports that state); turning it OFF is instant and cardless. A
+    model answer can never reach this, and a switch that could not be saved is
+    never reported as saved.
     """
     try:
         import jarvis_wifi as W
@@ -23346,13 +23359,33 @@ def _run_wifi_reconnect_set(f: dict) -> Result:
                       "wifi_reconnect_set")
     on = f.get("on") is True
     try:
-        out = W.set_enabled(on)
+        code, out = W.request_enabled(on)
     except Exception as exc:                # noqa: BLE001 - said, never swallowed
         return Result("I could not change the auto Wi-Fi reconnect "
                       f"({type(exc).__name__}), so nothing was changed.",
                       "wifi_reconnect_set")
     out = out if isinstance(out, dict) else {}
-    return Result(str(out.get("words") or W.set_words(on)), "wifi_reconnect_set")
+    said = str(out.get("words") or out.get("message") or "").strip()
+    if not said:
+        said = (W.SET_ON if on and int(code) < 400
+                else "The auto Wi-Fi reconnect was not changed.")
+    return Result(said, "wifi_reconnect_set")
+
+
+def _run_wifi_reconnect_did() -> Result:
+    """"Did you reconnect my wifi?" - read from the Change Journal receipts.
+
+    Ruling Q4.5: every attempt writes `timestamp`, `profile_name`, `auth_type`
+    and `result: connected | still_offline`, so this deterministic answer comes
+    from the module's own record, never the model.
+    """
+    try:
+        import jarvis_wifi as W
+        said = W.did_words()
+    except Exception:                       # noqa: BLE001 - older PC: fixed words
+        said = ("This build of Jarvis has no auto Wi-Fi reconnect record yet - "
+                "run apply-patches.ps1 on the PC.")
+    return Result(said, "wifi_reconnect_did")
 
 
 def _run_wifi_reconnect_about() -> Result:
@@ -24742,6 +24775,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_wifi_reconnect_about()
     if n == "wifi_reconnect_when":
         return _run_wifi_reconnect_when()
+    if n == "wifi_reconnect_did":
+        return _run_wifi_reconnect_did()
     if n == "cloud_escalation_rule":
         return _run_cloud_escalation_rule()
     if n == "model_recommender":
@@ -25554,6 +25589,7 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # private chat answers them instead of guessing. The CHANGE
     # (`wifi_reconnect_set`) is deliberately NOT here.
     "self_wifi_reconnect", "wifi_reconnect_about", "wifi_reconnect_when",
+    "wifi_reconnect_did",
     # Determinism Phase A (2026-11-08, the audit's NEG-6): these are the same
     # kind of read - the owner's own settings/catalogue state, answered from
     # local code with no secret and no write. A private chat gets the real
@@ -25756,6 +25792,7 @@ READ_ONLY_INTENTS = frozenset({
     "self_version", "self_desktop_version", "self_phone_version", "self_hardware",
     "self_notes", "self_chats", "self_wake", "self_projects", "self_read_aloud",
     "self_wifi_reconnect", "wifi_reconnect_about", "wifi_reconnect_when",
+    "wifi_reconnect_did",
     "self_setting_state",
     "safety_pretend", "safety_without_asking", "safety_approve_for_me",
     "safety_tunnel", "safety_checks_off", "safety_token",

@@ -120,6 +120,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode, setLevel, attachSpeechSource } from "./voice.js";
+import { createReadAloudStop, readStillFresh } from "./read-aloud.js";
 import {
   lookLine,
   markMessage,
@@ -4796,12 +4797,19 @@ let speechQueue = [];
  *  default (ON) holds, and a read that fails leaves it as it was - the same
  *  "today's behaviour" the switch ships with. */
 let readAloudOn = true;
+/** Bumped by every `read_aloud` event: the event is published AT the backend's
+ *  write, so a GET that started before one arrived is a stale snapshot and must
+ *  not overwrite it (a stale "on" after an OFF would speak the next sentence of
+ *  the same answer). `read-aloud.js` `readStillFresh` is the rule. */
+let readAloudEventSeq = 0;
 
 /** Re-read the PC's read-aloud switch. Cheap (one loopback GET) and never
  *  throws: with no bridge (a browser window) the shipped default stands. */
 function refreshReadAloud() {
+  const startedAt = readAloudEventSeq;
   try {
     invokeStrict("get_read_aloud").then(function (state) {
+      if (!readStillFresh(startedAt, readAloudEventSeq)) return;
       readAloudOn = !(state && state.enabled === false);
     }, function () { /* keep the last known value; the shipped default is ON */ });
   } catch (error) { /* no desktop bridge: nothing to ask */ }
@@ -6428,6 +6436,49 @@ onEvent((frame) => {
   const aloud = aloudFor(frame, state.autoListening);
   if (aloud) sayAside(aloud);
 });
+
+/* Wave-10 Q5 (the Wave-9 audit's F2): the automatic read-aloud switch can be
+   turned OFF while this window is already talking. `refreshReadAloud` reads the
+   switch at the START of a voice turn, so an OFF clicked in Settings - or said
+   in chat or Jarvis Live, which go through the same backend route - used to
+   take effect only on the NEXT answer. The PC publishes the change on its own
+   event bus (`jarvis_read_aloud.py` `_publish`: one `read_aloud` frame,
+   `{"enabled": bool}` and nothing else); `read-aloud.js` owns what that frame
+   does to the queue and the sound, so the stop is one tested function the
+   browser-free suite drives - this is the subscription. OFF empties the queue
+   and stops the sentence in flight; ON only sets the rule, so a later sentence
+   of this same answer may be spoken. One boolean, the switch's own state: no
+   card, no route, no model, and nothing said by an answer. */
+onEvent(createReadAloudStop({
+  setReadAloudOn: (on) => {
+    readAloudEventSeq += 1;
+    readAloudOn = on;
+  },
+  bumpGeneration: () => { speechGeneration += 1; },
+  dropQueue: () => { speechQueue = []; aheadClip = null; },
+  setClipPlaying: (value) => { clipPlaying = value; },
+  takeAudio: () => {
+    const audio = currentAudio;
+    currentAudio = null;
+    return audio;
+  },
+  settleClip: () => {
+    const finish = finishCurrentClip;
+    finishCurrentClip = null;
+    if (finish) finish();
+  },
+  setSpeaking: (value) => { speaking = value; },
+  sync: () => { syncLiveAnswer(); },
+  afterStop: () => {
+    // The filler line ("One moment."), a clip paused for a barge-in check and a
+    // moment flow are speech too; the reply keeps streaming, it is just not
+    // being said.
+    interrupt.replyEnded();
+    momentFlow.stopped();
+    stopMoment();
+    endPause();
+  },
+}));
 
 /* ==========================================================================
    Jarvis Live (live.rs, live-rules.js; docs/LIVE-DESIGN.md)

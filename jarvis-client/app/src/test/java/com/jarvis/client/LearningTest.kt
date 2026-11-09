@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.net.AnswerFeedback
 import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.net.AnswerMarkDetails
 import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.FeedbackReason
@@ -361,8 +362,8 @@ class LearningTest {
             ),
         )
         assertEquals(MemoryCardKind.RETIRE, c.kind)
-        assertEquals("Stop using this fact", c.acceptLabel)
-        assertEquals("Keep using it", c.discardLabel)
+        assertEquals(MemoryCards.FEEDBACK_RETIRE_ACCEPT, c.acceptLabel)
+        assertEquals(MemoryCards.FEEDBACK_RETIRE_DISCARD, c.discardLabel)
         assertEquals("The owner's dentist is Dr Hale", c.fact)
         // The heading already asks the question, so the reason starts after it.
         assertTrue(c.reason!!.startsWith("It was part of 6 answers you marked wrong"))
@@ -579,5 +580,82 @@ class LearningTest {
             "llama3.1",
         )
         assertEquals("Recent answers: about 10 words a second (middle of the last 2 answers).", s!!.currentLine)
+    }
+
+    // ---------------------------- the saved why (Wave 10 Q2.1) -------------
+
+    @Test
+    fun `the saved mark is read from the GET answer, with no invented why`() {
+        // GET /api/feedback/mark?turn_id= (contract v2): the existing route,
+        // one id, never a new path.
+        assertEquals("/api/feedback/mark?turn_id=$id32", Feedback.markStatePath(id32))
+        assertNull(Feedback.markStatePath("nope"))
+
+        val full = Feedback.markState(
+            obj("""{"turn_id": "$id32", "mark": "wrong", "reason": "outdated",
+                   "correction": "I run a 2060, not a 2080"}"""),
+        )!!
+        assertEquals(id32, full.turnId)
+        assertEquals(AnswerMark.WRONG, full.mark)
+        assertEquals(FeedbackReason.OUTDATED, full.reason)
+        assertEquals("I run a 2060, not a 2080", full.correction)
+        assertTrue(full.isWrong)
+        assertTrue(full.hasWords)
+
+        // An answer marked right has a saved mark but no why: nothing is
+        // invented for it.
+        val sparse = Feedback.markState(obj("""{"turn_id": "$id32", "mark": "right"}"""))!!
+        assertEquals(AnswerMark.RIGHT, sparse.mark)
+        assertNull(sparse.reason)
+        assertEquals("", sparse.correction)
+        assertFalse(sparse.hasWords)
+
+        // A garbled mark and an unknown reason word never become a guess.
+        val junk = Feedback.markState(
+            obj("""{"turn_id": "$id32", "mark": "weird", "reason": "because"}"""),
+        )!!
+        assertEquals(AnswerMark.NONE, junk.mark)
+        assertNull(junk.reason)
+        assertFalse(junk.hasWords)
+
+        assertNull(Feedback.markState(null))
+        assertNull(Feedback.markState(obj("""{"mark": "wrong"}""")))
+    }
+
+    // ------------- the two feedback cards' labels (Wave 10 Q2.2) -----------
+
+    @Test
+    fun `the two machine sources use the owner's four labels, and other cards keep theirs`() {
+        assertEquals("Forget that fact", MemoryCards.FEEDBACK_RETIRE_ACCEPT)
+        assertEquals("Keep using it", MemoryCards.FEEDBACK_RETIRE_DISCARD)
+        assertEquals("Update the fact", MemoryCards.FEEDBACK_CORRECTION_ACCEPT)
+        assertEquals("Keep it as it is", MemoryCards.FEEDBACK_CORRECTION_DISCARD)
+
+        // A wrong_fact / outdated mark with the owner's own correction words
+        // queues `feedback_correction`: accepting UPDATES the fact.
+        val correction = MemoryCards.from(
+            obj(
+                """{"id": 31, "text": "I run a 2060, not a 2080",
+                   "replaces": "The owner runs a 2080", "replaces_id": 7,
+                   "replaces_text": "The owner runs a 2080",
+                   "confidence": null, "source": "feedback_correction",
+                   "created": 3.0, "flags": [], "flags_checked": true,
+                   "keep_both_ok": true, "verbatim": false}""",
+            ),
+        )
+        assertEquals(MemoryCardKind.CORRECTION, correction.kind)
+        assertEquals("Update the fact", correction.acceptLabel)
+        assertEquals("Keep it as it is", correction.discardLabel)
+        assertEquals(MemoryCards.FEEDBACK_CORRECTION_EXPLAINER, correction.explainer)
+        // One card, one decision: never a third answer from a mark.
+        assertFalse(correction.bothAreTrue)
+        // The machine source is not shown as provenance words.
+        assertNull(correction.sourceLine)
+        assertEquals("The owner runs a 2080", correction.replaces)
+
+        // Every OTHER card keeps exactly today's labels.
+        val plain = MemoryCards.from(obj("""{"id": 3, "text": "Mario likes hiking", "source": "conversation"}"""))
+        assertEquals("Keep", plain.acceptLabel)
+        assertEquals("Discard", plain.discardLabel)
     }
 }

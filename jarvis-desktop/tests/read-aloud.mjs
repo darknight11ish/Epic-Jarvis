@@ -3,6 +3,11 @@
  *
  *   node tests/read-aloud.mjs
  *
+ * Six checks below are behavioural (Wave-10 Q5 / Wave-9 audit F2): the same
+ * `createReadAloudStop` the quickbar subscribes is driven with a queue
+ * mid-answer and a recording audio stub, and must empty the queue and stop the
+ * sentence in flight - no browser, no DOM, no player.
+ *
  * Three files, three jobs:
  *   - `src/read-aloud.js` - the words and the one reading rule for the PC's
  *     answer. Imported here and checked value by value.
@@ -29,9 +34,13 @@ import { fileURLToPath } from "node:url";
 import {
   DEFAULT_ON,
   MISSING,
+  READ_ALOUD_KIND,
   READ_ALOUD_PATH,
+  createReadAloudStop,
   describeReadAloud,
+  readAloudFrameAction,
   readReadAloud,
+  readStillFresh,
 } from "../src/read-aloud.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -141,6 +150,138 @@ check("the Rust commands exist, call the one route, and need the boolean back", 
   assert.match(settings, /"read-aloud-write"/);
   const quickbar = readFileSync(join(caps, "quickbar.json"), "utf8");
   assert.match(quickbar, /"read-aloud-read"/);
+});
+
+/* --------------------------------------------------------------------------
+   Wave-10 Q5 / Wave-9 audit F2: OFF stops speech immediately, mid-answer.
+   The same `createReadAloudStop` main.js subscribes is driven here with a queue
+   mid-answer and a recording audio stub - no browser, no DOM, no player.
+   -------------------------------------------------------------------------- */
+
+/** The window's speech variables as plain test values. The io closures have
+ *  exactly the shape `main.js` passes, so a pass here is a pass for that code. */
+function midAnswerWindow() {
+  const w = {
+    readAloudOn: true,
+    queue: ["First sentence.", "Second sentence.", "Third sentence."],
+    ahead: { text: "Fourth sentence.", generation: 7, request: null },
+    clipPlaying: true,
+    speaking: true,
+    generation: 7,
+    settled: 0,
+    synced: 0,
+    afterStops: 0,
+    paused: [],
+  };
+  w.audio = { onended: () => {}, onerror: () => {},
+              pause() { w.paused.push(this); } };
+  w.io = {
+    setReadAloudOn: (on) => { w.readAloudOn = on; },
+    bumpGeneration: () => { w.generation += 1; },
+    dropQueue: () => { w.queue = []; w.ahead = null; },
+    setClipPlaying: (value) => { w.clipPlaying = value; },
+    takeAudio: () => { const audio = w.audio; w.audio = null; return audio; },
+    settleClip: () => { w.settled += 1; },
+    setSpeaking: (value) => { w.speaking = value; },
+    sync: () => { w.synced += 1; },
+    afterStop: () => { w.afterStops += 1; },
+  };
+  w.onFrame = createReadAloudStop(w.io);
+  return w;
+}
+
+check("the switch's bus frame is understood, and only from a real boolean", () => {
+  assert.equal(READ_ALOUD_KIND, "read_aloud");
+  assert.equal(readAloudFrameAction({ kind: "read_aloud", data: { enabled: true } }), "on");
+  assert.equal(readAloudFrameAction({ kind: "read_aloud", data: { enabled: false } }), "off");
+  // Other kinds, a missing body and a STRING are not guessed at: an unreadable
+  // state must never read as off, and a frame that is not the switch is ignored.
+  assert.equal(readAloudFrameAction({ kind: "step", data: { enabled: false } }), null);
+  assert.equal(readAloudFrameAction({ kind: "read_aloud" }), null);
+  assert.equal(readAloudFrameAction({ kind: "read_aloud", data: { enabled: "false" } }), null);
+  assert.equal(readAloudFrameAction(null), null);
+});
+
+check("OFF mid-answer empties the queue and stops the sentence being spoken", () => {
+  const w = midAnswerWindow();
+  const audio = w.audio;
+  assert.equal(w.onFrame({ kind: "read_aloud", data: { enabled: false } }), "off");
+  assert.equal(w.readAloudOn, false, "the window's rule still says ON");
+  assert.deepEqual(w.queue, [], "queued answer sentences survived OFF");
+  assert.equal(w.ahead, null, "a sentence made ahead survived OFF");
+  assert.equal(w.speaking, false);
+  assert.equal(w.clipPlaying, false);
+  assert.deepEqual(w.paused, [audio], "the clip in flight was not paused");
+  assert.equal(w.audio, null, "the stopped clip is still held as current");
+  assert.equal(w.settled, 1, "the player's wait was left pending");
+  assert.equal(w.synced, 1, "the link line was not repainted");
+  assert.equal(w.afterStops, 1);
+  // The generation bump is what stops a clip still being MADE from playing:
+  // `drainSpeechQueue` compares the number it started with against this one.
+  assert.notEqual(w.generation, 7, "a clip already requested can still play");
+  // The audio's own handlers are detached so its `ended` cannot re-enter.
+  assert.equal(audio.onended, null);
+  assert.equal(audio.onerror, null);
+});
+
+check("ON sets the rule but touches nothing that is playing", () => {
+  const w = midAnswerWindow();
+  const queued = w.queue.slice();
+  const audio = w.audio;
+  assert.equal(w.onFrame({ kind: "read_aloud", data: { enabled: true } }), "on");
+  assert.equal(w.readAloudOn, true);
+  assert.deepEqual(w.queue, queued, "ON dropped queued speech");
+  assert.equal(w.ahead && w.ahead.text, "Fourth sentence.");
+  assert.deepEqual(w.paused, [], "ON paused the clip");
+  assert.equal(w.audio, audio);
+  assert.equal(w.speaking, true);
+});
+
+check("an OFF with nothing playing is harmless, and each OFF is its own stop", () => {
+  const idle = midAnswerWindow();
+  idle.speaking = false;
+  idle.clipPlaying = false;
+  idle.ahead = null;
+  idle.queue = [];
+  assert.equal(idle.onFrame({ kind: "read_aloud", data: { enabled: false } }), "off");
+  assert.equal(idle.audio, null);
+  assert.equal(idle.settled, 1);
+
+  const w = midAnswerWindow();
+  w.onFrame({ kind: "read_aloud", data: { enabled: false } });
+  w.onFrame({ kind: "read_aloud", data: { enabled: false } });
+  assert.equal(w.settled, 2, "the second OFF was ignored");
+  assert.deepEqual(w.queue, []);
+  assert.equal(w.readAloudOn, false);
+});
+
+check("a frame that is not the switch never silences Jarvis", () => {
+  const w = midAnswerWindow();
+  assert.equal(w.onFrame({ kind: "step", data: {} }), null);
+  assert.equal(w.onFrame({ kind: "read_aloud", data: {} }), null);
+  assert.equal(w.onFrame({ kind: "read_aloud", data: { enabled: "off" } }), null);
+  assert.equal(w.readAloudOn, true);
+  assert.equal(w.queue.length, 3);
+  assert.deepEqual(w.paused, []);
+});
+
+check("a switch read that started before an event cannot overwrite it", () => {
+  // main.js's wiring, in the same order: a GET captures the counter at its
+  // start; an event bumps it and sets the rule; the GET's snapshot is older.
+  let seq = 0;
+  const w = midAnswerWindow();
+  w.io.setReadAloudOn = (on) => { seq += 1; w.readAloudOn = on; };
+  w.onFrame = createReadAloudStop(w.io);
+
+  const readStartedAt = seq;              // refreshReadAloud() begins here
+  w.onFrame({ kind: "read_aloud", data: { enabled: false } });   // OFF lands
+  assert.equal(readStillFresh(readStartedAt, seq), false,
+    "a stale GET would set readAloudOn back to true after the OFF");
+  assert.equal(w.readAloudOn, false);
+
+  const nextReadStartedAt = seq;          // the next turn's read begins after it
+  assert.equal(readStillFresh(nextReadStartedAt, seq), true);
+  assert.equal(readStillFresh(0, 0), true, "no event: the read stands");
 });
 
 console.log(`\n${passed} passed, 0 skipped, 0 failed`);

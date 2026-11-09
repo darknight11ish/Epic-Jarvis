@@ -286,6 +286,13 @@ object OpenPlace {
         "more-options",
         "crash-notes",
         "start-jarvis",
+        // Wi-Fi reconnect (Q4, 2026-11-08): a PC-only maintenance feature. It
+        // brings a saved, password-protected Wi-Fi profile back after the PC
+        // went offline; the phone has no radio to repair and no saved profile
+        // to use, so there is no version of this screen it could drive. The
+        // honest PC-only sentence is the answer, and the switch itself is
+        // changed on the PC or through chat.
+        "wifi-reconnect",
         // Notifications was here until 2026-10-29 (the settings wrong-app audit's
         // finding 7): the phone does have the PC's seven kinds, in its
         // "Notifications from Jarvis" row, so it has a place in PLACES now

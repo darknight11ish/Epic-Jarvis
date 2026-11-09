@@ -299,6 +299,12 @@
   cursor: default;
 }
 
+/* Wave 10 (Q2.1): "Take the mark back" exists only while a wrong mark is
+   saved; hidden means hidden in every WebView, never a 0-height button. */
+.jarvis-answer-sheet-action[hidden] {
+  display: none !important;
+}
+
 .jarvis-answer-sheet-note {
   margin: 0 2px;
   font-size: 11px;
@@ -385,6 +391,14 @@ html[data-hud-shell="split-stage"] #stage > #brain{grid-row:9;}
    purpose: every other shell still lays the stage out as a flex column, where
    the page's own display rules have never pushed anything around. */
 html[data-hud-shell="split-stage"] #stage > [hidden]{display:none !important;}
+/* The owner's ruling (Q1, 2026-11-08) words it wider than the Studio shell, so
+   the same rule is stated once for EVERY layout: a hidden stage child never
+   claims a cell, whatever the shell. Safe everywhere - a hidden element was
+   never meant to be drawn, and the page's own author display rules are exactly
+   what used to beat the browser's [hidden] rule. (`.host-card` is not a class
+   this page uses: the two host-raised cards are `#connect-account` and
+   `#secret-handoff`, which this covers.) */
+#stage > [hidden]{display:none !important;}
 /* EDIT MODE (the editor's own template, kept in step with the two new rows):
  *   1 stage-bar | 2 editor banner | 3 Stage-top region | 4 secret-handoff |
  *   5 connect-account | 6 stage-menu | 7 main-screen strip | 8 banner |

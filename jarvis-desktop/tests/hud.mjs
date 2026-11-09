@@ -332,6 +332,17 @@ async function openHud(browser, status, pageOptions = {}) {
             if (!r.ok) throw new Error(`the server answered HTTP ${r.status}`);
             return r.json();
           }
+          // Wave 10 Q2.1 (2026-11-08): the saved mark on ONE answer, read back
+          // through the same shell family as the mark itself, so a re-opened
+          // menu can show the saved reason and the owner's own words.
+          case "get_feedback_mark": {
+            const r = await origFetch(
+              backend + "/api/feedback/mark?turn_id=" + encodeURIComponent(args.turnId),
+              { headers: shellHeaders });
+            if ([404, 501, 503].includes(r.status)) return { available: false, status: r.status };
+            if (!r.ok) throw new Error(`the server answered HTTP ${r.status}`);
+            return r.json();
+          }
           // The card's own Approve and Deny (2026-10-16, the owner's ask):
           // ONE command, the same one the Jarvis bar and the widget call,
           // granted to this window by surfaces.toml's `hud-approvals`. Rust
@@ -577,7 +588,7 @@ async function openHud(browser, status, pageOptions = {}) {
         return route.fulfill({ status: 200, headers: cors,
           json: { available: true, pending: status.memory, setup: status.memorySetup || {} } });
       }
-      if (url.pathname === "/api/feedback/mark" && status.turnId) {
+      if (url.pathname === "/api/feedback/mark" && req.method() === "POST" && status.turnId) {
         marks.push(JSON.parse(req.postData() || "{}"));
         return status.markRoute === false
           ? route.fulfill({ status: 404, headers: cors, json: { error: "not found" } })
@@ -586,6 +597,13 @@ async function openHud(browser, status, pageOptions = {}) {
               // the HUD must tolerate and never act on.
               ok: true, said: "Marked wrong - thanks, I'll factor that in.",
               card_raised: false } });
+      }
+      // Wave 10 Q2.1: the saved mark on this answer, which the re-opened menu
+      // reads back. Only a scenario that gives one has a mark saved.
+      if (url.pathname === "/api/feedback/mark" && req.method() === "GET" && status.turnId) {
+        return status.savedMark
+          ? route.fulfill({ status: 200, headers: cors, json: status.savedMark })
+          : route.fulfill({ status: 404, headers: cors, json: { error: "no mark" } });
       }
       // A decision that came out of the HUD's own buttons: the shell's
       // `decide_approval` is what posts this, with the token (audit M2).
@@ -2847,6 +2865,30 @@ await check("a HUD answer gets a caret menu, not a permanent right/wrong row", a
   assert.deepEqual(problems, []);
 });
 
+await check("a saved wrong mark with no why opens the sheet empty but offers take-back (Q2.1)", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const savedMark = { turn_id: turnId, mark: "wrong", reason: "", correction: "" };
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId, savedMark });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(250);
+  const menu = tools.locator(".jarvis-answer-menu");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(200);
+  // Nothing is invented: no chip is pressed and the box is empty.
+  assert.equal(await menu.locator(".jarvis-answer-reason[aria-pressed=true]").count(), 0,
+    "a why was invented for a mark saved without one");
+  assert.equal(await menu.locator(".jarvis-answer-correction").inputValue(), "");
+  // But the mark itself is known, so its removal is offered.
+  assert.equal(await menu.locator("button", { hasText: "Take the mark back" }).isVisible(), true);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 await check("the wrong sheet sends a reason and correction only on Submit", async () => {
   const turnId = "0123456789abcdef0123456789abcdef";
   const { page, problems, marks } = await openHud(browser,
@@ -2904,6 +2946,66 @@ await check("the wrong sheet can be dismissed without sending anything", async (
   assert.match(await menu.innerText(), /Read out loud|Copy answer/,
     "Cancel did not return to the normal menu");
   assert.equal(marks.length, 0, "Cancel sent a mark");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("two receipts each go back to their own label (Wave-9 audit F4)", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  const menu = tools.locator(".jarvis-answer-menu");
+  // One receipt, then a DIFFERENT button's receipt before the first one has
+  // cleared. One shared timer used to leave the first button saying "Copied."
+  // for ever (the second click cancelled its restore).
+  await menu.locator("button", { hasText: "Copy answer" }).click();
+  await page.waitForTimeout(120);
+  await menu.locator("button", { hasText: "Right" }).click();
+  await page.waitForTimeout(1700);
+  const labels = await menu.locator("button.jarvis-answer-item").allTextContents();
+  assert.ok(labels.includes("Copy answer"),
+    `the Copy answer receipt never went back to its label: ${JSON.stringify(labels)}`);
+  assert.ok(labels.includes("Right"),
+    `the Right receipt never went back to its label: ${JSON.stringify(labels)}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("a marked answer re-shows its saved reason and correction (Q2.1)", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const savedMark = { turn_id: turnId, mark: "wrong", reason: "wrong_fact",
+    correction: "I run a 2060, not a 2080." };
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId, savedMark });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(250);
+  const menu = tools.locator(".jarvis-answer-menu");
+  // The saved mark paints as the current one, and opening the menu sent nothing.
+  assert.equal(await menu.locator("button", { hasText: "Wrong" }).getAttribute("aria-checked"),
+    "true", "the saved wrong mark is not shown as the current one");
+  assert.equal(marks.length, 0, "re-opening the menu sent a mark");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(250);
+  // Not an empty sheet: the chip it was saved with and the owner's words are back.
+  const pressed = menu.locator(".jarvis-answer-reason[aria-pressed=true]");
+  assert.equal(await pressed.count(), 1, "the saved reason chip is not pressed");
+  assert.match(await pressed.textContent(), /wrong fact/i);
+  assert.equal(await menu.locator(".jarvis-answer-correction").inputValue(),
+    "I run a 2060, not a 2080.", "the owner's own saved words are not in the box");
+  // Taking the mark back is its own explicit action, and it sends today's body.
+  await menu.locator("button", { hasText: "Take the mark back" }).click();
+  await page.waitForTimeout(300);
+  assert.deepEqual(marks, [{ turn_id: turnId, mark: "none" }]);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
   await page.close();
   assert.deepEqual(problems, []);
 });
@@ -3219,6 +3321,10 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   const linkPerms = link.slice(link.indexOf("permissions = ["), link.indexOf("]") + 1);
   assert.deepEqual(linkPerms.match(/allow-[a-z-]+/g),
     ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer",
+      // Wave 10 (Q2 section 1.5): the saved reason and correction on one
+      // answer, so the re-opened menu shows them. Read-only, beside the mark
+      // it belongs to.
+      "allow-get-feedback-mark",
       // Two yes/no answers (App lock, "Hide memory lists"): its face never
       // nods at a saved fact while either is on (face-moments.js).
       "allow-get-lock-flags",

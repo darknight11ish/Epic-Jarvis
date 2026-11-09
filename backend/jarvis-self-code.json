@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "433f4e10866dd780c46edcb21f74f3af1dc92e62",
- "built_at": "2026-11-08T16:18:07-08:00",
+ "ref": "515e060fea990b6b66bc599d369b5543babc742f",
+ "built_at": "2026-11-08T16:53:02-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4523,6 +4523,7 @@
     "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
     "changelog.d/2026-11-07-wave-8-2-full-self-awareness.md",
     "changelog.d/2026-11-07-wave-9-read-aloud-bench-and-brain.md",
+    "changelog.d/2026-11-08-wave-10-honest-answers-and-wifi.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4660,6 +4661,7 @@
     "decisions.d/2026-11-07-self-code-map-from-main.md",
     "decisions.d/2026-11-07-self-knowledge-honesty.md",
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
+    "decisions.d/2026-11-08-wifi-reconnect-standing-action.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
     "docs/ACCOUNT-KEYS-DESIGN.md",
@@ -5105,7 +5107,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 811,
+   "file_count": 813,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6172,6 +6174,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "515e060fea990b6b66bc599d369b5543babc742f",
+   "date": "2026-11-08",
+   "subject": "fix(wifi): align the auto Wi-Fi reconnect with the owner's Q4 guardrails"
+  },
+  {
+   "sha": "99d09dd68549843bd584a43e423fc6684a29ae56",
+   "date": "2026-11-08",
+   "subject": "docs(about): re-derive the claims totals after the Wave-10 rows"
+  },
+  {
+   "sha": "d65395849d40738e6586c712ce237c0a7bf86cdb",
+   "date": "2026-11-08",
+   "subject": "docs(records): Wave 10 changelog, decision, claims and the connect-account receipt doc"
+  },
+  {
+   "sha": "d99d1978143742459b95775bb4ce923fbc2e7d06",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): regenerate the map after the determinism merge"
+  },
+  {
    "sha": "433f4e10866dd780c46edcb21f74f3af1dc92e62",
    "date": "2026-11-08",
    "subject": "merge: task-20 determinism phase A (read-aloud corpus, preset/Live proofs, 49-row sweep)"
@@ -6250,26 +6272,6 @@
    "sha": "d561ef5d9847fe9c76c0f73e2141c9d47927badd",
    "date": "2026-11-08",
    "subject": "merge: wave10 right/wrong phone sheet"
-  },
-  {
-   "sha": "83837bea31cdc01f4b3a0cdb669b145ff5726c54",
-   "date": "2026-11-08",
-   "subject": "merge: wave10 right/wrong desktop sheet"
-  },
-  {
-   "sha": "d085ef4e70807365d4b9288e1ca4b416c5ab7bfc",
-   "date": "2026-11-08",
-   "subject": "merge: wave10 right/wrong backend (contract v2)"
-  },
-  {
-   "sha": "efcdce00b32c0d91acd852969861800b2ce4c1dd",
-   "date": "2026-11-08",
-   "subject": "fix(hud): place the editor's Stage-top region, which owns the approvals queue"
-  },
-  {
-   "sha": "52982005dc4c8ddebd5f9540ca08c516b37aeef8",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map for the GitHub receipt work"
   }
  ],
  "top_level": [
@@ -6306,7 +6308,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 224
+   "files": 225
   },
   {
    "path": "videos/",
@@ -6316,7 +6318,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 137
+   "files": 138
   },
   {
    "path": "plugins/",
@@ -6390,8 +6392,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5513,
-  "covered": 5047,
+  "tracked_files": 5515,
+  "covered": 5049,
   "excluded": 466,
   "subsystems": 27
  },
