@@ -572,6 +572,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.wifi-reconnect",
+    "title": "Wi-Fi reconnect",
+    "about": "Reconnect to a saved Wi-Fi network while this PC has no internet.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "wi-fi reconnect",
+      "wifi reconnect",
+      "the auto wi-fi reconnect"
+    ]
+  },
+  {
     "id": "settings.voices",
     "title": "Jarvis's voice",
     "about": "Custom voices and the voice pack.",
@@ -2984,6 +3005,7 @@ export const ALIASES = {
   "asks first": "settings.asks-first",
   "attention budget": "brain.now.budget",
   "audit chain": "brain.trust.ledger",
+  "auto wi-fi reconnect": "settings.wifi-reconnect",
   "automatic learning": "settings.learning",
   "backend capabilities": "settings.backend-supports",
   "background jobs": "brain.work.jobs",
@@ -3265,7 +3287,9 @@ export const ALIASES = {
   "when a captcha stops jarvis": "settings.handoff-front",
   "when the phone does not answer": "settings.handoff",
   "which card runs chat": "settings.second-card.chat-card",
+  "wi-fi reconnect": "settings.wifi-reconnect",
   "widgets": "brain.work.widgets",
+  "wifi reconnect": "settings.wifi-reconnect",
   "wiki": "brain.memory.wiki",
   "windows hello": "settings.security",
   "work": "brain.tab.work",

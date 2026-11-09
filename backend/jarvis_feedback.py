@@ -199,13 +199,20 @@ NOTE_FOR_REASON = {"misunderstood": "manner", "too_long": "manner",
                    "too_sensitive": "privacy"}
 #: The note kinds this module keeps (its own table, never memory.db).
 NOTE_KINDS = ("manner", "privacy")
-#: The `source`/action name of the two cards a wrong_fact / outdated mark may
-#: raise, in the ordinary memory review queue. "feedback_correction" is an
-#: ordinary proposal (the owner's words are the proposed replacement fact, so
-#: accepting it updates the fact); "feedback_retire" is the queue's existing
-#: "retire this?" card (accepting it forgets the fact).
-CARD_ACTION_CORRECTION = "feedback_correction"
-CARD_ACTION_RETIRE = "feedback_retire"
+#: The `source` name of the two cards a wrong_fact / outdated mark may raise, in
+#: the ordinary memory review queue. "feedback_correction" is an ordinary
+#: proposal (the owner's words are the proposed replacement fact, so accepting
+#: it updates the fact); "feedback_retire" is the queue's existing "retire this?"
+#: card (accepting it forgets the fact).
+#: NAMED SOURCE, NOT ACTION, on purpose: these are review-queue `source` values,
+#: not gate actions. jarvis_card_words' completeness scan (backend/test_card_words.py)
+#: reads every `*_ACTION* = "..."` constant in a shipped module as a gate action
+#: that needs one plain card title; calling a queue source an ACTION there made
+#: two non-gate names look like untitled cards. The JSON field the response
+#: carries is still `card_action` (see the docstring above) - the API did not
+#: change, only the internal name.
+CARD_SOURCE_CORRECTION = "feedback_correction"
+CARD_SOURCE_RETIRE = "feedback_retire"
 #: The longest correction this backend stores. Longer is refused, never cut:
 #: silently cutting the owner's own words is the one thing a correction path
 #: must not do.
@@ -512,7 +519,7 @@ def _queue_card(fact_id, correction: str, *, extract=None, memory=None) -> tuple
                     init(c)
                 if c.execute(
                         "SELECT 1 FROM proposals WHERE state='pending' AND source=?"
-                        " AND replaces_id=?", (CARD_ACTION_CORRECTION,
+                        " AND replaces_id=?", (CARD_SOURCE_CORRECTION,
                                                int(fact_id))).fetchone():
                     return "", None
                 cfg = getattr(extract, "_cfg", None)
@@ -527,13 +534,13 @@ def _queue_card(fact_id, correction: str, *, extract=None, memory=None) -> tuple
                     "INSERT INTO proposals (text, replaces, confidence, source,"
                     " created, replaces_id, replaces_text)"
                     " VALUES (?,?,?,?,?,?,?)",
-                    (words, fact.get("text"), None, CARD_ACTION_CORRECTION,
+                    (words, fact.get("text"), None, CARD_SOURCE_CORRECTION,
                      time.time(), int(fact_id), fact.get("text")))
                 try:
                     c.commit()
                 except Exception:
                     pass
-                return (CARD_ACTION_CORRECTION,
+                return (CARD_SOURCE_CORRECTION,
                         int(cur.lastrowid or 0) or None)
         # No correction typed: the queue's existing "retire this?" card, so
         # accepting it is a FORGET with the same one-decision rule.
@@ -545,7 +552,7 @@ def _queue_card(fact_id, correction: str, *, extract=None, memory=None) -> tuple
                 f"mem:{int(fact_id)}", {"helpful": 0, "harmful": 0})
         pid = propose(int(fact_id), helpful=int(n["helpful"]),
                       harmful=int(n["harmful"]))
-        return (CARD_ACTION_RETIRE, int(pid) if pid else None) if pid else ("", None)
+        return (CARD_SOURCE_RETIRE, int(pid) if pid else None) if pid else ("", None)
     except Exception:
         return "", None
 
