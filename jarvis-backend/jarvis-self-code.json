@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "1fbc48bedebe0c1e7413251853be01b37d2a9621",
- "built_at": "2026-11-08T20:45:59-08:00",
+ "ref": "45237367a41fa42958defdf2c93b068960929cd7",
+ "built_at": "2026-11-08T21:46:34-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3880,6 +3880,7 @@
     "backend/test_jobs.py",
     "backend/test_kokoro.py",
     "backend/test_kv_prefix.py",
+    "backend/test_lane_integrity.py",
     "backend/test_lane_prompt.py",
     "backend/test_lanes.py",
     "backend/test_learner_real_model.py",
@@ -4258,7 +4259,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 666,
+   "file_count": 667,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6184,6 +6185,51 @@
  ],
  "recent_commits": [
   {
+   "sha": "45237367a41fa42958defdf2c93b068960929cd7",
+   "date": "2026-11-08",
+   "subject": "Merge commit '7e23650b379b859313ba8095bfd64402d8ef3054' into integration/wave11-2026-11-08"
+  },
+  {
+   "sha": "620fc8df8f347a84c845da7eb360500ca758f2b0",
+   "date": "2026-11-08",
+   "subject": "Merge commit '8efff523edbea75099580ede74cc1993bffc41f5' into integration/wave11-2026-11-08"
+  },
+  {
+   "sha": "6313a416d211f61ca896b9797ee686d33a1e346e",
+   "date": "2026-11-08",
+   "subject": "Merge commit '533c62a7e734927b199fa9f68349f44229d6f967' into integration/wave11-2026-11-08"
+  },
+  {
+   "sha": "533c62a7e734927b199fa9f68349f44229d6f967",
+   "date": "2026-11-08",
+   "subject": "feat(catalogue): list the auto Wi-Fi reconnect feature, closing the required feature-list red"
+  },
+  {
+   "sha": "8efff523edbea75099580ede74cc1993bffc41f5",
+   "date": "2026-11-08",
+   "subject": "fix(lanes): Q4 dead-pooled-lane fallback, Q5 explicit num_ctx, Q6 warm guard"
+  },
+  {
+   "sha": "7e23650b379b859313ba8095bfd64402d8ef3054",
+   "date": "2026-11-08",
+   "subject": "fix(desktop): the owner's three UI asks - Hide advanced, no local-session HUD line, foldable model filters"
+  },
+  {
+   "sha": "2da4c85e15a081149aaf738c96518f97a6ce41e7",
+   "date": "2026-11-08",
+   "subject": "fix(wave11-prep): pin the new preset-advice wording, regenerate the phone feature directory"
+  },
+  {
+   "sha": "3fc9dc3e280dcc4d5bd5e3e3b3e82f1339456902",
+   "date": "2026-11-08",
+   "subject": "Merge remote-tracking branch 'origin/integration/wave10-2026-11-08' into integration/wave11-2026-11-08"
+  },
+  {
+   "sha": "005d3f6c43ae68728e8dc3dff7aa0e02be4f2cd0",
+   "date": "2026-11-08",
+   "subject": "fix(phone): the menu catalogue now holds 133 names, not 132"
+  },
+  {
    "sha": "1fbc48bedebe0c1e7413251853be01b37d2a9621",
    "date": "2026-11-08",
    "subject": "docs(records): one Wave-11 changelog bullet and one decision, with the map regenerated"
@@ -6197,6 +6243,11 @@
    "sha": "804895b04d979dfefcce53317837d13846bf0146",
    "date": "2026-11-08",
    "subject": "integration: Jarvis can talk about its local models in chat and Live"
+  },
+  {
+   "sha": "a1f685d1e202694eb5bd1669dbe7d21c8e0eed5a",
+   "date": "2026-11-08",
+   "subject": "fix(wave10): close the four Windows backend-suite reds CI found"
   },
   {
    "sha": "0af45dc9eb6f53e0f502c8c3a1f3a2b85abdaf6f",
@@ -6232,63 +6283,13 @@
    "sha": "624c66134cbfe933e3359918a6f85264a1005269",
    "date": "2026-11-08",
    "subject": "chore(self-code): regenerate the map after the lane-lifecycle fix"
-  },
-  {
-   "sha": "cef68e568a135be9163e35f5f670b15a5c8d817c",
-   "date": "2026-11-08",
-   "subject": "fix(lanes): a restart or a stop can no longer leave chat pointing at a dead pooled lane"
-  },
-  {
-   "sha": "856f6283855a53f7c483919069394b24a43db464",
-   "date": "2026-11-08",
-   "subject": "fix(wave10): repair the claims, directory, hud and learning reds CI found"
-  },
-  {
-   "sha": "670466e03b89b332b2ebc48c3ac40f3775b3bde1",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map after the offload fix"
-  },
-  {
-   "sha": "eadec803a747850679773bba0e859f50d0bff2ca",
-   "date": "2026-11-08",
-   "subject": "integration: offload reads the chat lane (patch history included)"
-  },
-  {
-   "sha": "b0e629f3134f414eaca7af59e9d77da6619577e6",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map for the Wave-11 integration tree"
-  },
-  {
-   "sha": "5f81a2b56115ec7e497a7dc867b8f3e4899c959e",
-   "date": "2026-11-08",
-   "subject": "fix(models): the GPU-offload warning reads the chat lane, not a stale address"
-  },
-  {
-   "sha": "cb48e2d6e5b5593bc1a61659cb4ced9c6d114a7f",
-   "date": "2026-11-08",
-   "subject": "integration: the GPU-offload warning reads the chat lane"
-  },
-  {
-   "sha": "4ca3ea21e556cf53e5bd331071be1799d88a6ed0",
-   "date": "2026-11-08",
-   "subject": "fix(models): the GPU-offload warning reads the chat lane, not a stale address"
-  },
-  {
-   "sha": "90f95475a11ecb57553563ceec8c93bde2c3d6e5",
-   "date": "2026-11-08",
-   "subject": "integration: the HUD model chip says the model in use"
-  },
-  {
-   "sha": "d83836a56b2044738fcf94c6aeec1286d983bb1d",
-   "date": "2026-11-08",
-   "subject": "integration: the Brain model page tells the PC's hardware truth"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1398
+   "files": 1400
   },
   {
    "path": "jarvis-desktop/",
@@ -6402,15 +6403,15 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5526,
-  "covered": 5059,
-  "excluded": 467,
+  "tracked_files": 5528,
+  "covered": 5060,
+  "excluded": 468,
   "subsystems": 27
  },
  "excluded_patterns": [
   {
    "why": "generated by tools/build_patch_history.py from the patch files it records",
-   "count": 211,
+   "count": 212,
    "examples": [
     "backend/patch-history/app-control/2759987.patch",
     "backend/patch-history/appearance/35a1001.patch",
