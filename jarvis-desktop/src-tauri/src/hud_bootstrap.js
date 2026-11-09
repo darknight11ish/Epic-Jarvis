@@ -3136,6 +3136,74 @@
     /* Never let a layout read break the page's own script. */
   }
 
+  /* A SAVE PAINTS THIS WINDOW TOO (the owner's report of 2026-11-08: "changing
+   * the layout doesn't do anything. none of the options actually change the
+   * jarvis HUD at all"). Until now this script only READ the store at start-up,
+   * so a layout chosen in the Settings picker - whose own comment said the HUD
+   * "reads the saved document on its next load" - or from this window's Presets
+   * menu was invisible in the already-open window until it was reloaded. That
+   * is what "the options do nothing" looked like.
+   *
+   * Rust's one write, `set_hud_layout` (hud_layout.rs), now announces the
+   * validated document it just saved on this Tauri event. It is applied with
+   * the SAME code as the start-up read, so the store is still the only truth -
+   * it is just re-read when it changes instead of only when the window opens.
+   * A payload this cannot read is ignored, and a shell without the event
+   * channel keeps the old behaviour (the next open still paints it). */
+  /** The saved preset's own opening view/tab belongs to opening the window.
+   *  This also runs on the Edit HUD editor's autosaves (it saves through the
+   *  same command), so while the owner is arranging cards it puts the shell and
+   *  density on the page but does NOT move them to another view mid-edit. */
+  function applySavedLayout(layout) {
+    var editing = false;
+    try {
+      editing = Boolean(window.__jarvisHudEdit && window.__jarvisHudEdit.editing);
+    } catch (e) {
+      editing = false;
+    }
+    if (!editing) {
+      applyLayout(layout);
+      return;
+    }
+    var facts = factsOf(layout);
+    if (!facts) return;
+    window.__jarvisHudLayout = layout;
+    applyFacts(facts);
+    rememberPreview(facts);
+    try {
+      window.dispatchEvent(new CustomEvent("jarvis:hud-shell", { detail: {
+        shell_template: facts.shell_template,
+        density: facts.density
+      } }));
+      window.dispatchEvent(new CustomEvent("jarvis:hud-layout", { detail: layout }));
+    } catch (e) {
+      /* An old engine without CustomEvent: the attributes are still set. */
+    }
+  }
+
+  function applySavedWhenReady(layout) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", function () {
+        applySavedLayout(layout);
+      }, { once: true });
+    } else {
+      applySavedLayout(layout);
+    }
+  }
+
+  try {
+    var listenLayout = tauri && tauri.event && tauri.event.listen;
+    if (typeof listenLayout === "function") {
+      listenLayout("jarvis:hud-layout-changed", function (event) {
+        var saved = event && event.payload;
+        if (!saved || typeof saved !== "object") return;
+        applySavedWhenReady(saved);
+      });
+    }
+  } catch (e) {
+    /* An older shell without event.listen: the next window open still applies. */
+  }
+
   /* H2 (2026-10-22): Settings' "Edit HUD in the window" button asks Rust to
    * show this window and emit `jarvis:hud-edit-request`. Rust's emit reaches
    * the page as a Tauri event; the page's editor listens for a DOM event, so
