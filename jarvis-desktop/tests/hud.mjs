@@ -3447,6 +3447,89 @@ await check("the connect card draws the newest waiting card and saves it through
   await page.close();
 });
 
+
+/* Wave 10 (2026-11-08): the owner's screenshot showed the "Connect an account"
+ * card painted into the Studio's face column, with the conversation and the
+ * face pushed down under it. The two host-raised cards are direct children of
+ * `#stage` and the Studio shell is a grid; they had no placement, so the grid
+ * auto-placed them into the first free cell. This measures the REAL page: the
+ * cards own full-width rows, the conversation starts below them, a hidden
+ * stage card claims no cell, and hiding the cards moves the conversation back
+ * up. (The static render of the owner's 150% window measured the same boxes:
+ * before x=1049 w=809 row=auto; after x=76 w=1766 row=5 and row=4.) */
+await check("Studio: the two host cards own full-width rows, and hidden stage cards claim no cells", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false }, { viewport: { width: 1280, height: 820 } });
+  await setHudLook(page, "studio");
+  await page.waitForTimeout(250);
+  const measure = () => page.evaluate(() => {
+    const box = (selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      const cs = getComputedStyle(node);
+      return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width),
+               bottom: Math.round(r.bottom), display: cs.display,
+               gridRow: cs.gridRow, gridColumn: cs.gridColumn };
+    };
+    const stage = box("#stage");
+    const talk = box("#talk");
+    return {
+      stage,
+      talk,
+      brain: box("#brain"),
+      connect: box("#connect-account"), secret: box("#secret-handoff"),
+      approvals: box("#approvals"),
+      region: box('#stage > [data-hud-region="stage_top"]'),
+    };
+  });
+  // Raise BOTH host cards (the host normally opens one; the layout must be the
+  // same for either, and they must not share a row).
+  await page.evaluate(() => {
+    document.getElementById("connect-account").hidden = false;
+    document.getElementById("secret-handoff").hidden = false;
+  });
+  await page.waitForTimeout(120);
+  const m = await measure();
+  for (const [name, card] of [["connect-account", m.connect], ["secret-handoff", m.secret]]) {
+    assert.ok(card, `${name} is missing from the Studio page`);
+    assert.notEqual(card.display, "none", `${name} did not show when raised`);
+    assert.notEqual(card.gridRow, "auto",
+      `${name} is still auto-placed into whatever cell is free (grid-row: ${card.gridRow})`);
+    assert.ok(card.x <= m.stage.x + 20,
+      `${name} does not start at the stage's left edge: ${JSON.stringify(card)} vs stage ${JSON.stringify(m.stage)}`);
+    assert.ok(card.w >= m.stage.w - 40,
+      `${name} is not full width: ${card.w} inside a ${m.stage.w}px stage`);
+    assert.equal(card.gridColumn, "1 / -1", `${name} does not span both stage columns`);
+  }
+  assert.notEqual(m.connect.gridRow, m.secret.gridRow,
+    "the two host cards share one grid row instead of owning one each");
+  assert.ok(m.talk.y >= Math.max(m.connect.bottom, m.secret.bottom) - 1,
+    `the conversation is not below the raised cards (talk ${m.talk.y}, cards end ${m.connect.bottom}/${m.secret.bottom})`);
+  // A hidden stage card claims no height: #approvals is author display:flex,
+  // so before the fix it was a 0-height full-width row player.
+  assert.equal(m.approvals.h, 0, "the hidden approvals card has height");
+  // The editor's Stage-top region is NOT hidden (it owns the approvals queue);
+  // it gets a deliberate row instead of being auto-placed into a free cell.
+  if (m.region) {
+    assert.notEqual(m.region.gridRow, "auto",
+      "the editor's Stage-top region (which owns the approvals queue) is still auto-placed");
+  }
+  // Hiding the cards again moves the conversation back up: the card row was
+  // what pushed it down (the owner's complaint).
+  const throughY = m.talk.y;
+  await page.evaluate(() => {
+    document.getElementById("connect-account").hidden = true;
+    document.getElementById("secret-handoff").hidden = true;
+  });
+  await page.waitForTimeout(120);
+  const after = await measure();
+  assert.ok(after.talk.y < throughY,
+    `hiding the host cards did not move the conversation up (${after.talk.y} >= ${throughY})`);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 await check("a HUD voice is used only when it is on this computer (and typed answers are silent)", async () => {
   // Wave 9 (owner, 2026-11-06/07): a TYPED answer is never read aloud, so the
   // typed box produces no voice at all - and the shell's wrapper still refuses
@@ -6228,6 +6311,81 @@ await check("H4: catching up shows the rail, Approve waits and Deny keeps workin
   const overlaps = await safetyOverlaps(page);
   assert.deepEqual(overlaps.hits, [], `the safety rail covers a control: ${overlaps.hits}`);
   assert.deepEqual(overlaps.blocked, [], `the safety rail pointer-blocks: ${overlaps.blocked}`);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+
+/* Wave 10 (2026-11-08): the fixed safety strip sat over the Studio stage bar's
+ * model/state chips at the owner's 150% scaling (his screenshot showed only
+ * "DING BY" under it). The shell now reserves a band as tall as the strip, so
+ * the stage bar starts below it and the strip still covers no control. The
+ * band is measured from the strip's own box, so a second chip cannot slip
+ * back under either. (Static render at the owner's 1269x669 CSS viewport,
+ * DPR 1.5: before padding 0 and both chips overlapped; after padding 40px and
+ * no overlap.) */
+await check("H4: in Studio the safety strip reserves a band and covers no top-bar chip", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD },
+    { viewport: { width: 1269, height: 669 } });
+  await setHudLook(page, "studio");
+  await LINK(page, { connected: true, stale: true });
+  await K.until(page, "the safety strip to show", async () =>
+    (await page.evaluate(() => !document.getElementById("hud-safety").hidden)), { ms: 8000 });
+  await page.waitForTimeout(250);
+  const m = await page.evaluate(() => {
+    const strip = document.getElementById("hud-safety").getBoundingClientRect();
+    const bar = document.querySelector("#stage > .stage-bar").getBoundingClientRect();
+    const shell = document.getElementById("shell");
+    const ids = ["chip-model-door", "chip-state", "hud-stop", "hud-layout-badge",
+                 "hud-edit-toggle", "stage-bar-galaxy-options", "galaxy-show-placeholder"];
+    const overlaps = [];
+    for (const id of ids) {
+      const node = document.getElementById(id);
+      if (!node || node.hidden) continue;
+      const b = node.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      if (strip.left < b.right && b.left < strip.right
+          && strip.top < b.bottom && b.top < strip.bottom) overlaps.push(id);
+    }
+    return {
+      attr: document.body.getAttribute("data-hud-safety-visible"),
+      band: getComputedStyle(document.body).getPropertyValue("--hud-safety-band").trim(),
+      pad: parseFloat(getComputedStyle(shell).paddingTop) || 0,
+      stripBottom: Math.round(strip.bottom),
+      barTop: Math.round(bar.top),
+      overlaps,
+    };
+  });
+  assert.equal(m.attr, "", "the shell never marked the strip visible, so no band was reserved");
+  assert.match(m.band, /^\d+(\.\d+)?px$/, `the band height is not a measured px value: '${m.band}'`);
+  assert.ok(m.pad >= m.stripBottom,
+    `the reserved band (${m.pad}px) is shorter than the strip (${m.stripBottom}px)`);
+  assert.ok(m.barTop >= m.stripBottom - 1,
+    `the stage bar starts at ${m.barTop}px, under a strip that ends at ${m.stripBottom}px`);
+  assert.deepEqual(m.overlaps, [],
+    `the safety strip covers top-bar controls: ${m.overlaps}`);
+  // A hidden strip gives the space back.
+  await LINK(page, { connected: true, stale: false });
+  await page.waitForTimeout(250);
+  const off = await page.evaluate(() => ({
+    attr: document.body.getAttribute("data-hud-safety-visible"),
+    pad: parseFloat(getComputedStyle(document.getElementById("shell")).paddingTop) || 0,
+  }));
+  assert.equal(off.attr, null, "the band stayed reserved after the strip hid");
+  assert.equal(off.pad, 0, "the shell kept padding with no strip on screen");
+  // Scoped to Studio on purpose: the other layouts were already measured clear,
+  // so nothing else's geometry moves.
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(250);
+  await setHudLook(page, "cockpit");
+  await page.waitForTimeout(250);
+  const other = await page.evaluate(() => ({
+    attr: document.body.getAttribute("data-hud-safety-visible"),
+    pad: parseFloat(getComputedStyle(document.getElementById("shell")).paddingTop) || 0,
+  }));
+  assert.equal(other.attr, "", "the strip is visible in the cockpit shell too");
+  assert.equal(other.pad, 0, "the reserved band leaked into a non-Studio shell");
   await page.close();
   assert.deepEqual(problems, []);
 });

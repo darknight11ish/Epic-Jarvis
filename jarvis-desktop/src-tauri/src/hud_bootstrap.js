@@ -1935,6 +1935,75 @@
   if (document.head) staleSheet();
   else document.addEventListener("DOMContentLoaded", staleSheet, { once: true });
 
+  /* Wave 10 (2026-11-08): the safety strip's own band.
+   *
+   * H4's promise is that `#hud-safety` is ALWAYS visible - and a fixed strip at
+   * the top of the window covered the stage bar's model/state chips at the
+   * owner's 150% scaling once the shell's Layout badge and [Edit HUD] button
+   * were beside them (his screenshot showed "DING BY" under the strip). The
+   * fix is geometry, not words: while the strip is really on screen, tell the
+   * stylesheet how tall it is and let it push the shell's content below it
+   * (hud-link.css, scoped to the Studio shell). When the strip hides, the
+   * space comes back.
+   *
+   * It only READS the strip: it does not move, restyle or hide it, and it
+   * adds no control. The height is measured from the strip's own box each
+   * time the strip's contents or the window change, so a second chip cannot
+   * slip back under the bar. */
+  function watchSafetyBand() {
+    var strip = document.getElementById("hud-safety");
+    if (!strip) return;
+    var lastBand = "";
+    function applyBand() {
+      var shell = document.getElementById("shell");
+      var shown = false;
+      try {
+        shown = !strip.hidden && strip.getClientRects().length > 0;
+      } catch (err) {
+        shown = !strip.hidden;
+      }
+      if (!shown || !shell) {
+        if (document.body.hasAttribute("data-hud-safety-visible")) {
+          document.body.removeAttribute("data-hud-safety-visible");
+          document.body.style.removeProperty("--hud-safety-band");
+        }
+        return;
+      }
+      // The strip is fixed at top:2px; reserve its own measured height plus a
+      // small gap, so the first in-flow row starts clear of it.
+      var band = Math.max(0, Math.round(
+        strip.getBoundingClientRect().bottom + 6
+      ));
+      if (band !== lastBand) {
+        lastBand = band;
+        document.body.style.setProperty("--hud-safety-band", band + "px");
+      }
+      document.body.setAttribute("data-hud-safety-visible", "");
+    }
+    if (typeof MutationObserver !== "undefined") {
+      var watch = new MutationObserver(applyBand);
+      // The strip's own show/hide and its chips change the height; edit mode
+      // changes whether the strip is on screen at all.
+      watch.observe(strip, { attributes: true,
+                             attributeFilter: ["hidden", "style", "class"],
+                             childList: true, subtree: true, characterData: true });
+      watch.observe(document.body, { attributes: true,
+                                     attributeFilter: ["data-hud-edit"] });
+    }
+    window.addEventListener("resize", applyBand);
+    try {
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(applyBand).catch(function () {});
+      }
+    } catch (err) { /* no FontFaceSet: the observer still keeps it in step */ }
+    applyBand();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", watchSafetyBand, { once: true });
+  } else {
+    watchSafetyBand();
+  }
+
   /* What the command answered when it refused, on the card itself. Rust's
    * sentence is the honest one - it names Windows Hello, the stale link or App
    * lock - so it is shown as it came, the same way the bar's own hint carries
