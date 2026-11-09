@@ -94,6 +94,7 @@ gate-touches.patch	gate-touches/81e1128.patch	81e1128ad5beab8198943aaec2fd994c81
 gate-touches.patch	gate-touches/0f244f7.patch	0f244f7b04ecbea8640b5440943242991113a7af	2026-10-11T00:19:59-07:00	the gate reads what an action touches, not the words on its card (#249)
 github-tools.patch	github-tools/72f6847.patch	72f68473885ee7844bca1eb43855a5dcb4050000	2026-11-03T16:39:39-08:00	feat(github): read your own GitHub, and three small actions on it - one card each, never merge or push
 goals.patch	goals/d68f7b2.patch	d68f7b240737ac081d91b26c85410738520d8f42	2026-09-27T23:29:50Z	Backend: Goals - a plan the owner edits, one card per acting step
+gpu-offload.patch	gpu-offload/b2f5a08.patch	b2f5a083305955bca736934c0fb9e8d89c39c623	2026-09-15T04:08:06Z	The three daily annoyances: a log file, autostart, and a CPU warning
 handsfree.patch	handsfree/8c3490d.patch	8c3490d834b8e11a2b93ba0629a866de99d3d641	2026-11-05T03:19:26-08:00	fix(handsfree): the gate rows go where no other patch reads, and every red suite is answered
 handsfree.patch	handsfree/ced61a2.patch	ced61a23f7b691acade485e9b5d86f416b2b54d3	2026-11-04T16:56:58-08:00	feat(handsfree): read every card out, answer one by voice, and text a contact
 hud-request-gate.patch	hud-request-gate/af2adbb.patch	af2adbbbe5281363e88dc09b61375482b6869e3e	2026-10-18T22:07:57-07:00	fix(hud): header deadline, bounded concurrency and a token-failure gate without touching a route
