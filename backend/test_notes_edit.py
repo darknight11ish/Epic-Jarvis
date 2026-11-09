@@ -242,7 +242,7 @@ def t_the_module_is_shipped_twinned_and_catalogued():
     # phone's upload door added a fourth (upload), so this pin moves with them -
     # the same one-line change every new drop-in makes here.
     check("the registry is not stale (the folder count rose, and more ready modules)",
-          registry.get("folder_count") == 26 and registry.get("ready_count") == 55,
+          registry.get("folder_count") == 27 and registry.get("ready_count") == 56,
           {registry.get("folder_count"), registry.get("ready_count")})
     docs = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs have the section", "## 170. The Obsidian notes editor" in docs)
