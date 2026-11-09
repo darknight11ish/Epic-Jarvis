@@ -213,9 +213,14 @@ def t_the_stack_walk_pins_what_it_measures() -> None:
     pin = _stack.RATCHET.get("jarvis_skills.py")
     check("_stack.RATCHET pins jarvis_skills.py at 11 hunks (6 before this patch + its 5)",
           pin == 11, pin)
-    pin_text = (REPO / "tools" / "check_patch_original_text.py").read_text(encoding="utf-8")
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_patch_original_text", REPO / "tools" / "check_patch_original_text.py")
+    checker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(checker)
     check("tools/check_patch_original_text.py pins the same patch, at 5 hunks / 33 lines",
-          re.search(r'"skill-scan-wiring\.patch":\s*\(5, 33\)', pin_text) is not None)
+          checker.PIN.get("skill-scan-wiring.patch") == (5, 33),
+          checker.PIN.get("skill-scan-wiring.patch"))
 
 
 def main() -> int:
