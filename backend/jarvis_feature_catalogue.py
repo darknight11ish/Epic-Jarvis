@@ -3,7 +3,7 @@
 The owner's feature list, as data: 180 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 c082ea170ce310f3b3070bc1a52f665be690715566ffafd6e3d7bf926ed2bf1d); the apps' Features pages read their own
+`features/features.json` (sha256 1c488df68e7e177e90b14ad9469afc3c3f9d6e221f4066aa86f148564c8a2f93); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "c082ea170ce310f3b3070bc1a52f665be690715566ffafd6e3d7bf926ed2bf1d"
+SOURCE_SHA256 = "1c488df68e7e177e90b14ad9469afc3c3f9d6e221f4066aa86f148564c8a2f93"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1933,12 +1933,12 @@ FEATURES = (
         "id": "model-knowledge",
         "group": "The PC itself",
         "title": "Ask which model is answering",
-        "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. A named preset or model can be switched to from the same question.",
-        "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+        "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. From the same chat you can start a benchmark - the current model, or one named preset's model - ask what has been measured (speed runs and the five suite scorecards), which model each preset uses, and whether a better model is only an estimate. A named preset or model can be switched to from the same question.",
+        "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"what have you measured?\", \"what models do the current presets use?\", \"start a benchmark\", \"start the benchmark suites\", \"benchmark the coding model\", \"switch to the Coding preset\".",
         "asks": "Answering asks nothing. Applying a preset or switching a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it.",
-        "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed is only stated when this PC measured it; the phone still has no list of models to browse.",
+        "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed or score is only stated when this PC measured it, with its date; a candidate model is labelled MEASURED ON THIS PC or ESTIMATED FIT (run benchmark to verify) and is never called better for a preset until a benchmark measured it there. A benchmark uses a throwaway model server on a spare port, never a live lane's own server directly; it may pause the lane it needs and puts the active preset back, refuses while an answer is streaming, and only one runs at a time. The phone still has no list of models to browse.",
         "surface": "both",
-        "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running", "tells me which model is answering"],
+        "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running", "tells me which model is answering", "model benchmarks", "benchmark the models"],
         "covers": ["model-page"],
     },
     {

@@ -36535,3 +36535,77 @@ If the in-range scan or the radio state cannot be read (on a Windows 11 PC with
 Location services off, `netsh wlan show networks`/`show interfaces` are refused -
 measured 2026-11-08), the check says so in one calm line and **makes no attempt**;
 it never guesses that a network is in range.
+
+## 205. Talking about the local models: measured results, starting a benchmark, which model each preset uses, and honest advice (added 2026-11-08)
+
+The owner's ask: *"I'd also like to be able to talk about the local AI models.
+what has been measured, start Benchmarks, what a better models for the current
+Presets, what are the current models for the current Presets and more in chat
+and in jarvis live."* Chat and Jarvis Live share `/api/chat`, so every answer
+below is one deterministic implementation in `jarvis_quick.py` and takes the
+same `quick:` route (the intent name travels in `X-Jarvis-Route`'s `quick`
+field). No new HTTP route exists in this wave.
+
+**What has been measured.** "what have you measured", "what has been measured",
+"what did the last benchmark measure", "what are the benchmark results",
+"what benchmarks have you run" and their plain variants answer from the TWO
+stores `jarvis_bench.py` writes: `BenchLog` (speed runs: model, lane, decode
+rate, spill, pass/fail, date) and `ScoreLog` (`bench-scores.jsonl`: one row per
+suite per model/quant/context/digest, with score, items passed, decode rate and
+date). Every number is copied from a stored row - the answer says "Every number
+above was measured on this PC", names the date it was measured, and says a
+field is missing rather than estimating it. With no record at all it says so
+plainly and names the door that starts a run.
+
+**Starting a benchmark.** The door is the existing machinery, never a second
+runner: `jarvis_bench.start` for one speed run and `jarvis_bench.start_suites`
+for the five suites. "start a benchmark" / "run a benchmark" / "benchmark
+yourself" start the speed run of the current model; "start benchmarks", "start
+the benchmarks", "run the benchmarks", "start the benchmark suites", "run the
+full benchmark" start the five-suite run; "benchmark the coding model", "run the
+coding benchmark" and "start a benchmark on the fast model" start a speed run of
+that preset's model on that preset's lane (the lane comes from the preset row,
+never from a guess). An unknown name is refused in words and nothing is
+measured. The answer says it may pause the lane it needs, that it uses a
+throwaway model server on a spare port (never a live lane's own server
+directly), that only one runs at a time, that a streaming chat/voice turn is the
+one busy refusal, and that the results are kept in Brain, Model, Models. "how do
+I start a benchmark" / "what does a benchmark measure" answers with that same
+explanation and starts nothing.
+
+**Which model each preset uses.** "what models do the current presets use",
+"what are the current models for the current presets", "which model is each
+preset using", "what are the preset models" and "which preset uses which model"
+answer from `jarvis_model_knowledge.presets()` and `current_preset()` - title,
+model tag, card and context window, with the active one marked. The one-preset
+question keeps its own older answer (`preset_model`, "what model does the coding
+preset use"), which now also accepts the bare name ("what model does fast use").
+
+**Which model is better for a preset.** "what are the best models for the
+current presets", "what is a better model for the coding preset", "which model
+is better for coding", "what should I use for coding" and "is there a better
+model for general" answer with the preset's current model and whatever this PC
+measured for it, then the hardware-aware recommender's
+(`jarvis_model_recommender.recommend()`) other candidates with its own labels -
+`MEASURED ON THIS PC` or `ESTIMATED FIT (run benchmark to verify)`. It never
+upgrades an estimate to a measurement and never calls one model better for a
+preset until a benchmark measured it there; it says a benchmark is the only
+proof and that nothing was switched. The older "which model should I use for
+<task>" answer keeps owning a task that names no preset.
+
+**What did you use before.** "what did you use before", "what model did you use
+before" and "which model did you use previously" read the change journal
+(`<OPENJARVIS_HOME>/self-awareness/changes.jsonl`) for the newest recorded model
+change - from, to, date - and say plainly when no model change is recorded
+instead of guessing.
+
+**The feature guide cannot contradict this.** `jarvis_feature_guide.py`'s
+`SELF_FACTS` gained a bounded `model_benchmarks` digest (in `SELF_FACT_IDS`, so
+the model's `self_portrait` tool result carries it), and the feature list's
+"Ask which model is answering" row now names the measured/benchmark/best-model
+sentences. `backend/test_model_conversation.py` pins the exact owner phrasings
+as chat turns AND as Live-marked turns (byte-identical words), asserts no number
+appears that is not in the store, blocks the model entry point and the network,
+and uses a fake `jarvis_bench.start`/`start_suites` - no benchmark is started by
+the tests and no live lane is contacted.
+

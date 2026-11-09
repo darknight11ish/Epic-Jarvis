@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "027ed3d0ff54af3ae6bc8d7b84a0d9fdba251c9e",
- "built_at": "2026-11-08T18:27:15-08:00",
+ "ref": "0e19ed8e92e1514f496d485f575910ba7deced75",
+ "built_at": "2026-11-08T19:03:42-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4665,6 +4665,7 @@
     "decisions.d/2026-11-07-self-code-map-from-main.md",
     "decisions.d/2026-11-07-self-knowledge-honesty.md",
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
+    "decisions.d/2026-11-08-build-caches-and-atomic-twins.md",
     "decisions.d/2026-11-08-deterministic-self-state-answers.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
@@ -5113,7 +5114,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 815,
+   "file_count": 816,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6180,6 +6181,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "0e19ed8e92e1514f496d485f575910ba7deced75",
+   "date": "2026-11-08",
+   "subject": "feat(wave10): ruling Q7 badge uniformity, Q4 atomic map twins and one shared build cache"
+  },
+  {
    "sha": "027ed3d0ff54af3ae6bc8d7b84a0d9fdba251c9e",
    "date": "2026-11-08",
    "subject": "fix(wave10): wire the Wi-Fi switch into change-by-asking and move the four count pins to 39"
@@ -6273,11 +6279,6 @@
    "sha": "d405ce4d8865c22b0ee6c3cee82fba600a9feb74",
    "date": "2026-11-08",
    "subject": "fix(features): the four stale read-aloud descriptions describe the shipped switch"
-  },
-  {
-   "sha": "30a106f13eb2c72b4b37e5f76312440fd68bebc5",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map after the Q3 preset-independence work"
   }
  ],
  "top_level": [
@@ -6324,7 +6325,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 140
+   "files": 141
   },
   {
    "path": "plugins/",
@@ -6398,8 +6399,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5521,
-  "covered": 5055,
+  "tracked_files": 5522,
+  "covered": 5056,
   "excluded": 466,
   "subsystems": 27
  },

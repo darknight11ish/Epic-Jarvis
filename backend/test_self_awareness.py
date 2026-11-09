@@ -234,7 +234,8 @@ def t_awareness_answers_read_locally():
     bench = _ran("what benchmarks have been run on you?", sched)
     check("the benchmark history is honest when there are no rows",
           bench is not None and bench.intent == "bench_history"
-          and ("no benchmark runs" in bench.reply.lower()
+          and ("not measured anything" in bench.reply.lower()
+               or "no benchmark record" in bench.reply.lower()
                or "newest benchmark runs" in bench.reply.lower()),
           None if bench is None else bench.reply[:180])
     inv = _ran("what do you have?", sched)

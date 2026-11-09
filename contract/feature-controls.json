@@ -8728,7 +8728,7 @@
       "name": "Ask which model is answering",
       "group": "The PC itself",
       "surface": "both",
-      "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+      "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"what have you measured?\", \"what models do the current presets use?\", \"start a benchmark\", \"start the benchmark suites\", \"benchmark the coding model\", \"switch to the Coding preset\".",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -8739,7 +8739,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"what have you measured?\", \"what models do the current presets use?\", \"start a benchmark\", \"start the benchmark suites\", \"benchmark the coding model\", \"switch to the Coding preset\".",
         "search": [
           "Ask which model is answering"
         ],
@@ -8747,7 +8747,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+        "location": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"what have you measured?\", \"what models do the current presets use?\", \"start a benchmark\", \"start the benchmark suites\", \"benchmark the coding model\", \"switch to the Coding preset\".",
         "search": [
           "ask which model is answering"
         ],

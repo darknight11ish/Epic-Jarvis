@@ -70,6 +70,27 @@ def t_the_owner_sentences_route_to_the_full_run():
         m = Q.match(said)
         check(f"{said!r} is the five-suite run",
               m is not None and m.name == "bench_suites", m)
+    # The owner's own 2026-11-08 words: "start Benchmarks" is the PLURAL ask and
+    # used to be read as "open the benchmarks app" - a door that does not exist.
+    for said in ("start a benchmark", "run a benchmark", "benchmark yourself"):
+        m = Q.match(said)
+        check(f"{said!r} is still the speed bench",
+              m is not None and m.name == "bench_run", m)
+    for said in ("start benchmarks", "start the benchmarks", "run the benchmarks",
+                 "run the benchmark suites", "run the full benchmark"):
+        m = Q.match(said)
+        check(f"{said!r} is the five-suite run",
+              m is not None and m.name == "bench_suites", m)
+    # A NAMED benchmark went to the model or to the app launcher before this;
+    # it is the speed bench of that preset's model now.
+    for said in ("benchmark the coding model", "run the coding benchmark",
+                 "start a benchmark on the fast model"):
+        m = Q.match(said)
+        check(f"{said!r} is a named speed bench",
+              m is not None and m.name == "bench_run", m)
+    m = Q.match("how do i start a benchmark")
+    check("'how do i start a benchmark' is the explanation, not a run",
+          m is not None and m.name == "bench_how", m)
     # ... and the older sentences keep their own owner.
     m = Q.match("run a benchmark")
     check("'run a benchmark' is still the speed bench",

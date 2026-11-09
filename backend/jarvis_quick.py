@@ -17798,7 +17798,10 @@ _K_MODEL_CURRENT = re.compile(
     # optional "and why" tail is tolerated and NOT invented on: the preset the
     # answer already names is the honest reason this PC has.
     r"|(?:what|which)\s+(?:ai\s+)?model\s+is\s+answering(?:\s+(?:me|this|that|you))?"
-    r"(?:\s*,?\s*and\s+why\b.*)?")
+    r"(?:\s*,?\s*and\s+why\b.*)?"
+    # "what is the current model" / "what's the current model" (2026-11-08):
+    # the same fact as "what model are you using", which already answers it.
+    r"|(?:what|which)(?:'s|\s+is)\s+the\s+current\s+(?:ai\s+)?model\b.*")
 _K_MODEL_ANSWERED = re.compile(
     r"(?:which|what)\s+model\s+(?:answered|wrote|gave|produced|said)\s+"
     r"(?:that|this|it|the\s+answer)\b.*")
@@ -17826,6 +17829,56 @@ _K_PRESET_DETAIL = re.compile(
     r"(?:\s+(?:change|do|mean|load|run|use))?\s*\??$"
     r"|which\s+model\s+(?:would|does|will)\s+(?:the\s+)?(.+?)\s+preset\s+"
     r"(?:load|run|use)\s*\??$")
+#: "what models do the current presets use" (owner's ask, 2026-11-08). A summary
+#: of ALL preset rows, each by its own model/lane/context words - the same rows
+#: the HUD's preset chip and both apps read. It is not "what preset am I on"
+#: (`preset_current`, one preset) and not "what does <one preset> change"
+#: (`preset_detail`).
+_K_PRESET_MODELS_ALL = re.compile(
+    r"(?:what|which)\s+models?\s+(?:do|does)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?:current\s+)?presets?\s+(?:use|run|load|have)\b.*"
+    r"|(?:what|which)\s+models?\s+(?:are\s+)?(?:the\s+|my\s+|your\s+)?"
+    r"(?:current\s+)?presets?\s+(?:using|running)\b.*"
+    r"|what\s+are\s+the\s+current\s+models?\s+(?:for|of|in)\s+(?:the\s+|my\s+)?"
+    r"(?:current\s+)?presets?\b.*"
+    r"|(?:which|what)\s+model\s+(?:is\s+)?each\s+preset\s+(?:using|running)\b.*"
+    r"|(?:which|what)\s+preset\s+uses\s+which\s+model\b.*"
+    r"|what\s+are\s+the\s+preset\s+models?\b.*", re.I)
+
+#: "which model is better for the coding preset" / "what is a better model for
+#: the coding preset" / "what should I use for coding" (2026-11-08). Claimed
+#: ONLY when the words name a real preset row; a non-preset task keeps its
+#: older `model_recommend` answer (advice about which preset fits a job).
+_K_PRESET_BEST = re.compile(
+    r"what\s+is\s+(?:a\s+|the\s+)?(?:better|best)\s+(?:local\s+)?model\s+for\s+"
+    r"(?:the\s+|my\s+)?(?P<name0>.+?)\s*(?:preset)?\s*\??$"
+    r"|what\s+should\s+i\s+(?:use|pick|run)\s+for\s+(?:the\s+|my\s+)?"
+    r"(?P<name4>.+?)\s*(?:preset)?\s*\??$"
+    r"|(?:what|which)\s+(?:local\s+)?model\s+(?:is\s+)?(?:better|best)\s+"
+    r"(?:for|to\s+use\s+for|to\s+run)\s+(?:the\s+|my\s+)?(?P<name1>.+?)\s*"
+    r"(?:preset)?\s*\??$"
+    r"|(?:what|which)\s+(?:local\s+)?model\s+should\s+i\s+(?:use|pick|run)\s+"
+    r"for\s+(?:the\s+|my\s+)?(?P<name2>.+?)\s*(?:preset)?\s*\??$"
+    r"|is\s+there\s+a\s+better\s+(?:local\s+)?model\s+for\s+(?:the\s+|my\s+)?"
+    r"(?P<name3>.+?)\s*(?:preset)?\s*\??$", re.I)
+
+#: "what are the best models for the current presets" (the owner's own plural).
+_K_PRESET_BEST_ALL = re.compile(
+    r"(?:what|which)\s+(?:are\s+)?the\s+(?:better|best)\s+(?:local\s+)?models?\s+"
+    r"(?:for|to\s+use\s+for)\s+(?:the\s+|my\s+)?(?:current\s+)?presets?\b.*"
+    r"|what\s+better\s+(?:local\s+)?models?\s+(?:are\s+there|exist)\s+"
+    r"(?:for|in)\s+(?:the\s+|my\s+)?(?:current\s+)?presets?\b.*", re.I)
+
+#: "what did you use before" (2026-11-08): the model history is the change
+#: journal's, and this reads it. With nothing recorded it says so, never guesses.
+_K_MODEL_BEFORE = re.compile(
+    r"what\s+(?:ai\s+)?model\s+did\s+you\s+(?:use|run)\s+before\b.*"
+    r"|what\s+did\s+you\s+(?:use|run)\s+before\s*(?:as\s+(?:your|the)\s+model)?\s*\??$"
+    r"|what\s+was\s+the\s+(?:ai\s+)?model\s+before\b.*"
+    r"|which\s+(?:ai\s+)?model\s+did\s+you\s+(?:use|run)\s+"
+    r"(?:before|previously|last)\b.*"
+    r"|what\s+(?:ai\s+)?model\s+was\s+running\s+before\b.*", re.I)
+
 _K_MODEL_SPEED = re.compile(
     r"(?:how\s+fast\s+is|what(?:'s|\s+is)\s+the\s+speed\s+of|"
     r"tokens\s+(?:a|per)\s+second\s+for)\s+(.+?)\s*\??$")
@@ -17901,6 +17954,11 @@ _K_BOTH_CARDS = re.compile(
     + r"(?:\s+at\s+(?:the\s+)?(?:same\s+time|once))?\s*\??$")
 
 
+_K_PRESET_MODEL_BARE = re.compile(
+    r"(?:what|which)\s+(?:ai\s+)?model\s+does\s+(?:the\s+)?"
+    r"(?P<name>[a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,1})\s+(?:use|run|load)\s*\??$")
+
+
 def _preset_model_ask(s: str) -> Optional[str]:
     """The preset name in a model-of-a-preset question, or None."""
     # `_K_PRESET_MODEL_USED` before `_K_PRESET_MODEL_ITS`: "what model is
@@ -17912,6 +17970,13 @@ def _preset_model_ask(s: str) -> Optional[str]:
         m = rx.fullmatch(s)
         if m is not None:
             return " ".join(str(m.group("name") or "").split())
+    # "what model does fast use": only a REAL preset name answers here, so a
+    # sentence about something else keeps whatever owner it had (2026-11-08).
+    m = _K_PRESET_MODEL_BARE.fullmatch(s)
+    if m is not None:
+        name = " ".join(str(m.group("name") or "").split())
+        if _preset_lookup_words(name) is not None:
+            return name
     return None
 
 
@@ -18115,6 +18180,14 @@ def _model_chat(s: str) -> Optional[Intent]:
     # called "focus" and `_preset_model_ask` as the model of one.
     if _K_FOCUS_PRESETS.fullmatch(s):
         return Intent("focus_presets")
+    # The model-conversation summaries of 2026-11-08 run BEFORE the
+    # one-preset "what model does <name> use" ask: "which model is each
+    # preset using" is a summary, and that ask would read "each" as a
+    # preset name.
+    if _K_PRESET_MODELS_ALL.fullmatch(s):
+        return Intent("preset_models")
+    if _K_PRESET_BEST_ALL.fullmatch(s):
+        return Intent("preset_best_all")
     # FIRST, deliberately: "what model are you using in the coding preset"
     # also fits _K_MODEL_CURRENT's "are you using" prefix, and the preset
     # question must win - it is the one with a fact to quote. The owner's own
@@ -18127,6 +18200,19 @@ def _model_chat(s: str) -> Optional[Intent]:
         return Intent("preset_model", {"name": name})
     if _K_BOTH_CARDS.fullmatch(s):
         return Intent("both_cards")
+    # Advice for one named preset, and the model history (2026-11-08). A
+    # name that is not a preset falls through to the older recommendation.
+    m = _K_PRESET_BEST.fullmatch(s)
+    if m is not None:
+        name = next((g for g in m.groupdict().values() if g), "")
+        name = re.sub(r"^(?:the|my|your)\s+", "", str(name or "").strip())
+        name = re.sub(r"\s+preset$", "", name).strip(" ?.!,")
+        if _preset_lookup_words(name) is not None:
+            return Intent("preset_best", {"name": name})
+        # Not a preset: "which model should i use for writing" keeps the older
+        # task recommendation below, which is advice about a preset's fit.
+    if _K_MODEL_BEFORE.fullmatch(s):
+        return Intent("model_before")
     for rx, intent_name in ((_K_MODEL_CURRENT, "model_current"),
                             (_K_MODEL_ANSWERED, "model_answerer")):
         if rx.fullmatch(s):
@@ -19779,6 +19865,255 @@ def _model_record() -> str:
     except Exception:
         pass
     return ""
+
+
+def _preset_lookup_words(words):
+    """The preset row a name means (id, title or own words), or None - never a guess."""
+    text = " ".join(str(words or "").lower().replace("-", " ").split())
+    text = re.sub(r"^(?:the|my|your)\s+", "", text)
+    text = re.sub(r"\s+presets?$", "", text).strip(" ?.!,")
+    if not text:
+        return None
+    try:
+        import jarvis_model_knowledge as K
+        row = K.preset_by_name(text)
+        if row:
+            return row
+        for candidate in K.presets():
+            title = str(candidate.get("title") or "").lower().replace("-", " ")
+            if text == title or text in title or title.startswith(text):
+                return candidate
+    except Exception:                       # noqa: BLE001 - older PC
+        return None
+    return None
+
+
+def _preset_lane_words(row: dict) -> str:
+    """Where a preset's model runs, in the preset row's own words."""
+    lane = row.get("lane") or {}
+    card = str(lane.get("card") or "")
+    context = row.get("context")
+    parts = []
+    if card:
+        parts.append("on " + card)
+    if context:
+        try:
+            parts.append("at " + f"{int(context):,}" + " tokens")
+        except (TypeError, ValueError):
+            pass
+    return (" " + " ".join(parts)) if parts else ""
+
+
+def _stored_rate_words(row: dict) -> str:
+    """One measured store row's speed, in the store's own numbers."""
+    rate = row.get("tokens_per_s")
+    if rate is None:
+        rate = row.get("tok_s")
+    bits = []
+    try:
+        if rate is not None:
+            bits.append(f"{float(rate):g} tokens a second")
+    except (TypeError, ValueError):
+        pass
+    context = row.get("context_tokens")
+    if context:
+        try:
+            bits.append("at " + f"{int(context):,} tokens")
+        except (TypeError, ValueError):
+            pass
+    return ", ".join(bits)
+
+
+def _recommender_candidate_words(exclude: str = "", limit: int = 3) -> list:
+    """The hardware-aware list's other candidates, with ITS provenance labels.
+
+    Read from `jarvis_model_recommender.recommend()`, the same panel the Brain
+    shows, so a chat answer and a screen cannot offer different models. A row
+    that is not this PC's measurement keeps the module's own ESTIMATED/OTHER
+    label - this function never upgrades an estimate to a measurement.
+    """
+    try:
+        import jarvis_model_recommender as MR
+        panel = MR.recommend(limit=0)
+    except Exception:                       # noqa: BLE001 - older PC
+        return []
+    rows = [r for r in (panel.get("rows") or ()) if isinstance(r, dict)]
+    measured, estimated = [], []
+    for row in rows:
+        model = str(row.get("model") or "")
+        if not model or model == exclude:
+            continue
+        label = str(row.get("label") or model)
+        prov = str(row.get("provenance") or "")
+        speed = (row.get("measured") or {}).get("decode_tps")
+        if prov == "measured_this_pc":
+            if isinstance(speed, (int, float)) and not isinstance(speed, bool):
+                label += f" ({float(speed):g} tokens a second)"
+            measured.append(label)
+        else:
+            tier = str(row.get("provenance_label") or "ESTIMATED FIT (run benchmark to verify)")
+            estimated.append(f"{label} [{tier}]")
+    out = []
+    if measured:
+        out.append("MEASURED ON THIS PC: " + ", ".join(measured[:limit]))
+    if estimated:
+        out.append("ESTIMATED FIT (run benchmark to verify): "
+                   + ", ".join(estimated[:limit]))
+    return out
+
+
+def _run_preset_models() -> Result:
+    """What model every CURRENT preset uses - the summary the owner asked for."""
+    try:
+        import jarvis_model_knowledge as K
+        rows, current = K.presets(), K.current_preset()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("I cannot read this PC's preset rows right now (the model "
+                      "knowledge module is missing), so I will not list the models "
+                      "the presets use.", "preset_models")
+    if not rows:
+        return Result("The preset store on this PC answered with no rows, so I "
+                      "cannot tell you which models the presets use.", "preset_models")
+    current_id = (current or {}).get("id")
+    parts = []
+    for row in rows:
+        title = str(row.get("title") or row.get("id") or "a preset")
+        model = str(row.get("model") or "")
+        bit = title + ": " + (model or "no local model (the cloud preset)")
+        bit += _preset_lane_words(row)
+        if row.get("id") == current_id:
+            bit += " (active)"
+        parts.append(bit)
+    said = (f"These are the {len(rows)} presets on this PC and the model each one "
+            "uses: " + "; ".join(parts) + ".")
+    if current:
+        said += (' The active preset is "' + str(current.get("title") or current_id)
+                 + '".')
+    said += (' Ask "what model is better for the <preset> preset?" for advice that '
+             "says which candidate is measured and which is only estimated. Nothing "
+             "was switched.")
+    return Result(said, "preset_models")
+
+
+def _run_preset_best(f: dict) -> Result:
+    """Better-model advice for ONE preset, with the measured/estimated labels."""
+    name = str((f or {}).get("name") or "")
+    row = _preset_lookup_words(name)
+    if row is None:
+        try:
+            import jarvis_model_knowledge as K
+            names = ", ".join(str(p.get("title")) for p in K.presets())
+        except Exception:                   # noqa: BLE001 - older PC
+            names = ""
+        return Result('I do not know a preset called "' + name + '" on this PC, so '
+                      "I will not guess advice for it. The presets are: "
+                      + (names or "not readable right now") + ".",
+                      "preset_best")
+    title = str(row.get("title") or row.get("id") or name)
+    model = str(row.get("model") or "")
+    if not model:
+        return Result('The "' + title + '" preset has no local model - it uses the '
+                      "cloud service you chose, so there is nothing local to compare "
+                      "or benchmark.", "preset_best")
+    said = 'The "' + title + '" preset runs ' + model + _preset_lane_words(row) + "."
+    try:
+        import jarvis_model_knowledge as K
+        measured = K.bench_for(model)
+        if measured:
+            said += " Measured on this PC: " + K.speed_words(model)
+        else:
+            said += (" This PC has no measured speed for it yet, so I will not call "
+                     "it fast or slow.")
+    except Exception:                       # noqa: BLE001 - said, never guessed
+        said += " I could not read this PC's measured record just now."
+    candidates = _recommender_candidate_words(exclude=model)
+    if candidates:
+        said += (" The hardware-aware list offers other models this PC could run, "
+                 "with its own labels - " + "; ".join(candidates) + ".")
+    else:
+        said += (" The hardware-aware list could not name another model this PC can "
+                 "run right now.")
+    said += (' Those are candidates, not a verdict: nothing has measured them FOR '
+             'the "' + title + '" preset, so I will not claim one is better. Say '
+             '"benchmark the ' + title.lower() + ' model" and its scorecard decides. '
+             "Nothing was switched.")
+    return Result(said, "preset_best")
+
+
+def _run_preset_best_all() -> Result:
+    """The same advice for every current preset, in one honest answer."""
+    try:
+        import jarvis_model_knowledge as K
+        rows, current = K.presets(), K.current_preset()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("I cannot read this PC's preset rows right now, so I will not "
+                      "guess better models for them.", "preset_best_all")
+    if not rows:
+        return Result("The preset store answered with no rows on this PC, so there "
+                      "are no current presets to advise about.", "preset_best_all")
+    current_id = (current or {}).get("id")
+    parts = []
+    for row in rows:
+        title = str(row.get("title") or row.get("id") or "a preset")
+        model = str(row.get("model") or "")
+        bit = title + ": " + (model or "no local model (the cloud preset)")
+        if row.get("id") == current_id:
+            bit += " (active)"
+        try:
+            measured = K.bench_for(model) if model else None
+        except Exception:                   # noqa: BLE001 - said as unmeasured
+            measured = None
+        rate = _stored_rate_words(measured or {})
+        bit += (" - measured on this PC: " + rate) if rate else " - not measured on this PC yet"
+        parts.append(bit)
+    said = ("For each of the " + str(len(rows)) + " presets on this PC, what it runs "
+            "now and what has been measured: " + "; ".join(parts) + ".")
+    candidates = _recommender_candidate_words()
+    if candidates:
+        said += (" The hardware-aware list's other candidates, with its own labels - "
+                 + "; ".join(candidates) + ".")
+    else:
+        said += (" The hardware-aware list offered no other model for this PC right "
+                 "now.")
+    said += (' Nothing has measured those FOR a specific preset, so I will not call '
+             'one better than another - a benchmark is the only proof. Say "benchmark '
+             'the coding model" for the preset you care about. Nothing was switched.')
+    return Result(said, "preset_best_all")
+
+
+def _run_model_before() -> Result:
+    """What model ran before: the change journal's own record, or an honest no."""
+    said = ("I do not keep a separate model history - only my change journal. ")
+    try:
+        rows = _awareness_journal_rows()
+    except Exception:                       # noqa: BLE001 - unreadable journal
+        rows = []
+    changes = []
+    for row in rows:
+        for change in (row.get("changed") or []):
+            if isinstance(change, dict) and str(change.get("key") or "") == "model":
+                changes.append((row, change))
+    current = _model_record() or ""
+    if not current:
+        try:
+            import jarvis_model_knowledge as K
+            current = str(K.current_model() or "")
+        except Exception:                   # noqa: BLE001 - older PC
+            current = ""
+    if not changes:
+        said += ("No model change is recorded there on this PC, so I will not guess "
+                 "what I used before.")
+    else:
+        row, change = changes[-1]
+        old = str(change.get("from") or "").strip()
+        new = str(change.get("to") or "").strip()
+        day = _bench_day(row.get("at"))
+        said += ("The last model change in my change journal was from "
+                 + (old or "nothing recorded") + " to " + (new or "nothing recorded")
+                 + (", recorded " + day if day else "") + ".")
+    said += (" The model now is " + current + "." if current
+             else " This PC does not record which model is running now.")
+    return Result(said, "model_before")
 
 
 def _run_model_current() -> Result:
@@ -24733,9 +25068,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "bench_history":
         return _run_bench_history()
     if n == "bench_run":
-        return _run_bench_run()
+        return _run_bench_run(intent.f)
     if n == "bench_suites":
         return _run_bench_suites()
+    if n == "bench_how":
+        return _run_bench_how()
     if n == "bench_progress":
         return _run_bench_progress()
     if n == "bench_stop":
@@ -25086,6 +25423,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # "how long does it take to clear old chats if i batched a lot of them
         # together?" - answered from this PC's measured state, never the model.
         return _run_history_purge()
+    if n == "preset_models":
+        return _run_preset_models()
+    if n == "preset_best":
+        return _run_preset_best(intent.f)
+    if n == "preset_best_all":
+        return _run_preset_best_all()
+    if n == "model_before":
+        return _run_model_before()
     if n == "model_current":
         return _run_model_current()
     if n == "model_answerer":
@@ -25582,6 +25927,7 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # know this PC's preset, benchmark rows, switch states or change journal,
     # so a private chat answers these from the local code, never the model.
     "preset_current", "bench_history", "bench_progress", "self_changes",
+    "preset_models", "preset_best", "preset_best_all", "model_before", "bench_how",
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
@@ -25784,6 +26130,11 @@ READ_ONLY_INTENTS = frozenset({
     # changing or restarting anything - so none may take back what "cancel
     # that" would undo.
     "tools_inventory", "tools_asking", "connected_list", "self_refresh",
+    # The model-conversation reads (2026-11-08): all-preset models, per-preset
+    # advice, the model history, and how to start a benchmark - every one reads
+    # this PC's own rows and changes nothing, so none may clear "cancel that".
+    "preset_models", "preset_best", "preset_best_all", "model_before",
+    "bench_how",
     # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
@@ -26977,13 +27328,49 @@ _AW_PRESET_CURRENT = re.compile(
     r"|(?:what|which)\s+preset\s+(?:am\s+i|are\s+you)\s*", re.I)
 
 _AW_BENCH_HISTORY = re.compile(
-    r"(?:what|which)\s+benchmarks?\s+(?:have|has|were|did)\s+(?:been\s+)?"
+    r"(?:what|which)\s+benchmarks?\s+(?:have|has|were|did)\s+"
+    r"(?:(?:you|i|jarvis|we)\s+)?(?:been\s+)?"
     r"(?:run|measured|done|recorded|completed)(?:\s+(?:on|for)\s+(?:you|me|this\s+pc))?"
     r"|(?:what|which)\s+(?:are\s+)?(?:your|the)\s+benchmark\s+"
     r"(?:results|numbers|measurements|scores|history)"
     r"|(?:show|tell)\s+me\s+(?:your|the)\s+benchmarks?"
     r"|what\s+have\s+you\s+measured"
-    r"|benchmark\s+history", re.I)
+    r"|benchmark\s+history"
+    # The owner's other ways of asking "what did the benchmark measure?"
+    # (2026-11-08): these used to fall to the model, which does not have the
+    # numbers. They all read the SAME two stores the other shapes read.
+    r"|what\s+(?:has\s+been|was|got)\s+measured"
+    r"(?:\s+(?:on|for|so\s+far\s+on)\s+(?:you|me|this\s+pc))?"
+    r"|what(?:'s|\s+has|\s+is)\s+been\s+measured"
+    r"(?:\s+(?:on|for)\s+(?:you|me|this\s+pc))?"
+    r"|what\s+did\s+the\s+(?:last\s+)?benchmark\s+(?:measure|find|show|record|prove)"
+    r"|what\s+did\s+you\s+(?:measure|benchmark)"
+    r"|what\s+were\s+the\s+benchmark\s+(?:results|numbers|measurements)"
+    r"|what\s+are\s+your\s+measured\s+(?:speeds|results|numbers|figures)"
+    r"|tell\s+me\s+what\s+you\s+measured"
+    r"|show\s+me\s+the\s+measured\s+(?:results|numbers|speeds)", re.I)
+
+#: The owner's "start Benchmarks" (2026-11-08). A PLURAL benchmark ask is the
+#: five-suite run; the singular ones keep `_AW_BENCH_RUN`'s speed bench. Checked
+#: before the open/launch matcher, which used to read "start benchmarks" as
+#: "open the benchmarks app" and answer "I have asked this PC to open
+#: benchmarks." - a door that does not exist.
+_AW_BENCH_PLURAL = re.compile(
+    r"(?:start|run|do|take|begin)\s+(?:the\s+|some\s+|all\s+(?:of\s+)?the\s+)?"
+    r"benchmarks\s*\??$", re.I)
+
+#: One benchmark of a NAMED model/preset: "benchmark the coding model", "run the
+#: coding benchmark", "start a benchmark on the fast model" (2026-11-08). Only
+#: known preset words are claimed; a model tag typed by hand keeps the model
+#: switch language it had.
+_AW_BENCH_TARGET = re.compile(
+    r"benchmark\s+(?:the\s+)?(?P<t1>coding|general|fast|everyday|current)\s+"
+    r"(?:model|preset)\s*\??$"
+    r"|(?:run|start|do|take)\s+(?:a\s+|the\s+)?(?:quick\s+|speed\s+)?benchmark\s+"
+    r"(?:on|of|for)\s+(?:the\s+)?(?P<t2>coding|general|fast|everyday|current)"
+    r"\s*(?:model|preset)?\s*\??$"
+    r"|(?:run|start)\s+the\s+(?P<t3>coding|general|fast|everyday|current)\s+"
+    r"benchmark\s*\??$", re.I)
 
 _AW_BENCH_RUN = re.compile(
     r"(?:run|do|start|take|perform)\s+(?:a|one|the|another)\s+"
@@ -27009,6 +27396,17 @@ _AW_BENCH_PROGRESS = re.compile(
 
 _AW_BENCH_STOP = re.compile(
     r"(?:stop|cancel|abort)\s+(?:the\s+)?(?:benchmark|bench\s+run)", re.I)
+
+#: "how do I start a benchmark" and "what does a benchmark measure" (2026-11-08):
+#: answered with the door, the throwaway-server rule and where the results go -
+#: never by the model, which does not know this PC's runner.
+_AW_BENCH_HELP = re.compile(
+    r"how\s+(?:do|can|would|should)\s+i\s+(?:start|run|do|take|begin)\s+"
+    r"(?:a\s+|the\s+|some\s+)?benchmarks?(?:\s+suites?)?\s*\??$"
+    r"|how\s+(?:do|does)\s+(?:the\s+|a\s+)?benchmarks?\s+work\s*\??$"
+    r"|what\s+(?:do|does)\s+(?:a\s+|the\s+|my\s+|your\s+)?benchmarks?\s+"
+    r"(?:measure|do|test|check)\s*\??$"
+    r"|what\s+is\s+(?:a\s+|the\s+)?benchmark\s*\??$", re.I)
 
 #: "What changed about you?" is the JOURNAL's. A question about the shipped
 #: update ("what changed in your last update?") stays `recent_changes`' - it
@@ -27394,43 +27792,170 @@ def _bench_progress_snapshot():
         return None
 
 
-def _run_bench_history() -> Result:
-    """The benchmark rows this PC recorded, newest first, or an honest empty."""
+def _bench_day(at) -> str:
+    """A stored row's own date, in the owner's words - never "now"."""
+    try:
+        return time.strftime("%d %b %Y", time.localtime(float(at)))
+    except (TypeError, ValueError, OSError):
+        return ""
+
+
+def _bench_g(value) -> str:
+    """One stored number, exactly as the store holds it (no rounding invention)."""
+    try:
+        return f"{float(value):g}"
+    except (TypeError, ValueError):
+        return ""
+
+
+#: The suite ids, in words, from the module that owns them - never typed again.
+def _bench_suite_label(suite_id) -> str:
+    key = str(suite_id or "")
     try:
         import jarvis_bench as B
-        rows = list(B.BenchLog().runs(limit=5))
-    except Exception:
-        rows = []
-    if not rows:
-        return Result("I have no benchmark runs recorded on this PC yet. Brain, "
-                      "Model, Models runs one, and since today I can start one for "
-                      'the current model if you say "run a benchmark".',
+        for row in getattr(B, "SUITES", ()) or ():
+            if str(row.get("id") or "") == key:
+                return str(row.get("label") or key)
+    except Exception:                       # noqa: BLE001 - older PC
+        pass
+    return key.replace("_", " ").strip().capitalize() or "a suite"
+
+
+def _run_bench_history() -> Result:
+    """What this PC has actually measured: speed runs AND suite scorecards.
+
+    THE OWNER'S ASK (2026-11-08): "what has been measured". The store already
+    had the answer in TWO files `jarvis_bench` writes - `BenchLog` (speed runs)
+    and `ScoreLog` (the five-suite scorecards) - and the earlier answer read
+    only the first. Every number here is copied from a stored row; a field a
+    row does not hold is said as missing, never estimated. If nothing is
+    stored, it says so and names the door that starts a run.
+    """
+    try:
+        import jarvis_bench as B
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("The benchmark module is not installed on this PC, so I "
+                      "cannot read any measured results and I will not invent one.",
                       "bench_history")
-    bits = []
-    for row in rows:
-        model = str(row.get("model") or "a model")
-        lane = str(row.get("lane") or "")
-        speed = row.get("gen_median")
-        try:
-            speed_s = (f"{float(speed):.1f} tokens a second"
-                       if speed is not None else "no speed number")
-        except (TypeError, ValueError):
-            speed_s = "no speed number"
-        said = model + (" on the " + lane + " lane" if lane else "") + " - " + speed_s
-        if row.get("spilled"):
-            said += " (some layers spilled)"
-        if row.get("ok") is False:
-            said += " (that run failed)"
-        bits.append(said)
-    return Result("The newest benchmark runs on this PC: " + "; ".join(bits)
-                  + '. Ask "run a benchmark" to measure the current model again.',
-                  "bench_history")
+    try:
+        runs = list(B.BenchLog().runs(limit=4))
+    except Exception:                       # noqa: BLE001 - damaged store
+        runs = []
+    try:
+        scores = list(B.ScoreLog().rows())[-4:]
+    except Exception:                       # noqa: BLE001 - damaged store
+        scores = []
+    if not runs and not scores:
+        return Result("I have not measured anything on this PC yet: there is no "
+                      "benchmark record here, so I will not invent a number. Say "
+                      "\"start a benchmark\" and I measure the current model's "
+                      "speed, or \"start the benchmark suites\" for all five - "
+                      "speed, coding, general, tool-calling and vision. The "
+                      "results are kept in Brain, Model, Models.",
+                      "bench_history")
+    said = ""
+    if runs:
+        bits = []
+        for row in runs:
+            model = str(row.get("model") or "a model")
+            lane = str(row.get("lane") or "")
+            speed = _bench_g(row.get("gen_median"))
+            part = model + (" on the " + lane + " lane" if lane else "") + " - "
+            part += (speed + " tokens a second") if speed else "no speed number stored"
+            if row.get("spilled"):
+                part += " (some layers spilled)"
+            if row.get("ok") is False:
+                part += " (that run failed)"
+            day = _bench_day(row.get("at"))
+            if day:
+                part += ", measured " + day
+            bits.append(part)
+        said = "The newest benchmark runs on this PC: " + "; ".join(bits) + "."
+    if scores:
+        bits = []
+        for row in scores:
+            model = str(row.get("model") or "a model")
+            label = _bench_suite_label(row.get("suite"))
+            part = label + " on " + model + ": "
+            score = _bench_g(row.get("score_pct"))
+            items, passed = row.get("items"), row.get("items_passed")
+            if score:
+                part += score + "%"
+                if isinstance(items, (int, float)) and isinstance(passed, (int, float)):
+                    part += " (" + _bench_g(passed) + " of " + _bench_g(items) + " tasks)"
+            elif row.get("skipped"):
+                part += "skipped"
+            elif row.get("passed") is False:
+                part += "that run did not pass"
+            else:
+                part += "no score stored"
+            speed = _bench_g(row.get("decode_tps"))
+            if speed:
+                part += ", " + speed + " tokens a second"
+            ctx = _bench_g(row.get("ctx"))
+            if ctx and "." not in ctx:
+                part += " at " + ctx + " tokens"
+            day = _bench_day(row.get("at"))
+            if day:
+                part += ", measured " + day
+            bits.append(part)
+        said += " The newest suite scorecards on this PC: " + "; ".join(bits) + "."
+    return Result(said + ' Every number above was measured on this PC. Say "start '
+                  'a benchmark" to measure the current model again, or "start the '
+                  'benchmark suites" for all five; the results are kept in Brain, '
+                  'Model, Models.', "bench_history")
 
 
-def _run_bench_run() -> Result:
-    """Start ONE async benchmark of the current model through jarvis_bench itself."""
+def _bench_target_row(words: str):
+    """The preset row a named benchmark target means, or None (never a guess)."""
+    words = " ".join(str(words or "").lower().split()).strip(" ?.!,")
+    if not words or words == "current":
+        return None
+    try:
+        import jarvis_model_knowledge as K
+        row = K.preset_by_name(words)
+        if row:
+            return row
+        for candidate in K.presets():
+            title = str(candidate.get("title") or "").lower()
+            if words == title or words in title or title.startswith(words):
+                return candidate
+    except Exception:                       # noqa: BLE001 - older PC
+        return None
+    return None
+
+
+def _run_bench_run(f: Optional[dict] = None) -> Result:
+    """Start ONE async benchmark through jarvis_bench itself.
+
+    The current model by default; a NAMED preset's model when the owner said
+    "benchmark the coding model" (2026-11-08). The lane and the model come from
+    the preset row that owns them - never from a guess.
+    """
     import jarvis_bench as B
-    model = _model_record() or ""
+    target = str((f or {}).get("target") or "")
+    lane = "everyday"
+    model = ""
+    if target and target != "current":
+        row = _bench_target_row(target)
+        if not row:
+            try:
+                import jarvis_model_knowledge as K
+                names = ", ".join(str(p.get("title")) for p in K.presets())
+            except Exception:               # noqa: BLE001 - older PC
+                names = ""
+            return Result("Nothing was measured: I do not know a model or preset "
+                          "called \"" + target + "\" on this PC. The presets are: "
+                          + (names or "not readable right now") + '. Say "benchmark '
+                          'the coding model" or "start a benchmark" for the current '
+                          "model.", "bench_run")
+        model = str(row.get("model") or "")
+        lane = "coding" if "coding" in str(row.get("id") or "").lower() else "everyday"
+        if not model:
+            return Result("Nothing was measured: the \"" + str(row.get("title") or target)
+                          + "\" preset has no local model to benchmark.", "bench_run")
+    if not model:
+        model = _model_record() or ""
     if not model:
         try:
             import jarvis_presets as P
@@ -27440,13 +27965,12 @@ def _run_bench_run() -> Result:
     if not model:
         return Result("Nothing was measured: I cannot read which model is running on "
                       "this PC right now, and I will not guess one.", "bench_run")
-    lane = "everyday"
     try:
         import jarvis_presets as P
         pid = str(P.choice() or "").lower()
     except Exception:
         pid = ""
-    if "coding" in pid:
+    if (not target or target == "current") and "coding" in pid:
         lane = "coding"
     body = {"model": model, "lane": lane,
             "confirm": {"model": model, "lane": lane, "may_evict": True}}
@@ -27474,6 +27998,8 @@ def _run_bench_run() -> Result:
     note = str(out.get("message") or "")
     if note and "Nothing else" not in note:
         said += " " + note
+    said += (' The results will be kept in Brain, Model, Models - ask "what have '
+             'you measured?" when it finishes.')
     return Result(said, "bench_run")
 
 
@@ -27531,7 +28057,25 @@ def _run_bench_suites() -> Result:
         "vision suite and says so; nothing is counted as a pass that was skipped. "
         "It runs on a throwaway model server and may pause the lane it needs, then "
         "put the active preset back. Ask \"how is the benchmark going?\" for "
-        "progress and the numbers when it finishes.", "bench_suites")
+        "progress and the numbers when it finishes; the scorecards are kept in "
+        "Brain, Model, Models.", "bench_suites")
+
+
+def _run_bench_how() -> Result:
+    """How to start a benchmark, what it does, and where the results go.
+
+    Fixed words (2026-11-08): the model does not know this PC's runner, and the
+    owner asked how to start one. Nothing runs here - this is a read."""
+    return Result(
+        "To start one, just say it: \"start a benchmark\" measures the current "
+        "model's speed, and \"start the benchmark suites\" runs all five - speed, "
+        "coding, general, tool-calling and vision. You can name one too, like "
+        "\"benchmark the coding model\". A run uses a throwaway model server on a "
+        "spare port, never your live lane's own server directly: it may pause the "
+        "lane it needs and puts your active preset back afterwards. It refuses "
+        "while I am answering a turn, and only one runs at a time. The results "
+        "are kept in Brain, Model, Models - ask \"what have you measured?\" and "
+        "I will read them back.", "bench_how")
 
 
 def _run_bench_progress() -> Result:
@@ -27861,8 +28405,12 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
 
     if _AW_PRESET_CURRENT.fullmatch(low):
         return Intent("preset_current")
-    if _AW_BENCH_SUITES.fullmatch(low):
+    if _AW_BENCH_SUITES.fullmatch(low) or _AW_BENCH_PLURAL.fullmatch(low):
         return Intent("bench_suites")
+    m = _AW_BENCH_TARGET.fullmatch(low)
+    if m:
+        target = next((g for g in m.groupdict().values() if g), "")
+        return Intent("bench_run", {"target": target.lower()})
     if _AW_BENCH_RUN.fullmatch(low):
         return Intent("bench_run")
     if _AW_BENCH_PROGRESS.fullmatch(low):
@@ -27871,6 +28419,8 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         return Intent("bench_stop")
     if _AW_BENCH_HISTORY.fullmatch(low):
         return Intent("bench_history")
+    if _AW_BENCH_HELP.fullmatch(low):
+        return Intent("bench_how")
     m = _AW_CHANGES.fullmatch(low)
     if m:
         d = m.groupdict()
