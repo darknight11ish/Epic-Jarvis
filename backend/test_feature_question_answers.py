@@ -358,9 +358,19 @@ def t_the_model_prompt_does_not_carry_the_catalogue():
           not any(str(row.get("what") or "")[:60] in prompt
                   for row in C.FEATURES if row.get("what")),
           "a row's prose is in the prompt")
-    source = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
+    # An AST walk, not a source-text pin (tools/check_no_source_pins.py): the
+    # claim is about what the module IMPORTS, and an import is an ast node.
+    import ast
+    imported = set()
+    for node in ast.walk(ast.parse((HERE / "jarvis_agent.py").read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            imported.update(a.name for a in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
     check("jarvis_agent imports no feature catalogue",
-          "jarvis_feature_catalogue" not in source,
+          not any(name == "jarvis_feature_catalogue"
+                  or name.startswith("jarvis_feature_catalogue.")
+                  for name in imported),
           "a catalogue import appeared in jarvis_agent")
     for row in C.FEATURES[:5]:
         check(f"no row text is sent for a typed question: {row.get('id')}",
