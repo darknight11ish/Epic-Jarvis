@@ -36480,3 +36480,36 @@ Meshnet app, change any Windows setting, act while the link is healthy, act
 mid-turn, or raise a card per attempt. Each of those is a rule in the module's
 own header, and the audit trail is one calm sentence in the HUD/Settings line
 and the event stream (`wifi_reconnect`).
+
+**Ruling Q4 guardrails (2026-11-08).** The owner approved this as a bounded,
+default-ON, PC-only maintenance feature. There is **no card per attempt** (an
+offline PC cannot be reached by a phone to answer one); instead the ruling's six
+mandatory guardrails are enforced in the module and proved in its suite:
+
+1. **Saved password-protected profiles only** - the profile must carry a stored
+   key AND an authentication in the exact allow-list `WPA2PSK`, `WPA3SAE`,
+   `WPA2`, `WPA3`; Open, None, WEP and 802.1X/Enterprise are hard-refused, and
+   `key=clear` is never passed.
+2. **Strictly offline-only** - (a) the switch is ON, (b) Lockdown is readable
+   and OFF, (c) this Wi-Fi has no working internet, and (d) the owner did not
+   turn Wi-Fi off: an adapter disabled or radio off means NOTHING is switched
+   back on, and an unreadable radio or Lockdown fails SAFE (skip).
+3. **Bounded in-range attempts** - only the top 3 saved password-protected
+   profiles whose SSID `netsh wlan show networks` currently sees, each verified
+   for 10 seconds, stopping at the first success.
+4. **The switch** - ON by default as the owner asked; changing it is exactly ONE
+   `change_own_config` card to turn it ON (nothing is written until that card is
+   answered; a waiting card answers "a card is waiting") and instant/cardless to
+   turn it OFF. Settings, Chat and Jarvis Live all reach the same
+   `jarvis_wifi.request_enabled`; a model answer can never toggle it.
+5. **Full audit receipt** - every attempt writes `timestamp`, `profile_name`,
+   `auth_type`, `result: connected | still_offline` to the project's audit/status
+   log and to the module's bounded receipts (never a key), so the deterministic
+   sentence "did you reconnect my wifi?" is answered from that record.
+6. **Decision record** - `decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md`
+   (the Lead owns records).
+
+If the in-range scan or the radio state cannot be read (on a Windows 11 PC with
+Location services off, `netsh wlan show networks`/`show interfaces` are refused -
+measured 2026-11-08), the check says so in one calm line and **makes no attempt**;
+it never guesses that a network is in range.

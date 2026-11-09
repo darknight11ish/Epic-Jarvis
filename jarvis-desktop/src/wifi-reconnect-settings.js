@@ -94,7 +94,12 @@ async function load() {
 async function save(on) {
   if (busy) return;
   busy = true;
-  paint({ known: true, on: !on }, on ? "Turning it on…" : "Turning it off…");
+  // RULING Q4.4 (2026-11-08): turning it ON raises ONE approval card, so the
+  // switch stays off until that card is answered; OFF needs no card at all.
+  paint({ known: true, on: !on },
+    on ? "Waiting for your approval card in the Jarvis bar — the switch stays " +
+         "off until it is approved."
+       : "Turning it off…");
   try {
     const reply = await TAURI.core.invoke("set_wifi_reconnect", { enabled: on });
     paint(reply);

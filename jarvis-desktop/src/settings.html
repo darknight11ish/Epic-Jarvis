@@ -1949,10 +1949,12 @@
           <input id="wifi-reconnect-switch" type="checkbox" />
           <span>Reconnect Wi-Fi automatically
             <span class="toggle-detail" id="wifi-reconnect-detail">
-              On to start, as you asked. On: every 2 hours while this PC has no
-              internet, Jarvis tries the saved password-protected Wi-Fi networks
-              it already knows - at most 3 tries - and says what happened. Off:
-              Jarvis never touches this PC's Wi-Fi choice.
+              On to start, as you asked. On: every 2 hours, only while this PC
+              has no internet and only with Lockdown off and the Wi-Fi radio left
+              on, Jarvis tries the saved password-protected networks that are in
+              range - at most 3, verified for 10 seconds each - and says what
+              happened. Turning it back on asks for one approval card; turning it
+              off is instant. Off: Jarvis never touches this PC's Wi-Fi choice.
             </span>
           </span>
         </label>
