@@ -5845,6 +5845,66 @@ def _read_aloud_set(s: str) -> Optional[Intent]:
     return None
 
 
+#: THE AUTO WI-FI RECONNECT, SAID OUT LOUD (2026-11-08).
+#:
+#: The owner asked for a feature that "defaults on but can be changed in settings
+#: or chat with jarvis", with the switch itself, its default and its file owned by
+#: `jarvis_wifi.py` (GET/POST /api/wifi-reconnect). This file owns ONLY the
+#: sentences: they read the switch's own state, never the model's guess, and the
+#: change calls the module's own `set_enabled()` - the exact function the Settings
+#: switch's route calls.
+#:
+#: WHAT MAY MATCH, and nothing else: the feature by its Settings name ("auto
+#: wi-fi reconnect", "automatic wifi reconnect"), and the owner's own words about
+#: reconnecting Wi-Fi on its own. A network question that is not about this switch
+#: ("what wifi am I on?", "turn off the kitchen light") keeps its own path.
+_WIFI_ON = re.compile(
+    r"(?:turn|switch)\s+on\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|(?:turn|switch)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+on"
+    r"|(?:enable|activate)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|reconnect\s+(?:to\s+)?(?:the\s+|my\s+)?wi[\s-]?fi\s+automatically"
+    r"|keep\s+(?:the\s+|my\s+)?wi[\s-]?fi\s+(?:connected|working)\s+automatically")
+_WIFI_OFF = re.compile(
+    r"(?:turn|switch)\s+off\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|(?:turn|switch)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+off"
+    r"|(?:disable|deactivate|stop)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|(?:do\s+not|don't)\s+(?:reconnect|touch|change)\s+(?:the\s+|my\s+)?wi[\s-]?fi"
+    r"|stop\s+(?:reconnecting|trying\s+to\s+reconnect)\s+(?:to\s+)?(?:the\s+|my\s+)?wi[\s-]?fi")
+_WIFI_ABOUT = re.compile(
+    r"what\s+does\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:do|mean)"
+    r"|how\s+does\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+work"
+    r"|what\s+is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect")
+_WIFI_WHEN = re.compile(
+    r"when\s+will\s+(?:jarvis\s+|it\s+)?(?:try|attempt|check)\s+(?:the\s+|my\s+)?wi[\s-]?fi(?:\s+again)?"
+    r"|when\s+is\s+the\s+next\s+(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+(?:reconnect\s+)?(?:check|try|attempt)"
+    r"|when\s+does\s+(?:jarvis|it)\s+next\s+check\s+(?:the\s+|my\s+)?wi[\s-]?fi"
+    r"|when\s+will\s+(?:it|jarvis)\s+try\s+to\s+(?:reconnect|connect)\s+(?:to\s+)?(?:the\s+)?wi[\s-]?fi")
+_WIFI_STATE = re.compile(
+    r"is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:switch\s+)?(?:on|off|enabled|disabled)"
+    r"|is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:turned|switched)\s+(?:on|off)"
+    r"|is\s+jarvis\s+(?:trying|going)\s+to\s+(?:reconnect|fix)\s+(?:the\s+|my\s+)?wi[\s-]?fi")
+
+
+def _wifi_reconnect_set(s: str) -> Optional[Intent]:
+    """The auto Wi-Fi reconnect switch in the owner's own words, or None."""
+    if _WIFI_OFF.fullmatch(s):
+        return Intent("wifi_reconnect_set", {"on": False})
+    if _WIFI_ON.fullmatch(s):
+        return Intent("wifi_reconnect_set", {"on": True})
+    return None
+
+
+def _wifi_reconnect_read(s: str) -> Optional[Intent]:
+    """The read-only auto Wi-Fi reconnect questions: what it does, when it tries."""
+    if _WIFI_ABOUT.fullmatch(s):
+        return Intent("wifi_reconnect_about")
+    if _WIFI_WHEN.fullmatch(s):
+        return Intent("wifi_reconnect_when")
+    if _WIFI_STATE.fullmatch(s):
+        return Intent("self_wifi_reconnect")
+    return None
+
+
 #: "read remembered facts aloud when my phone connects" (deploy finding 3,
 #: 2026-11-07; architect ruling Q8). MEASURED on the live Wave-8.2 build: the
 #: model answered "I'll set a reminder to read remembered facts aloud when your
@@ -6672,6 +6732,12 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     got = _read_aloud_set(s)
     if got is not None:
         return got
+    # The auto Wi-Fi reconnect (2026-11-08), the owner's own words. The change
+    # writes the switch's own file through jarvis_wifi.set_enabled and is
+    # deliberately NOT read-only; the questions fall through to the reads below.
+    got = _wifi_reconnect_set(s)
+    if got is not None:
+        return got
     got = _phone_remembered_aloud(s)
     if got is not None:
         return got
@@ -6683,6 +6749,9 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         return got
     if _READ_ALOUD_STATE.fullmatch(s):
         return Intent("self_read_aloud")
+    got = _wifi_reconnect_read(s)
+    if got is not None:
+        return got
     # A sentence that clearly asks to change A SETTING, naming one nothing
     # above knows: "turn off the turbo setting", "change my security settings",
     # "enable the settings thing". Answered honestly rather than handed to the
@@ -13974,6 +14043,25 @@ def _self_projects_words(sources: Optional[dict] = None) -> str:
             + ", so I will not guess how many there are.")
 
 
+def _self_wifi_reconnect_words(sources: Optional[dict] = None) -> str:
+    """Is the auto Wi-Fi reconnect on? Read from the switch's OWN file (2026-11-08).
+
+    Never the voice, never the model: the switch, its default and its file live in
+    `jarvis_wifi.py`, so the answer is that module's own sentence. A build without
+    the module says so rather than guessing.
+    """
+    try:
+        import jarvis_wifi as W
+    except Exception:
+        return ("This build of Jarvis has no auto Wi-Fi reconnect yet - run "
+                "apply-patches.ps1 on the PC. Nothing was changed.")
+    try:
+        return str(W.state_words())
+    except Exception:
+        return ("I could not read the auto Wi-Fi reconnect's own state, so I will "
+                "not say whether it is on.")
+
+
 _MEASURED_SELF_WORDS = {
     "self_version": _self_version_words,
     "self_desktop_version": _self_desktop_version_words,
@@ -13983,6 +14071,7 @@ _MEASURED_SELF_WORDS = {
     "self_chats": _self_chats_words,
     "self_wake": _self_wake_words,
     "self_read_aloud": _self_read_aloud_words,
+    "self_wifi_reconnect": _self_wifi_reconnect_words,
     "self_projects": _self_projects_words,
 }
 
@@ -22861,6 +22950,62 @@ def _run_phone_memory_aloud_command() -> Result:
     return Result(_PHONE_MEMORY_ALOUD_COMMAND_SAID, "phone_memory_aloud_command")
 
 
+def _run_wifi_reconnect_set(f: dict) -> Result:
+    """"Turn the auto Wi-Fi reconnect on/off" - one writer, the module's own setter.
+
+    The same function the Settings switch's route calls, so the answer is the
+    module's own sentence and a switch that could not be saved is never reported
+    as saved. Cardless in both directions; see `jarvis_wifi.py` for the argument
+    and its one narrow standing action (saved, password-protected profiles only).
+    """
+    try:
+        import jarvis_wifi as W
+    except Exception:                       # noqa: BLE001 - older PC: no switch
+        return Result("This build of Jarvis has no auto Wi-Fi reconnect yet - run "
+                      "apply-patches.ps1 on the PC. Nothing was changed.",
+                      "wifi_reconnect_set")
+    on = f.get("on") is True
+    try:
+        out = W.set_enabled(on)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result("I could not change the auto Wi-Fi reconnect "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "wifi_reconnect_set")
+    out = out if isinstance(out, dict) else {}
+    return Result(str(out.get("words") or W.set_words(on)), "wifi_reconnect_set")
+
+
+def _run_wifi_reconnect_about() -> Result:
+    """"What does the auto Wi-Fi reconnect do?" - fixed words about the feature.
+
+    Fixed so it can answer in a private chat without a model; it says what the
+    module does and does not do, never a guess.
+    """
+    try:
+        import jarvis_wifi as W
+        said = W.about_words()
+    except Exception:                       # noqa: BLE001 - older PC: fixed words
+        said = ("The auto Wi-Fi reconnect keeps this desktop's link repaired: while "
+                "this PC has no internet it tries a saved password-protected network "
+                "it already knows, every 2 hours, and never asks for a password.")
+    return Result(said, "wifi_reconnect_about")
+
+
+def _run_wifi_reconnect_when() -> Result:
+    """"When will it try the Wi-Fi again?" - read from the switch's own state.
+
+    Never a made-up time: OFF, no saved profile and "the last check was at HH:MM,
+    the next is due at HH:MM" are all real answers from the module's own file.
+    """
+    try:
+        import jarvis_wifi as W
+        said = W.when_words()
+    except Exception:                       # noqa: BLE001 - older PC: fixed words
+        said = ("This build of Jarvis has no auto Wi-Fi reconnect yet - run "
+                "apply-patches.ps1 on the PC.")
+    return Result(said, "wifi_reconnect_when")
+
+
 def _run_cloud_escalation_rule() -> Result:
     """The cloud switch's rule, read-only - the Gate 11 probe's own question."""
     return Result(_CLOUD_ESCALATION_RULE_SAID, "cloud_escalation_rule")
@@ -24161,6 +24306,16 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_phone_read_aloud_refused()
     if n == "phone_memory_aloud_command":
         return _run_phone_memory_aloud_command()
+    # The auto Wi-Fi reconnect (2026-11-08): the owner's own sentences through
+    # jarvis_wifi's own setter/state - the same functions the Settings route and
+    # its switch call. Cardless both ways, PC-only, one narrow saved-profile
+    # action; see jarvis_wifi.py's own header for the argument.
+    if n == "wifi_reconnect_set":
+        return _run_wifi_reconnect_set(f)
+    if n == "wifi_reconnect_about":
+        return _run_wifi_reconnect_about()
+    if n == "wifi_reconnect_when":
+        return _run_wifi_reconnect_when()
     if n == "cloud_escalation_rule":
         return _run_cloud_escalation_rule()
     if n == "model_recommender":
@@ -24966,6 +25121,11 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # ONE non-secret verdict file - nothing leaves this PC and nothing is
     # written, so a private chat gets the truth rather than a model's overclaim.
     "github_connect_receipt",
+    # The auto Wi-Fi reconnect's reads (2026-11-08): the switch's state, what it
+    # does and when it next tries are all read from this PC's own file, so a
+    # private chat answers them instead of guessing. The CHANGE
+    # (`wifi_reconnect_set`) is deliberately NOT here.
+    "self_wifi_reconnect", "wifi_reconnect_about", "wifi_reconnect_when",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
@@ -25156,6 +25316,7 @@ READ_ONLY_INTENTS = frozenset({
     # nothing, so none may take back what "cancel that" would undo.
     "self_version", "self_desktop_version", "self_phone_version", "self_hardware",
     "self_notes", "self_chats", "self_wake", "self_projects", "self_read_aloud",
+    "self_wifi_reconnect", "wifi_reconnect_about", "wifi_reconnect_when",
     "self_setting_state",
     "safety_pretend", "safety_without_asking", "safety_approve_for_me",
     "safety_tunnel", "safety_checks_off", "safety_token",

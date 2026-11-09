@@ -1725,6 +1725,15 @@ SHIPPED = (
     # `jarvis_model_recommender.chat_hook(question, *, hardware=None,
     # scores=None) -> Optional[str]`, for jarvis_quick to wire.
     "jarvis_model_recommender.py",
+    # The auto Wi-Fi reconnect (jarvis_wifi.py, 2026-11-08; the owner's own
+    # words: a feature that defaults on, changeable in Settings or chat, that
+    # every 2 hours while this desktop has no internet asks Windows to connect
+    # to a saved password-protected network it has already used - never an open
+    # or new network, never a password prompt, never a key read or printed, never
+    # while a chat/voice turn is streaming, and every attempt reported in one
+    # calm line. Route GET/POST /api/wifi-reconnect comes from its own
+    # install(), loaded by plugins/ready/wifi-reconnect - no patch.
+    "jarvis_wifi.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

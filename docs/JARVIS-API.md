@@ -36412,3 +36412,63 @@ should this PC run?" is deterministic. `GET /api/models/recommendations`
 carries the panel as its optional `recommender` key (omitted honestly by a PC
 without the module); the Brain draws it in Models as "What this PC should run".
 
+## 204. The auto Wi-Fi reconnect (2026-11-08)
+
+The owner's ask: a feature that "defaults on but can be changed in settings or
+chat with jarvis", that every 2 hours while this desktop has no internet asks
+Windows to reconnect to a password-protected Wi-Fi network "that have already
+been connected to in the past on that desktop".
+
+`backend/jarvis_wifi.py`, installed by its own drop-in
+(`plugins/ready/wifi-reconnect/plugin.json`, `install(): handler`) - no patch
+carries it.
+
+**The route** (PC-only; `tools/check_parity.py` carries it as `deliberate` and
+ARCHITECTURE section 8 gives the reason):
+
+```
+GET  /api/wifi-reconnect
+     -> 200 {"ok": true, "enabled": true, "default": true, "known": true,
+             "dry_run": false, "words": "...", "last_words": "...",
+             "last_at": ..., "last_class": "...", "next_check_at": ...,
+             "attempts": N, "state_path": "..."}
+POST /api/wifi-reconnect  {"enabled": true|false}
+     -> 200 the same shape (plus "before" and "changed"); 400 on a bad value or
+        an unknown setting; 403 from any device other than this PC; 503 when the
+        setting could not be saved. Cardless in both directions.
+```
+
+**What it does, exactly.** It reads this PC's own Windows Wi-Fi profile store
+read-only (`netsh wlan show profiles` / `show profile` - never a plaintext-key
+export, never a password prompt). A profile is a candidate only when it reports
+a stored key AND a Personal/PSK authentication, so an open network is never
+tried and a name the PC has not saved can never be introduced. Every 2 hours,
+and only when it is due, a check runs: OFF returns at once; an answer streaming,
+standby or a running task SKIPS the cycle and says so; then it diagnoses - no
+adapter, Wi-Fi down, connected-but-no-internet, online, or (the case that must
+not touch the Wi-Fi) the Wi-Fi is fine and the VPN/private link or the internet
+upstream is the problem. Only a genuinely broken Wi-Fi link goes on: at most 3
+candidates, the one in use first, each attempt given about 20 s, stopping as
+soon as the internet is back. A dry run (`JARVIS_WIFI_DRY_RUN=1`) logs what it
+WOULD do and never calls Windows' connect.
+
+**State**: `wifi_reconnect.json` in the Jarvis settings folder holds the switch,
+the last check time (so sleep/resume is one check, not a burst), the last calm
+sentence and a bounded history (20 rows). A missing file is the shipped default
+ON (the owner asked for that); a damaged file fails SAFE (OFF). No network name,
+password, key or BSSID is ever written: a record names a profile by its saved
+list position at most.
+
+**Who changes it**: the Settings switch ("On this PC" -> "Wi-Fi reconnect") and
+the deterministic chat/Live sentences in `jarvis_quick.py` - "is the auto wi-fi
+reconnect on?", "turn the auto wi-fi reconnect off/on", "what does the wi-fi
+reconnect do?", "when will it try the wi-fi again?". All read the same state
+file and call the same setter; no model tool exists for it, so a model answer
+can never toggle it.
+
+**What it may not do**: connect to a network that is not saved, connect to an
+open network, read or print a key, toggle the radio, start/stop the VPN or
+Meshnet app, change any Windows setting, act while the link is healthy, act
+mid-turn, or raise a card per attempt. Each of those is a rule in the module's
+own header, and the audit trail is one calm sentence in the HUD/Settings line
+and the event stream (`wifi_reconnect`).
