@@ -569,9 +569,10 @@ def t_every_preset_on_the_contract_is_covered():
                 and isinstance(v.operand, ast.Name) and v.operand.id == "heavy"
                 for v in direct.values))
     check("the uncarded decision is `owner_ui and not heavy`", decided)
-    check("Coding is the one heavy preset today, so it is the one kept carded",
-          [p.id for p in P.PRESETS if p.heavy_mode] == ["coding"]
-          and len(P.PRESETS) == 9,
+    check("Coding and Medical are the two heavy presets today, so they are the two "
+          "kept carded",
+          [p.id for p in P.PRESETS if p.heavy_mode] == ["coding", "medical"]
+          and len(P.PRESETS) == 10,
           [p.id for p in P.PRESETS if p.heavy_mode])
 
 

@@ -26358,7 +26358,7 @@ selector in both apps' chat bars and a Settings page. The contract is the file
 from `backend/jarvis_presets.py` (shipped whole, twin in the base); the app UIs
 render it verbatim. No new token and no new gate action.
 
-**Nine local presets since 2026-10-27.** The owner asked for the strong
+**Ten local presets since 2026-11-09.** The owner asked for the strong
 integrated abilities to be preset choices that load the best local model for
 the job, so four capability rows joined the original five: **Reflective Coach**
 (talking a difficult thought through), **Pictures & Screens** (a screenshot or
@@ -26371,11 +26371,15 @@ speed are not separately measured (the model's vision capability is
 documented). **Fast** now runs `qwen3.5:4b` on the RTX 2080 SUPER (the `coding`
 lane) at 16,384 tokens, the window that lane serves; measured 2026-10-10 on the
 same card: 77.1 tokens a second and 4.15 GB of video memory at a 65,536-token
-window, the file 3.16 GB on disk. The split is deliberate: only the 12 GB card
+window, the file 3.16 GB on disk. **Medical Expert** is the tenth row, appended
+last on 2026-11-09: `medgemma:27b` on the same pooled lane Coding uses, at
+32,768 tokens - its measured numbers are in §145.1b. The split is deliberate:
+only the 12 GB card
 holds the 196,608-token window (Qwen3.5's recurrent layers keep no KV cache),
 while the 8 GB card is the display card and runs the small model with about
 4 GB of video memory, leaving headroom for Windows, DWM and WebView2; Coding's
-30B model uses both cards only while it is applied. Nothing switches by itself:
+30B model and Medical's 27B use all three cards only while one is applied.
+Nothing switches by itself:
 an apply that needs a different model raises the ONE existing `switch_model`
 approval card, a model already loaded is simply chosen with nothing to approve,
 and no automatic per-feature model switching exists.
@@ -26383,7 +26387,7 @@ and no automatic per-feature model switching exists.
 **`GET /api/work` (and its alias `GET /api/presets`) - READ ONLY.** The same
 origin and token checks as the old route; the answer is:
 
-    {"found", "presets": [nine], "old_ids_replaced": [...],
+    {"found", "presets": [ten], "old_ids_replaced": [...],
      "hardware": {"detected": {"count",
                                "cards": [{"index","name","vram_gib","uuid",
                                           "pci_id","monitor"}],
@@ -26408,7 +26412,8 @@ Each preset carries `id/title/focus/what/cost/worse/model/lane{key,card,port,
 words}/context/helper/policy/measured/pending/heavy_mode/heavy_words/apply{action,
 switch_route,apply_route,lane_start,auto:false}`. A `pending` preset has no
 model tag or figure and says it is waiting. `heavy_mode` (Coding on the 30B
-coder) means the preset's model needs BOTH cards as ONE pooled lane; since
+coder, and since 2026-11-09 Medical on `medgemma:27b` at 32,768) means the
+preset's model needs ALL THREE cards as ONE pooled lane; since
 2026-11-02 that lane exists and the row is applicable like every other one,
 with `heavy_words` carrying the PC's own plain-words cost (both cards, and the
 other two models paused while it runs). Both fields are additive: a reader that
@@ -26598,6 +26603,29 @@ through `hud_get`; every model write (`/api/models/switch`, `/install`,
 Tests: `backend/test_presets.py`, `test_presets_lanes.py`,
 `test_presets_apply.py` (route shape, origin/token, old shape not served,
 pending/heavy refusals, rollback), and `tools/gen_work_presets.py --check`.
+
+### 145.1b The Medical preset on the same pooled lane (added 2026-11-09)
+
+**Medical Expert** (`id: "medical"`) is the tenth row, appended after Browser &
+Forms so the nine older rows keep their order, ids and `focus_choices` order.
+Its model is `medgemma:27b` on the `pooled` lane at **32,768 tokens** - the same
+one-Ollama-on-port-11450 shape Coding's row uses, with `heavy_mode: true` and
+`mode: "medical"`. Its words are on the row: clinical reading and
+patient-advocate questions, **no tool calling** (`ollama show` reports no
+`tools` capability, so it cannot use Jarvis's tools, browser or files), vision
+reported but not measured here, and plainly that it is not a doctor - no
+diagnosis, no prescription, no replacement for the owner's own clinician.
+
+Measured on this PC on 2026-11-09 (`model-bench` run
+`run-20261109-105956`, the `medgemma` window row): **17.31 GiB loaded, 100% in
+video memory, 0 B spilled**, a **46.8 s** cold load and **9.27 tokens a
+second** on the summary/coding prompt, 11.1 on the measured ~150-word
+explanation and 7.89 on the four-token answer. That is the honest
+**7.9-11.1 tok/s** range, not a single optimistic figure.
+
+The preset changes no wording: choose the **Patient Advocate** personality in
+How Jarvis talks if that manner is wanted - a preset is a model, a lane and a
+window, never a personality.
 
 ### 145.1 The Cloud row, the provider list, and the standing escalation switch (added 2026-10-27)
 

@@ -2489,10 +2489,15 @@ PROMOTION_DECODE_FLOOR = {"coding": 75.0, "general": 40.0,
 PROMOTION_PAIRS = (
     {"id": "coding_q4", "preset": "coding",
      "incumbent": "qwen3-coder-30b-a3b-ud-q3-k-xl",
-     "candidate": "qwen3-coder:30b-a3b-q4_K_M",
-     "ctx": 49152, "suites": ("speed", "coding"),
-     "why": "the bigger q4 build measured 93.08 tok/s at 20.60 GiB against the "
-            "shipped q3 build; the coding rubric was never re-run on it"},
+     "candidate": "gemma4:26b-a4b-it-qat",
+     "ctx": 32768, "suites": ("speed", "coding"),
+     "why": "measured 2026-11-09 at 32,768 tokens: 15.5 GiB loaded with 0.68 GiB "
+            "(4.4%) spilled and 49.26 tok/s, so the spill is expected to keep the "
+            "shipped q3 coder; the pair is measured rather than assumed. Re-pointed "
+            "from qwen3-coder:30b-a3b-q4_K_M after that tag was deleted on "
+            "2026-11-09 11:09 PT (its completed receipt: 65.3 tok/s with 231.5 MiB "
+            "spilled against the incumbent's 76.8 tok/s with 0 B, both 6/6 coding "
+            "-> KEEP CURRENT)"},
     {"id": "general_12b", "preset": "general",
      "incumbent": "qwen3.5:9b",
      "candidate": "gemma4:12b-it-qat",

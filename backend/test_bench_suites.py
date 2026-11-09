@@ -935,8 +935,11 @@ def t_pair_verdict_reads_the_store_shape_and_stays_read_only():
           unknown["ok"] is False and "coding_q4" in unknown["why"])
     plan = B.promotion_plan("coding_q4")
     check("the plan names both models and the window",
-          plan["ok"] is True and plan["ctx"] == 49152
-          and plan["pair"]["candidate"] == "qwen3-coder:30b-a3b-q4_K_M")
+          plan["ok"] is True and plan["ctx"] == 32768
+          and plan["pair"]["candidate"] == "gemma4:26b-a4b-it-qat")
+    check("the deleted q4 build is no longer a candidate in any pair",
+          all(p["candidate"] != "qwen3-coder:30b-a3b-q4_K_M"
+              for p in B.PROMOTION_PAIRS))
     view = B.promotion_pairs_view(store=B.ScoreLog(Path(tempfile.gettempdir())
                                                     / "no-such-scores.jsonl"))
     check("the pairs view offers both pairs, none applied",
