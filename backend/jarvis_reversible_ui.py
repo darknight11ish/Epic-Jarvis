@@ -366,7 +366,7 @@ def install(Handler, *, origin_ok, token_ok, read_body) -> str:
         path = str(getattr(self, "path", "") or "").split("?", 1)[0]
         if path != SWITCH_ROUTE:
             if original is None:
-                return self._send(404, {"error": "not found"})
+                return self._send(404, {"error": "There is nothing at that address, so nothing was changed."})
             return original(self)
         if not origin_ok(self):
             return self._send(403, {"error": "cross-origin request refused"})
