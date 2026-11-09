@@ -1,0 +1,315 @@
+{
+  "schema": 1,
+  "about": "The owner's REAL sentences, from the independent determinism audit (2026-11-08). Every row here must be answered by the deterministic layer before the model: a NO MATCH is not acceptable for any of them. Words are asserted (exact or must-contain), not just 'an answer came back'. Behind backend/test_factual_determinism.py.",
+  "banned_words": [
+    "cloning",
+    "pushing",
+    "pulling",
+    "i turned it on for you",
+    "i turned it off for you",
+    "already changed",
+    "i've tested the token",
+    "i tested the token",
+    "i will set",
+    "i'll set",
+    "i've set"
+  ],
+  "entries": [
+    {
+      "id": "RD-1",
+      "family": "read-aloud",
+      "sentence": "you turn off reading out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": false
+      },
+      "read_aloud_before": true,
+      "read_aloud_after": false,
+      "changes_state": true,
+      "must_contain_any": [
+        "Read-aloud is off now",
+        "Read replies out loud is already off"
+      ]
+    },
+    {
+      "id": "RD-2",
+      "family": "read-aloud",
+      "sentence": "turn off reading everything out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": false
+      },
+      "read_aloud_before": true,
+      "read_aloud_after": false,
+      "changes_state": true,
+      "must_contain_any": [
+        "Read-aloud is off now",
+        "Read replies out loud is already off"
+      ]
+    },
+    {
+      "id": "RD-3",
+      "family": "read-aloud",
+      "sentence": "stop reading everything out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": false
+      },
+      "read_aloud_before": true,
+      "read_aloud_after": false,
+      "changes_state": true,
+      "must_contain_any": [
+        "Read-aloud is off now",
+        "Read replies out loud is already off"
+      ]
+    },
+    {
+      "id": "RD-4",
+      "family": "read-aloud",
+      "sentence": "read everything out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": true
+      },
+      "read_aloud_before": false,
+      "read_aloud_after": true,
+      "changes_state": true,
+      "must_contain_any": [
+        "Read-aloud is on now",
+        "Read replies out loud is already on"
+      ]
+    },
+    {
+      "id": "RD-5",
+      "family": "read-aloud",
+      "sentence": "read your replies out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": true
+      },
+      "read_aloud_before": false,
+      "read_aloud_after": true,
+      "changes_state": true,
+      "must_contain_any": [
+        "Read-aloud is on now",
+        "Read replies out loud is already on"
+      ]
+    },
+    {
+      "id": "RD-6",
+      "family": "read-aloud",
+      "sentence": "is read aloud on?",
+      "intent": "self_read_aloud",
+      "args": {},
+      "must_contain": [
+        "read replies out loud"
+      ],
+      "state_aware": {
+        "on": [
+          "Yes",
+          "is on"
+        ],
+        "off": [
+          "No",
+          "is off"
+        ]
+      }
+    },
+    {
+      "id": "RD-7",
+      "family": "read-aloud",
+      "sentence": "read remembered facts aloud when my phone connects",
+      "intent": "phone_read_aloud_refused",
+      "args": {},
+      "must_contain": [
+        "nothing was changed",
+        "Read out answers that use what Jarvis remembers"
+      ]
+    },
+    {
+      "id": "RD-8",
+      "family": "read-aloud",
+      "sentence": "is the read replies out loud switch on",
+      "intent": "self_read_aloud",
+      "args": {},
+      "must_contain": [
+        "read replies out loud"
+      ]
+    },
+    {
+      "id": "RD-9",
+      "family": "read-aloud",
+      "sentence": "stop reading your replies out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": false
+      },
+      "read_aloud_before": true,
+      "read_aloud_after": false,
+      "changes_state": true,
+      "must_contain_any": [
+        "Read-aloud is off now",
+        "Read replies out loud is already off"
+      ]
+    },
+    {
+      "id": "RD-10",
+      "family": "read-aloud",
+      "sentence": "turn on read aloud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": true
+      },
+      "read_aloud_before": false,
+      "read_aloud_after": true,
+      "changes_state": true,
+      "must_contain_any": [
+        "Read-aloud is on now",
+        "Read replies out loud is already on"
+      ]
+    },
+    {
+      "id": "RD-11",
+      "family": "read-aloud",
+      "sentence": "you turn off reading out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": false
+      },
+      "read_aloud_before": false,
+      "read_aloud_after": false,
+      "changes_state": true,
+      "must_contain": [
+        "already off",
+        "Nothing was changed"
+      ],
+      "note": "the already-off half: says so and writes no no-op receipt"
+    },
+    {
+      "id": "RD-12",
+      "family": "read-aloud",
+      "sentence": "read everything out loud",
+      "intent": "read_aloud_set",
+      "args": {
+        "on": true
+      },
+      "read_aloud_before": true,
+      "read_aloud_after": true,
+      "changes_state": true,
+      "must_contain": [
+        "already on",
+        "Nothing was changed"
+      ],
+      "note": "the already-on half"
+    },
+    {
+      "id": "SS-1",
+      "family": "settings-state",
+      "sentence": "what are my settings set to",
+      "intent": "settings_explain_all",
+      "args": {},
+      "must_contain": [
+        "switches",
+        "named choices",
+        "number setting",
+        "Ask about one by name"
+      ]
+    },
+    {
+      "id": "SS-2",
+      "family": "settings-state",
+      "sentence": "explain any setting",
+      "intent": "settings_explain_all",
+      "args": {},
+      "must_contain": [
+        "switches",
+        "named choices",
+        "number setting"
+      ]
+    },
+    {
+      "id": "SS-3",
+      "family": "settings-state",
+      "sentence": "explain your settings",
+      "intent": "settings_explain_all",
+      "args": {},
+      "must_contain": [
+        "switches",
+        "named choices",
+        "number setting"
+      ]
+    },
+    {
+      "id": "SS-4",
+      "family": "settings-state",
+      "sentence": "what can I change",
+      "intent": "changeable_overview",
+      "args": {},
+      "must_contain": [
+        "I can change"
+      ]
+    },
+    {
+      "id": "SS-5",
+      "family": "settings-state",
+      "sentence": "what is the anti-slop mode set to?",
+      "intent": "setting_explain",
+      "args": {},
+      "must_contain": [
+        "anti-slop mode",
+        "Right now"
+      ]
+    },
+    {
+      "id": "SS-6",
+      "family": "settings-state",
+      "sentence": "what is the personality set to?",
+      "intent": "setting_explain",
+      "args": {},
+      "must_contain": [
+        "personality",
+        "Right now"
+      ]
+    },
+    {
+      "id": "SS-7",
+      "family": "settings-state",
+      "sentence": "what is the jarvis live timeout set to?",
+      "intent": "setting_explain",
+      "args": {},
+      "must_contain": [
+        "How long Jarvis Live waits"
+      ]
+    },
+    {
+      "id": "SS-8",
+      "family": "settings-state",
+      "sentence": "is background learning on?",
+      "intent": "feature_state_setting",
+      "args": {},
+      "must_contain": [
+        "Background learning"
+      ]
+    },
+    {
+      "id": "SS-9",
+      "family": "settings-state",
+      "sentence": "is read aloud on?",
+      "intent": "self_read_aloud",
+      "args": {},
+      "must_contain": [
+        "read replies out loud"
+      ]
+    },
+    {
+      "id": "SS-10",
+      "family": "settings-state",
+      "sentence": "what is chat history set to?",
+      "intent": "setting_explain",
+      "args": {},
+      "must_contain": [
+        "chat history"
+      ]
+    }
+  ]
+}

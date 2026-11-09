@@ -5359,7 +5359,13 @@ _SETTINGS_EXPLAIN_ALL = re.compile(
     r"|explain\s+(?:to\s+me\s+)?(?:any\s+settings?(?:\s+.*)?|(?:your|the)\s+settings?\s*\??)"
     r"|how\s+do\s+i\s+(?:find\s+out|see|check)\s+what\s+"
     r"(?:a|one\s+of\s+your|the)\s+settings?\s+(?:is\s+)?(?:currently\s+)?"
-    r"(?:set\s+to|at)(?:\s+.*)?")
+    r"(?:set\s+to|at)(?:\s+.*)?"
+    # "what are my settings set to" (determinism audit 2026-11-08, F13): the
+    # ordinary plural shape of the one-setting question, and it fell to the
+    # model. The answer names the real counts and how to ask about one - it
+    # never claims to read all 49 values at once, which it cannot.
+    r"|what\s+are\s+(?:all\s+)?(?:my|the|your)\s+(?:current\s+)?settings?"
+    r"(?:\s+(?:set\s+to|at|now|currently))?")
 
 
 def _settings_explain_all(s: str) -> Optional[Intent]:
@@ -5824,7 +5830,16 @@ _READ_ALOUD_OFF = re.compile(
     r"|(?:disable|deactivate)\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud"
     r"|(?:stop|quit)\s+reading\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
     r"|(?:don'?t|do\s+not)\s+read\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
-    r"|(?:stop|quit|don'?t|do\s+not)\s+read\s+everything\s+(?:out\s+)?(?:loud|aloud)")
+    r"|(?:stop|quit|don'?t|do\s+not)\s+read\s+everything\s+(?:out\s+)?(?:loud|aloud)"
+    # The owner's own three OFF sentences (determinism audit 2026-11-08, F5):
+    # "you turn off reading out loud", "turn off reading everything out loud",
+    # "stop reading everything out loud" fell to the model because the OFF
+    # matcher only knew "read aloud"/"read-aloud" and "read everything", never
+    # "reading ... out loud". These shapes add nothing else: they still need
+    # the whole sentence and still read nothing before or after the switch.
+    r"|(?:you\s+)?(?:turn|switch)\s+off\s+reading\s+(?:everything\s+)?"
+    r"(?:out\s+)?(?:loud|aloud)"
+    r"|(?:stop|quit)\s+reading\s+everything\s+(?:out\s+)?(?:loud|aloud)")
 _READ_ALOUD_STATE = re.compile(
     r"are\s+you\s+(?:currently\s+|right\s+now\s+)?reading\s+"
     r"(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
@@ -5833,7 +5848,14 @@ _READ_ALOUD_STATE = re.compile(
     r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+"
     r"(?:switch\s+)?(?:on|off|enabled|disabled)"
     r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+"
-    r"(?:turned|switched)\s+(?:on|off)")
+    r"(?:turned|switched)\s+(?:on|off)"
+    # The ordinary settings-card wording (determinism audit 2026-11-08, F13):
+    # "is the read replies out loud switch on" names the same switch in its
+    # Settings words, and it fell to the model because no alternative carried
+    # "read replies out loud" + "switch".
+    r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read(?:ing)?\s+"
+    r"(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)\s+"
+    r"(?:switch\s+)?(?:on|off|enabled|disabled)")
 
 
 def _read_aloud_set(s: str) -> Optional[Intent]:
@@ -14321,10 +14343,21 @@ def _run_self_setting_state(intent: Intent, sources: Optional[dict] = None) -> O
     setting = next((b for b in (getattr(R, "BOOL_SETTINGS", ()) or ())
                     if str(getattr(b, "key", "")) == key), None)
     if setting is None:
-        return None                         # the switch is gone: the model's, as before
+        # Determinism Phase A (2026-11-08, the audit's F4/NEG-7): a matched
+        # state question used to return None here, which handed it to the
+        # model - so a switch removed from this PC's registry could make the
+        # model guess about its own settings. Say the honest sentence instead;
+        # the deterministic layer never silently becomes a model claim.
+        label = str(what or key or "that setting").strip()
+        return Result("I could not read whether " + label + " is on right now - "
+                      "this PC's settings list does not have that switch any more, "
+                      "so I will not guess.", intent.name)
     names = tuple(getattr(setting, "names", ()) or ())
     label = str(names[0] if names else (what or key)).strip()
-    value = FG.read_state(key)
+    try:
+        value = FG.read_state(key)
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        value = None
     if isinstance(value, bool):
         return Result(("Yes" if value else "No") + " - " + label + " is "
                       + ("on" if value else "off") + " right now.", intent.name)
@@ -23865,12 +23898,31 @@ def _run_feature_can_do(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_can_do")
 
 
+def _could_not_read_state(label: str) -> Result:
+    """The ONE honest sentence for a state read that failed (Phase A, 2026-11-08).
+
+    The audit's NEG-7: an exception inside the deterministic layer must become
+    an honest sentence, never a crash that the /api/chat handler turns into a
+    model answer. It says "could not read" and "will not guess", and never
+    claims on or off."""
+    label = str(label or "that setting").strip() or "that setting"
+    return Result("I could not read whether " + label + " is on right now - "
+                  "the module that owns it is not answering on this PC, so I "
+                  "will not guess.", "feature_state")
+
+
 def _run_feature_state(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_state")
-    out = FG.state(f.get("id") or "")
-    return Result(str(out.get("words") or ""), "feature_state")
+    try:
+        out = FG.state(f.get("id") or "")
+        words = str((out or {}).get("words") or "").strip()
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        words = ""
+    if not words:
+        return _could_not_read_state(str(f.get("id") or "that feature"))
+    return Result(words, "feature_state")
 
 
 def _setting_name_for_guide(key: str) -> str:
@@ -23903,8 +23955,15 @@ def _run_feature_state_setting(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_state")
-    out = FG.state(_setting_name_for_guide(f.get("key") or ""))
-    return Result(str(out.get("words") or ""), "feature_state")
+    label = _setting_name_for_guide(f.get("key") or "")
+    try:
+        out = FG.state(label)
+        words = str((out or {}).get("words") or "").strip()
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        words = ""
+    if not words:
+        return _could_not_read_state(label or str(f.get("key") or "that setting"))
+    return Result(words, "feature_state")
 
 
 def _run_feature_howto(f: dict) -> Result:
@@ -24198,7 +24257,18 @@ def _run_setting_explain(f: dict) -> Result:
         import jarvis_settings_registry as R
     except Exception:
         return Result(SETTINGS_MISSING, "setting_explain")
-    return Result(R.explain_setting_words(f), "setting_explain")
+    try:
+        words = str(R.explain_setting_words(f) or "").strip()
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        words = ""
+    if not words:
+        # Phase A (2026-11-08): a named explain read that fails is said plainly
+        # rather than raising into the /api/chat handler, where the try/except
+        # would have made the model answer instead (the audit's NEG-7).
+        return Result("I could not read that setting right now - the module "
+                      "that owns it is not answering on this PC, so I will not "
+                      "guess. Nothing was changed.", "setting_explain")
+    return Result(words, "setting_explain")
 
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
@@ -25315,6 +25385,13 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # private chat answers them instead of guessing. The CHANGE
     # (`wifi_reconnect_set`) is deliberately NOT here.
     "self_wifi_reconnect", "wifi_reconnect_about", "wifi_reconnect_when",
+    # Determinism Phase A (2026-11-08, the audit's NEG-6): these are the same
+    # kind of read - the owner's own settings/catalogue state, answered from
+    # local code with no secret and no write. A private chat gets the real
+    # words from this PC rather than a model's guess about its own settings.
+    # None of them changes anything, so none may clear a "cancel that".
+    "feature_state", "feature_state_setting", "setting_explain",
+    "self_setting_state", "settings_explain_all",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH

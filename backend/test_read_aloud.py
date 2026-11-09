@@ -242,7 +242,15 @@ def t_the_owner_sentences_toggle_the_switch():
                      "don't read answers aloud",
                      "stop reading your answers out loud",
                      "turn off read aloud",
-                     "do not read your replies out loud"):
+                     "do not read your replies out loud",
+                     # The owner's own three OFF sentences (determinism audit
+                     # 2026-11-08, F5). They fell to the model before Phase A;
+                     # the corpus suite (test_factual_determinism.py) is their
+                     # full proof, and they are pinned here too so this
+                     # feature's own suite keeps them covered.
+                     "you turn off reading out loud",
+                     "turn off reading everything out loud",
+                     "stop reading everything out loud"):
         _reset_switch()
         got = _ran(sentence)
         check(f"{sentence!r} turns automatic read-aloud off at once",
