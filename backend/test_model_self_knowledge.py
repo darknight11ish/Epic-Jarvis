@@ -169,9 +169,18 @@ def main():
 
     # --- 4. advice, not a switch -------------------------------------------
     r = ask("which model should I use for coding?")
-    check("recommend: names a preset, says it is advice and nothing switched",
-          r is not None and "Coding" in r.reply and "This is advice" in r.reply
-          and "nothing was switched" in r.reply, getattr(r, "reply", None))
+    # 2026-11-08: the model-conversation lane changed this reply from the
+    # generic "This is advice - nothing was switched;" to the preset's own
+    # words. Pin the NEW product wording exactly - the old assertion would pass
+    # on the old text and is therefore not coverage any more.
+    check("recommend: names the Coding preset, what it runs, and that nothing "
+          "was switched",
+          r is not None
+          and r.reply.startswith('The "Coding" preset runs qwen3-coder-')
+          and "on all three cards" in r.reply
+          and "49,152 tokens" in r.reply
+          and r.reply.rstrip().endswith("Nothing was switched."),
+          getattr(r, "reply", None))
     for text in ("use the dark theme", "what is the weather", "read my email"):
         got = ask(text)
         reply = getattr(got, "reply", "") or ""
