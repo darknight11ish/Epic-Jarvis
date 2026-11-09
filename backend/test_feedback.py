@@ -27,7 +27,7 @@ review-queue half needs jarvis_extract.py WITH feedback.patch applied, and
 the route half needs jarvis_hud.py with it applied; each skips honestly when
 the file is absent and FAILS when the file is there without the patch.
 """
-import json, os, socket, sys, tempfile, textwrap, time, traceback, types
+import json, os, socket, subprocess, sys, tempfile, textwrap, time, traceback, types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -60,6 +60,33 @@ import jarvis_feedback as F
 
 FAILED, PASSED = [], []
 SKIPPED = []
+
+
+def _agent_probe(assertions: str):
+    """Run `import jarvis_agent` in a CLEAN interpreter, then let [assertions]
+    observe the real import and its real model-facing prompt there.
+
+    BEHAVIOUR, NOT SOURCE TEXT (Wave 10, the source-pin audit). The old checks
+    on this page read `jarvis_agent.py` as text and matched module names: that
+    goes red when the file is reformatted or a helper is renamed, and stays
+    green when the agent imports the same module through a different path. This
+    runs the agent's own import graph in a fresh process and looks at what it
+    actually pulled in, which cannot be fooled by spelling.
+
+    Returns the finished process: returncode 0 is the pass, stderr says what
+    went wrong. `HERE` is on PYTHONPATH so the agent under test is this tree's.
+    """
+    code = "import sys\nimport jarvis_agent as AG\n" + assertions
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(HERE), env.get("PYTHONPATH", "")]).strip(os.pathsep)
+    return subprocess.run([sys.executable, "-c", code], cwd=str(HERE),
+                          env=env, capture_output=True, text=True, timeout=180)
+
+
+def _probe_detail(proc) -> str:
+    """The one line worth printing when a probe fails (its last assertion)."""
+    return (proc.stderr or proc.stdout).strip()[-400:]
 
 
 def check(name, cond, detail=""):
@@ -341,9 +368,22 @@ def t_nothing_leaves_and_the_model_cannot_mark():
         check("recording, marking, counting and raising a card open no socket", False, str(exc))
     finally:
         F._maybe_raise = real
-    agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
-    check("the model's tool loop never names this module",
-          "jarvis_feedback" not in agent and "/api/feedback" not in agent)
+    # BEHAVIOUR (Wave 10 source-pin audit): the model's tool loop must not
+    # reach this module. Read the REAL agent in a clean interpreter, ask where
+    # its import graph went, and build the REAL model-facing prompt - a text
+    # match on the module's name would go red on a rename and green if the
+    # module were imported under another name.
+    probe = _agent_probe(
+        "assert 'jarvis_feedback' not in sys.modules, "
+        "'jarvis_agent imported jarvis_feedback'\n"
+        "msgs = AG.with_rules_first([{'role': 'user', "
+        "'content': 'mark that answer wrong'}])\n"
+        "text = '\\n'.join(str(m.get('content') or '') "
+        "for m in AG.messages_for_model(msgs))\n"
+        "assert '/api/feedback' not in text, "
+        "'the model prompt carries the feedback route'")
+    check("the model's tool loop never reaches this module",
+          probe.returncode == 0, _probe_detail(probe))
     src = Path(F.__file__).read_text(encoding="utf-8")
     import ast
     mods = set()
