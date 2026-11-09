@@ -9,6 +9,11 @@
  * and the one reading rule for the PC's answer; `read-aloud-settings.js` is the
  * wiring that calls the two commands.
  *
+ * It also carries the Wave-10 stop (the owner's Q5 ruling, 2026-11-08): the
+ * backend publishes the switch on its event bus, and `createReadAloudStop`
+ * turns that frame into an immediate halt of the sentence in flight - so OFF
+ * is literal mid-answer, not "from the next answer". See its own comment below.
+ *
  * THE TWO RULES IT EXPLAINS, in the owner's own decisions of 2026-11-07:
  *   1. A TYPED question is never read automatically ("if i write it with my
  *      keyboard I would like it not to be read out loud by Default"), so the
@@ -27,6 +32,110 @@ export const READ_ALOUD_PATH = "/api/read-aloud";
 /** The shipped default: ON, so nothing the owner hears today changes until he
  *  turns it off. */
 export const DEFAULT_ON = true;
+
+/**
+ * Wave-10 Q5 / Wave-9 audit F2: OFF reaches a window that is already talking.
+ *
+ * THE GAP THIS CLOSES. The quickbar read the switch at the START of every voice
+ * turn (`main.js` `refreshReadAloud`), so an OFF clicked in Settings - or said
+ * in chat/Live, which goes through the same backend route - stopped the NEXT
+ * answer, not the sentence in flight. "OFF at once" was therefore not literal.
+ * The backend already publishes the change on its own event bus on every set
+ * (`backend/jarvis_read_aloud.py` `_publish`: one frame, kind `read_aloud`,
+ * `{"enabled": bool}` and nothing else), Rust already fans every bus frame out
+ * to every window (`stream.rs` -> the `jarvis-event` Tauri event, which
+ * `jarvis-link.js` hands to `onEvent` subscribers), so the missing half is
+ * only the consumer: below.
+ *
+ * WHY IT IS A MODULE AND NOT INLINE IN main.js: the stop has to be provable
+ * without a browser. `tests/read-aloud.mjs` drives `createReadAloudStop` with a
+ * queue mid-answer and a recording audio stub - the same function `main.js`
+ * subscribes - so the test cannot pass by measuring a copy.
+ */
+
+/** The one bus kind the switch moves on (backend `jarvis_read_aloud.py`). */
+export const READ_ALOUD_KIND = "read_aloud";
+
+/**
+ * What one bus frame means for the window: "on", "off", or null for any other
+ * frame. A frame without a real boolean is NOT guessed: an unreadable state
+ * must never read as off (the same rule `readReadAloud` follows).
+ */
+export function readAloudFrameAction(frame) {
+  if (!frame || frame.kind !== READ_ALOUD_KIND) return null;
+  const data = frame.data;
+  if (!data || typeof data.enabled !== "boolean") return null;
+  return data.enabled ? "on" : "off";
+}
+
+/**
+ * Stops answer speech NOW, through `io` - getters/setters over the window's own
+ * variables, so this file holds no DOM and the test can pass plain values.
+ *
+ * The order matters: the generation bump first, so a `speak_reply` still being
+ * made (or a drain loop already awaiting one) can never start playing it; then
+ * the queue and the one-ahead clip; then the sound itself - `pause` is what
+ * ends the sentence mid-word, and detaching the handlers keeps its `ended`
+ * promise from re-entering the drain; then the promise the player is waiting on
+ * is settled; then the flags and the link line.
+ *
+ * What it does NOT do is mute the rest of the turn (`main.js` `speechMuted`,
+ * which a barge-in sets): the switch is a rule, not a one-off. Flipping it back
+ * ON mid-answer lets the sentences still arriving be spoken, and every later
+ * voice turn re-reads the switch.
+ *
+ * `io`:
+ *   setReadAloudOn(on), bumpGeneration(), dropQueue(), setClipPlaying(bool),
+ *   takeAudio() -> audio|null, settleClip(), setSpeaking(bool), sync(),
+ *   afterStop?()  - the window's own extra cleanup (moment line, pause waiters)
+ */
+export function stopSpeechNow(io) {
+  io.bumpGeneration();
+  io.dropQueue();
+  io.setClipPlaying(false);
+  const audio = io.takeAudio();
+  if (audio) {
+    audio.onended = null;
+    audio.onerror = null;
+    try {
+      if (typeof audio.pause === "function") audio.pause();
+    } catch (error) {
+      // A stopped or already-detached element is not an error worth a line.
+    }
+  }
+  io.settleClip();
+  io.setSpeaking(false);
+  io.sync();
+  if (typeof io.afterStop === "function") io.afterStop();
+}
+
+/**
+ * Whether a switch READ that started at `startedAtSeq` is still the newest truth,
+ * given the event counter now. The two news sources cross: `refreshReadAloud` is
+ * a GET issued at the start of a voice turn, and a `read_aloud` event says the
+ * switch moved while that GET was in flight. The event is the later truth - the
+ * backend publishes it AT the write - so an older snapshot must not overwrite
+ * it; a stale "on" landing after an OFF would let the next sentence of the same
+ * answer be spoken. Returns true when the read is safe to apply.
+ */
+export function readStillFresh(startedAtSeq, currentSeq) {
+  return startedAtSeq === currentSeq;
+}
+
+/**
+ * The handler `main.js` gives the event stream: one function, the same one the
+ * test drives. Returns the action it took ("on"/"off"/null) so a test can see a
+ * frame was understood rather than silently ignored.
+ */
+export function createReadAloudStop(io) {
+  return function onReadAloudFrame(frame) {
+    const action = readAloudFrameAction(frame);
+    if (action === null) return null;
+    io.setReadAloudOn(action === "on");
+    if (action === "off") stopSpeechNow(io);
+    return action;
+  };
+}
 
 /** What a PC without the module is told. */
 export const MISSING =

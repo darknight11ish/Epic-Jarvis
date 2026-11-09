@@ -233,6 +233,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions). `done` makes the animals' orb glow once - "a long answer is ready" (`face-moments.js`); the robot, which has no orb, brightens its eyes and fins once instead | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`); `done` makes the animal's orb glow once, the robot's eyes and fins (`face/AnimalNow.kt`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
+| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
 
 `devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
 a device was paired or removed, or the old shared key was retired or
@@ -36347,11 +36348,18 @@ if that source is off) and carry `quick` in `X-Jarvis-Route`, with no model call
 
 ## 201. The automatic read-aloud switch (2026-11-07)
 
-`GET /api/read-aloud` and `POST /api/read-aloud {"on": bool}` read and set the
-PC's own answer-speech switch. It is ON by default (the pre-2026-11-07 behaviour
-of the HUD's voice answers), OFF at once with no approval card in either
-direction, and a model answer can never set it: the chat/Live sentences below
-go through `jarvis_quick`'s own deterministic door. It is **PC-only**
+`GET /api/read-aloud` and `POST /api/read-aloud {"enabled": bool}` read and set
+the PC's own answer-speech switch. It is ON by default (the pre-2026-11-07
+behaviour of the HUD's voice answers), OFF at once with no approval card in
+either direction, and a model answer can never set it: the chat/Live sentences
+below go through `jarvis_quick`'s own deterministic door. **OFF is literal
+mid-answer** (the owner's Q5 ruling, 2026-11-08): on every set the backend
+publishes one `read_aloud` event (`{"enabled": bool}` only - never words), the
+desktop's one event stream carries it to every window, and the Jarvis bar stops
+the sentence in flight, empties its queue and settles the clip being made, so an
+OFF from Settings, chat or Live silences the answer already being spoken. (Before
+this it was read at the start of each voice turn, so one OFF stopped only the
+next answer.) It is **PC-only**
 (`tools/check_parity.py` classifies it `deliberate`; ARCHITECTURE section 8):
 the route controls the desktop HUD's speakers for voice-turn answers, while the
 phone has its own on-device remembered-answer switch and its own per-answer
