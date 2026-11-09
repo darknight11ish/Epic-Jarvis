@@ -812,9 +812,14 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   nowhere: the folder and then the file are checked by
   `jarvis_documents.allowed_path()`, and the `.gitignore` rules and the
   per-file size cap are `jarvis_repomap.py`'s own, so the two readers cannot
-  disagree about the same file. It adds no gate action and raises no card (a
-  read, under `read_files_readonly`), it ships OFF in `[tools].enabled` like
-  `file_read`, and its own switch is one row on Settings, "What asks first".
+  disagree about the same file. It can also read one range of lines
+  (`start_line` and `lines`): the lines come numbered with their real file
+  line numbers, a `more` footer says which range to ask for next, and a
+  96 KiB answer budget keeps one answer small - so a file over the 512 KB
+  whole-file cap can still be read a piece at a time. It adds no gate action
+  and raises no card (a read, under `read_files_readonly`), it ships OFF in
+  `[tools].enabled` like `file_read`, and its own switch is one row on
+  Settings, "What asks first".
   The module is `backend/jarvis_project_read.py`; its suite is
   `backend/test_project_read.py`, and the API document's section 211 says what
   it refuses and why.

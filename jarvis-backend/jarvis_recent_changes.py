@@ -21,6 +21,7 @@ from pathlib import Path
 BULLETS = (
     'Wave 13: Reminders hear the date you meant, one carded GitHub repository create, Creator mode, a memory fault banner, and the pooled window held after a cold turn',
     "Wave 12: the dead skill checks are wired, files drag in, notes and Notion get their numbers, read-aloud speaks in Jarvis's own voice, a reversible click needs no card, and the Brain stops describing plans as facts",
+    'Jarvis can read one code file inside a folder you listed - and it asks nobody',
     'Wave 11: the model screens tell the truth, the coding lane cannot die silently, and Jarvis can talk about its own models',
     'Wave 10: one honest answer menu, a real receipt for the GitHub token, HUD layouts that apply at once, deterministic feature answers and a default-ON Wi-Fi reconnect',
     "Wave 9: the read-aloud switch, the five-suite benchmark, the Brain's model filters and the hardware-aware recommender",

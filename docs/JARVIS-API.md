@@ -38118,7 +38118,7 @@ is a **composition of two things that already ship**, not a third boundary:
 
 | Field | Meaning |
 |---|---|
-| `path` | a folder on "Folders Jarvis may look in", **or** a registered project's id (32 hex characters, never a folder that exists - the same single-field convention `my_files`' `map` action uses) |
+| `path` | a folder on "Folders Jarvis may look in", **or** a registered project's id (a `uuid4().hex`, so 32 hex characters; the map's matcher accepts 16 to 64, and a name is only taken as an id when it is not an existing folder - the same single-field convention `my_files`' `map` action uses) |
 | `file` | the file's path **inside** that folder, forward or back slashes: `app/server.py` |
 | `start_line` | *optional*: the first line to show, counting from 1 (default 1) |
 | `lines` | *optional*: how many lines to show (default 400, hard cap 2,000) |

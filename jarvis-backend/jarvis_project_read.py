@@ -66,8 +66,10 @@ WHAT IT DOES AND DOES NOT DO
 
 THE TWO WAYS IN
   * `path` is a folder on the owner's list, OR a registered project's id
-    (32 hex characters, which is never a folder that exists - the same one
-    field `my_files`' `map` action already uses for the same reason).
+    (32 hex characters in practice - `uuid4().hex`; the map's own matcher
+    accepts 16 to 64, and a name is only taken as an id when it is not an
+    existing folder - the same one field `my_files`' `map` action already uses
+    for the same reason).
   * `file` is the file's path INSIDE that folder, with forward or back
     slashes: `app/server.py`. A whole path, a `..` step, a drive letter or a
     leading slash is refused before anything is joined.
@@ -710,11 +712,13 @@ def run_tool(args: dict, *, roots=None, clock=None) -> dict:
     line range `{"start_line": ..., "lines": ...}`.
 
     `path` takes EITHER a folder on the owner's list OR a project's id, so the
-    tool's schema needs no third field - a project id is 32 hex characters and
-    is never a folder that exists, which is exactly how `my_files`' `map`
-    action tells the two apart, and this follows it rather than inventing a
-    second convention. The two range arguments are validated in `read_folder`,
-    so every door (a folder or a project id) refuses a bad value the same way.
+    tool's schema needs no third field - a project id is a `uuid4().hex`, so 32
+    hex characters (the map's own matcher accepts 16 to 64), and a name is only
+    taken as an id when it is not an existing folder, which is exactly how
+    `my_files`' `map` action tells the two apart, and this follows it rather
+    than inventing a second convention. The two range arguments are validated
+    in `read_folder`, so every door (a folder or a project id) refuses a bad
+    value the same way.
     """
     if not isinstance(args, dict):
         return {"ok": False, "error": NEED_FOLDER}
