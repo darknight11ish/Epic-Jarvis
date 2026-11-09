@@ -3176,7 +3176,7 @@ def _bare_when(s: str, now: float) -> Optional[Intent]:
 #: Wave-13 "Grandma" bug): the COMMAND that asked for it, and the time phrase
 #: that says when. Both belong to the sentence, not to the action - the title
 #: is what the notification and both apps print above the reminder, so it has
-#: to read "Call Grandma", never "remind me to call Grandma in 4 days from now"
+#: to read "call Grandma", never "remind me to call Grandma in 4 days from now"
 #: and never "call Grandma in".
 _REMIND_COMMAND_LEAD = re.compile(
     r"^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?"
@@ -3198,7 +3198,7 @@ def reminder_action_words(text, now: Optional[float] = None) -> str:
     sentence around it (2026-11-09).
 
     A title is what the reminder says when it goes off and what both apps print
-    above it, so it has to be the action - "Call Grandma" - and never the
+    above it, so it has to be the action - "call Grandma" - and never the
     instruction ("remind me to call Grandma in 4 days from now"). Three pieces
     of the sentence are removed, in this order, and only when something is left:
 

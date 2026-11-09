@@ -100,17 +100,18 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // The everyday helpers that used to be "not this slice" (8)
   "calculator", "memory_search", "file_read", "web_search", "my_files",
   "propose_plan", "change_setting", "feature_guide",
-  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (24:
+  // Jarvis's own tools, which had no switch row at all before 2026-11-04 (25:
   // the original 12, plus the four pack-manager tools, hands-free's
-  // send_text_message and the six on-demand GitHub tools)
+  // send_text_message, the seven on-demand GitHub tools and the approval row)
   "goals_list", "goal_add", "goal_progress", "goal_done",
   "conversation_find", "conversation_open", "phone_apps", "plugin_list",
   "plugin_switch", "pack_list", "pack_inspect", "pack_install", "pack_remove",
   "send_text_message", "refresh_abilities", "self_portrait", "setup_quiz",
-  // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05)
+  // Your own GitHub, on demand (2026-11-03; a switch row since 2026-11-05),
+  // including the carded repository create added 2026-11-09
   "github_list", "github_read_file", "github_ci_status",
   "github_comment", "github_open_issue", "github_rerun_workflow",
-  "approval_policy",
+  "github_create_repo", "approval_policy",
 ]);
 export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_DETAIL =

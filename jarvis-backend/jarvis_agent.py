@@ -15560,8 +15560,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         tool = str(failed.get("tool") or "")
         why = str(failed.get("why") or "").strip()
         head = SCHEDULE_NOT_DONE.get(tool, "That was not set: {why}")
-        line = (head.format(why=why).rstrip() + SCHEDULE_NOT_DONE_END) if why \
-            else SCHEDULE_NOT_DONE_PLAIN
+        reason = head.format(why=why).rstrip() if why else ""
+        if reason and reason[-1] not in ".!?":
+            reason += "."                # the tool's error need not end a sentence
+        line = (reason + SCHEDULE_NOT_DONE_END) if reason else SCHEDULE_NOT_DONE_PLAIN
         said["gap"] = True
         emit(line)
 

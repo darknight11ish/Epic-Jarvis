@@ -125,7 +125,7 @@ built and tested, and the ones with no hands-on pass say so in **Honest limits**
   memory map** ("The memory map — what Jarvis remembers") and the HUD has a one-click door to it.
 - **Lane truth:** a dead pooled lane falls back to a live one, the pooled chat uses the lane's own `num_ctx`,
   and warming the coder never hijacks the everyday lane.- **Reminders hear the date you meant.** "Remind me to call Grandma in 4 days from now" now lands four days
-  out instead of 13:00 today, the title is the action ("Call Grandma"), and Jarvis no longer says "I've
+  out instead of 13:00 today, the title is the action ("call Grandma"), and Jarvis no longer says "I've
   updated it" over a footer that admits nothing ran - a failed change says what failed, in the tool's own
   words. The phone's fired reminder carries its notification flag explicitly.
 - **Jarvis tells the truth about what reaches the internet, and can create a GitHub repository after ONE
