@@ -132,62 +132,68 @@ TIERS = (
 #: compute buffers included; `context_gib` is the window that number is for.
 #: EVERY number here is either a measured row from `docs/MEASURED-2026-11-07-
 #: THREE-GPU.md` (this PC's own three-card sweep) or said to be an estimate.
+#: A `measured_note` carries the arrangement and the numbers; the row builder
+#: prefixes it with "Separately measured on 2026-11-07:", once for every row,
+#: so the estimate above it and this measurement are read as two labelled
+#: claims rather than one mixed one (Wave 11: MiniCPM-V's "fits on one card"
+#: estimate sat beside "across three cards" with nothing saying they were
+#: different kinds of sentence).
 CATALOGUE = (
     {"model": "qwen3.5:4b", "label": "Qwen3.5 4B", "params": "4B",
      "quant": "Q4_K_M", "min_vram_gib": 3.2, "context_gib": 16384,
      "capabilities": ("completion",),
-     "measured_note": "3.20 GiB at 16,384 on one card (2026-11-07 sweep)"},
+     "measured_note": "3.20 GiB at 16,384 on one card"},
     {"model": "minicpm-v4.6", "label": "MiniCPM-V 4.6", "params": "1.3B",
      "quant": "Q4_K_M", "min_vram_gib": 1.4, "context_gib": 16384,
      "capabilities": ("completion", "vision"),
-     "measured_note": "1.33 GiB at 16,384 across three cards (2026-11-07 sweep)"},
+     "measured_note": "1.33 GiB at 16,384 across three cards"},
     {"model": "qwen3:8b", "label": "Qwen3 8B", "params": "8B",
      "quant": "Q4_K_M", "min_vram_gib": 6.0, "context_gib": 16384,
      "capabilities": ("completion",),
-     "measured_note": "5.85-5.97 GiB at 16,384 on one card (2026-11-07, this PC)"},
+     "measured_note": "5.85-5.97 GiB at 16,384 on one card"},
     {"model": "qwen3.5:9b", "label": "Qwen3.5 9B (everyday)", "params": "9B",
      "quant": "Q4_K_M", "min_vram_gib": 9.3, "context_gib": 196608,
      "capabilities": ("completion",),
      "measured_note": "9.18 GiB at 196,608 on the RTX 2060 alone "
-                      "(2026-11-07 sweep: 42.01 tok/s)"},
+                      "(42.01 tok/s)"},
     {"model": "qwen3-vl:8b-thinking", "label": "Qwen3-VL 8B (vision)",
      "params": "8B", "quant": "Q4_K_M", "min_vram_gib": 6.2,
      "context_gib": 16384, "capabilities": ("completion", "vision"),
      "measured_note": "6.14 GiB at 16,384 on the headless 2080 SUPER "
-                      "(2026-11-07 sweep: 63.35 tok/s)"},
+                      "(63.35 tok/s)"},
     {"model": "gemma4:12b-it-qat", "label": "Gemma 4 12B (QAT)",
      "params": "12B", "quant": "QAT Q4", "min_vram_gib": 7.2,
      "context_gib": 16384, "capabilities": ("completion",),
-     "measured_note": "7.15 GiB at 16,384 on the RTX 2060 (2026-11-07 sweep)"},
+     "measured_note": "7.15 GiB at 16,384 on the RTX 2060"},
     {"model": "qwen3-coder-30b-a3b-ud-q3-k-xl",
      "label": "Qwen3 Coder 30B-A3B (coding)", "params": "30B MoE",
      "quant": "UD-Q3_K_XL", "min_vram_gib": 16.2, "context_gib": 49152,
      "capabilities": ("completion", "coding"),
      "measured_note": "16.17 GiB at 49,152 across three cards "
-                      "(2026-11-07 sweep: 83.82 tok/s)"},
+                      "(83.82 tok/s)"},
     {"model": "qwen3-coder:30b-a3b-q4_K_M",
      "label": "Qwen3 Coder 30B-A3B (Q4 candidate)", "params": "30B MoE",
      "quant": "Q4_K_M", "min_vram_gib": 20.6, "context_gib": 49152,
      "capabilities": ("completion", "coding"),
      "measured_note": "20.60 GiB at 49,152 across three cards "
-                      "(2026-11-07 sweep: 93.08 tok/s, not shipped)"},
+                      "(93.08 tok/s, not shipped)"},
     {"model": "gemma4:31b-it-qat", "label": "Gemma 4 31B (QAT)",
      "params": "31B", "quant": "QAT Q4", "min_vram_gib": 18.3,
      "context_gib": 16384, "capabilities": ("completion", "reasoning"),
      "measured_note": "18.25 GiB at 16,384 across three cards "
-                      "(2026-11-07 sweep: 15.57 tok/s)"},
+                      "(15.57 tok/s)"},
     {"model": "orcarouter/Qwen3.8-27B-Uncensored:q4_K_M",
      "label": "Qwen3.8 27B Uncensored", "params": "27B", "quant": "Q4_K_M",
      "min_vram_gib": 16.9, "context_gib": 24576,
      "capabilities": ("completion", "uncensored"),
      "measured_note": "16.93 GiB at 24,576 across three cards "
-                      "(2026-11-07 sweep: 17.68 tok/s)"},
+                      "(17.68 tok/s)"},
     {"model": "hf.co/mradermacher/Huihui-Qwen3.5-9B-abliterated-GGUF:Q4_K_M",
      "label": "Huihui Qwen3.5 9B (uncensored)", "params": "9B",
      "quant": "Q4_K_M", "min_vram_gib": 7.3, "context_gib": 32768,
      "capabilities": ("completion", "uncensored"),
      "measured_note": "7.30 GiB at 32,768 across three cards "
-                      "(2026-11-07 sweep: 52.76 tok/s)"},
+                      "(52.76 tok/s)"},
 )
 
 #: On a PC that reports NO usable card, a model still runs - on the processor,
@@ -251,7 +257,15 @@ def _card_rows(cards) -> list:
 
 
 def detect_cards(*, detect: Optional[Callable] = None) -> list:
-    """The CUDA cards this PC reports, through `jarvis_hardware.detect()`.
+    """Every CUDA card this PC's own hardware probe reports.
+
+    WAVE 11 (2026-11-08, the owner's three-card PC): `used` is OLLAMA'S CURRENT
+    USAGE, not whether the card exists. `jarvis_hardware.detect()` marks a card
+    `used: false` when Ollama's log does not list it, and the old filter here
+    read that as "not this PC's card" - so a three-card PC (12 + 8 + 8 = 28
+    GiB) was described as one 8 GB card. A recommender answers "what should
+    THIS PC run", so every CUDA card the probe reports counts; which cards one
+    running Ollama happens to list stays out of the tier and the words.
 
     A separate function so a test (and another PC's probe) can hand cards in;
     `[]` when the probe cannot answer, which is the honest "no card reported"
@@ -267,8 +281,7 @@ def detect_cards(*, detect: Optional[Callable] = None) -> list:
         return []
     rows = (got or {}).get("cards") if isinstance(got, dict) else None
     usable = [c for c in (rows or ())
-              if str(c.get("route") or "CUDA").upper() in ("CUDA", "")
-              and c.get("used") is not False]
+              if str(c.get("route") or "CUDA").upper() in ("CUDA", "")]
     return _card_rows(usable)
 
 
@@ -496,11 +509,17 @@ def recommend(*, hardware: Optional[dict] = None,
         where = ("fits on one card" if fit == "fits_1_card" else
                  "runs on the processor, slowly" if fit == "processor" else
                  "fits across the pooled cards")
-        why = (f"{card['label']} needs about {card['min_vram_gib']:g} GiB at "
-               f"{int(card['context_gib']):,} tokens, and it {where} on this "
-               f"PC.")
+        # THE ESTIMATE SENTENCE owns the placement only; the requirement above
+        # it is already its own row line ("needs about ... at ... tokens"), so
+        # it is not repeated here. A measured note below is prefixed as the
+        # SEPARATE claim it is (Wave 11).
+        why = f"At that window it {where} on this PC."
         if warning:
             why = why + " Warning: " + warning + "."
+        measured_note = card.get("measured_note") or ""
+        if measured_note:
+            measured_note = ("Separately measured on 2026-11-07: "
+                             + measured_note)
         rows.append({
             "model": card["model"], "label": card["label"],
             "params": card["params"], "quant": card["quant"],
@@ -514,7 +533,7 @@ def recommend(*, hardware: Optional[dict] = None,
             "measured": measured_bits,
             "downgrade_warning": warning,
             "why": why,
-            "measured_note": card.get("measured_note", ""),
+            "measured_note": measured_note,
         })
     # Measured rows first (they are the ones a reader can trust most), then
     # the fastest measured, then the smallest estimated - a stable order.

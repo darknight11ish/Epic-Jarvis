@@ -2281,6 +2281,23 @@ def t_compute_ranking():
         p = CP.plan("qwen3:8b")
     check("the old way ranked by free memory (the 2060); the rule picks index 0 here",
           p.text_on == "cuda:0")
+    check("the plan describes cards beyond the first, not a second-card "
+          "assumption (Wave 11: the owner's PC has three)",
+          "any card beyond the first is used only by a second-card feature" in p.why
+          and "the second card runs only" not in p.why,
+          p.why)
+    three = [CP.Device(0, "NVIDIA GeForce RTX 2080 SUPER", 8192, 1944),
+             CP.Device(1, "NVIDIA GeForce RTX 2060", 12288, 11000),
+             CP.Device(2, "NVIDIA GeForce RTX 2080 SUPER", 8192, 2100)]
+    with mock.patch.object(CP, "devices", return_value=three), \
+            mock.patch.object(CP, "_cfg", lambda k, d=None: d):
+        p3 = CP.plan("qwen3:8b")
+    check("on a three-card PC the sentence stays true and counts them",
+          len(p3.devices) == 3
+          and "any card beyond the first is used only by a second-card feature"
+              in p3.why
+          and "the second card runs only" not in p3.why,
+          (len(p3.devices), p3.why))
     d = p.as_dict()
     check("plan()'s fields are all still there",
           {"text_model", "text_on", "vision_resident", "tts_resident", "simulated", "prefer",
