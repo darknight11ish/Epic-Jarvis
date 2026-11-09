@@ -671,8 +671,40 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
     }
 
 
+def _point_chat_back_if_the_pooled_server_is_gone(*, probe_fn=None) -> bool:
+    """Never leave the chat lane naming a pooled server that is not answering.
+
+    THE BUG THIS CLOSES (2026-11-08, measured live). `presets-active-lane.json`
+    is what the HUD's `active_ollama_url()` hands EVERY chat turn. It can name
+    the pooled port (11450) while that server is gone - it is one on-demand
+    `ollama serve`, not a logon task - and then every model-backed chat turn
+    dies with a false "The local model is not running" while the everyday lane
+    is fine. Stopping this mode is one of the two moments that can create that
+    state; when it does, put chat back on the configured lane and say so
+    through the normal preset status (`/api/work`). A server left answering on
+    the port by another process is NOT renamed away from: it is alive, so the
+    lane file is still true.
+
+    Returns True only when the persisted lane was pointing at the pooled port
+    AND was re-pointed. Never raises.
+    """
+    try:
+        import jarvis_presets as P
+        lane = P._persisted_lane_url()
+        if not lane:
+            return False
+        if f"127.0.0.1:{POOLED_PORT}" not in lane and f"localhost:{POOLED_PORT}" not in lane:
+            return False
+        ask = probe_fn or probe
+        if ask(POOLED_PORT, 0.5):
+            return False
+        return bool(P._set_active_url(P._active_url()))
+    except Exception:
+        return False
+
+
 def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True,
-                     mode: Optional[str] = None) -> tuple:
+                     mode: Optional[str] = None, probe_fn=None) -> tuple:
     """End the pooled lane: unload it, stop the server it started, put both
     lanes back exactly as they were. `(status, body)`; no card.
 
@@ -706,6 +738,14 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True,
     gone = eng.unload_coder(port=POOLED_PORT, mode=profile["key"],
                             model=(loaded_model if loaded_model else None))
     eng.server_stop()
+    # A lane file must never outlive the server it names (2026-11-08). Only on
+    # an ordinary stop: standby (restore=False) deliberately keeps the owner's
+    # chosen preset so waking can bring the same pooled lane back, and it is
+    # `_default_start_lane`/apply that writes the lane when that happens.
+    lane_moved_back = False
+    if restore:
+        lane_moved_back = _point_chat_back_if_the_pooled_server_is_gone(
+            probe_fn=probe_fn)
     if restore:
         back = eng.restore_lanes()
     else:
@@ -733,6 +773,7 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True,
         "mode": profile["key"],
         "message": message,
         "unloaded": gone["proof"], "restored": back["proof"],
+        "chat_lane_restored": bool(lane_moved_back),
         "since": held.get("since"), "by": held.get("by"),
     }
 

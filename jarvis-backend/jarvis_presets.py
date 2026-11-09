@@ -1013,6 +1013,147 @@ def _set_active_url(url: str) -> bool:
 
 
 
+# --------------------------------------------------------------------------
+#   After a RESTART: the on-demand pooled lane does not come back (2026-11-08)
+# --------------------------------------------------------------------------
+#
+# THE GAP THIS CLOSES (measured live, 2026-11-08). The Coding preset's lane is
+# NOT a Windows logon task - by the owner's 2026-11-04 decision there is no
+# third lane task, because a pooled Ollama that starts with Windows would hold
+# every card against the everyday model. It is ONE `ollama serve` this process
+# starts on demand (`jarvis_model_lanes.start_pooled_lane`, port 11450). Three
+# things survive a restart while that server does not:
+#   * `presets-choice.json` still says "coding";
+#   * `presets-active-lane.json` still says http://127.0.0.1:11450, and the
+#     HUD patch's active_ollama_url() points every chat turn there;
+#   * `model-state.json` still says the current model is the pooled 30B.
+# Tonight's deploy restarted the backend at 18:56 and all three were left as
+# they were: coding-routed chats then failed with "The local model is not
+# running" (a false sentence - the everyday lane was fine), and the wake-time
+# warm-up loaded the pooled 30B on the ONE-card everyday lane at Ollama's 8192
+# context, which is the HUD's 74%-on-GPU / 26%-CPU warning. Both are the same
+# state inconsistency, so this is where it is repaired.
+#
+# WHAT IT DOES, and what it deliberately does NOT do:
+#   * only when the remembered lane is the POOLED port and nothing answers
+#     there - the two logon-task lanes are left alone (their own Windows tasks
+#     race the backend at logon, and a briefly-down everyday lane is not this
+#     bug);
+#   * points the chat lane back at the configured lane (OLLAMA_URL, the
+#     everyday model), rolls the model back to the one it replaced, and forgets
+#     the preset that cannot be served - so the HUD's Presets screen says
+#     plainly that nothing is chosen instead of lying;
+#   * it never STARTS the pooled lane and never raises a card: starting the
+#     three-card lane is a model switch the owner approves, and a background
+#     reconcile must not approve one for him. Re-applying the Coding preset is
+#     the one carded action that brings the pooled lane back;
+#   * it never touches a lane that answers, never downloads, never leaves this
+#     PC, and never raises.
+
+LANE_FILE_NAME = "presets-active-lane.json"
+_LAST_RECONCILE: dict = {"changed": False, "why": "not run yet"}
+
+
+def _persisted_lane_url() -> str:
+    """The lane `presets.patch`'s active_ollama_url() reads, or "". Never raises."""
+    import json
+    try:
+        doc = json.loads((_config_dir() / LANE_FILE_NAME).read_text(encoding="utf-8"))
+        url = str(doc.get("base_url") or "").strip().rstrip("/")
+    except Exception:
+        return ""
+    if url.startswith(("http://127.0.0.1:", "http://localhost:")):
+        return url
+    return ""
+
+
+def _pooled_port() -> int:
+    """The pooled lane's own port, from the module that owns it (never typed)."""
+    try:
+        import jarvis_model_lanes
+        return int(jarvis_model_lanes.POOLED_PORT)
+    except Exception:
+        return 11450
+
+
+def _lane_answers(url: str, timeout: float = 2.0) -> bool:
+    """Does this loopback lane answer /api/version? Read-only; False on any error."""
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/api/version",
+                                    timeout=float(timeout)) as resp:
+            return int(getattr(resp, "status", 0) or 0) == 200
+    except Exception:
+        return False
+
+
+def reconcile_after_restart(*, probe=None, set_active_url=None,
+                            rollback_model=None) -> dict:
+    """Repair the persisted preset state when the on-demand pooled lane is gone.
+
+    Called ONCE by `install()` in the real HUD process (see `_warm_on_startup`);
+    every seam is injectable so the suite proves all three outcomes without a
+    socket, a model or a card. Returns {"changed", "why", "lane", "preset"}.
+    """
+    import os as _os
+    if _os.environ.get("JARVIS_SUITE_RUNNING") and not _os.environ.get(
+            "OPENJARVIS_CONFIG_DIR"):
+        # A suite that forgot to point OPENJARVIS_CONFIG_DIR at its own temp
+        # folder must NEVER read, let alone rewrite, the owner's live preset
+        # files (this happened once in a smoke check, 2026-11-08; content was
+        # restored at once). It is a bug in the caller, so it is refused loudly.
+        return {"changed": False, "lane": "", "preset": "",
+                "why": ("refused: a suite run must point OPENJARVIS_CONFIG_DIR at "
+                        "its own temp folder; nothing was touched")}
+    lane = _persisted_lane_url()
+    if not lane:
+        return {"changed": False, "why": "no preset has been applied on this PC yet",
+                "lane": "", "preset": ""}
+    port = _pooled_port()
+    if f"127.0.0.1:{port}" not in lane and f"localhost:{port}" not in lane:
+        # A logon-task lane is restarted by its own Windows task at logon; a
+        # briefly-down one is NOT this restart gap, so its files stay as they are.
+        return {"changed": False,
+                "why": (f"the remembered lane is not the on-demand pooled lane "
+                        f"(port {port}); it is started by its own Windows task"),
+                "lane": lane, "preset": str(choice() or "")}
+    probe = probe or _lane_answers
+    if probe(lane):
+        return {"changed": False, "why": "", "lane": lane,
+                "preset": str(choice() or "")}
+    target = _active_url()
+    lane_ok = bool((set_active_url or _set_active_url)(target))
+    rolled = False
+    try:
+        got = (rollback_model or _default_rollback_model)()
+        rolled = isinstance(got, dict) and got.get("ok") is not False
+    except Exception:
+        rolled = False
+    preset = str(choice() or "")
+    cleared = False
+    try:
+        _choice_path().unlink()
+        cleared = True
+    except FileNotFoundError:
+        cleared = True
+    except Exception:
+        cleared = False
+    why = (
+        f"the remembered preset ({preset or 'one with no name'}) needed the "
+        f"on-demand three-card lane at {lane}, which does not survive a "
+        f"restart; chat was pointed back at {target}"
+        + (", the previous model was restored" if rolled else
+           " (the previous model could not be restored)")
+        + (", and the preset was forgotten" if cleared else
+           ", but the preset file could not be cleared")
+        + ". Apply the preset again to bring the three-card lane back.")
+    return {"changed": bool(lane_ok or rolled or cleared), "why": why,
+            "lane": target, "preset": preset, "pooled_lane": lane,
+            "lane_ok": lane_ok, "model_rolled_back": rolled,
+            "preset_cleared": cleared}
+
+
 def _active_lane_key() -> Optional[str]:
     url = _active_url()
     for key, lane in LANES.items():
@@ -1067,6 +1208,9 @@ def live_status() -> dict:
         "chosen_preset": chosen,
         "chosen_model": chosen_preset.model if chosen_preset else None,
         "active_lane": {"key": lane_key, "base_url": _active_url()},
+        # What the startup reconcile did after the last restart (2026-11-08).
+        # A read: it changes nothing and is empty on a PC with no pooled preset.
+        "restart_reconcile": dict(_LAST_RECONCILE),
         "lane": lane,
         "lane_status": lane,
         "apply_path": APPLY_PATH,
@@ -1482,6 +1626,21 @@ def install(Handler, *, origin_ok, token_ok, read_body):
         return self._send(code, out)
 
     Handler.do_POST = do_POST
+    # Repair the persisted preset state BEFORE anything reads it: an on-demand
+    # pooled lane does not survive a restart, and a chat lane left pointing at
+    # its dead port fails every coding-routed turn with a false "not running"
+    # (and lets a wake-time warm-up load the pooled 30B on one card). Real HUD
+    # process only, the same rule as the card warm below, so a suite's
+    # install() stays off the owner's PC.
+    global _LAST_RECONCILE
+    if _warm_on_startup():
+        try:
+            _LAST_RECONCILE = reconcile_after_restart()
+            if _LAST_RECONCILE.get("changed"):
+                print("  presets    " + str(_LAST_RECONCILE.get("why") or ""))
+        except Exception as exc:                     # noqa: BLE001 - never blocks start-up
+            _LAST_RECONCILE = {"changed": False,
+                               "why": f"{type(exc).__name__}: the startup check failed"}
     # Warm the card detection while the HUD finishes starting, so the first
     # GET /api/work does not pay the ~10 s `nvidia-smi` + lane-probe cost. The
     # request path never does it again once a snapshot exists (see above).
