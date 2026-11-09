@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "2d5d0ec2f6d1f54f0219b55463e4d757b5323d33",
- "built_at": "2026-11-09T05:54:29-08:00",
+ "ref": "993210bdc8ab346100083007775ada853c5346c2",
+ "built_at": "2026-11-09T08:05:03-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4037,6 +4037,7 @@
     "backend/test_plugins_honesty.py",
     "backend/test_pooled_lane.py",
     "backend/test_pooled_modes.py",
+    "backend/test_pooled_preload.py",
     "backend/test_position_pins.py",
     "backend/test_power_switch.py",
     "backend/test_preset_answers.py",
@@ -4285,7 +4286,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 677,
+   "file_count": 678,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6220,6 +6221,26 @@
  ],
  "recent_commits": [
   {
+   "sha": "993210bdc8ab346100083007775ada853c5346c2",
+   "date": "2026-11-09",
+   "subject": "records(wave13): the two owner-report HUD fixes are in the one changelog bullet, the one decision bullet, and the field-test register"
+  },
+  {
+   "sha": "0d462d94c26a4ff95a04364f79d8d08f8158384d",
+   "date": "2026-11-09",
+   "subject": "fix(hud): the chosen personality wears the chosen rectangle, and the model chip stops going stale"
+  },
+  {
+   "sha": "2de6ee107468081b991b57c3b4f6c374b5d85ce1",
+   "date": "2026-11-09",
+   "subject": "style(wave13): the asks_first list comment the assembly reflow left one space out"
+  },
+  {
+   "sha": "c07054ca44d6de1efa46db5cad63a72cf362830e",
+   "date": "2026-11-09",
+   "subject": "chore(wave13): the self-code map covers the creator module, and the reversible-UI suite stops calling github_create_repo unbuilt"
+  },
+  {
    "sha": "2d5d0ec2f6d1f54f0219b55463e4d757b5323d33",
    "date": "2026-11-09",
    "subject": "merge(wave12): bring the #1217 head content into the wave-13 branch ahead of the main merge"
@@ -6298,33 +6319,13 @@
    "sha": "a61e9cacf2c330fcac546c352ffa8c78551ced0d",
    "date": "2026-11-09",
    "subject": "fix(guard): the third-card guard strips the :latest tag Ollama reports, and the wave-12 records carry the field-test findings"
-  },
-  {
-   "sha": "24aaacb6b629856068be41bb118cbd1391a4da56",
-   "date": "2026-11-09",
-   "subject": "chore(generated): the recent-changes record carries the wave-12 bullet"
-  },
-  {
-   "sha": "abd210cfa087e2300c77871831f04ff191c02611",
-   "date": "2026-11-09",
-   "subject": "feat(manual-click): one allow-list for reversible UI choices (Gemini Q2)"
-  },
-  {
-   "sha": "bbc419410649c538138969bbbded4ae4e97debee",
-   "date": "2026-11-09",
-   "subject": "fix(chat): \"which model is better for the Coding preset?\" names the Coding model (wave-11 acceptance defect)"
-  },
-  {
-   "sha": "b8f296ee32bb7e66f5fa3d7907be73a884f360e9",
-   "date": "2026-11-09",
-   "subject": "fix(audit): the wave-12 strings lose their developer words, and the HUD read-aloud's data: clip is recorded"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1415
+   "files": 1416
   },
   {
    "path": "jarvis-desktop/",
@@ -6438,8 +6439,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5562,
-  "covered": 5092,
+  "tracked_files": 5563,
+  "covered": 5093,
   "excluded": 470,
   "subsystems": 27
  },
