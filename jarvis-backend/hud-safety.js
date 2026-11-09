@@ -60,10 +60,6 @@ export const OFFLINE_LEAD = "No link to Jarvis on your PC: ";
 export const TAINT_LEAD = "Something Jarvis read tried to rush you on the card that is waiting";
 export const TAINT_TAIL = "Take your time — this can never be hidden.";
 
-/** A4 (2026-10-23): the persistent local-only session latch is armed. Plain
- *  words only - the owner never reads the word "taint" on a screen. */
-export const LATCH_LOCAL_WORDS = "This session is staying on your PC.";
-
 /** A4: the persistent rush latch is armed - every approval asks for one more
  *  look until it clears. Says what changes, not what the mechanism is called. */
 export const LATCH_RUSH_WORDS =
@@ -135,21 +131,22 @@ export function taintWords(rows) {
 }
 
 /**
- * A4 (2026-10-23): the persistent-session chip's words, or null.
+ * A4 (2026-10-23): the persistent rush latch's words, or null.
  *
  * `latch` is the page's `{taint, rush}` object from `/api/status` - each one
  * `true`, `false`, or `null` ("the PC has not said"). ONLY `true` draws a
  * chip: `null` must never read as "not latched", and false has nothing to say.
- * Both true are shown together, because they are two different facts (this
- * session stays local AND approvals are asking more carefully).
+ *
+ * The `taint` latch still exists and is still enforced (the gate fails closed,
+ * and the queue-scoped rush evidence still shows on a waiting card), but the
+ * owner asked on 2026-11-08 that its persistent "This session is staying on
+ * your PC." line be taken off the HUD. So the rail now speaks only for the
+ * rush latch; an armed taint latch on its own draws nothing.
  */
 export function latchWords(latch) {
   if (!latch || typeof latch !== "object") return null;
-  const parts = [];
-  if (latch.taint === true) parts.push(LATCH_LOCAL_WORDS);
-  if (latch.rush === true) parts.push(LATCH_RUSH_WORDS);
-  if (!parts.length) return null;
-  return { tone: "warn", words: parts.join(" ") };
+  if (latch.rush === true) return { tone: "warn", words: LATCH_RUSH_WORDS };
+  return null;
 }
 
 /**

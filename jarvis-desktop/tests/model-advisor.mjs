@@ -421,6 +421,27 @@ await check("the desktop-only decision is written down where the audit looks", a
   }
 });
 
+await check("the filter row is a disclosure the owner can fold away", async () => {
+  // The owner, 2026-11-08: the long filter row ran off the right edge of the
+  // Model pane ("Param..." cut off), so it can now be folded away. Every
+  // control stays; the fold is a way of looking, like the filters themselves.
+  assert.match(pageSrc, /const fold = el\("details", "model-filters-fold"\)/,
+    "the filter row is not a disclosure");
+  assert.match(pageSrc, /fold\.id = "advisor-filters-fold"/,
+    "the disclosure has no id the page or a test can reach");
+  assert.match(pageSrc, /fold\.open = advisor\.filtersOpen !== false/,
+    "the disclosure does not start from the remembered (session) state");
+  assert.match(pageSrc, /title\.textContent = fold\.open \? "Hide filters" : "Filters"/,
+    "the disclosure does not name the action it performs");
+  assert.match(pageSrc, /advisor\.filtersOpen = fold\.open/,
+    "opening or closing the fold is not remembered across re-renders");
+  assert.match(pageSrc, /body\.append\(bar, tags, foot\)/,
+    "the controls are no longer inside the disclosure's body");
+  const css = read(join(SRC, "brain.css"));
+  assert.match(css, /\.model-filter-controls \{\s*flex-wrap: wrap;/,
+    "the filter controls still cannot wrap, so they can still run off the edge");
+});
+
 /* ── 6. The real page, against stubbed answers at the bridge ──────────────── */
 
 const { base, close } = await K.serve();

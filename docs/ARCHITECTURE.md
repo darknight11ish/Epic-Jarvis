@@ -4439,9 +4439,12 @@ clears anything). **Since A4 (2026-10-23) the two persistent session latches are
 readable too**: the PC's own `/api/status` carries `taint_latched` /
 `rush_latched`, read-only (true/false/null, where null is "the PC has not said" —
 never "not latched" — and a taint read that fails answers true, the gate's own
-fail-closed rule), so the strip can say "this session is staying on your PC" and
-"something Jarvis read tried to rush you recently; approvals ask for one more
-look" with no card waiting and across a backend restart. The queue-scoped banner
+fail-closed rule), so the strip can say "something Jarvis read tried to rush you
+recently; approvals ask for one more look" with no card waiting and across a
+backend restart. **The owner asked on 2026-11-08 that the persistent
+"This session is staying on your PC." line be taken off the HUD** — it is gone
+from the strip; the taint latch itself is unchanged (the gate still fails
+closed, and a waiting card still carries the queue-scoped rush evidence). The queue-scoped banner
 stays separate and never claims a latch from a card alone; none of this adds a
 command, permission, card, route or grant (`/api/status` was already on the HUD's
 fixed allowlist), and no control can clear either latch. The real locked-window

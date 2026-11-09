@@ -14,7 +14,6 @@ import {
   OFFLINE_LEAD,
   TAINT_LEAD,
   TAINT_TAIL,
-  LATCH_LOCAL_WORDS,
   LATCH_RUSH_WORDS,
   FIXED_LABEL,
   LOCK_BEAT_MS,
@@ -235,21 +234,29 @@ check("A4: the persistent latches are plain words, drawn only when true", () => 
   assert.equal(latchWords({ taint: false, rush: false }), null);
   assert.equal(latchWords({ taint: null, rush: null }), null);
   assert.equal(latchWords({ taint: "true", rush: 1 }), null, "only a real true arms a chip");
-  const local = latchWords({ taint: true, rush: false });
-  assert.equal(local.words, LATCH_LOCAL_WORDS);
-  assert.equal(local.tone, "warn");
+  // The owner asked on 2026-11-08 that the persistent "This session is
+  // staying on your PC." line be taken off the HUD. The taint latch itself is
+  // unchanged (the gate still fails closed, and a waiting card still carries
+  // the queue-scoped rush evidence), so an armed taint latch on its own now
+  // draws nothing; the rush latch keeps its sentence.
+  assert.equal(latchWords({ taint: true, rush: false }), null);
+  assert.equal(latchWords({ taint: true, rush: null }), null);
   const rushed = latchWords({ taint: false, rush: true });
   assert.equal(rushed.words, LATCH_RUSH_WORDS);
+  assert.equal(rushed.tone, "warn");
   const both = latchWords({ taint: true, rush: true });
-  assert.ok(both.words.includes(LATCH_LOCAL_WORDS) && both.words.includes(LATCH_RUSH_WORDS));
+  assert.equal(both.words, LATCH_RUSH_WORDS,
+    "the local-session sentence must not come back beside the rush one");
   // A beginner reads these: none of the internal words may reach a screen.
-  for (const words of [local.words, rushed.words, both.words]) {
+  for (const words of [rushed.words, both.words]) {
     assert.ok(!/taint|latch|tier|armed|session-local/i.test(words),
       `internal jargon on a screen: ${words}`);
   }
   // The chip sits after the lock chip and before the queue evidence, and only
-  // when a latch is armed; linked-only stays silent (the one row says it).
-  assert.deepEqual(safetyChips({ latch: { taint: true } }).map((c) => c.chip), ["latch"]);
+  // when the rush latch is armed; the local-session line was removed on the
+  // owner's 2026-11-08 request, so an armed taint latch alone draws nothing.
+  assert.deepEqual(safetyChips({ latch: { taint: true } }).map((c) => c.chip), []);
+  assert.deepEqual(safetyChips({ latch: { rush: true } }).map((c) => c.chip), ["latch"]);
   assert.deepEqual(safetyChips({
     lock: { appLock: true },
     latch: { taint: true, rush: true },
@@ -435,8 +442,8 @@ await checkAsync("every one of the four chips is revealed before its first words
     },
     {
       chip: "latch",
-      words: LATCH_LOCAL_WORDS,
-      drive: (api) => api.setLatch({ taint: true }),
+      words: LATCH_RUSH_WORDS,
+      drive: (api) => api.setLatch({ rush: true }),
     },
     {
       chip: "taint",
