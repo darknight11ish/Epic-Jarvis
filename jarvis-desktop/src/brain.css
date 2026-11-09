@@ -3773,3 +3773,43 @@ mark.find-current {
 .schedule-editor-field input{min-width:120px;}
 .schedule-editor-note{margin:6px 0; font-size:12px; opacity:.75;}
 .schedule-editor-buttons{display:flex; gap:6px; margin-top:6px;}
+
+/* ── The model filter row, foldable (owner, 2026-11-08) ───────────────────
+   The filter controls are one long row; on a narrow window it ran off the
+   right edge ("Param..." cut off). It now wraps when it is shown, and a
+   disclosure lets the owner fold the whole row away: "Filters" closed,
+   "Hide filters" open. Every control still exists while it is folded. The
+   state is session-only, exactly like the filters themselves. */
+.model-filters-fold {
+  border-top: var(--stroke-hair) solid var(--border);
+  margin-top: 10px;
+}
+.model-filters-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  list-style: none;
+}
+.model-filters-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.model-filters-fold > summary::before {
+  content: "▸";
+  color: var(--text-faint);
+}
+.model-filters-fold[open] > summary::before {
+  content: "▾";
+}
+.model-filters-fold[open] > summary {
+  color: var(--text);
+}
+.model-filter-controls {
+  flex-wrap: wrap;
+}
+.model-filters-body {
+  padding-top: 4px;
+}

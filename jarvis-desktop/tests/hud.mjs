@@ -6783,8 +6783,8 @@ await check("H4: the rush banner is the waiting card's evidence, escaped, never 
   assert.deepEqual(problems, []);
 });
 
-await check("H4/A4: the persistent latches show read-only, and unknown stays silent", async () => {
-  // Both armed: one chip, both plain sentences, no control, still one strip.
+await check("H4/A4: the rush latch shows read-only, unknown stays silent, and the owner's local-session line is gone", async () => {
+  // Both armed: one chip, the rush sentence only, no control, still one strip.
   const both = await openHud(browser,
     { jarvis: true, ollama: true, proxy: false, taint_latched: true, rush_latched: true });
   await both.page.waitForFunction(() => {
@@ -6792,7 +6792,10 @@ await check("H4/A4: the persistent latches show read-only, and unknown stays sil
     return node && !node.hidden && node.textContent.length > 0;
   }, null, { timeout: 8000 });
   const words = await both.page.locator("#hud-safety-latch").innerText();
-  assert.match(words, /staying on your PC/, words);
+  // The owner asked on 2026-11-08 for the persistent "This session is staying
+  // on your PC." line to be taken off the HUD; the rush latch still speaks.
+  assert.ok(!/staying on your PC/.test(words),
+    `the owner asked for this line to be gone, and it is back: ${words}`);
   assert.match(words, /tried to rush you recently/, words);
   assert.ok(!/taint|latch|tier|armed/i.test(words), `internal jargon on screen: ${words}`);
   assert.equal(await both.page.locator("#hud-safety-latch").getAttribute("role"), "status");

@@ -731,6 +731,7 @@ const dom = {
   themePicker: $("theme-picker"),
   rail: $("rail-nav"),
   advancedToggle: $("rail-advanced-toggle"),
+  advancedLabel: $("rail-advanced-label"),
   countAdvanced: $("count-advanced"),
 
   canvas: $("graph-canvas"),
@@ -1832,6 +1833,10 @@ const advisor = {
   /** The owner's model filter bar (Q4, 2026-11-07). Session-only: a filter is a
    *  way of looking at this answer, not a setting the PC owns. */
   filters: Advisor.freshFilters(),
+  /** Whether the filter row is unfolded (owner, 2026-11-08: the long row ran
+   *  off the right edge, so it can be folded away). Session-only, like the
+   *  filters themselves. */
+  filtersOpen: true,
 };
 
 /** The one bridge call, with the action's own wait and the right late sentence. */
@@ -2260,12 +2265,9 @@ function advisorFilterBar(allRows, benchmarked) {
     "advisor-filter-sort", "Sort",
     Advisor.SORT_MODES.map((mode) => ({ value: mode.id, label: mode.label })),
     advisor.filters.sort, (value) => { advisor.filters.sort = value; renderModels(); }));
-  wrap.append(bar);
-
   const tags = el("div", "row-actions advisor-filter-tags");
   tags.append(el("span", "advisor-filter-label", "Capabilities"));
   for (const tag of Advisor.CAPABILITY_TAGS) tags.append(advisorFilterTag(tag));
-  wrap.append(tags);
 
   const foot = el("div", "row-actions advisor-filter-foot");
   const clear = button("Clear filters", () => {
@@ -2280,7 +2282,30 @@ function advisorFilterBar(allRows, benchmarked) {
       Advisor.filterCandidates(allRows, advisor.filters, benchmarked)));
   summary.id = "advisor-filter-summary";
   foot.append(summary);
-  wrap.append(foot);
+
+  // The owner asked on 2026-11-08 for this long row to be hideable, and for
+  // the controls to wrap instead of running off the right edge. A disclosure
+  // is the smallest honest shape: every control stays, and one press folds
+  // the row away. Folded or not, the filters keep working and the summary
+  // line inside still says how many models are hidden.
+  const fold = el("details", "model-filters-fold");
+  fold.id = "advisor-filters-fold";
+  fold.open = advisor.filtersOpen !== false;
+  const title = el("summary", "model-filters-fold-title");
+  title.id = "advisor-filters-fold-title";
+  const paintTitle = () => {
+    title.textContent = fold.open ? "Hide filters" : "Filters";
+  };
+  fold.addEventListener("toggle", () => {
+    advisor.filtersOpen = fold.open;
+    paintTitle();
+  });
+  fold.append(title);
+  const body = el("div", "model-filters-body");
+  body.append(bar, tags, foot);
+  fold.append(body);
+  wrap.append(fold);
+  paintTitle();
   return wrap;
 }
 
@@ -15888,6 +15913,13 @@ dom.rail?.addEventListener("keydown", (event) => {
 dom.advancedToggle?.addEventListener("click", () => {
   advancedOpen = !advancedOpen;
   dom.advancedToggle.setAttribute("aria-expanded", String(advancedOpen));
+  // The toggle is a disclosure, so it names the opposite action while it is
+  // open: "Advanced" opens, "Hide advanced" closes. The owner asked for this
+  // on 2026-11-08 - the line staying "Advanced" made the press look like it
+  // had done nothing at all.
+  if (dom.advancedLabel) {
+    dom.advancedLabel.textContent = advancedOpen ? "Hide advanced" : "Advanced";
+  }
   for (const key of ADVANCED_VIEWS) {
     const item = $(`tab-${key}`)?.closest("li");
     if (item) {
