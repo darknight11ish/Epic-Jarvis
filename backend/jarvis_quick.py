@@ -7250,6 +7250,36 @@ def _cap_stem(word: str) -> str:
     return word
 
 
+#: THE OWNER'S SPOKEN SYNONYM, AND WHY IT IS HERE (2026-11-08, the feature-echo
+#: defect). "does jarvis have a feature for reading out loud?" was answered with
+#: the `read-web-page` row ("Read one web page out loud") although the row he
+#: meant is `read-aloud` ("Jarvis reads its answers aloud"). The read-web-page
+#: row's alias is literally "read out loud", so its NAME beat the read-aloud
+#: row's own words - a deterministic echo of an unrelated feature row, measured
+#: on both the QUEUED and the LIVE 0.2.439 trees. The fix is the words he says:
+#: "out loud" is "aloud", and "reading"/"reads" are "read". Applied to the
+#: QUESTION only, never to a row's own words, so no row is ever rewritten and
+#: the mapping cannot make two rows share a name they did not have.
+_CAP_ALOUD = re.compile(r"\bout[\s-]+loud\b", re.I)
+_CAP_ALOUD_WORDS = (
+    (re.compile(r"\breading\b", re.I), "read"),
+    (re.compile(r"\breads\b", re.I), "read"),
+)
+
+
+def _cap_alias_normalise(text) -> str:
+    """The question's words with the owner's spoken synonyms applied.
+
+    Only the ones a person says differently from the catalogue's own spelling:
+    "out loud" -> "aloud" (the read-aloud row) and "reading/reads" -> "read".
+    The rows keep their own words; this is the question side only.
+    """
+    out = _CAP_ALOUD.sub("aloud", str(text or ""))
+    for rx, repl in _CAP_ALOUD_WORDS:
+        out = rx.sub(repl, out)
+    return out
+
+
 def _cap_tokens(text) -> tuple:
     """The content words of a phrase, lower-cased, stemmed, de-duplicated."""
     out = []
@@ -7372,7 +7402,8 @@ def _cap_resolve(raw) -> Optional[dict]:
     tail = _cap_tail(raw)
     if not tail:
         return None
-    query = _cap_tokens(tail)
+    # The question's spoken words, not the row's: see `_cap_alias_normalise`.
+    query = _cap_tokens(_cap_alias_normalise(tail))
     if len(query) < 2:
         return None
     query_set = frozenset(query)
@@ -7478,7 +7509,11 @@ def _cap_question(raw) -> Optional[Intent]:
     if rows:
         return Intent("capability_answer",
                       {"ids": [str(r.get("id") or "") for r in rows], "ask": ask})
-    return None
+    # 2026-11-08, the feature-echo defect: a feature question this matcher did
+    # not claim is answered from the one row it names - or honestly when it
+    # names none - instead of being handed to the model. See the block comment
+    # beside `_explicit_feature_question`.
+    return _explicit_feature_question(raw)
 
 
 def _cap_safety_question(raw) -> Optional[Intent]:
@@ -9274,7 +9309,6 @@ def _price_radar_question(raw) -> Optional[Intent]:
         return Intent("price_radar_lookup")
     return None
 
-
 def _feature_capability_question(raw) -> Optional[Intent]:
     """A capability question read off the RAW sentence (2026-10-31).
 
@@ -9296,6 +9330,161 @@ def _feature_capability_question(raw) -> Optional[Intent]:
         if got is not None:
             return got
     return _feature_capabilities(text)
+
+
+# ---------------------------------------------------------------------------
+#   A FEATURE QUESTION THAT FELL THROUGH (2026-11-08, the feature-echo defect)
+#
+# MEASURED, on the QUEUED tree (eb776a6e0) and the LIVE 0.2.439 tree, by
+# driving the real matcher (no model): "does jarvis have a feature for reading
+# out loud?" was answered from the `read-web-page` row -
+#   "Yes - Read one web page out loud. Fetch the one page you named ..."
+# - while the row the owner means is `read-aloud` ("Jarvis reads its answers
+# aloud"). The deterministic layer, not the model, was the echo: the
+# read-web-page row's own alias is "read out loud", so it outranked the
+# read-aloud row's words in the capability matcher. `_cap_alias_normalise`
+# (beside `_cap_stem`) is the first half of the fix: it makes the QUESTION's
+# "out loud" mean "aloud", so the right row wins.
+#
+# RULED OUT as the echo's source: the model prompt. `jarvis_agent.LANE_SYSTEM`
+# carries no catalogue rows, no note that `with_rules_first` adds does, and
+# `jarvis_agent` imports no feature catalogue at all - rows reach a model only
+# through the `feature_guide` tool, which a model has to call. A test pins that
+# (backend/test_feature_question_answers.py).
+#
+# THE OTHER HALF OF THE CLASS IS COVERAGE. These natural feature shapes had no
+# matcher, so they fell to the model, which can echo rows already in the
+# conversation. The fallback below runs LAST in `match()`, after every action
+# and every older capability shape, and is deterministic:
+#   * a question that NAMES a catalogue row (its own words, an alias, or the
+#     row's id) answers from that row - never from a different row;
+#   * a question that says "feature"/"ability"/"tool"/"option" and names NO row
+#     gets the honest "I don't know that name" answer instead of the model;
+#   * "what can you tell me about <known feature>" answers from that row; an
+#     unknown subject there keeps the old model path, because "tell me about a
+#     car" is an ordinary question, not a feature question.
+# Read-only: every branch returns an Intent the existing runners answer from
+# the guide's own rows; nothing beyond the catalogue is read and nothing is
+# written.
+# ---------------------------------------------------------------------------
+
+#: The explicit feature-question shapes, checked only after the generic
+#: capability matcher has declined. `area` is the words after the feature noun.
+_FEAT_EXPLICIT = re.compile(
+    r"(?:does|do|is|are|can|could|has|have)\s+(?:jarvis|you)\s+"
+    r"(?:(?:have|got|offer|support|provide|do)\s+)?"
+    r"(?:a\s+|an\s+|any\s+|the\s+)?(?:feature|ability|option|way|tool)s?\s+"
+    r"(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)?"
+    r"(?P<area>.+)"
+    r"|is\s+there\s+(?:a\s+|an\s+|any\s+)?(?:feature|ability|option|way|tool)s?\s+"
+    r"(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)?"
+    r"(?P<area2>.+)"
+    r"|(?:does|do|is|are|can)\s+(?:jarvis|you)\s+(?:have|got|offer|support)\s+"
+    r"(?:the\s+)?(?P<area3>.+?)\s+(?:feature|ability|option|tool)")
+#: "what can you tell me about <a known feature>" - a known row only.
+_FEAT_TELL_ABOUT = re.compile(
+    r"what\s+can\s+you\s+tell\s+me\s+about\s+(?:the\s+|my\s+|a\s+|an\s+)?"
+    r"(?P<area>.+?)\s*\??$")
+#: "can jarvis read my email?" - THIRD PERSON ONLY: "can YOU read my email" is
+#: how the owner asks Jarvis to DO it and must keep its action path.
+_FEAT_CAN_JARVIS = re.compile(
+    r"can\s+jarvis\s+(?:read|see|view|check|search|find|use)\s+"
+    r"(?:my|the|your)\s+(?P<area>.+?)\s*\??$")
+
+#: Leading words that describe the question rather than the feature.
+_FEAT_AREA_LEAD = re.compile(
+    r"^(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)+", re.I)
+_FEAT_AREA_AUX = re.compile(
+    r"^(?:(?:can|could|will|would|does|do|is|are|has|have)\s+)+", re.I)
+_FEAT_AREA_ARTICLE = re.compile(r"^(?:(?:a|an|the|my|your)\s+)+", re.I)
+#: The evaluation harness's own trailing instructions, which are not part of the
+#: question ("... Answer in one sentence."). The same words `_cap_tail` strips.
+_FEAT_HARNESS_TAIL = re.compile(
+    r"\s+(?:answer\s+in\s+(?:one|a\s+short|a\s+single)\s+sentence"
+    r"|in\s+one\s+sentence|one\s+sentence|please)\s*$", re.I)
+
+
+def _feat_spoken(text) -> str:
+    """The question's spoken words via `_cap_alias_normalise` (one home)."""
+    return _cap_alias_normalise(text)
+
+
+def _feature_echo_row(area):
+    """The ONE catalogue row the question's subject names, or None.
+
+    NORMALISED QUESTION, UNCHANGED ROWS: "reading out loud" -> "read aloud",
+    which is the read-aloud row's own id. Exact name first, then the guide's
+    loose finder - and only when it answers with exactly one row; an ambiguous
+    name is never turned into an answer about the wrong one.
+    """
+    target = " ".join(_feat_spoken(area).split()).strip(" ?.!,;")
+    target = _FEAT_AREA_LEAD.sub("", target)
+    target = _FEAT_AREA_AUX.sub("", target)
+    target = _FEAT_AREA_ARTICLE.sub("", target)
+    target = _feature_target(target)
+    if not target:
+        return None
+    row = _feature_lookup_exact(target)
+    if row is not None:
+        return row
+    try:
+        import jarvis_feature_guide as FG
+        got = FG.find(target, loose=True)
+    except Exception:                       # noqa: BLE001 - guide absent/broken
+        return None
+    if got.get("kind") == "feature":
+        return got.get("row")
+    return None
+
+
+def _explicit_feature_question(raw) -> Optional[Intent]:
+    """A feature question the capability matcher did not claim, or None.
+
+    Runs LAST in `match()` (through `_cap_question`), after every action and
+    every older capability shape, so it can never take a sentence that already
+    has a better owner. See the block comment above for the measured defect.
+    """
+    text = " ".join(str(raw or "").replace("\u2019", "'").lower().split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    text = _FEAT_HARNESS_TAIL.sub("", text).strip(" ?.!,")
+    if not text:
+        return None
+    # These already have their own deterministic owners, and stealing them would
+    # take a better answer away: the GitHub self-knowledge intents, the crisis
+    # help answer, and the two-part question matcher.
+    if re.search(r"\bgithub\b", text):
+        return None
+    if "crisis" in text:
+        return None
+    if re.search(r"\band\b", text):
+        return None
+    m = _FEAT_EXPLICIT.fullmatch(text)
+    if m:
+        area = next((g for g in (m.group("area"), m.group("area2"),
+                                 m.group("area3")) if g), "")
+        row = _feature_echo_row(area)
+        if row is not None:
+            return Intent("capability_answer",
+                          {"id": str(row.get("id") or ""), "ask": False})
+        # The owner said "feature"/"ability"/"tool"/"option": answering "I do
+        # not know that name" is honest and deterministic. The model must not
+        # be handed a feature question to dress up with rows it has seen.
+        return Intent("feature_unknown",
+                      {"words": _feature_target(_feat_spoken(area))})
+    m = _FEAT_TELL_ABOUT.fullmatch(text)
+    if m:
+        row = _feature_echo_row(m.group("area"))
+        if row is not None:
+            return Intent("feature_explain", {"id": str(row.get("id") or "")})
+        return None
+    m = _FEAT_CAN_JARVIS.fullmatch(text)
+    if m:
+        row = _feature_echo_row(m.group("area"))
+        if row is not None:
+            return Intent("capability_answer",
+                          {"id": str(row.get("id") or ""), "ask": False})
+        return None
+    return None
 
 
 # ---- discussion/explanation resolution (2026-10-31, pass-11 audit) ---------
