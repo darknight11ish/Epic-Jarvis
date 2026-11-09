@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "0e19ed8e92e1514f496d485f575910ba7deced75",
- "built_at": "2026-11-08T19:03:42-08:00",
+ "ref": "b951e171e7be75a733912ef30c673e408e1e141d",
+ "built_at": "2026-11-08T20:35:53-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3937,6 +3937,7 @@
     "backend/test_menu_visibility.py",
     "backend/test_mesh_tls_cert.py",
     "backend/test_model_chat_cases.py",
+    "backend/test_model_conversation.py",
     "backend/test_model_lanes.py",
     "backend/test_model_profiles.py",
     "backend/test_model_recommendations.py",
@@ -4257,7 +4258,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 665,
+   "file_count": 666,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4527,6 +4528,7 @@
     "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
     "changelog.d/2026-11-07-wave-8-2-full-self-awareness.md",
     "changelog.d/2026-11-07-wave-9-read-aloud-bench-and-brain.md",
+    "changelog.d/2026-11-08-model-conversation.md",
     "changelog.d/2026-11-08-wave-10-honest-answers-and-wifi.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4667,6 +4669,7 @@
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
     "decisions.d/2026-11-08-build-caches-and-atomic-twins.md",
     "decisions.d/2026-11-08-deterministic-self-state-answers.md",
+    "decisions.d/2026-11-08-model-conversation.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
     "decisions.d/README.md",
@@ -5114,7 +5117,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 816,
+   "file_count": 818,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6181,6 +6184,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "b951e171e7be75a733912ef30c673e408e1e141d",
+   "date": "2026-11-08",
+   "subject": "feat(models): talk about the local models in chat and Live - measured, start a benchmark, preset models, honest advice"
+  },
+  {
    "sha": "0e19ed8e92e1514f496d485f575910ba7deced75",
    "date": "2026-11-08",
    "subject": "feat(wave10): ruling Q7 badge uniformity, Q4 atomic map twins and one shared build cache"
@@ -6274,18 +6282,13 @@
    "sha": "6918d544e6d8ebb860f5cf4e6c2381c0588e45e5",
    "date": "2026-11-08",
    "subject": "test(feedback): migration smoke on a copy of the live feedback.db (Q2)"
-  },
-  {
-   "sha": "d405ce4d8865c22b0ee6c3cee82fba600a9feb74",
-   "date": "2026-11-08",
-   "subject": "fix(features): the four stale read-aloud descriptions describe the shipped switch"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1396
+   "files": 1397
   },
   {
    "path": "jarvis-desktop/",
@@ -6315,7 +6318,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 225
+   "files": 226
   },
   {
    "path": "videos/",
@@ -6325,7 +6328,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 141
+   "files": 142
   },
   {
    "path": "plugins/",
@@ -6399,8 +6402,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5522,
-  "covered": 5056,
+  "tracked_files": 5525,
+  "covered": 5059,
   "excluded": 466,
   "subsystems": 27
  },
