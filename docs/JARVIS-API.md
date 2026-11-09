@@ -29555,9 +29555,13 @@ Field rules, each proved by `backend/test_model_resources.py`:
   RAM".
 - **Cards per lane** come from the model server's own compute-process GPU rows
   (`llama-server.exe`/`ollama.exe`), because the Ollama listener spawns the
-  runner under a different pid. With exactly one loaded lane they are that
-  lane's cards; with two loaded lanes the split cannot be told from these reads
-  and the lane's `gpu_indices` is left empty - never guessed.
+  runner under a different pid. The runner's parent chain names the lane's own
+  listening Ollama server, so each loaded lane keeps its own `gpu_indices` even
+  when two lanes are loaded at once (the walk is a read-only process query and
+  starts no process; it is bounded). With exactly one loaded lane and no
+  readable parent, its cards are all the model server's cards. With two loaded
+  lanes and no readable parent the split is left empty - never guessed - and the
+  lane's words say the cards carrying it were not reported.
 - **`jarvis_mb`/`other_mb` are `null` when the driver does not report
   per-program video memory.** This PC's Windows driver answers `[N/A]` for
   `used_memory` on every compute-apps row, so `gpu_share.known` is `false`, the

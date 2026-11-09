@@ -25,6 +25,15 @@ no lane and raises no card. It only GETs each lane's own `/api/ps` (a read that
 loads nothing) and runs `nvidia-smi`/`netstat` read-only. Unreachable lane or a
 lane with nothing loaded is said in WORDS - never a 0 dressed up as a fact.
 
+WHICH LANE OWNS WHICH CARD (F6, 2026-11-09). The graphics driver lists the
+model RUNNER, not the Ollama server listening on the lane's port, so the two
+pids differ. `collect()` walks the runner's parent chain to the lane's own
+listener, which is how each loaded lane still names `card 0` / `card 2` when
+two lanes are loaded at once. That walk is read-only (a ctypes process query;
+it starts no process), bounded to `MAX_PARENT_STEPS` links, and when the OS
+will not report a parent the lane's cards stay UNREPORTED in words - never
+guessed.
+
 WHO SERVES IT. `jarvis_model_recommendations.install()` already wraps the live
 handler for `GET /api/models/recommendations`; that wrapper serves this module's
 answer at `GET /api/models/resources` (additive, same token/origin checks, and
@@ -348,6 +357,90 @@ def _listen_pids(run: Callable, ports) -> tuple:
     return out, ""
 
 
+#: How many parent links the ancestry walk follows before giving up. The Ollama
+#: listener starts the runner directly on this PC; the spare links cover a
+#: launcher or shell in between, and the bound stops a broken parent read from
+#: looping.
+MAX_PARENT_STEPS = 8
+
+
+def _default_parent_pid(pid: int) -> Optional[int]:
+    """One process's parent id, read-only. None on a non-Windows PC or a refusal."""
+    if os.name != "nt":
+        return None
+    try:
+        return _windows_parent_pid(int(pid))
+    except Exception:  # noqa: BLE001 - a parent read never breaks the whole read
+        return None
+
+
+def _windows_parent_pid(pid: int) -> Optional[int]:
+    """The parent process id via `NtQueryInformationProcess` - no process spawned.
+
+    `ProcessBasicInformation`'s `InheritedFromUniqueProcessId` is the parent id;
+    the handle is opened for a read only (`PROCESS_QUERY_LIMITED_INFORMATION`)
+    and closed again. A parent of 0 or -1 (the System Idle Process, or a parent
+    that has already gone) is None, never a made-up pid.
+    """
+    import ctypes
+    from ctypes import wintypes  # noqa: F401 - imported with ctypes, as above
+
+    class PROCESS_BASIC_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("ExitStatus", ctypes.c_long),
+            ("PebBaseAddress", ctypes.c_void_p),
+            ("AffinityMask", ctypes.c_void_p),
+            ("BasePriority", ctypes.c_long),
+            ("UniqueProcessId", ctypes.c_void_p),
+            ("InheritedFromUniqueProcessId", ctypes.c_void_p),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    ntdll = ctypes.WinDLL("ntdll", use_last_error=True)
+    handle = kernel32.OpenProcess(0x1000, False, int(pid))
+    if not handle:
+        return None
+    try:
+        info = PROCESS_BASIC_INFORMATION()
+        status = ntdll.NtQueryInformationProcess(
+            handle, 0, ctypes.byref(info), ctypes.sizeof(info), None)
+        if status != 0:
+            return None
+        parent = int(info.InheritedFromUniqueProcessId or 0)
+        return parent if parent > 0 else None
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _lane_port_of(app_pid, listen_pids, parent_of) -> Optional[int]:
+    """Which lane's own Ollama server started this GPU process - as a port.
+
+    The driver's GPU row names the llama-server runner; the lane's `/api/ps`
+    listener is the Ollama server that started it, so their pids differ. The
+    runner's parent chain reaching a listener pid is a measured fact: the walk
+    returns that port, or None when it never reaches one. None means "not
+    reported"; the caller must not guess a card from it.
+    """
+    by_pid = {}
+    for port, pid in (listen_pids or {}).items():
+        port_i, pid_i = _int(port), _int(pid)
+        if port_i is not None and pid_i is not None:
+            by_pid.setdefault(pid_i, port_i)
+    if not by_pid:
+        return None
+    current = _int(app_pid)
+    seen = set()
+    for _ in range(MAX_PARENT_STEPS):
+        if current is None or current in seen:
+            return None
+        port = by_pid.get(current)
+        if port is not None:
+            return port
+        seen.add(current)
+        current = _int(parent_of(current))
+    return None
+
+
 def _default_process_stats(pid: int) -> dict:
     """One process's real memory/CPU numbers, read-only (Windows)."""
     if os.name != "nt":
@@ -433,6 +526,7 @@ def collect(*, config_dir=None, preset_rows=None, lanes=None, active_lane=None,
             smi: Optional[dict] = None,
             listen: Optional[Callable] = None,
             process_stats: Optional[Callable] = None,
+            parents: Optional[Callable] = None,
             now: Optional[float] = None,
             jarvis_pid: Optional[int] = None) -> dict:
     """The whole answer: lanes, cards, the Jarvis process. Never raises for a
@@ -464,6 +558,15 @@ def collect(*, config_dir=None, preset_rows=None, lanes=None, active_lane=None,
     elif smi_data.get("apps"):
         listen_pids, listen_error = _listen_pids(_subprocess_run(), ports)
     process = process_stats or _default_process_stats
+    # WHICH LANE OWNS WHICH CARD (F6). The driver names the runner process, and
+    # the lane's listener started it, so the runner's ancestry is what ties a
+    # GPU row to a lane. Read only when a listener pid is known; a lane whose
+    # runner ancestry cannot be read keeps its cards unreported (below).
+    parent_of = parents if parents is not None else _default_parent_pid
+    if listen_pids:
+        for app in model_apps:
+            app["lane_port"] = _lane_port_of(app.get("pid"), listen_pids,
+                                             parent_of)
 
     lane_answers = []
     for definition in lane_defs:
@@ -515,7 +618,7 @@ def collect(*, config_dir=None, preset_rows=None, lanes=None, active_lane=None,
             "size_vram_bytes": model.get("size_vram_bytes"),
             "spill_bytes": model.get("spill_bytes") or 0,
             "on_card_percent": model.get("on_card_percent"),
-            "gpu_indices": _lane_gpu_indices(apps, listen_pids.get(port)),
+            "gpu_indices": _lane_gpu_indices(apps, listen_pids.get(port), port),
         })
         row["words"] = (
             f"{model['name']} loaded with "
@@ -523,11 +626,14 @@ def collect(*, config_dir=None, preset_rows=None, lanes=None, active_lane=None,
             f"{_on_card_words(row)}")
         lane_answers.append(row)
 
-    # A lane's cards may be known only from the model server's own GPU rows:
-    # the Ollama listener spawns the llama-server runner, so their pids differ.
-    # When exactly ONE lane holds a model, all the model server's cards are
-    # that lane's - a measured fact, not a guess. With two loaded lanes the
-    # split cannot be told from these reads, so it is left unsaid.
+    # A lane's cards may still be unknown: the Ollama listener spawns the
+    # llama-server runner under a different pid, so a direct pid match does not
+    # find them. The runner's ancestry normally names its own lane (above,
+    # `_lane_port_of`). When the OS will not report that parent, ONE loaded
+    # lane's cards are still all the model server's cards - a measured fact,
+    # not a guess. With two loaded lanes and no ancestry the split cannot be
+    # told, so it is left unsaid and the lane's words say the cards were not
+    # reported.
     loaded_lanes = [l for l in lane_answers if l.get("loaded")]
     if len(loaded_lanes) == 1 and not loaded_lanes[0].get("gpu_indices"):
         known = _unique_indices(model_apps)
@@ -684,12 +790,19 @@ def _lane_definitions() -> list:
     return defs
 
 
-def _lane_gpu_indices(apps, pid) -> list:
-    """Which cards carry this lane's model: the cards its own server uses."""
-    if pid is None:
-        return []
-    return sorted({int(a["gpu_index"]) for a in apps
-                   if a.get("pid") == pid and a.get("gpu_index") is not None})
+def _lane_gpu_indices(apps, pid, port=None) -> list:
+    """Which cards carry this lane's model: the listener's own cards, or the
+    cards of the runner process whose ancestry names this lane's port."""
+    out = set()
+    for app in apps or []:
+        idx = app.get("gpu_index")
+        if idx is None:
+            continue
+        if pid is not None and app.get("pid") == pid:
+            out.add(int(idx))
+        elif port is not None and app.get("lane_port") == port:
+            out.add(int(idx))
+    return sorted(out)
 
 
 def _on_card_words(lane: dict) -> str:
