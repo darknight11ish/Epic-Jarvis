@@ -436,6 +436,17 @@ def _read_notify(flag: str):
     return None if limit is None else M.value_of(limit) is True
 
 
+def _read_wifi_auto_reconnect():
+    """The auto Wi-Fi reconnect's switch (2026-11-08, owner ruling Q4).
+
+    Read from the module itself, never from a copy of the rule: `enabled()`
+    reads a missing or damaged settings file as OFF (the safe direction for
+    "is it on?"), and a module that cannot answer reads as "I could not read
+    it", never as off."""
+    import jarvis_wifi as M
+    return M.enabled() is True
+
+
 def _read_watch_notify():
     import jarvis_watch_notify as M
     return M.settings().get("enabled") is True
@@ -640,6 +651,10 @@ STATE_READERS = {
     # Its one rule lives in jarvis_live.voice_check_needed(); this reads the
     # same answer the PC acts on, never a second copy.
     "voice_check_locked": _read_voice_check_locked,
+    # 2026-11-08: the auto Wi-Fi reconnect (owner ruling Q4) is a registry
+    # switch, so it gets its state reader here like every other one - "is
+    # auto wifi reconnect on?" answers from the module's own enabled().
+    "wifi_auto_reconnect": _read_wifi_auto_reconnect,
 }
 
 
