@@ -6,7 +6,7 @@
 export const FEATURE_DIRECTORY = {
   "schema": 1,
   "source": "contract/feature-controls.json",
-  "source_sha256": "e6e114f62e24204a2d37d5622521cfacbddc1c3167bafcb96bacd1260abb4939",
+  "source_sha256": "71f2ecc8bf6e7836ffbc3537e5b226039223754ef7ca9be3893affb405e66153",
   "feature_count": 180,
   "label_order": [
     "Switchable / Adjustable (Typed & Settings)",
@@ -94,7 +94,7 @@ export const FEATURE_DIRECTORY = {
       "surface": "both",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "status": "planned",
-      "label_note": "the read-aloud control is not a registered switch and has no typed path yet",
+      "label_note": "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin.",
       "example": "turn on Jarvis reads its answers aloud",
       "example_ok": true,
       "where": "desktop Settings: All features and abilities; phone: All features and abilities",

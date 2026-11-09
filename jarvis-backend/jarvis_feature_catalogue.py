@@ -3,7 +3,7 @@
 The owner's feature list, as data: 180 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de); the apps' Features pages read their own
+`features/features.json` (sha256 c082ea170ce310f3b3070bc1a52f665be690715566ffafd6e3d7bf926ed2bf1d); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de"
+SOURCE_SHA256 = "c082ea170ce310f3b3070bc1a52f665be690715566ffafd6e3d7bf926ed2bf1d"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -72,7 +72,7 @@ FEATURES = (
         "group": "Talking",
         "title": "Jarvis reads its answers aloud",
         "what": "Jarvis reads its answers aloud, in the voice you chose; a finished answer can be read out again from its own speaker button.",
-        "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
+        "where": "On by default: a question asked by voice, or in Jarvis Live, gets a spoken answer; an answer to a typed question stays silent. Settings, Voice, \"Read replies out loud\" turns the automatic reading off and back on, and saying \"stop reading your replies out loud\" in chat or Jarvis Live does the same (\"read your replies out loud\" turns it back on). The speaker beside a finished answer, and Read out loud in its menu, read that one answer again; Settings, HUD, \"Read-aloud buttons on answers\" adds those speakers on the PC. An answer that used a sensitive saved fact stays on screen. No card is raised, and no model can change this switch.",
         "asks": "No card to read aloud; an answer that used a sensitive fact stays on screen unless you allow it in Settings.",
         "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
         "surface": "both",

@@ -2789,7 +2789,7 @@ NO_COMMAND_REASON = {
     # reason for matrix_rows_without_reason(); their label stays Switchable and
     # their row status stays planned, so this reason is reported, not a hidden pass.
     "wake-word": ("planned", "no own switch or typed control is wired today; planned row", "voiceprint-wiring"),
-    "read-aloud": ("planned", "the read-aloud control is not a registered switch and has no typed path yet", "voiceprint-wiring"),
+    "read-aloud": ("planned", "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin.", "voiceprint-wiring"),
     "spoken-style": ("planned", "spoken style is automatic, not a registered switch or typed control yet", "voiceprint-wiring"),
     "home-status": ("planned", "no own typed phrase is wired for the home-status feature yet", "voiceprint-wiring"),
 
@@ -3068,7 +3068,7 @@ PLANNED_SWITCHABLE = {
     "wake-word": ("voiceprint-wiring",
                   "no own switch or typed control is wired today; a planned row, not a fake phrase"),
     "read-aloud": ("voiceprint-wiring",
-                   "the read-aloud control is not a registered switch and has no typed path yet"),
+                   "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin."),
     "spoken-style": ("voiceprint-wiring",
                      "spoken style is automatic, not a registered switch or typed control yet"),
     "home-status": ("voiceprint-wiring",
