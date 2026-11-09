@@ -158,6 +158,26 @@ def t_pooled_profile_reads_the_modes_and_keeps_the_coding_default():
         raised2 = "coding lane only" in str(exc) or "not one of" in str(exc)
     check("and honestly refuses the modes it cannot describe", raised2)
 
+    # wave-14: the preset layer's own row reaches the lane profile, with its
+    # measured spill allowance (0 B for Medical), even without a big-coder
+    # engine - and the big-coder module can resolve the same row by name.
+    medical = L.pooled_profile("medical", engine=eng)
+    check("medical is the preset layer's medgemma:27b",
+          medical["model"] == "medgemma:27b")
+    check("medical's window is its measured 32,768",
+          medical["num_ctx"] == 32768)
+    check("medical's measured spill allowance is 0 bytes",
+          medical["spill_allowance"] == 0)
+    bare_medical = L.pooled_profile("medical", engine=Bare())
+    check("... and the preset row needs no big-coder engine",
+          bare_medical["model"] == "medgemma:27b"
+          and bare_medical["num_ctx"] == 32768)
+    check("the big-coder module resolves medical too",
+          B.mode_profile("medical").key == "medical"
+          and B.mode_profile("medical").num_ctx == 32768)
+    check("... without widening MODE_KEYS",
+          B.MODE_KEYS == ("coding", "deep_think", "creative"))
+
 
 # ==========================================================================
 #   2. start_pooled_lane
@@ -182,6 +202,27 @@ def t_starting_deep_think_announces_and_loads_its_own_window():
           and body.get("num_ctx") == m.num_ctx, body)
     check("the message says deep think, not coding",
           "deep think" in body["message"] and "coding" not in body["message"])
+
+
+def t_starting_medical_loads_the_preset_rows_own_window_and_mode():
+    eng = Engine()
+    code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Allow(),
+                                     tasks=lambda: [], mode="medical", by="test")
+    check("a Medical start is accepted", code == 200, (code, body))
+    check("the load asked for the preset row's own mode, 32,768 window and its "
+          "measured 0 B spill allowance",
+          eng.loaded.get("mode") == "medical"
+          and eng.loaded.get("num_ctx") == 32768
+          and eng.loaded.get("allow_spill") == 0, eng.loaded)
+    check("the announcement is the preset row's own card",
+          eng.card_kw.get("mode") == "medical"
+          and eng.card_kw.get("num_ctx") == 32768, eng.card_kw)
+    check("the answer names medgemma, the mode and the window",
+          body.get("mode") == "medical" and body.get("model") == "medgemma:27b"
+          and body.get("num_ctx") == 32768, body)
+    check("the message says medical, never coding",
+          "medical" in body["message"].lower()
+          and "coding" not in body["message"])
 
 
 def t_the_coding_start_is_still_the_exact_shipped_message():

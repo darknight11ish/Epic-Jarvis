@@ -1255,11 +1255,38 @@ def active_chat_url(default: str = "") -> str:
     return lane
 
 
+def _applied_pooled_mode() -> str:
+    """The pooled mode the APPLIED preset names, from presets-choice.json.
+
+    `choice()` reads that file (`_choice_path`); the file is written last by a
+    successful apply (`write_choice(p.id)`). A named-lane preset returns "" and
+    the caller falls back to the lane's own evidence. Never raises.
+    """
+    try:
+        p = by_id(choice())
+        return str(getattr(p, "mode", "") or "") if p is not None else ""
+    except Exception:
+        return ""
+
+
 def pooled_num_ctx() -> Optional[int]:
-    """The pooled lane's configured window, from the ONE lane config (MODES)."""
+    """The pooled lane's configured window for the preset that is APPLIED.
+
+    THE DEFECT THIS FIXES: this called `pooled_profile()` with no mode, so it
+    answered the coding window (49,152) whatever preset had been applied. A chat
+    turn then asked a 32,768-token Medical lane for 49,152 tokens - a window it
+    never loaded. The answer now follows the APPLIED preset's `mode` from
+    `presets-choice.json`; only when that file does not name a pooled preset
+    (a just-restarted server, or the lane started outside the preset road) does
+    it ask the lane what it really holds (`pooled_mode_now`, one /api/ps read),
+    and it keeps the coding default as the last resort. This is read-only.
+    """
     try:
         import jarvis_model_lanes as lanes
-        profile = lanes.pooled_profile()
+        mode = _applied_pooled_mode()
+        if not mode:
+            mode = str(lanes.pooled_mode_now() or "") or "coding"
+        profile = lanes.pooled_profile(mode)
         return int(profile.get("num_ctx") or lanes.POOLED_CTX)
     except Exception:
         try:
@@ -1323,6 +1350,9 @@ def is_pooled_model(model) -> bool:
             return True
     except Exception:
         pass
+    for row in pooled_modes():
+        if _bare_model(row.get("model") or "") == name:
+            return True
     return False
 
 
@@ -1753,6 +1783,10 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     `_default_adopt` for the whole argument. A card the owner denies leaves
     NOTHING changed on this path: nothing has been unloaded yet.
 
+    Since 2026-11-09 the same road carries the Medical preset: `p.mode` is
+    passed to `start_pooled_lane`, which loads `medgemma:27b` at 32,768 with
+    the same one card.
+
     The other direction matters too: a preset that is NOT heavy needs the two
     lanes back, so applying one ENDS the pooled lane first (it unloads the 30B
     and puts both models back exactly as they were). If it cannot end it, the
@@ -1785,7 +1819,7 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
     # on an existing lane. Coding keeps the pooled lane's own card; Cloud
     # returned above. See the section above `apply_preset`.
     direct_owner = bool(owner_ui) and not heavy
-    start_lane = start_lane or (lambda key: _default_start_lane(key))
+    start_lane = start_lane or _lane_starter
     if direct_owner:
         switch_model = (switch_for_owner or switch_model
                         or (lambda ref: _switch_for_the_owner(ref)))
@@ -1818,7 +1852,9 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                          "error": ("the big coding model is still holding both "
                                    f"cards, so this preset was not applied: {why}")}
     try:
-        code, start_body = start_lane(p.lane)
+        mode = str(getattr(p, "mode", "") or "")
+        code, start_body = (start_lane(p.lane, mode=mode) if mode
+                            else start_lane(p.lane))
     except Exception as exc:
         return 503, {"ok": False, "changed": False,
                      "error": f"the {p.lane} lane could not be started "
@@ -1965,23 +2001,38 @@ def apply_preset(preset_id, *, provider=None, cloud_gate=None, start_lane=None,
                  "receipt_id": receipt_id}
 
 
-def _default_start_lane(key: str):
+def _default_start_lane(key: str, mode: str = ""):
     """The preset's own lane, started on demand.
 
     "pooled" is not one of the PC's logon tasks: it is the ONE Ollama that sees
     all three cards, started here and stopped by the next apply that is not heavy
     (`_default_stop_pooled`). `jarvis_model_lanes.start_pooled_lane` raises the
-    ONE card for it, before it unloads anything.
+    ONE card for it, before it unloads anything. `mode` is the applied preset's
+    pooled mode (Medical today); "" keeps the coding lane every pre-wave-14
+    caller has always started.
     """
     import jarvis_model_lanes
     if str(key) == jarvis_model_lanes.POOLED_KEY:
-        return jarvis_model_lanes.start_pooled_lane()
+        return jarvis_model_lanes.start_pooled_lane(mode=str(mode or "coding"))
     mapped = LANE_START_KEYS.get(str(key))
     if mapped is None or jarvis_model_lanes.lane_by_key(mapped) is None:
         return 409, {"ok": False, "changed": False,
                      "reason": f"the preset lane {key!r} has no model lane on this PC "
                                f"(known lanes: {', '.join(l.key for l in jarvis_model_lanes.LANES)})"}
     return jarvis_model_lanes.start_lane(mapped)
+
+
+def _lane_starter(key: str, mode: str = ""):
+    """`_default_start_lane` with the mode passed ONLY when a preset names one.
+
+    The nine older presets name no pooled mode, so they call the starter with
+    one argument exactly as before: every injected one-argument seam in the
+    existing tests, and every caller that replaced `_default_start_lane`, keeps
+    working. The two-argument call is reserved for a preset that really does
+    name a pooled mode (Medical today), and an injected seam that cannot take
+    it says so with a TypeError rather than being silently downgraded.
+    """
+    return _default_start_lane(key, mode) if mode else _default_start_lane(key)
 
 
 def _default_stop_pooled() -> dict:

@@ -199,9 +199,10 @@ def t_the_lane_is_the_one_big_coder_owns():
           P.LANES["pooled"]["port"] == L.POOLED_PORT
           and P.LANES["pooled"]["card"] == L.POOLED["card"]
           and P.LANES["pooled"]["words"] == L.POOLED["words"], P.LANES["pooled"])
-    check("the Coding preset is on the pooled lane and is the only heavy row",
+    check("the Coding preset is on the pooled lane and is one of the two heavy rows",
           P.by_id("coding").lane == "pooled"
-          and [p.id for p in P.PRESETS if p.heavy_mode] == ["coding"])
+          and [p.id for p in P.PRESETS if p.heavy_mode] == ["coding", "medical"],
+          [p.id for p in P.PRESETS if p.heavy_mode])
 
 
 def t_the_card_describes_the_load_it_will_really_do():
@@ -470,8 +471,8 @@ class Apply:
         self.pooled_running, self.stop_ok = pooled_running, stop_ok
         self.switch_ok, self.choice_ok, self.set_ok = switch_ok, choice_ok, set_ok
 
-    def start(self, key):
-        self.calls.append(("start", key))
+    def start(self, key, mode=""):
+        self.calls.append(("start", key) if not mode else ("start", key, mode))
         if not self.start_ok:
             return 200, {"ok": False, "changed": False,
                          "outcome": self.start_outcome or "denied",
@@ -533,6 +534,24 @@ def t_coding_applies_through_the_pooled_lane():
     check("... chat is pointed at the pooled lane's own port, not :11436",
           d.calls[2] == ("set_url", "http://127.0.0.1:11450"), d.calls)
     check("... and the Coding preset is what is remembered", d.choice == "coding")
+
+
+def t_medical_applies_through_the_pooled_lane_in_its_own_mode():
+    d = Apply()
+    code, out = apply(d, "medical")
+    check("Medical applies: the pooled lane starts in its OWN mode, the model is "
+          "recorded, chat is pointed at :11450 and the choice is written",
+          code == 200 and out["changed"] is True
+          and [c[0] for c in d.calls] == ["start", "switch", "set_url", "choice"],
+          (code, out, d.calls))
+    check("... the start carries mode='medical', not Coding's 49,152 default",
+          d.calls[0] == ("start", "pooled", "medical"), d.calls)
+    check("... the model recorded is the preset's medgemma:27b",
+          d.calls[1] == ("switch", "medgemma:27b"), d.calls)
+    check("... chat moves to the pooled lane's own port, never :11436",
+          d.calls[2] == ("set_url", "http://127.0.0.1:11450"), d.calls)
+    check("... and the Medical preset is what is remembered",
+          d.choice == "medical")
 
 
 def t_a_non_heavy_apply_leaves_a_pooled_lane_that_is_not_running_alone():
@@ -1020,6 +1039,7 @@ def main() -> int:
                t_standby_stops_the_pooled_lane_and_leaves_the_lanes_stopped,
                t_standby_stop_keeps_the_ordinary_stop_putting_the_lanes_back,
                t_coding_applies_through_the_pooled_lane,
+               t_medical_applies_through_the_pooled_lane_in_its_own_mode,
                t_a_non_heavy_apply_leaves_a_pooled_lane_that_is_not_running_alone,
                t_leaving_the_pooled_lane_stops_it_before_the_new_model,
                t_a_pooled_lane_that_will_not_stop_refuses_the_new_preset,

@@ -26627,6 +26627,14 @@ The preset changes no wording: choose the **Patient Advocate** personality in
 How Jarvis talks if that manner is wanted - a preset is a model, a lane and a
 window, never a personality.
 
+Applying it starts that lane **in its own mode**: the row's `mode: "medical"`
+reaches the pooled lane's start, so `medgemma:27b` is what loads, and the
+window this backend reports for the pooled lane follows the preset that is
+applied (`pooled_num_ctx()`), so a Medical turn asks for 32,768 tokens - the
+window the lane really loaded - never Coding's 49,152. Stopping the lane and
+`GET /api/work`'s lane state recognise `medgemma:27b` the same way, from the
+preset layer's own `pooled_modes()` rows.
+
 ### 145.1 The Cloud row, the provider list, and the standing escalation switch (added 2026-10-27)
 
 Owner decision, 2026-10-27: the Cloud row belongs in the Presets menu beside

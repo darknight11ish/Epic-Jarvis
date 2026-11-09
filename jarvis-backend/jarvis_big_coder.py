@@ -201,16 +201,42 @@ DEFAULT_MODE = "coding"
 MODE_KEYS = tuple(m.key for m in MODES)
 
 
+def _preset_modes() -> tuple:
+    """The preset layer's pooled modes (`medical` and two candidates), as `Mode` rows.
+
+    `jarvis_presets.pooled_modes()` is read lazily; a backend without it keeps
+    the three modes above. `MODES`, `MODE_KEYS` and `modes_view()` do NOT gain
+    the preset rows - the big-coder route's `handle_post` still accepts only the
+    three, so a preset mode can only be started through the preset apply.
+    """
+    try:
+        import jarvis_presets as P
+        rows = P.pooled_modes()
+    except Exception:
+        return ()
+    out = []
+    for r in rows:
+        if not r.get("key") or not r.get("model") or not r.get("num_ctx"):
+            continue
+        out.append(Mode(str(r["key"]), str(r.get("label") or ""),
+                        str(r["model"]), int(r["num_ctx"]),
+                        str(r.get("measured_words") or ""),
+                        int(r.get("spill_allowance") or 0),
+                        int(r.get("needs_cards") or NEEDS_CARDS),
+                        (), None, None, ""))
+    return tuple(out)
+
+
 def mode_profile(key: Optional[str] = None) -> Mode:
     """The named mode, or `coding`. An UNKNOWN key is not silently the coding
     mode: it raises, so a typo in a route is a refusal rather than a 30B model
     loaded under the wrong sentence."""
     want = str(key or DEFAULT_MODE).strip().lower()
-    for m in MODES:
+    for m in tuple(MODES) + _preset_modes():
         if m.key == want:
             return m
     raise ValueError(f"{key!r} is not one of the pooled modes: "
-                     + ", ".join(MODE_KEYS))
+                     + ", ".join(m.key for m in tuple(MODES) + _preset_modes()))
 
 
 def modes_view() -> list:
@@ -929,7 +955,9 @@ def running_mode() -> Optional[str]:
 
     The three modes share one server and one model at a time, so this is
     also the answer to "is the big mode on at all" - `start()` refuses to
-    load a second one beside it.
+    load a second one beside it. A PRESET mode (Medical) is not reported
+    here: `MODES` stays exactly the three and
+    `jarvis_model_lanes.pooled_state()` is the authority for the preset lane.
     """
     rows = ps(_url(BIG_PORT))
     if rows is not None:

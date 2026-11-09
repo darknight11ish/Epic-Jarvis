@@ -231,6 +231,10 @@ def the_warm_never_loads_the_pooled_model_on_the_everyday_lane() -> None:
     try:
         check("Q6d: is_pooled_model knows the :latest tag Ollama reports",
               P.is_pooled_model(POOLED_MODEL + ":latest") is True)
+        check("wave-14: is_pooled_model knows the Medical preset's medgemma:27b",
+              P.is_pooled_model("medgemma:27b") is True)
+        check("wave-14: ... with Ollama's :latest tag too",
+              P.is_pooled_model("medgemma:27b:latest") is True)
         _lane(EVERYDAY)
         got = AG.warm_everyday(model=POOLED_MODEL + ":latest")
         check("Q6d: the tagged pooled 30B is never warmed on the everyday lane",
