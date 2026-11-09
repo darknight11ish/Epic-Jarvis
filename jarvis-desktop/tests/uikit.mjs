@@ -3553,6 +3553,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "remove_folder":
             return window.__folders && window.__folders.removeAnswer || { ok: true };
           case "import_notion":
+            // `importDelayMs` lets a test watch the page WHILE the PC is still
+            // unzipping - the real command blocks for as long as the import
+            // takes, and the page polls get_folders for the live counts. When
+            // the import returns, the PC has cleared its live record
+            // (jarvis_documents.importing()), so the stub clears it too: a
+            // page that kept showing "unzipping" after the answer would be
+            // the bug this shape lets a test catch.
+            if (window.__folders && window.__folders.importDelayMs) {
+              await new Promise((r) => setTimeout(r, window.__folders.importDelayMs));
+              if (window.__folders.view) delete window.__folders.view.importing;
+            }
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
           // look.rs: the Watch with me session and the Never look at list.
           case "screen_status": {

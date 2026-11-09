@@ -46,8 +46,12 @@ import java.util.Locale
  * TWO CAPS, THE OWNER'S DECISION OF 2026-11-05: 50 MB for a document (exactly
  * what the PC's reader already handles, so nothing can be stored that Jarvis
  * cannot open - `jarvis_documents.MAX_DOC_BYTES`) and 250 MB for a Notion
- * export (it is only stored and unpacked - `EXPORT_UNCOMPRESSED_MAX`). They
- * are checked here before a byte leaves the phone, and again by the PC.
+ * export. The Notion one is the RAW ZIP BYTES that cross his private network,
+ * not the PC's unpacked ceiling - that ceiling is 4 GB since 2026-11-09 (it was
+ * 250 MB, and this comment used to name it, which is why it is spelled out
+ * here): the two numbers answer different questions, and raising the unpacked
+ * one did not move the phone's upload cap. They are checked here before a byte
+ * leaves the phone, and again by the PC.
  *
  * HONEST DEGRADATION. A PC without these routes answers 404 (an older backend,
  * or the upload module missing). Then the answer is [notHere] and NOTHING is
@@ -78,7 +82,7 @@ object Upload {
     /** Most raw bytes one document may carry - the PC's `MAX_DOC_BYTES`. */
     const val DOCUMENT_MAX = 50L * 1024 * 1024
 
-    /** Most raw bytes one Notion export may carry - the owner's 250 MB. */
+    /** Most raw bytes one Notion export may carry, as it is sent - the owner's 250 MB. */
     const val NOTION_MAX = 250L * 1024 * 1024
 
     /** What the phone is sending. The PC reads this word, and nothing about it is a path. */

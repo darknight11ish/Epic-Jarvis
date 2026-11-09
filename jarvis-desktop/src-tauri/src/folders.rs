@@ -49,8 +49,12 @@ const UNREADABLE: &str = "Jarvis answered, but not in a way this app can read. U
 
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
-/// Unzipping a big export (up to 1 GB, 20,000 files) takes a while.
-const IMPORT_TIMEOUT: Duration = Duration::from_secs(600);
+/// Unzipping a big export takes a while. It was 600 s, sized for the old 1 GB
+/// ceiling; an import may now unpack up to 4 GB (2026-11-09), which is minutes
+/// of copying on a slow disk, so the window waits up to half an hour. The
+/// Settings page shows the PC's own live counts while it waits, so the wait is
+/// visible rather than a frozen button.
+const IMPORT_TIMEOUT: Duration = Duration::from_secs(1800);
 
 fn missing(code: u16, body: &str) -> bool {
     code == 404

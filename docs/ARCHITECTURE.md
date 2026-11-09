@@ -4950,6 +4950,25 @@ what is missing is only the Settings screen agreeing about who turned it off.
   attempt (a card every 2 hours is not answerable). JARVIS-API section 204
   records the route and the guardrails.
 
+- **The phone's Notion upload cap stays 250 MB while the PC's unpacked ceiling
+  is 4 GB, and that is one-sided on purpose** (2026-11-09; the owner's decision
+  that a 276 MB Notion export must import; `backend/jarvis_documents.py`,
+  `backend/jarvis_notion_obsidian.py`, `backend/jarvis_upload.py`, JARVIS-API
+  §206). These are TWO numbers answering different questions, and the labels
+  used to be mixed up: the PC's ceiling is on the UNPACKED total an export's
+  own directory declares, and it is 4 GB now (it was 250 MB at the folder
+  import and 500 MB at the vault converter, and the 250 MB one is what refused
+  the owner's file); the phone's 250 MB is on the RAW ZIP BYTES it sends over
+  his private network, which was his own decision of 2026-11-05, and raising
+  the unpacked ceiling did not move it. So a 276 MB zip still cannot be SENT
+  from the phone, while it imports from the PC's own Settings picker. Both
+  apps show the PC's refusal sentence verbatim - `NotionImport.nothing()` on
+  the phone passes it through `DesktopWrite.asSentence()` - so the new wording
+  reaches both without a second copy anywhere. Nothing new is one-sided in the
+  permission model: no route, control or card was added, `tools/check_parity.py`
+  has nothing to classify, and raising the phone's raw upload cap is a separate
+  decision for the owner rather than a side effect of this one.
+
 
 - **"What's new in Jarvis" is the desktop's pane, and that is one-sided on
   purpose** (Task-50, Wave 12; `docs/JARVIS-API.md` section 206;

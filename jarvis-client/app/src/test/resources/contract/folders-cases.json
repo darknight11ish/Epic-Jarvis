@@ -18,6 +18,7 @@
    },
    "empty": "No folders yet, so Jarvis does not look in any of your files.",
    "folders": [],
+   "importing": null,
    "last": null,
    "max": 20,
    "notion": {
@@ -42,6 +43,7 @@
    },
    "empty": "No folders yet, so Jarvis does not look in any of your files.",
    "folders": [],
+   "importing": null,
    "last": null,
    "max": 20,
    "notion": {
@@ -66,6 +68,7 @@
    },
    "empty": "No folders yet, so Jarvis does not look in any of your files.",
    "folders": [],
+   "importing": null,
    "last": null,
    "max": 20,
    "notion": {
@@ -97,6 +100,7 @@
      "path": "C:\\Users\\owner\\Documents"
     }
    ],
+   "importing": null,
    "last": {
     "at": 1790000000.0,
     "message": "Added. Jarvis can look in that folder when you ask.",
@@ -126,6 +130,7 @@
    },
    "empty": "No folders yet, so Jarvis does not look in any of your files.",
    "folders": [],
+   "importing": null,
    "last": {
     "at": 1790000000.0,
     "message": "You said no, so that folder was not added.",
@@ -168,6 +173,7 @@
      "path": "C:\\Users\\owner\\Notes\\Notion"
     }
    ],
+   "importing": null,
    "last": null,
    "max": 20,
    "notion": {
@@ -205,6 +211,7 @@
      "path": "C:\\Users\\owner\\Notes\\Notion"
     }
    ],
+   "importing": null,
    "last": null,
    "max": 20,
    "notion": {
@@ -242,6 +249,7 @@
      "path": "C:\\Users\\owner\\Notes\\Notion"
     }
    ],
+   "importing": null,
    "last": null,
    "max": 20,
    "notion": {
@@ -273,6 +281,7 @@
      "path": "C:\\Users\\owner\\Documents"
     }
    ],
+   "importing": null,
    "last": null,
    "max": 20,
    "notion": {

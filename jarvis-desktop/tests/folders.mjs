@@ -25,6 +25,7 @@ import { dirname, join } from "node:path";
 import {
   actions,
   folderLines,
+  importLine,
   MISSING,
   NOT_HERE,
   readFolders,
@@ -164,6 +165,32 @@ await check("Settings: bring in a Notion export into a listed folder", async () 
   assert.deepEqual(options, C.two_folders_pc.folders.map((f) => f.path));
   assert.deepEqual(got, [["import_notion", { into: options[0] }]]);
   assert.equal(status, "Brought in 3 files.");
+});
+
+await check("Settings: the import shows the PC's REAL counts while it runs", async () => {
+  // The PC's own live counts (jarvis_documents.importing(), carried by
+  // GET /api/folders as `importing`). The command is held open for 1.5 s so the
+  // page's one-second poll has to happen; the numbers are the backend's shape,
+  // and the sentence is the page's, built from them.
+  const view = exists(C.two_folders_pc);
+  view.importing = { files: 4231, of_files: 12340, bytes: 1288490189,
+                     of_bytes: 3649638400 };
+  const page = await settings({ view, importDelayMs: 1500,
+                                importAnswer: { ok: true, said: "Brought in 3 files." } });
+  await page.locator("#fo-notion-pick").click();
+  await page.waitForTimeout(1200);
+  const during = await page.locator("#fo-status").innerText();
+  await page.waitForTimeout(1200);
+  const after = await page.locator("#fo-status").innerText();
+  const polls = await page.evaluate(
+    () => window.__calls.filter(([c]) => c === "get_folders").length);
+  await page.close();
+  assert.ok(during.includes("Unzipping the export:"), during);
+  assert.ok(during.includes("4,231 of 12,340 files"), during);
+  assert.ok(during.includes("1.2 GB of 3.4 GB"), during);
+  assert.equal(after, "Brought in 3 files.");
+  assert.ok(polls >= 2, `the page polled ${polls} time(s)`);
+  assert.equal(importLine(null), "");
 });
 
 await check("Settings: a folder name is text, never markup", async () => {

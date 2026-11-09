@@ -116,7 +116,10 @@ WHAT IT NEVER DOES
 LIMITS, IN ONE PLACE
 
     MAX_DOC_BYTES      50 MiB    a document (the number the desktop reader uses)
-    MAX_NOTION_BYTES  250 MiB    one Notion export zip
+    MAX_NOTION_BYTES  250 MiB    one Notion export zip, AS THE PHONE SENDS IT
+                                 (raw compressed bytes, the owner's 2026-11-05
+                                 number - NOT the unpacked ceiling, which is
+                                 4 GB since 2026-11-09 and is the PC's check)
     CHUNK_BYTES         1 MiB    raw bytes per chunk request
     MAX_ACTIVE             3     uploads in flight at once
     STAGING_MAX       512 MiB    everything staged, all uploads together
@@ -181,7 +184,14 @@ SUB = "From my phone"
 PURPOSES = ("document", "notion")
 
 MAX_DOC_BYTES = 50 * 1024 * 1024             # jarvis_documents.MAX_DOC_BYTES
-MAX_NOTION_BYTES = 250 * 1024 * 1024         # EXPORT_UNCOMPRESSED_MAX, the export's own
+#: ONE NOTION EXPORT, BY THE BYTES THE PHONE SENDS - the owner's 2026-11-05
+#: number, and it is a DIFFERENT limit from the PC's unpacked ceiling
+#: (`jarvis_documents.EXPORT_UNCOMPRESSED_MAX`): that one was 250 MiB when this
+#: was written and is 4 GB since 2026-11-09, so the comment here used to name a
+#: number that is no longer the same. Raising THIS one is the owner's call (it
+#: is how much crosses his private network in one go), not a side effect of the
+#: unpack check - see docs/ARCHITECTURE.md section 8 for the one-sided record.
+MAX_NOTION_BYTES = 250 * 1024 * 1024
 CHUNK_BYTES = 1024 * 1024                    # raw bytes; import_history.py's number
 MAX_ACTIVE = 3
 STAGING_MAX = 512 * 1024 * 1024
@@ -918,7 +928,8 @@ def _notion_zip_problem(path: str) -> str:
     """'' when the staged export may be handed to the importer, else a sentence.
 
     The checks are the importer's own: `jarvis_documents.zip_bomb_problem` with
-    `EXPORT_UNCOMPRESSED_MAX` (the 250 MiB number its folder import uses), and
+    `EXPORT_UNCOMPRESSED_MAX` (the PC's unpacked ceiling - 4 GB since
+    2026-11-09; the sentence names the declared size and the ceiling), and
     `jarvis_notion_obsidian._zip_problem` when that module is here, which is
     exactly what `plan_import` will judge it by a moment later.
     """

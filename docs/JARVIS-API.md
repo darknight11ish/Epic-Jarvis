@@ -36762,6 +36762,7 @@ and uses a fake `jarvis_bench.start`/`start_suites` - no benchmark is started by
 the tests and no live lane is contacted.
 
 
+
 ## 206. What's new in Jarvis: the Brain's Tutorials tab shows the recent-changes record (Task-50, Wave 12)
 
 One read, no card, no write: `GET /api/recent-changes` carries the generated
@@ -36807,3 +36808,116 @@ newest published".
 so it has no Settings -> Updates to open and no install to describe; its
 Tutorials tab keeps the shared catalogue (section 114). `tools/check_parity.py`
 classifies the route `deliberate` with that reason.
+
+## 207. A Notion import may unpack to 4 GB, and every refusal names the real numbers (added 2026-11-09)
+
+The owner's report: Notion exported his workspace as a 276 MB `.zip`, and
+Settings, Folders Jarvis may look in refused it, saying the unzipped size was
+too large.
+
+**The door, traced rather than assumed.** The desktop Settings button is
+`import_notion` (`jarvis-desktop/src-tauri/src/folders.rs:188` on this branch's
+base, `2003bf30f`): it opens the Windows `.zip` picker and posts
+`{"zip", "into"}` to `POST /api/folders/import` (`folders.rs:37`). That route is
+`jarvis_documents.request_import` -> `import_notion`, and the cap it hit is
+`EXPORT_UNCOMPRESSED_MAX` (`backend/jarvis_documents.py:274` on that same base:
+250 MB), applied to the total the zip's own directory DECLARES by
+`zip_bomb_problem` (`jarvis_documents.py:856`), raised for the import at
+`jarvis_documents.py:2352`. The sentence shown was, in full:
+
+```
+Jarvis will not open that export: it unpacks to more than 250 MB (a zip-bomb guard)
+```
+
+That is "the unzipped size is too large", and it is the folder import, not the
+vault converter. The vault converter (`backend/jarvis_notion_obsidian.py`, the
+phone's and the plugin's door, `/api/notion/preview` and `/api/notion/import`)
+has its own declared ceiling, `MAX_ZIP_UNCOMPRESSED` (500 MB before this
+change), and it is not what refused this file.
+
+**The limits now.** Two numbers moved; every other guard is unchanged and still
+refuses:
+
+| limit | before | now | what it judges |
+| --- | --- | --- | --- |
+| `jarvis_documents.EXPORT_UNCOMPRESSED_MAX` | 250 MB | **4 GB** | the unpacked TOTAL an export's directory declares, before a byte is written |
+| `jarvis_documents.IMPORT_MAX_BYTES` | 1 GB | **4 GB** | the bytes really written, counted as they arrive (the backstop for a header that lies) |
+| `jarvis_notion_obsidian.MAX_ZIP_UNCOMPRESSED` | 500 MB | **4 GB** | the same declared total, at the vault door |
+| `jarvis_notion_obsidian.MAX_BYTES` | 1 GB | **4 GB** | the same counted bytes, at the vault door |
+| `IMPORT_MAX_ONE` / `MAX_ONE` | 200 MB | unchanged | one member, declared and then counted |
+| `IMPORT_MAX_FILES` / `MAX_FILES` | 20,000 | unchanged | members, declared then counted |
+| `IMPORT_MAX_ZIP` / `MAX_ZIP` | 2 GB | unchanged | the `.zip` file itself |
+| `MAX_ZIP_RATIO` (vault door) | 100:1 | unchanged | declared unpacked against compressed (a zip bomb's shape) |
+| `EXPORT_ROOM_FACTOR` (new) | - | **1.2** | free space the target drive must have, against the declared total |
+
+The counted cap moved WITH the declared one on purpose: a backstop that is
+tighter than the ceiling it backs up would refuse every honest export the
+declared check lets through, and would have moved the owner's refusal from
+"250 MB" to "1 GB" without fixing anything.
+
+**Every refusal names the real numbers.** `_size_words()` writes a byte count
+the way Windows shows it ("276 MB", "4 GB", "4.5 GB"), and the sentences now
+carry both sides of the comparison:
+
+```
+Jarvis will not open that export: it unpacks to more than 4 GB: it declares
+4.5 GB once unzipped (a zip-bomb guard)
+
+there is not enough free space on that drive: this export declares 3.2 GB once
+unzipped, so it needs 3.8 GB free (a fifth more, for the copy), and the drive
+has 1.1 GB free
+
+it unpacks to more than 4 GB: 4.0 GB has been written so far
+
+one file in it is larger than 200 MB
+```
+
+The free-space preflight is new (`jarvis_documents.disk_space_problem`, and the
+room is checked AGAIN for each Notion `Part-N.zip` inside the export, because a
+part's own contents are not in the outer archive's declared total). It measures
+the target drive with `shutil.disk_usage` BEFORE the first byte, and a drive
+that cannot be measured is never refused on a guess. If the disk fills anyway,
+the write's `ENOSPC` is its own refusal (not "a name too long") and the hidden
+staging folder is removed - a refused import leaves nothing behind, on every
+path.
+
+**It can be watched while it runs.** `import_notion(..., progress=callable)`
+reports `{"files", "bytes", "of_files", "of_bytes"}` as the bytes are really
+written (about twice a second, never once per member), and the same counts are
+readable meanwhile: `GET /api/folders` carries a new additive key,
+`"importing": {"files", "bytes", "of_files", "of_bytes"}` (`null` when no
+import is running; cleared on success and on every refusal). The desktop
+Settings page polls that read once a second while its import is in flight and
+shows the counts instead of one frozen sentence, and the window's own timeout
+for this command went from 600 s to 1800 s (`folders.rs:57`) because a 4 GB
+unpack is minutes. The phone needs no change for this: it reads the PC's own
+sentences, and no route, control, approval card or permission changed.
+
+**The phone's 250 MB is a different number, and stays.** `jarvis_upload.py`'s
+`MAX_NOTION_BYTES` is the RAW ZIP BYTES the phone sends over his private
+network (the owner's decision of 2026-11-05), not an unpacked ceiling; the
+unpacked check it runs on the staged upload follows the constant above, so a
+276 MB zip sent from the phone is still refused at the upload door while it
+imports from the PC's picker. `docs/ARCHITECTURE.md` section 8 records that
+one-sided reason.
+
+**What proves it** (`backend/test_documents.py`,
+`backend/test_notion_obsidian.py`; no 276 MB fixture is written): a synthetic
+zip whose own directory DECLARES 276 MB - a real small export with one skipped
+member's declared size rewritten - imports successfully (it is over the old
+250 MB ceiling and under the new 4 GB one); a declared total over 4 GB is still
+refused, with both numbers in the sentence; the ratio (100:1, a real
+highly-compressible archive), the 200 MB per-file cap, the 20,000-file cap and
+the 2 GB zip cap all still refuse; the free-space preflight is tested with a
+drive seam (1 MB free behind an 8 MB export) AND against the real drive; the
+progress callback and the live `importing` record are checked during and after
+an import, including after a refusal; and the phone's relay of the PC's
+sentence and its unchanged 250 MB cap are pinned. `tools/gen_folders_cases.py`
+regenerated the two `folders-cases.json` copies for the additive `importing`
+key, and `backend/test_documents.py` checks they match the backend.
+
+**Not tested here:** a real 276 MB Notion export was not available, so the
+owner's file itself is the field test; and the desktop's progress line is
+proved by the JavaScript suite against a stubbed bridge, not by watching a
+real import in the packaged app.
+
