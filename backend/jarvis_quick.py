@@ -13549,12 +13549,23 @@ _GITHUB_OWN_CI = re.compile(
     r"|how\s+is\s+(?:your|jarvis'?s?)\s+ci\b.*"
     r"|is\s+(?:your|jarvis'?s?)\s+ci\s+(?:green|passing|failing|red)\s*\??$")
 
-#: "Can you create a repository?" - the owner's 2026-11-09 ask, answered with the
-#: real carded action instead of a denial. ONLY the capability forms are claimed:
-#: `normalise()` strips a leading "can you", so "create a repository called
-#: Fitness Band" arrives as the bare imperative and is deliberately NOT matched
-#: here - it must reach the model, which calls `github_create_repo`. Claiming it
-#: would replace the action with a speech about the action.
+#: "Can you create a repository?" - the owner's own 2026-11-09 ask, answered with
+#: the real carded action instead of a denial. The capability forms are claimed;
+#: the ACTION is not.
+#:
+#: `normalise()` strips a leading "can/could/would/will you", so the owner's own
+#: sentence arrives as the bare "create a repository". That bare shape is
+#: therefore claimed here, and the match is a FULL match with nothing after the
+#: noun: a request that carries the repository's name or a description ("create
+#: a repository called Fitness Band") has words left over, so it deliberately
+#: does NOT match and must reach the model, which calls `github_create_repo`.
+#: Claiming that one would replace the action with a speech about the action.
+#:
+#: The older capability wordings stay claimed too ("are you able to ...", "do
+#: you have a way to ...", "is creating one possible", "why did you say you
+#: can't ..."). The sentence-normalising branch for "can you create ... on my
+#: github" is the BARE branch below - the old `(?:can|could) you` branch here
+#: could never match, because normalise() had already removed those words.
 _GITHUB_CREATE_REPO = re.compile(
     r"(?:are|is)\s+(?:you|jarvis)\s+able\s+to\s+(?:create|make|set\s+up)\s+"
     r"(?:me\s+)?(?:a\s+|an\s+|one\s+|new\s+|any\s+)*(?:new\s+)?(?:github\s+)?"
@@ -13571,8 +13582,12 @@ _GITHUB_CREATE_REPO = re.compile(
     r"(?:repos?(?:itory|itories)?)\b.*"
     r"|is\s+(?:creating|making)\s+(?:a\s+|an\s+|one\s+)?(?:new\s+)?(?:github\s+)?"
     r"(?:repo|repository)\s+(?:possible|supported|allowed)\b.*"
-    r"|(?:can|could)\s+you\s+create\s+(?:github\s+)?(?:repos?(?:itory|itories)?)"
-    r"\s*(?:on|in)\s+(?:my|the)\s+github\b.*")
+    # The bare capability sentence normalise() leaves behind: "create a
+    # repository", "create me a repository", "set up a new github repository",
+    # "create repositories on my github". A full match only - see above.
+    r"|(?:create|make|set\s*up)\s+(?:me\s+)?(?:a\s+|an\s+|one\s+|new\s+|any\s+)*"
+    r"(?:new\s+)?(?:github\s+)?(?:repos?(?:itory|itories)?)"
+    r"(?:\s+(?:on|in)\s+(?:my|the)\s+github)?\s*\??")
 
 _GITHUB_ASKS = re.compile(
     r"what\s+asks?\s+(?:you\s+)?(?:first\s+)?before\s+github\s+acts?\s*\??$"

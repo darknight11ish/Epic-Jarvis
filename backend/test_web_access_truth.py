@@ -28,10 +28,11 @@ WHAT THIS SUITE PROVES, with no model, no socket and no real token:
      was I refused" has a real answer;
   4. the GitHub half is separate from the three web halves, says whether a
      token is saved and how many of its seven tools are on;
-  5. "are you able to create a repository?" is answered with the real carded
-     action (and the real reason it is off), while the imperative "create a
-     repository called Fitness Band" is DELIBERATELY not claimed - it must reach
-     the model, which calls github_create_repo;
+  5. "can you create a repository?" - the owner's own words - and the other
+     capability wordings are answered with the real carded action (and the real
+     reason it is off), while a request that NAMES the repository ("create a
+     repository called Fitness Band") is DELIBERATELY not claimed - it must
+     reach the model, which calls github_create_repo;
   6. the fixed words are the ones the model's own `self_portrait` carries
      (`jarvis_feature_guide.SELF_FACTS["internet_access"]`), so the
      deterministic answer and a model turn cannot say different things;
@@ -340,24 +341,51 @@ def t_the_fixed_words_are_the_models_own_digest():
 #   4. the create-a-repository question has a real, carded answer
 # --------------------------------------------------------------------------
 
+#: The owner's own 2026-11-09 sentence and the capability shapes a person types.
+#: `normalise()` removes the leading "can/could you", so these arrive as bare
+#: sentences; every one must reach the fixed answer, never the model.
+CREATE_REPO_CAPABILITY = (
+    "can you create a repository?",          # the owner's own words
+    "could you create a repo?",
+    "can you create a new repository?",
+    "can you create me a repository please",
+    "can you create a github repository?",
+    "can you create repositories on my github?",
+    "create a repository",
+    "set up a new github repository",
+)
+
+#: A request that NAMES the repository is an ACTION, not a capability question:
+#: it keeps its own path to the model's `github_create_repo` tool and its ONE
+#: card (the full-match rule in `_GITHUB_CREATE_REPO` is why).
+CREATE_REPO_ACTION = (
+    "create a repository called Fitness Band",
+    "can you create a repository called Fitness Band?",
+    "create a repository for my Fitness Band project",
+    "create a repository named fitness-band with a description",
+)
+
 
 def t_the_create_repository_question_is_answered_with_the_real_action():
-    intent, reply = _answer("are you able to create a repository?")
-    check("the question is github_self, not the model",
-          intent is not None and intent.name == "github_self"
-          and intent.f.get("shape") == "create_repo",
-          (intent.name, intent.f) if intent else None)
-    for needle in ("Yes", "one new, empty repository", "approval card",
-                   "never an organization", "Fitness-Band", "does not allow spaces"):
-        check(f"the answer says {needle!r}", needle.lower() in reply.lower(),
-              reply[:900])
+    for sentence in CREATE_REPO_CAPABILITY:
+        intent, reply = _answer(sentence)
+        check(f"{sentence!r} is github_self/create_repo, not the model",
+              intent is not None and intent.name == "github_self"
+              and intent.f.get("shape") == "create_repo",
+              (intent.name, intent.f) if intent else None)
+        for needle in ("one new, empty repository", "approval card",
+                       "never an organization", "Fitness-Band",
+                       "does not allow spaces"):
+            check(f"{sentence!r} answers with {needle!r}",
+                  needle.lower() in reply.lower(), reply[:900])
+    _intent, reply = _answer("can you create a repository?")
     check("with no token it says the token is missing",
           "no token is saved" in reply.lower(), reply[-400:])
 
     keep = ASK.tools_enabled_set
     try:
         ASK.tools_enabled_set = lambda: {"github_create_repo"}
-        _intent, reply = _answer("are you able to create a repository?")
+        _intent, reply = _answer("can you create a repository?")
     finally:
         ASK.tools_enabled_set = keep
     check("its own tool being on is said", "is switched on" in reply, reply[:900])
@@ -365,7 +393,7 @@ def t_the_create_repository_question_is_answered_with_the_real_action():
     keep = ASK.tools_enabled_set
     try:
         ASK.tools_enabled_set = lambda: set()
-        _intent, reply = _answer("are you able to create a repository?")
+        _intent, reply = _answer("can you create a repository?")
     finally:
         ASK.tools_enabled_set = keep
     check("its own tool being off is said, with what turns it on",
@@ -374,6 +402,14 @@ def t_the_create_repository_question_is_answered_with_the_real_action():
     check("the answer never claims a merge card or an automatic create",
           "merge card" not in reply.lower() or "no merge card" in reply.lower(),
           reply[:400])
+
+
+def t_a_request_that_names_the_repository_keeps_its_own_path():
+    """The named request is an ACTION, not the capability answer (owner's ask)."""
+    for sentence in CREATE_REPO_ACTION:
+        intent = Q.match(sentence)
+        check(f"{sentence!r} is NOT claimed as the capability answer",
+              intent is None, (intent.name, intent.f) if intent else None)
 
 
 # --------------------------------------------------------------------------
@@ -388,6 +424,7 @@ def main() -> int:
             t_the_github_half_is_separate_and_read_from_the_modules()
             t_the_fixed_words_are_the_models_own_digest()
             t_the_create_repository_question_is_answered_with_the_real_action()
+            t_a_request_that_names_the_repository_keeps_its_own_path()
     except Exception:
         FAILED.append("the suite itself raised")
         traceback.print_exc()
