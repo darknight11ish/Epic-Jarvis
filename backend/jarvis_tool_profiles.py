@@ -1941,7 +1941,7 @@ PROFILES: dict = {
         "id": "feature_guide",
         "title": "Explain one of Jarvis's features",
         "what": "Answers \"what is this feature?\", \"where is it?\" and \"is it "
-                "on?\" from the owner's own feature list - 181 rows in 9 groups, "
+                "on?\" from the owner's own feature list - 182 rows in 9 groups, "
                 "turned into a shipped module - rather than from a guess. The "
                 "counts in this sentence are checked against that module by the "
                 "suite, so they cannot go stale here.",

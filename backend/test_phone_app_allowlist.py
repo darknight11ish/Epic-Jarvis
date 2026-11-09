@@ -660,14 +660,17 @@ def t_the_patch_is_registered_and_has_no_gate_hunk():
     # packs-tamper-on-load.patch (2026-11-05) is the second such patch: it is
     # last of the core patches, immediately before the loader, and its one hunk
     # is in jarvis_skills.py - no gate row and no HUD route at all.
+    # skill-scan-wiring.patch (wave 13, 2026-11-09) is the third: it is a
+    # jarvis_skills.py-only patch registered before activity-turn-guard (its
+    # hunks do not touch jarvis_gate.py or the HUD), so it joins the list here.
     check("... with only the patches written after this one between it and "
           "the loader",
           "phone-apps.patch" in order
           and order[order.index("phone-apps.patch") + 1] == "bench.patch"
           and order[order.index("bench.patch") + 1:]
-          == ["packs-tamper-on-load.patch", "activity-turn-guard.patch",
-              "plugin-loader.patch"],
-          order[-3:])
+          == ["packs-tamper-on-load.patch", "skill-scan-wiring.patch",
+              "activity-turn-guard.patch", "plugin-loader.patch"],
+          order[-4:])
     # handsfree.patch (2026-11-04, hands-free mode) is NOT appended after this
     # patch. Its three `jarvis_gate.py` rows are ONE end-of-file hunk, and it is
     # applied BEFORE web-search-grant.patch so unknown-risk-approvable.patch

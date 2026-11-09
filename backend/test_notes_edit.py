@@ -244,8 +244,13 @@ def t_the_module_is_shipped_twinned_and_catalogued():
     # Wave 11 (2026-11-08): a fifth arrived with the Wi-Fi reconnect (wifi-reconnect),
     # which was born as a folder rather than a patch, so both figures in the pin
     # below rise by one - the same one-line change every new drop-in makes here.
+    # Wave 13 (2026-11-09): skill-scan-wiring.patch adds a 29th patch-backed
+    # drop-in and creator-mode is the 58th ready folder, so both figures rise
+    # again - measured from the branch's own plugins/registry.json, and
+    # tools/gen_plugin_catalogue.py --check reports it up to date (58 drop-in
+    # folders: 29 with a patch + 29 without).
     check("the registry is not stale (the folder count rose, and more ready modules)",
-          registry.get("folder_count") == 28 and registry.get("ready_count") == 57,
+          registry.get("folder_count") == 29 and registry.get("ready_count") == 58,
           {registry.get("folder_count"), registry.get("ready_count")})
     docs = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
     check("the docs have the section", "## 170. The Obsidian notes editor" in docs)
