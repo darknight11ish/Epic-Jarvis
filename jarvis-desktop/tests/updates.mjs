@@ -130,6 +130,92 @@ await check("no update says so, with the version", async () => {
   assert.equal(installVisible, false, "an Install button is offered with nothing to install");
 });
 
+/* ── The four states (Task-50, Wave 12) ──────────────────────────────────────
+ * Up to date / update available / unknown / cannot check. The bug this
+ * replaces: with `available: null, error: null` (a fresh launch, no check
+ * ever run) the card printed "the newest published" - a claim nothing had
+ * made. So each state is driven from the PC's own `state` field here, and the
+ * two that must never look alike are compared directly. */
+
+await check("a card that has never checked says UNKNOWN, not 'the newest published'", async () => {
+  const page = await open();   // K.UPDATE_NONE: state "unknown", no checked_at
+  await page.waitForTimeout(300);
+  const state = await page.locator("#update-state").innerText();
+  await page.close();
+  assert.match(state, /not checked yet/i, `said "${state}"`);
+  assert.ok(!/newest published/i.test(state),
+    `claimed to be the newest with no check behind it: "${state}"`);
+});
+
+await check("a finished check with nothing newer says UP TO DATE and when", async () => {
+  const page = await open({
+    update: { ...K.UPDATE_NONE, state: "up_to_date", checked_at: "2026-11-09 14:32" },
+  });
+  await page.waitForTimeout(300);
+  const state = await page.locator("#update-state").innerText();
+  await page.close();
+  assert.match(state, /newest published/i, `said "${state}"`);
+  assert.match(state, /last checked .*14:32/i, `did not say when it checked: "${state}"`);
+});
+
+await check("an older check keeps its date, so it cannot read as today", async () => {
+  const page = await open({
+    update: { ...K.UPDATE_NONE, state: "up_to_date", checked_at: "2020-01-02 09:05" },
+  });
+  await page.waitForTimeout(300);
+  const state = await page.locator("#update-state").innerText();
+  await page.close();
+  assert.match(state, /2020-01-02 09:05/, `dropped the date off an old check: "${state}"`);
+});
+
+await check("a check that could not answer says so, with the reason and the time", async () => {
+  const page = await open({
+    update: {
+      ...K.UPDATE_NONE,
+      state: "cannot_check",
+      error: "Could not reach the release endpoint: connection refused",
+      checked_at: "2026-11-09 14:32",
+    },
+  });
+  await page.waitForTimeout(300);
+  const state = await page.locator("#update-state").innerText();
+  const installVisible = await page.locator("#update-install").isVisible();
+  await page.close();
+  assert.match(state, /could not reach/i, `did not carry the reason: "${state}"`);
+  assert.match(state, /14:32/, `did not say when it tried: "${state}"`);
+  assert.ok(!/newest published/i.test(state), "a failed check was drawn as a good state");
+  assert.equal(installVisible, false, "an Install button appeared after a failed check");
+});
+
+await check("unknown and up to date are never the same sentence", async () => {
+  const textOf = async (update) => {
+    const page = await open({ update });
+    await page.waitForTimeout(300);
+    const said = await page.locator("#update-state").innerText();
+    await page.close();
+    return said;
+  };
+  const unknown = await textOf({ ...K.UPDATE_NONE });
+  const fresh = await textOf({
+    ...K.UPDATE_NONE, state: "up_to_date", checked_at: "2026-11-09 14:32",
+  });
+  assert.notEqual(unknown, fresh, "an unchecked card reads exactly like a checked one");
+});
+
+await check("CONTROL: the state is computed in Rust, and Settings only renders it", () => {
+  // One rule, one place: `update.rs` owns the four words and the checked time,
+  // so the card and the tray row cannot disagree about the same fact.
+  const rust = read("src-tauri/src/update.rs");
+  assert.match(rust, /fn state_of\(/, "there is no single state rule");
+  for (const state of ["unknown", "cannot_check", "up_to_date", "update_available"]) {
+    assert.ok(rust.includes(`"${state}"`), `update.rs never names ${state}`);
+  }
+  assert.match(rust, /status\.checked_at = Some\(local_stamp\(\)\)/,
+    "a finished check does not record when it ran");
+  assert.match(rust, /status\.checked_at = Some\(local_stamp\(\)\);\s*\n\s*status\.error/,
+    "the failed-updater path does not record the attempt");
+});
+
 await check("an available update names both versions", async () => {
   const page = await open({ update: { ...K.UPDATE_NONE, ...FOUND }, updateBoth: BLOCKED });
   await page.waitForTimeout(300);
