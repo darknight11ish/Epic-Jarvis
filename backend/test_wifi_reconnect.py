@@ -395,6 +395,25 @@ def the_check() -> None:
     finally:
         os.environ.pop("JARVIS_WIFI_DRY_RUN", None)
 
+    # The first evidence of a real attempt is a durable log line too, not only
+    # the state file: the project's own audit log gets one line per cycle.
+    _reset(enabled=True)
+    fake = FakeLocal(rows=_profiles(("Home", True, True)),
+                     facts={"adapter": True, "up": False, "profile": "",
+                            "ipv4": ""})
+    audited = []
+    original_audit = W._audit
+    W._audit = lambda event, detail: audited.append((event, detail))  # type: ignore[assignment]
+    try:
+        W.check_once(now=now, local=fake, probe=lambda: False,
+                     sleep=lambda _s: None)
+    finally:
+        W._audit = original_audit  # type: ignore[assignment]
+    lines = [e for e, _d in audited if e == "wifi_reconnect_attempt"]
+    check("every real attempt writes one durable log line", len(lines) == 1)
+    check("that log line carries counts and no name",
+          audited and "Home" not in str(audited))
+
     # The clock is the file's: a second call at the same instant is not due.
     _reset(enabled=True, last_check_at=now)
     fake = FakeLocal(rows=_profiles(("Home", True, True)),
