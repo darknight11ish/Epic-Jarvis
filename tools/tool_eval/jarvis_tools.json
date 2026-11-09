@@ -900,6 +900,38 @@
  {
   "type": "function",
   "function": {
+   "name": "project_read",
+   "description": "Read one file's words - code, config or docs - from a folder you listed, or from one of your projects. Give the folder (or the project's id) and the file's path inside it. For a long file, add start_line and lines to read one line range; the answer's \"more\" field says what to ask for next. It reads inside that folder only. Read-only: it never writes, renames or deletes anything, and nothing is sent anywhere. For a PDF, Word, Excel or PowerPoint file, use my_files. For a file outside the folders you listed, use file_read.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "path": {
+      "type": "string",
+      "description": "the folder on your list, or a project's id"
+     },
+     "file": {
+      "type": "string",
+      "description": "the file's path inside that folder, for example app/server.py"
+     },
+     "start_line": {
+      "type": "integer",
+      "description": "optional: the line to start at, counting from 1 (default 1)"
+     },
+     "lines": {
+      "type": "integer",
+      "description": "optional: how many lines to show (default 400, at most 2000)"
+     }
+    },
+    "required": [
+     "path",
+     "file"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "send_file_to_phone",
    "description": "Send ONE file from the owner's own listed folders to their phone app. Use when they ask to search for a file and send, view or download it on the phone. Give query (a few words of the file's name) or path (the full path, if known). ONE card, ONE file, at most 10 MiB; nothing is fetchable until the owner approves.",
    "parameters": {
