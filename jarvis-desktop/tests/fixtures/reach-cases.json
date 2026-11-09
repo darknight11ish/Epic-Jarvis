@@ -1380,6 +1380,10 @@
      "name": "Searching your notes"
     },
     {
+     "id": "project_read",
+     "name": "Reading one file of code, config or notes in a folder you listed"
+    },
+    {
      "id": "send_file_to_phone",
      "name": "Sending one file from your PC to your phone (one card each)"
     },

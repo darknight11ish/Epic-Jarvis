@@ -166,18 +166,20 @@ def tools_answer_is_the_registry_and_the_live_file():
     # hands-free then added send_text_message (on by default), the product check
     # added product_check (off), the four pack tools (2026-11-05) ship ON, and the
     # cloud-escalation door (2026-11-06) rides with change_setting instead of a
-    # switch of its own, and the one CREATE (2026-11-09) joined - so the registered
-    # count is 66 and enabled stays 19. The
+    # switch of its own; wave 13's one CREATE (2026-11-09, the carded
+    # github_create_repo) joined after it, and project_read - the read half of
+    # "Jarvis takes over dev work" - ships OFF like file_read; so the registered
+    # count is 67 and enabled stays 19. The
     # answer is still read from the registry and the settings file, never typed.
     inv = SP.tool_inventory()
-    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 66,
+    check("the inventory reads jarvis_agent.TOOLS", inv["registered"] == 67,
           str(inv["registered"]))
     check("the inventory reads the settings file's own enabled list",
           inv["enabled"] == 19, str(inv["enabled"]))
     r = answer("what tools do you have")
     check("the answer exists", r is not None and r.reply, r and r.reply)
     reply = r.reply
-    check("it names the registered count", "66 tools" in reply, reply[:120])
+    check("it names the registered count", "67 tools" in reply, reply[:120])
     check("it names the switched-on count", "19 of them are switched on" in reply,
           reply[:160])
     # The list is capped at about fourteen names plus "and N more", so the
@@ -213,8 +215,8 @@ def tools_answer_follows_a_real_settings_file():
         check("the chat answer follows the same file",
               bool(reply) and "1 of them are switched on" in reply
               and "Web search" in reply, reply or "")
-        check("... and says the other 65 are not switched on",
-              bool(reply) and "other 65 are built in but not switched on" in reply,
+        check("... and says the other 66 are not switched on",
+              bool(reply) and "other 66 are built in but not switched on" in reply,
               reply or "")
     finally:
         if real is None:

@@ -38082,3 +38082,143 @@ synthetic (a non-loopback address, a written bad file). The route's auth is the 
 shared memory block, not a new check proved here. Both app screens were exercised against
 the desktop's mock browser and the phone's JVM contract only - not driven on real hardware
 with a real fault. Those are field-test rows, never a pass.
+
+## 214. `project_read`: one bounded read of a code file inside a folder you listed (2026-11-09)
+
+The owner approved "Jarvis takes over dev work" as a plan in four slices, the
+first of which is the read half; the 2026-11-05 project decision said each
+previously-unbuilt item needs its own owner decision, so this is that half's
+own entry (`decisions.d/2026-11-09-project-read.md`). This section documents
+the one thing that half added: a model tool called `project_read`.
+
+**The gap it closes, measured against the two readers that already existed.**
+Neither could do this job:
+
+* `file_read` (section 35.3) opens any text file at any path, and it has **no
+  check against the owner's folder list at all**. It is the unbounded read, on
+  purpose, and it was left exactly as it is - adding a folder check there
+  would change a shipped tool both apps and this document already describe.
+* `my_files`' `read` action **is** bounded (`jarvis_documents.read` asks
+  `allowed_path` before it opens anything) and it refuses code:
+  `TEXT_KINDS` is `.md`, `.markdown`, `.txt`, `.csv`, so a `.py` file is
+  answered with *"Jarvis reads PDF, Word (.docx), Excel (.xlsx), PowerPoint
+  (.pptx), Markdown, text and CSV files only."*
+
+So "read this Python file in my project" had no bounded door. `project_read`
+is a **composition of two things that already ship**, not a third boundary:
+
+* `jarvis_documents.allowed_path()` - the ONE folder boundary the files tool
+  uses - asked for the folder, and then again for the file itself;
+* `jarvis_repomap._walk()` - the only `.gitignore`-aware walk in this tree,
+  the same one `GET /api/projects/{id}/map` uses (section 195) - plus that
+  module's own per-file cap.
+
+**The tool.** `project_read`, declared in `jarvis_agent.TOOLS` beside
+`my_files`, two fields:
+
+| Field | Meaning |
+|---|---|
+| `path` | a folder on "Folders Jarvis may look in", **or** a registered project's id (32 hex characters, never a folder that exists - the same single-field convention `my_files`' `map` action uses) |
+| `file` | the file's path **inside** that folder, forward or back slashes: `app/server.py` |
+
+The answer is JSON: `{"ok": true, "content": "<the file's text>", "path":
+"<the resolved path that was opened>", "file": "app/server.py", "folder":
+{"path", "name"}, "bytes": int, "cap": int, "truncated": bool,
+"outside_text": true, "what": "..."}`. A project read adds
+`{"project": {"id", "name"}}`. A refusal is `{"ok": false, "error": "<ONE
+plain sentence>"}` - never a stack trace, for anything a caller can cause.
+
+**What it refuses, and why each refusal is the existing code's rather than a
+second rule.**
+
+* A folder that is not on the owner's list: refused in the map's own sentence,
+  `jarvis_repomap.REFUSED`, before any walk starts. An unlisted folder is
+  never walked and then filtered.
+* A path that climbs out with `..`, a whole path (a drive letter, a leading
+  slash, a UNC name), an empty name and a NUL byte: refused before a single
+  path is built, because joining a `..` is exactly the mistake that makes a
+  folder boundary meaningless.
+* A link that leads out of the folder: `allowed_path()` resolves it and
+  refuses it, and the check that passes is the same resolved path that is
+  opened - the lesson `file_read` records, that checking one path and opening
+  another lets a link swapped in between point elsewhere.
+* A hidden file or folder (a name starting with `.`), a "Protected from
+  Jarvis" item, a reserved Windows device name and a place file_read refuses
+  (keys, saved passwords, browser data): all of them are `allowed_path()`'s
+  own refusals, unchanged.
+* A file the repository map would not list - ignored by the folder's own
+  `.gitignore` (nested files and `!` negation included), or inside a
+  build/vendor/dependency folder - is refused in one plain sentence. So the
+  two readers cannot disagree about the same file.
+* A binary file (a NUL byte in its first 8,192 bytes) is refused in words
+  rather than returned as mojibake.
+
+**The honest limit inside that last point: "`.gitignore`-aware" is NOT
+"tracked files only".** `_walk` never asks git. An ignored file is skipped; an
+untracked file that is not ignored **is** read, exactly as the map lists it.
+Anything that needs "only what git tracks" is a different rule and is not
+claimed here.
+
+**The cap is the map's own number, not a copy of it.** `MAX_FILE_BYTES` is
+`jarvis_repomap.MAX_FILE_BYTES` (512 KB). A file past it is read to the cap
+and the answer says `truncated: true` - it is not refused, and a cut file is
+never presented as the whole file. Bytes that are not valid UTF-8 are decoded
+with replacement characters, exactly as `file_read` and the map do. The walk
+carries the map's bounds too (4,000 files, 6 seconds); when it stops early the
+answer names the bound that stopped it rather than reporting "no such file".
+
+**No card, and no new gate action.** Reading is decided under `file_read`'s
+own action, `read_files_readonly` - tier `auto` in the shipped
+`[autonomy.tiers]` (`backend/rebuilt/jarvis-framework.toml`) - by declaring
+the tool with `gate_lookup_name=lambda args: "file_read"`. There is no new
+`_TOOL_ACTIONS` line, no new tier line and no `.patch`; the same shape the
+repository map shipped with. Nothing is approved, written, moved or sent, so
+there is nothing to approve. The tool is in
+`jarvis_agent._PROTECTION_READ_ONLY_TOOLS`, so a folder the owner marked
+read-only may be read and a blocked one is refused by `allowed_path()` before
+anything opens.
+
+**It is a switch row on the Tools page, and that is the repo's own law, not a
+choice made here.** Since the owner's 2026-11-04 decision, every tool the
+model can be offered has its own switch, and the only exceptions are the
+handful whose own switch (or another tool) decides them - a closed set pinned
+by `backend/test_asks_first.py`. `project_read` honours `[tools].enabled`
+like every ordinary tool, so a row is real: it joins
+`jarvis_asks_first.TIER_UNLISTED` (the same "Everyday helpers" group
+`file_read` and `my_files` sit in), which makes the switchable count **62**,
+and the desktop mirror in `jarvis-desktop/src/asks-first.js` carries the same
+row. It ships **OFF** - it is not a line in the shipped `[tools].enabled`,
+exactly like `file_read` - so the owner turns it on in Settings, "What asks
+first", and turning it on is one card plus Windows Hello.
+
+**Both apps: nothing new on a screen, and that is not a gap left undecided.**
+This is a tool the local model calls; no app draws it, and no route was added
+- the same one-sided-by-design shape section 195's repository map records in
+`docs/ARCHITECTURE.md` section 8. `tools/check_parity.py` has no route to
+classify here, because there is no route.
+
+**Rule 1 holds and is unchanged.** The whole read is local: no network call,
+no socket, no model call inside the module - it is `ast`-free, standard
+library only, and it sends nothing anywhere. Its result carries
+`outside_text: true`, and the agent's own boundary (`_TurnWatch.took_in`)
+labels and scans every tool result before the model reads it, so a turn that
+read code counts as having read outside text, latches private, and cannot learn
+a fact from it.
+
+**Proved by:** `backend/test_project_read.py` (81 checks, all green).
+It proves: a `.py` file inside a listed folder is read and the words are the
+file's own bytes; an unlisted folder is refused with the map's one sentence
+and nothing is read; `..`, a bare `..`, a drive letter, a leading slash and a
+UNC name are each refused before anything is joined; a real symlink that leads
+outside is refused and not one word of its target comes back (SKIPPED, never
+"passed", on a PC that cannot make a link); the per-file cap **is**
+`jarvis_repomap.MAX_FILE_BYTES` and a 550 KB file is cut at exactly that and
+says `truncated`; an ignored folder, an ignored `*.gen.py`, a `!` un-ignore, a
+build folder and a hidden folder all behave as the map's own walk says they
+do, and every file that walk lists is readable byte for byte; a project id
+reads that project's folder and a folder taken off the list stops being
+readable even for a project that still names it; and - against the **real**
+`jarvis_gate` from the published base, with the **shipped** tier table, driven
+through the real `_one_call` - the tool runs at tier `auto`, the step records
+`"outcome": "auto"`, exactly one gate call is made under
+`read_files_readonly`, and nothing is left pending: no card is raised.

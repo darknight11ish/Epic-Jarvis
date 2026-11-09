@@ -70,9 +70,11 @@ export const SWITCHABLE = Object.freeze([
 
 /**
  * Every tool an app may switch ON - `jarvis_asks_first.TOOLS_SWITCHABLE`,
- * 60 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand GitHub tools
- * that landed with the GitHub tools branch, the four pack-manager tools,
- * hands-free's send_text_message and the approval-policy tool's own row). A DIFFERENT thing from SWITCHABLE
+ * 62 at 2026-11-09 (60 at 2026-11-05: 48 at 2026-11-04, plus the six on-demand
+ * GitHub tools that landed with the GitHub tools branch, the four pack-manager
+ * tools, hands-free's send_text_message and the approval-policy tool's own
+ * row; wave 13's carded github_create_repo made it 61, and 62 adds project_read's
+ * own row, the read half of "Jarvis takes over dev work"). A DIFFERENT thing from SWITCHABLE
  * (above): that is whether an offered tool asks first; this is whether it is
  * offered at all ([tools].enabled).
  *
@@ -97,9 +99,12 @@ export const TOOLS_SWITCHABLE = Object.freeze([
   // Tier C, the raw and powerful ones (7; run_data_script has its own switch)
   "shell_exec", "control_computer", "control_phone", "browser_control",
   "read_web_page", "connect_account", "rea_investigate",
-  // The everyday helpers that used to be "not this slice" (8)
+  // The everyday helpers that used to be "not this slice" (9)
   "calculator", "memory_search", "file_read", "web_search", "my_files",
   "propose_plan", "change_setting", "feature_guide",
+  // Reading one file of code inside a folder you listed (2026-11-09): the read
+  // half of "Jarvis takes over dev work", decided under file_read's own action
+  "project_read",
   // Jarvis's own tools, which had no switch row at all before 2026-11-04 (25:
   // the original 12, plus the four pack-manager tools, hands-free's
   // send_text_message, the seven on-demand GitHub tools and the approval row)

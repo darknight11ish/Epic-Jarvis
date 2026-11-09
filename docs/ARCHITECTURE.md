@@ -4981,7 +4981,17 @@ what is missing is only the Settings screen agreeing about who turned it off.
   same store. The map writes nothing (no index, no cache), adds no gate action
   and no card (a read, under the existing `read_files_readonly` line), runs no
   model, opens no socket, and lists names and signatures only - never a
-  function's body. `project_edit` (a code-writing tool) remains unbuilt.
+  function's body. **The READ half of the next item is built since
+  2026-11-09:** the `project_read` tool (JARVIS-API §211) reads ONE file of
+  code, config or docs inside a folder on that same list, or inside a
+  registered project's folder, behind the same `jarvis_documents.allowed_path`
+  boundary and the same `.gitignore`-aware walk the map uses - so the model can
+  read a project's own source file, which `file_read` (no folder check at all)
+  and `my_files` (refuses code: `TEXT_KINDS` is md/txt/csv) each could not do.
+  It adds no route and no card (a read, under the existing
+  `read_files_readonly` line), so neither app gains a screen and
+  `tools/check_parity.py` is unaffected. `project_edit` (a code-writing tool)
+  remains unbuilt.
 
 **A spoken answer is not a screen, so the Live read-aloud fix adds nothing one-sided** (2026-11-05; the owner's report, `docs/LIVE-DESIGN.md` §3.6; `backend/jarvis_live.py`'s `MODEL_NOTE` and `backend/jarvis_manner.py`'s `post_history_hint`). Both apps already receive the same `/api/chat` reply and speak it with their own voice - the change is the model instruction for a Live turn, composed on the PC and never sent to either app as a field. No route, no card, no setting, no screen and no client code changed, so there is nothing for this section to declare one-sided: `tools/check_parity.py` has nothing new to classify.
 

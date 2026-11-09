@@ -95,6 +95,8 @@ PAST              = "backend/jarvis_past.py"
 AUTO_LEARN        = "backend/jarvis_auto_learn.py"
 SANDBOX_EXEC      = "backend/jarvis_sandbox_exec.py"
 DOCUMENTS         = "backend/jarvis_documents.py"
+REPOMAP           = "backend/jarvis_repomap.py"
+PROJECT_READ      = "backend/jarvis_project_read.py"
 CHILD_ENV         = "backend/jarvis_child_env.py"
 UI_CONTROL        = "backend/jarvis_ui_control.py"
 PROTECTION        = "backend/jarvis_protection.py"
@@ -1246,6 +1248,44 @@ PROFILES: dict = {
         "sources": [AGENT, DOCUMENTS, MEDIA_INDEX, PROTECTION],
     },
 
+    "project_read": {
+        "id": "project_read",
+        "title": "Read one code file inside a folder you listed",
+        "what": "Opens ONE file of code, config or docs inside a folder the owner has "
+                "already put on \"Folders Jarvis may look in\", or inside one of their "
+                "registered projects, and returns the words inside it. It is the bounded "
+                "way to read source: file_read has no folder check at all, and my_files "
+                "reads documents but refuses code files.",
+        "gives": [
+            "Read a Python, JavaScript, JSON or TOML file in a project and quote it",
+            "Check what a config file really sets instead of assuming",
+            "Follow one path inside a project without leaving the owner's own folders",
+        ],
+        "touches": "files",
+        "limits": [
+            "Only inside \"Folders Jarvis may look in\", or a project's folder that is on "
+            "that same list - a folder taken off the list stops being readable",
+            "One file per call, at most 512 KB: a longer file is cut, and the answer says "
+            "so rather than pretending it is the whole file",
+            "A path that climbs out with \"..\", a link that leads outside, a hidden folder "
+            "and a \"Protected from Jarvis\" item are all refused",
+            "Reading only: it never writes, renames or deletes anything, and nothing is "
+            "sent anywhere",
+        ],
+        "combines": {
+            "my_files": "my_files finds the file and reads PDF, Word, Excel and PowerPoint; "
+                        "project_read reads the code and config beside it.",
+            "file_read": "file_read opens a plain text file anywhere on this PC; "
+                         "project_read is the same read, bounded to a folder you listed.",
+        },
+        "tier": "switchable",
+        "enable_hint": "Turn on \"Reading one file of code, config or notes in a folder you "
+                       "listed\" in Settings, \"What asks first\", under \"Everyday helpers\" "
+                       "- one approval card and Windows Hello on the PC. It ships OFF (it is "
+                       "not in the shipped `[tools].enabled` list), like file_read.",
+        "sources": [AGENT, ASKS_FIRST, DOCUMENTS, REPOMAP, PROJECT_READ],
+    },
+
     "send_file_to_phone": {
         "id": "send_file_to_phone",
         "title": "Send one file to your phone",
@@ -2335,9 +2375,11 @@ FAMILIES: dict = {
     "files": {
         "title": "Files and documents",
         "what": "Finding the owner's own files, reading them in the formats they "
-                "actually use, computing over one, and sending one to the phone. "
-                "Everything here is bounded by the folder list the owner sets.",
-        "tools": ["my_files", "file_read", "run_data_script", "send_file_to_phone"],
+                "actually use, reading one code or config file in a project, computing "
+                "over one, and sending one to the phone. Everything here is bounded by "
+                "the folder list the owner sets.",
+        "tools": ["my_files", "file_read", "project_read", "run_data_script",
+                  "send_file_to_phone"],
         "impact": "This is the difference between Jarvis talking about documents and "
                   "Jarvis using them: it can find the right PDF, read one part of a "
                   "long report, add up a CSV exactly, and put the finished file on "

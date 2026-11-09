@@ -116,12 +116,14 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    # 61 since 2026-11-09 (60 at 2026-11-06, 59 at 2026-11-05): the owner's
+    # 62 since 2026-11-09 (60 at 2026-11-06, 59 at 2026-11-05): the owner's
     # decision made EVERY tool the AI model can be offered switchable - the raw
     # Tier C set and the everyday helpers included - and the on-demand GitHub
-    # tools joined that set with the GitHub branch. The last one, the carded
-    # `github_create_repo` (wave 13, 2026-11-09), is a model tool like the rest,
-    # so it has its row on the PC's Tools page too; hands-free's
+    # tools joined that set with the GitHub branch. The carded
+    # `github_create_repo` (wave 13, 2026-11-09) is a model tool like the rest,
+    # so it has its row on the PC's Tools page too - the 61st; project_read,
+    # the read half of "Jarvis takes over dev work", is the 62nd (a read
+    # decided under file_read's own action, so its row is real). hands-free's
     # send_text_message joined with that branch, and the four pack-manager
     # tools (2026-11-05) with the pack manager.
     # They are model tools (they run on this PC, in
@@ -132,13 +134,13 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
     # sandbox, the product check and the two web-search grant tools, which ride
     # with web search); a
     # switch the turn ignored would be a lie. test_asks_first.py carries the
-    # same 61 and the same reason.
-    check("the in-app rows: 61, every tool the model can be offered",
+    # same 62 and the same reason.
+    check("the in-app rows: 62, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 61)
+          and len(AF.TOOLS_SWITCHABLE) == 62)
     # The PC half of the law, proved against the page itself rather than
     # assumed: jarvis-desktop/src/asks-first.js carries its own copy of the
     # list (the Tools page's rows), so a tool added on one side alone fails

@@ -285,8 +285,11 @@ def tool_counts_are_the_real_tools():
     # switched OFF, hands-free added send_text_message (on by default, 13 -> 14),
     # the product check added product_check (off), the four pack tools (2026-11-05)
     # ship ON, and the cloud-escalation door (2026-11-06) rides with change_setting
-    # rather than adding a switch of its own - so the registered count is 65, the
-    # enabled count stays 19, and the asks-first rows are unchanged at 148. Both
+    # rather than adding a switch of its own - so the registered count was 65, and
+    # 66 since 2026-11-09 adds project_read (the read half of "Jarvis takes over
+    # dev work", shipped OFF like file_read), the
+    # enabled count stays 19, and the asks-first rows grow by that one switch row
+    # (148 -> 149). Both
     # numbers are still read from the registries, never typed.
     inv = SP.tool_inventory()
     check("the registered count is jarvis_agent.TOOLS' own length",
