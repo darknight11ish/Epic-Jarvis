@@ -29784,6 +29784,45 @@ chat body is built in Rust (`stream_chat`) with no `attachment` field, so a file
 picker there would be a second copy of these rules and this UI; the chat window
 is the file door.
 
+`<input type="file" accept>`, a drop handler for a file dragged onto the window,
+a paste handler for a file on the clipboard, a chip under the composer showing
+the name, the size and "Read on your PC", the refusal sentences, and the
+attachment on the newest message of the `send()` body. **No route and no new
+command.** The one Rust line it needs is a WINDOW SETTING, not a route: the HUD
+(and each chat window) is built with `disable_drag_drop_handler()` on Windows,
+because Tauri's own drag-drop handler **replaces** WebView2's and the page's
+`drop` event then never sees the file - the listener worked in a browser and did
+nothing in the packaged window until 2026-11-09. A drop carries a list, and one
+file goes with a question: the page attaches the first dropped file that passes
+its kind and cap checks (checked before a byte is read, as the picker does) and
+the chip adds "One file goes with a question, so the other N were not attached.";
+nothing in the batch passing adds "None of the N dropped files were attached."
+after the first file's own refusal.
+
+**The Alt+Space bar has the same file door** (the owner's decision of
+2026-11-09, chosen on a clickable card: a dropped file must work in the small
+bar too, not only in the HUD and the chat windows). `index.html`/`main.js`:
+the bar highlights while a file is held over the window, takes a dropped file,
+checks the **same eight kinds and the same 2,500,000-byte cap BEFORE a byte is
+read**, and says the **same refusal sentences** and the same "Read on your
+PC." line as the HUD - `jarvis-desktop/tests/quickbar-attach.mjs` reads both
+files and pins the words to each other. A name chip with its own Remove sits
+beside the bar's other controls; **one file goes with a question**, so a second
+drop replaces the file already waiting, in the HUD's own "One file goes with a
+question, so ..." words. **Nothing auto-sends:** the file waits on the chip
+until Enter, Esc takes it away, and only the PC ever reads it, under the same
+`read_files_readonly` gate. The bar's chat is built in Rust rather than posted
+by the page, so the file rides **`stream_chat`'s own `attachment` argument**
+(`commands.rs`), and the body Rust builds is the HUD's own shape: `attachment:
+{name, mime, size, data}` on the newest user message, `has_file: true` at the
+top level. **No new route, no upload, no new command, no new permission** - the
+window's `dragDropEnabled: false` (`tauri.conf.json`, the `quickbar` entry) is
+already off, so a dropped file reaches the page. **Still NOT-TESTABLE at a
+desk:** a real Explorer drag onto the packaged window (that the Tauri runtime
+hands the drop over), and the chip's look with a real file name from the owner's
+PC; the page half is driven in a browser with a synthetic `File`, and the body
+it results in is asserted in Rust.
+
 **Phone** (`jarvis-client`, a separate agent's slice): an `OpenDocument` picker
 with the same document list, plus an image wildcard only while the PC's
 Pictures feature works (or it reads the words in pictures - section 36), so it
@@ -29820,6 +29859,16 @@ file that passes the kind and cap checks is the one attached, the rest are named
 as not attached, and a batch with nothing readable says so) and the window
 setting that lets the drop through at all - a source pin, because driving a real
 Explorer-to-window drag is NOT-TESTABLE at a desk.
+
+pins the caps, the wording and the part shape. The Alt+Space bar's half is
+`jarvis-desktop/tests/quickbar-attach.mjs`: the same kinds, cap and sentences
+read out of the HUD and compared with the bar's, the refusal before a read, the
+one-file rule and Remove, that nothing auto-sends, the request shape
+(`attachRide`), and that `stream_chat` carries `attachment` and builds the body
+with `has_file`; Rust's `commands::chat_attachment_tests` proves the body and
+the plain refusals. **A real Explorer drag is NOT-TESTABLE at a desk** - it needs
+the packaged app, the Tauri runtime handing the drop over, and the owner's own
+file.
 
 ---
 

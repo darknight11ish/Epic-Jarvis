@@ -2537,6 +2537,29 @@ rule apply there unchanged. What that page's own `fetch` still cannot do is
 post a decision itself: `hud_bootstrap.js`'s shim refuses `/api/approve` and
 `/api/deny` whatever the link is doing. **The same file also keeps a private answer on screen there** (2026-10-16, the owner's decision *"Gate it - keep sensitive answers on screen in the HUD too"*): that page is the one surface which reads a TYPED answer aloud, and an answer whose route says `injected_sensitive` above 0 or `gate: "private"` is refused, with the bar's own line ("It's on your screen.") drawn under the answer instead - the rule of `docs/JARVIS-API.md` §16 step 3, read off the route the page already has. It is a decision, not an oversight: the step-3 exception that a typed question may be read aloud is removed in that one window and nowhere else. **The refusal is now the page's own, asked before a tap can start anything** (`private-speech.js` through `mayReadAloud`, failing closed); the shell's `speechSynthesis.speak` wrapper and its kept-on-screen line stay as the guard for any speech-synthesis path that might return to that page. **And since TASK-51 (2026-11-09, the owner's decision of 2026-11-08) that page no longer speaks with the webview's voice at all**: a tapped answer is played as audio the PC made in the configured Jarvis voice, through the bar's own `speak_reply` command (`POST /api/voice/say`, granted to the HUD as one narrow `hud-speech` set), with Pause / Resume beside Read out loud and a Stop that resets the player; a voice the PC cannot make is said in words and never replaced by a Windows one (JARVIS-API §206). No window may `emit` events to the others either (M1).
 
+**A dropped file is one door per window, and the Alt+Space bar now has it too**
+(2026-11-09; the owner's decision, JARVIS-API §163.6). The HUD and every chat
+window take a dropped file because their Rust builders turn Tauri's own
+drag-drop handler off (`disable_drag_drop_handler()`): on Windows Tauri
+**replaces** WebView2's handler, so the page's `drop` event never fires while it
+is on - the listener existed, worked in a browser, and did nothing in the
+packaged window. The Alt+Space bar is declared in `tauri.conf.json` rather than
+built in Rust, and its `dragDropEnabled: false` is that same switch, so a
+dropped file reaches `index.html`. One file goes with a question: the same
+eight kinds, the same 2,500,000-byte cap checked **before a byte is read**, the
+same plain refusal sentences as the HUD, a name chip with its own Remove, and
+**nothing auto-sends** - the file waits on the chip until Enter, and Esc takes
+it away. The bar's chat body is built in Rust, so the file rides
+`stream_chat`'s own `attachment` argument, and the body is the HUD's shape
+(`attachment` on the newest user message, `has_file: true` at the top level):
+no new route, no new command, no new permission, and the PC's
+`read_files_readonly` gate is unchanged. **NOT-TESTABLE at a desk:** a real drag
+from Explorer onto the packaged window - that the Tauri runtime hands the drop
+over at all - and the chip's look with a real file name from the owner's PC;
+the desk tests lift the page's own rule block out of `main.js` and run it
+(`tests/quickbar-attach.mjs`), and assert the resulting body in Rust
+(`commands.rs`'s `chat_attachment_tests`).
+
 **The HUD page draws only while it is being looked at** (2026-10-23, the
 idle-power review). Its Galaxy map has one drawing loop, and it runs only while
 the Brain map is the view on screen **and** the window is visible: leaving the

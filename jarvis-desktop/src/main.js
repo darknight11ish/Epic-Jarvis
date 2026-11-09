@@ -436,6 +436,14 @@ const dom = {
   submitHint: $("submit-hint"),
   noteChip: $("note-chip"),
   noteChipLabel: $("note-chip-label"),
+  // The one file waiting for the next question (the owner's decision of
+  // 2026-11-09; JARVIS-API.md section 163.6): the name chip beside the bar's
+  // own controls, its Remove, and the line under the bar that carries the
+  // HUD's own sentence.
+  attachChip: $("attach-chip"),
+  attachName: $("attach-chip-name"),
+  attachRemove: $("attach-chip-remove"),
+  attachNote: $("attach-note"),
 
   approval: $("approval"),
   approvalAction: $("approval-action"),
@@ -3924,6 +3932,19 @@ async function streamViaFetch(payload) {
   state.abort = () => controller.abort();
 
   try {
+    // The same shape Rust builds for the Tauri path: one file, on the newest
+    // message, with `has_file: true` beside it (JARVIS-API.md section 163.1).
+    const body = {
+      messages: payload.messages,
+      has_image: payload.hasImage,
+      stream: true,
+      auto: payload.auto,
+      conversation_id: payload.conversationId,
+      device: payload.device,
+      ...(payload.temporary ? { temporary: true } : {}),
+      ...(payload.private ? { private: true } : {}),
+    };
+    attachRide(body, payload.attachment);
     const response = await fetch(CHAT_ENDPOINT, {
       method: "POST",
       headers: {
@@ -3931,16 +3952,7 @@ async function streamViaFetch(payload) {
         Accept: "text/event-stream",
         "X-Jarvis-Client": JARVIS_CLIENT_HEADER,
       },
-      body: JSON.stringify({
-        messages: payload.messages,
-        has_image: payload.hasImage,
-        stream: true,
-        auto: payload.auto,
-        conversation_id: payload.conversationId,
-        device: payload.device,
-        ...(payload.temporary ? { temporary: true } : {}),
-        ...(payload.private ? { private: true } : {}),
-      }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
 
@@ -4066,6 +4078,201 @@ async function fileFromBar(target, text) {
     commitWindowHeight();
   }
 }
+
+/* ---- A file dropped on the bar (JARVIS-API.md section 163.6) ------------- *
+ * The owner's decision of 2026-11-09, chosen on a clickable card: a dropped
+ * compatible file must work in the small Alt+Space bar too, not only in the
+ * HUD and the chat windows. ONE file goes with a question, so this is the
+ * smallest honest door: a name, a Remove, and the sentence that matters.
+ *
+ * The rules are the HUD's own (`jarvis_hud.html`, section 163.1): the same
+ * eight kinds, the same 2,500,000-byte cap, the same plain refusal sentences,
+ * a kind and a size checked BEFORE a byte is read, and nothing read from a
+ * file Jarvis cannot take. tests/quickbar-attach.mjs lifts this block out of
+ * this file and runs it, and compares the sentences to the HUD's, so the two
+ * windows cannot drift.
+ *
+ * NOTHING HERE SENDS ANYTHING. A dropped file waits on the chip until the
+ * owner presses Enter; Remove takes it away; the bytes are handed to the next
+ * request exactly once and then dropped from the page, so a later question
+ * cannot re-send a file nobody attached again. The `attachment` travels as
+ * `stream_chat`'s own argument (commands.rs builds the body), because the
+ * bar's chat is posted by Rust, not by this page - and only the PC ever
+ * reads the file, under its existing read-files gate.
+ */
+let attachFile = null;
+
+const ATTACH_MAX_BYTES = 2500000;
+const ATTACH_KINDS = [".pdf", ".docx", ".xlsx", ".pptx", ".md", ".markdown", ".txt", ".csv"];
+// A picture is refused down its own path, with the HUD's picture sentence,
+// rather than being read here as if it were a document.
+const ATTACH_PICTURE_KINDS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic"];
+const ATTACH_READ_ON_PC = "Read on your PC.";
+const ATTACH_OUTSIDE = "The words count as outside text, so a web search in this chat will still ask first.";
+const ATTACH_AGAIN = "Attach it again for another question.";
+const ATTACH_ONE_FILE = "One file goes with a question, so ";
+const ATTACH_REPLACED = ATTACH_ONE_FILE + "the file dropped before it was replaced.";
+const ATTACH_REFUSED_KIND = "Jarvis can read PDF, Word, Excel, PowerPoint, Markdown, text and CSV files in a chat, and that one is not a kind Jarvis reads.";
+const ATTACH_REFUSED_PICTURE = "A picture goes in as a picture: attach it with the picture button, and this PC will read its words. Nothing was read from it here.";
+const ATTACH_UNREADABLE = "That file could not be read here.";
+
+/** "1.2 MB", "640 KB", "12 bytes" - the backend's own words for a size. */
+function attachSize(n){
+  if(n >= 1000000) return (n / 1000000).toFixed(1) + " MB";
+  if(n >= 1000) return Math.floor(n / 1000) + " KB";
+  return n + (n === 1 ? " byte" : " bytes");
+}
+
+/** The lower-case extension, or "" for a name with none (".env" has none). */
+function attachExt(name){
+  const at = String(name || "").toLowerCase().lastIndexOf(".");
+  return at <= 0 ? "" : String(name).toLowerCase().slice(at);
+}
+
+/** " One file goes with a question, so the other 2 were not attached." */
+function attachOthers(n){
+  if(!n || n < 1) return "";
+  return ATTACH_ONE_FILE + "the other " + n
+    + (n === 1 ? " was" : " were") + " not attached.";
+}
+
+/** " None of the 3 dropped files were attached." - a multi-file drop only. */
+function attachNone(n){
+  return n > 1 ? " None of the " + n + " dropped files were attached." : "";
+}
+
+/** The chip and the line, or the sentence saying why nothing was attached. */
+function attachShow(text, bad){
+  dom.attachChip.hidden = !attachFile;
+  dom.attachName.textContent = attachFile ? attachFile.name : "";
+  dom.attachRemove.hidden = !attachFile;
+  dom.attachNote.textContent = text;
+  dom.attachNote.classList.toggle("bad", !!bad);
+  dom.attachNote.hidden = !text;
+  if(text) announce(text, bad ? "assertive" : "polite");
+  syncWindowHeight();
+}
+
+/** Let the file go: the bytes, the chip, the line. */
+function attachClear(){
+  attachFile = null;
+  dom.attachChip.hidden = true;
+  dom.attachName.textContent = "";
+  dom.attachRemove.hidden = true;
+  dom.attachNote.textContent = "";
+  dom.attachNote.classList.remove("bad");
+  dom.attachNote.hidden = true;
+}
+
+/** Take one File the owner dropped. Refuses in words, before reading it.
+ *  `extra` is how many OTHER files arrived in the same drop (0 otherwise):
+ *  one file goes with a question, so the chip names the rest. A second drop
+ *  REPLACES the file already waiting, and says so in the HUD's own words. */
+function attachTake(file, extra){
+  if(!file) return;
+  const others = extra || 0;
+  const replacing = Boolean(attachFile);
+  const name = String(file.name || "the file you attached");
+  const ext = attachExt(name);
+  // Checked BEFORE the file is read, so a 40 MB video is refused without ever
+  // being read (the design's section 8, step 1).
+  if(ATTACH_KINDS.indexOf(ext) < 0){
+    const picture = ATTACH_PICTURE_KINDS.indexOf(ext) >= 0;
+    attachClear();
+    attachShow((picture ? ATTACH_REFUSED_PICTURE : ATTACH_REFUSED_KIND)
+      + attachNone(others + 1), true);
+    return;
+  }
+  if(file.size > ATTACH_MAX_BYTES){
+    attachClear();
+    attachShow("That file is " + attachSize(file.size) + ". Files up to "
+      + attachSize(ATTACH_MAX_BYTES) + " can be attached; for bigger ones, put it in a "
+      + "folder Jarvis may look in." + attachNone(others + 1), true);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => { attachClear(); attachShow(ATTACH_UNREADABLE + attachNone(others + 1), true); };
+  reader.onload = () => {
+    const url = String(reader.result || "");
+    const comma = url.indexOf(",");
+    if(comma < 0){ attachClear(); attachShow(ATTACH_UNREADABLE + attachNone(others + 1), true); return; }
+    attachFile = {name: name, mime: String(file.type || ""), size: file.size,
+                  data: url.slice(comma + 1)};
+    attachShow(name + " — " + attachSize(file.size) + " " + ATTACH_READ_ON_PC + " "
+      + ATTACH_OUTSIDE + " " + ATTACH_AGAIN
+      + (replacing ? " " + ATTACH_REPLACED : "")
+      + attachOthers(others), false);
+  };
+  reader.readAsDataURL(file);
+}
+
+/** A drop carries a LIST. Take the first file this bar can actually attach -
+ *  kind and cap checked before a byte is read - and name how many others were
+ *  left out, so a batch is not refused because of a bad file beside a good
+ *  one and a good one is never silently ignored. The HUD's own rule. */
+function attachDrop(files){
+  const list = Array.from(files || []);
+  if(!list.length) return;
+  let take = -1;
+  for(let i = 0; i < list.length; i++){
+    const file = list[i];
+    if(ATTACH_KINDS.indexOf(attachExt(file.name)) >= 0 && file.size <= ATTACH_MAX_BYTES){
+      take = i;
+      break;
+    }
+  }
+  attachTake(list[take < 0 ? 0 : take], list.length - 1);
+}
+
+/** Put the one file on the NEWEST message of a /api/chat body, with
+ *  `has_file: true` beside it - the HUD's own shape (section 163.1). The
+ *  message is replaced by a COPY: the page's own history re-sends every
+ *  earlier message on the next turn, so an attachment left there would be
+ *  uploaded again and again. Rust builds the same shape for the Tauri path
+ *  (commands.rs, `add_chat_attachment`); this is the browser-preview path. */
+function attachRide(body, attachment){
+  if(!attachment || !body || !Array.isArray(body.messages) || !body.messages.length){
+    return body;
+  }
+  const at = body.messages.length - 1;
+  body.messages[at] = Object.assign({}, body.messages[at], {attachment: attachment});
+  body.has_file = true;
+  return body;
+}
+
+/* ---- The bar's own listeners for it ------------------------------------- *
+ * Above is the whole rule; below is only where the gesture arrives. `dragover`
+ * is what makes the window a drop target: without `preventDefault()` the drop
+ * is refused and the file may be opened by the program underneath. A TEXT
+ * drag is left alone - only a drag carrying Files is swallowed.
+ */
+dom.attachRemove.addEventListener("click", () => {
+  attachClear();
+  syncWindowHeight();
+  focusInput({ selectAll: false });
+});
+
+dom.shell.addEventListener("dragover", (e) => {
+  const types = Array.from((e.dataTransfer && e.dataTransfer.types) || []);
+  if(types.indexOf("Files") < 0) return;
+  e.preventDefault();
+  if(e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  dom.shell.classList.add("drag-over");
+});
+
+// Only when the pointer really left the window: `dragleave` also fires while
+// moving between the bar, the card and the chip inside it.
+dom.shell.addEventListener("dragleave", (e) => {
+  if(!dom.shell.contains(e.relatedTarget)) dom.shell.classList.remove("drag-over");
+});
+
+dom.shell.addEventListener("drop", (e) => {
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if(!files || !files.length) return;
+  e.preventDefault();
+  dom.shell.classList.remove("drag-over");
+  attachDrop(files);
+});
 
 /**
  * Sends the prompt and streams the answer into the card.
@@ -4285,6 +4492,16 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
     // true, the same rule it already follows for `temporary`.
     cloudYes,
   };
+  // A file dropped on the bar rides on THIS question only (JARVIS-API.md
+  // section 163.6): `stream_chat`'s own `attachment` argument on the Tauri
+  // path, the newest message on the browser-preview path (streamViaFetch,
+  // `attachRide`). Either way the page drops its copy HERE, so no later
+  // question can re-send a file nobody attached again.
+  if (attachFile) {
+    payload.attachment = attachFile;
+    attachClear();
+    syncWindowHeight();
+  }
   // The picture is this ONE question's, and it goes with it (the owner's
   // decision of 2026-10-07; SCREEN-ATTACH-DESIGN.md's flow, step 5). The
   // design described the old attachment as already working this way; it did
@@ -5683,6 +5900,9 @@ async function dismiss() {
   syncNoteChip();
   state.capture = null;
   state.clipboard = null;
+  // The bar leaving the screen takes the dropped file with it: a file
+  // attached to a question nobody asked would otherwise ride the next one.
+  attachClear();
   clearSelectionChip();
   dom.captureThumb.removeAttribute("src");
   syncAttachments();
