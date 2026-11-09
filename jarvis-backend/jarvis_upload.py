@@ -116,13 +116,17 @@ WHAT IT NEVER DOES
 LIMITS, IN ONE PLACE
 
     MAX_DOC_BYTES      50 MiB    a document (the number the desktop reader uses)
-    MAX_NOTION_BYTES  250 MiB    one Notion export zip, AS THE PHONE SENDS IT
-                                 (raw compressed bytes, the owner's 2026-11-05
-                                 number - NOT the unpacked ceiling, which is
-                                 4 GB since 2026-11-09 and is the PC's check)
+    MAX_NOTION_BYTES    4 GiB    one Notion export zip, AS THE PHONE SENDS IT
+                                 (raw compressed bytes; the owner's 2026-11-05
+                                 number was 250 MiB and he raised it to 4 GiB on
+                                 2026-11-09 so a phone may send the same export
+                                 the PC takes. NOT the unpacked ceiling - that
+                                 is the PC's 4 GB check, a DIFFERENT number)
     CHUNK_BYTES         1 MiB    raw bytes per chunk request
     MAX_ACTIVE             3     uploads in flight at once
-    STAGING_MAX       512 MiB    everything staged, all uploads together
+    STAGING_MAX         4 GiB    everything staged, all uploads together
+                                 (raised 2026-11-09 with the phone's cap, so one
+                                 full export can be staged at all)
     LIFETIME_MINUTES      30     an id expires, and its staging goes with it
 
 Standard library only. Nothing here opens a socket, starts a program or reads a
@@ -184,17 +188,20 @@ SUB = "From my phone"
 PURPOSES = ("document", "notion")
 
 MAX_DOC_BYTES = 50 * 1024 * 1024             # jarvis_documents.MAX_DOC_BYTES
-#: ONE NOTION EXPORT, BY THE BYTES THE PHONE SENDS - the owner's 2026-11-05
-#: number, and it is a DIFFERENT limit from the PC's unpacked ceiling
-#: (`jarvis_documents.EXPORT_UNCOMPRESSED_MAX`): that one was 250 MiB when this
-#: was written and is 4 GB since 2026-11-09, so the comment here used to name a
-#: number that is no longer the same. Raising THIS one is the owner's call (it
-#: is how much crosses his private network in one go), not a side effect of the
-#: unpack check - see docs/ARCHITECTURE.md section 8 for the one-sided record.
-MAX_NOTION_BYTES = 250 * 1024 * 1024
+#: ONE NOTION EXPORT, BY THE BYTES THE PHONE SENDS - a DIFFERENT limit from the
+#: PC's unpacked ceiling (`jarvis_documents.EXPORT_UNCOMPRESSED_MAX`): that one
+#: was 250 MiB and became 4 GB on 2026-11-09, and the owner raised THIS one from
+#: 250 MiB to 4 GiB on 2026-11-09 too, deliberately, so a phone can send the
+#: same export the PC takes. It is how much crosses his private network in one
+#: go, so it is the owner's call, not a side effect of the unpack check - see
+#: docs/ARCHITECTURE.md section 8 for the record.
+MAX_NOTION_BYTES = 4 * 1024 * 1024 * 1024
 CHUNK_BYTES = 1024 * 1024                    # raw bytes; import_history.py's number
 MAX_ACTIVE = 3
-STAGING_MAX = 512 * 1024 * 1024
+#: Everything staged, all uploads together. Raised with MAX_NOTION_BYTES on
+#: 2026-11-09: a 4 GiB export could not otherwise be staged at all, and the
+#: three-in-flight cap still bounds what a stolen token can leave on the disk.
+STAGING_MAX = 4 * 1024 * 1024 * 1024
 LIFETIME_MINUTES = 30
 LIFETIME = LIFETIME_MINUTES * 60
 

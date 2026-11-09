@@ -532,9 +532,11 @@ def t_the_caps():
     check("a Notion export over its own cap is refused, with its own sentence",
           code == 413 and U._said_size(U.MAX_NOTION_BYTES) in out.get("said", ""),
           (code, out))
-    check("the two caps are the owner's numbers",
-          U.MAX_NOTION_BYTES == 250 * 1024 * 1024
+    check("the two caps are the owner's numbers (Notion raised to 4 GiB 2026-11-09)",
+          U.MAX_NOTION_BYTES == 4 * 1024 * 1024 * 1024
           and U.MAX_NOTION_BYTES > U.MAX_DOC_BYTES, U.MAX_NOTION_BYTES)
+    check("the staging ceiling can hold one full Notion export",
+          U.STAGING_MAX >= U.MAX_NOTION_BYTES, (U.STAGING_MAX, U.MAX_NOTION_BYTES))
 
     data = b"%PDF-1.4\n" + b"z" * 5000
     code, out = begin("taxes.pdf", data, into)

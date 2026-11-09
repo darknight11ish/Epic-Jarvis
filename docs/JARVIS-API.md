@@ -36042,9 +36042,9 @@ POST /api/upload/finish   {"id": "<the id>", "sha256": "<optional hex>"}
 |---|---|---|
 | one piece | 1 MiB of raw bytes | about 1.37 MB of base64 and JSON, a third of the server's 4 MiB request-body cap (MAX_BODY), and the same number `import_history.py` already reads in |
 | a document | 50 MiB | the number the desktop reader already handles (`jarvis_documents.MAX_DOC_BYTES`), so nothing can be stored that Jarvis cannot open |
-| a Notion export | 250 MiB | it is stored and unpacked, never parsed as a document (`EXPORT_UNCOMPRESSED_MAX`) |
+| a Notion export | 4 GiB | it is stored and unpacked, never parsed as a document; the PC's unpacked ceiling is its own 4 GB check (`EXPORT_UNCOMPRESSED_MAX`), and the 250 MiB of 2026-11-05 was raised by the owner on 2026-11-09 |
 | uploads in flight | 3 | so a stolen token cannot keep a queue of half files |
-| staged in all | 512 MiB | the disk ceiling before anything is landed |
+| staged in all | 4 GiB | the disk ceiling before anything is landed; raised with the Notion cap so one full export can be staged |
 | an id's life | 30 minutes | one `finish`, then the id and its bytes are gone; a sweep on the next `begin` clears what a phone that died left |
 
 **Every way it refuses, in plain words.** At `begin`: no such folder on the list, an empty list, a damaged list, a name with a path or a reserved word in it, an extension outside the eight, a declared size over the cap, a fourth upload in flight, the staging quota, a protected destination and a "Protected from Jarvis" block. At `chunk`: an unknown or expired id, the card still waiting (409), the card denied (403), a piece out of turn (409), a piece over 1 MiB (413) and a piece past the declared size (413). At `finish`: bytes that do not match the name, an encrypted PDF, a zip bomb, zero bytes, a short upload, a sha256 that does not match, a destination that disappeared, a link where a folder should be, and a disk that will not take it (a sentence, never a stack trace).
@@ -36893,13 +36893,16 @@ for this command went from 600 s to 1800 s (`folders.rs:57`) because a 4 GB
 unpack is minutes. The phone needs no change for this: it reads the PC's own
 sentences, and no route, control, approval card or permission changed.
 
-**The phone's 250 MB is a different number, and stays.** `jarvis_upload.py`'s
-`MAX_NOTION_BYTES` is the RAW ZIP BYTES the phone sends over his private
-network (the owner's decision of 2026-11-05), not an unpacked ceiling; the
-unpacked check it runs on the staged upload follows the constant above, so a
-276 MB zip sent from the phone is still refused at the upload door while it
-imports from the PC's picker. `docs/ARCHITECTURE.md` section 8 records that
-one-sided reason.
+**The phone sends the same export now (owner decision 2026-11-09).**
+`jarvis_upload.py`'s `MAX_NOTION_BYTES` is the RAW ZIP BYTES the phone sends
+over his private network; it was 250 MiB (the owner's 2026-11-05 number) and he
+raised it to **4 GiB** on 2026-11-09 so a 276 MB export sent from the phone is
+accepted like the PC's picker. The staging ceiling moved with it
+(`STAGING_MAX` 512 MiB -> 4 GiB), because a full-size export could not otherwise
+be staged at all; the unpacked check on the staged upload still follows the
+4 GB constant above. The phone streams the file in 1 MiB chunks straight from
+the provider, so the cap is a ceiling on the transfer, not on the phone's
+memory. `docs/ARCHITECTURE.md` section 8 records the numbers and their history.
 
 **What proves it** (`backend/test_documents.py`,
 `backend/test_notion_obsidian.py`; no 276 MB fixture is written): a synthetic
@@ -36912,7 +36915,7 @@ the 2 GB zip cap all still refuse; the free-space preflight is tested with a
 drive seam (1 MB free behind an 8 MB export) AND against the real drive; the
 progress callback and the live `importing` record are checked during and after
 an import, including after a refusal; and the phone's relay of the PC's
-sentence and its unchanged 250 MB cap are pinned. `tools/gen_folders_cases.py`
+sentence and its 4 GB raw-upload cap are pinned (raised 2026-11-09). `tools/gen_folders_cases.py`
 regenerated the two `folders-cases.json` copies for the additive `importing`
 key, and `backend/test_documents.py` checks they match the backend.
 
