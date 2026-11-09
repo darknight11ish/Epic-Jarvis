@@ -1289,7 +1289,7 @@
     "properties": {
      "text": {
       "type": "string",
-      "description": "what to remind the owner of, in their words"
+      "description": "the ACTION only, in the owner's words - e.g. \"Call Grandma\" or \"take my pills\"; never the whole request (\"remind me to call Grandma in 4 days\") and never the time"
      },
      "when": {
       "type": "string"

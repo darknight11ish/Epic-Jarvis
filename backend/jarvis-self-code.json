@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "6f00bd58d324f11a07059c4139d0d84499e23d8a",
- "built_at": "2026-11-09T12:49:24-08:00",
+ "ref": "7d892e277a42efe9a7b6d86a5b9623d65eff45fd",
+ "built_at": "2026-11-09T12:49:43-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6228,6 +6228,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "7d892e277a42efe9a7b6d86a5b9623d65eff45fd",
+   "date": "2026-11-09",
+   "subject": "docs(wave13): the audit's record corrections - creator numbering, stale counts, DEF-049 live-delivery gap"
+  },
+  {
    "sha": "6f00bd58d324f11a07059c4139d0d84499e23d8a",
    "date": "2026-11-09",
    "subject": "fix(wave13): the owner's own \"can you create a repository?\" reaches the carded answer"
@@ -6321,11 +6326,6 @@
    "sha": "b581c4b29cd8e6ed0fd163e6b22884b9b042ac7d",
    "date": "2026-11-09",
    "subject": "fix(pooled): warm the lane at its 49,152-token window before a cold /v1 turn"
-  },
-  {
-   "sha": "62fbe79953ed08a29ae2de15e0e606069192e0d4",
-   "date": "2026-11-09",
-   "subject": "merge(wave13): fold the memory fault banner into the one wave-13 PR (Gemini Q4/0.3)"
   }
  ],
  "top_level": [

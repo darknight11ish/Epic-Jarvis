@@ -280,8 +280,22 @@ def t_what_it_saves():
     print(f"      (info) every tool but browser_control: {full} tokens; short list: {short} "
           f"(saves {full - short}, {round(100 * (full - short) / full)}%)")
     check("the short list is well under half of the full one", short * 2 < full)
-    check("the short list stays small (pinned: at most 1,635 tokens)", short <= 1635,
+    check("the short list stays small (pinned: at most 1,676 tokens)", short <= 1676,
           str(short))
+    # Pinned 1,635 -> 1,676 on 2026-11-09 (wave 13), and this is the whole of
+    # the growth, measured with this module's own estimate_tokens rule: the
+    # short list reads 1,656 here, where origin/main (d6df4022) reads 1,615.
+    # All 41 tokens are `set_reminder`'s `text` parameter, whose description now
+    # says the ACTION only and names the whole-request shape it must not take
+    # (that tool reads 309 tokens, against 268 on main; it is the wave-13 fix
+    # for the owner's live bug where the whole sentence became the reminder's
+    # title). `set_reminder` is in CORE_TOOLS, so its whole schema is in the
+    # short list and the short list pays it in full. `github_create_repo` adds
+    # nothing here - it sits in the `github` group, whose own line did not grow
+    # - and 1,615 + 41 = 1,656 is the same arithmetic the measurement prints.
+    # 1,676 leaves 20 tokens spare, the same headroom the 2026-11-02 and
+    # 2026-11-05 pins used. The cost is still paid only with
+    # `[tools] short_list = true`, which ships OFF.
     # Pinned 1,600 -> 1,635 on 2026-11-05 (the combined six-PR tree), and the two
     # causes are both measured with this module's own estimate_tokens rule rather
     # than argued: the short list reads 1,615, where it read 1,579 when the
