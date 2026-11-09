@@ -5334,13 +5334,21 @@ TOOLS: dict = {
         "project_read",
         "Read one file's words - code, config or docs - from a folder you listed, or "
         "from one of your projects. Give the folder (or the project's id) and the "
-        "file's path inside it. It reads inside that folder only. Read-only: it never "
-        "writes, renames or deletes anything, and nothing is sent anywhere.",
+        "file's path inside it. For a long file, add start_line and lines to read one "
+        "line range; the answer's \"more\" field says what to ask for next. It reads "
+        "inside that folder only. Read-only: it never writes, renames or deletes "
+        "anything, and nothing is sent anywhere.",
         {"type": "object", "properties": {
             "path": {"type": "string", "description": "the folder on your list, or a "
                                                       "project's id"},
             "file": {"type": "string", "description": "the file's path inside that folder, "
-                                                      "for example app/server.py"}},
+                                                      "for example app/server.py"},
+            "start_line": {"type": "integer",
+                           "description": "optional: the line to start at, counting from 1 "
+                                          "(default 1)"},
+            "lines": {"type": "integer",
+                      "description": "optional: how many lines to show (default 400, at "
+                                     "most 2000)"}},
          "required": ["path", "file"]},
         _prepare_project_read, _run_project_read,
         gate_lookup_name=lambda args: "file_read",

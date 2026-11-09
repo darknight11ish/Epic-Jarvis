@@ -38,6 +38,24 @@ What this proves, in the order the design asked for it:
  10. It writes NOTHING: every file's size and mtime is unchanged, no file is
      added or removed, and a binary file is refused in words instead of
      returned as mojibake.
+ 11. A LINE RANGE. `start_line` and `lines` (optional whole numbers) return
+     numbered lines carrying their REAL file line numbers, the window, the real
+     total and the byte/line caps - and the ruling's one footer, word for word,
+     in `more` when (and only when) more follows. The footer never goes into
+     `content`, the slice is bounded at 96 KiB even for an absurd `lines`, a
+     file too big to count says the total is unknown instead of guessing, and a
+     bad value is refused in one plain sentence. With neither argument the read
+     is the whole file, exactly as before.
+ 12. A CREDENTIAL FILE is refused by NAME with one plain sentence, even inside
+     a folder the owner listed: `.env` and `.env.*`, a private key, the
+     `.pem`/`.key`/`.pfx`/`.p12`/`.kdbx`/`.jks` extensions, a `.git` folder in
+     the path - while ordinary source files that merely contain the word
+     (`key.py`, `keys.py`, `env.py`, `credentials_migration.py`) still read.
+     The refusal never reads the file first (a binary `.env` is still refused
+     as a credential file, not as binary).
+ 13. It writes NOTHING, proved again with SHA-256 as well as size and mtime_ns
+     across a whole-file read AND a line-range read, with no file added or
+     removed.
 
 No source-text pins except the two the brief asks for (the schema's own words
 and the action's name, both read from the objects that hold them). Every other
@@ -50,6 +68,7 @@ both ways, and says which gate it read.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -333,9 +352,20 @@ def t_5_the_cap_is_the_maps_and_a_long_file_says_so():
                                                     ("truncated", "bytes")}))
     small = PR.run_tool({"path": str(root), "file": "small.py"})
     check("5. a file under the cap says it is whole", small.get("truncated") is False, "")
+    check("5. ... and a whole file that fits carries no footer at all",
+          "more" not in small, json.dumps(small)[:300])
     check("5. the huge file is never loaded whole into the answer",
           len(str(out.get("content") or "")) <= RM.MAX_FILE_BYTES,
           len(str(out.get("content") or "")))
+    # A cut WHOLE-FILE read also says which line range to ask for next, with
+    # the real total counted from the file itself.
+    complete = str(out.get("content") or "").count("\n")
+    real_total = len((root / "big.py").read_text(encoding="utf-8").splitlines())
+    check("5. a cut whole-file read carries the one line-range footer",
+          out.get("more") == PR.MORE.format(first=1, last=complete, total=real_total),
+          f"{out.get('more')!r} vs complete={complete} total={real_total}")
+    check("5. ... counted from the real file, so the next range starts after the cut",
+          complete > 0 and real_total > complete, f"{complete} of {real_total}")
 
 
 # ==========================================================================
@@ -398,6 +428,15 @@ def t_7_a_project_id_reads_its_own_folder():
     out = PR.run_tool({"path": made["id"], "file": "app/router.py"})
     check("7. ... and the answer names the project it came from",
           out.get("project", {}).get("name") == "Project read", out.get("project"))
+    ranged = PR.run_tool({"path": made["id"], "file": "app/server.py",
+                          "start_line": 3, "lines": 2})
+    check("7. a line range flows through a project id too (run_tool -> read_project "
+          "-> read_folder)",
+          ranged.get("ok") is True and ranged.get("start_line") == 3
+          and ranged.get("end_line") == 4 and ranged.get("total_lines") == 5
+          and ranged.get("project", {}).get("id") == made["id"],
+          json.dumps({k: ranged.get(k) for k in
+                      ("ok", "start_line", "end_line", "total_lines")}))
     check("7. an unknown project id answers its own plain sentence",
           PR.run_tool({"path": "0" * 32, "file": "app/router.py"}).get("error")
           == "There is no project with that id.", "")
@@ -544,9 +583,19 @@ def t_9_the_schema_says_only_what_the_tool_does():
           "folder you listed" in desc and "project" in desc, desc)
     check("9. it says it is read-only, and that nothing is sent",
           "read-only" in desc.lower() and "nothing is sent" in desc.lower(), desc)
-    check("9. the two fields are the folder (or id) and the file inside it",
-          sorted(props) == ["file", "path"]
+    check("9. the four fields: the folder (or id), the file, and the optional line "
+          "range",
+          sorted(props) == ["file", "lines", "path", "start_line"]
           and schema["parameters"].get("required") == ["path", "file"], sorted(props))
+    check("9. start_line and lines are optional WHOLE numbers, and their defaults and "
+          "the cap are said",
+          props["start_line"].get("type") == "integer"
+          and props["lines"].get("type") == "integer"
+          and "default 1" in str(props["start_line"].get("description"))
+          and "default 400" in str(props["lines"].get("description"))
+          and "2000" in str(props["lines"].get("description")), props)
+    check("9. the description says a line range exists and that 'more' answers it",
+          "start_line" in desc and "more" in desc, desc)
     check("9. the `file` field says 'inside that folder', so it cannot be read as "
           "a whole path",
           "inside that folder" in str(props["file"].get("description")), props["file"])
@@ -598,6 +647,10 @@ def t_10_it_writes_nothing_and_refuses_a_binary():
     out = PR.run_tool({"path": str(root), "file": "app/logo.bin"})
     check("10. a binary file is refused in words, not returned as mojibake",
           out.get("ok") is False and out.get("error") == PR.BINARY, str(out)[:250])
+    out = PR.run_tool({"path": str(root), "file": "app/logo.bin",
+                       "start_line": 1, "lines": 2})
+    check("10. ... and a LINE RANGE is refused too, not numbered as if it were words",
+          out.get("ok") is False and out.get("error") == PR.BINARY, str(out)[:250])
     check("10. a folder is refused as a folder, not as a missing file",
           PR.run_tool({"path": str(root), "file": "app"}).get("error") == PR.IS_FOLDER, "")
     out = PR.run_tool({"path": str(root), "file": "app/nothing-here.py"})
@@ -610,6 +663,275 @@ def t_10_it_writes_nothing_and_refuses_a_binary():
               b"\r\n", b"\n")
           == (REPO / "jarvis-backend" / "jarvis_project_read.py").read_bytes().replace(
               b"\r\n", b"\n"), "")
+
+
+# ==========================================================================
+#   11. a line range - numbered lines, the real total, and ONE footer
+# ==========================================================================
+
+def t_11_a_line_range_returns_numbered_lines_and_one_footer():
+    root = TMP / "tree-j"
+    root.mkdir(exist_ok=True)
+    short = "".join(f"value_{i} = {i}\n" for i in range(1, 61))
+    _write(root / "lines.py", short)
+    _write(root / "long.py", "".join(f"row_{i} = {i}\n" for i in range(1, 501)))
+    _write(root / "huge.py", "".join(f"x{i}\n" for i in range(1, 2501)))
+    _write(root / "fat.py", "".join("z" * 200 + "\n" for _ in range(600)))
+    _write(root / "unknown.py", "".join(f"u{i} = {i}\n" for i in range(1, 150001)))
+    listed(root)
+    total = len(short.splitlines())
+    check("11. the test file's own line count is the one the tool must report",
+          total == 60, total)
+
+    out = PR.run_tool({"path": str(root), "file": "lines.py",
+                       "start_line": 11, "lines": 5})
+    check("11. a line range is read", out.get("ok") is True, json.dumps(out)[:300])
+    content = str(out.get("content") or "")
+    check("11. the lines are numbered with their REAL file line numbers",
+          content.split("\n") == [f"11: value_11 = 11", f"12: value_12 = 12",
+                                  f"13: value_13 = 13", f"14: value_14 = 14",
+                                  f"15: value_15 = 15"], content[:300])
+    check("11. the answer names the window it showed and the real total",
+          (out.get("start_line"), out.get("end_line"), out.get("total_lines"))
+          == (11, 15, total),
+          str((out.get("start_line"), out.get("end_line"), out.get("total_lines"))))
+    check("11. `more` is the ruling's sentence, word for word",
+          out.get("more") == PR.MORE.format(first=11, last=15, total=total),
+          str(out.get("more")))
+    check("11. ... and NOT one word of it is inside `content` (the model reads that "
+          "as source code)",
+          "Showing lines" not in content and "request the next" not in content,
+          content[-120:])
+    check("11. a cut range says `truncated: true`", out.get("truncated") is True,
+          out.get("truncated"))
+    check("11. the answer carries the byte cap and the line cap",
+          out.get("cap") == PR.MAX_FILE_BYTES and out.get("line_cap") == PR.MAX_LINES,
+          str((out.get("cap"), out.get("line_cap"))))
+
+    # With NEITHER argument the read is the whole file, exactly as before a
+    # range existed: no range keys, and no footer when the whole file fits.
+    whole = PR.run_tool({"path": str(root), "file": "lines.py"})
+    check("11. no range asked is still the whole-file read, with no range keys",
+          whole.get("content") == (root / "lines.py").read_bytes().decode("utf-8")
+          and not {"start_line", "end_line", "total_lines", "more"} & set(whole),
+          json.dumps(sorted(whole))[:300])
+    check("11. ... and it still says it was not cut", whole.get("truncated") is False, "")
+
+    # A range that reaches the end has nothing more: no footer at all.
+    last = PR.run_tool({"path": str(root), "file": "lines.py",
+                        "start_line": 41, "lines": 400})
+    body = str(last.get("content") or "").split("\n")
+    check("11. a range that reaches the end of the file has NO footer",
+          last.get("ok") is True and "more" not in last
+          and last.get("truncated") is False, json.dumps(last)[:300])
+    check("11. ... and it ends on the file's real last line, numbered",
+          last.get("end_line") == total and body[-1] == "60: value_60 = 60",
+          f"{last.get('end_line')} {body[-1:]}")
+
+    # `lines` alone starts at line 1; `start_line` alone shows the default 400.
+    only_count = PR.run_tool({"path": str(root), "file": "lines.py", "lines": 3})
+    check("11. `lines` alone starts at line 1",
+          only_count.get("start_line") == 1
+          and str(only_count.get("content") or "").split("\n") ==
+          ["1: value_1 = 1", "2: value_2 = 2", "3: value_3 = 3"],
+          str(only_count.get("content"))[:200])
+    check("11. ... and the footer counts from 1 too",
+          only_count.get("more") == PR.MORE.format(first=1, last=3, total=total),
+          str(only_count.get("more")))
+    only_start = PR.run_tool({"path": str(root), "file": "long.py",
+                              "start_line": 30})
+    check("11. `start_line` alone shows the default 400 lines",
+          only_start.get("ok") is True
+          and len(str(only_start.get("content") or "").split("\n")) == PR.DEFAULT_LINES
+          == 400 and only_start.get("end_line") == 429,
+          f"{len(str(only_start.get('content') or '').split(chr(10)))} "
+          f"{only_start.get('end_line')}")
+
+    # The hard cap: asking for 100,000 lines cannot return more than 2,000.
+    capped = PR.run_tool({"path": str(root), "file": "huge.py", "lines": 100000})
+    check("11. an absurd `lines` is capped at the hard 2,000, not obeyed",
+          capped.get("ok") is True and capped.get("line_cap") == 2000
+          and len(str(capped.get("content") or "").split("\n")) == 2000
+          and capped.get("end_line") == 2000
+          and capped.get("total_lines") == 2500,
+          f"{capped.get('end_line')} / {capped.get('total_lines')}")
+    check("11. ... and it says which range is next",
+          capped.get("more") == PR.MORE.format(first=1, last=2000, total=2500),
+          str(capped.get("more")))
+
+    # The byte cap bounds the answer even when the lines are enormous.
+    fat = PR.run_tool({"path": str(root), "file": "fat.py", "lines": 2000})
+    fat_text = str(fat.get("content") or "")
+    check("11. the 96 KiB answer cap bounds an absurd `lines` before 2,000 lines",
+          fat.get("ok") is True and len(fat_text) <= PR.MAX_SLICE_BYTES
+          and fat.get("bytes") <= PR.MAX_SLICE_BYTES
+          and fat.get("end_line") < fat.get("total_lines"),
+          f"chars={len(fat_text)} bytes={fat.get('bytes')} "
+          f"end={fat.get('end_line')} of {fat.get('total_lines')}")
+    check("11. ... and the footer says WHY it stopped, in the same shape",
+          fat.get("more") == PR.MORE_BYTES.format(first=1, last=fat.get("end_line"),
+                                                  total=600, kib=96)
+          and "96 KiB" in str(fat.get("more")), str(fat.get("more")))
+
+    # A bad value is refused in ONE plain sentence - never an exception.
+    bad_values = [{"start_line": 0}, {"start_line": -1}, {"lines": 0},
+                  {"lines": -5}, {"start_line": "11"}, {"lines": "5"},
+                  {"start_line": 1.5}, {"lines": 1.5}, {"start_line": True},
+                  {"lines": True}, {"start_line": 1, "lines": 0}]
+    for asked in bad_values:
+        try:
+            got = PR.run_tool({"path": str(root), "file": "lines.py", **asked})
+        except Exception as exc:                             # noqa: BLE001
+            got = {"raised": type(exc).__name__}
+        check(f"11. a bad range value is refused in one sentence, not raised: {asked}",
+              got.get("ok") is False and got.get("available") is True
+              and got.get("error") == PR.BAD_RANGE.format(cap=PR.MAX_LINES),
+              str(got)[:250])
+
+    # A file too big to count: the exact total is unknown, and it says so.
+    saved = PR.MAX_COUNT_BYTES
+    PR.MAX_COUNT_BYTES = 1024 * 1024
+    try:
+        unknown = PR.run_tool({"path": str(root), "file": "unknown.py",
+                               "start_line": 5, "lines": 2})
+    finally:
+        PR.MAX_COUNT_BYTES = saved
+    check("11. a file too big to count says the exact total is unknown, and a range "
+          "can still be asked for",
+          unknown.get("ok") is True and unknown.get("total_lines") is None
+          and unknown.get("truncated") is True
+          and unknown.get("more") == PR.MORE_UNKNOWN.format(first=5, last=6, mib=1),
+          str(unknown.get("more")))
+    check("11. ... and the lines it did ask for are the real ones",
+          str(unknown.get("content") or "").split("\n") ==
+          ["5: u5 = 5", "6: u6 = 6"], str(unknown.get("content"))[:200])
+
+
+# ==========================================================================
+#   12. a credential file is refused by NAME - and ordinary source still reads
+# ==========================================================================
+
+def t_12_a_credential_file_is_refused_by_name():
+    root = TMP / "tree-k"
+    root.mkdir(exist_ok=True)
+    refused = [".env", ".env.local", ".netrc", ".git-credentials", ".npmrc",
+               "credentials", "credentials.json",
+               "id_rsa", "id_rsa.pub", "id_ed25519", "id_ecdsa", "id_dsa",
+               "secrets.pem", "server.key", "cert.pfx", "cert.p12",
+               "vault.kdbx", "store.jks",
+               "pkg/.git/config", "pkg/.git/HEAD"]
+    allowed = ["key.py", "keys.py", "env.py", "credentials_migration.py",
+               "notes.txt", "app/server.py"]
+    for rel in refused + allowed:
+        _write(root / rel, "SECRET = 'this must never come back'\n")
+    _write(root / ".notes.txt", "ordinary words, hidden by its name only\n")
+    listed(root)
+
+    for rel in refused:
+        out = PR.run_tool({"path": str(root), "file": rel})
+        check(f"12. {rel} is refused as a credential file",
+              out.get("ok") is False and out.get("available") is True
+              and out.get("error") == PR.CREDENTIAL, str(out)[:250])
+        check(f"12. ... and not one word of it comes back: {rel}",
+              "must never come back" not in json.dumps(out), str(out)[:250])
+    for rel in allowed:
+        out = PR.run_tool({"path": str(root), "file": rel})
+        check(f"12. {rel} still reads like any ordinary source file",
+              out.get("ok") is True and "SECRET" in str(out.get("content") or ""),
+              str(out)[:250])
+
+    # THE PREDICATE ITSELF, pinned on both sides - this is what stops the rule
+    # from drifting into "any name containing the word".
+    yes = [".env", ".ENV", ".env.production", ".env.local", ".netrc",
+           ".git-credentials", ".npmrc", "credentials", "credentials.json",
+           "CREDENTIALS.JSON", "id_rsa", "id_rsa.pub", "id_ed25519", "id_ecdsa",
+           "id_dsa", "id_dsa.pub", "secrets.pem", "x.key", "x.pfx", "x.p12",
+           "x.kdbx", "x.jks", "pkg/.git/config", "a/b/.git/HEAD"]
+    no = ["key.py", "keys.py", "env.py", "credentials_migration.py", "notes.txt",
+          "my.env", "server.pem.txt", "credentials.md", "my.git/config",
+          "key", "keys.json"]
+    check("12. the checker's own predicate: every credential NAME is refused",
+          all(PR._credential(n) for n in yes),
+          [n for n in yes if not PR._credential(n)])
+    check("12. ... and every ordinary source name is NOT refused",
+          not any(PR._credential(n) for n in no),
+          [n for n in no if PR._credential(n)])
+    check("12. `.git` as a FOLDER is refused anywhere in the path, not as a name",
+          PR._credential("a/.git/config") and PR._credential("a/b/.git/HEAD")
+          and not PR._credential("a/.git"), "")
+
+    # It never reads the file first: a credential file full of NUL bytes is
+    # refused as a CREDENTIAL FILE, not as a binary one.
+    (root / ".env").write_bytes(b"BINARY\x00\x00SECRET")
+    out = PR.run_tool({"path": str(root), "file": ".env"})
+    check("12. a binary .env is refused as a credential file - it was never opened",
+          out.get("ok") is False and out.get("error") == PR.CREDENTIAL, str(out)[:200])
+    # ... and the same for a name the boundary's own list does not know, so the
+    # NEW check is the one that refuses it, after the walk and before the open.
+    (root / "id_dsa").write_bytes(b"BINARY\x00\x00SECRET")
+    out = PR.run_tool({"path": str(root), "file": "id_dsa"})
+    check("12. a binary id_dsa is refused as a credential file - the new check ran "
+          "after the walk, before the open",
+          out.get("ok") is False and out.get("error") == PR.CREDENTIAL, str(out)[:200])
+
+    # The new sentence must not swallow the boundary's own refusals.
+    out = PR.run_tool({"path": str(root), "file": ".notes.txt"})
+    check("12. a hidden file that is NOT a credential file keeps the boundary's "
+          "sentence, not the credential one",
+          out.get("ok") is False and out.get("error") == PR.NOT_ALLOWED, str(out)[:200])
+    out = PR.run_tool({"path": str(root), "file": "../tree-k/key.py"})
+    check("12. climbing out is still the boundary's sentence, before any name check",
+          out.get("ok") is False and out.get("error") == PR.CLIMBS_OUT, str(out)[:200])
+
+
+# ==========================================================================
+#   13. zero mutation - SHA-256 across a whole read AND a range read
+# ==========================================================================
+
+def _hash_snapshot(root: Path):
+    """Every file's relative path, size, mtime_ns and SHA-256, and every folder
+    - read straight off the disk, so 'nothing changed' is measured, not assumed."""
+    files, dirs = {}, set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        for name in dirnames:
+            dirs.add(os.path.relpath(os.path.join(dirpath, name), root))
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            rel = os.path.relpath(full, root)
+            st = os.stat(full)
+            with open(full, "rb") as fh:
+                digest = hashlib.sha256(fh.read()).hexdigest()
+            files[rel] = (st.st_size, st.st_mtime_ns, digest)
+    return files, dirs
+
+
+def t_13_a_whole_read_and_a_range_read_change_nothing():
+    root = build(TMP / "tree-l")
+    _write(root / "app" / "many.py",
+           "".join(f"line_{i} = {i}\n" for i in range(1, 301)))
+    listed(root)
+    before_files, before_dirs = _hash_snapshot(root)
+    whole = PR.run_tool({"path": str(root), "file": "app/server.py"})
+    ranged = PR.run_tool({"path": str(root), "file": "app/many.py",
+                          "start_line": 51, "lines": 25})
+    after_files, after_dirs = _hash_snapshot(root)
+    check("13. the whole-file read and the line-range read both came back",
+          whole.get("ok") is True and ranged.get("ok") is True
+          and len(str(ranged.get("content") or "").split("\n")) == 25,
+          f"{whole.get('ok')} {ranged.get('ok')}")
+    changed = {k: (before_files.get(k), after_files.get(k))
+               for k in set(before_files) | set(after_files)
+               if before_files.get(k) != after_files.get(k)}
+    check("13. every file's path, size, mtime_ns and SHA-256 is unchanged",
+          before_files == after_files, str(changed)[:500])
+    check("13. no file was added and none removed",
+          sorted(before_files) == sorted(after_files),
+          str(sorted(set(after_files) - set(before_files)))[:300])
+    check("13. no folder was added and none removed",
+          before_dirs == after_dirs, str(before_dirs ^ after_dirs)[:300])
+    check("13. the range really was what was asked for (a check that can fail)",
+          str(ranged.get("content") or "").split("\n")[0] == "51: line_51 = 51"
+          and ranged.get("end_line") == 75, str(ranged.get("content"))[:120])
 
 
 if __name__ == "__main__":

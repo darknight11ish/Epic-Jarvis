@@ -1265,10 +1265,12 @@ PROFILES: dict = {
         "limits": [
             "Only inside \"Folders Jarvis may look in\", or a project's folder that is on "
             "that same list - a folder taken off the list stops being readable",
-            "One file per call, at most 512 KB: a longer file is cut, and the answer says "
-            "so rather than pretending it is the whole file",
-            "A path that climbs out with \"..\", a link that leads outside, a hidden folder "
-            "and a \"Protected from Jarvis\" item are all refused",
+            "One file per call. A whole-file read stops at 512 KB; a longer file is read "
+            "a line range at a time (start_line and lines), and the answer's \"more\" "
+            "field says which range to ask for next",
+            "A path that climbs out with \"..\", a link that leads outside, a hidden folder, "
+            "a credential file (a private key, a saved password or a token) and a "
+            "\"Protected from Jarvis\" item are all refused",
             "Reading only: it never writes, renames or deletes anything, and nothing is "
             "sent anywhere",
         ],

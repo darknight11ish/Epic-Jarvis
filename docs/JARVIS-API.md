@@ -38114,12 +38114,21 @@ is a **composition of two things that already ship**, not a third boundary:
   module's own per-file cap.
 
 **The tool.** `project_read`, declared in `jarvis_agent.TOOLS` beside
-`my_files`, two fields:
+`my_files`, four fields:
 
 | Field | Meaning |
 |---|---|
 | `path` | a folder on "Folders Jarvis may look in", **or** a registered project's id (32 hex characters, never a folder that exists - the same single-field convention `my_files`' `map` action uses) |
 | `file` | the file's path **inside** that folder, forward or back slashes: `app/server.py` |
+| `start_line` | *optional*: the first line to show, counting from 1 (default 1) |
+| `lines` | *optional*: how many lines to show (default 400, hard cap 2,000) |
+
+`start_line` and `lines` are the 2026-11-09 architecture ruling's first two
+conditions (Q3). Asking for either one turns the read into a **line range**;
+asking for neither is the whole-file read exactly as it shipped, so every
+existing answer and every existing check stays true. Their schema is
+`"integer"`, and they are not in `required` - a model that says nothing about
+lines gets the whole file.
 
 The answer is JSON: `{"ok": true, "content": "<the file's text>", "path":
 "<the resolved path that was opened>", "file": "app/server.py", "folder":
@@ -38127,6 +38136,48 @@ The answer is JSON: `{"ok": true, "content": "<the file's text>", "path":
 "outside_text": true, "what": "..."}`. A project read adds
 `{"project": {"id", "name"}}`. A refusal is `{"ok": false, "error": "<ONE
 plain sentence>"}` - never a stack trace, for anything a caller can cause.
+
+**A line range, and the ONE footer.** A range read returns numbered lines in
+`content`, one per line, `"{line_number}: {text}"` - the number is the REAL
+file line number, so a window never restarts at 1. It adds `start_line`,
+`end_line`, `total_lines`, `line_cap` (2,000) and keeps `cap` (the 512 KB
+whole-file byte cap); `truncated` is `true` exactly when more follows.
+`end_line` is the last line shown, or `start_line - 1` when the file ends
+before that line; `total_lines` is `null` only when the file is too big to
+count (below); `bytes` is how many file bytes the shown lines hold, not the
+length of the numbered text. It works through a project id exactly as it does
+through a folder, because `read_project` passes straight to `read_folder`.
+A binary file is refused as binary for a range read too - a picture is never
+numbered as if its bytes were words.
+
+The footer is a THIRD condition from the same ruling, and it is a separate
+field on purpose: **`more`, never `content`**. The model reads `content` as
+source code, and a sentence appended to it is a sentence the model can quote
+as if the file said it (`file_read` records the same rule). `more` is omitted
+when nothing follows. Its sentence is deterministic:
+
+* `"Showing lines A–B of N; request the next line range to read more"` - the
+  exact shape the ruling asked for, with A, B and N the real numbers.
+* A **second fixed sentence** when the file is over 64 MiB (`MAX_COUNT_BYTES`):
+  the exact total is unknown because counting it would mean reading every byte,
+  and the sentence says so and says a line range can still be asked for. The
+  total is counted by STREAMING the file in binary chunks (a line ends at a
+  newline, so a Windows CRLF counts once, and a last piece with no newline is
+  still a line) - never by loading the file and never by guessing.
+* A third fixed sentence when the 96 KiB answer limit (`MAX_SLICE_BYTES`)
+  stopped the slice before the range asked for was complete - it says the limit
+  was reached, so the footer never claims the file ended.
+* A whole-file read cut at the 512 KB cap carries the same "request the next
+  line range" footer too, using the counted total where the file is small
+  enough to count; that is how a model that hits the cap learns there is a way
+  to ask for the rest.
+
+Both bound the answer: at most 2,000 lines, and at most 96 KiB of text, so an
+absurd `lines` request cannot overflow the model's context. The 2,000 limit is
+enforced by capping, not refusing. A value that is not a whole number of 1 or
+more (`0`, `-1`, `"11"`, `1.5`, `true`) is refused with one plain sentence - a
+return, never an exception. A `\r` from a Windows CRLF is dropped from the text
+shown but never from the count.
 
 **What it refuses, and why each refusal is the existing code's rather than a
 second rule.**
@@ -38152,6 +38203,32 @@ second rule.**
   two readers cannot disagree about the same file.
 * A binary file (a NUL byte in its first 8,192 bytes) is refused in words
   rather than returned as mojibake.
+* A **credential file is refused by name**, with one plain sentence that names
+  the reason: *"That is a credential file (its name says it holds a key, a
+  password or a token), so Jarvis will not read it even inside a folder you
+  listed."* The predicate is small and deterministic, and it is the NAME only -
+  it never opens, stats or lists the file, so it cannot depend on the file
+  existing or on being readable. Refused: `.env` and `.env.*` (`.env.local`),
+  `.netrc`, `.git-credentials`, `.npmrc`, `credentials`, `credentials.json`,
+  `id_rsa`/`id_ed25519`/`id_ecdsa`/`id_dsa` with or without a suffix
+  (`id_rsa.pub`), the `.pem`, `.key`, `.pfx`, `.p12`, `.kdbx` and `.jks`
+  extensions, and any path with a `.git` FOLDER in it (`.git/config`,
+  `pkg/.git/HEAD`). Deliberately NOT refused: `key.py`, `keys.py`, `env.py`,
+  `credentials_migration.py`, `my.env`, `credentials.md`, `my.git/config` -
+  ordinary source files that merely contain the word.
+
+**Measured before the credential sentence existed, so the record does not
+overclaim.** Three of those names were genuinely readable: `id_dsa`,
+`credentials` and `credentials.json`. The rest were already refused, but by
+`allowed_path()`'s protected-name list, with the wrong words - a `.env` inside
+a folder the owner HAD listed was answered *"Jarvis may read only files inside
+the folders on the owner's list"*, which is false for that file. So this change
+is both a real refusal for three names and a true reason for the rest. The
+checker runs when the folder/file boundary has already refused the path and
+again after the walk, before the file is opened - after the boundary/walk
+checks and before any read, as the ruling required - so a name the boundary's
+own list does not know is still refused, and a binary `.env` is answered as a
+credential file rather than as binary, which proves it was never opened.
 
 **The honest limit inside that last point: "`.gitignore`-aware" is NOT
 "tracked files only".** `_walk` never asks git. An ignored file is skipped; an
@@ -38159,13 +38236,16 @@ untracked file that is not ignored **is** read, exactly as the map lists it.
 Anything that needs "only what git tracks" is a different rule and is not
 claimed here.
 
-**The cap is the map's own number, not a copy of it.** `MAX_FILE_BYTES` is
-`jarvis_repomap.MAX_FILE_BYTES` (512 KB). A file past it is read to the cap
-and the answer says `truncated: true` - it is not refused, and a cut file is
-never presented as the whole file. Bytes that are not valid UTF-8 are decoded
-with replacement characters, exactly as `file_read` and the map do. The walk
-carries the map's bounds too (4,000 files, 6 seconds); when it stops early the
-answer names the bound that stopped it rather than reporting "no such file".
+**The whole-file cap is the map's own number, not a copy of it.**
+`MAX_FILE_BYTES` is `jarvis_repomap.MAX_FILE_BYTES` (512 KB). A whole-file
+read past it is read to the cap and the answer says `truncated: true` and
+carries the `more` footer - it is not refused, and a cut file is never
+presented as the whole file. A file past the cap can be read in full a line
+range at a time, which is what the footer tells the model to ask for. Bytes
+that are not valid UTF-8 are decoded with replacement characters, exactly as
+`file_read` and the map do. The walk carries the map's bounds too (4,000
+files, 6 seconds); when it stops early the answer names the bound that stopped
+it rather than reporting "no such file".
 
 **No card, and no new gate action.** Reading is decided under `file_read`'s
 own action, `read_files_readonly` - tier `auto` in the shipped
@@ -38205,20 +38285,49 @@ labels and scans every tool result before the model reads it, so a turn that
 read code counts as having read outside text, latches private, and cannot learn
 a fact from it.
 
-**Proved by:** `backend/test_project_read.py` (81 checks, all green).
+**Proved by:** `backend/test_project_read.py` (178 checks, all green).
 It proves: a `.py` file inside a listed folder is read and the words are the
 file's own bytes; an unlisted folder is refused with the map's one sentence
 and nothing is read; `..`, a bare `..`, a drive letter, a leading slash and a
 UNC name are each refused before anything is joined; a real symlink that leads
 outside is refused and not one word of its target comes back (SKIPPED, never
 "passed", on a PC that cannot make a link); the per-file cap **is**
-`jarvis_repomap.MAX_FILE_BYTES` and a 550 KB file is cut at exactly that and
-says `truncated`; an ignored folder, an ignored `*.gen.py`, a `!` un-ignore, a
-build folder and a hidden folder all behave as the map's own walk says they
-do, and every file that walk lists is readable byte for byte; a project id
-reads that project's folder and a folder taken off the list stops being
-readable even for a project that still names it; and - against the **real**
-`jarvis_gate` from the published base, with the **shipped** tier table, driven
-through the real `_one_call` - the tool runs at tier `auto`, the step records
-`"outcome": "auto"`, exactly one gate call is made under
-`read_files_readonly`, and nothing is left pending: no card is raised.
+`jarvis_repomap.MAX_FILE_BYTES` and a 550 KB file is cut at exactly that, says
+`truncated` and carries the `more` footer with the real total; an ignored
+folder, an ignored `*.gen.py`, a `!` un-ignore, a build folder and a hidden
+folder all behave as the map's own walk says they do, and every file that walk
+lists is readable byte for byte; a project id reads that project's folder and a
+folder taken off the list stops being readable even for a project that still
+names it.
+
+The ruling's four conditions have their own checks. **Line ranges:** a range
+`11..15` comes back as `11: ...` through `15: ...` with the real numbers,
+`start_line`/`end_line`/`total_lines` right for a 60-line file; `more` is the
+exact ruling sentence and appears in no other field; a range that reaches the
+end has no `more` at all; `lines` alone starts at 1, `start_line` alone shows
+the default 400; `100,000` is capped at 2,000; 600 lines of 200 characters are
+stopped at 96 KiB with the byte-cap sentence and `end_line` well before the
+total; a file larger than a 1 MiB counting limit reports `total_lines: null`
+and the unknown-total sentence while still returning the lines asked for; a
+range read of a binary file is refused as binary; the same range through a
+project id works; and `0`, `-1`, `"11"`, `1.5` and `true` are each refused in
+the one sentence, never raised. With neither argument, the whole-file read is
+byte for byte the old one and carries no range keys. **Credentials:** `.env`,
+`.env.local`, `.netrc`, `.git-credentials`, `.npmrc`, `credentials`,
+`credentials.json`, `id_rsa`, `id_rsa.pub`, `id_ed25519`, `id_ecdsa`,
+`id_dsa`, `.pem`/`.key`/`.pfx`/`.p12`/`.kdbx`/`.jks` files,
+`pkg/.git/config` and `pkg/.git/HEAD` are all refused with `PR.CREDENTIAL` and
+none of their words come back, while `key.py`, `keys.py`, `env.py`,
+`credentials_migration.py`, `notes.txt` and `app/server.py` still read; the
+predicate is pinned on both sides (`my.env`, `server.pem.txt`,
+`credentials.md`, `my.git/config` and `key` are NOT refused); a `.env` and an
+`id_dsa` full of NUL bytes are answered as credential files, not as binary,
+which proves they were never opened; and a hidden non-credential file keeps the
+boundary's own sentence. **Zero mutation:** every file's relative path, size,
+mtime_ns and SHA-256 in a temp tree is recorded before and after both a
+whole-file read and a line-range read, and nothing changes, is added or is
+removed. And - against the **real** `jarvis_gate` from the published base, with
+the **shipped** tier table, driven through the real `_one_call` - the tool runs
+at tier `auto`, the step records `"outcome": "auto"`, exactly one gate call is
+made under `read_files_readonly`, and nothing is left pending: no card is
+raised.
