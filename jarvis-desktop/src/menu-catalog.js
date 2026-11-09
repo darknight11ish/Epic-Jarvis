@@ -1650,7 +1650,7 @@ export const MENUS = [
   {
     "id": "brain.tab.work",
     "title": "Work",
-    "about": "Focus, chatbots, today, goals, quiz and the rest.",
+    "about": "Focus, chatbots, today, quiz and the rest.",
     "apps": [
       "desktop"
     ],
@@ -1669,7 +1669,7 @@ export const MENUS = [
   {
     "id": "brain.tab.projects",
     "title": "Projects",
-    "about": "Projects, their notes and benchmarks.",
+    "about": "Projects, their notes, benchmarks and goals.",
     "apps": [
       "desktop",
       "phone"

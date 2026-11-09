@@ -656,9 +656,9 @@ MENUS: tuple = (
        area="brain", view="history", kind="tab", names=("history", "chat history")),
     _m("brain.tab.faculties", "Model", "The models, compute and skills.", (DESKTOP,),
        area="brain", view="faculties", kind="tab", names=("model",)),
-    _m("brain.tab.work", "Work", "Focus, chatbots, today, goals, quiz and the rest.", (DESKTOP,),
+    _m("brain.tab.work", "Work", "Focus, chatbots, today, quiz and the rest.", (DESKTOP,),
        area="brain", view="work", kind="tab", names=("work",)),
-    _m("brain.tab.projects", "Projects", "Projects, their notes and benchmarks.",
+    _m("brain.tab.projects", "Projects", "Projects, their notes, benchmarks and goals.",
        area="brain", view="projects", kind="tab", group="goals-projects", names=("projects",)),
     # Named as the phone's plate is named (the cohesion audit of 2026-10-08:
     # this one place was "Tutorials" on the PC and "Tutorials and the FAQ" on
