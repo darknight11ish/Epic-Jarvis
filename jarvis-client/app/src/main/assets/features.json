@@ -3456,6 +3456,25 @@
     ]
   },
   {
+    "id": "wifi-auto-reconnect",
+    "group": "The PC itself",
+    "title": "Reconnect to Wi-Fi by itself",
+    "what": "While this PC has no internet, Jarvis asks Windows to reconnect to a saved password-protected Wi-Fi network it already knows, every two hours, and stops as soon as the connection is back.",
+    "where": "Settings, Wi-Fi reconnect - on by default. Turn it off there, or say \"turn off auto wifi reconnect\"; turning it on again asks once on a card.",
+    "asks": "Turning it on raises one approval card; turning it off is instant and shows no card. Each reconnect attempt shows no card of its own.",
+    "limit": "It only asks Windows to reconnect to a saved, password-protected network already on this PC; an open, WEP or enterprise network is skipped, and it tries only the top three saved networks actually in range. It never asks for a password and never changes a network's settings.",
+    "surface": "desktop",
+    "surface_reason": "The feature repairs THIS PC's own Wi-Fi link, so the phone neither shows nor changes it (ARCHITECTURE section 8, owner ruling Q4).",
+    "covers": ["settings.wifi-reconnect"],
+    "aliases": [
+      "wifi reconnect",
+      "wi-fi reconnect",
+      "auto wifi reconnect",
+      "automatic wi-fi reconnection"
+    ],
+    "gate": ["change_own_config"]
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",

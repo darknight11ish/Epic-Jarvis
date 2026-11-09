@@ -27,7 +27,7 @@ network and no real benchmark:
     inventories ("what do you have?" / "what can you change?"), the same-area
     groups (8 sections with more than one part), and a desktop Settings-page row
     by its page words;
-  - the 180 feature-catalogue rows all resolve from their own cues - the same
+  - the 181 feature-catalogue rows all resolve from their own cues - the same
     contract the Wave-8 audit measured;
   - "run a benchmark" no longer matches the open-app doorway (the live bug that
     said "I have asked this PC to open benchmark"), and a PRIVATE chat still
@@ -461,7 +461,7 @@ def t_every_feature_row_resolves_from_its_own_cues():
                 break
         if not covered:
             problems.append(rid)
-    check("all 180 feature rows answer from their own words", not problems,
+    check("all 181 feature rows answer from their own words", not problems,
           problems[:12])
 
 

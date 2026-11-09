@@ -3102,7 +3102,11 @@ FEATURE_ADJUST_PHRASES = {
 #: label even though their typed control exists. The old matrix labelled them
 #: Switchable/Adjustable because it looked only at status, not at which app
 #: the feature lives on.
-PC_ONLY_FEATURES = {"calendar", "phone-notifications", "phone-watch"}
+#: 2026-11-08 (Wave 10, owner ruling Q4): the auto Wi-Fi reconnect switch is
+#: PC-only by nature for the same reason - it repairs THIS PC's own link and
+#: the route refuses every device but this PC - so it takes the same label.
+PC_ONLY_FEATURES = {"calendar", "phone-notifications", "phone-watch",
+                    "wifi-auto-reconnect"}
 
 #: Feature id -> (own setting keys, own intent names, expected action values).
 #: Used by control_matrix() and the checker: a phrase is this feature's words

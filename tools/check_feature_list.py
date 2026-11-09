@@ -340,6 +340,11 @@ INTERNAL = {
 #: claim a lesson that does not exist.
 LESSON_EXEMPT = {
     "typing": "the box you type in; the app's own prompt field is the lesson",
+    # The Wave-10 auto Wi-Fi reconnect switch (owner ruling Q4) is ONE Settings
+    # switch, ON by default, whose own card and detail line say what it does;
+    # there is no multi-step flow to teach yet, so its lesson is a named
+    # follow-up rather than invented prose here.
+    "wifi-auto-reconnect": "one Settings switch whose own card is the lesson; no tutorial lesson yet",
     # The Jarvis calendar's store and routes land before either screen, so
     # there is nothing to teach yet: the Calendar screens (HUD card, phone
     # plate, widget) are the next slice, and their lesson lands with them.

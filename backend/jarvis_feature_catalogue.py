@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 180 rows from features/features.json.
+The owner's feature list, as data: 181 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 c082ea170ce310f3b3070bc1a52f665be690715566ffafd6e3d7bf926ed2bf1d); the apps' Features pages read their own
+`features/features.json` (sha256 43375ecb4700d17942e9f5c8be2a9152bdb779de633b36db115106ee6749dcef); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "c082ea170ce310f3b3070bc1a52f665be690715566ffafd6e3d7bf926ed2bf1d"
+SOURCE_SHA256 = "43375ecb4700d17942e9f5c8be2a9152bdb779de633b36db115106ee6749dcef"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1953,6 +1953,19 @@ FEATURES = (
         "surface_reason": "The program runs on this PC and is started by a PowerShell script on this PC. The phone has no switch for it, and a phone that could start a program on the PC would be a new power.",
         "aliases": ["voicestudio", "voice studio", "the second voice program"],
         "covers": [],
+    },
+    {
+        "id": "wifi-auto-reconnect",
+        "group": "The PC itself",
+        "title": "Reconnect to Wi-Fi by itself",
+        "what": "While this PC has no internet, Jarvis asks Windows to reconnect to a saved password-protected Wi-Fi network it already knows, every two hours, and stops as soon as the connection is back.",
+        "where": "Settings, Wi-Fi reconnect - on by default. Turn it off there, or say \"turn off auto wifi reconnect\"; turning it on again asks once on a card.",
+        "asks": "Turning it on raises one approval card; turning it off is instant and shows no card. Each reconnect attempt shows no card of its own.",
+        "limit": "It only asks Windows to reconnect to a saved, password-protected network already on this PC; an open, WEP or enterprise network is skipped, and it tries only the top three saved networks actually in range. It never asks for a password and never changes a network's settings.",
+        "surface": "desktop",
+        "surface_reason": "The feature repairs THIS PC's own Wi-Fi link, so the phone neither shows nor changes it (ARCHITECTURE section 8, owner ruling Q4).",
+        "aliases": ["wifi reconnect", "wi-fi reconnect", "auto wifi reconnect", "automatic wi-fi reconnection"],
+        "covers": ["settings.wifi-reconnect"],
     },
     {
         "id": "approvals",

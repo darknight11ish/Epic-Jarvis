@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "856f6283855a53f7c483919069394b24a43db464",
- "built_at": "2026-11-08T20:29:11-08:00",
+ "ref": "005d3f6c43ae68728e8dc3dff7aa0e02be4f2cd0",
+ "built_at": "2026-11-08T20:52:00-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6181,6 +6181,16 @@
  ],
  "recent_commits": [
   {
+   "sha": "005d3f6c43ae68728e8dc3dff7aa0e02be4f2cd0",
+   "date": "2026-11-08",
+   "subject": "fix(phone): the menu catalogue now holds 133 names, not 132"
+  },
+  {
+   "sha": "a1f685d1e202694eb5bd1669dbe7d21c8e0eed5a",
+   "date": "2026-11-08",
+   "subject": "fix(wave10): close the four Windows backend-suite reds CI found"
+  },
+  {
    "sha": "856f6283855a53f7c483919069394b24a43db464",
    "date": "2026-11-08",
    "subject": "fix(wave10): repair the claims, directory, hud and learning reds CI found"
@@ -6269,16 +6279,6 @@
    "sha": "1942c00046cc4cd7dfbfd6570b3e2e9fe7daf7d0",
    "date": "2026-11-08",
    "subject": "Merge branch 'fix/wave10-catalogue-and-migration-2026-11-08' into integration/wave10-2026-11-08"
-  },
-  {
-   "sha": "6becb98cce721972e0860655f8b7d06be85a8f9a",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map for the migration smoke test"
-  },
-  {
-   "sha": "6918d544e6d8ebb860f5cf4e6c2381c0588e45e5",
-   "date": "2026-11-08",
-   "subject": "test(feedback): migration smoke on a copy of the live feedback.db (Q2)"
   }
  ],
  "top_level": [

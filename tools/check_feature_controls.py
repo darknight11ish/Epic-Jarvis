@@ -505,9 +505,12 @@ def main(argv=None):
     # own switch on Settings, "What asks first", so the FEATURE has no single
     # switch to read; the row is the ability plus the three carded actions and
     # the never-list. 106 + 1 -> 107 Command-Only, 179 + 1 -> 180 features.
-    # Measured from the contract, not chosen.
+    # 2026-11-08 (Wave 10, owner ruling Q4): the auto Wi-Fi reconnect switch
+    # joined as PC-Only Setting (the phone neither shows nor changes it, and
+    # the route refuses every device but this PC). 16 + 1 -> 17 PC-Only,
+    # 180 + 1 -> 181 features. Measured from the contract, not chosen.
     expected_label_counts = {
-        LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 16,
+        LAB_SWITCH: 43, LAB_SETTINGS_ONLY: 2, LAB_PC_ONLY: 17,
         LAB_COMMAND: 107, LAB_ALWAYS: 12,
     }
     actual_label_counts = Counter(row.get("label") for row in contract.get("features", []))
