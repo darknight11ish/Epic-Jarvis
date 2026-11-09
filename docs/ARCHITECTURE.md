@@ -3142,20 +3142,30 @@ backend routes, in both directions; the rest are listed here only.
 - **Your own GitHub is read and acted on by chat, and neither app has a screen
   for it - one-sided on purpose** (2026-11-03; the owner's decision: *"GitHub
   tools = Read + actions"*; JARVIS-API §190). The ABILITY is on both apps'
-  chats, because the six model tools (`github_list`, `github_read_file`,
+  chats, because the seven model tools (`github_list`, `github_read_file`,
   `github_ci_status`, `github_comment`, `github_open_issue`,
-  `github_rerun_workflow`) run on this PC and either app's chat is the same
-  turn. What is deliberately one-sided is a screen: neither app lists repos,
-  pull requests or runs, and neither opens a comment box. A repository list, a
-  diff and a comment editor are deep configuration and a second door onto the
-  owner's own code; the chat tool is the door, and the card is the decision. No
-  route was added, so `tools/check_parity.py` is unchanged and clean. What asks
-  first is four gate actions, every one `ask`: `github_inspect` (the three
-  reads - they ask too, because a read still sends the saved GitHub token out)
-  and the three actions. They are NOT the existing `github_read`, which is the
+  `github_rerun_workflow`, and since 2026-11-09 `github_create_repo`) run on
+  this PC and either app's chat is the same turn. What is deliberately
+  one-sided is a screen: neither app lists repos, pull requests or runs, and
+  neither opens a comment box, a repository-name box or a "create" button. A
+  repository list, a diff and a comment editor are deep configuration and a
+  second door onto the owner's own code; the chat tool is the door, and the
+  card is the decision. **The one CREATE is the same decision, and the phone
+  deliberately gets no screen for it either:** `github_create_repo` is a model
+  tool, so the typed sentence works identically in both apps' chats, and
+  building a name-and-private-flag form on the phone would be a second door
+  onto a write that cannot be undone - exactly what the 2026-11-03 ruling
+  avoids. The card itself is answerable on the phone (the gate's own card
+  surface), which is where the owner's yes actually happens. No route was
+  added, so `tools/check_parity.py` is unchanged and clean. What asks first is
+  five gate actions, every one `ask`: `github_inspect` (the three reads - they
+  ask too, because a read still sends the saved GitHub token out),
+  `github_comment`, `github_open_issue`, `github_rerun_workflow` and
+  `github_create_repo`. They are NOT the existing `github_read`, which is the
   scheduled look a "tell me when" watch makes and must stay `auto`; the reason
-  is in JARVIS-API §190.2. Nothing can merge, push, commit, delete or close.
-  `backend/test_github_tools.py` holds the whole of it.
+  is in JARVIS-API §190.2. Nothing can merge, push, commit, delete or close;
+  the one thing it can make is a new, empty repository, and it cannot delete
+  that. `backend/test_github_tools.py` holds the whole of it.
 
 - **More than one conversation window is the desktop's, and that is one-sided on
   purpose** (2026-11-03; the owner's ask *"have multiple conversation windows

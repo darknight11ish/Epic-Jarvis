@@ -886,6 +886,35 @@ PROFILES: dict = {
         "sources": [AGENT, GITHUB, ASKS_FIRST],
     },
 
+    "github_create_repo": {
+        "id": "github_create_repo",
+        "title": "Create one new repository on your own GitHub",
+        "what": "Creates ONE new, EMPTY repository on the owner's own GitHub "
+                "account, with a name and an optional description and private "
+                "flag. The exact name and whether it is private are shown on one "
+                "card first, and nothing is sent to GitHub without the owner's yes.",
+        "gives": [
+            "Make a new repository without leaving chat",
+            "See the exact name and its privacy on the card first",
+            "Know it was created, with GitHub's own address, or get GitHub's own "
+            "sentence saying why not",
+        ],
+        "touches": "network service",
+        "limits": [
+            "One repository per call, on your own account - never an organization's",
+            "Nothing is pushed into it: no code, no files, no commit",
+            "Jarvis cannot delete it afterwards - there is no delete action",
+            "A name may use only letters, numbers, dot, dash and underscore",
+        ],
+        "combines": {
+            "github_list": "github_create_repo makes one empty repository; "
+                           "github_list shows the repositories you already have.",
+        },
+        "tier": "switchable",
+        "enable_hint": GITHUB_TOOL_ENABLE_HINT,
+        "sources": [AGENT, GITHUB, ASKS_FIRST],
+    },
+
     "web_search": {
         "id": "web_search",
         "title": "Search the public web",
@@ -2469,7 +2498,8 @@ FAMILIES: dict = {
                 "capture or database.",
         "tools": ["github_search", "shell_exec", "propose_plan", "rea_investigate",
                   "github_list", "github_read_file", "github_ci_status",
-                  "github_comment", "github_open_issue", "github_rerun_workflow"],
+                  "github_comment", "github_open_issue", "github_rerun_workflow",
+                  "github_create_repo"],
         "impact": "This is the family the owner uses to actually build things with "
                   "Jarvis: it answers \"has someone already built this?\" with a "
                   "graded verdict, runs the installer or the build, and can inspect "
@@ -2477,12 +2507,14 @@ FAMILIES: dict = {
                   "what makes a multi-step job approvable in one read instead of ten "
                   "separate clicks. It also reads your own GitHub on demand - "
                   "repositories, pull requests, issues, CI and one file - and can "
-                  "post one comment, open one issue or re-run one workflow, each "
-                  "behind its own card; it can never merge, push or delete.",
+                  "post one comment, open one issue, re-run one workflow or create "
+                  "one new empty repository, each behind its own card; it can never "
+                  "merge, push or delete.",
         "limits": ["Every way out of the PC here is carded: shell commands always "
                    "ask, GitHub research needs an approved plan, a look at your "
-                   "own GitHub asks every time, and each of its three actions has "
-                   "its own card",
+                   "own GitHub asks every time, each of its four actions has its "
+                   "own card, and a repository it creates is empty and cannot be "
+                   "deleted by Jarvis",
                    "REA refuses live process capture, device changes and debugger "
                    "sessions by name, and the plan module ships off until a "
                    "measured evaluation passes",

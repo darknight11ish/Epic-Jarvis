@@ -3695,7 +3695,7 @@
       "name": "Read and act on your own GitHub",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+      "where": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue, github_rerun_workflow and github_create_repo. All seven ship off; github_search and the scheduled watch_github job are separate switches.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3706,7 +3706,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue, github_rerun_workflow and github_create_repo. All seven ship off; github_search and the scheduled watch_github job are separate switches.",
         "search": [
           "Read and act on your own GitHub"
         ],
@@ -3714,7 +3714,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue and github_rerun_workflow. All six ship off; github_search and the scheduled watch_github job are separate switches.",
+        "location": "Say \"connect my GitHub\" for the token card. Then switch each tool on in Settings, What asks first, under \"Let the AI use this\" (group \"Jarvis's own tools\"): github_list, github_read_file, github_ci_status, github_comment, github_open_issue, github_rerun_workflow and github_create_repo. All seven ship off; github_search and the scheduled watch_github job are separate switches.",
         "search": [
           "read and act on your own github"
         ],

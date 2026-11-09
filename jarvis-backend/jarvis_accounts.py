@@ -629,10 +629,12 @@ FAMILIES: Tuple[Family, ...] = (
         # for four days after the owner's 2026-11-03 "Read + actions" decision
         # added the three carded actions (2026-11-07 audit, BLOCKER 3: this row
         # was the one place `/api/accounts` still described the old surface).
-        # The three reads share `github_inspect`; the three actions each have
-        # their own action in the shipped [autonomy.tiers].
+        # The three reads share `github_inspect`; the four actions each have
+        # their own action in the shipped [autonomy.tiers] - the three of
+        # 2026-11-03 and the one CREATE of 2026-11-09.
         abilities=("github_inspect", "github_comment", "github_open_issue",
-                   "github_rerun_workflow", "github_read", "research_authenticated"),
+                   "github_rerun_workflow", "github_create_repo", "github_read",
+                   "research_authenticated"),
         verify="connect_account:github",
         change=('Say "connect my GitHub" for the token card, then switch each '
                 'GitHub tool on in Settings, What asks first, under "Let the AI '
@@ -640,16 +642,18 @@ FAMILIES: Tuple[Family, ...] = (
         remove=("Not removable from any screen yet - the next slice adds a Remove "
                 "button; until then only by hand in Windows Credential Manager. Jarvis "
                 "forgetting it does not revoke it: the token stays valid on github.com "
-                "until you delete it there. Switching the six tools off in Settings, "
+                "until you delete it there. Switching the seven tools off in Settings, "
                 "What asks first, stops it being used without deleting the token."),
         limit=("Read AND act, each with its own card: three read tools (list, "
-               "read-file, CI status) and three actions (comment, open an issue, "
-               "re-run a workflow). It never merges a pull request, never pushes or "
+               "read-file, CI status) and four actions (comment, open an issue, "
+               "re-run a workflow, create one new empty repository on your own "
+               "account). It never merges a pull request, never pushes or "
                "commits and never closes or deletes anything - there is no merge "
-               "action and no merge card, even with your approval."),
+               "action, no merge card and no delete action, even with your approval."),
         can=("Read your repositories, open pull requests, issues, CI status and one "
-             "file, and comment, open an issue or re-run a workflow - each after you "
-             "say yes on its own card; never merge, push or close."),
+             "file, and comment, open an issue, re-run a workflow or create one new "
+             "empty repository - each after you say yes on its own card; never "
+             "merge, push or close."),
     ),
     Family(
         id="email",

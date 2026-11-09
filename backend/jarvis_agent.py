@@ -741,14 +741,15 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 
 
 # --------------------------------------------------------------------------
-#   GitHub: read it, and take three small actions (jarvis_github.py)
+#   GitHub: read it, and take a few small actions (jarvis_github.py)
 # --------------------------------------------------------------------------
 #: The owner's decision of 2026-11-03: Jarvis may READ his GitHub (repositories,
-#: open pull requests, issues, CI status, one file) and take three small ACTIONS
-#: (comment, open an issue, re-run a workflow) - each action behind its own
-#: approval card - and it may never merge, push, commit, delete or close.
+#: open pull requests, issues, CI status, one file) and take a few small ACTIONS
+#: (comment, open an issue, re-run a workflow - plus, since 2026-11-09, create one
+#: new empty repository) - each action behind its own approval card - and it may
+#: never merge, push, commit, delete or close.
 #:
-#: ALL SIX ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
+#: ALL SEVEN ARE IN `NEEDS_A_PERSON` BELOW, reads included, and that is the point:
 #: a fixed-endpoint read still sends the owner's own GitHub token to
 #: api.github.com, so it is egress with a credential attached. `github_read` is
 #: the action a "tell me when" GitHub watch already uses, and it MUST stay
@@ -758,7 +759,11 @@ def _run_github_search(args: dict, plan_obj, **_) -> dict:
 #: NEEDS_A_PERSON as well means an owner who loosens that line still cannot make
 #: a GitHub read run with nobody asked.
 GITHUB_READ_TOOLS = ("github_list", "github_read_file", "github_ci_status")
-GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow")
+GITHUB_ACTION_TOOLS = ("github_comment", "github_open_issue", "github_rerun_workflow",
+                       # 2026-11-09: one new, empty repository on the owner's own
+                       # account - the owner's "create a repository called
+                       # Fitness Band" ask. Its own action at "ask".
+                       "github_create_repo")
 GITHUB_TOOLS = GITHUB_READ_TOOLS + GITHUB_ACTION_TOOLS
 
 
@@ -816,6 +821,11 @@ def _prepare_github_open_issue(args: dict):
 def _prepare_github_rerun_workflow(args: dict):
     import jarvis_github as GH
     return _github_plan(GH.plan_rerun, args)
+
+
+def _prepare_github_create_repo(args: dict):
+    import jarvis_github as GH
+    return _github_plan(GH.plan_create_repo, args)
 
 
 def _run_github(args: dict, plan_obj, **_) -> dict:
@@ -4989,11 +4999,12 @@ TOOLS: dict = {
         # which action name (and therefore which tier) governs THIS call.
         gate_lookup_name=lambda args: _github_search_action_name(),
         instead={"web_search": "For a general web search, use web_search."}),
-    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
-    # owner's decision of 2026-11-03: "Read + actions"). Every one of the six
-    # asks a person: `github_inspect`'s tier is "ask" in the shipped config, and
-    # all six are in NEEDS_A_PERSON, so a loosened tier still cannot run one with
-    # nobody asked (the reason is on GITHUB_READ_TOOLS above).
+    # GitHub reads and the four small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03: "Read + actions", and the one CREATE of
+    # 2026-11-09). Every one of the seven asks a person: `github_inspect`'s tier
+    # is "ask" in the shipped config, and all seven are in NEEDS_A_PERSON, so a
+    # loosened tier still cannot run one with nobody asked (the reason is on
+    # GITHUB_READ_TOOLS above).
     #
     # The lookup names are the TOOL names: github-tools.patch registers each one
     # in the gate's `_TOOL_ACTIONS` against the action it is decided under, so
@@ -5075,6 +5086,26 @@ TOOLS: dict = {
             "run_id": {"type": "string", "description": "the workflow run's number"}},
          "required": ["repo", "run_id"]},
         _prepare_github_rerun_workflow, _run_github),
+    # ONE new, empty repository on the owner's own account (2026-11-09, the
+    # owner's "create a repository called Fitness Band"). A card first, always:
+    # it is a write on GitHub in the owner's name that Jarvis cannot undo.
+    "github_create_repo": Tool(
+        "github_create_repo",
+        "Create ONE new, EMPTY repository on the owner's own GitHub account, with a "
+        "name and optional description. The owner sees the exact name and whether it "
+        "is private on an approval card first, and nothing is created without their "
+        "yes. Nothing is pushed into it, no code or files are sent, no organization "
+        "is created, and it never merges, pushes, commits, closes or deletes anything.",
+        {"type": "object", "properties": {
+            "name": {"type": "string",
+                     "description": 'the new repository\'s name, e.g. "Fitness-Band" '
+                                    "(letters, numbers, dot, dash and underscore; no spaces)"},
+            "description": {"type": "string",
+                            "description": "a short description; may be left out"},
+            "private": {"type": "boolean",
+                        "description": "true for a private repository; default false"}},
+         "required": ["name"]},
+        _prepare_github_create_repo, _run_github),
     # Web search (jarvis_search.py; the owner's decisions of 2026-09-25): the
     # provider the owner chose - SearXNG on this PC by default - and never
     # another one quietly. Handled by _web_search_call, not the generic path:
@@ -6103,8 +6134,9 @@ def _github_search_action_name() -> str:
 #: NOTE_WRITES below).
 NEEDS_A_PERSON = {
     "github_search": "sends a search term to GitHub",
-    # GitHub reads and the three small GitHub actions (jarvis_github.py, the
-    # owner's decision of 2026-11-03). The READS are here for the same reason
+    # GitHub reads and the four small GitHub actions (jarvis_github.py, the
+    # owner's decision of 2026-11-03, plus the one CREATE of 2026-11-09). The
+    # READS are here for the same reason
     # `github_search` above is: a read sends the owner's own GitHub token to
     # api.github.com on a fixed address, so it is egress with a credential
     # attached, and "it is only a read" is not a reason to spend a credential
@@ -6120,6 +6152,8 @@ NEEDS_A_PERSON = {
     "github_open_issue": "opens a new issue on GitHub in the owner's name",
     "github_rerun_workflow": "starts a CI run on GitHub, which spends the work of running "
                              "the checks again",
+    "github_create_repo": "creates a new repository on GitHub in the owner's name, which "
+                          "Jarvis cannot delete afterwards",
     "browser_control": "drives a web page, which nearly always sends something",
     "control_computer": "clicks and types in another program, which can press Send",
     "control_phone": "taps on the phone, which can send a message or pay for something",
@@ -10079,14 +10113,15 @@ TOOL_GROUPS = (
     # this file may do it. `jarvis_quick.py` raises the same card with no model.
     ("connect", "connect a calendar or GitHub", (CONNECT_TOOL,)),
     # GitHub: searching it for a library, and (2026-11-03) reading the owner's
-    # own and taking the three small actions. The six joined this group rather
+    # own and taking the small actions. The seven joined this group rather
     # than starting new ones for the reason the propose_plan note below gives: a
     # NEW group name costs tokens in more_tools' own description on every turn,
     # and a group's MEMBERS cost nothing extra there. They belong together
-    # anyway - every one of them is about GitHub, and all six ship switched off.
+    # anyway - every one of them is about GitHub, and all seven ship switched off.
     ("github", "search GitHub for a library, or read your own GitHub and act on it",
      ("github_search", "github_list", "github_read_file", "github_ci_status",
-      "github_comment", "github_open_issue", "github_rerun_workflow")),
+      "github_comment", "github_open_issue", "github_rerun_workflow",
+      "github_create_repo")),
     # Reading ONE web page the owner hands over, out loud (jarvis_readpage.py,
     # 2026-10-05; JARVIS-API section 115) - the same shape as the "send_email"
     # group above: its own name, one member, because both are a single
@@ -10314,9 +10349,10 @@ TOOL_HINTS = {
                         r"\bfirefox\b", r"page element"),
     "github_search": (r"\bgithub\b", r"\blibrary\b", r"\bcrate\b", r"\brepo\b",
                       r"\bpackage\b", r"\bexisting\b"),
-    # Your own GitHub, on demand (2026-11-03). Each of the six has words of its
-    # own so `tool_diet` can tell them apart: `github` alone is on all six, and
-    # the six must not be sent to the model for every GitHub question - the
+    # Your own GitHub, on demand (2026-11-03, plus the one CREATE of 2026-11-09).
+    # Each of the seven has words of its own so `tool_diet` can tell them apart:
+    # `github` alone is on all seven, and the seven must not be sent to the model
+    # for every GitHub question - the
     # other words are what actually narrow it.
     "github_list": (r"\bgithub\b", r"\brepos?\b", r"\bpull requests?\b",
                     r"\bissues?\b", r"\bworkflow runs?\b", r"\bmy repos\b"),
@@ -10329,6 +10365,8 @@ TOOL_HINTS = {
                           r"\bfile\b[\s\S]{0,20}\bbug\b", r"\bnew issue\b"),
     "github_rerun_workflow": (r"\bgithub\b", r"\bre-?run\b", r"\bworkflow\b",
                               r"\bci\b", r"\bagain\b"),
+    "github_create_repo": (r"\bgithub\b", r"\brepos?(?:itory|itories)?\b",
+                           r"\bcreate\b", r"\bmake\b", r"\bnew\b", r"\bproject\b"),
     "web_search": (r"\bweb\b", r"\binternet\b", r"\bonline\b", r"\blatest\b", r"\bnews\b",
                    r"\bcurrent\b", r"\bweather\b", r"\bforecast\b", r"\brain\b", r"who is"),
     "read_web_page": (r"web ?page", r"\burl\b", r"https?://", r"\blink\b", r"\barticle\b"),

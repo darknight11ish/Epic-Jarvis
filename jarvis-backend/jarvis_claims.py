@@ -246,13 +246,14 @@ ACTING_TOOLS = frozenset({
     # after ONE card, and remove deletes exactly the files its ledger recorded -
     # both change this PC, so "nothing was done" after one must be corrected.
     "pack_install", "pack_remove",
-    # The three GitHub ACTIONS (2026-11-03): each one changes something on
-    # GitHub in the owner's name, and none of it can be taken back by Jarvis.
-    # "I posted the comment" / "I opened the issue" / "I re-ran it" must be
-    # corrected when only the card was raised or the POST failed - exactly the
-    # reason `send_email` is in this set. The three GitHub READS are in
-    # READ_ONLY_TOOLS above.
+    # The three GitHub ACTIONS (2026-11-03) plus the one CREATE (2026-11-09):
+    # each one changes something on GitHub in the owner's name, and none of it
+    # can be taken back by Jarvis. "I posted the comment" / "I opened the issue"
+    # / "I re-ran it" / "I created the repository" must be corrected when only
+    # the card was raised or the POST failed - exactly the reason `send_email`
+    # is in this set. The three GitHub READS are in READ_ONLY_TOOLS above.
     "github_comment", "github_open_issue", "github_rerun_workflow",
+    "github_create_repo",
     # "rea_investigate" (2026-11-04, the owner's decision to ship the full
     # REA toolbox): it left READ_ONLY_TOOLS for the reason written there - the
     # full toolbox patches a local file, writes an exported bundle or a pulled

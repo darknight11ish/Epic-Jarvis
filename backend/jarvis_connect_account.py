@@ -230,15 +230,15 @@ SERVICES: "collections.OrderedDict[str, Service]" = collections.OrderedDict([
             kind="token",
             hint=("On github.com: Settings, Developer settings, Personal access tokens, "
                   "then create one. A read-only token is enough to read private "
-                  "repositories, CI and a file; commenting, opening an issue and "
-                  "re-running a workflow need a token allowed to write issues and "
-                  "actions."),
+                  "repositories, CI and a file; commenting, opening an issue, "
+                  "re-running a workflow and creating a repository need a token "
+                  "allowed to write issues, actions and repositories."),
         ),),
         summary=("Jarvis uses this token for GitHub searches, private repositories and "
                  "CI watches - and, when the GitHub tools are switched on, to read your "
                  "repositories, pull requests, issues, CI and a file, comment, open an "
-                 "issue and re-run a workflow, each on its own card. It is sent to "
-                 "api.github.com and nowhere else."),
+                 "issue, re-run a workflow and create one new empty repository, each on "
+                 "its own card. It is sent to api.github.com and nowhere else."),
         note=("The token is handled like a password: typed here, on this PC, and kept "
               "in Windows Credential Manager - never in the chat."),
         how="Say \"connect GitHub\" and one card appears for a personal access token.",

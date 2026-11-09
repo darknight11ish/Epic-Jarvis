@@ -765,6 +765,17 @@
        "windows_hello": false
       },
       {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
+       "windows_hello": false
+      },
+      {
        "action": "support_chat",
        "confirmations": 1,
        "fixed": false,
@@ -1830,6 +1841,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -2306,6 +2318,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -3193,6 +3213,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -4261,6 +4292,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -4737,6 +4769,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -5621,6 +5661,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -6688,6 +6739,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -7164,6 +7216,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -8043,6 +8103,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -9110,6 +9181,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -9586,6 +9658,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -10470,6 +10550,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -11552,6 +11643,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -12028,6 +12120,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -12908,6 +13008,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -13985,6 +14096,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -14461,6 +14573,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -15336,6 +15456,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -16403,6 +16534,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -16879,6 +17011,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -17770,6 +17910,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -18838,6 +18989,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -19314,6 +19466,14 @@
       "last": null,
       "on": false,
       "title": "Running a GitHub workflow again (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
       "waiting": false
      },
      {
@@ -20198,6 +20358,17 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run a GitHub workflow again",
+       "windows_hello": false
+      },
+      {
+       "action": "github_create_repo",
+       "confirmations": 1,
+       "fixed": false,
+       "id": "github_create_repo",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Create a new repository on your GitHub",
        "windows_hello": false
       },
       {
@@ -21265,6 +21436,7 @@
        "github_comment",
        "github_open_issue",
        "github_rerun_workflow",
+       "github_create_repo",
        "approval_policy"
       ],
       "title": "Jarvis's own tools"
@@ -21745,6 +21917,14 @@
      },
      {
       "group": "Jarvis's own tools",
+      "id": "github_create_repo",
+      "last": null,
+      "on": false,
+      "title": "Creating one new empty repository on your GitHub (one card each)",
+      "waiting": false
+     },
+     {
+      "group": "Jarvis's own tools",
       "id": "approval_policy",
       "last": null,
       "on": false,
@@ -21955,6 +22135,7 @@
   "github_comment",
   "github_open_issue",
   "github_rerun_workflow",
+  "github_create_repo",
   "approval_policy"
  ],
  "words": {

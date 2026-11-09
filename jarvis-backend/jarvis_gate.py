@@ -3030,6 +3030,11 @@ _TOOL_ACTIONS.update({
     "github_comment": "github_comment",
     "github_open_issue": "github_open_issue",
     "github_rerun_workflow": "github_rerun_workflow",
+    # The one CREATE (2026-11-09, the owner's "create a repository called
+    # Fitness Band"): one new, empty repository on his own account. Its own
+    # action, so its card says "create a repository" rather than reading as
+    # "open an issue".
+    "github_create_repo": "github_create_repo",
 })
 _RISK.update({
     # Reading only. Reversible "yes" and reach "outbound" is the same pair
@@ -3045,6 +3050,10 @@ _RISK.update({
     # has started cannot be taken back. Calling that reversible would be a
     # promise this file cannot keep.
     "github_rerun_workflow": ("no", "outbound", "starts a CI run again with the same code; nothing in the repository changes, but the workflow may deploy or send its own notifications and a started run cannot be taken back"),
+    # Creating a repository (2026-11-09). "no" for the same reason opening an
+    # issue is: Jarvis has no delete action, so a repository it makes cannot be
+    # taken back by it, and nothing is pushed into it.
+    "github_create_repo": ("no", "outbound", "creates a new empty repository on your own GitHub account in your name; Jarvis cannot delete it afterwards and nothing is pushed into it"),
 })
 
 

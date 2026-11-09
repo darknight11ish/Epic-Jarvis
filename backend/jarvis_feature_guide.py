@@ -3944,7 +3944,12 @@ def abilities_directory() -> list:
 # These four facts are about how Jarvis talks about itself, not new features,
 # so they live here and are held by `backend/test_self_answers.py`.
 SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history",
-                 "github_connect", "model_benchmarks")
+                 "github_connect", "model_benchmarks",
+                 # The owner's 2026-11-09 report: Jarvis denied web browsing while
+                 # web search was ON, and answered "I cannot create a repository"
+                 # to "create a repository called Fitness Band". Four different
+                 # things reach the internet, and the model conflated them.
+                 "internet_access")
 
 SELF_FACTS = {
     "approval_policy": {
@@ -4026,18 +4031,20 @@ SELF_FACTS = {
                    "GitHub account and nothing more. A saved token lets Jarvis search "
                    "GitHub, see private repositories and watch CI. With the GitHub tools "
                    "switched on it can also read your repositories, pull requests, issues, "
-                   "CI status and one file, comment, open an issue and re-run a workflow - "
-                   "each on its own approval card. It can NEVER clone, push or pull code, "
-                   "and never merge, commit, close or delete anything: there is no action, "
-                   "card or endpoint for those."),
+                   "CI status and one file, comment, open an issue, re-run a workflow and "
+                   "create one new empty repository on your own account - each on its own "
+                   "approval card. It can NEVER clone, push or pull code, and never merge, "
+                   "commit, close or delete anything: there is no action, card or endpoint "
+                   "for those."),
         "sentence": ("A GitHub token saved on the connect card is tested once with one "
                      "GitHub request - that proves the token identifies your GitHub "
                      "account, nothing more. It lets me search GitHub, see private "
                      "repositories and watch CI. With the GitHub tools switched on I can "
                      "also read your repositories, pull requests, issues, CI status and "
-                     "one file, comment, open an issue and re-run a workflow - each on "
-                     "its own approval card. I can never clone, push or pull code, and "
-                     "never merge, commit, close or delete anything."),
+                     "one file, comment, open an issue, re-run a workflow and create one "
+                     "new empty repository on your own account - each on its own approval "
+                     "card. I can never clone, push or pull code, and never merge, commit, "
+                     "close or delete anything."),
         # The capability half alone, for the deterministic chat answer after a
         # connect-card save: short, and the same words as `sentence`'s second
         # half. One source of truth for both.
@@ -4047,7 +4054,8 @@ SELF_FACTS = {
         "short": ("It lets me search GitHub, see private repositories and watch CI; "
                   "with the GitHub tools switched on, it can also read your "
                   "repositories, pull requests, issues, CI status and one file, "
-                  "comment, open an issue and re-run a workflow - each on its own "
+                  "comment, open an issue, re-run a workflow and create one new empty "
+                  "repository on your own account - each on its own "
                   "approval card. I never copy a repository to this PC, send code "
                   "back to GitHub, or change code in any way: there is no action, "
                   "card or endpoint for that, and no merge action or merge card "
@@ -4061,7 +4069,8 @@ SELF_FACTS = {
                   "saved token does let me do: search GitHub, see private repositories "
                   "and watch CI; and with the GitHub tools switched on, read your "
                   "repositories, pull requests, issues, CI status and one file, comment, "
-                  "open an issue and re-run a workflow - each on its own approval card. "
+                  "open an issue, re-run a workflow and create one new empty repository "
+                  "on your own account - each on its own approval card. "
                   "There is no merge action and no merge card at all."),
     },
     # THE OWNER'S 2026-11-08 ASK: "talk about the local AI models - what has
@@ -4103,6 +4112,44 @@ SELF_FACTS = {
                      "are kept in Brain, Model, Models. Ask \"what did you use "
                      "before?\" and I read the change journal - with nothing "
                      "recorded I say so instead of guessing."),
+    },
+    # THE OWNER'S 2026-11-09 REPORT, added 2026-11-09. He asked why Jarvis denied
+    # web browsing while `web_search` was ON, and asked it to create a repository
+    # called "Fitness Band". Both were factual self-description faults: FOUR
+    # different things leave this PC for the internet, each with its own switch
+    # and its own card, and the model answered as if "the web" were one thing.
+    # `jarvis_quick.py` answers the same question deterministically from
+    # `jarvis_reach.view()` and the GitHub modules, so the words here are the
+    # bounded digest the model's own `self_portrait` carries - one source, two
+    # readers. Read-only: no state is read here.
+    "internet_access": {
+        "family": "internet_access",
+        "digest": ("Four SEPARATE things reach the internet, and one being on never "
+                   "turns another on: (a) web search - the search words go to a search "
+                   "engine and titles/snippets come back, switched in Settings, Web "
+                   "search and by the web_search tool row; (b) reading one web page - "
+                   "its own tool that fetches the ONE address on its card and nothing "
+                   "else; (c) browser control - a real browser tab being clicked and "
+                   "typed in, which needs its own switch and the second card's browser "
+                   "lane or the windowless browser; (d) the GitHub integration - a saved "
+                   "token plus its own tools, each use on its own card. A refusal must "
+                   "name WHICH of the four is off and what turns it on; never say 'I "
+                   "cannot browse the web' when web search is on, and never say a "
+                   "switch is on without reading it."),
+        "sentence": ("Four separate things reach the internet, and turning on one never "
+                     "turns on another. Web search sends your search words to a search "
+                     "engine and brings back titles and snippets - it is switched in "
+                     "Settings, Web search, and by the web_search row on Settings, What "
+                     "asks first. Reading one web page is a different tool: it fetches "
+                     "the one address shown on its card, once, and never a link on the "
+                     "page. Browser control is different again: it works a real page by "
+                     "clicking and typing in one tab, and it needs its own switch in "
+                     "Settings, What asks first, plus the second graphics card's browser "
+                     "lane or the windowless browser. The GitHub integration is separate "
+                     "from all three: it needs a token saved through the connect card and "
+                     "its own tools switched on, and every GitHub use raises its own card. "
+                     "So \"I cannot browse the web\" is never the whole true answer - the "
+                     "honest answer names which of the four is off and what turns it on."),
     },
 }
 

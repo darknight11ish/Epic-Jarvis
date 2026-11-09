@@ -1574,6 +1574,7 @@ _TOOL_TARGETS = {
     'github_comment': ('the github comment tool', 'github comment tool', 'the github comment', 'github comment'),
     'github_open_issue': ('the github open issue tool', 'github open issue tool', 'the github open issue', 'github open issue'),
     'github_rerun_workflow': ('the github rerun workflow tool', 'github rerun workflow tool', 'the github rerun workflow', 'github rerun workflow'),
+    'github_create_repo': ('the github create repo tool', 'github create repo tool', 'the github create repo', 'github create repo'),
     'approval_policy': ('the approval policy tool', 'approval policy tool', 'the approval policy', 'approval policy'),
     'email_read': ('the email tool', 'email', 'my email'),
 }

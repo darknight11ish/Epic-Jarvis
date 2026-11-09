@@ -37493,7 +37493,7 @@ still asks (a download, `forget_range`, Lockdown off; source pins for the
 live-only modules); a body naming `owner_ui`/`ui_direct` is ignored in both
 directions, and no query or header is read; the tier table still says
 `switch_model = "ask"`; the module is in both SHIPPED lists and the two copies
-are byte-equal. `backend/test_presets_owner_ui.py` keeps section 209's own
+are byte-equal. `backend/test_presets_owner_ui.py` keeps section 212's own
 proof.
 
 
@@ -37700,3 +37700,101 @@ in order:
 Until that lands, **no plug-in is installed by Creator mode, and the card says
 so in the pack manager's own words** - which is the honest smaller slice rather
 than a code-install path nobody has designed.
+
+## 212. The truth about what reaches the web, and one carded `github_create_repo` (2026-11-09)
+
+**The owner's report.** He asked why Jarvis denied web browsing while the `web_search`
+switch was ON, and he asked it to create a repository called "Fitness Band". Both were
+the same fault: four different things leave this PC for the internet, each with its own
+switch, and the answer treated "the web" as one thing. This section records what was
+added to make the answer factual without asking a language model to guess.
+
+**The four things, kept apart on purpose.**
+
+| What | What it really does | What decides it |
+| --- | --- | --- |
+| (a) web search | Sends the search words to a search engine and brings back titles and snippets. | Settings, Web search (`jarvis_search.request_enabled()`), AND the `web_search` row on Settings, What asks first. |
+| (b) reading one web page | Fetches the ONE address shown on its card, once, and never a link on the page. | The `read_web_page` tool row on Settings, What asks first (`jarvis_readpage.py`). |
+| (c) browser control | Works a real page - clicking and typing in one tab. | Its own switch on Settings, What asks first, AND the second graphics card's "Browser control" lane or the windowless browser (Obscura). |
+| (d) the GitHub integration | Reads, comments, opens an issue, re-runs a workflow and creates one new empty repository, each on its own card. | A token saved through the "connect my GitHub" card, AND each of its seven tool rows on Settings, What asks first. |
+
+**Where the deterministic answer lives (no model, no guess).**
+
+- `backend/jarvis_feature_guide.py`'s `SELF_FACTS["internet_access"]` - the ONE source of
+  the fixed words. Its `sentence` is the owner-facing answer; its `digest` is what the
+  model's `self_portrait` tool result carries, so a model turn cannot contradict the
+  fixed answer. It is in `SELF_FACT_IDS`, which is what makes the portrait carry it.
+- `backend/jarvis_quick.py`'s `_INTERNET_ACCESS` grammar and `_run_internet_access()` -
+  whole sentences only, answered from `jarvis_reach.view()` (the same rows both apps draw
+  under "What Jarvis can reach") plus `jarvis_github.connected()` and
+  `jarvis_asks_first.tools_enabled_set()`. The answer says ON or OFF for each of the
+  four and, for an OFF one, quotes that row's own reason and what turns it on. It is in
+  `READ_ONLY_INTENTS`, so "cancel that" cannot undo a question.
+- **Why only the BARE phrase is claimed.** `jarvis_quick.normalise()` strips a leading
+  "can/could/would/will you" before any grammar sees the sentence, so "can you browse the
+  web?" and "browse the web" arrive identically. The bare phrase is the only shape that
+  is a capability question and nothing else, so it is the one claimed. A phrase with a
+  task in it ("browse the web for flights to Rome") deliberately keeps its own path,
+  because that one has something real to do.
+
+**The one CREATE: `github_create_repo`.** A new model tool, `github_create_repo`, decided
+under its own gate action of the same name, shipped `"ask"` in both settings copies and
+listed in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still raises the card.
+
+- It takes a typed `name` (required) and an optional `description` and `private` flag.
+  Nothing else: the request body is built field by field in `jarvis_github.plan_create_repo`,
+  so a model cannot add a team, an organization or a template field, and a list of names
+  is ignored rather than looped over.
+- It POSTs to the fixed `https://api.github.com/user/repos` - "user" is whoever the saved
+  token belongs to, so it can never create a repository in an organization or in somebody
+  else's account.
+- A name must be 1-100 characters of letters, numbers, dot, dash and underscore, and not
+  "." or "..". A name with a space is REFUSED here with the fix in the sentence
+  (`"Fitness Band"` -> `"Fitness-Band"`), never silently rewritten into a different
+  repository name. A description is capped at 350 characters so the card can show it.
+- ONE approval card is raised BEFORE any network call, and it prints the exact name,
+  whether it is private, the description, and the one `POST` address. Nothing is sent
+  until a person says yes; a denial sends nothing at all. One repository per card.
+- On 201 the receipt quotes only what GitHub really answered: `full_name` and `html_url`
+  (and that it is private when GitHub says so). A 201 without those fields says GitHub did
+  not send the repository back rather than inventing a name or an address.
+- On a refusal it quotes **GitHub's own message** (the top-level `message` and each
+  `errors[].message`), scrubbed of the token, then says nothing was created. A 401 adds
+  the "save a new token" sentence after GitHub's own "Bad credentials". There is no
+  silent retry, and there is no HTTP code in the words the owner reads.
+- The token is read from Windows Credential Manager through
+  `jarvis_token_store.resolve_secret` (the same secret the connect card wrote), sent only
+  in the `Authorization` header to `api.github.com`, and never printed in a card, a tool
+  result, a failure sentence or a log line.
+
+**What it still cannot do.** It cannot push anything into the new repository, upload code
+or files, create a branch, delete the repository it created, merge, close or comment in
+the same call. There is one create planner and one create action; nothing here is bulk.
+
+**The phone deliberately gets no screen for it.** The tool works identically from either
+app's chat, and the approval card is answerable on the phone; a name-and-private-flag form
+on the phone would be a second door onto a write that cannot be undone. ARCHITECTURE
+section 8 records that as one-sided on purpose.
+
+**How it is held (hermetic, no network, no real token).**
+
+- `python -B backend/test_github_tools.py` - the card is built and the denial sends
+  nothing; the body is exactly `{name, private, description}`; extra arguments and extra
+  fields are refused or ignored; the token is in no card, receipt or failure and a server
+  that echoes it is scrubbed; a 201 reports GitHub's real full name and address and a 201
+  with no repository in it invents neither; 401 and 422 quote GitHub's own message with no
+  token and no HTTP code; every tier is `"ask"`, every table a new tool must join carries
+  it, and there is exactly one create planner.
+- `python -B backend/test_web_access_truth.py` - the four questions route to the fixed
+  answer (not the model), the answer names all four as separate with live ON/OFF state and
+  the OFF rows' own reasons, the GitHub half reads the token state and the tool count, the
+  fixed words are the model's own digest, "create a repository called Fitness Band" is
+  NOT claimed as a capability answer (it must reach the model, which calls the tool), and
+  the intent is read-only.
+
+**NOT-TESTABLE here, said plainly.** Nothing in this repository made a real GitHub call:
+every test drives the module through the injected `fetch` seam with a fake transport and a
+fake token. The first real `POST /user/repos` with the owner's own token, the real 201
+body, GitHub's real refusal for a name that is already taken, and whether his token has
+the `repo`/`public_repo` permission the create needs are only provable on his PC, with his
+token, once he asks for a repository. That is a field-test row, never a pass.

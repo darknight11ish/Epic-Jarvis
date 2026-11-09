@@ -1344,6 +1344,10 @@
      "name": "Running a GitHub workflow again (one card each)"
     },
     {
+     "id": "github_create_repo",
+     "name": "Creating one new empty repository on your GitHub (one card each)"
+    },
+    {
      "id": "web_search",
      "name": "Web search"
     },

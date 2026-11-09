@@ -240,19 +240,26 @@ github_read               = "auto"
 #
 # All four are also in `jarvis_agent.NEEDS_A_PERSON`, so an owner who loosens a
 # line below still gets a card: the config says how much Jarvis asks, and that
-# set says a read like this is never done with nobody asked. The three actions
+# set says a read like this is never done with nobody asked. The four actions
 # cannot be "auto" in any case - `github_comment` and `github_open_issue` post
-# in the owner's name, which cannot be taken back, and `github_rerun_workflow`
-# spends CI work.
+# in the owner's name, which cannot be taken back, `github_rerun_workflow`
+# spends CI work, and `github_create_repo` makes a repository Jarvis has no
+# delete action for.
 #
 # These tools ship SWITCHED OFF: they are not in [tools].enabled below, exactly
-# like `github_search`. Add the six names (github_list, github_read_file,
-# github_ci_status, github_comment, github_open_issue, github_rerun_workflow) to
-# that list when you want them offered, and save a token with "connect GitHub".
+# like `github_search`. Add the seven names (github_list, github_read_file,
+# github_ci_status, github_comment, github_open_issue, github_rerun_workflow,
+# github_create_repo) to that list when you want them offered, and save a token
+# with "connect GitHub".
 github_inspect            = "ask"
 github_comment            = "ask"
 github_open_issue         = "ask"
 github_rerun_workflow     = "ask"
+# Creating ONE new, empty repository on the owner's own account (2026-11-09,
+# the owner's "create a repository called Fitness Band"). "ask", never "auto":
+# it is a write on GitHub in the owner's name that Jarvis cannot undo, and it
+# is also in NEEDS_A_PERSON so a loosened line still raises its card.
+github_create_repo        = "ask"
 # Reading files: the file_read tool, and since 2026-09-26 the my_files tool
 # too (finding, searching and reading files ONLY in "Folders Jarvis may look
 # in", which is empty until you add a folder on the PC with an approval
