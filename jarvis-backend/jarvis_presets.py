@@ -1187,29 +1187,42 @@ def lane_num_ctx(url) -> Optional[int]:
     return pooled_num_ctx()
 
 
+def _bare_model(model) -> str:
+    """A model name without the ":latest" tag Ollama adds for itself.
+
+    Measured on the live install, 2026-11-09 (Q6b defect): `/api/ps` reported the
+    pooled 30B as `qwen3-coder-30b-a3b-ud-q3-k-xl:latest`, the exact-name compare
+    below did not recognise it, and the everyday lane warmed a second copy of the
+    30B (74% on card / 26% on CPU - the copy the owner photographed).
+    """
+    x = str(model or "").strip()
+    return x[:-7] if x.endswith(":latest") else x
+
+
 def is_pooled_model(model) -> bool:
     """Is `model` a pooled-lane (three-card) model name? Never a 11436 client.
 
     Q6 (2026-11-08): the everyday lane must never be asked to load one of these
     - the 30B model cannot fit one card, and loading it there is the duplicate
-    copy (74% GPU / 26% CPU) the owner photographed.
+    copy (74% GPU / 26% CPU) the owner photographed. The comparison strips the
+    ":latest" tag Ollama reports (Q6b, measured live 2026-11-09).
     """
-    name = str(model or "").strip()
+    name = _bare_model(model)
     if not name:
         return False
     try:
         import jarvis_big_coder as big
-        if str(getattr(big, "MODEL", "") or "").strip() == name:
+        if _bare_model(getattr(big, "MODEL", "")) == name:
             return True
         for key in getattr(big, "MODES", ()) or ():
             profile = big.MODES[key] if isinstance(big.MODES, dict) else key
-            if str(getattr(profile, "model", "") or "").strip() == name:
+            if _bare_model(getattr(profile, "model", "")) == name:
                 return True
     except Exception:
         pass
     try:
         import jarvis_model_lanes as lanes
-        if str(getattr(lanes, "POOLED_MODEL", "") or "").strip() == name:
+        if _bare_model(getattr(lanes, "POOLED_MODEL", "")) == name:
             return True
     except Exception:
         pass

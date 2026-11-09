@@ -223,6 +223,23 @@ def the_warm_never_loads_the_pooled_model_on_the_everyday_lane() -> None:
               and seen[-1][1] == EVERYDAY, seen)
     finally:
         _restore(real)
+
+    # (d) DEF measured on the live install, 2026-11-09: Ollama's own /api/ps
+    # reports the model with a ":latest" tag, and the exact-name compare let it
+    # past the guard - the 30B really was loaded on 11436 at 74% on card.
+    seen, real = _warm_harness()
+    try:
+        check("Q6d: is_pooled_model knows the :latest tag Ollama reports",
+              P.is_pooled_model(POOLED_MODEL + ":latest") is True)
+        _lane(EVERYDAY)
+        got = AG.warm_everyday(model=POOLED_MODEL + ":latest")
+        check("Q6d: the tagged pooled 30B is never warmed on the everyday lane",
+              got is False and seen == [], (got, seen))
+        got = AG.warm_everyday(model=POOLED_MODEL)
+        check("Q6d: ... and the untagged name is still refused too",
+              got is False and seen == [], (got, seen))
+    finally:
+        _restore(real)
     LANE_FILE.unlink(missing_ok=True)
 
 
