@@ -81,7 +81,7 @@ pub(crate) const LOCKDOWN: &str = "lockdown";
 /// The tools that may be OFFERED to the AI model at all from
 /// this app - `jarvis_asks_first.TOOLS_SWITCHABLE`, word for word. 61 at
 /// 2026-11-09 (60 at 2026-11-05; Wave 13 added the carded repository create)
-    /// was 48 at 2026-11-04, plus the six on-demand GitHub tools then, the four
+/// was 48 at 2026-11-04, plus the six on-demand GitHub tools then, the four
 /// pack-manager tools that ship ON, hands-free's send_text_message and the
 /// approval-policy tool's own row): the
 /// owner's decision of 2026-11-04 made EVERY tool the AI model can be offered
