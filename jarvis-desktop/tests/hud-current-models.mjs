@@ -38,7 +38,14 @@
  *      the only `/api/` it names, there is no `invoke(`/POST in it, and Rust's
  *      fixed list gains `/api/models` while every model WRITE stays refused;
  *   7. the three served copies of the page and of hud-presets.js are
- *      byte-identical.
+ *      byte-identical;
+ *   8. THE CHIP IS THE MODEL IN USE, NOT THE PC'S DEFAULT (the owner's field
+ *      bug, 2026-11-08 19:05 PT): the page's own `modelInUse` rule and its
+ *      quick-turn chip guard are extracted from the shipped page and run here
+ *      with fake state, so a chosen focus preset's model is what boot paints,
+ *      and a quick "no AI model" turn cannot erase it. The panel's own words
+ *      are checked against the same field evidence: the model answering leads,
+ *      and the PC's default is named only AS the default.
  *
  * NOT here: the real desktop window and WebView2 painting (a rebuild+install is
  * needed after merge), and the real PC's `/api/models` body - that is
@@ -57,6 +64,10 @@ const ROOT = join(HERE, "..", "..");
 const SRC = join(HERE, "..", "src");
 const read = (path) => readFileSync(path, "utf8");
 const page = read(join(SRC, "jarvis_hud.html"));
+// The assertion targets are about the page's LINES, not its checkout's line
+// endings: a Windows working tree may hold CRLF where the committed file is
+// LF, so the shipped source is read here in its committed shape.
+const pageLf = page.replace(/\r\n/g, "\n");
 const presetsSrc = read(join(SRC, "hud-presets.js"));
 const rust = read(join(HERE, "..", "src-tauri", "src", "hud_proxy.rs"));
 const bootstrap = read(join(HERE, "..", "src-tauri", "src", "hud_bootstrap.js"));
@@ -402,6 +413,118 @@ await check("the page and hud-presets.js are byte-identical in all three served 
     assert.equal(new Set(hashes).size, 1,
       `${name} differs across ${places.join(", ")}: ${hashes.map((h) => h.slice(0, 8)).join(" ")}`);
   }
+});
+
+/* ── 8. The chip shows the model in use, never the default alone ─────────── *
+ *
+ * THE OWNER'S FIELD BUG (2026-11-08, ~19:05 PT). The top-right chip read
+ * Qwen3.5:9b while the Current Models panel said the Coding preset's
+ * qwen3-coder-30b-a3b-ud-q3-k-xl was answering, and the chip's door promises
+ * "what Jarvis is using and has loaded". Boot painted the chip from
+ * /api/status's default_model alone, and nothing repainted it until a chat
+ * turn's route or a preset apply - so a chosen preset could never show.
+ */
+
+/** The shipped rule, executed: the page's own modelInUse() with a fake S. */
+function shippedModelInUse() {
+  const match = /\nfunction modelInUse\(\)\{([\s\S]*?)\n\}/.exec(pageLf);
+  assert.ok(match, "the page has no modelInUse() rule");
+  return new Function("S", match[1]);
+}
+
+/** The shipped quick-turn guard, executed: what a turn's route may paint. */
+function shippedChipFromRoute() {
+  const match = /const quickTurn = ([\s\S]*?);\n\s*const laneWords = ([\s\S]*?);\n\s*const noModelWords = ([\s\S]*?);\n\s*if\(!quickTurn && laneWords && !noModelWords\)\{\n\s*\$\(\"chip-model\"\)\.textContent = laneWords;/
+    .exec(pageLf);
+  assert.ok(match, "the quick-turn chip guard is gone from the turn handler");
+  return new Function("route",
+    `const quickTurn = ${match[1]}; const laneWords = ${match[2]};`
+    + ` const noModelWords = ${match[3]};`
+    + 'if(!quickTurn && laneWords && !noModelWords){ return laneWords; } return null;');
+}
+
+await check("boot paints the chosen preset's model, and the plain default only when none is chosen", () => {
+  const modelInUse = shippedModelInUse();
+  // The field evidence, exactly: the Coding preset runs its coder model, and
+  // the PC's default is a different model.
+  assert.equal(
+    modelInUse({ presetModel: "qwen3-coder-30b-a3b-ud-q3-k-xl", defaultModel: "qwen3.5:9b" }),
+    "qwen3-coder-30b-a3b-ud-q3-k-xl",
+    "the chip rule still prefers the PC's default over the chosen preset's model");
+  assert.equal(modelInUse({ presetModel: "", defaultModel: "qwen3.5:9b" }), "qwen3.5:9b",
+    "with no preset chosen the default model is not what the chip says");
+  assert.equal(modelInUse({ presetModel: "", defaultModel: "" }), "local model",
+    "with no model read yet the chip claims a model it does not have");
+  // Boot uses that one painter, and repaints when the chosen preset's own read
+  // lands; the old "chip = the default" line is the bug and is gone.
+  assert.ok(pageLf.includes("  paintModelInUse();\n  // Its own read; it paints when it lands"),
+    "boot does not paint the chip from the model in use");
+  assert.ok(pageLf.includes('loadPresets().then(() => { if(S.lane === "auto") paintModelInUse(); });'),
+    "the chosen preset's model never replaces the first paint once its read lands");
+  assert.equal(/\$\("chip-model"\)\.textContent = S\.defaultModel;/.test(pageLf), false,
+    "boot still paints the chip from the default model alone");
+  // A lane the owner already picked here is not overwritten by a late read.
+  assert.ok(pageLf.includes('if(S.lane === "auto") paintModelInUse()'),
+    "a late preset read can overwrite the lane the owner picked");
+  // The painter is the one place: it writes the model and drops the cloud mark.
+  const painter = /function paintModelInUse\(\)\{([\s\S]*?)\n\}/.exec(pageLf);
+  assert.ok(painter, "the page has no paintModelInUse()");
+  assert.match(painter[1], /el\.textContent = modelInUse\(\);/,
+    "the painter does not use the one model-in-use rule");
+  assert.match(painter[1], /el\.classList\.remove\("hot"\);/,
+    "an on-PC model keeps the cloud (gold) mark");
+});
+
+await check('a quick "no AI model" turn does not wipe the chip', () => {
+  const chipFromRoute = shippedChipFromRoute();
+  // An ordinary routed answer DOES show the model that really answered it.
+  assert.equal(chipFromRoute({ lane: "qwen3.5:9b" }), "qwen3.5:9b");
+  // A quick-path turn is made with no model at all (jarvis_quick.LANE is the
+  // literal "no AI model"), and the owner's 2026-10-29 field bug was the chip
+  // then reading NO AI MODEL while the model was up. It must not paint at all.
+  assert.equal(chipFromRoute({ quick: "settings", lane: "no AI model" }), null,
+    "a quick turn still repaints the chip");
+  assert.equal(chipFromRoute({ quick: "time", lane: "" }), null,
+    "a quick turn with no lane still repaints the chip");
+  // ...and a non-quick turn whose lane literally says it is the same case.
+  assert.equal(chipFromRoute({ lane: "no AI model" }), null,
+    "the literal no-AI-model lane still wipes the chip");
+  assert.ok(pageLf.includes("if(!quickTurn && laneWords && !noModelWords){"),
+    "the quick/no-model guard is gone - a quick turn would wipe the chip");
+  // So the preset model painted at boot survives the quick turn.
+  assert.equal(shippedModelInUse()({ presetModel: "qwen3-coder-30b-a3b-ud-q3-k-xl",
+    defaultModel: "qwen3.5:9b" }), "qwen3-coder-30b-a3b-ud-q3-k-xl");
+});
+
+await check("the panel still names the PC's default only AS the default (field evidence)", () => {
+  const CODER = "qwen3-coder-30b-a3b-ud-q3-k-xl";
+  const reads = {
+    models: { ok: true, value: {
+      current: CODER,
+      previous: "qwen3.5:9b",
+      installed: [CODER, "qwen3.5:9b"],
+      offload: { available: true, status: "gpu", models: [
+        { name: CODER, size_mb: 19000, vram_mb: 12000, on_gpu_percent: 63 },
+      ] },
+    } },
+    status: { ok: true, value: { ollama: true, default_model: "qwen3.5:9b", lanes: [] } },
+    presets: { ok: true, value: { available: true, chosen_preset: "coding",
+      chosen_model: CODER,
+      presets: [{ id: "coding", title: "Coding", model: CODER }] } },
+  };
+  const words = P.currentModelsWords(reads);
+  assert.equal(words.answering[0].text, CODER,
+    "the panel does not lead with the model actually answering");
+  assert.equal(words.answering[0].dim, false);
+  assert.deepEqual(words.focus.map((l) => l.text),
+    [`Chosen focus preset: Coding (${CODER})`]);
+  const defaultLine = words.answering.find((l) => /default model/.test(l.text));
+  assert.ok(defaultLine, "the panel stopped naming the PC's default at all");
+  assert.equal(defaultLine.text, "The PC's default model is qwen3.5:9b.",
+    "the default is not named as the DEFAULT");
+  assert.equal(defaultLine.dim, true, "the default line is not the grey aside");
+  assert.notEqual(words.answering[0].text, "qwen3.5:9b",
+    "the panel led with the default model while another one was answering");
 });
 
 console.log(fails ? `\n${fails} failed` : `\nall ${passed} Current Models checks passed`);

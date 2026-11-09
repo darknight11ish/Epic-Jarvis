@@ -7925,6 +7925,30 @@ function publishSafetyFacts(st){
   try{ window.dispatchEvent(new CustomEvent("jarvis-latch-status", { detail: facts })); }catch(e){}
 }
 
+/** The model Jarvis is USING, in plain words: the chosen focus preset's own
+ *  model when the PC says one is chosen (Coding runs its coder model), else the
+ *  PC's default model. Empty until a read lands.
+ *
+ *  THE OWNER'S FIELD BUG (2026-11-08, 19:05 PT): the chip read Qwen3.5:9b while
+ *  its own Current Models panel said the Coding preset's qwen3-coder was
+ *  answering. The chip's door promises "what Jarvis is using and has loaded",
+ *  and boot used to paint it from /api/status's default_model alone, so a
+ *  chosen preset could never show. The panel was right; the chip was not. */
+function modelInUse(){
+  return S.presetModel || S.defaultModel || "local model";
+}
+
+/** Paint the top-right chip from the model in use (never from the default
+ *  alone). The gold "hot" mark belongs to a cloud turn, so an on-PC model
+ *  removes it. A quick "no AI model" turn never calls this - the turn handler
+ *  keeps the chip rather than erasing it (the 2026-10-29 field bug). */
+function paintModelInUse(){
+  const el = $("chip-model");
+  if(!el) return;
+  el.textContent = modelInUse();
+  el.classList.remove("hot");
+}
+
 async function boot(){
   setView("talk");
 
@@ -7991,9 +8015,12 @@ async function boot(){
   renderLanes();
   renderPresets();
   paintCloud();
+  // The chip is what Jarvis is USING, not the PC's default. The preset read is
+  // its own and async, so paint the honest best answer now and correct it when
+  // the PC's chosen preset lands; a lane the owner picked here stays theirs.
+  paintModelInUse();
   // Its own read; it paints when it lands and says plainly if it cannot.
-  loadPresets();
-  $("chip-model").textContent = S.defaultModel;
+  loadPresets().then(() => { if(S.lane === "auto") paintModelInUse(); });
   reactor.set("idle");
   paintHost();
 
