@@ -47,6 +47,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -78,6 +79,33 @@ require_shipped("jarvis_feedback.py")
 import jarvis_feedback as F  # noqa: E402
 
 PASSED, FAILED, SKIPPED = [], [], []
+
+
+def _agent_probe(assertions: str):
+    """Run `import jarvis_agent` in a CLEAN interpreter, then let [assertions]
+    observe the real import and its real model-facing prompt there.
+
+    BEHAVIOUR, NOT SOURCE TEXT (Wave 10, the source-pin audit). The old checks
+    on this page read `jarvis_agent.py` as text and matched module names: that
+    goes red when the file is reformatted or a helper is renamed, and stays
+    green when the agent imports the same module through a different path. This
+    runs the agent's own import graph in a fresh process and looks at what it
+    actually pulled in, which cannot be fooled by spelling.
+
+    Returns the finished process: returncode 0 is the pass, stderr says what
+    went wrong. `HERE` is on PYTHONPATH so the agent under test is this tree's.
+    """
+    code = "import sys\nimport jarvis_agent as AG\n" + assertions
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(HERE), env.get("PYTHONPATH", "")]).strip(os.pathsep)
+    return subprocess.run([sys.executable, "-c", code], cwd=str(HERE),
+                          env=env, capture_output=True, text=True, timeout=180)
+
+
+def _probe_detail(proc) -> str:
+    """The one line worth printing when a probe fails (its last assertion)."""
+    return (proc.stderr or proc.stdout).strip()[-400:]
 
 
 def check(name, cond, detail=""):
@@ -493,14 +521,29 @@ def t_manner_and_privacy_notes_change_no_memory():
 
 def t_the_model_can_never_read_or_write_these():
     src = Path(F.__file__).read_text(encoding="utf-8")
-    agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
-    check("the model's tool loop never names this module",
-          "jarvis_feedback" not in agent)
-    check("...nor the feedback route, reason tags or correction columns",
-          all(x not in agent for x in ("/api/feedback", "wrong_fact",
-                                       "feedback_correction", "correction_saved")))
-    check("...nor the review-queue source these cards use",
-          "feedback_retire" not in agent)
+    # BEHAVIOUR (Wave 10 source-pin audit): the model's tool loop must not
+    # reach this module. Two clean-interpreter probes replace the text greps:
+    # one observes the agent's REAL import graph, the other builds the REAL
+    # model-facing prompt and asserts none of these words reached it. A text
+    # match could not tell a renamed import in a comment from a real call.
+    import_probe = _agent_probe(
+        "assert 'jarvis_feedback' not in sys.modules, "
+        "'jarvis_agent imported the feedback module'")
+    check("the model's tool loop never names or imports this module",
+          import_probe.returncode == 0, _probe_detail(import_probe))
+    words_probe = _agent_probe(
+        "msgs = AG.with_rules_first([{'role': 'user', "
+        "'content': 'mark that answer wrong'}])\n"
+        "text = '\\n'.join(str(m.get('content') or '') "
+        "for m in AG.messages_for_model(msgs))\n"
+        "for word in ('/api/feedback', 'wrong_fact', 'feedback_correction', "
+        "'correction_saved', 'feedback_retire'):\n"
+        "    assert word not in text, 'the model prompt carries ' + word\n"
+        "assert not any('feedback' in name.lower() for name in dir(AG)), "
+        "'the agent exposes a feedback name'")
+    check("...nor the feedback route, reason tags, correction columns or "
+          "review-queue source (the real model-facing prompt)",
+          words_probe.returncode == 0, _probe_detail(words_probe))
     import ast
     mods = set()
     for n in ast.walk(ast.parse(src)):

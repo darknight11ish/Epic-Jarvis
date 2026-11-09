@@ -63,6 +63,7 @@ catalogue, a made-up scheduler and a temp config dir.
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import tempfile
 import traceback
@@ -82,6 +83,33 @@ import jarvis_quick as Q  # noqa: E402
 FAILED, PASSED = [], []
 BY_ID = {str(row.get("id") or ""): row for row in C.FEATURES}
 TITLES = tuple(str(row.get("title") or "") for row in C.FEATURES)
+
+
+def _agent_probe(assertions: str):
+    """Run `import jarvis_agent` in a CLEAN interpreter, then let [assertions]
+    observe the real import and its real model-facing prompt there.
+
+    BEHAVIOUR, NOT SOURCE TEXT (Wave 10, the source-pin audit). The old checks
+    on this page read `jarvis_agent.py` as text and matched module names: that
+    goes red when the file is reformatted or a helper is renamed, and stays
+    green when the agent imports the same module through a different path. This
+    runs the agent's own import graph in a fresh process and looks at what it
+    actually pulled in, which cannot be fooled by spelling.
+
+    Returns the finished process: returncode 0 is the pass, stderr says what
+    went wrong. `HERE` is on PYTHONPATH so the agent under test is this tree's.
+    """
+    code = "import sys\nimport jarvis_agent as AG\n" + assertions
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(HERE), env.get("PYTHONPATH", "")]).strip(os.pathsep)
+    return subprocess.run([sys.executable, "-c", code], cwd=str(HERE),
+                          env=env, capture_output=True, text=True, timeout=180)
+
+
+def _probe_detail(proc) -> str:
+    """The one line worth printing when a probe fails (its last assertion)."""
+    return (proc.stderr or proc.stdout).strip()[-400:]
 
 
 def check(label: str, ok: bool, detail="") -> None:
@@ -358,10 +386,15 @@ def t_the_model_prompt_does_not_carry_the_catalogue():
           not any(str(row.get("what") or "")[:60] in prompt
                   for row in C.FEATURES if row.get("what")),
           "a row's prose is in the prompt")
-    source = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
+    # BEHAVIOUR (Wave 10 source-pin audit): run the agent's REAL import in a
+    # fresh interpreter and observe its import graph. A text match on
+    # "jarvis_feature_catalogue" went red on a rename and green on a renamed
+    # import; this cannot.
+    probe = _agent_probe(
+        "assert 'jarvis_feature_catalogue' not in sys.modules, "
+        "'jarvis_agent imported the feature catalogue'")
     check("jarvis_agent imports no feature catalogue",
-          "jarvis_feature_catalogue" not in source,
-          "a catalogue import appeared in jarvis_agent")
+          probe.returncode == 0, _probe_detail(probe))
     for row in C.FEATURES[:5]:
         check(f"no row text is sent for a typed question: {row.get('id')}",
               str(row.get("title") or "") not in
