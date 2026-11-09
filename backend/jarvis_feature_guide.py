@@ -3940,7 +3940,7 @@ def abilities_directory() -> list:
 # These four facts are about how Jarvis talks about itself, not new features,
 # so they live here and are held by `backend/test_self_answers.py`.
 SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history",
-                 "github_connect")
+                 "github_connect", "model_benchmarks")
 
 SELF_FACTS = {
     "approval_policy": {
@@ -4059,6 +4059,46 @@ SELF_FACTS = {
                   "repositories, pull requests, issues, CI status and one file, comment, "
                   "open an issue and re-run a workflow - each on its own approval card. "
                   "There is no merge action and no merge card at all."),
+    },
+    # THE OWNER'S 2026-11-08 ASK: "talk about the local AI models - what has
+    # been measured, start Benchmarks, what a better models for the current
+    # Presets, what are the current models for the current Presets". This digest
+    # is what the model's `self_portrait` tool result carries, so a model turn
+    # cannot contradict the deterministic answers or invent a measurement.
+    "model_benchmarks": {
+        "family": "model_benchmarks",
+        "digest": ("You can ask about the local models, all answered on this PC: "
+                   "what has been measured (speed runs and the five suite "
+                   "scorecards, with the date), which model each preset uses, "
+                   "whether a candidate is MEASURED ON THIS PC or only an "
+                   "ESTIMATED FIT (run benchmark to verify), and what model ran "
+                   "before from the change journal. A benchmark is started by "
+                   "asking and uses a throwaway model server on a spare port, "
+                   "never a live lane's own server directly; it may pause the lane "
+                   "it needs and puts the active preset back. No number may be "
+                   "invented, and a model is never called better until a benchmark "
+                   "measured it for that preset."),
+        "sentence": ("Yes. You can talk to me about the local models and I answer "
+                     "from this PC's own records, never the model's memory. Ask "
+                     "\"what has been measured?\" and I read the newest speed runs "
+                     "and the five suite scorecards - speed, coding, general, "
+                     "tool-calling and vision - with their dates. Ask \"what models "
+                     "do the current presets use?\" and I list each preset's model, "
+                     "card and context window. Ask \"what is a better model for the "
+                     "coding preset?\" and I give the current model plus the "
+                     "hardware-aware list's candidates, each labelled MEASURED ON "
+                     "THIS PC or ESTIMATED FIT (run benchmark to verify) - a "
+                     "candidate is never called better until a benchmark measured "
+                     "it for that preset. To start one, say \"start a benchmark\" "
+                     "(the current model's speed) or \"start the benchmark suites\" "
+                     "(all five), or name one like \"benchmark the coding model\": "
+                     "it uses a throwaway model server on a spare port, never your "
+                     "live lane's own server directly, may pause the lane it needs "
+                     "and puts your active preset back afterwards, refuses while I "
+                     "am answering a turn, and only one runs at a time. The results "
+                     "are kept in Brain, Model, Models. Ask \"what did you use "
+                     "before?\" and I read the change journal - with nothing "
+                     "recorded I say so instead of guessing."),
     },
 }
 
