@@ -758,6 +758,7 @@ def install(source: Path, trust: str = "third_party",
                       "installed": time.time(), "uses": 0,
                       "verdict": report["verdict"], "notes": []}
     _write_index(ix)
+    _lock_after_install(skill, report)
     # A pack the pack manager installed keeps a SHA-256 manifest in
     # jarvis-packs.json, and EVERY door that writes a skill's files comes
     # through this function: the pack manager's own install, the Skills
@@ -807,6 +808,7 @@ def uninstall(name: str) -> dict:
     ix = _read_index()
     ix.pop(name, None)
     _write_index(ix)
+    _unlock_after_remove(name)
     try:
         import jarvis_content_risk as _cr
         _cr.unpin("skill", name)
@@ -823,6 +825,57 @@ def _pin_skill(skill: "Skill") -> None:
         _cr.pin("skill", skill.name, _cr.normalise(skill.body).text)
     except Exception:
         pass
+
+
+def _lock_after_install(skill, report) -> None:
+    """Write or refresh this skill's row in `skills.lock` (wired 2026-11-09).
+
+    WHY (Gemini Q3): the lock was built and tested in `jarvis_skill_hub` but
+    nothing in production wrote it - the same built-but-unwired shape DEF-049
+    fixed for the four checks. One row per install / edit / turn-on, carrying
+    the sha256 the install pinned and the scan's verdict and findings
+    (including the four extra checks), so `GET /api/skills/hub/lock` is a real
+    audit record rather than a reader for a file nothing writes.
+
+    Lazy import, like `_extra_findings`: an older base without the hub behaves
+    exactly as before, and a lock write that fails never fails the install -
+    the skill is already copied and indexed, and the lock is a record, not the
+    gate.
+    """
+    try:
+        import jarvis_skill_hub as hub
+    except Exception:                                  # pragma: no cover
+        return
+    try:
+        row = hub.lock_entry(
+            skill.name,
+            sha256_hash=skill.sha256,
+            trust_level=hub.TRUST_FROM_SKILLS.get(skill.trust, "community"),
+            report=report if isinstance(report, dict) else None,
+        )
+        hub.write_lock([row])
+    except Exception:
+        return
+
+
+def _unlock_after_remove(name: str) -> None:
+    """Delete this skill's `skills.lock` row when it is uninstalled (2026-11-09).
+
+    A skill that is gone must not keep a trust record: the lock route would
+    otherwise describe a file that no longer exists. A missing hub or a missing
+    row is not an error - removal must never fail because of a record.
+    """
+    try:
+        import jarvis_skill_hub as hub
+    except Exception:                                  # pragma: no cover
+        return
+    forget = getattr(hub, "forget_lock", None)
+    if forget is None:
+        return
+    try:
+        forget(name)
+    except Exception:
+        return
 
 
 def _skill_drift(skill: "Skill") -> Optional[dict]:

@@ -1199,6 +1199,37 @@ def write_lock(entries, *, skills_dir=None) -> dict:
     return {"ok": True, "written": True, "names": added, "path": str(root / LOCK_NAME)}
 
 
+def forget_lock(name: str, *, skills_dir=None) -> dict:
+    """Delete ONE skill's row from `skills.lock`; the other rows stay.
+
+    Called by `jarvis_skills.uninstall()` (wired 2026-11-09, Gemini Q3): a
+    skill that is gone must not keep a trust record, or `GET /api/skills/hub/lock`
+    would describe a file that no longer exists. Whole-file through a temp file
+    and a rename, like `write_lock`. A missing lock, an unreadable lock or an
+    unknown name is a plain answer, never an exception - removal itself must
+    never fail because a record could not be tidied.
+    """
+    rows = read_lock(skills_dir=skills_dir)
+    key = str(name or "")
+    if key not in rows:
+        return {"ok": False, "removed": False,
+                "reason": "no lock row for that skill"}
+    rows.pop(key, None)
+    root = _root(skills_dir)
+    doc = _lock_shape()
+    doc["skills"] = rows
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        target = root / LOCK_NAME
+        tmp = target.with_name(target.name + ".tmp")
+        tmp.write_text(json.dumps(doc, indent=2, sort_keys=True), encoding="utf-8")
+        os.replace(tmp, target)
+    except Exception as exc:
+        return {"ok": False, "removed": False,
+                "reason": f"could not write the lock ({type(exc).__name__}: {exc})"}
+    return {"ok": True, "removed": True, "name": key}
+
+
 def effective_trust(entry) -> str:
     """How far a lock row may actually be trusted, whatever it says.
 

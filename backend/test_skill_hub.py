@@ -930,9 +930,10 @@ def t_no_skill_the_owner_did_not_see_can_be_saved():
     would be a way around the scanner and the card. Every path in this module
     that writes goes through write_skill(), which is both.
 
-    It writes exactly ONE file of its own now - `skills.lock`, in `write_lock()`
-    - and that is checked here too, by AST, so the lock cannot quietly become a
-    general licence to write whatever it likes.
+    It writes exactly ONE file of its own - `skills.lock` - through TWO named
+    functions: `write_lock()` (install/edit) and `forget_lock()` (uninstall,
+    wired 2026-11-09 under Gemini Q3). That is checked here by AST, so the lock
+    cannot quietly become a general licence to write whatever it likes.
     """
     src = (HERE / "jarvis_skill_hub.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
@@ -945,10 +946,11 @@ def t_no_skill_the_owner_did_not_see_can_be_saved():
         hit = names & {"write_text", "write_bytes", "mkdir", "copytree"}
         if hit:
             writers[node.name] = sorted(hit)
-    check("the only function that writes a file of its own is write_lock()",
-          set(writers) == {"write_lock"}, repr(writers))
-    check("and it writes the lock with write_text()/mkdir() and nothing else",
-          writers.get("write_lock") == ["mkdir", "write_text"], repr(writers))
+    check("the only functions that write a file of their own are the two lock writers",
+          set(writers) == {"write_lock", "forget_lock"}, repr(writers))
+    check("and both write the lock with write_text()/mkdir() and nothing else",
+          writers.get("write_lock") == ["mkdir", "write_text"]
+          and writers.get("forget_lock") == ["mkdir", "write_text"], repr(writers))
     check("no copytree outside jarvis_skills' quarantine anywhere in the module",
           "copytree" not in ast.unparse(tree), "copytree in the module")
     calls = {getattr(n.func, "attr", None)

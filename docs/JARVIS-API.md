@@ -25622,6 +25622,18 @@ was beside it and `0` when it was not, and a hub scanner that RAISES is a block
 callers - `scan_skill_text()` and `vet()` - is the point: the shapes are not
 copied into the install path.
 
+**WIRED INTO THE SKILL LIFE CYCLE (2026-11-09).** The lock is no longer a
+surface for a file nothing writes: `jarvis_skills.install()` writes ONE row on
+every install, edit and turn-on (`lock_entry()` then `write_lock()`), carrying
+the sha256 the install pinned and the scan's verdict and findings - so the four
+extra checks and any bundled-script warning are recorded with it - and
+`uninstall()` deletes that row through the new `forget_lock()`. Both calls are
+lazy imports exactly like `_extra_findings()`: an older base without the hub
+behaves as before, and a lock write that fails never fails the install (the
+skill is already copied and indexed; the lock is a record, not the gate). A
+refused or denied install writes NO row. Proved by
+`backend/test_skills_lock_wired.py`.
+
 ### 138.3 The lock file
 
 Beside the skill folder, `skills.lock`, written whole through a temp file and a
@@ -25708,9 +25720,13 @@ than guessed at.
 **Nothing here approves anything and nothing here adds a route that decides
 anything.** The one new route is a read; it is a `GET`, it raises no card, and
 the gate's own table already tiers `skill_list`, `skill_load` and `skill_scan` as
-`auto` (`jarvis_gate.py:850`). The only writer in the whole module is still
-`write_skill()`, through `POST /api/skills/learn` (§135.3), one
-`modify_own_code` card, before the file is written.
+`auto` (`jarvis_gate.py:850`). The only writer of SKILL CONTENT in the whole
+module is still `write_skill()`, through `POST /api/skills/learn` (§135.3), one
+`modify_own_code` card, before the file is written. The lock file gained two
+writers on 2026-11-09 - `write_lock()` from the install path and
+`forget_lock()` from `uninstall()` - both called from `jarvis_skills.py`;
+neither is a permission, neither writes a skill file, and both are no-ops when
+the hub is not beside the base.
 
 `docs/ARCHITECTURE.md` §8 carries the row for the app surfaces: the lock, the
 conventions and the suggestions are readable by either app and **no app calls
