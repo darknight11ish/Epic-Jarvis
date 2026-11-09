@@ -329,7 +329,7 @@ SUBSYSTEMS = (
         "areas": ("backend",),
         "purpose": "The calendar Jarvis owns and the real one it may read, plus the "
                    "accounts it can connect to and the one GitHub integration with its "
-                   "three small actions.",
+                   "four small actions.",
         "modules": (
             "jarvis_calendar", "jarvis_google_calendar", "jarvis_local_calendar",
             "jarvis_accounts", "jarvis_connect_account",

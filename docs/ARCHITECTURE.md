@@ -5089,7 +5089,7 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **Creator mode is the PC's, and that is one-sided on purpose** (2026-11-09,
   Wave 13; the owner's ruling that its scope is "Plug-ins and skills";
-  JARVIS-API section 209, `backend/jarvis_creator.py`,
+  JARVIS-API section 211, `backend/jarvis_creator.py`,
   `plugins/ready/creator-mode/`). A creator puts a skill folder (a `SKILL.md`)
   or a plug-in folder (a `plugin.json`) in ONE waiting folder on this PC, opens
   Settings -> Skills, and installs ONE item behind ONE card; a skill lands

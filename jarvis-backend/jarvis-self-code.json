@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "589f12f78cc832bf1cd490932a185c9bff15fa14",
- "built_at": "2026-11-09T10:34:52-08:00",
+ "ref": "6f00bd58d324f11a07059c4139d0d84499e23d8a",
+ "built_at": "2026-11-09T12:49:24-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -577,7 +577,7 @@
    "id": "calendar",
    "title": "Calendar, accounts and the GitHub connection",
    "group": "runtime",
-   "purpose": "The calendar Jarvis owns and the real one it may read, plus the accounts it can connect to and the one GitHub integration with its three small actions.",
+   "purpose": "The calendar Jarvis owns and the real one it may read, plus the accounts it can connect to and the one GitHub integration with its four small actions.",
    "files": [
     "backend/jarvis_accounts.py",
     "backend/jarvis_calendar.py",
@@ -6228,6 +6228,31 @@
  ],
  "recent_commits": [
   {
+   "sha": "6f00bd58d324f11a07059c4139d0d84499e23d8a",
+   "date": "2026-11-09",
+   "subject": "fix(wave13): the owner's own \"can you create a repository?\" reaches the carded answer"
+  },
+  {
+   "sha": "43b925f6239b8625982920abbf0eb57ade6394c5",
+   "date": "2026-11-09",
+   "subject": "fix(wave13): the COMPUTE panel names the card each loaded lane is on (F6)"
+  },
+  {
+   "sha": "03034f43214503849899be56357565bc22d91daf",
+   "date": "2026-11-09",
+   "subject": "test(wave13): the Tools page draws 61 switch rows - the carded github_create_repo row the older cutoff still counted as 60"
+  },
+  {
+   "sha": "ad296598aaa566a68bdbf7b88a407b5104a9a4e8",
+   "date": "2026-11-09",
+   "subject": "test(wave13): the four same-rule stack-order allowlists name the F5 patch, with its hunks (jarvis_skills.py only) stated"
+  },
+  {
+   "sha": "c36fd472de28cab552a9160ad6fe9b8e13c741b9",
+   "date": "2026-11-09",
+   "subject": "chore(wave13): the self-code map covers the corrected F5 delivery route (both twins, written LAST)"
+  },
+  {
    "sha": "589f12f78cc832bf1cd490932a185c9bff15fa14",
    "date": "2026-11-09",
    "subject": "test(wave13): allowlist the F5 patch after gate-touches, and read the patch-original-text pin at runtime (no source-text pin)"
@@ -6301,31 +6326,6 @@
    "sha": "62fbe79953ed08a29ae2de15e0e606069192e0d4",
    "date": "2026-11-09",
    "subject": "merge(wave13): fold the memory fault banner into the one wave-13 PR (Gemini Q4/0.3)"
-  },
-  {
-   "sha": "993210bdc8ab346100083007775ada853c5346c2",
-   "date": "2026-11-09",
-   "subject": "records(wave13): the two owner-report HUD fixes are in the one changelog bullet, the one decision bullet, and the field-test register"
-  },
-  {
-   "sha": "0d462d94c26a4ff95a04364f79d8d08f8158384d",
-   "date": "2026-11-09",
-   "subject": "fix(hud): the chosen personality wears the chosen rectangle, and the model chip stops going stale"
-  },
-  {
-   "sha": "a707c2e30174c51087743f34f07436f6eb612f14",
-   "date": "2026-11-09",
-   "subject": "fix(ci): the register's About-page totals and the wave-12 speech pin the backend job caught on #1217"
-  },
-  {
-   "sha": "2de6ee107468081b991b57c3b4f6c374b5d85ce1",
-   "date": "2026-11-09",
-   "subject": "style(wave13): the asks_first list comment the assembly reflow left one space out"
-  },
-  {
-   "sha": "e0642d5f6c7a09cb9b41f2bcbc30059bafe9845a",
-   "date": "2026-11-09",
-   "subject": "feat(memory): one fault banner with \"Retry now\", not a queue of failure cards"
   }
  ],
  "top_level": [

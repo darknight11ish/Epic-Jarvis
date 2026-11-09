@@ -1,6 +1,6 @@
 # The pooled lane's measured window after a cold chat turn — design (recorded OPEN, 2026-11-09)
 
-**Status: implemented and desk-tested; the live field-test row is still to be added.** The page began as a
+**Status: implemented and desk-tested; the live field-test row is row 26 of `docs/FIELD-TEST-MATRIX-2026-11-09.md` and stays NOT RUN until this PR's deploy drives it.** The page began as a
 recorded defect so the next session would start from the measured evidence instead of re-deriving it; it now
 also records the fix shape and its proof. The change is internal to the existing chat path: no new route,
 card, tier or permission, and the everyday/coding lanes are untouched.
@@ -76,7 +76,7 @@ regenerated with its twin in the same run, as always, because the new suite is a
 
 ## The field-test row this acceptance needs
 
-Add ONE row to the field-test register, in the register's own words: **after a COLD pooled turn, `/api/ps`
+The row is in the field-test register (row 26), in the register's own words: **after a COLD pooled turn, `/api/ps`
 `context_length` == 49152** - the pooled model unloaded first, then one chat turn, then the lane's own
 `/api/ps`; the answer must still have streamed, with 0 spill. The row passes only when driven on this PC with
 the model unloaded first; the warmed Q8 run is not this row. `jarvis_agent.POOLED_PRELOAD_LAST` says what the

@@ -37632,14 +37632,14 @@ this PC, the PC scans what is there when the Settings card is opened, and the
 owner installs ONE item behind ONE approval card. Installing is not enabling.
 A plug-in is a program, so this slice stages it, scans it and refuses it **in the
 pack manager's own words** rather than inventing a code-install path; the exact
-remaining work for that half is 209.9.
+remaining work for that half is 211.9.
 
 Creator mode is a new module, `jarvis-backend/jarvis_creator.py`, shipped whole
 and loaded by the drop-in folder `plugins/ready/creator-mode/` - no patch. Its
 two routes are answered by its own `install()`, the same way
 `jarvis_skill_menu.install()` answers the Skills routes (section 178).
 
-### 209.1 The waiting folder
+### 211.1 The waiting folder
 
 ONE place, and it is a folder on this PC:
 
@@ -37666,7 +37666,7 @@ when the owner opens the card (or presses **Look again**, or returns to the
 page), and the install happens when they answer a card. Writing a file into
 `creator-incoming` cannot change what Jarvis does.
 
-### 209.2 The two routes, PC only
+### 211.2 The two routes, PC only
 
 ```http
 GET  /api/creator/incoming
@@ -37689,7 +37689,7 @@ with the PC's own words: `installed`, `state`, `where`, `message`, and the pack
 manager's scan report. A refusal is `ok: false` with `refused: true` and
 `asked: false`; it is never a transport error the page has to decode.
 
-### 209.3 The scan is the pack manager's, called not copied
+### 211.3 The scan is the pack manager's, called not copied
 
 A skill is handed to `jarvis_packs.scan_source()`, which is the pack manager's
 own full pre-install scan (section 197.3): file list and hashes, the code and
@@ -37709,7 +37709,7 @@ this folder's evidence: the first file that can run when the folder holds one
 its `plugin.json` names when the folder holds only its manifest. Nothing is
 imported to read the manifest.
 
-### 209.4 Install is ONE card, and installing is not enabling
+### 211.4 Install is ONE card, and installing is not enabling
 
 A skill install calls **`jarvis_packs.install_pack()`** - the pack manager's own
 door - which re-scans from scratch, refuses a refused skill without asking,
@@ -37724,7 +37724,7 @@ There is **no bulk path**: the request names one folder, a body with a list is
 refused before anything is scanned, and each item is its own card. There is no
 "install all", no yes-to-all and no per-row loop that installs several.
 
-### 209.5 What this deliberately does not do
+### 211.5 What this deliberately does not do
 
 - **No plug-in install.** A plug-in is code with the same trust as the backend
   itself; installing one needs the phase-2 code-trust work (197.7, 197.10), not a
@@ -37745,7 +37745,7 @@ refused before anything is scanned, and each item is its own card. There is no
   goes through the pack manager's own path and is refused before the card, for
   the same reason.
 
-### 209.6 The Settings card
+### 211.6 The Settings card
 
 Settings -> **Skills** gains a **Creator mode - things waiting** block
 (`jarvis-desktop/src/settings.html`; `skills-menu-settings.js` over two new
@@ -37768,7 +37768,7 @@ installed and turned off.
 The phone's existing list of what is installed is unchanged. ARCHITECTURE
 section 8 carries the entry.
 
-### 209.7 What is proved, and what needs the owner's PC
+### 211.7 What is proved, and what needs the owner's PC
 
 `py -3 backend/test_creator_mode.py` (130 checks, all passing): a staged skill is
 seen and scanned with no card; a warning and a block are both shown, never
@@ -37791,7 +37791,7 @@ real click on the real card, on his own PC, with a real folder in
 `creator-incoming` - no lane has driven that, so the field-test row stays NOT RUN
 YET until he does.
 
-### 209.8 What a creator sees, in order
+### 211.8 What a creator sees, in order
 
 1. Put the folder in `creator-incoming`. Nothing happens; nothing runs.
 2. Open Settings -> Skills (the Creator mode block is in that card). The block
@@ -37803,7 +37803,7 @@ YET until he does.
 5. A plug-in shows the pack manager's code refusal and no button. That is this
    slice's whole plug-in half.
 
-### 209.9 What the plug-in half still needs
+### 211.9 What the plug-in half still needs
 
 The staged plug-in folder is refused by `jarvis_packs.CODE_REFUSED`, so nothing
 half-installs. To turn a plug-in into an installable item, the next slice needs,
@@ -37863,6 +37863,16 @@ added to make the answer factual without asking a language model to guess.
   task in it ("browse the web for flights to Rome") deliberately keeps its own path,
   because that one has something real to do.
 
+- **The create-a-repository question, in the owner's own words.** `_GITHUB_CREATE_REPO`
+  claims the capability forms and answers them from `_github_create_repo_words()` - the
+  action's existence, its own tool switch and whether a token is saved - including the
+  exact sentence the owner used, "can you create a repository?". Because `normalise()`
+  removes the leading "can you", the claimed shape is the BARE `create a repository`
+  (optionally `me`, `new`, `github`, `on my github`), and the match is whole-sentence: a
+  request that carries the name or a description ("create a repository called Fitness
+  Band") has words left over, keeps its own path to the model's `github_create_repo` tool,
+  and raises its ONE card. It is never answered with a speech about the action.
+
 **The one CREATE: `github_create_repo`.** A new model tool, `github_create_repo`, decided
 under its own gate action of the same name, shipped `"ask"` in both settings copies and
 listed in `jarvis_agent.NEEDS_A_PERSON`, so a loosened tier still raises the card.
@@ -37914,9 +37924,10 @@ section 8 records that as one-sided on purpose.
 - `python -B backend/test_web_access_truth.py` - the four questions route to the fixed
   answer (not the model), the answer names all four as separate with live ON/OFF state and
   the OFF rows' own reasons, the GitHub half reads the token state and the tool count, the
-  fixed words are the model's own digest, "create a repository called Fitness Band" is
-  NOT claimed as a capability answer (it must reach the model, which calls the tool), and
-  the intent is read-only.
+  fixed words are the model's own digest, "can you create a repository?" and its other
+  capability wordings ARE answered from the real action state, "create a repository called
+  Fitness Band" is NOT claimed as a capability answer (it must reach the model, which calls
+  the tool), and the intent is read-only.
 
 **NOT-TESTABLE here, said plainly.** Nothing in this repository made a real GitHub call:
 every test drives the module through the injected `fetch` seam with a fake transport and a
