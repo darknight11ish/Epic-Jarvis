@@ -509,10 +509,11 @@ mod tests {
     #[test]
     fn the_page_reads_are_allowed_exactly() {
         for path in HUD_GET_PATHS {
-            // The calendar is the ONE path on this list whose read always
-            // carries its window, so the bare path is not one this page sends -
-            // it is checked on its own below, with the query it does send.
-            if path == CALENDAR_PATH {
+            // Two paths on this list never go out bare: the calendar always
+            // carries its window, and the Memory tab's read is always rebuilt
+            // as the retire-aware refresh (Wave 10, ruling Q2 section 1.5).
+            // Both are checked on their own below, with the query each sends.
+            if path == CALENDAR_PATH || path == MEMORY_PENDING_PATH {
                 continue;
             }
             assert_eq!(allowed_get(path).as_deref(), Some(path));

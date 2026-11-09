@@ -393,6 +393,12 @@ fn main() {
             "open_conversation_window",
             // The right/wrong mark on one answer (feedback.patch). Quickbar.
             "mark_answer",
+            // Reading that saved mark back for the answer being re-shown
+            // (2026-11-08, Wave 10 ruling Q2 section 1.5): the HUD answer menu
+            // reads the reason and the correction through this GET when the
+            // mark is already saved, so it never shows a stale or invented one.
+            // Read-only.
+            "get_feedback_mark",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
             // Re-opening that same walkthrough on demand (the owner's request

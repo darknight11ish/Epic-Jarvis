@@ -2778,7 +2778,7 @@ pub async fn get_feedback_mark(
     }
     if !(200..300).contains(&status) {
         return Err(format!(
-            "the server answered HTTP {status}: {}",
+            "the server answered with an error ({status}): {}",
             text.trim()
         ));
     }
