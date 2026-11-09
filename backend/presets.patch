@@ -2,7 +2,7 @@ diff --git a/jarvis_hud.py b/jarvis_hud.py
 index f134133..41781f1 100644
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -81,6 +81,48 @@ JARVIS_API_KEY = os.environ.get("OPENJARVIS_API_KEY", "")
+@@ -81,6 +81,61 @@ JARVIS_API_KEY = os.environ.get("OPENJARVIS_API_KEY", "")
  CONFIG_DIR = Path(os.environ.get("OPENJARVIS_CONFIG_DIR", Path.home() / ".openjarvis"))
  HERE = Path(__file__).resolve().parent
  
@@ -22,7 +22,20 @@ index f134133..41781f1 100644
 +def active_ollama_url() -> str:
 +    """The chat lane's address, from the owner's applied preset; OLLAMA_URL when
 +    there is no file (the default), the file is unreadable, or it names anything
-+    that is not a loopback address. Never raises."""
++    that is not a loopback address. Never raises.
++
++    Q4 (2026-11-08): a file naming the ON-DEMAND pooled lane (11450) whose
++    server is gone is repaired HERE. The shipped helper proves the port with
++    ONE sub-second TCP connect, atomically puts the file back on the
++    configured lane (OLLAMA_URL) and returns it, so a chat turn answers
++    instead of failing "The local model is not running". It starts nothing,
++    pauses nothing and loads nothing - a HUD/status poll calls this.
++    """
++    try:
++        import jarvis_presets
++        return jarvis_presets.active_chat_url(OLLAMA_URL)
++    except Exception:
++        pass
 +    try:
 +        doc = json.loads(PRESETS_LANE_FILE.read_text(encoding="utf-8"))
 +        url = str(doc.get("base_url") or "").strip().rstrip("/")

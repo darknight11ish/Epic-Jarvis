@@ -12975,6 +12975,22 @@ def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None)
     turn a slow first answer into a fast one."""
     url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
     name = model or _chat_model_now() or "jarvis-primary"
+    # Q6 (2026-11-08): the #1 live-stability guard. (a) While the on-demand
+    # pooled lane is the chat lane and is running, the two single-card lanes are
+    # PAUSED on purpose - warming 11436 would take a card back and start the
+    # duplicate; (b) even on the everyday lane, a pooled 30B model name is never
+    # loaded there: it cannot fit one card, and doing it is exactly the 74%
+    # on-GPU / 26% CPU copy the owner photographed. Neither case sends anything.
+    try:
+        import jarvis_presets as _P
+        _active = _P._persisted_lane_url()
+        if (_active and _P._port_of_url(_active) == _P._pooled_port()
+                and _P._lane_listening(_active)):
+            return False
+        if _P.is_pooled_model(name):
+            return False
+    except Exception:
+        pass
     try:
         if not _is_this_machine(url) or local_model_refusal(url, name):
             return False
@@ -14260,6 +14276,17 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     return keep_rules_first(out)
 
 
+def _pooled_num_ctx(ollama_url) -> Optional[int]:
+    """Q5: the window a KEPT pooled-lane turn must name, from the lane config."""
+    if not ollama_url:
+        return None
+    try:
+        import jarvis_presets
+        return jarvis_presets.lane_num_ctx(str(ollama_url))
+    except Exception:
+        return None
+
+
 def chat_body(model: str, messages: list, opts: dict, tools=None, *,
               spoken: bool = False, question: str = "", role: str = "everyday",
               ollama_url: Optional[str] = None,
@@ -14285,6 +14312,14 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
     spoken turn, a model that cannot think, or a model the owner set to
     answer directly."""
     body = {"model": model, "messages": messages, "stream": True, **PROMPT_USAGE, **opts}
+    # Q5 (2026-11-08): on the pooled lane, NAME the measured window. Ollama
+    # otherwise loads the model at its own default (8192 on this PC) and
+    # reloads/truncates the 49,152-token window the preset measured. Only the
+    # pooled lane gets this; every other lane keeps its server's environment
+    # window and no options field (today's byte-for-byte request).
+    _ctx = _pooled_num_ctx(ollama_url)
+    if _ctx:
+        body["options"] = {"num_ctx": int(_ctx)}
     if not _reasoning_field_refused:
         reasoning = None
         try:

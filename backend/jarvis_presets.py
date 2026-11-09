@@ -1088,6 +1088,125 @@ def _lane_answers(url: str, timeout: float = 2.0) -> bool:
         return False
 
 
+#: How long the Q4 probe may take. ONE TCP connect; no HTTP, no model, no card.
+_POOLED_PROBE_TIMEOUT_S = 0.35
+
+
+def _port_of_url(url) -> Optional[int]:
+    """The loopback port a lane URL names, or None. Never raises."""
+    try:
+        import urllib.parse
+        parts = urllib.parse.urlsplit(str(url or "").strip())
+        if (parts.hostname or "").lower() not in ("127.0.0.1", "localhost", "::1"):
+            return None
+        port = int(parts.port or 0)
+        return port if 0 < port < 65536 else None
+    except Exception:
+        return None
+
+
+def _lane_listening(url: str, timeout: float = _POOLED_PROBE_TIMEOUT_S) -> bool:
+    """Something is LISTENING on this loopback lane's port - one TCP connect.
+
+    Q4 (2026-11-08): this is the whole probe the chat-lane getter is allowed to
+    do. It opens no HTTP request, sends no /api/generate or /api/chat, loads no
+    model, pauses no lane and starts nothing; sub-second by construction.
+    """
+    import socket
+    port = _port_of_url(url)
+    if not port:
+        return False
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)),
+                                      timeout=float(timeout)):
+            return True
+    except Exception:
+        return False
+
+
+def active_chat_url(default: str = "") -> str:
+    """Q4: the chat lane, with a dead POOLED pointer repaired atomically here.
+
+    The HUD patch's `active_ollama_url()` calls this for every chat turn. When
+    `presets-active-lane.json` names the on-demand pooled lane (`_pooled_port()`,
+    11450) and a fast TCP probe shows nothing is listening there, it puts the
+    file back - atomically, through the one setter every lane write uses - to the
+    configured lane (`OLLAMA_URL`, normally 11436) and returns it, so a chat turn
+    answers instead of failing "The local model is not running".
+
+    What it deliberately does NOT do: never starts/auto-spawns the pooled server
+    (a status/HUD poll calls this; starting the three-card lane would pause the
+    ordinary lanes and cold-load 13.8 GB inside a poll), never pauses or stops a
+    lane, never asks a model anything, never raises.
+    """
+    fallback = str(default or "").strip().rstrip("/") or _active_url()
+    lane = _persisted_lane_url()
+    if not lane:
+        return fallback                       # no file / not loopback: today's rule
+    if _port_of_url(lane) == _pooled_port() and not _lane_listening(lane):
+        _set_active_url(fallback)
+        return fallback
+    return lane
+
+
+def pooled_num_ctx() -> Optional[int]:
+    """The pooled lane's configured window, from the ONE lane config (MODES)."""
+    try:
+        import jarvis_model_lanes as lanes
+        profile = lanes.pooled_profile()
+        return int(profile.get("num_ctx") or lanes.POOLED_CTX)
+    except Exception:
+        try:
+            import jarvis_big_coder as big
+            return int(big.mode_profile(big.DEFAULT_MODE).num_ctx)
+        except Exception:
+            return None
+
+
+def lane_num_ctx(url) -> Optional[int]:
+    """The configured `num_ctx` a chat request on LANE `url` must carry, or None.
+
+    Q5 (2026-11-08): only the pooled lane has a window the chat request has to
+    NAME - its 49,152 measurement - because Ollama otherwise loads at the
+    model's own default (8192 here). Every other lane keeps today's behaviour:
+    its server carries the window in its environment and the request sends no
+    options. The number comes from the lane module's own config, never a second
+    copy here.
+    """
+    if _port_of_url(url) != _pooled_port():
+        return None
+    return pooled_num_ctx()
+
+
+def is_pooled_model(model) -> bool:
+    """Is `model` a pooled-lane (three-card) model name? Never a 11436 client.
+
+    Q6 (2026-11-08): the everyday lane must never be asked to load one of these
+    - the 30B model cannot fit one card, and loading it there is the duplicate
+    copy (74% GPU / 26% CPU) the owner photographed.
+    """
+    name = str(model or "").strip()
+    if not name:
+        return False
+    try:
+        import jarvis_big_coder as big
+        if str(getattr(big, "MODEL", "") or "").strip() == name:
+            return True
+        for key in getattr(big, "MODES", ()) or ():
+            profile = big.MODES[key] if isinstance(big.MODES, dict) else key
+            if str(getattr(profile, "model", "") or "").strip() == name:
+                return True
+    except Exception:
+        pass
+    try:
+        import jarvis_model_lanes as lanes
+        if str(getattr(lanes, "POOLED_MODEL", "") or "").strip() == name:
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def reconcile_after_restart(*, probe=None, set_active_url=None,
                             rollback_model=None) -> dict:
     """Repair the persisted preset state when the on-demand pooled lane is gone.

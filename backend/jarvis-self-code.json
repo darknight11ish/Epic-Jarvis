@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "9a72242f75d90f67d1353e2265b717e694f1d87d",
- "built_at": "2026-11-08T20:40:13-08:00",
+ "ref": "1fbc48bedebe0c1e7413251853be01b37d2a9621",
+ "built_at": "2026-11-08T20:45:59-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -4528,13 +4528,8 @@
     "changelog.d/2026-11-07-wave-8-1-followup-fixes.md",
     "changelog.d/2026-11-07-wave-8-2-full-self-awareness.md",
     "changelog.d/2026-11-07-wave-9-read-aloud-bench-and-brain.md",
-    "changelog.d/2026-11-08-awareness-gate-why-blocked.md",
-    "changelog.d/2026-11-08-brain-hardware-truth.md",
-    "changelog.d/2026-11-08-hud-model-chip-in-use.md",
-    "changelog.d/2026-11-08-model-conversation.md",
-    "changelog.d/2026-11-08-offload-reads-chat-lane.md",
-    "changelog.d/2026-11-08-restart-reconciles-the-chat-lane.md",
     "changelog.d/2026-11-08-wave-10-honest-answers-and-wifi.md",
+    "changelog.d/2026-11-08-wave-11-model-and-lane-truth.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
     "decisions.d/2026-10-31-feature-evidence-gate.md",
@@ -4672,13 +4667,9 @@
     "decisions.d/2026-11-07-self-code-map-from-main.md",
     "decisions.d/2026-11-07-self-knowledge-honesty.md",
     "decisions.d/2026-11-07-three-gpu-presets-measured.md",
-    "decisions.d/2026-11-08-brain-hardware-truth.md",
     "decisions.d/2026-11-08-build-caches-and-atomic-twins.md",
     "decisions.d/2026-11-08-deterministic-self-state-answers.md",
-    "decisions.d/2026-11-08-hud-model-chip-in-use.md",
-    "decisions.d/2026-11-08-model-conversation.md",
-    "decisions.d/2026-11-08-offload-reads-chat-lane.md",
-    "decisions.d/2026-11-08-restart-reconciles-the-chat-lane.md",
+    "decisions.d/2026-11-08-wave-11-model-and-lane-truth.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
     "decisions.d/README.md",
@@ -5126,7 +5117,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 827,
+   "file_count": 818,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6193,6 +6184,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "1fbc48bedebe0c1e7413251853be01b37d2a9621",
+   "date": "2026-11-08",
+   "subject": "docs(records): one Wave-11 changelog bullet and one decision, with the map regenerated"
+  },
+  {
    "sha": "9a72242f75d90f67d1353e2265b717e694f1d87d",
    "date": "2026-11-08",
    "subject": "chore(self-code): regenerate the map after the model-conversation lane merged"
@@ -6286,11 +6282,6 @@
    "sha": "d83836a56b2044738fcf94c6aeec1286d983bb1d",
    "date": "2026-11-08",
    "subject": "integration: the Brain model page tells the PC's hardware truth"
-  },
-  {
-   "sha": "492ab22270fee45b4059aefe1a4339c031b6c918",
-   "date": "2026-11-08",
-   "subject": "fix(hud): the model chip says the model IN USE, not the PC's default"
   }
  ],
  "top_level": [
@@ -6327,7 +6318,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 231
+   "files": 226
   },
   {
    "path": "videos/",
@@ -6337,7 +6328,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 146
+   "files": 142
   },
   {
    "path": "plugins/",
@@ -6411,8 +6402,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5535,
-  "covered": 5068,
+  "tracked_files": 5526,
+  "covered": 5059,
   "excluded": 467,
   "subsystems": 27
  },
