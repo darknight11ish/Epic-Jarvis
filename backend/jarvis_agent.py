@@ -373,6 +373,32 @@ def _run_file_read(args: dict) -> dict:
     return {"ok": True, "content": content, "truncated": truncated, "path": path}
 
 
+def _prepare_project_read(args: dict):
+    """What the turn says it is about to read. No card is raised for it."""
+    where = str(args.get("path") or "").strip()
+    what = str(args.get("file") or "").strip()
+    return None, (f"Read the file: {what or 'a file'}"
+                  f"{(' in ' + where) if where else ''}")
+
+
+def _run_project_read(args: dict, plan_obj=None, **_) -> dict:
+    """Read ONE file inside a folder the owner listed (jarvis_project_read.py).
+
+    The whole of the work lives in that module: the folder boundary
+    (`jarvis_documents.allowed_path`, asked for the folder and then for the
+    file) and the project map's own `.gitignore`-aware walk, so this tool and
+    the map cannot disagree about the same file. This function exists so the
+    tool is declared and run like every other one, and so a missing module is
+    a sentence the model can read rather than a stack trace in the answer.
+    """
+    try:
+        import jarvis_project_read as PR
+    except Exception as exc:                                 # noqa: BLE001
+        return {"ok": False, "error": "reading a file inside a folder is not available "
+                                      f"here ({type(exc).__name__})"}
+    return PR.run_tool(args or {})
+
+
 #: What an approved shell command may inherit beyond jarvis_child_env's
 #: essentials: what PowerShell and the Windows shell look for. Never a secret:
 #: jarvis_child_env drops any name that looks like one, even these.
@@ -5259,6 +5285,36 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "file_read",
         instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
                  "file_read": "For a PDF or Word file, use this, not file_read."}),
+    # Read ONE source file inside a folder on "Folders Jarvis may look in", or
+    # inside a registered project's own folder (jarvis_project_read.py,
+    # 2026-11-09; the read half of the owner's approved "Jarvis takes over dev
+    # work" plan). It exists because neither read path does this today:
+    # file_read has NO folder check at all, and my_files' `read` refuses code
+    # (TEXT_KINDS is md/txt/csv), so a .py file had no bounded door.
+    #
+    # The boundary is `jarvis_documents.allowed_path` - the SAME function, not
+    # a second one - asked for the folder and then again for the file, and the
+    # `.gitignore` rules are the repository map's own walk (jarvis_repomap),
+    # so the two readers cannot disagree about the same file. Decided under
+    # file_read's action, `read_files_readonly` (tier "auto" in the shipped
+    # [autonomy.tiers]): it raises NO card and adds NO gate action, because a
+    # read changes nothing. Nothing is written, moved or sent.
+    "project_read": Tool(
+        "project_read",
+        "Read one file's words - code, config or docs - from a folder you listed, or "
+        "from one of your projects. Give the folder (or the project's id) and the "
+        "file's path inside it. It reads inside that folder only. Read-only: it never "
+        "writes, renames or deletes anything, and nothing is sent anywhere.",
+        {"type": "object", "properties": {
+            "path": {"type": "string", "description": "the folder on your list, or a "
+                                                      "project's id"},
+            "file": {"type": "string", "description": "the file's path inside that folder, "
+                                                      "for example app/server.py"}},
+         "required": ["path", "file"]},
+        _prepare_project_read, _run_project_read,
+        gate_lookup_name=lambda args: "file_read",
+        instead={"my_files": "For a PDF, Word, Excel or PowerPoint file, use my_files.",
+                 "file_read": "For a file outside the folders you listed, use file_read."}),
     # Send ONE file to the phone (jarvis_send_file.py, 2026-10-31, Gemini Q7).
     # The owner's own words: ask Jarvis to search for a file and send it to the
     # Jarvis Android app to view or download. ONE card, exact filename/folder/
@@ -10070,7 +10126,8 @@ TOOL_GROUPS = (
     ("documents", "find and read files in the listed folders",
      ("my_files", "my_spending")),
     ("files", "read a file or run a command or small script",
-     ("file_read", "shell_exec", SANDBOX_TOOL, REA_TOOL, SEND_FILE_TOOL, PROTECT_TOOL)),
+     ("file_read", "project_read", "shell_exec", SANDBOX_TOOL, REA_TOOL, SEND_FILE_TOOL,
+      PROTECT_TOOL)),
     # Its own group: my_spending's group is dropped while no folder is listed,
     # and this needs no folder.
     ("retirement", "a retirement what-if", ("retirement_whatif",)),
@@ -17201,6 +17258,10 @@ def _cloud_call(args: dict, call: dict, convo: list, steps: list, say_step,
 _PROTECTION_READ_ONLY_TOOLS = frozenset({
     "file_read", "my_files", "notes_search", "memory_search", "read_media",
     "search_media", "web_search", "feature_guide", "calculator", "read_screen",
+    # Reading one file inside a listed folder (jarvis_project_read.py,
+    # 2026-11-09): a folder the owner marked read-only may be read, and a
+    # blocked one is refused by jarvis_documents.allowed_path() anyway.
+    "project_read",
 })
 
 

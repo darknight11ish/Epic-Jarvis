@@ -159,14 +159,15 @@ class AsksFirstTest {
         assertFalse("the phone cannot enable tools - the PC is where they change", t.canEnable)
         val rawItems = raw["items"]!!.jsonArray.map { it.jsonObject }
         val rawIds = rawItems.map { it["id"]!!.jsonPrimitive.content }
-        // 60 at 2026-11-05: the six on-demand GitHub tools, hands-free's
+        // 61 at 2026-11-09: project_read's own row joined the switchable list,
+        // which was 60 at 2026-11-05 (the six on-demand GitHub tools, hands-free's
         // send_text_message, the four pack-manager tools and the approval-policy
         // tool's own row all joined the
         // switchable list (48 since the owner's decision of 2026-11-04: every
         // tool the AI model can be offered is a switch, raw Tier C set and
         // everyday helpers included; 21 before that). The phone still shows
         // them read-only.
-        assertEquals("60 one-tool switches", 60, rawIds.size)
+        assertEquals("61 one-tool switches", 61, rawIds.size)
         for (id in listOf("shell_exec", "control_computer", "browser_control",
                 "read_web_page", "connect_account", "rea_investigate",
                 "calculator", "propose_plan", "web_search",

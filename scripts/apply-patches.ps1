@@ -3159,6 +3159,16 @@ $SHIPPED = @(
     # honest audit of the everyday settings. Every model/chat path still asks.
     # The same entry, in the same position, is in backend/_where.py's SHIPPED.
     'jarvis_reversible_ui.py'
+    # Reading ONE file inside a folder the owner listed (jarvis_project_read.py,
+    # 2026-11-09; the read half of the plan the owner approved for Jarvis to
+    # help with development work). One model tool, no route, and no approval
+    # card: a read is decided under the same line file_read uses. It reuses the
+    # folder boundary in jarvis_documents.allowed_path and the .gitignore-aware
+    # walk and per-file size limit in jarvis_repomap, so it cannot disagree with
+    # the repository map about the same file. Standard library only, writes
+    # nothing, opens no socket. The same entry, in the same position, is in
+    # backend/_where.py's SHIPPED, above jarvis_bench.py, which stays last.
+    'jarvis_project_read.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

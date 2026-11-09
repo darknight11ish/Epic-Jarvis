@@ -1551,6 +1551,7 @@ _TOOL_TARGETS = {
     'propose_plan': ('the propose plan tool', 'propose plan tool', 'the propose plan', 'propose plan'),
     'change_setting': ('the change setting tool', 'change setting tool', 'the change setting', 'change setting'),
     'feature_guide': ('the feature guide tool', 'feature guide tool', 'the feature guide', 'feature guide'),
+    'project_read': ('the project read tool', 'project read tool', 'the project read', 'project read'),
     'goals_list': ('the goals list tool', 'goals list tool', 'the goals list', 'goals list'),
     'goal_add': ('the goal add tool', 'goal add tool', 'the goal add', 'goal add'),
     'goal_progress': ('the goal progress tool', 'goal progress tool', 'the goal progress', 'goal progress'),

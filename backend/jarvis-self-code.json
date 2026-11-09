@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "1c536b03b3762901637f017fd537e5756a076509",
- "built_at": "2026-11-09T04:20:51-08:00",
+ "ref": "d6df40225de7c7400b302744f10043f284496cd5",
+ "built_at": "2026-11-09T09:20:57-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -527,19 +527,20 @@
    "id": "files",
    "title": "Files, documents and storage",
    "group": "runtime",
-   "purpose": "Finding and reading the owner's files and documents, bringing one in from the phone, sending one out, and keeping a backup of what Jarvis changes.",
+   "purpose": "Finding and reading the owner's files and documents, reading one code file inside a folder he listed, bringing one in from the phone, sending one out, and keeping a backup of what Jarvis changes.",
    "files": [
     "backend/jarvis_attached_file.py",
     "backend/jarvis_backup.py",
     "backend/jarvis_data_health.py",
     "backend/jarvis_documents.py",
     "backend/jarvis_file_guardian.py",
+    "backend/jarvis_project_read.py",
     "backend/jarvis_send_file.py",
     "backend/jarvis_storage.py",
     "backend/jarvis_storage_health.py",
     "backend/jarvis_upload.py"
    ],
-   "file_count": 9,
+   "file_count": 10,
    "key_modules": [
     {
      "path": "backend/jarvis_documents.py",
@@ -563,7 +564,8 @@
     "backend/test_upload.py",
     "backend/test_file_guardian.py",
     "backend/test_backup.py",
-    "backend/test_documents_honesty.py"
+    "backend/test_documents_honesty.py",
+    "backend/test_project_read.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -4056,6 +4058,7 @@
     "backend/test_product_research.py",
     "backend/test_profiles.py",
     "backend/test_progress.py",
+    "backend/test_project_read.py",
     "backend/test_projects.py",
     "backend/test_promise_guards.py",
     "backend/test_prompt_coach.py",
@@ -4278,7 +4281,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 674,
+   "file_count": 675,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4550,6 +4553,7 @@
     "changelog.d/2026-11-07-wave-9-read-aloud-bench-and-brain.md",
     "changelog.d/2026-11-08-wave-10-honest-answers-and-wifi.md",
     "changelog.d/2026-11-08-wave-11-model-and-lane-truth.md",
+    "changelog.d/2026-11-09-project-read.md",
     "changelog.d/2026-11-09-wave-12.md",
     "changelog.d/README.md",
     "decisions.d/2026-10-31-architect-rulings-after-wave.md",
@@ -4693,6 +4697,7 @@
     "decisions.d/2026-11-08-wave-11-model-and-lane-truth.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
+    "decisions.d/2026-11-09-project-read.md",
     "decisions.d/2026-11-09-wave-12-owner-clicks-and-truth.md",
     "decisions.d/README.md",
     "docs/ABOUT-JARVIS.md",
@@ -5140,7 +5145,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 821,
+   "file_count": 823,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6058,6 +6063,7 @@
     "jarvis-backend/jarvis_product_research.py",
     "jarvis-backend/jarvis_profiles.py",
     "jarvis-backend/jarvis_progress.py",
+    "jarvis-backend/jarvis_project_read.py",
     "jarvis-backend/jarvis_projects.py",
     "jarvis-backend/jarvis_prompt_coach.py",
     "jarvis-backend/jarvis_protection.py",
@@ -6179,7 +6185,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 337,
+   "file_count": 338,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6208,6 +6214,41 @@
   }
  ],
  "recent_commits": [
+  {
+   "sha": "d6df40225de7c7400b302744f10043f284496cd5",
+   "date": "2026-11-09",
+   "subject": "Merge pull request #1217 from darknight11ish/integration/wave12-2026-11-09"
+  },
+  {
+   "sha": "a707c2e30174c51087743f34f07436f6eb612f14",
+   "date": "2026-11-09",
+   "subject": "fix(ci): the register's About-page totals and the wave-12 speech pin the backend job caught on #1217"
+  },
+  {
+   "sha": "11f0f6ac4fc6e57715d2ec7f165e7a04fc5c7643",
+   "date": "2026-11-09",
+   "subject": "fix(ci): two stale pins and a decks mention the required Windows backend job caught on #1217"
+  },
+  {
+   "sha": "0aee1f9fcf7e5c0d23f5bc08bad1d0459a7f987d",
+   "date": "2026-11-09",
+   "subject": "fix(claims): the recorded skip reason is matched lowercase, like every other entry"
+  },
+  {
+   "sha": "f3693548928d6edd979792c41dd91627dff30d54",
+   "date": "2026-11-09",
+   "subject": "fix(claims): the drag-and-drop suite's MarkItDown skip is a machine limit, not withheld proof"
+  },
+  {
+   "sha": "4b295de3dc3c323f0292d1ec937a14a01bc820b3",
+   "date": "2026-11-09",
+   "subject": "fix(ci): the three real reds on #1217 - the long Wave-12 title, a setter mention, and one old source pin"
+  },
+  {
+   "sha": "80d7906b5acd34ce46f02a341c7ba92de859325e",
+   "date": "2026-11-09",
+   "subject": "chore(self-code): regenerate the map for wave 12, both twins in one run"
+  },
   {
    "sha": "1c536b03b3762901637f017fd537e5756a076509",
    "date": "2026-11-09",
@@ -6272,48 +6313,13 @@
    "sha": "289454fd351f58f740647dccb1d00d4642980f9e",
    "date": "2026-11-09",
    "subject": "fix(menus): the Work and Projects tab descriptions match where Goals now lives"
-  },
-  {
-   "sha": "70c2d9d514a8a8d80e869a075ce4f3ef1f32f4d5",
-   "date": "2026-11-09",
-   "subject": "fix(brain): Goals belongs to the Projects view in the menu catalogue, and the wave-12 record is one fragment"
-  },
-  {
-   "sha": "d4b957c1602c17983263952b974431f3b6fb8c58",
-   "date": "2026-11-09",
-   "subject": "feat(brain): a Measured results card that reads the benchmark stores"
-  },
-  {
-   "sha": "6fe454fd4ad198c122866a1ca06bc6a44fd68f4b",
-   "date": "2026-11-09",
-   "subject": "feat(brain): loaded-now/resources truth and a compute panel that names the real cards"
-  },
-  {
-   "sha": "ad70e0de1dba93e624242b2315323c396544cf8e",
-   "date": "2026-11-09",
-   "subject": "feat(brain): Goals under Projects, and an honest memory map with a 1-click HUD door (IA recs 5+6)"
-  },
-  {
-   "sha": "cc48a5767910c453ac3a32c981fb37600f048723",
-   "date": "2026-11-09",
-   "subject": "test(records): replace two source-text pins with AST/runtime checks (check_no_source_pins gate)"
-  },
-  {
-   "sha": "d6faf89a067f0cfc5d6bafe04e2640daa5f4b78a",
-   "date": "2026-11-09",
-   "subject": "docs(attachments): one HUD paragraph and the quick-bar file door after the merge"
-  },
-  {
-   "sha": "a3682ef4302961aba72243e6be619da6f1d3c045",
-   "date": "2026-11-09",
-   "subject": "fix(quickbar): a slower earlier file read cannot overwrite a later drop"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1410
+   "files": 1412
   },
   {
    "path": "jarvis-desktop/",
@@ -6333,7 +6339,7 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 349
+   "files": 350
   },
   {
    "path": "tools/",
@@ -6343,7 +6349,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 227
+   "files": 228
   },
   {
    "path": "videos/",
@@ -6353,7 +6359,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 143
+   "files": 144
   },
   {
    "path": "plugins/",
@@ -6427,8 +6433,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5551,
-  "covered": 5082,
+  "tracked_files": 5556,
+  "covered": 5087,
   "excluded": 469,
   "subsystems": 27
  },

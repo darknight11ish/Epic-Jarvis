@@ -306,11 +306,12 @@ SUBSYSTEMS = (
         "title": "Files, documents and storage",
         "group": "runtime",
         "areas": ("backend",),
-        "purpose": "Finding and reading the owner's files and documents, bringing one "
+        "purpose": "Finding and reading the owner's files and documents, reading one "
+                   "code file inside a folder he listed, bringing one "
                    "in from the phone, sending one out, and keeping a backup of what "
                    "Jarvis changes.",
         "modules": (
-            "jarvis_documents", "jarvis_send_file", "jarvis_upload",
+            "jarvis_documents", "jarvis_project_read", "jarvis_send_file", "jarvis_upload",
             "jarvis_attached_file", "jarvis_file_guardian", "jarvis_backup",
             "jarvis_storage", "jarvis_storage_health", "jarvis_data_health",
         ),
@@ -319,7 +320,7 @@ SUBSYSTEMS = (
                         "jarvis_backup"),
         "tests": ("backend/test_documents.py", "backend/test_upload.py",
                   "backend/test_file_guardian.py", "backend/test_backup.py",
-                  "backend/test_documents_honesty.py"),
+                  "backend/test_documents_honesty.py", "backend/test_project_read.py"),
         "docs": ("docs/ARCHITECTURE.md", "docs/JARVIS-API.md"),
     },
     {

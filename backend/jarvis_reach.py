@@ -127,6 +127,7 @@ TOOL_NAMES = {
     "email_check": "Reading your email",
     "notes_search": "Searching your notes",
     "my_files": "Finding and reading files in the folders you listed",
+    "project_read": "Reading one file of code, config or notes in a folder you listed",
     "my_spending": "Adding up spending from your bank files (shown on screen only)",
     "retirement_whatif": "A retirement what-if from numbers you type (shown on screen only)",
     "home_read": "Reading Home Assistant",

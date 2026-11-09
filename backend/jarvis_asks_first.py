@@ -413,7 +413,8 @@ LOOSEN_ACTION = "loosen_what_asks_first"
 #:            account, REA.
 #:   TIER_UNLISTED - the everyday helpers the slice never offered before:
 #:            calculator, memory_search, file_read, web_search, my_files,
-#:            propose_plan, change_setting, feature_guide.
+#:            propose_plan, change_setting, feature_guide, and project_read
+#:            (reading one file inside a listed folder, 2026-11-09).
 #:   TIER_EXTRA - the rest of the model's own tools, which shipped ON and had
 #:            no switch row at all: goals, old conversations, phone apps,
 #:            plugins, the self portrait and the setup quiz.
@@ -448,6 +449,11 @@ TIER_C = (
 TIER_UNLISTED = (
     "calculator", "memory_search", "file_read", "web_search", "my_files",
     "propose_plan", "change_setting", "feature_guide",
+    # Reading one file inside a listed folder (jarvis_project_read.py,
+    # 2026-11-09). A row here is REAL: the turn reads [tools].enabled, and this
+    # is a read decided under read_files_readonly at tier "auto" - the same
+    # line file_read and my_files sit on, which is why it is the same group.
+    "project_read",
 )
 #: The tools that shipped ON and had no switch row at all before 2026-11-04.
 #: Each one really is decided by its line in [tools].enabled, so a switch here
@@ -507,12 +513,13 @@ NOT_A_SWITCH = (("run_data_script", "product_check") + GRANT_ASK_TOOLS
                 + CLOUD_RIDES_WITH_SETTINGS)
 
 #: Every tool an app may switch ON - all of the model's own tools except the
-#: ones above. 60 at 2026-11-05 (48 at 2026-11-04, plus the six on-demand
-#: GitHub tools the tool list had grown without a row of their own, plus
-#: hands-free's send_text_message, plus the approval-policy tool's own row,
-#: plus the four pack tools; the product check is the fourth exception
-#: rather than a row, and the cloud escalation switch the fifth - it rides with
-#: change_setting, so the count does not move with it).
+#: ones above. 61 at 2026-11-09 (60 at 2026-11-05: 48 at 2026-11-04, plus the
+#: six on-demand GitHub tools the tool list had grown without a row of their
+#: own, plus hands-free's send_text_message, plus the approval-policy tool's
+#: own row, plus the four pack tools; 61 is project_read's own row, the read
+#: half of "Jarvis takes over dev work"; the product check is the fourth
+#: exception rather than a row, and the cloud escalation switch the fifth - it
+#: rides with change_setting, so the count does not move with it).
 TOOLS_SWITCHABLE = (TIER_A + TIER_B
                     + tuple(t for t in TIER_C if t not in NOT_A_SWITCH)
                     + TIER_UNLISTED + TIER_EXTRA)

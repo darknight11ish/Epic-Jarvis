@@ -750,6 +750,21 @@ is `$SHIPPED` near the top of the script, and the same list is `SHIPPED` in
   `jarvis_notes.py`, `jarvis_home.py`. Copying one does not switch it on:
   the model is only offered a tool that `[tools].enabled` in
   `jarvis-framework.toml` names.
+- **`project_read`** (added 2026-11-09) - reads ONE file of code, config or
+  notes inside a folder on "Folders Jarvis may look in", or inside a
+  registered project's own folder, so the model can read a `.py` file at all:
+  `file_read` has no folder check and `my_files` refuses code
+  (`TEXT_KINDS` is md/txt/csv). **There is no patch** - the tool is declared
+  in `jarvis_agent.py`, which ships whole - and it writes a second boundary
+  nowhere: the folder and then the file are checked by
+  `jarvis_documents.allowed_path()`, and the `.gitignore` rules and the
+  per-file size cap are `jarvis_repomap.py`'s own, so the two readers cannot
+  disagree about the same file. It adds no gate action and raises no card (a
+  read, under `read_files_readonly`), it ships OFF in `[tools].enabled` like
+  `file_read`, and its own switch is one row on Settings, "What asks first".
+  The module is `backend/jarvis_project_read.py`; its suite is
+  `backend/test_project_read.py`, and the API document's section 211 says what
+  it refuses and why.
 - **`change_setting`** (added 2026-10-13) - the one tool that changes a
   setting, so that asking in ANY wording works instead of only a sentence
   that fits the fixed phrase grammar in `jarvis_quick.py`. Before it,

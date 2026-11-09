@@ -116,11 +116,14 @@ ROW_OF = {"email_check": "email_read", "home_read": "home_read"}
 
 
 def t_every_switch_writes_the_tool_the_model_is_offered():
-    # 59 since 2026-11-05 (48 at 2026-11-04): the owner's decision made EVERY
+    # 61 since 2026-11-09 (60 at 2026-11-05, 48 at 2026-11-04): the owner's
+    # decision made EVERY
     # tool the AI model can be offered switchable - the raw Tier C set and the
     # everyday helpers included - and the six on-demand GitHub tools joined that
     # set with the GitHub branch, hands-free's send_text_message with that one,
     # and the four pack-manager tools (2026-11-05) with the pack manager.
+    # 61 adds project_read, the read half of "Jarvis takes over dev work": a
+    # read decided under file_read's own action, so its row is real.
     # They are model tools (they run on this PC, in
     # either app's chat), so each one has its row on the PC's Tools page; what
     # the GitHub branch keeps one-sided is a SCREEN (no repo list, no diff, no
@@ -129,13 +132,13 @@ def t_every_switch_writes_the_tool_the_model_is_offered():
     # sandbox, the product check and the two web-search grant tools, which ride
     # with web search); a
     # switch the turn ignored would be a lie. test_asks_first.py carries the
-    # same 59 and the same reason.
-    check("the in-app rows: 60, every tool the model can be offered",
+    # same 61 and the same reason.
+    check("the in-app rows: 61, every tool the model can be offered",
           AF.TOOLS_SWITCHABLE == (AF.TIER_A + AF.TIER_B
                                   + tuple(t for t in AF.TIER_C
                                           if t not in AF.NOT_A_SWITCH)
                                   + AF.TIER_UNLISTED + AF.TIER_EXTRA)
-          and len(AF.TOOLS_SWITCHABLE) == 60)
+          and len(AF.TOOLS_SWITCHABLE) == 61)
     # The PC half of the law, proved against the page itself rather than
     # assumed: jarvis-desktop/src/asks-first.js carries its own copy of the
     # list (the Tools page's rows), so a tool added on one side alone fails
