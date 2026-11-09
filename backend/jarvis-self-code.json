@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b3b3000349e1b779b08981b6b517e4d421aa28ec",
- "built_at": "2026-11-09T14:03:17-08:00",
+ "ref": "97256e72f4e0c85e50bc4948d43c86196ee60b18",
+ "built_at": "2026-11-09T14:44:31-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6228,6 +6228,11 @@
  ],
  "recent_commits": [
   {
+   "sha": "97256e72f4e0c85e50bc4948d43c86196ee60b18",
+   "date": "2026-11-09",
+   "subject": "presets: the tenth Medical row, three pooled modes, coding_q4 re-point (wave-14 draft)"
+  },
+  {
    "sha": "b3b3000349e1b779b08981b6b517e4d421aa28ec",
    "date": "2026-11-09",
    "subject": "test(wave13): the three stale tool pins the required Windows job caught"
@@ -6321,11 +6326,6 @@
    "sha": "d6df40225de7c7400b302744f10043f284496cd5",
    "date": "2026-11-09",
    "subject": "Merge pull request #1217 from darknight11ish/integration/wave12-2026-11-09"
-  },
-  {
-   "sha": "1d04f3db477870c01a3e3fddbdc6a3b43e3b4b2f",
-   "date": "2026-11-09",
-   "subject": "merge(wave13): fold the F2 native-preload seam into the one wave-13 PR (Gemini Q4)"
   }
  ],
  "top_level": [
