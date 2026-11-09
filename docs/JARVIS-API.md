@@ -36761,3 +36761,49 @@ appears that is not in the store, blocks the model entry point and the network,
 and uses a fake `jarvis_bench.start`/`start_suites` - no benchmark is started by
 the tests and no live lane is contacted.
 
+
+## 206. What's new in Jarvis: the Brain's Tutorials tab shows the recent-changes record (Task-50, Wave 12)
+
+One read, no card, no write: `GET /api/recent-changes` carries the generated
+`jarvis_recent_changes.py` module - the same bullets the chat's "what changed in
+your last update?" answer reads (section 158.2) - to the Brain's "What's new in
+Jarvis" pane. The route lives in `jarvis_brain_reads.py`
+(`RECENT_CHANGES_PATH`) and is installed by `brain-reads.patch`'s existing
+`install()` call, so it needs no patch of its own. It is behind the pairing token
+and the origin check like every other Brain read.
+
+| field | meaning |
+|---|---|
+| `ok` | true on a read that produced an answer |
+| `available` | true when the module is installed on this PC; `false` with `why` when it is not |
+| `version` | the `VERSION` beside the module, read at answer time, or `""` when this PC has none |
+| `bullets` | the module's own newest-first bullets, at most 20, each cut to 400 characters |
+| `empty_words` | the module's own `NO_RECORD_WORDS`, for a record that carries nothing |
+| `source` | `"jarvis_recent_changes.py"` |
+
+**It never invents a change.** A missing module answers `501` with
+`available: false` and the standard "run apply-patches.ps1" sentence; a module
+that raises answers `500` with a plain sentence; an empty record answers `200`
+with `bullets: []` and the module's own sentence, which the pane prints instead
+of a list. Nothing here reads the owner's data, so nothing is withheld: the
+changelog is already public. The read is bounded, so a runaway record cannot
+flood a window.
+
+**Where it is drawn.** Desktop only: Brain -> Tutorials and the FAQ, the "What's
+new in Jarvis" pane (`tutorials.rs` `get_recent_changes`, `src/tutorials.js`).
+Its one control, "Open Settings -> Updates", calls `open_fix_place` with
+`place: "updates"` - a navigation that opens Settings at its Updates card, under
+the same App lock as the tray. That card is also where the four-state update
+truth is read (Task-50): `update.rs`'s `Status.state` is `unknown` /
+`cannot_check` / `up_to_date` / `update_available`, with `checked_at` as the
+PC's own wall clock ("YYYY-MM-DD HH:MM"), and **both** the tray's report row
+("Up to date - checked 14:32") and the Updates card render that one field, so
+the menu and the card cannot disagree. `unknown` and `cannot_check` are said as
+themselves - a check that never ran, or could not answer, is never drawn as "the
+newest published".
+
+**The phone has no such pane, and that is one-sided on purpose**
+(`docs/ARCHITECTURE.md` section 8): the phone does not install or update Jarvis,
+so it has no Settings -> Updates to open and no install to describe; its
+Tutorials tab keeps the shared catalogue (section 114). `tools/check_parity.py`
+classifies the route `deliberate` with that reason.

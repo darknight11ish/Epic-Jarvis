@@ -2084,6 +2084,11 @@ permissions = [
   "allow-get-tutorials",
   "allow-mark-tutorial",
   "allow-get-faq",
+  # "What's new in Jarvis" (Task-50, Wave 12): the generated recent-changes
+  # module's own bullets. A read of the project's own record - nothing written,
+  # no card. Its one control uses the `open-fix-place` grant this window
+  # already holds (brain.js's own navigation), asking for `updates`.
+  "allow-get-recent-changes",
 ]
 
 # How long "Solve it here" stays on offer (handoff.rs; backend/jarvis_handoff_mode.py;

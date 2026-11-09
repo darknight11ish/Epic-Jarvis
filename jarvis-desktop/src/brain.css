@@ -3691,6 +3691,50 @@ mark.find-current {
   transition: outline-color 120ms ease-out, box-shadow 120ms ease-out;
 }
 
+/* ── "What's new in Jarvis" (tutorials.js, Task-50, Wave 12) ───────────────
+   One quiet pane at the top of the Help tab, drawn from the generated
+   recent-changes module. A list of the project's own sentences - never a
+   badge, a percentage or a nudge - and its one button only opens
+   Settings -> Updates, where the owner's own press is what installs. */
+
+.whats-new {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+  margin: 0 0 16px;
+}
+
+.whats-new h3 {
+  margin: 0 0 6px;
+}
+
+.whats-new-version {
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.whats-new-list {
+  margin: 0 0 6px;
+  padding-left: 20px;
+}
+
+.whats-new-list li {
+  margin: 4px 0;
+}
+
+.whats-new-door {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.whats-new-said {
+  color: var(--text-muted);
+}
+
 /* ==========================================================================
    Windows high-contrast (forced-colors)
    --------------------------------------------------------------------------

@@ -4950,26 +4950,24 @@ what is missing is only the Settings screen agreeing about who turned it off.
   attempt (a card every 2 hours is not answerable). JARVIS-API section 204
   records the route and the guardrails.
 
-- **A file is dragged into the desktop chat; the phone keeps its one "Attach a
-  file" row, and that is one-sided on purpose** (2026-11-09; the owner's ask:
-  drag-and-drop compatible files into the Jarvis bar / chat bar). The desktop's
-  HUD and every chat window accept a dropped file because their builders turn
-  Tauri's own drag-drop handler off - `disable_drag_drop_handler()` in
-  `jarvis-desktop/src-tauri/src/lib.rs` and `chat_windows.rs`. On Windows that
-  handler REPLACES WebView2's, so without the setting the page's `drop` listener
-  never sees `dataTransfer.files` at all: the gesture only ever worked in a
-  browser, never in the packaged window. The bytes then ride the existing
-  `/api/chat` `attachment` field (JARVIS-API §163), so the same 2,500,000-byte
-  cap, the same eight extensions (seven kinds - `.md` and `.markdown` are one),
-  the same `read_files_readonly` gate, the same local-only routing and the same
-  no-card-by-default rule apply, and nothing auto-sends. **The phone gets no
-  drag gesture:** it has no desktop-style file-manager window beside the chat to
-  drag from, and its one "Attach a file" row already sends the same kinds down
-  the same field. `tools/check_parity.py` sees no route on either side - this is
-  a gesture, not a permission. The harness is pure node
-  (`jarvis-desktop/tests/attach.mjs`); a real Explorer-to-window drag and the
-  Tauri runtime's own event are **NOT-TESTABLE** at a desk and are not claimed
-  as tested.
+
+- **"What's new in Jarvis" is the desktop's pane, and that is one-sided on
+  purpose** (Task-50, Wave 12; `docs/JARVIS-API.md` section 206;
+  `backend/jarvis_brain_reads.py`'s `RECENT_CHANGES_PATH`, reading the generated
+  `backend/jarvis_recent_changes.py`; `tutorials.rs` `get_recent_changes`,
+  `src/tutorials.js`). The Brain's Tutorials and the FAQ tab shows the project's
+  own recent-changes record - the same bullets the chat's "what changed in your
+  last update?" answer reads - and its one control opens Settings at the Updates
+  card (`open_fix_place` with `place: "updates"`, a navigation only). **The
+  phone shows no such pane because it has nowhere for the door to go:** the
+  phone does not install or update Jarvis (the desktop's updater runs on this
+  PC), so a "What's new" pane there could describe a change and then offer
+  nothing to act on. The phone's Tutorials tab keeps the shared catalogue
+  (`JARVIS-API` section 114). `tools/check_parity.py` classifies
+  `/api/recent-changes` `deliberate` with this reason. The pane invents nothing:
+  a module that is missing, empty or unreadable answers with a sentence saying
+  so, never with a list.
+
 
 ## 9. Where the backend lives
 

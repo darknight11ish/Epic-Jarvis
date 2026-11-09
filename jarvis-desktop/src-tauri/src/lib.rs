@@ -1422,6 +1422,11 @@ pub fn run() {
             tutorials::get_tutorials,
             tutorials::mark_tutorial,
             tutorials::get_faq,
+            // "What's new in Jarvis" (Task-50, Wave 12): the generated
+            // recent-changes module's own bullets, read by the Brain's
+            // Tutorials tab. A read of the project's own record; nothing here
+            // writes or approves.
+            tutorials::get_recent_changes,
             web_search::get_web_search,
             web_search::set_web_search,
             web_search::test_web_search,

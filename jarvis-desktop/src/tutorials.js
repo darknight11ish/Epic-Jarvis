@@ -60,6 +60,18 @@ export const LABELS = {
   pointed: "There it is.",
   otherWindow: "It is in another window",
   noPoint: "Nothing on this screen to point at for this step.",
+  // "What's new in Jarvis" (Task-50, Wave 12): the generated recent-changes
+  // module's own bullets, with the one door to the card that can install.
+  whatsNew: "What's new in Jarvis",
+  whatsNewVersion: "This PC runs Jarvis",
+  openUpdates: "Open Settings → Updates",
+  updatesOpened: "Opened.",
+  // Said only when the PC has no sentence of its own to send (an older
+  // backend). The module's own NO_RECORD_WORDS is preferred over this.
+  whatsNewEmpty:
+    "The newest changes are not written down beside the program on this PC, " +
+    "so there is nothing to list here.",
+  whatsNewUnavailable: "This PC's Jarvis does not have the changes list yet.",
 };
 
 /**
@@ -270,6 +282,29 @@ export function metWords(counts) {
 }
 
 /**
+ * The bullets a "What's new" answer may show: the PC's own strings, trimmed,
+ * empties dropped, at most 20 - the route already bounds them, and this is the
+ * second belt so a malformed answer cannot draw a thousand rows.
+ */
+export function whatsNewBullets(answer) {
+  const raw = answer && Array.isArray(answer.bullets) ? answer.bullets : [];
+  return raw
+    .map((item) => String(item == null ? "" : item).trim())
+    .filter(Boolean)
+    .slice(0, 20);
+}
+
+/**
+ * The sentence for a record with nothing in it. The module's own
+ * `NO_RECORD_WORDS` when the PC sent it; this file's plain fallback otherwise.
+ * Never a list, and never a guess about what changed.
+ */
+export function whatsNewWords(answer) {
+  const own = String((answer && answer.empty_words) || "").trim();
+  return own || LABELS.whatsNewEmpty;
+}
+
+/**
  * The FAQ, filtered by what the owner typed. Matching is case-insensitive and
  * looks in the question AND the answer, because half the time the owner
  * remembers a word from the answer.
@@ -364,6 +399,18 @@ export async function showTutorials(root) {
   root.append(head);
   const body = el("div", "tutorials-body");
   root.append(body);
+
+  // "What's new in Jarvis" (Task-50, Wave 12) sits at the TOP of the one Help
+  // place: it is the question the owner asks first after an update. The box is
+  // drawn now and filled asynchronously, so a slow backend never holds up the
+  // tutorials list below it.
+  const whatsNew = el("section", "whats-new");
+  whatsNew.append(el("h3", null, LABELS.whatsNew));
+  body.append(whatsNew);
+  // Started here, NOT at the end: this pane must still fill when the tutorials
+  // or FAQ read fails and `showTutorials` returns early, and it must not hold
+  // up the lists below it (it is not awaited).
+  mountWhatsNew(whatsNew);
 
   let catalogue;
   try {
@@ -484,6 +531,64 @@ export async function showTutorials(root) {
   // button was NOT deleted with the Settings card, because the Brain is now the
   // only way in that is not the tray icon (tests/features.mjs holds that).
   mountFeaturesButton();
+}
+
+/**
+ * "What's new in Jarvis" (Task-50, Wave 12): the one Help place shows what
+ * changed, read from the generated `jarvis_recent_changes.py` module through
+ * `get_recent_changes`.
+ *
+ * **NOTHING IS INVENTED.** Every bullet is the project's own record - the same
+ * bullets the chat's "what changed in your last update?" answer reads - the
+ * version is the VERSION beside that module, and a record with no bullets is
+ * shown as the module's own sentence. There is no card and no write: the one
+ * control is a door to Settings -> Updates, where the owner's own press is the
+ * only thing that can install.
+ */
+async function mountWhatsNew(box) {
+  const body = el("div", "whats-new-body");
+  box.append(body);
+  try {
+    const answer = await loadRecentChanges();
+    if (!answer || answer.available === false) {
+      // An older PC, or the route could not be read: say that, and say what to
+      // do. It is not "no changes" - that would be an invented answer.
+      body.append(el("p", "problem", (answer && answer.why) || LABELS.whatsNewUnavailable));
+    } else {
+      const version = String(answer.version || "").trim();
+      if (version) {
+        body.append(el("p", "whats-new-version", `${LABELS.whatsNewVersion} ${version}.`));
+      }
+      const bullets = whatsNewBullets(answer);
+      if (!bullets.length) {
+        // The module's own NO_RECORD_WORDS, not a list and not a guess.
+        body.append(el("p", "empty", whatsNewWords(answer)));
+      } else {
+        const list = el("ul", "whats-new-list");
+        for (const words of bullets) list.append(el("li", null, words));
+        body.append(list);
+      }
+    }
+  } catch (error) {
+    body.append(el("p", "problem", problemWords(error)));
+  }
+  // The one control: a door. It checks nothing and installs nothing; it opens
+  // the card where those presses live, under the same App lock as the tray.
+  const door = el("div", "whats-new-door");
+  const open = el("button", "whats-new-open", LABELS.openUpdates);
+  open.type = "button";
+  const said = el("span", "whats-new-said");
+  open.addEventListener("click", async () => {
+    said.textContent = "";
+    try {
+      await invoke("open_fix_place", { place: "updates" });
+      said.textContent = LABELS.updatesOpened;
+    } catch (error) {
+      said.textContent = problemWords(error);
+    }
+  });
+  door.append(open, said);
+  box.append(door);
 }
 
 /**
@@ -621,6 +726,11 @@ export async function loadTutorials(section) {
 
 export async function loadFaq() {
   return invoke("get_faq", {});
+}
+
+/** "What's new in Jarvis": the generated module's own bullets (Task-50). */
+export async function loadRecentChanges() {
+  return invoke("get_recent_changes");
 }
 
 /** Record where the owner is. Failure is reported, never silent. */
