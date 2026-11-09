@@ -1408,8 +1408,7 @@ def live_status() -> dict:
 
 #: The receipt name for one preset clicked in an app, so Undo knows how to put
 #: the model, the lane and the chosen preset back (jarvis_receipts.py). It is
-#: registered at import, the same way jarvis_decks.py and jarvis_antislop.py
-#: register theirs.
+#: registered at import, the same way jarvis_antislop.py's own receipts are.
 OWNER_RECEIPT_TOOL = "preset_apply"
 
 

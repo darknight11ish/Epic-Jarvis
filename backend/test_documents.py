@@ -964,19 +964,22 @@ def t_a_276_mb_export_is_accepted_and_the_guards_still_refuse():
     check("a refused import clears it too - no stale 'unzipping' line",
           bool(said) and D.importing() is None, said)
 
-    # (g) The phone shows the PC's own sentence, and its 250 MB is a DIFFERENT
-    # limit (the raw zip it sends), not the unpacked ceiling raised here.
+    # (g) The phone shows the PC's own sentence, and its 4 GB raw-upload cap is
+    # the phone's OWN number (the raw zip bytes it sends) even though the owner
+    # raised it on 2026-11-09 to match the PC's 4 GB unpacked ceiling - the two
+    # limits are still two numbers (ARCHITECTURE.md section 8).
     kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
           / "client" / "net" / "NotionImport.kt").read_text(encoding="utf-8")
     check("the phone relays the PC's refusal sentence verbatim",
           "DesktopWrite.asSentence(why)" in kt, "")
     up = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
           / "client" / "net" / "Upload.kt").read_text(encoding="utf-8")
-    check("the phone's 250 MB is its raw-upload cap, unchanged by this decision",
-          "NOTION_MAX = 250L * 1024 * 1024" in up, "")
+    check("the phone's raw-upload cap is its own 4 GB, raised on 2026-11-09",
+          "NOTION_MAX = 4L * 1024 * 1024 * 1024" in up, "")
     arch = (REPO / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
-    check("the one-sided reason is recorded in ARCHITECTURE.md section 8",
-          "The phone's Notion upload cap stays 250 MB" in arch, "")
+    check("the two numbers and the phone's new cap are recorded in ARCHITECTURE.md section 8",
+          "The phone may send a 4 GB Notion export too" in arch
+          and "they are still two numbers" in arch, "")
     fresh()
 
 
