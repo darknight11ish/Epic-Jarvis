@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "b3b3000349e1b779b08981b6b517e4d421aa28ec",
- "built_at": "2026-11-09T14:03:17-08:00",
+ "ref": "1c209ac527386c9dc4be7ac906600e0a14d49e83",
+ "built_at": "2026-11-09T15:28:53-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -527,19 +527,20 @@
    "id": "files",
    "title": "Files, documents and storage",
    "group": "runtime",
-   "purpose": "Finding and reading the owner's files and documents, bringing one in from the phone, sending one out, and keeping a backup of what Jarvis changes.",
+   "purpose": "Finding and reading the owner's files and documents, reading one code file inside a folder he listed, bringing one in from the phone, sending one out, and keeping a backup of what Jarvis changes.",
    "files": [
     "backend/jarvis_attached_file.py",
     "backend/jarvis_backup.py",
     "backend/jarvis_data_health.py",
     "backend/jarvis_documents.py",
     "backend/jarvis_file_guardian.py",
+    "backend/jarvis_project_read.py",
     "backend/jarvis_send_file.py",
     "backend/jarvis_storage.py",
     "backend/jarvis_storage_health.py",
     "backend/jarvis_upload.py"
    ],
-   "file_count": 9,
+   "file_count": 10,
    "key_modules": [
     {
      "path": "backend/jarvis_documents.py",
@@ -563,7 +564,8 @@
     "backend/test_upload.py",
     "backend/test_file_guardian.py",
     "backend/test_backup.py",
-    "backend/test_documents_honesty.py"
+    "backend/test_documents_honesty.py",
+    "backend/test_project_read.py"
    ],
    "docs": [
     "docs/ARCHITECTURE.md",
@@ -2988,7 +2990,6 @@
     "jarvis-desktop/tests/hud-current-models.mjs",
     "jarvis-desktop/tests/hud-edit-fieldtest.mjs",
     "jarvis-desktop/tests/hud-edit-geometry.mjs",
-    "jarvis-desktop/tests/hud-edit-select.mjs",
     "jarvis-desktop/tests/hud-edit-tabs.mjs",
     "jarvis-desktop/tests/hud-edit.mjs",
     "jarvis-desktop/tests/hud-galaxy-looks.mjs",
@@ -3158,7 +3159,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1246,
+   "file_count": 1245,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -4068,6 +4069,7 @@
     "backend/test_product_research.py",
     "backend/test_profiles.py",
     "backend/test_progress.py",
+    "backend/test_project_read.py",
     "backend/test_projects.py",
     "backend/test_promise_guards.py",
     "backend/test_prompt_coach.py",
@@ -4293,7 +4295,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 680,
+   "file_count": 681,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -4565,6 +4567,7 @@
     "changelog.d/2026-11-07-wave-9-read-aloud-bench-and-brain.md",
     "changelog.d/2026-11-08-wave-10-honest-answers-and-wifi.md",
     "changelog.d/2026-11-08-wave-11-model-and-lane-truth.md",
+    "changelog.d/2026-11-09-project-read.md",
     "changelog.d/2026-11-09-wave-12.md",
     "changelog.d/2026-11-09-wave-13.md",
     "changelog.d/README.md",
@@ -4709,6 +4712,7 @@
     "decisions.d/2026-11-08-wave-11-model-and-lane-truth.md",
     "decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md",
     "decisions.d/2026-11-08-wrong-answer-menu-and-memory-cards.md",
+    "decisions.d/2026-11-09-project-read.md",
     "decisions.d/2026-11-09-wave-12-owner-clicks-and-truth.md",
     "decisions.d/2026-11-09-wave-13-reminders-github-creator.md",
     "decisions.d/README.md",
@@ -5158,7 +5162,7 @@
     "docs/ui-audit-2026-09-26/restraint.md",
     "docs/ui-audit-2026-09-26/ui-mockups.html"
    ],
-   "file_count": 824,
+   "file_count": 826,
    "key_modules": [],
    "tests": [
     "backend/test_docs_map_generator.py",
@@ -6078,6 +6082,7 @@
     "jarvis-backend/jarvis_product_research.py",
     "jarvis-backend/jarvis_profiles.py",
     "jarvis-backend/jarvis_progress.py",
+    "jarvis-backend/jarvis_project_read.py",
     "jarvis-backend/jarvis_projects.py",
     "jarvis-backend/jarvis_prompt_coach.py",
     "jarvis-backend/jarvis_protection.py",
@@ -6199,7 +6204,7 @@
     "jarvis-backend/sw.js",
     "jarvis-backend/theme.css"
    ],
-   "file_count": 338,
+   "file_count": 339,
    "key_modules": [
     {
      "path": "jarvis-backend/jarvis_self_code.py",
@@ -6228,6 +6233,31 @@
   }
  ],
  "recent_commits": [
+  {
+   "sha": "1c209ac527386c9dc4be7ac906600e0a14d49e83",
+   "date": "2026-11-09",
+   "subject": "chore(p1a): regenerate the saved tool copies the rebased tool list moved"
+  },
+  {
+   "sha": "f16ac7478b2e3f1caeedb5592b6781c5be18987f",
+   "date": "2026-11-09",
+   "subject": "fix(p1a): fold the new fragment into the recent-changes module, and say the map's real id rule"
+  },
+  {
+   "sha": "d5c0b62cb8d3d9262cad643dd650e47e7cb748fa",
+   "date": "2026-11-09",
+   "subject": "feat(takeover): project_read reads a line range and refuses credential files"
+  },
+  {
+   "sha": "872590dadfc95de7746c9c29a153403754f8a7b9",
+   "date": "2026-11-09",
+   "subject": "feat(takeover): project_read - one bounded code read, and no card"
+  },
+  {
+   "sha": "552103af56b8a561fb26984746b2ce9709486c21",
+   "date": "2026-11-09",
+   "subject": "dry-run: simulate the #1218 merge into main"
+  },
   {
    "sha": "b3b3000349e1b779b08981b6b517e4d421aa28ec",
    "date": "2026-11-09",
@@ -6302,43 +6332,18 @@
    "sha": "b33f1fdadcbbf6688e0de2e3ca9e0ddb36215ad3",
    "date": "2026-11-09",
    "subject": "merge(wave13): the skills caller fix gets a live-delivery route (F5)"
-  },
-  {
-   "sha": "1d5b512a56d9874408b0bb31e293aae86ca7af59",
-   "date": "2026-11-09",
-   "subject": "fix(skills): give the wave-12 skill scan a route to a live install (F5)"
-  },
-  {
-   "sha": "c09e795d8f81709a055a7229fc44a8e685265321",
-   "date": "2026-11-09",
-   "subject": "records(wave13): the one changelog bullet and one decision bullet carry the memory-fault banner and the F2 cold-turn seam; claims C150-C152, the About totals (250/237), the field-test rows, the README honest limits and DEF-034's fixed half"
-  },
-  {
-   "sha": "3e69e609176361ed8d4a86062d32625951ad9efc",
-   "date": "2026-11-09",
-   "subject": "merge(main): bring #1217 into wave 13 - the About-page register totals and the two wave-12 test pins"
-  },
-  {
-   "sha": "d6df40225de7c7400b302744f10043f284496cd5",
-   "date": "2026-11-09",
-   "subject": "Merge pull request #1217 from darknight11ish/integration/wave12-2026-11-09"
-  },
-  {
-   "sha": "1d04f3db477870c01a3e3fddbdc6a3b43e3b4b2f",
-   "date": "2026-11-09",
-   "subject": "merge(wave13): fold the F2 native-preload seam into the one wave-13 PR (Gemini Q4)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1420
+   "files": 1422
   },
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1254
+   "files": 1253
   },
   {
    "path": "jarvis-client/",
@@ -6353,7 +6358,7 @@
   {
    "path": "jarvis-backend/",
    "line": "the published base: a complete runnable copy of the backend",
-   "files": 350
+   "files": 351
   },
   {
    "path": "tools/",
@@ -6363,7 +6368,7 @@
   {
    "path": "changelog.d/",
    "line": "one bullet per pull request, rolled into CHANGELOG.md",
-   "files": 228
+   "files": 229
   },
   {
    "path": "videos/",
@@ -6373,7 +6378,7 @@
   {
    "path": "decisions.d/",
    "line": "one dated decision per pull request, rolled into DECISIONS.md",
-   "files": 144
+   "files": 145
   },
   {
    "path": "plugins/",
@@ -6447,8 +6452,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5572,
-  "covered": 5101,
+  "tracked_files": 5576,
+  "covered": 5105,
   "excluded": 471,
   "subsystems": 27
  },
