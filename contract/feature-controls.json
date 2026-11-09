@@ -243,7 +243,7 @@
       "name": "Jarvis reads its answers aloud",
       "group": "Talking",
       "surface": "both",
-      "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
+      "where": "On by default: a question asked by voice, or in Jarvis Live, gets a spoken answer; an answer to a typed question stays silent. Settings, Voice, \"Read replies out loud\" turns the automatic reading off and back on, and saying \"stop reading your replies out loud\" in chat or Jarvis Live does the same (\"read your replies out loud\" turns it back on). The speaker beside a finished answer, and Read out loud in its menu, read that one answer again; Settings, HUD, \"Read-aloud buttons on answers\" adds those speakers on the PC. An answer that used a sensitive saved fact stays on screen. No card is raised, and no model can change this switch.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -272,7 +272,7 @@
       },
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "the read-aloud control is not a registered switch and has no typed path yet",
+      "reason": "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin.",
       "label": "Switchable / Adjustable (Typed & Settings)",
       "label_evidence": {
         "example_phrase": "turn on Jarvis reads its answers aloud",
@@ -282,14 +282,14 @@
         "status": "planned",
         "reason_code": "planned-no-own-control",
         "owner": "voiceprint-wiring",
-        "reason": "the read-aloud control is not a registered switch and has no typed path yet",
+        "reason": "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin.",
         "settings_gap": null,
         "label_source": "Switchable / Adjustable (Typed & Settings)"
       },
       "own_keys": [],
       "own_intents": [],
       "own_actions": {},
-      "label_note": "the read-aloud control is not a registered switch and has no typed path yet"
+      "label_note": "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin."
     },
     {
       "id": "spoken-style",
@@ -11628,7 +11628,7 @@
       "id": "read-aloud",
       "status": "planned",
       "owner": "voiceprint-wiring",
-      "reason": "the read-aloud control is not a registered switch and has no typed path yet"
+      "reason": "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin."
     },
     {
       "kind": "feature",
