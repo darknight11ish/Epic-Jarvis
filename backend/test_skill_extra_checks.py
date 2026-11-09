@@ -325,18 +325,6 @@ def t_the_hub_scanner_kept_its_old_codes_after_the_split_out():
           url["verdict"])
 
 
-def t_the_install_gate_is_still_the_one_scan():
-    """A source pin: vet() is what install() judges, and vet calls the four."""
-    src = (REPO / "jarvis-backend" / "jarvis_skills.py").read_text(encoding="utf-8")
-    check("vet() calls the four extra checks",
-          "findings += _extra_findings(skill)" in src)
-    check("install() still gates on vet()'s verdict",
-          "report = vet(skill)" in src)
-    check("the four codes are still named where the fallback needs them",
-          all(f'"{c}"' in src for c in ("hermes_exec", "exfil_phrasing",
-                                        "gate_bypass_claim", "bare_url")))
-
-
 def main():
     print("jarvis_skills.py + jarvis_skill_hub.py: the four extra checks are WIRED")
     for fn in (t_the_hermes_inline_command_is_refused,
@@ -349,8 +337,7 @@ def main():
                t_a_warning_needs_accept_warnings_then_raises_exactly_one_card,
                t_a_raising_hub_scanner_fails_closed,
                t_without_the_hub_the_report_says_the_layer_did_not_run,
-               t_the_hub_scanner_kept_its_old_codes_after_the_split_out,
-               t_the_install_gate_is_still_the_one_scan):
+               t_the_hub_scanner_kept_its_old_codes_after_the_split_out):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

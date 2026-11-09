@@ -30,6 +30,7 @@ What is proved here, with no server, no network and no model:
 """
 from __future__ import annotations
 
+import ast
 import sys
 import traceback
 from pathlib import Path
@@ -157,13 +158,25 @@ def t_the_read_is_bounded():
 
 
 def t_not_a_tool_the_model_can_call():
-    agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
-    for needle in ("recent-changes", "recent_changes_api", "recent-changes/"):
-        check(f"jarvis_agent.py never mentions {needle}", needle not in agent)
-    # The one place the agent DOES read the module is its own prompt context,
-    # which is not a route and calls no function here.
-    check("the agent's own use is the module, not this route",
-          "jarvis_brain_reads" not in agent)
+    """The route is not reachable from the agent - checked by AST, not by text.
+
+    A pin on source TEXT goes red when the code is renamed or improved and stays
+    green when the behaviour is wrong (tools/check_no_source_pins.py). So the
+    agent's file is parsed: no string constant may name the route, and no name
+    or attribute may reach jarvis_brain_reads.
+    """
+    tree = ast.parse((HERE / "jarvis_agent.py").read_text(encoding="utf-8"))
+    strings = [n.value for n in ast.walk(tree)
+               if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+    bad_strings = [s for s in strings
+                   if "recent-changes" in s or "recent_changes_api" in s]
+    check("no string in jarvis_agent.py names the recent-changes route",
+          not bad_strings, bad_strings[:3])
+    names = [getattr(n, "id", None) or getattr(n, "attr", None)
+             for n in ast.walk(tree)]
+    bad_names = [n for n in names if n and "jarvis_brain_reads" in n]
+    check("no code path in jarvis_agent.py reaches jarvis_brain_reads",
+          not bad_names, bad_names[:3])
 
 
 if __name__ == "__main__":
