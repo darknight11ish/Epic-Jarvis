@@ -36,8 +36,10 @@ export const HOW_TO =
   "which model and graphics card it uses, and what it is honestly worse at " +
   "before you choose anything.";
 export const ONE_CARD =
-  "Choosing a preset raises one approval card on the PC. Nothing switches " +
-  "until you answer it, and the phone shows the same card.";
+  "Picking a local preset switches the model at once, and picking another " +
+  "switches straight back. The heavy preset (it pauses the other models " +
+  "first) and the cloud service row (it changes where your words go) still " +
+  "raise one approval card on the PC.";
 export const ACTION = "Use this preset";
 export const CURRENT_WORDS = "Current";
 export const PICK_FIRST = "Pick a preset first.";
@@ -85,7 +87,8 @@ export const CONTRACT_SHAPE_UPDATE =
  * disabled without touching this constant.
  */
 export const APPLY_BRIDGE_WIRED = true;
-export const ASKED_WORDS = "Asked the PC. Nothing changes until you answer the card.";
+export const ASKED_WORDS =
+  "Asked the PC. This one asks first - nothing changes until you answer the card.";
 export const REFUSED_WORDS = "That did not work.";
 
 function plain(value) {

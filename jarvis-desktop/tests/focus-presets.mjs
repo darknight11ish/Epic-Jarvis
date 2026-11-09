@@ -316,6 +316,21 @@ await check("a missing hardware block still says the contract needs updating", a
   assert.equal(read.hardware.why, Focus.CONTRACT_SHAPE_UPDATE);
 });
 
+await check("the preset rule says a local pick switches at once, and the two that cannot still ask", () => {
+  // The owner's ask of 2026-11-09: a preset picked in the app is his own
+  // reversible click, so it needs no card. Coding pauses both other models
+  // and Cloud moves his words, so both keep their card - and the sentence the
+  // page shows must say so rather than promising a card for every row.
+  assert.match(Focus.ONE_CARD, /at once/i,
+    `the rule does not say a local preset switches at once: ${Focus.ONE_CARD}`);
+  assert.match(Focus.ONE_CARD, /heavy preset/,
+    `the rule does not say the heavy preset still asks: ${Focus.ONE_CARD}`);
+  assert.match(Focus.ONE_CARD, /cloud service/,
+    `the rule does not say the cloud service row still asks: ${Focus.ONE_CARD}`);
+  assert.match(Focus.ONE_CARD, /approval card/i,
+    `the rule does not say which rows still ask: ${Focus.ONE_CARD}`);
+});
+
 await check("Settings draws the same list, the one-card explanation and the current mark", async () => {
   const other = withApplyRoute(FIXTURE);
   other.chosen = "general";

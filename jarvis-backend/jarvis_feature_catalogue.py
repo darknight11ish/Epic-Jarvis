@@ -3,7 +3,7 @@
 The owner's feature list, as data: 181 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 ac81459fd3fd92814a57bbc3cd1b0fc456890dd0d986fb2b36cb3ccfde09411c); the apps' Features pages read their own
+`features/features.json` (sha256 17355d9c8ba2d41257598edffd2b45958028e9c51f8390271a9dfdf55da74da7); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "ac81459fd3fd92814a57bbc3cd1b0fc456890dd0d986fb2b36cb3ccfde09411c"
+SOURCE_SHA256 = "17355d9c8ba2d41257598edffd2b45958028e9c51f8390271a9dfdf55da74da7"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1436,7 +1436,7 @@ FEATURES = (
         "title": "Models",
         "what": "The models Jarvis can use - switch the everyday one, install another by name, roll back, and on the PC check Hugging Face for newer ones that fit your graphics cards.",
         "where": "Brain, Model, Models. The \"Check for new models\" button is at the bottom of that list, with the candidates it finds, their benchmark, and the preset changes it suggests. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
-        "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it. A check raises no card and downloads nothing; benchmarking measures this PC and changes nothing; the preset advice is applied only through the PC's own preset card.",
+        "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it. A check raises no card and downloads nothing; benchmarking measures this PC and changes nothing; the preset advice is applied only through the PC's own preset control (a local preset picked there switches at once).",
         "limit": "On the PC the check shows a short list the PC chose from what fits your graphics cards - not a searchable catalogue, and nothing in it is called better until it has been measured on this PC. The phone still has no list at all: you type the model's name by hand, the same as at a terminal.",
         "surface": "both",
         "covers": ["models", "model_recommendations", "brain.model.models", "brain.model.resources", "brain.model.measured", "model_resources", "model_measured", "brain.tab.faculties", "model-page"],
@@ -1539,8 +1539,8 @@ FEATURES = (
         "title": "Focus presets",
         "what": "Nine presets for the kind of work you are about to do, each naming the model, graphics card, context, cost and what it is honestly worse at before you choose - including the four capability rows added 2026-10-27 (Reflective Coach for talking a difficult thought through, Pictures & Screens for screenshots and pictures, Documents & Notes for long reading and study, Browser & Forms for long pages and multi-step forms, all on qwen3.5:9b on the 12 GB card) and Fast's move to the small qwen3.5:4b on the fast card.",
         "where": "Settings, Focus presets, or the preset chip in the Jarvis bar on the PC; inside the Hardware plate on the phone.",
-        "asks": "Opening the list changes nothing. Applying a preset raises one approval card before any model changes.",
-        "limit": "An apply of one of the other eight presets starts its lane, then switches the model behind that one approval card; a declined card there leaves the started lane running with no model switched. The Coding preset is the one heavy row: its pooled both-card lane exists and really starts, raising that one card before it pauses the other two models, so a declined card there changes nothing. It runs at the 32,768-token window measured on this PC on 2026-11-03 - the largest rung that loads, at 323.5 MiB spilled into system RAM, which this one window allows up to a 352 MiB cap and nothing larger, while 16,384 stays the largest rung with no spill. A 15-minute real coding session after deployment is the next test: the measurement configured the window, it did not fill it. The Cloud row beside these nine is a separate cloud service choice, described in its own row.",
+        "asks": "Opening the list changes nothing. A local preset picked in either app's own list switches at once - it is your own click and picking another switches straight back - and writes a receipt naming the preset it replaced. The Coding and Cloud rows still raise one approval card before anything changes.",
+        "limit": "An apply of a local preset starts its lane and switches the model at once, with no card (2026-11-09); a switch that fails rolls the lane and the saved preset back. The Coding preset is the one heavy row: its pooled all-three-card lane exists and really starts, raising that one card before it pauses the other two models, so a declined card there changes nothing. It runs at the 32,768-token window measured on this PC on 2026-11-03 - the largest rung that loads, at 323.5 MiB spilled into system RAM, which this one window allows up to a 352 MiB cap and nothing larger, while 16,384 stays the largest rung with no spill. A 15-minute real coding session after deployment is the next test: the measurement configured the window, it did not fill it. The Cloud row beside these nine is a separate cloud service choice, described in its own row, and it still asks.",
         "surface": "both",
         "aliases": ["presets", "jarvis presets"],
         "covers": ["settings.focus-presets"],
@@ -1935,7 +1935,7 @@ FEATURES = (
         "title": "Ask which model is answering",
         "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. From the same chat you can start a benchmark - the current model, or one named preset's model - ask what has been measured (speed runs and the five suite scorecards), which model each preset uses, and whether a better model is only an estimate. A named preset or model can be switched to from the same question.",
         "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"what have you measured?\", \"what models do the current presets use?\", \"start a benchmark\", \"start the benchmark suites\", \"benchmark the coding model\", \"switch to the Coding preset\".",
-        "asks": "Answering asks nothing. Applying a preset or switching a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it.",
+        "asks": "Answering asks nothing. Asking Jarvis to apply a preset or switch a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it. That card is for the chat path - picking a preset in either app's own list switches at once instead.",
         "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed or score is only stated when this PC measured it, with its date; a candidate model is labelled MEASURED ON THIS PC or ESTIMATED FIT (run benchmark to verify) and is never called better for a preset until a benchmark measured it there. A benchmark uses a throwaway model server on a spare port, never a live lane's own server directly; it may pause the lane it needs and puts the active preset back, refuses while an answer is streaming, and only one runs at a time. The phone still has no list of models to browse.",
         "surface": "both",
         "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running", "tells me which model is answering", "model benchmarks", "benchmark the models"],

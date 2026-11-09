@@ -1,6 +1,9 @@
 //! Focus presets on the PC (backend/jarvis_presets.py, JARVIS-API section 128's
 //! successor, PRs #603/#611): the nine presets, the hardware block and the ONE
-//! approval-gated apply.
+//! apply. A local preset applies at once (the owner's own reversible click,
+//! 2026-11-09); the backend still raises its ONE `switch_model` card for a
+//! model/chat apply, for Coding (its pooled lane pauses both other models) and
+//! for the Cloud row.
 //!
 //! Three commands, granted to the quickbar, Settings and the HUD:
 //!
@@ -10,10 +13,11 @@
 //! * [`apply_focus_preset`] - `POST /api/work/apply {"preset": "<id>"}`, with an
 //!   OPTIONAL `provider` for the Presets menu's Cloud row (2026-10-27: picking
 //!   an API service is the same apply with one more field, never a second
-//!   route). This approves nothing itself: the backend starts the named lane on
-//!   demand and raises the ONE existing `switch_model` ask card. A stale link is
-//!   refused before anything is sent (rule 4), like every other card-raising
-//!   write.
+//!   route). This approves nothing itself: it is the road a screen's click
+//!   takes, and the backend decides - a local preset switches at once with a
+//!   receipt, the rows that are not a quick reversible switch still raise their
+//!   card. A stale link is refused before anything is sent (rule 4), like every
+//!   other write.
 //! * [`hud_cloud_escalate`] - `POST /api/work/cloud-escalate {"on": true|false}`:
 //!   the HUD Presets menu's "Escalate to the cloud when the work is too complex"
 //!   switch. ONE boolean, and the PC decides: ON is a loosening and the PC

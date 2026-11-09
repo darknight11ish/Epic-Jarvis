@@ -233,7 +233,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions). `done` makes the animals' orb glow once - "a long answer is ready" (`face-moments.js`); the robot, which has no orb, brightens its eyes and fins once instead | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`); `done` makes the animal's orb glow once, the robot's eyes and fins (`face/AnimalNow.kt`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
-| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201). The HUD page reads the same frame from its own stream and, on `false`, stops a tapped "Read out loud" where it is (section 206) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
+| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201). The HUD page reads the same frame from its own stream and, on `false`, stops a tapped "Read out loud" where it is (section 208) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
 
 `devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
 a device was paired or removed, or the old shared key was retired or
@@ -4202,7 +4202,7 @@ local-voices-only rule is still in front of the same call (an "Online
 voice at all**, so the refusal it must survive is its own: the speaker beside
 an answer and the answer menu's "Read out loud" both ask
 `private-speech.js`'s `mayReadAloud` for THAT answer's own route first, and
-failing closed if the module cannot be loaded (§206) - a refused answer is
+failing closed if the module cannot be loaded (§208) - a refused answer is
 never handed to the player, and the receipt is the rule's own line. The
 route is the same `X-Jarvis-Route` the page already draws the lane and the
 gate from, so it is this rule, not a second one - and read the scope
@@ -26324,6 +26324,15 @@ before anything happens. Both apps call this route now: the desktop's
 focus-presets bridge sends it, and the Android preset screen reads and sends
 the same `apply_path` the GET advertises.
 
+**Changed 2026-11-09: a local preset picked in either app raises NO card.**
+This is the owner's own reversible click, and this route is the one road it
+takes; the model/chat path still raises the `switch_model` card. The apply now
+also answers `receipt_id` (the `preset_apply` receipt naming the preset, model
+and lane it replaced) and the preset it replaced is one click away in the same
+menu. Coding (its pooled lane pauses both other models) and the Cloud row still
+raise their card exactly as this section describes. See section 209 for the
+rule and its boundary.
+
 ### 145.1 The Coding preset's pooled both-card lane (2026-11-02, added)
 
 Coding is the ONE preset whose model cannot run on either named lane: 14.8 GB
@@ -36840,7 +36849,7 @@ desktop keeps a "Read out loud" item in its own answer menu beside Right/Wrong,
 with a receipt; since TASK-51 (2026-11-09) that item - and the speaker beside
 an answer - reads in Jarvis's configured voice, with Pause / Resume beside it
 and a Stop that resets the player, and it stops at once on the OFF frame above
-(§206). The phone has the same item in its message menu, reading that
+(§208). The phone has the same item in its message menu, reading that
 answer through `/api/voice/say` under the existing lock rules. The
 `private-speech` rule still wins over the switch: a sensitive saved fact, a
 private tool and an answer about the owner's screen are never read aloud by
@@ -37326,3 +37335,76 @@ speakers, and how a long answer sounds in his configured voice. Those need the
 owner at his PC; what is proved here is that the page cannot reach a browser
 voice and that the one path it does use is the one a spoken answer uses.
 
+## 209. A preset clicked in either app raises no card (2026-11-09)
+
+The owner's ask, in his own words: *"if i manually click and change the preset
+for jarvis, it shouldnt need a card"* and *"if i manually choose anything in the
+jarvis app or deskstop program, and its something that i can easily click and
+change back right away, it shouldnt need a card"*.
+
+**The rule.** A local focus preset picked in either app's own preset control
+applies at once, with no approval card. The preset it replaced is written into
+a receipt (`preset_apply` in `jarvis_receipts.py`), and the menu it was picked
+from puts the old preset one click away - that menu row is the everyday way
+back. The receipt is readable through `GET /api/receipts` and undoable through
+`POST /api/receipts/<receipt_id>/undo`; the apply's own answer carries its id
+as `receipt_id`, and `previous_preset` names what was replaced. Undo is
+registered only when the preset it replaced is itself a local one: if the row
+it replaced was Coding or Cloud, the receipt is still written, but Undo is not
+offered, because going back to either of those raises its own card and that
+menu row is the way back. (Receipts are routes only today - there is no
+separate receipts screen in either app - so the receipt is the machine record
+plus the Undo the existing route can run, not a new button.)
+
+**Why this is the owner's click and not the model's.** Both apps' preset
+controls call ONE route, `POST /api/work/apply` (`jarvis_presets.install()`,
+wired by `presets.patch` onto the HUD's `Handler`), and that route already
+demands the server's origin check and the pairing token before it reads the
+body. The model never posts to its own HTTP API: its path is in-process -
+`jarvis_model_knowledge.apply_preset` (the spoken "use the X preset" command),
+`jarvis_settings_registry.set_focus_preset` ("set the focus preset to X"), and
+`jarvis_quick`'s command path all call `jarvis_presets.apply_from_body`. That
+function is unchanged and still carded: it raises the existing
+`switch_model` card inside `jarvis_models.switch_to`. The uncarded road is a
+private call, `_apply_body(..., owner_ui=True)`, made by the route wrapper
+alone; there is no header, body field or query parameter that asks for it, and
+`[autonomy.tiers]` still says `switch_model = "ask"`.
+
+**The boundary - "easily click and change back right away" means all four:**
+the request is a paired app's screen, the change is one model switch on a lane
+that already exists, the preset it replaced is one click away in the same menu,
+and nothing is downloaded, installed, deleted or spent. Under that rule:
+
+* the nine local presets, except Coding, apply with no card;
+* **Coding keeps its card.** Its pooled three-card lane unloads both other lane
+  models and loads a 14.8 GB model for about half a minute; that is not a quick
+  click back, and the card is the warning before the first unload
+  (`jarvis_model_lanes.start_pooled_lane` raises it, unchanged);
+* **the Cloud row keeps its card.** It chooses where the owner's words go, and
+  its card is `change_own_config` (`jarvis_presets.apply_cloud`, unchanged);
+* **installs and downloads keep their cards.** `download_model` and
+  `/api/models/install` are untouched: a full-model install is not this case;
+* a preset asked for in chat or by voice keeps its card: that is the model's
+  path, and the owner did not click it.
+
+**What a failed apply does.** The receipt is written BEFORE the switch and
+removed again if the switch does not happen, so a refused or failed apply never
+leaves a receipt claiming a change. A failure after the switch rolls the model,
+the chat lane and the saved preset back exactly as before, and names only the
+restores it saw succeed (`restored` / `not_restored` in the answer).
+
+**Both apps.** The desktop chip, Settings -> Focus presets and the HUD Presets
+menu apply through `apply_focus_preset` (Rust) to the same route; the phone's
+Focus presets plate does the same through `JarvisApi.focusPresetApply`. So the
+rule is one-sided in neither app, and `tools/check_parity.py` is unaffected.
+The phone's own sentence says the same thing as the desktop's: a local preset
+switches at once, and Coding and Cloud still ask.
+
+**Proved by:** `backend/test_presets_owner_ui.py` - the route applies a local
+preset with zero `jarvis_gate.check()` calls and writes one undoable receipt;
+Undo puts the previous preset, model and lane back; `apply_from_body` (the
+model/chat road) raises exactly one `switch_model` card and writes no receipt;
+Coding still goes through its pooled lane's asking start; Cloud still raises
+`change_own_config`; no request field can ask for the uncarded road; and the
+shipped `jarvis_models.switch_to` still asks. `backend/test_presets_apply.py`
+keeps the carded path's rollback and refusal checks.

@@ -2999,8 +2999,10 @@ object JarvisRuntime {
     // ------------------------------------------------------- focus presets ----
     // The owner's decision of 2026-10-18: four (then five) focus presets from
     // ONE backend contract (net/FocusPresets.kt, backend/fixtures/work_presets.json).
-    // Reading never changes anything; using one posts the contract's single
-    // apply action, which raises the existing approval card.
+    // Reading never changes anything; using a local preset posts the contract's
+    // single apply action and switches at once (the owner's own reversible
+    // click, 2026-11-09), while Coding and the Cloud row still raise the
+    // PC's approval card.
 
     /** Re-reads the preset contract. Reads only; a failed read is said in words. */
     suspend fun refreshFocusPresets() {
@@ -3010,8 +3012,9 @@ object JarvisRuntime {
     /**
      * Uses the preset [id] by posting the ONE apply action the contract names
      * (never a route invented here). Held on a stale link (rule 4); a pending
-     * preset is never posted. A success means the card was asked for, not that
-     * a model changed - the list is re-read and the PC's answer says which.
+     * preset is never posted. A local preset switches at once; Coding and the
+     * Cloud row answer with a card asked for, not a model changed. Either way
+     * the list is re-read and the PC's answer says which.
      */
     suspend fun useFocusPreset(id: String): String {
         actionBlocker()?.let { return it }

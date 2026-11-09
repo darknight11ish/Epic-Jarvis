@@ -1267,6 +1267,32 @@ in `jarvis_asks_first.NOT_A_SWITCH` - the data sandbox, the product check and
 the two web-search grant tools, each decided by its own switch. **No fourth
 "settings-file only" tool tier may be added.**
 
+**A direct click on the owner's own screen, where the way back is the same
+click, raises no card - and nothing else does** (2026-11-09). The owner's rule:
+*"if i manually choose anything in the jarvis app or deskstop program, and its
+something that i can easily click and change back right away, it shouldnt need a
+card."* The first feature under it is a local focus preset: the one route both
+apps' own preset controls call (`POST /api/work/apply`) applies it at once with
+no `jarvis_gate` question, and writes a `preset_apply` receipt through
+`jarvis_receipts` naming the preset, model and lane it replaced, so the change
+is recorded and the existing receipts route can undo it (when the preset it
+replaced is itself a local one; going back to Coding or Cloud is a carded menu
+click, not an Undo). The everyday way back is the old preset's own menu row.
+Four facts must ALL hold, and they are the boundary: the request came from a
+route only a screen calls (the model's own
+tool path never posts to the HTTP API - it calls
+`jarvis_presets.apply_from_body` in-process and keeps its card), the change is
+one model switch on a lane that already exists, the preset it replaced is one
+click away in the same menu, and nothing is downloaded, installed, deleted or
+spent. `jarvis_presets.apply_preset` applies this rule; `owner_ui` is set by ONE
+caller, the route wrapper, and is never read from a request body. It is
+deliberately NOT a tier change: `switch_model` stays `ask` in
+`[autonomy.tiers]`, and a chat/voice apply, the heavy Coding preset (its pooled
+lane unloads both other models) and the Cloud row (it changes where the owner's
+words go) all still raise their card; `install` and `download_model` are
+untouched. JARVIS-API section 206 has the full rule,
+`backend/test_presets_owner_ui.py` proves both halves.
+
 ---
 
 ## 4. The egress boundary
