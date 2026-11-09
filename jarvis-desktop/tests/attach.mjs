@@ -96,6 +96,14 @@ check("the chip is under #input, and there is one way in for each gesture", () =
   assert.match(html, /window\.addEventListener\("paste"/, "no paste handler");
   // A dropped file must not navigate the page to it.
   assert.match(html, /if\(types\.indexOf\("Files"\) >= 0\) e\.preventDefault\(\);/);
+  // 2026-11-09: a drop is a LIST. The handler must hand the whole list to the
+  // one-file rule, which takes what it can and names the rest.
+  assert.match(html, /attachDrop\(files\);/, "the drop handler does not take the list");
+  assert.match(html, /function attachDrop\(files\)/, "there is no attachDrop");
+  assert.match(html, /One file goes with a question, so the other /,
+    "the chip never says the other dropped files were left out");
+  assert.match(html, /None of the " \+ n \+ " dropped files were attached\./,
+    "a refused batch does not say none of it was attached");
 });
 
 check("the chip uses textContent and classes, never an HTML sink or a style attribute", () => {
@@ -270,6 +278,72 @@ check("a paste carrying a FILE is taken; a text paste never is", () => {
   assert.equal(taken[0].name, "notes.txt");
 });
 
+/* ---- several files in one drop (2026-11-09) ----------------------------- *
+ * One file goes with a question (JARVIS-API.md section 163.1), so a drop of
+ * several must attach exactly one and SAY which of the rest were left out -
+ * never silently take the first and forget the others, and never refuse a good
+ * file because a bad one was dropped beside it. */
+
+check("the count sentences read plainly, and pluralise", () => {
+  const { sandbox } = fakePage();
+  assert.equal(sandbox.attachOthers(0), "");
+  assert.equal(sandbox.attachOthers(1),
+    " One file goes with a question, so the other 1 was not attached.");
+  assert.equal(sandbox.attachOthers(3),
+    " One file goes with a question, so the other 3 were not attached.");
+  assert.equal(sandbox.attachNone(1), "");
+  assert.equal(sandbox.attachNone(2), " None of the 2 dropped files were attached.");
+});
+
+check("a drop of several files takes the first one Jarvis can read and names the rest", async () => {
+  const { sandbox, node } = fakePage();
+  sandbox.attachDrop([
+    { name: "song.mp3", size: 4000, type: "audio/mpeg" },
+    { name: "tenancy.pdf", size: 1200000, type: "application/pdf", __bytes: "the file" },
+    { name: "notes.txt", size: 40, type: "text/plain", __bytes: "hi" },
+  ]);
+  await new Promise((r) => setTimeout(r, 5));
+  const held = sandbox.__attach();
+  assert.ok(held, "nothing was attached from a batch holding one readable file");
+  assert.equal(held.name, "tenancy.pdf", "the first readable file is not the one taken");
+  const text = node("attach-chip").textContent;
+  assert.match(text, /tenancy\.pdf — 1\.2 MB Read on your PC\./);
+  assert.match(text, /One file goes with a question, so the other 2 were not attached\./);
+  assert.equal(node("attach-clear").hidden, false, "there is no way to remove it");
+});
+
+check("a batch is not refused because the first file is too big - the big one is never read", async () => {
+  const { sandbox, node } = fakePage();
+  let read = false;
+  sandbox.attachDrop([
+    { name: "video.pdf", size: 4400000, get __bytes() { read = true; return ""; } },
+    { name: "tenancy.pdf", size: 10, type: "application/pdf", __bytes: "x" },
+  ]);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(read, false, "the file over the cap was read before the cap was checked");
+  assert.equal(sandbox.__attach().name, "tenancy.pdf");
+  assert.match(node("attach-chip").textContent, /the other 1 was not attached/);
+});
+
+check("a batch with nothing Jarvis can read refuses in words and says none were attached", () => {
+  const { sandbox, node } = fakePage();
+  sandbox.attachDrop([{ name: "song.mp3", size: 4000 },
+                      { name: "film.mp4", size: 90000 }]);
+  assert.equal(sandbox.__attach(), null, "something was attached anyway");
+  const text = node("attach-chip").textContent;
+  assert.match(text, /not a kind Jarvis reads/);
+  assert.match(text, /None of the 2 dropped files were attached\./);
+  assert.ok(node("attach-chip").classList.contains("bad"), "the refusal is not marked as one");
+});
+
+check("one file dropped is still the one-file answer, with no count sentence", async () => {
+  const { sandbox, node } = fakePage();
+  sandbox.attachDrop([{ name: "tenancy.pdf", size: 10, type: "application/pdf", __bytes: "x" }]);
+  await new Promise((r) => setTimeout(r, 5));
+  assert.equal(sandbox.__attach().name, "tenancy.pdf");
+  assert.doesNotMatch(node("attach-chip").textContent, /goes with a question|None of the/);
+});
+
 /* ── 3. the request shape send() really builds ───────────────────────────── */
 
 /** The block `if(ATTACH && body.messages ...)` out of send(), indent included. */
@@ -344,6 +418,31 @@ check("the page is byte-identical in the desktop, backend/ and the base", () => 
     const p = join(HERE, ...other);
     assert.equal(readFileSync(p, "utf8"), mine, `${other} has drifted from src/jarvis_hud.html`);
   }
+});
+
+/* ── 5. the window lets the drop through ─────────────────────────────────── */
+
+check("every window that shows the chat turns Tauri's drag-drop handler off", () => {
+  // Tauri 2's own `disable_drag_drop_handler` doc says it "is required to use
+  // HTML5 drag and drop APIs on the frontend on Windows since we replace the
+  // drag drop handler of WebView2". Its handler was ON, so the page's drop
+  // listener (which worked in a browser) never fired in the packaged window.
+  // This is a source pin because the only other proof is driving a real
+  // Explorer-to-window drag, and that is NOT-TESTABLE at a desk.
+  const chain = (file, marker) => {
+    const src = readFileSync(join(HERE, "..", "src-tauri", "src", file), "utf8");
+    const start = src.indexOf(marker);
+    assert.ok(start > 0, `${file}: ${marker} is gone`);
+    const end = src.indexOf(".build()", start);
+    assert.ok(end > start, `${file}: the builder chain does not close`);
+    return src.slice(start, end);
+  };
+  assert.match(chain("lib.rs", "WebviewWindowBuilder::new("),
+    /\.disable_drag_drop_handler\(\)/,
+    "the HUD window leaves Tauri's drag-drop handler on, so a dropped file never reaches the page");
+  assert.match(chain("chat_windows.rs", "WebviewWindowBuilder::new("),
+    /\.disable_drag_drop_handler\(\)/,
+    "a chat window leaves Tauri's drag-drop handler on, so a dropped file never reaches the page");
 });
 
 /* ── the tally ───────────────────────────────────────────────────────────── */

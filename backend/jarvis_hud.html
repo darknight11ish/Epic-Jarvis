@@ -7208,7 +7208,15 @@ $("input").addEventListener("drop", () => { S.inputTag = "pasted"; });
  * window, and a file on the clipboard - and ONE shape out: the newest user
  * message of the ordinary /api/chat body carries
  *   attachment: {name, mime, size, data}    (base64 of the raw bytes)
- * with `has_file: true` beside it. No new route, no upload, no Rust.
+ * with `has_file: true` beside it. No new route and no upload; the only Rust
+ * is the window setting that lets the gesture reach this page at all.
+ *
+ * A DROP OF SEVERAL FILES (2026-11-09): one file goes with a question, so the
+ * first dropped file this page can attach is the one taken, and the chip says
+ * plainly how many others were not. The window turns Tauri's OWN drag-drop
+ * handler off (lib.rs, chat_windows.rs): on Windows that handler REPLACES
+ * WebView2's, so without the setting this page's `drop` event never fires in
+ * the packaged app - it only ever worked in a browser.
  *
  * The caps and the wording are the backend's own (jarvis_attached_file.py),
  * and tests/attach.mjs pins both here so the two apps cannot drift.
@@ -7237,6 +7245,18 @@ function attachExt(name){
   return at <= 0 ? "" : String(name).toLowerCase().slice(at);
 }
 
+/** " One file goes with a question, so the other 2 were not attached." */
+function attachOthers(n){
+  if(!n || n < 1) return "";
+  return " One file goes with a question, so the other " + n
+    + (n === 1 ? " was" : " were") + " not attached.";
+}
+
+/** " None of the 3 dropped files were attached." - a multi-file drop only. */
+function attachNone(n){
+  return n > 1 ? " None of the " + n + " dropped files were attached." : "";
+}
+
 /** The chip, or the sentence that says why nothing was attached. */
 function attachShow(text, bad){
   const chip = $("attach-chip");
@@ -7259,9 +7279,13 @@ function attachClear(){
   if(pick) pick.hidden = false;
 }
 
-/** Take one File the owner picked, dropped or pasted. Refuses in words. */
-function attachTake(file){
+/** Take one File the owner picked, dropped or pasted. Refuses in words.
+ *  `extra` is how many OTHER files arrived with it in the same drop (0 for the
+ *  picker and the clipboard): only one file can ride on a question, so the
+ *  chip names the rest rather than dropping them in silence. */
+function attachTake(file, extra){
   if(!file) return;
+  const others = extra || 0;
   const name = String(file.name || "the file you attached");
   const ext = attachExt(name);
   // Checked BEFORE the file is read, so a 40 MB video is refused without ever
@@ -7269,14 +7293,15 @@ function attachTake(file){
   if(ATTACH_KINDS.indexOf(ext) < 0){
     const picture = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".heic"].indexOf(ext) >= 0;
     attachClear();
-    attachShow(picture ? ATTACH_REFUSED_PICTURE : ATTACH_REFUSED_KIND, true);
+    attachShow((picture ? ATTACH_REFUSED_PICTURE : ATTACH_REFUSED_KIND)
+      + attachNone(others + 1), true);
     return;
   }
   if(file.size > ATTACH_MAX_BYTES){
     attachClear();
     attachShow("That file is " + attachSize(file.size) + ". Files up to "
       + attachSize(ATTACH_MAX_BYTES) + " can be attached; for bigger ones, put it in a "
-      + "folder Jarvis may look in.", true);
+      + "folder Jarvis may look in." + attachNone(others + 1), true);
     return;
   }
   const reader = new FileReader();
@@ -7288,9 +7313,29 @@ function attachTake(file){
     ATTACH = {name: name, mime: String(file.type || ""), size: file.size,
               data: url.slice(comma + 1)};
     attachShow(name + " — " + attachSize(file.size) + " " + ATTACH_READ_ON_PC + " "
-      + ATTACH_OUTSIDE + " " + ATTACH_AGAIN, false);
+      + ATTACH_OUTSIDE + " " + ATTACH_AGAIN + attachOthers(others), false);
   };
   reader.readAsDataURL(file);
+}
+
+/** A drop carries a LIST. Take the first file this page can actually attach -
+ *  kind and cap checked BEFORE a byte is read - and name how many others were
+ *  left out, so a batch is not refused because of a bad file beside a good one
+ *  and a good one is never silently ignored. */
+function attachDrop(files){
+  const list = Array.from(files || []);
+  if(!list.length) return;
+  let take = -1;
+  for(let i = 0; i < list.length; i++){
+    const file = list[i];
+    if(ATTACH_KINDS.indexOf(attachExt(file.name)) >= 0 && file.size <= ATTACH_MAX_BYTES){
+      take = i;
+      break;
+    }
+  }
+  // Nothing in the batch can be attached: the first file's own refusal names
+  // the real rule, and attachTake adds the count of the rest.
+  attachTake(list[take < 0 ? 0 : take], list.length - 1);
 }
 
 $("attach-pick").addEventListener("click", () => $("attach-file").click());
@@ -7310,7 +7355,9 @@ window.addEventListener("drop", e => {
   const files = e.dataTransfer && e.dataTransfer.files;
   if(!files || !files.length) return;
   e.preventDefault();
-  attachTake(files[0]);
+  // A drop can carry several files; attachDrop picks the one that can go and
+  // names the rest (one file goes with a question).
+  attachDrop(files);
 });
 // A file on the clipboard (a copied PDF, a screenshot's own file). A TEXT
 // paste is untouched: only a paste that really carries a file comes here.

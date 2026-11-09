@@ -29699,12 +29699,30 @@ Nothing from a file can approve, spend or write.
 
 ### 163.6 Both apps
 
-**Desktop HUD** (`jarvis-desktop/src/jarvis_hud.html`, and the two byte-identical
-copies the base and the desktop carry): one hidden `<input type="file" accept>`,
-a drop handler for a file dragged onto the window, a paste handler for a file on
-the clipboard, a chip under the composer showing the name, the size and "Read on
-your PC", the refusal sentences, and the attachment on the newest message of the
-`send()` body. **No Rust**, no new command, no new window.
+**Desktop HUD and every chat window** (`jarvis-desktop/src/jarvis_hud.html`, and
+the two byte-identical copies the base and the desktop carry): one hidden
+`<input type="file" accept>`, a drop handler for files dragged onto the window, a
+paste handler for a file on the clipboard, a chip under the composer showing the
+name, the size and "Read on your PC", the refusal sentences, and the attachment
+on the newest message of the `send()` body. **No new command, no new window and
+no new route.** The one Rust line it needs is a WINDOW SETTING, not a route: the
+HUD and each chat window are built with `disable_drag_drop_handler()`
+(`lib.rs:924`, `chat_windows.rs:269`), because on Windows Tauri's own drag-drop
+handler **replaces** WebView2's and the page's `drop` event then never sees
+`dataTransfer.files` - the listener existed and worked in a browser, but did
+nothing in the packaged window until 2026-11-09. **A drop carries a list, and one
+file goes with a question** (§163.1): the page attaches the first dropped file
+that passes those kind and cap checks (checked before a byte is read, as the
+picker does), and the
+chip adds "One file goes with a question, so the other N were not attached.";
+when nothing in the batch can be attached it adds "None of the N dropped files
+were attached." after the first file's own refusal. A batch is therefore not
+refused because a bad file was dropped beside a good one, and a good file is
+never silently ignored. Nothing auto-sends: the file waits on the chip and Remove
+takes it away. **The Alt+Space bar gets no second file door** (2026-11-09): its
+chat body is built in Rust (`stream_chat`) with no `attachment` field, so a file
+picker there would be a second copy of these rules and this UI; the chat window
+is the file door.
 
 **Phone** (`jarvis-client`, a separate agent's slice): an `OpenDocument` picker
 with the same document list, plus an image wildcard only while the PC's
@@ -29737,7 +29755,11 @@ private. `backend/test_chat_log.py` opens the stored row and proves it holds onl
 the owner's words, and `backend/test_backup.py` decrypts the archived history and
 scans every archive member to prove no backup carries the file's body, its
 base64 or its name. The HUD half is `jarvis-desktop/tests/attach.mjs`, which
-pins the caps, the wording and the part shape.
+pins the caps, the wording, the part shape, the several-file rule (the first
+file that passes the kind and cap checks is the one attached, the rest are named
+as not attached, and a batch with nothing readable says so) and the window
+setting that lets the drop through at all - a source pin, because driving a real
+Explorer-to-window drag is NOT-TESTABLE at a desk.
 
 ---
 
