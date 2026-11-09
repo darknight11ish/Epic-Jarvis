@@ -6,9 +6,10 @@
  * misread: the queue read is the phone's own two-flag read, the four kind
  * words are exact, Dismiss is ONE shared local function used by the banner and
  * the list, Review uses the existing `open_fix_place` navigation and invents no
- * "memory" place, the list references no memory-decision route, and the hidden
- * state draws the sentence and no titles. `hud.mjs` drives the same page in a
- * browser for the visual half.
+ * "memory" place, the ONE new Keep is drawn only on a plain new fact and sends
+ * exactly one integer id with accept:true, every other memory write is still
+ * absent, and the hidden state draws the sentence and no titles. `hud.mjs`
+ * drives the same page in a browser for the visual half.
  *
  * Run: node tests/hud-memory-door.mjs
  */
@@ -30,9 +31,10 @@ const doorEnd = HUD.indexOf("/* == memory door end == */");
 assert.ok(doorStart >= 0 && doorEnd > doorStart, "the memory door block is not in the page");
 const DOOR = HUD.slice(doorStart, doorEnd);
 
-check("the Memory panel has its own list, empty sentence and hidden sentence", () => {
+check("the Memory panel has its own list, refusal line, empty sentence and hidden sentence", () => {
   assert.match(HUD, /id="memory-door"/);
   assert.match(HUD, /id="memory-door-list"/);
+  assert.match(HUD, /id="memory-door-note" role="status"/);
   assert.match(HUD, /id="memory-door-empty"/);
   assert.match(HUD, /id="memory-door-hidden"/);
   assert.match(HUD, /id="memory-door-where"/);
@@ -67,14 +69,59 @@ check("Review opens the Brain through the existing open_fix_place, no invented p
   assert.deepEqual(places, ['place:"brain"']);
 });
 
-check("the list has no memory decision, approval or send route", () => {
-  for (const route of ["/api/memory/decide", "/api/memory/keep_both", "/api/memory/sleep_time",
+check("Keep is drawn only for a plain new fact, and only from the one rule", () => {
+  // The owner's ruling (2026-11-09, "Keep on plain facts only"): a card the
+  // Brain would warn about is not decided here. The rule is in the Brain's own
+  // terms - a NEW FACT, no flags, no replacement, not the sleep offer - and it
+  // is applied ONCE, in paintMemoryDoor, never beside the button.
+  assert.match(DOOR, /function memoryDoorKeepable\(row\)/);
+  assert.match(DOOR, /source === "feedback_retire"\) return false/);
+  assert.match(DOOR, /if\(rid !== null && rid !== undefined[\s\S]{0,90}return false;/);
+  assert.match(DOOR, /if\(!Array\.isArray\(row\.flags\) \|\| row\.flags\.length > 0\) return false/);
+  assert.match(DOOR, /String\(row\.id\) === "sleep_offer"\) return false/);
+  assert.match(DOOR, /return memoryDoorKind\(row\) === "New fact"/);
+  assert.match(DOOR, /keep: memoryDoorKeepable\(row\)/);
+  assert.match(DOOR, /if\(card\.keep === true\)/);
+  // The offer never carries a keep field, so it can never grow a button.
+  assert.match(DOOR, /return \{ id:"sleep_offer", kind:"Sleep offer",/);
+});
+
+check("one Keep is ONE POST of one integer id with accept:true, and nothing else", () => {
+  // Exactly one mention of the route, one POST, one body shape, and the shell
+  // header this page always sends. No list, no "keep all", no second call.
+  // One CALL, not one mention: the block's own comment names the route, and a
+  // second call is what would be a second door.
+  assert.equal((DOOR.match(/jfetch\("\/api\/memory\/decide"/g) || []).length, 1,
+    "the door calls the decision route more than once");
+  assert.match(DOOR, /method: "POST",/);
+  assert.match(DOOR, /body: JSON\.stringify\(\{ id: id, accept: true \}\)/);
+  assert.match(DOOR, /"Content-Type": "application\/json", "X-Jarvis-Client": "hud"/);
+  assert.equal((DOOR.match(/accept: true/g) || []).length, 1,
+    "the door sends more than one accept");
+  assert.equal((DOOR.match(/jfetch\(/g) || []).length, 2,
+    "the door should fetch only the queue read and the one decision");
+  // A stale link holds the press before anything is sent (rule 4), and the
+  // page's signal is the shell's own push.
+  assert.match(DOOR, /function memoryDoorLinkStale\(\)/);
+  assert.match(DOOR, /window\.__hudLinkStatus/);
+  assert.match(DOOR, /if\(memoryDoorLinkStale\(\)\)\{[\s\S]*?return;/);
+  // Success removes the row locally; a refusal keeps it and says the PC's
+  // own sentence. The button is only re-enabled on the failure path.
+  assert.match(DOOR, /if\(r\.ok && j && j\.ok !== false\)\{[\s\S]*?memoryDismiss\(li\)/);
+  assert.match(DOOR, /memoryDoorNote\(memoryDoorRefusal\(j, r\.status\)\)/);
+  assert.match(DOOR, /button\.disabled = false/);
+});
+
+check("every OTHER memory decision, approval and send route is still absent", () => {
+  for (const route of ["/api/memory/keep_both", "/api/memory/sleep_time",
                        "/api/memory/forget", "/api/memory/erase", "/api/memory/edit",
+                       "/api/memory/profile", "/api/memory/shared",
                        "/api/approve", "/api/deny", "/api/files/send"]) {
     assert.ok(!DOOR.includes(route), `${route} is referenced by the HUD's memory door`);
   }
-  assert.ok(!/method:\s*"POST"/i.test(DOOR), "the door POSTs something");
-  assert.ok(!/jfetch\([^)]*method/i.test(DOOR), "the door sends a non-GET request");
+  // One POST, the decide. A second one anywhere in the block is a second door.
+  assert.equal((DOOR.match(/method: "POST"/g) || []).length, 1,
+    "the door POSTs more than the one decision");
 });
 
 check("hidden mode draws the owner-independent sentence and no card titles", () => {
@@ -152,4 +199,4 @@ if (fails.length) {
   console.log(`\n${fails.length} failed`);
   process.exit(1);
 }
-console.log(`\n${8 - fails.length} passed, 0 failed`);
+console.log(`\n${11 - fails.length} passed, 0 failed`);

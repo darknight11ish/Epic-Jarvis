@@ -3047,9 +3047,13 @@ html[data-cal-view="day"] .cal-side{display:none;}
 .memory-door-btns button{font:inherit; font-size:11px; padding:4px 8px; cursor:pointer;
   color:var(--text); background:transparent; border:1px solid var(--line); border-radius:4px;}
 .memory-door-btns button:hover{color:var(--ice); border-color:rgb(var(--accent-rgb) / .5);}
-.memory-door-empty, .memory-door-hidden, .memory-door-where{margin:6px 0 0; font-size:11.5px;
-  line-height:1.4; color:var(--dim);}
+.memory-door-empty, .memory-door-hidden, .memory-door-where, .memory-door-note{margin:6px 0 0;
+  font-size:11.5px; line-height:1.4; color:var(--dim);}
 .memory-door-hidden{color:var(--text); font-weight:600;}
+/* A refusal keeps the row and its Keep button, so the PC's own sentence goes
+ * here, beside the list, and stays until the next press says otherwise. */
+.memory-door-note{color:var(--text);}
+.memory-door-note[hidden]{display:none;}
 
 /* ---- "Personalize Jarvis" (Wave B, 2026-11-03) -------------------------- *
  * The one offer that the setup quiz is unfinished. It sits in the right rail
@@ -4098,6 +4102,7 @@ html[data-cal-view="day"] .cal-side{display:none;}
         <div class="hud-label">Memory cards waiting for you</div>
         <p class="memory-door-hidden" id="memory-door-hidden" hidden></p>
         <ul class="memory-door-list" id="memory-door-list"></ul>
+        <p class="memory-door-note" id="memory-door-note" role="status" hidden></p>
         <p class="memory-door-empty" id="memory-door-empty" hidden>No memory cards are waiting. New facts Jarvis wants to remember will show up here.</p>
         <p class="memory-door-where" id="memory-door-where">Memory is the Memory tab in the Brain window - decide each card there.</p>
       </div>
@@ -9843,13 +9848,26 @@ async function initPoll(){
 /* The Memory tab's own list of the pending memory cards. It reads the SAME
  * route the phone's Learning plate reads (the two flags make the backend
  * include retire cards and the once-a-day sleep offer), draws each card's own
- * words and kind, and offers the same two doors the banner offers: Review in
- * the Brain (navigation only - there is no "memory" place in open_fix_place,
- * so it opens the Brain and the line under the list says where Memory is) and
- * Dismiss (the banner's own local removal, shared through memoryDismiss - no
- * memory decision leaves this page). No approval, no sleep-time write, no
- * decide/keep/forget route is referenced. While App lock or "Hide memory
- * lists" is on, nothing but the owner-independent sentence is drawn.
+ * words and kind, and offers two doors the banner offers: Review in the Brain
+ * (navigation only - there is no "memory" place in open_fix_place, so it opens
+ * the Brain and the line under the list says where Memory is) and Dismiss (the
+ * banner's own local removal, shared through memoryDismiss).
+ *
+ * KEEP, and the one narrow promise this page now keeps (the owner's ruling,
+ * 2026-11-09, "Keep on plain facts only" - after asking for "an accept button
+ * here too"): a card that is a PLAIN NEW FACT gets one Keep button. Every
+ * card the Brain would warn about - a warning flag, a replacement
+ * (replaces_id), a feedback retire card, the overnight sleep offer - still
+ * sends the owner to the Brain, and nothing here reproduces a safety rule:
+ * this page only asks whether the Brain would have anything to say about the
+ * card. One press sends ONE decision: POST /api/memory/decide with one
+ * integer id and accept:true, through the shell's existing fetch door (the
+ * page holds no token; on the desktop the shell's shim forwards exactly that
+ * shape to the Brain's own `brain_memory_decide`). It is refused while the
+ * link is stale, the row and the button stay on any refusal, and the PC's own
+ * sentence is put under the list. No accept-all, no list form, no retry. The
+ * one other write the banner and the list share is still Dismiss, which
+ * removes the row locally and sends nothing.
  */
 var MEMORY_DOOR = {
   full: "/api/memory/pending?retire_cards=1&sleep_offer=1",
@@ -9859,7 +9877,8 @@ var MEMORY_DOOR = {
   offerDismissed: false,
   dismissed: {},
   hidden: false,
-  inflight: false
+  inflight: false,
+  note: ""
 };
 
 function memoryHiddenSentence(){
@@ -9889,6 +9908,101 @@ function memoryDoorOffer(offer){
   return { id:"sleep_offer", kind:"Sleep offer",
     words:String(offer.title || offer.what || "The overnight tidy-up"),
     detail:String(offer.what || "") };
+}
+
+/* Would the Brain have something to say about this card? Then it is the
+ * Brain's, not this page's. The test is the owner's own ruling in the Brain's
+ * own terms, not a copy of any warning: a NEW FACT, with no warning flags at
+ * all (an absent list and an empty list are the same "no warning"), that
+ * replaces nothing, and is not the once-a-day sleep offer. A Correction
+ * (replaces_id), a Retire (feedback_retire) and any "are these the same?"
+ * merge card all fail this, as does a row whose id is not a number, because
+ * the decision route takes one integer id and nothing else. */
+function memoryDoorKeepable(row){
+  if(!row || typeof row !== "object") return false;
+  if(row.id === null || row.id === undefined) return false;
+  if(String(row.id) === "sleep_offer") return false;
+  if(!Number.isInteger(Number(row.id)) || Number(row.id) <= 0) return false;
+  if(row.source === "feedback_retire") return false;
+  var rid = row.replaces_id;
+  if(rid !== null && rid !== undefined && String(rid) !== "" && String(rid) !== "0") {
+    return false;
+  }
+  // No flags (absent or empty). A shape this page does not understand is
+  // treated as flagged: a warning it cannot read is still the Brain's.
+  if(row.flags !== null && row.flags !== undefined) {
+    if(!Array.isArray(row.flags) || row.flags.length > 0) return false;
+  }
+  return memoryDoorKind(row) === "New fact";
+}
+
+/* The shell's own verdict on the link, published as `jarvis-link-status`
+ * (`hud_bootstrap.js` `linkWords`): `up:false` is "no link", and a connected
+ * but STALE stream says `short:"reconnecting"` with `up:true` - so both are
+ * the stale hold rule 4 asks for. Before the shell has said anything the
+ * signal is absent, and the hold is Rust's (`require_link_live` in the
+ * command), never a guess here. */
+function memoryDoorLinkStale(){
+  var l = window.__hudLinkStatus;
+  if(!l || typeof l !== "object") return false;
+  if(l.up === false) return true;
+  return /reconnecting/i.test(String(l.short || ""));
+}
+
+function memoryDoorNote(words){
+  MEMORY_DOOR.note = String(words || "");
+  var el = document.getElementById("memory-door-note");
+  if(!el) return;
+  el.textContent = MEMORY_DOOR.note;
+  el.hidden = !MEMORY_DOOR.note;
+}
+
+/* The PC's own sentence for a refusal, or a plain line carrying its code -
+ * never "decided" when it was not. */
+function memoryDoorRefusal(j, status){
+  var said = j && (j.error || j.message);
+  if(typeof said === "string" && said.trim()) return said.trim();
+  return "The PC refused that (HTTP " + Number(status || 0) + "), so nothing was decided.";
+}
+
+/* ONE Keep, ONE id, ONE POST. The same local removal Dismiss uses on success;
+ * on a refusal or a failed send the row and the button stay, and the PC's own
+ * sentence is shown. No retry, no queue, no second call. */
+async function memoryDoorKeep(card, li, button){
+  if(button && button.getAttribute("aria-busy") === "true") return;
+  if(memoryDoorLinkStale()){
+    memoryDoorNote("The link to your PC is stale, so nothing was sent. Wait for it to reconnect, then press Keep again.");
+    return;
+  }
+  var id = Number(card && card.id);
+  if(!Number.isInteger(id) || id <= 0){
+    memoryDoorNote("That card has no id the PC can take, so nothing was sent.");
+    return;
+  }
+  if(button){ button.setAttribute("aria-busy", "true"); button.disabled = true; }
+  try {
+    var r = await jfetch("/api/memory/decide", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Jarvis-Client": "hud" },
+      body: JSON.stringify({ id: id, accept: true })
+    });
+    var j = null;
+    try { j = await r.json(); } catch(e) { /* a reply with no words is still a reply */ }
+    if(r.ok && j && j.ok !== false){
+      memoryDoorNote("");
+      MEMORY_DOOR.dismissed[String(id)] = true;
+      memoryDismiss(li);
+      paintMemoryDoor();
+      return;
+    }
+    memoryDoorNote(memoryDoorRefusal(j, r.status));
+  } catch(e) {
+    memoryDoorNote("The PC did not answer, so nothing was decided. Check the link, then press Keep again.");
+  }
+  if(button && button.isConnected){
+    button.removeAttribute("aria-busy");
+    button.disabled = false;
+  }
 }
 
 /* ONE dismiss for the banner and the list: the banner's button and every
@@ -9923,6 +10037,7 @@ function paintMemoryDoor(){
       if(MEMORY_DOOR.dismissed[id]) continue;
       shown.push({ id: row && row.id, kind: memoryDoorKind(row),
         words: memoryDoorWords(row),
+        keep: memoryDoorKeepable(row),
         replaces: memoryDoorKind(row) === "Correction"
           ? String(row.replaces_text || row.replaces || "") : "" });
     }
@@ -9934,6 +10049,11 @@ function paintMemoryDoor(){
   for(var k = 0; k < shown.length; k++) listEl.appendChild(memoryDoorCardEl(shown[k]));
   if(emptyEl) emptyEl.hidden = hidden || shown.length > 0;
   if(whereEl) whereEl.hidden = hidden;
+  var noteEl = document.getElementById("memory-door-note");
+  if(noteEl){
+    noteEl.textContent = MEMORY_DOOR.note;
+    noteEl.hidden = hidden || !MEMORY_DOOR.note;
+  }
 }
 
 function memoryDoorCardEl(card){
@@ -9956,6 +10076,16 @@ function memoryDoorCardEl(card){
   }
   var btns = document.createElement("div");
   btns.className = "memory-door-btns";
+  // Keep is drawn ONLY for a card memoryDoorKeepable accepted (a plain new
+  // fact): every card the Brain would warn about keeps its two doors.
+  if(card.keep === true){
+    var keep = document.createElement("button");
+    keep.type = "button";
+    keep.className = "memory-door-keep yes";
+    keep.textContent = "Keep";
+    keep.onclick = function(){ memoryDoorKeep(card, li, keep); };
+    btns.appendChild(keep);
+  }
   var review = document.createElement("button");
   review.type = "button";
   review.className = "memory-door-review";
@@ -10050,7 +10180,9 @@ window.__hudMemoryDoor = {
   tabChanged: memoryDoorTabChanged,
   state: MEMORY_DOOR,
   kind: memoryDoorKind,
-  words: memoryDoorWords
+  words: memoryDoorWords,
+  keepable: memoryDoorKeepable,
+  stale: memoryDoorLinkStale
 };
 
 (function(){

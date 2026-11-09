@@ -5266,9 +5266,14 @@ they landed):
 - **The memory review pane.** The desktop has it (Brain → Memory: accept,
   reject, "both are true", edit, forget, and "what did you believe then?"),
   and so does the phone (Brain). Both read `/api/memory/pending`
-  (`memory-pane.patch`). The HUD page decides no memory cards: it says how
-  many are waiting and points at the Brain, and `hud_bootstrap.js` refuses
-  any memory write from it.
+  (`memory-pane.patch`). The HUD page decides one kind of card and no more:
+  since the owner's ruling of 2026-11-09 ("Keep on plain facts only", asked
+  for as "an accept button here too") its Memory tab offers Keep on a plain
+  new fact, through the Brain's own `brain_memory_decide` - one integer id,
+  `accept:true`, held on a stale link - while every card with a warning, a
+  replacement, a retire question or the sleep offer still goes to the Brain,
+  and `hud_bootstrap.js` forwards exactly that one body and refuses every
+  other memory write.
 - **Obsidian** (added 2026-09-24). `#obs` appends to today's daily note and
   the notes search reads the vault, both as a plain folder on this PC - no
   plugin, no key, no socket (`jarvis_note_capture.py`, `jarvis_notes.py`,
