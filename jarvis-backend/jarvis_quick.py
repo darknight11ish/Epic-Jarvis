@@ -12237,6 +12237,15 @@ CHANGE_BY_ASKING = frozenset({
     # (`_read_handsfree`) answers a real True/False, so the read-back below is a
     # read and not a claim.
     "handsfree",
+    # The auto Wi-Fi reconnect (2026-11-08, ruling Q4): the owner asked for it
+    # to be changeable "in Settings or chat". ON is exactly ONE
+    # change_own_config card through jarvis_wifi.request_enabled - the same
+    # function its own Settings switch and its dedicated phrases reach - and OFF
+    # is immediate and cardless, so this lane raises nothing of its own and
+    # reports the waiting honestly. Its reader (`_read_wifi_auto_reconnect` in
+    # the feature guide) answers a real True/False, so the receipt below is a
+    # read and not a claim.
+    "wifi_auto_reconnect",
     "web_search", "smartwatch_notifications", "phone_notifications",
     "screen_picture", "headless_browser", "sandbox_exec", "media_index",
     "briefing_senders", "big_coder", "better_voice", "chat_history",

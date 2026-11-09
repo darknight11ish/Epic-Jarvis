@@ -35,7 +35,7 @@ none of them needs the owner's PC, a network or a model:
    `jarvis_quick._run_feature_state_setting` passed the registry KEY to the
    FEATURE lookup, so 14 of the 38 switches answered a state question with
    `I do not have a feature called "lights_without_card"` - and showed the raw
-   snake_case key to the owner. This suite iterates ALL 38
+   snake_case key to the owner. This suite iterates ALL 39
    `jarvis_settings_registry.BOOL_SETTINGS`, drives the real runner with each
    key, and drives the ordinary "is <label> on?" phrase through the real
    matcher and answerer. No answer may contain the false-denial sentence or a
@@ -398,7 +398,7 @@ def t_the_add_howto_questions_answer_the_real_route():
 
 
 # ==========================================================================
-#   B4 - all 38 switches answer state questions about themselves
+#   B4 - all 39 switches answer state questions about themselves
 # ==========================================================================
 
 #: The 14 the audit measured answering "I do not have a feature called ...".
@@ -426,11 +426,11 @@ def _switch_answer_is_clean(setting, words, where):
     return ""
 
 
-def t_all_38_switch_read_phrases_are_about_their_own_switch():
-    """The audit's own regression: ALL 38, not only the 14 measured broken."""
+def t_all_39_switch_read_phrases_are_about_their_own_switch():
+    """The audit's own regression: ALL 39, not only the 14 measured broken."""
     fresh()
     real = tuple(R.BOOL_SETTINGS)
-    check("38 bool settings, the audit's own count", len(real) == 38, len(real))
+    check("39 bool settings, the audit's own count", len(real) == 39, len(real))
     problems = []
     missing_labels = [s.key for s in real if not Q._setting_label(s).strip()]
     answered = 0
@@ -465,9 +465,9 @@ def t_all_38_switch_read_phrases_are_about_their_own_switch():
             problem = _switch_answer_is_clean(setting, hwords, f"how_to({setting.key})")
             if problem:
                 problems.append((setting.key, problem))
-    check("every one of the 38 registry rows carries the label its card prints",
+    check("every one of the 39 registry rows carries the label its card prints",
           not missing_labels, missing_labels)
-    check(f"every one of the 38 read phrases is no longer a false denial "
+    check(f"every one of the 39 read phrases is no longer a false denial "
           f"({answered} answered without the model)",
           not problems, problems[:8])
     check("the 14 the audit measured are all answered, not sent to the model",
@@ -475,7 +475,7 @@ def t_all_38_switch_read_phrases_are_about_their_own_switch():
               for s in (b for b in real if b.key in B4_MEASURED_KEYS)),
           [b.key for b in real if b.key in B4_MEASURED_KEYS
            and Q.match(f"is {Q._setting_label(b)} on?", now=0) is None])
-    check("... and no answer anywhere shows any of the 38 raw keys",
+    check("... and no answer anywhere shows any of the 39 raw keys",
           not any(problem for _, problem in problems), problems[:8])
     # The guide itself, one label at a time: the same reading with no intent.
     unknown = []
@@ -484,7 +484,7 @@ def t_all_38_switch_read_phrases_are_about_their_own_switch():
         out = FG.state(label)
         if out.get("ok") is not True or _FALSE_DENIAL in str(out.get("words") or "").lower():
             unknown.append((setting.key, out.get("kind"), str(out.get("words") or "")[:120]))
-    check("the feature guide answers every one of the 38 by its own label",
+    check("the feature guide answers every one of the 39 by its own label",
           not unknown, unknown[:8])
     fresh()
 

@@ -183,8 +183,11 @@ def t_the_counts_and_the_readers_are_the_registrys_own():
     ("notif_setup")` in this table.
 
     Thirty-eight on 2026-11-04: `handsfree`, hands-free mode's own switch
-    (JARVIS-API section 191), whose reader is `_read_handsfree` in this table."""
-    check("38 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 38,
+    (JARVIS-API section 191), whose reader is `_read_handsfree` in this table.
+
+    Thirty-nine on 2026-11-08: `wifi_auto_reconnect`, the auto Wi-Fi reconnect
+    (ruling Q4), whose reader is `_read_wifi_auto_reconnect` in this table."""
+    check("39 BOOL_SETTINGS, as the plan counted", len(R.BOOL_SETTINGS) == 39,
           len(R.BOOL_SETTINGS))
     check("10 CHOICE_SETTINGS", len(R.CHOICE_SETTINGS) == 10, len(R.CHOICE_SETTINGS))
     check("1 NUMBER_SETTINGS", len(R.NUMBER_SETTINGS) == 1, len(R.NUMBER_SETTINGS))
