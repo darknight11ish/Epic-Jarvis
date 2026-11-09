@@ -3645,6 +3645,30 @@
           <ul class="sc-cards" id="sk-import-list"></ul>
           <p class="note" id="sk-import-note" hidden></p>
 
+          <h3 class="subhead">Creator mode - things waiting</h3>
+          <!-- Creator mode (2026-11-09, Wave 13; the owner's ruling that its
+               scope is "Plug-ins and skills"). ONE waiting folder on this PC
+               (creator-incoming, beside skills/) where a creator puts a skill
+               folder (a SKILL.md) or a plug-in folder (a plugin.json). Opening
+               this card SCANS what is there - read only, no card, nothing
+               copied - and each item shows the scanner's own verdict and
+               findings. Install is ONE item and ONE card, raised by the pack
+               manager's own install path; the skill lands TURNED OFF, so
+               installing is not enabling. A plug-in is code and is refused in
+               the pack manager's own words: this slice has no code-install
+               path. Both routes refuse every device but this PC
+               (backend/jarvis_creator.py, skills_menu.rs, skills-menu-rules.js;
+               JARVIS-API section 209). -->
+          <div id="sk-creator">
+            <p class="note">Put a skill folder (one with SKILL.md in it) or a plug-in folder (one with plugin.json in it) in the waiting folder on this PC, then press "Look again". Looking scans what is there and raises no card. Installing ONE item raises ONE card, and the skill lands turned off - turn it on in the list above when you want it. A plug-in is a program, and this first slice of Creator mode stages it, scans it, and refuses it in the pack manager's own words.</p>
+            <p class="note" id="sk-creator-folder" hidden></p>
+            <div class="row">
+              <button class="btn small" id="sk-creator-refresh" type="button">Look again</button>
+            </div>
+            <ul class="sc-cards" id="sk-creator-list"></ul>
+            <p class="note" id="sk-creator-note" hidden></p>
+          </div>
+
           <h3 class="subhead" id="sk-pick-title"></h3>
           <p class="note" id="sk-pick-detail"></p>
           <p class="note" id="sk-pick-inert" hidden></p>

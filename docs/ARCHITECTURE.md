@@ -5056,6 +5056,26 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 - **Read-aloud in Jarvis's own voice, with Pause and Stop, is the desktop's - one-sided on purpose (2026-11-09, TASK-51; the owner's decision of 2026-11-08 and Gemini's Q7).** The desktop HUD is the one surface that reads a TYPED answer aloud, and it used to do that with WebView2's speech engine, hand-picking a British voice and falling back to the first English voice in the list - which the owner's report of 2026-11-08 names on his PC as Windows' index-0 `Microsoft David`, a man, while his configured voice is Kokoro's (default `af_heart`, a woman). Since this slice the HUD plays AUDIO the PC made through the bar's own `speak_reply` (`POST /api/voice/say` -> `jarvis_speech.say()` -> `jarvis_voices.speaker()`, or the owner's custom voice), so the voice is the same one a spoken answer and Jarvis Live use; when that voice cannot be made the page says so in one line and speaks nothing else. It also gains an inline Pause / Resume beside Read out loud and a Stop that fully resets the player, and it stops on Stop everything and on the PC's `read_aloud {enabled: false}` event (JARVIS-API §206). **Nothing of this is ported to the phone, and nothing of the phone's voice path is touched:** the phone's tap-only Read out loud already speaks with Android's own on-device synthesiser under its own lock rules and its own voice, there is no WebView2-style voice list on Android to fall back through, and the PC's Kokoro voice cannot be shipped to it - so a phone port would be a second, different voice, which is the bug this slice removes. **The phone's voice-print / speaker-verification path is deliberately untouched by this work**: `jarvis_voice.py`, the enrolment routes and `voiceprint`-class commands are unchanged on both apps; the new desktop grant is ONE speech command (`hud-speech` = `allow-speak-reply`), with no microphone command, no recording command and no route added, so the owner check that guards what Jarvis acts on is exactly where it was. `tools/check_parity.py` has nothing new to classify: `/api/voice/say` was already there and already used by both apps' read-aloud.
 
+- **Creator mode is the PC's, and that is one-sided on purpose** (2026-11-09,
+  Wave 13; the owner's ruling that its scope is "Plug-ins and skills";
+  JARVIS-API section 209, `backend/jarvis_creator.py`,
+  `plugins/ready/creator-mode/`). A creator puts a skill folder (a `SKILL.md`)
+  or a plug-in folder (a `plugin.json`) in ONE waiting folder on this PC, opens
+  Settings -> Skills, and installs ONE item behind ONE card; a skill lands
+  TURNED OFF, and a plug-in is refused in this slice in the pack manager's own
+  words. **The phone has no part in it, and none is wanted:** a skill is
+  instructions the model follows and a plug-in is code that runs beside it, so
+  the screen that puts one in belongs where the folder is - this PC - and the
+  ONE card it raises is answered here. The phone keeps reading the plain list of
+  what is already installed (`GET /api/skills`, unchanged), so it can still see
+  the result without gaining a door that could stage or install anything. No
+  phone screen is a gap left for later: staging a folder is choosing among
+  folders on this PC's disk, and the phone has no picker and no deep
+  configuration editing (the standing rule). Both routes are PC-only in the
+  module itself (`jarvis_owner_check.from_this_pc`), so this is enforced rather
+  than merely unported, and `tools/check_parity.py` classifies both
+  `deliberate`.
+
 ## 9. Where the backend lives
 
 **The owner's live copies are not in this repo.** The owner keeps

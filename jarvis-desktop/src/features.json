@@ -3493,6 +3493,27 @@
     "gate": ["change_own_config"]
   },
   {
+    "id": "creator-mode",
+    "group": "The PC itself",
+    "title": "Creator mode: put a skill or a plug-in in a waiting folder",
+    "what": "ONE waiting folder on this PC, where you drop a skill folder or a plug-in folder. Jarvis reads and scans what is there, shows you what the scanner found, and installs ONE item at a time when you say yes.",
+    "where": "Settings, Skills, Creator mode, on the PC. The waiting folder is creator-incoming, beside the skills folder in Jarvis's own settings folder.",
+    "asks": "Looking at the folder raises no card. Installing ONE item raises ONE card (modify_own_code), and a skill the scanner refuses never becomes a card at all. Turning it on afterwards is the ordinary Turn on control, with its own card.",
+    "limit": "Installing is not enabling: a skill lands turned off, and the only way on is the ordinary Turn on control. A plug-in is a program, and this first slice stages it, scans it and refuses it in the pack manager's own words - no plug-in is installed yet. There is no install-all, no download source and no watcher: the folder is scanned when the card is opened, nothing is installed without a card answered on the PC, and the phone has no Creator mode screen.",
+    "surface": "desktop",
+    "surface_reason": "A skill is instructions the model follows and a plug-in is code that runs beside it, so the screen that puts one in sits where the folder is; the phone keeps reading the plain list of what is already installed (docs/ARCHITECTURE.md section 8).",
+    "covers": [],
+    "aliases": [
+      "creator mode",
+      "put a skill in a waiting folder",
+      "stage a plug-in",
+      "install a skill from a folder i drop in"
+    ],
+    "gate": [
+      "modify_own_code"
+    ]
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",

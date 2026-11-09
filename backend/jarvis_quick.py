@@ -8587,6 +8587,7 @@ PLUGIN_CATALOGUE = (
     ('card-prefs', 'how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.'),
     ('chatbot-limits-hud', "the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app."),
     ('chatbot-routes', 'the routes both apps use to have Jarvis talk to an AI chatbot for the owner.'),
+    ('creator-mode', 'a waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card opens, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in this first slice.'),
     ('decks', 'review decks.'),
     ('docker', "the containers on Jarvis's OWN list, and start/stop for them."),
     ('documents', '"Folders Jarvis may look in": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part...'),

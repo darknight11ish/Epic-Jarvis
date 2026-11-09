@@ -7,8 +7,8 @@
     "core": 148,
     "missing": 0
   },
-  "folder_count": 28,
-  "ready_count": 57,
+  "folder_count": 29,
+  "ready_count": 58,
   "folders": [
     {
       "name": "skill-hub",
@@ -232,6 +232,14 @@
       "install": "handler",
       "stack_order": 189,
       "summary": "the auto Wi-Fi reconnect: GET/POST /api/wifi-reconnect, ON by default, every 2 hours while this PC has no internet it asks Windows to connect to a saved password-protected Wi-Fi network it already knows - never open, never new, never a password, never while Jarvis is answering, and every attempt is reported in one calm line.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "creator-mode",
+      "module": "jarvis_creator",
+      "install": "handler",
+      "stack_order": 190,
+      "summary": "Creator mode: ONE waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card is opened, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in the pack manager's own words in this slice.",
       "why": "born as a folder: it replaces no patch"
     }
   ],

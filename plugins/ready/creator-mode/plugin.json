@@ -1,0 +1,7 @@
+{
+  "name": "creator-mode",
+  "summary": "Creator mode: ONE waiting folder on this PC where a creator puts a skill folder or a plug-in folder, a read-only scan when the Settings card is opened, and ONE install card a thing - a skill lands turned off, and a plug-in is refused in the pack manager's own words in this slice.",
+  "module": "jarvis_creator",
+  "install": "handler",
+  "stack_order": 190
+}

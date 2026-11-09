@@ -3159,6 +3159,18 @@ $SHIPPED = @(
     # honest audit of the everyday settings. Every model/chat path still asks.
     # The same entry, in the same position, is in backend/_where.py's SHIPPED.
     'jarvis_reversible_ui.py'
+    # Creator mode (jarvis_creator.py, 2026-11-09, Wave 13; the owner's ruling
+    # that its scope is "Plug-ins and skills"): ONE waiting folder on this PC
+    # where a creator puts a skill folder (a SKILL.md) or a plug-in folder (a
+    # plugin.json), a read-only scan when the Settings card is opened, and ONE
+    # modify_own_code card a thing. A skill is installed by the pack manager's
+    # own install_pack() - its own scanner, its own card - and lands TURNED
+    # OFF, so installing is not enabling; turning one on stays the ordinary ON
+    # control. A plug-in is code and is refused in the pack manager's own words
+    # before a card: this slice has no code-install path. Both routes refuse
+    # every device but this PC. No network, no watcher, no second scanner.
+    # The same entry, in the same position, is in backend/_where.py's SHIPPED.
+    'jarvis_creator.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

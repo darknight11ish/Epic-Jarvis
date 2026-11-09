@@ -36184,10 +36184,12 @@ dimension explicitly:
 
 POST /api/voice/utterance?source=live can now answer a clip it DROPPED as background audio. Nothing is renamed and nothing is removed: every field an older client reads keeps its meaning.
 
-- **ignored_unmatched_speaker: 	rue** on that reply, and absent-or-alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
+- **ignored_unmatched_speaker: 	rue** on that reply, and absent-or-
+alse on every other one. It means the clip arrived in a Jarvis Live session whose latch was on, carried at least jarvis_live.RADIO_GUARD_S (1.2 s) of speech, and did **not** sound like the enrolled owner - the in-RAM CAM++ embedding's cosine against the print's centroid came in under jarvis_live.RADIO_MIN_COSINE (0.25) when the clip carried "hey Jarvis" or arrived inside the follow-up window, or under RADIO_MIN_COSINE_NO_WAKE (0.32) when it did not.
 - **
 eason: "background_media_rejected"** on the same reply (jarvis_live.IGNORED_BACKGROUND).
-- **ok and owner are alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
+- **ok and owner are 
+alse**, and 	ext is empty. This is not a failure and it is not a pass: no transcript was produced, so ok keeps its existing meaning ("there are words for you"). Both apps already treat ok: false with no error words as "nothing to say", which is exactly the behaviour wanted - a radio must not make Jarvis speak.
 - **Nothing is sent to the model** on such a clip, nothing is kept, and no words of it appear in the reply. An app needs no change: a client that does not know the new field ignores it, and the clip is silent either way.
 - **Short confirmations are unaffected.** A clip under 1.2 s in a latched session is never put to this guard, so "yes" and "do it" answer exactly as they did before.
 
@@ -37493,3 +37495,208 @@ directions, and no query or header is read; the tier table still says
 `switch_model = "ask"`; the module is in both SHIPPED lists and the two copies
 are byte-equal. `backend/test_presets_owner_ui.py` keeps section 209's own
 proof.
+
+
+## 211. Creator mode: one waiting folder, a scan, and ONE card a thing (added 2026-11-09, Wave 13)
+
+The owner's ruling (2026-11-09, via the Lead): **Creator Mode's scope is "Plug-ins
+and skills"** - not plug-ins only and not everything. This is the first slice: a
+creator puts a skill folder or a plug-in folder in ONE fixed waiting folder on
+this PC, the PC scans what is there when the Settings card is opened, and the
+owner installs ONE item behind ONE approval card. Installing is not enabling.
+A plug-in is a program, so this slice stages it, scans it and refuses it **in the
+pack manager's own words** rather than inventing a code-install path; the exact
+remaining work for that half is 209.9.
+
+Creator mode is a new module, `jarvis-backend/jarvis_creator.py`, shipped whole
+and loaded by the drop-in folder `plugins/ready/creator-mode/` - no patch. Its
+two routes are answered by its own `install()`, the same way
+`jarvis_skill_menu.install()` answers the Skills routes (section 178).
+
+### 209.1 The waiting folder
+
+ONE place, and it is a folder on this PC:
+
+```
+<config folder>/creator-incoming
+```
+
+beside `skills/`, `skills-off/`, `skills-quarantine/` and `skills-incoming/` -
+the folders the rest of the skill machinery already uses. `JARVIS_CREATOR_INCOMING`
+overrides it, for the suites. It is made **when it is first needed**, so the
+installer carries no empty folder and no new deploy path; the only write this
+module does on a read is that `mkdir`.
+
+Every direct child folder is one item. A folder with `SKILL.md` is a skill; a
+folder with `plugin.json` is a plug-in; a folder with both, or with neither, is
+refused with a sentence saying so rather than guessed at. A link or a junction is
+refused, because a link can point anywhere on this PC. Folder names are names,
+never paths: the install request names one folder and the PC resolves it inside
+the waiting folder and proves the result is still under it.
+
+Nothing in that folder is ever run, imported, moved or copied by a read. There is
+no loader, no watcher, no timer and no scheduler looking at it: the scan happens
+when the owner opens the card (or presses **Look again**, or returns to the
+page), and the install happens when they answer a card. Writing a file into
+`creator-incoming` cannot change what Jarvis does.
+
+### 209.2 The two routes, PC only
+
+```http
+GET  /api/creator/incoming
+POST /api/creator/install
+```
+
+Both refuse every device but this PC (`jarvis_owner_check.from_this_pc`; 403 with
+one plain sentence), and `tools/check_parity.py` classifies both `deliberate`
+with the one-sided reason. The phone keeps reading the plain list of what is
+already installed (`GET /api/skills`), which is unchanged.
+
+`GET /api/creator/incoming` answers with the waiting folder's path, one row per
+item (`name`, `kind`, `verdict`, `refused`, `can_install`, `summary`, `reason`,
+the scanner's `findings`, `installed`, `where`), the counts, and one `note` in
+plain words. It is a READ: it raises no card.
+
+`POST /api/creator/install` takes **one** field, `name` - one folder - plus the
+optional `accept_warnings` the owner sends after reading warnings. It answers
+with the PC's own words: `installed`, `state`, `where`, `message`, and the pack
+manager's scan report. A refusal is `ok: false` with `refused: true` and
+`asked: false`; it is never a transport error the page has to decode.
+
+### 209.3 The scan is the pack manager's, called not copied
+
+A skill is handed to `jarvis_packs.scan_source()`, which is the pack manager's
+own full pre-install scan (section 197.3): file list and hashes, the code and
+binary refusal, the link refusal, compatibility, the existing
+`jarvis_skills.vet()` verdict and findings - including the four extra checks in
+`jarvis_skills._extra_findings()` (`hermes_exec`, `exfil_phrasing`,
+`gate_bypass_claim`, `bare_url`; section 178) and the bundled-scripts warning
+("ships N executable file(s) ... Nothing here runs them"). A folder whose
+`SKILL.md` is missing, oversized or malformed is a `malformed` refusal, not a
+card.
+
+A plug-in (`plugin.json`) is a program that runs inside the backend at start-up
+(`jarvis_plugins.py:57-63`), so it is **refused before any card**. The sentence
+is `jarvis_packs.CODE_REFUSED`, imported from that module - never copied - with
+this folder's evidence: the first file that can run when the folder holds one
+(the pack manager's own scan produces that refusal word for word), or the module
+its `plugin.json` names when the folder holds only its manifest. Nothing is
+imported to read the manifest.
+
+### 209.4 Install is ONE card, and installing is not enabling
+
+A skill install calls **`jarvis_packs.install_pack()`** - the pack manager's own
+door - which re-scans from scratch, refuses a refused skill without asking,
+raises exactly ONE `modify_own_code` card, copies only after the yes, records the
+ledger and receipt, and then **turns the skill OFF** through the existing off
+path (`jarvis_skill_menu.set_state({"on": false})`). The result is the same
+state a skill the owner switched off is in: not in `skills/`, not in
+`jarvis_skills.cards()`, not loadable, and offered again only by the ordinary
+**Turn on** control, which runs the scanner again and raises its own card.
+
+There is **no bulk path**: the request names one folder, a body with a list is
+refused before anything is scanned, and each item is its own card. There is no
+"install all", no yes-to-all and no per-row loop that installs several.
+
+### 209.5 What this deliberately does not do
+
+- **No plug-in install.** A plug-in is code with the same trust as the backend
+  itself; installing one needs the phase-2 code-trust work (197.7, 197.10), not a
+  second scanner here. It is listed, scanned and refused, so the owner can see
+  it and see why.
+- **No network, no marketplace, no URL, no git.** A local folder only.
+- **No watcher and no auto-install.** Nothing installs without a card answered
+  on the PC, and nothing installs because a file appeared.
+- **No phone surface.** A skill is instructions the model follows and a plug-in
+  is code that runs beside it; the screen that puts one in sits where the folder
+  is. ARCHITECTURE section 8 records the one-sided reason.
+- **No second scanner and no second card.** `jarvis_skills.vet()`,
+  `jarvis_packs.scan_source()`, `jarvis_packs.install_pack()` and
+  `jarvis_skills.install()` are called; none is re-implemented.
+- **No quarantine copy for a refused plug-in.** The staged folder IS the
+  evidence and it stays exactly where the creator put it; nothing was ever
+  handed to the installer, so there is nothing to quarantine. A refused skill
+  goes through the pack manager's own path and is refused before the card, for
+  the same reason.
+
+### 209.6 The Settings card
+
+Settings -> **Skills** gains a **Creator mode - things waiting** block
+(`jarvis-desktop/src/settings.html`; `skills-menu-settings.js` over two new
+actions on the existing `skills_menu` command in
+`jarvis-desktop/src-tauri/src/skills_menu.rs`):
+
+| action | what it asks the PC |
+|---|---|
+| `creator_read` | `GET /api/creator/incoming` - the folder and its scanned items. Read only; no card. |
+| `creator_install` | `POST /api/creator/install` with ONE name - the pack manager's scanner, then its ONE card. Held while the event stream is stale. |
+
+The block shows the folder's path, one row per item with the scanner's verdict
+and findings, and an **Install it…** button ONLY on a row the PC says can be
+installed. A refused skill and a plug-in show the refusal and get no button,
+because the PC would not draw a card for them. The status line shows the PC's
+own message - for a successful skill, the pack manager's sentence saying it was
+installed and turned off.
+
+**One-sided on purpose:** there is no phone control and no new phone screen.
+The phone's existing list of what is installed is unchanged. ARCHITECTURE
+section 8 carries the entry.
+
+### 209.7 What is proved, and what needs the owner's PC
+
+`py -3 backend/test_creator_mode.py` (130 checks, all passing): a staged skill is
+seen and scanned with no card; a warning and a block are both shown, never
+hidden; a plug-in is refused with `jarvis_packs.CODE_REFUSED.format(...)` word
+for word; a folder that is neither shape is refused; two reads change no byte of
+the staged folder, copy nothing, quarantine nothing and raise no card; a clean
+install raises exactly ONE `modify_own_code` card and lands the skill in
+`skills-off/` with the ledger saying `disabled`; the ordinary ON control then
+raises its own card and restores it; a blocked skill and a plug-in come back
+`asked: false` with the gate never called; a multi-name body is refused; names
+that are paths cannot reach outside; the routes answer and fall through, are
+refused from another device, and are classified `deliberate` in
+`tools/check_parity.py`; and the module imports no network, process or watcher.
+
+`node jarvis-desktop/tests/skills-menu.mjs` (25 checks) holds the page's
+`creatorView()`, its missing-module sentence, the one-button-per-row rule, the
+"no watcher" wiring and the `turned off` wording. `cargo test` covers the two new
+actions' plan/held/answer rules. **NOT-TESTABLE here, said plainly:** the owner's
+real click on the real card, on his own PC, with a real folder in
+`creator-incoming` - no lane has driven that, so the field-test row stays NOT RUN
+YET until he does.
+
+### 209.8 What a creator sees, in order
+
+1. Put the folder in `creator-incoming`. Nothing happens; nothing runs.
+2. Open Settings -> Skills (the Creator mode block is in that card). The block
+   scans what is there and shows the verdict, the findings, and (for a skill)
+   whether it needs its warnings read first.
+3. Press **Install it…** on ONE item, read the ONE card, answer it.
+4. The skill lands in `skills-off/`, turned off. Turn it on in the Skills list,
+   which scans it again and asks its own card.
+5. A plug-in shows the pack manager's code refusal and no button. That is this
+   slice's whole plug-in half.
+
+### 209.9 What the plug-in half still needs
+
+The staged plug-in folder is refused by `jarvis_packs.CODE_REFUSED`, so nothing
+half-installs. To turn a plug-in into an installable item, the next slice needs,
+in order:
+
+1. the phase-2 code-trust design `jarvis_packs` already names (197.7/197.10):
+   what a code pack may touch, where it runs (a separate process, not the HUD's
+   own), and what the scan can prove about it (AST/import and obfuscation);
+2. a real install path for a plug-in folder into `jarvis_plugins\` beside
+   `jarvis_hud.py` (today `scripts/add-plugin.ps1` is the only door), with the
+   ONE-card shape and a ledger row like the pack manager's;
+3. install != enable for a plug-in too: the loader already honours a `disabled`
+   marker beside `plugin.json` (`jarvis_plugins.py:159`), so landing one disabled
+   and switching it on through that marker is the shape - but the restart
+   sentence and the scanner's verdict for code must exist first;
+4. the same tests this slice has for skills: staged, scanned, refused-never-a-
+   card, one-card install, install-is-not-enable, and the phone's one-sidedness
+   classified in `tools/check_parity.py`.
+
+Until that lands, **no plug-in is installed by Creator mode, and the card says
+so in the pack manager's own words** - which is the honest smaller slice rather
+than a code-install path nobody has designed.

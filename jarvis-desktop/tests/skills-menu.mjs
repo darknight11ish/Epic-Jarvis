@@ -162,9 +162,16 @@ await check("the Rust plans exactly the actions the page knows about", () => {
   assert.deepEqual([...got].sort(), [...R.ACTIONS].sort());
 });
 
-await check("the three doors that raise a card are the ones held on a stale link", () => {
-  assert.deepEqual(R.CARD_ACTIONS.slice().sort(), ["edit", "enable", "install"]);
-  assert.ok(RUST.includes('matches!(action, "install" | "enable" | "edit")'));
+await check("the four doors that raise a card are the ones held on a stale link", () => {
+  assert.deepEqual(R.CARD_ACTIONS.slice().sort(), [
+    "creator_install",
+    "edit",
+    "enable",
+    "install",
+  ]);
+  assert.ok(
+    RUST.includes('matches!(action, "install" | "enable" | "edit" | "creator_install")'),
+  );
 });
 
 await check("every action the page uses is in the one list", () => {
@@ -280,6 +287,11 @@ await check("the page's own ids all exist in settings.html", () => {
     "sk-edit-save",
     "sk-edit-cancel",
     "sk-status",
+    "sk-creator",
+    "sk-creator-folder",
+    "sk-creator-list",
+    "sk-creator-note",
+    "sk-creator-refresh",
   ]) {
     assert.ok(HTML.includes(`id="${id}"`), `settings.html has ${id}`);
   }
@@ -323,6 +335,104 @@ await check("the Brain lists skills and links to this card - it is not a second 
   // there (brain.model.skills), and ids are never renamed.
   assert.ok(brainHtml.includes('id="skills-card" data-menu-id="brain.model.skills"'),
     "the Brain's Skills card lost its menu id");
+});
+
+/* ── 4. Creator mode: the waiting folder, the scan, ONE card ────────────── */
+
+await check("a waiting folder's answer is shown only when it is the shape we can show", () => {
+  for (const bad of [null, undefined, {}, [], "items", 0]) {
+    assert.equal(R.creatorView(bad), null, JSON.stringify(bad));
+  }
+  const view = R.creatorView({
+    ok: true,
+    folder: "C:\\Users\\x\\.openjarvis\\creator-incoming",
+    items: [
+      { name: "tidy-desk", kind: "skill", verdict: "clean", can_install: true },
+      {
+        name: "warn-one",
+        kind: "skill",
+        verdict: "review",
+        can_install: true,
+        needs_warnings: true,
+        findings: [{ severity: "warn", code: "raw_ip_url", message: "a bare IP" }],
+      },
+      {
+        name: "bad-one",
+        kind: "skill",
+        verdict: "refuse",
+        refused: true,
+        can_install: false,
+        findings: [{ severity: "block", code: "password_request", message: "asks for a password" }],
+      },
+      {
+        name: "my-plugin",
+        kind: "plugin",
+        verdict: "refuse",
+        refused: true,
+        can_install: false,
+        reason: "that pack contains executable code (jarvis_helper.py)",
+      },
+    ],
+    counts: { found: 4, ready: 2 },
+    note: "Nothing in this folder runs or is installed until you press Install.",
+  });
+  assert.equal(view.available, true);
+  assert.equal(view.items.length, 4);
+  const by = Object.fromEntries(view.items.map((i) => [i.name, i]));
+  assert.equal(by["tidy-desk"].canInstall, true);
+  assert.equal(by["tidy-desk"].kindWords, "skill");
+  assert.equal(by["warn-one"].needsWarnings, true);
+  assert.equal(by["warn-one"].warnings.length, 1);
+  // A refused item is LISTED and cannot be installed: the PC would not draw a
+  // card for it, so the page must not offer one.
+  assert.equal(by["bad-one"].canInstall, false);
+  assert.equal(by["bad-one"].blocking.length, 1);
+  assert.equal(by["my-plugin"].kind, "plugin");
+  assert.equal(by["my-plugin"].kindWords, "plug-in");
+  assert.equal(by["my-plugin"].canInstall, false);
+  assert.ok(by["my-plugin"].reason.includes("executable code"));
+  assert.equal(view.counts.ready, 2);
+});
+
+await check("a PC without Creator mode says so, and never shows an empty folder for it", () => {
+  const view = R.creatorView({ ok: false, error: "Creator mode is on the PC only" });
+  assert.equal(view.available, false);
+  assert.ok(view.why.includes("on the PC only"));
+  assert.equal(view.items.length, 0);
+  const missing = R.creatorView({ ok: false });
+  assert.ok(missing.why.includes("apply-patches.ps1"));
+  assert.ok(!/HTTP \d/.test(missing.why));
+});
+
+await check("Creator mode asks the PC, is never a watcher, and never installs by itself", () => {
+  assert.ok(PAGE.includes('ask("creator_read"'));
+  assert.ok(PAGE.includes('ask("creator_install"'));
+  assert.ok(RUST.includes("/api/creator/incoming"));
+  assert.ok(RUST.includes("/api/creator/install"));
+  // The scan is run from three owner-triggered places only: the first open, the
+  // page becoming visible, and "Look again". No setInterval, no timer, no
+  // polling loop, and no install on a timer.
+  assert.ok(!/setInterval|setTimeout\([^)]*loadCreator/.test(PAGE));
+  // Exactly two mentions of the install call: its own definition and the one
+  // click handler that a waiting row builds. Nothing else can start an install.
+  assert.equal((PAGE.match(/installCreator\(/g) || []).length, 2);
+  assert.ok(HTML.includes("sk-creator-refresh"));
+});
+
+await check("Creator mode is one item, one button, one card - and it is NOT enable", () => {
+  const creatorPage = PAGE.slice(
+    PAGE.indexOf("function creatorItemRow"),
+    PAGE.indexOf("function paintCreator"),
+  );
+  assert.equal((creatorPage.match(/addEventListener\("click"/g) || []).length, 1,
+    "a waiting row builds exactly ONE button");
+  for (const bad of ["creator-install-all", "sk-creator-all", "install every", "yes to all"]) {
+    assert.ok(!HTML.includes(bad) && !PAGE.includes(bad), `found ${bad}`);
+  }
+  // Installing lands the item turned OFF; the ordinary Turn on control is the
+  // only way on, and the page must say both halves.
+  assert.ok(HTML.includes("lands turned off"));
+  assert.ok(PAGE.includes("turned off"));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
