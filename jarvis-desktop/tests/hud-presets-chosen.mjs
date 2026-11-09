@@ -62,8 +62,9 @@ check("no visible label is built with a (chosen) suffix any more", () => {
 check("one helper marks the chosen row: class, aria-current and accessible word", () => {
   assert.equal((js.match(/\.classList\.add\("is-chosen"\)/g) || []).length, 1,
     "there is not exactly one writer of the is-chosen class");
-  assert.equal((js.match(/\bmarkChosen\(/g) || []).length, 4,
-    "expected one definition plus three calls (model presets, Cloud row, providers)");
+  assert.equal((js.match(/\bmarkChosen\(/g) || []).length, 6,
+    "expected one definition plus five calls (model presets, Cloud row, providers, "
+    + "the PC's personalities and the owner's own personalities)");
   assert.match(js, /button\.setAttribute\("aria-current", "true"\)/,
     "the chosen row does not say aria-current");
   assert.ok(js.includes("${visible} (chosen). ${hint}"),

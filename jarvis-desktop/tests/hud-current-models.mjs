@@ -527,5 +527,17 @@ await check("the panel still names the PC's default only AS the default (field e
     "the panel led with the default model while another one was answering");
 });
 
+await check("a preset read also keeps the top model chip honest", () => {
+  const start = page.indexOf("async function loadPresets(){");
+  assert.ok(start >= 0, "the HUD no longer has loadPresets()");
+  const end = page.indexOf("  }catch(e){", start);
+  assert.ok(end > start, "loadPresets() lost its catch block");
+  const body = page.slice(start, end);
+  assert.match(body, /if\s*\(\s*S\.lane === "auto"\s*\)\s*paintModelInUse\(\);/,
+    "the preset read does not repaint the top model chip, so a preset changed "
+    + "outside this window (Settings, or a benchmark on the PC) leaves the old "
+    + "model in the chip (the owner's report, 2026-11-09)");
+});
+
 console.log(fails ? `\n${fails} failed` : `\nall ${passed} Current Models checks passed`);
 process.exit(fails ? 1 : 0);
