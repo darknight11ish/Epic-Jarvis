@@ -2395,10 +2395,10 @@ export const MENUS = [
       "phone"
     ],
     "area": "brain",
-    "view": "work",
+    "view": "projects",
     "kind": "card",
     "group": "group.goals-projects",
-    "parent": "brain.tab.work",
+    "parent": "brain.tab.projects",
     "hide": true,
     "collapse": true,
     "why": "",

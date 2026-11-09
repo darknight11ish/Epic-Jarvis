@@ -808,7 +808,7 @@ MENUS: tuple = (
        why="A reminder that is due shows here; it must stay reachable.",
        names=("coming up",)),
     _m("brain.work.goals", "Goals", "Plans you edit, with a weekly check-in.",
-       area="brain", view="work", group="goals-projects", names=("goals",)),
+       area="brain", view="projects", group="goals-projects", names=("goals",)),
     _m("brain.work.quiz", "Quiz me on a text", "Questions on a text you paste or a YouTube link.",
        area="brain", view="work", group="study", names=("quiz", "quizzes")),
     _m("brain.work.quiz.youtube", "Quiz from a YouTube link",

@@ -2263,10 +2263,10 @@
         "phone"
       ],
       "area": "brain",
-      "view": "work",
+      "view": "projects",
       "kind": "card",
       "group": "group.goals-projects",
-      "parent": "brain.tab.work",
+      "parent": "brain.tab.projects",
       "hide": true,
       "collapse": true,
       "why": "",
@@ -4588,16 +4588,7 @@
       ],
       "end": {
         "hidden": [
-          "brain.work.briefing",
-          "brain.work.chatbot",
-          "brain.work.decks",
-          "brain.work.focus",
-          "brain.work.jobs",
-          "brain.work.quiz",
-          "brain.work.retirement",
-          "brain.work.support",
-          "brain.work.today",
-          "brain.work.widgets"
+          "brain.tab.work"
         ],
         "collapsed": []
       },
@@ -4661,7 +4652,7 @@
         "brain.tab.memory": false,
         "brain.tab.history": false,
         "brain.tab.faculties": false,
-        "brain.tab.work": false,
+        "brain.tab.work": true,
         "brain.tab.projects": false,
         "brain.tab.tutorials": false,
         "brain.tab.galaxy": false,
@@ -4797,7 +4788,7 @@
         "brain.trust.ledger": false,
         "brain.watch.watchlist": false
       },
-      "hidden_count": 10
+      "hidden_count": 1
     },
     {
       "name": "a card under a hidden tab is hidden and is not counted twice",
@@ -4918,7 +4909,7 @@
         "brain.work.today": true,
         "brain.work.widgets": true,
         "brain.work.coming-up": false,
-        "brain.work.goals": true,
+        "brain.work.goals": false,
         "brain.work.quiz": true,
         "brain.work.quiz.youtube": true,
         "brain.work.decks": true,

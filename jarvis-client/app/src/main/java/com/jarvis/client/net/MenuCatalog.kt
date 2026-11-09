@@ -147,7 +147,7 @@ object MenuCatalog {
         Menu("brain.work.today", "Today", "Your own cards for the day.", true, true, "brain", "work", "card", null, "brain.tab.work", true, true, "", listOf("today")),
         Menu("brain.work.widgets", "Widgets", "Widgets you described.", true, true, "brain", "work", "card", null, "brain.tab.work", true, true, "", listOf("widgets")),
         Menu("brain.work.coming-up", "Coming up", "Reminders, alarms, timers and repeating jobs.", true, true, "brain", "work", "card", null, "brain.tab.work", false, true, "A reminder that is due shows here; it must stay reachable.", listOf("coming up")),
-        Menu("brain.work.goals", "Goals", "Plans you edit, with a weekly check-in.", true, true, "brain", "work", "card", "group.goals-projects", "brain.tab.work", true, true, "", listOf("goals")),
+        Menu("brain.work.goals", "Goals", "Plans you edit, with a weekly check-in.", true, true, "brain", "projects", "card", "group.goals-projects", "brain.tab.projects", true, true, "", listOf("goals")),
         Menu("brain.work.quiz", "Quiz me on a text", "Questions on a text you paste or a YouTube link.", true, true, "brain", "work", "card", "group.study", "brain.tab.work", true, true, "", listOf("quiz", "quizzes")),
         Menu("brain.work.quiz.youtube", "Quiz from a YouTube link", "The YouTube link box inside the quiz.", true, true, "brain", "work", "row", "group.study", "brain.work.quiz", true, false, "", listOf("youtube link", "quiz youtube link")),
         Menu("brain.work.decks", "My study decks", "Questions kept to study again.", true, true, "brain", "work", "card", "group.study", "brain.tab.work", true, true, "", listOf("decks", "review decks", "study decks")),
