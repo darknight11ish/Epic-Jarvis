@@ -338,6 +338,11 @@ def t_it_is_read_only_and_touches_nothing():
 def t_the_catalogue_has_no_duplicates_and_says_where_its_numbers_come_from():
     models = [row["model"] for row in R.CATALOGUE]
     check("every model appears once", len(models) == len(set(models)))
+    check("the catalogue names no DELETED model tag",
+          all(row["model"] != "qwen3-coder:30b-a3b-q4_K_M"
+              for row in R.CATALOGUE),
+          [row["model"] for row in R.CATALOGUE
+           if row["model"] == "qwen3-coder:30b-a3b-q4_K_M"])
     check("every row has a positive size estimate",
           all(float(row["min_vram_gib"]) > 0 for row in R.CATALOGUE))
     check("every catalogue row says where its number comes from",

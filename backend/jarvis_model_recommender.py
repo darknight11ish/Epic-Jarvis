@@ -171,12 +171,6 @@ CATALOGUE = (
      "capabilities": ("completion", "coding"),
      "measured_note": "16.17 GiB at 49,152 across three cards "
                       "(83.82 tok/s)"},
-    {"model": "qwen3-coder:30b-a3b-q4_K_M",
-     "label": "Qwen3 Coder 30B-A3B (Q4 candidate)", "params": "30B MoE",
-     "quant": "Q4_K_M", "min_vram_gib": 20.6, "context_gib": 49152,
-     "capabilities": ("completion", "coding"),
-     "measured_note": "20.60 GiB at 49,152 across three cards "
-                      "(93.08 tok/s, not shipped)"},
     {"model": "gemma4:31b-it-qat", "label": "Gemma 4 31B (QAT)",
      "params": "31B", "quant": "QAT Q4", "min_vram_gib": 18.3,
      "context_gib": 16384, "capabilities": ("completion", "reasoning"),
