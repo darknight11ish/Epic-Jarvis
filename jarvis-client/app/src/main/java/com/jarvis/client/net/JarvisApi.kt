@@ -811,6 +811,22 @@ class JarvisApi(
     suspend fun autoFacts(before: Double? = null, limit: Int = AutoLearn.PAGE): ApiResult<JsonObject> =
         probeKeeping503(AutoLearn.listPath(before, limit))
 
+    /**
+     * `GET /api/memory/fault` - the ONE learning-fault banner (2026-11-09,
+     * docs/JARVIS-API.md section 213). A read: it carries the PC's own
+     * sentence, a count and times, never a fact's words.
+     */
+    suspend fun memoryFault(): ApiResult<JsonObject> = probe(MemoryFault.PATH)
+
+    /**
+     * `POST /api/memory/fault/retry` - "Retry now". It re-runs the PC's own
+     * batch check: it approves nothing, saves nothing and decides no
+     * proposal. 200 even when the check still fails (the PC's `outcome` says
+     * so), so the answer object is the thing to read.
+     */
+    suspend fun retryMemoryFault(): ApiResult<JsonObject> =
+        postObject(MemoryFault.RETRY_PATH, "{}")
+
     // ------------------------------------------------- smartwatch notifications ----
     // docs/JARVIS-API.md; see [WatchNotify] for the shapes and words.
 

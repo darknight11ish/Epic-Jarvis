@@ -299,6 +299,11 @@ INTERNAL = {
     "memory_entities": "the people-and-things read behind the list; 'memory-people' names it",
     "memory_facts": "the whole fact store read behind the list; 'memory-known' names it",
     "memory_pending": "the cards waiting for a yes; 'memory-waiting' names it",
+    # 2026-11-09 (JARVIS-API section 213): the ONE learning-fault banner's
+    # read. It is one line at the top of the queue 'memory-waiting' names, not
+    # a screen or an ability of its own - and the retry it carries is a single
+    # button there, never a control page.
+    "memory_fault": "the learning-fault banner's own read; drawn at the top of 'memory-waiting'",
     "content_risk": "the scanner's own read; its results are drawn in the Trust tab 'trust' names",
     "status": "the connection and model status read; the 'connection' entry names the line it feeds",
     "undo": "the undo shelf's own read; the 'undo' entry names the pane",

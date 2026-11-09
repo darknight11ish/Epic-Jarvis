@@ -140,6 +140,20 @@ repair below is fail-closed; every other check is unchanged.
               conversation card's note has no provenance), so they stay cards
               rather than be guessed at.
 
+A FAULT IS NOT A DECISION (2026-11-09, the memory-card research). When one of
+the three batch checks fails - a damaged auto-learning.json, no local model, a
+cloud model name, a missing jarvis_intake.py - the SAME reason used to be
+written onto every proposal in the pass, so one broken check could look like up
+to 200 facts waiting for a decision. That is a fault, and it now gets ONE
+record of its own (`memory-fault.json`, beside the learning state) and ONE
+banner in both apps, with one button: "Retry now". While the fault is active
+the cards whose reason is that same sentence are left out of the pending read;
+a per-fact card (a sensitive fact, a correction, words that are not the
+owner's) keeps its own reason and is never hidden. The retry re-runs the three
+batch checks through the same functions and handles the learner uses: it
+approves nothing, saves nothing, and decides no proposal. The record carries
+the reason, a time and a count - never a fact's words.
+
 NOTHING LEAVES THIS PC. There is no network code here; the sensitive-topic
 check asks the learner's own model, on this PC only. The event it raises,
 `memory_saved`, carries fact ids only - never the words (L10).
@@ -871,6 +885,299 @@ def stats() -> dict:
                         + " - those facts wait for your yes, and that is the check "
                           "failing, not your facts.")
     return out
+
+
+# --------------------------------------------------------------------------
+#   Faults: when a CHECK fails, that is one banner and not 200 decisions
+# --------------------------------------------------------------------------
+#
+# WHY (2026-11-09, the memory-card research's measured finding). When
+# check_settings, check_intake or check_local_model fails, after_pass writes
+# the SAME reason onto every proposal in the pass. A damaged
+# auto-learning.json reads as off, so from then on every fact is a card, every
+# pass, until the file is rewritten - and the review queue holds 200. That is a
+# fault, not a decision: the owner saw up to 200 per-fact cards whose only
+# content was one broken check.
+#
+# So a batch failure records ONE small record beside the learning state
+# (`memory-fault.json`, same folder, written atomically, and honest when it
+# cannot be written). While it is active the cards whose reason is that same
+# sentence are left out of the pending read - never a card with a sensitive
+# label, never a card with a per-fact reason - and both apps show the PC's own
+# sentence with ONE button, "Retry now". The retry re-runs the three batch
+# checks through the SAME functions and the SAME in-process handles the learner
+# uses; it approves nothing, saves nothing and decides no proposal. If the
+# check still fails the fault stays and says why.
+#
+# NOTHING A PERSON SAID CAN REACH THIS RECORD: the reason is one of the fixed
+# sentences the checks return, plus a time and a count. No fact's words.
+
+FAULT_VERSION = 1
+
+#: What "Retry now" answers when the check now passes. Both apps show the PC's
+#: own sentence; neither invents one of its own.
+RETRY_CLEARED = ("The check works again, so the warning is cleared. Nothing was "
+                 "saved or approved by this: your facts are still waiting where "
+                 "they were.")
+RETRY_NOT_CLEARED = ("The check works again, but your PC could not clear the "
+                     "warning. Try again, or restart Jarvis on the PC.")
+RETRY_STILL_FAILS = "The check still fails: {reason}. Nothing was saved or approved."
+RETRY_OFF_BY_CHOICE = ("Learning is off on this PC, so there is no check to run. "
+                       "Nothing was saved or approved.")
+RETRY_NOTHING = "There was no learning fault to retry."
+
+
+def fault_path() -> Path:
+    return _config_dir() / "memory-fault.json"
+
+
+def _fault_word(value, limit: int = 300) -> str:
+    """One line, bounded. The reasons are the checks' own fixed sentences, so
+    this can only ever hold one of those - never a fact's words."""
+    return " ".join(str(value or "").split())[:limit]
+
+
+def _fault_headline(reason: str, count: int) -> str:
+    """The PC's own sentence for the banner. Both apps show this, word for
+    word; the only word either app adds is its button's "Retry now"."""
+    n = max(0, int(count or 0))
+    if n == 1:
+        held = "1 fact is held back, unsaved"
+    elif n:
+        held = f"{n} facts are held back, unsaved"
+    else:
+        held = "Nothing was saved"
+    return (f"Jarvis could not check the facts it was about to save: {reason}. "
+            f"{held}, until that check works again. This is the check failing, "
+            f"not your facts.")
+
+
+def _fault_read_raw() -> dict:
+    """The record as it is on disk, `{}` when there is none, and
+    `{"_damaged": True}` when it cannot be read. Never raises."""
+    try:
+        raw = json.loads(fault_path().read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {"_damaged": True}
+    return raw if isinstance(raw, dict) else {"_damaged": True}
+
+
+def fault() -> dict:
+    """The active fault, as both apps read it, or `{"active": False, ...}`.
+
+    A record that cannot be read is NOT reported as a fault (the cards are
+    shown instead - fail visible) and `why` says so. `recorded` is whether a
+    record was read at all, so a caller can tell "no fault" from "could not
+    tell"."""
+    empty = {"active": False, "reason": "", "count": 0, "since": None, "at": None,
+             "tries": 0, "last_try_at": None, "last_result": "",
+             "recorded": False, "headline": "", "why": ""}
+    raw = _fault_read_raw()
+    if not raw:
+        return empty
+    if raw.get("_damaged"):
+        out = dict(empty)
+        out["why"] = ("the memory fault record is damaged, so a fault could not "
+                      "be read - any cards are shown instead")
+        return out
+    reason = _fault_word(raw.get("reason"))
+    if not reason:
+        return empty
+    try:
+        count = max(0, int(raw.get("count") or 0))
+    except (TypeError, ValueError):
+        count = 0
+    tries = raw.get("tries")
+    return {"active": True, "reason": reason, "count": count,
+            "since": raw.get("since"), "at": raw.get("at"),
+            "tries": int(tries) if isinstance(tries, (int, float))
+            and not isinstance(tries, bool) else 0,
+            "last_try_at": raw.get("last_try_at"),
+            "last_result": _fault_word(raw.get("last_result")),
+            "recorded": True,
+            "headline": _fault_headline(reason, count), "why": ""}
+
+
+def _fault_write(rec: dict) -> bool:
+    """Write the record atomically. False when it could not be written - and
+    then the cards are NOT hidden, because a suppression whose reason nothing
+    can read would silence them with no banner to explain it."""
+    p = fault_path()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, p)
+        return True
+    except Exception as exc:                                  # noqa: BLE001
+        try:
+            _audit("learning.fault_unrecorded", {"kind": type(exc).__name__})
+        except Exception:
+            pass
+        return False
+
+
+def _fault_note_ids(reason: str) -> Optional[list]:
+    """The PENDING proposal ids whose card note is EXACTLY this batch reason
+    and carries no per-fact mark: no sensitive label and no topic question.
+    Those are the cards the one fault parked; a sensitive card, a correction,
+    a "not in your own words" card or a topic card is a decision and is never
+    in this list. Pending only: a card the owner decided by hand while the
+    fault lasted is not held back any more, and must not be counted as one.
+    None when the store could not be read."""
+    try:
+        st = _store()
+        with closing(st._connect()) as c:
+            _init_notes(c)
+            rows = c.execute(
+                "SELECT n.proposal_id FROM auto_learn_notes n"
+                " JOIN proposals p ON p.id = n.proposal_id"
+                " WHERE n.reason=? AND n.sensitive IS NULL AND n.topic_ask IS NULL"
+                " AND p.state='pending'", (reason,)).fetchall()
+    except Exception:
+        return None
+    return [int(r[0]) for r in rows
+            if isinstance(r[0], int) and not isinstance(r[0], bool)]
+
+
+def note_fault(reason, count: int = 0, *, at=None, tried: bool = False) -> dict:
+    """Record ONE fault, replacing an older one. `count` is the number of
+    cards the store really holds for this reason when that can be read, the
+    caller's own count otherwise. `tried` is a Retry that did not clear it:
+    the attempt and its reason are kept for the banner.
+
+    Returns `fault()`'s reading plus `written`, so a caller can be honest
+    about a record that could not be saved."""
+    r = _fault_word(reason)
+    if not r:
+        return fault()
+    now = time.time() if at is None else float(at)
+    old = _fault_read_raw()
+    same = (not old.get("_damaged")) and _fault_word(old.get("reason")) == r
+    ids = _fault_note_ids(r)
+    n = len(ids) if ids is not None else max(0, int(count or 0))
+    since = old.get("since") if same and isinstance(old.get("since"), (int, float)) \
+        and not isinstance(old.get("since"), bool) else now
+    old_tries = old.get("tries") if same else 0
+    tries = int(old_tries) if isinstance(old_tries, (int, float)) \
+        and not isinstance(old_tries, bool) else 0
+    rec = {"version": FAULT_VERSION, "reason": r, "count": n, "at": now,
+           "since": since, "tries": tries + (1 if tried else 0),
+           "last_try_at": now if tried else (old.get("last_try_at") if same else None),
+           "last_result": r if tried else (old.get("last_result") if same else "")}
+    written = _fault_write(rec)
+    out = fault()
+    out["written"] = written
+    if not written:
+        out["reason"] = r
+        out["why"] = ("the memory fault could not be recorded on this PC, so the "
+                      "cards are shown instead")
+    return out
+
+
+def clear_fault() -> bool:
+    """Remove the record. True when there is none afterwards."""
+    try:
+        fault_path().unlink()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _settings_file_fault(reason) -> bool:
+    """Is this settings reason a BROKEN FILE rather than the owner's choice?
+
+    "automatic learning is off" and "background learning is off" are his own
+    switches - the cards stay, as they always did. A damaged or unreadable
+    auto-learning.json is machinery failing, which is a fault."""
+    r = str(reason or "")
+    return r == _DAMAGED or r.startswith(
+        "the automatic learning settings file could not be read")
+
+
+def batch_fault_reason(batch, off="") -> str:
+    """The batch reason, when it is a FAULT rather than the owner's own off.
+
+    `batch` is after_pass's own `off or check_intake() or check_local_model()`
+    and `off` is its first term. When `batch` is not `off`, the intake or the
+    model check failed - always a fault. When it IS `off`, only a damaged or
+    unreadable settings FILE is a fault; the two plain "off" sentences are the
+    owner's choice and those cards stay."""
+    b = str(batch or "")
+    if not b:
+        return ""
+    if b != str(off or ""):
+        return b
+    return b if _settings_file_fault(b) else ""
+
+
+def visible_pending(rows: list) -> list:
+    """The pending rows with the cards this fault parked taken out.
+
+    Called by jarvis_extract.pending(), so every client of the review queue
+    (the Brain, the phone, the HUD's proposal event, the counts) reads the
+    same list. With no active fault - or a store that cannot be read - every
+    row is returned unchanged: hiding a card with nothing to explain it would
+    be worse than showing it."""
+    f = fault()
+    if not f.get("active"):
+        return rows
+    ids = _fault_note_ids(f["reason"])
+    if not ids:
+        return rows
+    hide = set(ids)
+    out = []
+    for r in rows:
+        if not isinstance(r, dict):
+            out.append(r)
+            continue
+        pid = r.get("id")
+        if isinstance(pid, int) and not isinstance(pid, bool) and pid in hide:
+            continue
+        out.append(r)
+    return out
+
+
+def retry_fault(*, learning_on: bool = True, model=None, ollama=None,
+                at=None) -> dict:
+    """The owner's "Retry now": re-run ONLY the batch checks that failed.
+
+    Same functions, same in-process handles (`model`, `ollama`) the learning
+    pass uses; no new route for the model, no cloud, no outside text, and no
+    model CALL is made by any of the three checks. It never approves, never
+    saves and never decides a proposal: the cards stay exactly where they are.
+
+    Returns {"ok", "cleared", "fault", "outcome"} - the outcome is the PC's
+    own sentence for both apps to show. A retry that still fails KEEPS the
+    fault, adds one try and says why."""
+    f = fault()
+    if not f.get("active"):
+        return {"ok": True, "cleared": False, "fault": f, "outcome": RETRY_NOTHING,
+                "reason": ""}
+    off = check_settings(bool(learning_on))
+    still = batch_fault_reason(
+        off or check_intake() or check_local_model(ollama, model), off)
+    if not still:
+        cleared = clear_fault()
+        # Clearing because the owner turned learning OFF is not the check
+        # passing; say which one it was.
+        off_by_choice = bool(off) and not _settings_file_fault(off)
+        return {"ok": True, "cleared": cleared, "fault": fault(),
+                "outcome": (RETRY_OFF_BY_CHOICE if cleared and off_by_choice else
+                            (RETRY_CLEARED if cleared else RETRY_NOT_CLEARED)),
+                "reason": ""}
+    kept = note_fault(still, count=f.get("count") or 0, at=at, tried=True)
+    if kept.get("written") is False:
+        outcome = (f"The check still fails: {still}. Nothing was saved or approved, "
+                   f"and the warning could not be recorded on this PC.")
+    else:
+        outcome = RETRY_STILL_FAILS.format(reason=still)
+    return {"ok": True, "cleared": False, "fault": kept, "outcome": outcome,
+            "reason": still}
 
 
 def learning_status(learning_on: Optional[bool] = None, floor: Optional[bool] = None) -> dict:
@@ -2586,6 +2893,10 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
             return result
         off = check_settings(learning_on)
         batch = off or check_intake() or check_local_model(ollama, model)
+        # 2026-11-09: is this batch reason a FAULT (a broken check) or the
+        # owner's own "off"? Only a fault becomes one banner and hides its
+        # cards; his own off keeps the cards exactly as it always did.
+        fault_reason = batch_fault_reason(batch, off)
         # 2026-11-03: ONE bad turn no longer cards the whole pass. Every fact
         # is attributed to the turns that hold its words (`_attributed`), and
         # only a fact needing a word from a turn this PC did not see arrive -
@@ -2749,12 +3060,31 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 topics[pid] = sens
                 rewords[pid] = reworded
                 if why:
-                    # No reason is noted while automatic learning is off:
-                    # then every proposal is a card, as it always was - but
-                    # the chat it came from is noted either way (finding 3).
-                    _note_card(c, pid, "" if off else why, sensitive=sens,
+                    # No reason is noted while automatic learning is off BY
+                    # THE OWNER: then every proposal is a card, as it always
+                    # was - but the chat it came from is noted either way
+                    # (finding 3). A DAMAGED settings file is not "off": it is
+                    # the fault this file's banner exists for, and its reason
+                    # is written so the read can hide exactly those cards.
+                    _note_card(c, pid, "" if (off and not fault_reason) else why,
+                               sensitive=sens,
                                conversation_id=conversation_id,
                                topic_ask=topic_ask if (topic_why and why == topic_why) else None)
+        # 2026-11-09 (the memory-card research's measured finding): a batch
+        # check that failed is ONE fault, not one reason on every fact. It is
+        # recorded once - the read route draws one banner and leaves out the
+        # cards it parked. A pass that got PAST the batch checks clears an
+        # older fault, because the checks it names just proved themselves.
+        # Nothing here approves, saves or drops a proposal.
+        try:
+            if fault_reason:
+                result["fault"] = note_fault(
+                    fault_reason,
+                    count=len([w for w in decisions.values() if w == fault_reason]))
+            elif fault().get("active"):
+                clear_fault()
+        except Exception:                                     # noqa: BLE001
+            pass
         for pid, why in decisions.items():
             if why:
                 result["cards"][pid] = why
@@ -3116,9 +3446,15 @@ def _query(qs: str) -> dict:
 
 def handle_get(path: str, query: str = "", *, learning_on: Optional[bool] = None,
                floor: Optional[bool] = None) -> tuple:
-    """GET /api/memory/learning and /api/memory/auto. (code, body)."""
+    """GET /api/memory/learning, /api/memory/auto and /api/memory/fault.
+    (code, body)."""
     if path == "/api/memory/learning":
         return 200, learning_status(learning_on, floor)
+    if path == "/api/memory/fault":
+        # 2026-11-09: the ONE fault banner both apps read. It carries the
+        # PC's own reason, sentence, count and times - never a fact's words -
+        # and it is a read: nothing is changed by asking.
+        return 200, fault()
     if path == "/api/memory/auto":
         q = _query(query)
         try:
@@ -3137,8 +3473,22 @@ def handle_get(path: str, query: str = "", *, learning_on: Optional[bool] = None
     return 404, {"error": "no such route"}
 
 
-def handle_post(route: str, body) -> tuple:
-    """POST /api/memory/learning/auto, /sensitive and /paraphrase."""
+def handle_post(route: str, body, *, learning_on: Optional[bool] = None,
+                model=None, ollama=None) -> tuple:
+    """POST /api/memory/learning/auto, /sensitive, /paraphrase and
+    /api/memory/fault/retry.
+
+    `model` and `ollama` are the learner's own handles, passed by the route
+    that serves it (jarvis_hud.py) so the retry re-runs the SAME check on the
+    SAME model this PC learns with - no new route for a model, nothing off
+    this machine. They are ignored by the three switches."""
+    if route == "/api/memory/fault/retry":
+        # 2026-11-09: the owner's own click on the fault banner. It re-runs
+        # the failed batch check and nothing else - no approval, no save, no
+        # decision, no card.
+        return 200, retry_fault(
+            learning_on=True if learning_on is None else bool(learning_on),
+            model=model, ollama=ollama)
     kind = {"/api/memory/learning/auto": "auto",
             "/api/memory/learning/sensitive": "sensitive",
             "/api/memory/learning/paraphrase": "paraphrase"}.get(route)

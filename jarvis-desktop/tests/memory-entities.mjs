@@ -215,7 +215,8 @@ await check("CONTROL: the Rust reads the list, asks for merge cards, and hides t
   assert.match(routes, /\("memory_entities", "\/api\/memory\/entities"\)/);
   assert.match(routes, /"\/api\/memory\/pending\?retire_cards=1&sleep_offer=1&merge_cards=1"/);
   assert.match(read("src-tauri/src/lock/rules.rs"), /\("memory_entities", "entities"\)/);
-  assert.match(read("src/brain.js"), /memory: \["memory_facts", "memory_pending", "memory_entities"\]/);
+  assert.match(read("src/brain.js"),
+    /memory: \["memory_facts", "memory_pending", "memory_entities", "memory_fault"\]/);
 });
 
 await check("CONTROL: the phone draws the Galaxy read-only and still asks for no merge cards (owner 2026-10-11: he asked to see it on his phone, so 2026-09-30's plain-list-only rule is superseded for this one screen)", async () => {

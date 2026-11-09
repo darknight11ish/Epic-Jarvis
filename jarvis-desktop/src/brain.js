@@ -543,6 +543,9 @@ import {
   erasedLine,
   eraseQuestion,
   factMeta,
+  // 2026-11-09: the ONE learning-fault banner and its one button.
+  FAULT_RETRY_LABEL,
+  FAULT_RETRY_TITLE,
   FORGOTTEN,
   forgetQuestion,
   lastLineNow,
@@ -550,6 +553,7 @@ import {
   olderThan as olderAuto,
   PAGE as AUTO_PAGE,
   readAuto,
+  readFault,
   refreshRows as refreshAutoRows,
   rememberedLine,
   // 2026-11-02: the mark a fact in Jarvis's own words carries.
@@ -706,7 +710,10 @@ const VIEW_SECTIONS = {
               "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
-  memory: ["memory_facts", "memory_pending", "memory_entities"],
+  // memory_fault: the ONE learning-fault banner (2026-11-09, brain/routes.rs).
+  // A read that carries the PC's own sentence, a count and times - never a
+  // fact's words, and never hidden with the lists.
+  memory: ["memory_facts", "memory_pending", "memory_entities", "memory_fault"],
   // Read through its own commands (brain/history.rs), not brain_read.
   history: [],
   // "Activity" (past approvals, read-only): the same `/api/pending` the
@@ -3610,6 +3617,85 @@ function renderLearning() {
   dom.memoryLearning.append(box);
 }
 
+/* ==========================================================================
+   One learning-fault banner (2026-11-09; the memory-card research's measured
+   finding). A batch check that fails is a fault, not a decision: the PC
+   records one fault, leaves the cards it parked out of the pending read, and
+   both apps draw ITS own sentence with one button, "Retry now".
+
+   The banner sits at the top of "Waiting for you", where those cards would
+   have been. Nothing here approves, saves or decides: the retry asks the PC
+   to re-run the check it uses, and the PC's own `outcome` is shown. While a
+   retry is in flight the button says so; when it clears the fault the banner
+   keeps the PC's sentence, with no button, rather than vanishing silently.
+   ========================================================================== */
+
+/** The last fault read, whether the last read had one, the PC's outcome from
+ *  the last retry, and whether that retry is in flight. */
+const faultL = { view: null, live: false, said: "", busy: false };
+
+/** What "Waiting for you" says with nothing in it - unless a fault is up,
+ *  which explains its own emptiness. */
+const NOTHING_WAITING = "Nothing is waiting. Either Jarvis has not heard anything " +
+  "worth keeping, or background learning is off.";
+
+/** The banner: the PC's sentence and one button while a fault is active; the
+ *  PC's outcome alone (no button) once a retry has cleared it. */
+function faultNode() {
+  const f = faultL.view;
+  const box = el("div", "memory-fault");
+  if (faultL.live && f) {
+    box.dataset.tone = "warn";
+    box.setAttribute("role", "alert");
+    box.append(el("p", "memory-fault-line", f.headline));
+    const actions = el("div", "row-actions");
+    const retry = button(FAULT_RETRY_LABEL, retryMemoryFault, { title: FAULT_RETRY_TITLE });
+    retry.disabled = faultL.busy;
+    actions.append(retry);
+    box.append(actions);
+    if (faultL.said) {
+      const said = el("p", "note memory-fault-said", faultL.said);
+      said.setAttribute("role", "status");
+      box.append(said);
+    }
+  } else {
+    box.dataset.tone = "ok";
+    box.setAttribute("role", "status");
+    box.append(el("p", "memory-fault-line", faultL.said));
+  }
+  return box;
+}
+
+/** The owner's own click: re-run the PC's check, then read the queue and the
+ *  fault again. Nothing is approved, saved or decided by it. */
+async function retryMemoryFault() {
+  if (faultL.busy) return;
+  faultL.busy = true;
+  faultL.said = "";
+  renderProposals();
+  try {
+    const out = await invoke("brain_memory_fault_retry", {});
+    faultL.said = out && typeof out.outcome === "string" ? out.outcome.trim() : "";
+    if (!faultL.said) faultL.said = "Your PC answered, but not with a sentence this app can read.";
+    // The PC's retry answer says what its check found NOW, so the banner is
+    // already right even if the re-read below is skipped (one is in flight).
+    if (out && out.fault && typeof out.fault === "object") {
+      const after = readFault(out.fault);
+      faultL.live = Boolean(after);
+      if (after) faultL.view = after;
+    }
+  } catch (error) {
+    faultL.said = String((error && error.message) || error
+      || "The PC could not be asked to retry.");
+  } finally {
+    faultL.busy = false;
+  }
+  // The retry may have cleared the fault (those cards come back) or changed
+  // its count; read both again and redraw from the PC's own answer.
+  await load(["memory_pending", "memory_fault"], { quiet: true });
+  if (state.view === "memory") renderProposals();
+}
+
 function renderProposals() {
   const body = state.data.memory_pending || {};
   const why = unavailable("memory_pending");
@@ -3621,13 +3707,27 @@ function renderProposals() {
     dom.memoryProposals.replaceChildren(hiddenNode(body.hidden_count, "waiting"));
     return;
   }
+  // The fault is its own read. A failed one is NOT a reason to hide the
+  // queue: the cards are still the truth about what waits.
+  const live = readFault(state.data.memory_fault);
+  if (live && (!faultL.view || faultL.view.reason !== live.reason)) {
+    // A new fault: no stale outcome from the last one underneath it.
+    faultL.said = "";
+  }
+  if (live) faultL.view = live;
+  faultL.live = Boolean(live);
   const items = Array.isArray(body.pending) ? body.pending : [];
-  rows(
-    dom.memoryProposals,
-    items,
-    (p) => proposalRow(p),
-    "Nothing is waiting. Either Jarvis has not heard anything worth keeping, or background learning is off."
-  );
+  dom.memoryProposals.replaceChildren();
+  if (faultL.live || faultL.said) dom.memoryProposals.append(faultNode());
+  if (items.length) {
+    // Built here rather than by rows(): rows() clears its container, and the
+    // banner comes first.
+    const list = el("div", "rows");
+    for (const item of items) list.append(proposalRow(item));
+    dom.memoryProposals.append(list);
+  } else if (!faultL.live && !faultL.said) {
+    dom.memoryProposals.append(el("p", "empty", NOTHING_WAITING));
+  }
 }
 
 /**

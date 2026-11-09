@@ -1116,7 +1116,7 @@ permissions = [
 # every other item here.
 [[set]]
 identifier = "brain-memory"
-description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its three automatic-learning switches on (an approval card) or off, pin or unpin a fact on \"Always keep in mind\", and tag or untag a fact for \"Between us\". One fact per decision; there is no bulk form."
+description = "Keep or discard a proposed fact, reword one, stop one being recalled, erase the words of one for good, export the store, read what Jarvis believed at a past moment, turn the background learner on or off, list what it saved automatically and turn its three automatic-learning switches on (an approval card) or off, retry a failed learning check (which approves and saves nothing), pin or unpin a fact on \"Always keep in mind\", and tag or untag a fact for \"Between us\". One fact per decision; there is no bulk form."
 permissions = [
   "allow-brain-memory-decide",
   "allow-brain-memory-forget",
@@ -1153,6 +1153,14 @@ permissions = [
   # switch drawn here and refused here. One setting per call; ON raises ONE
   # card and is held on a stale link, OFF is immediate.
   "allow-brain-memory-learning-paraphrase",
+  # The ONE learning-fault banner (2026-11-09, the memory-card research):
+  # "Retry now" re-runs the PC's own batch check when one failed. It approves
+  # nothing, saves nothing, decides no proposal and raises no card - it only
+  # asks the PC what its check says now, so it is the one command in this set
+  # that is not held on a stale link (brain/auto_learn.rs says why). The
+  # banner it sits on is a read of the same answer (brain/routes.rs,
+  # `memory_fault`); it holds no fact's words.
+  "allow-brain-memory-fault-retry",
   # The ids of facts saved automatically that the owner has not looked at
   # yet, counted in Rust because the Brain is destroyed when it is closed
   # (brain/auto_learn.rs note_saved). Ids only, never a fact's words; it

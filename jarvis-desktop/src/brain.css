@@ -334,6 +334,30 @@ body {
   font-size: var(--text-sm);
 }
 
+/* The ONE learning-fault banner (2026-11-09): the PC's own sentence and one
+   "Retry now" where the per-fact failure cards used to pile up. It sits at
+   the top of "Waiting for you" and is the only warn-toned block in that card
+   while it is up; after a retry clears it, [data-tone="ok"] keeps the PC's
+   sentence without the button, so the answer is not a silent disappearance. */
+.memory-fault {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-left-width: 2px;
+  border-left-color: var(--warn);
+  border-radius: var(--radius-control);
+  background: var(--warn-faint);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+.memory-fault[data-tone="ok"] {
+  border-left-color: var(--ok);
+  background: var(--ok-faint);
+}
+.memory-fault-line { margin: 0; }
+.memory-fault .row-actions { margin-top: 6px; }
+.memory-fault-said { margin: 6px 0 0; }
+
 .view {
   flex: 1;
   min-height: 0;

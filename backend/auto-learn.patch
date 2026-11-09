@@ -122,7 +122,7 @@
          return True
  
  
-@@ -2071,6 +2131,31 @@
+@@ -2071,6 +2131,35 @@
              try:
                  code, out = jarvis_chat_log.handle_get(
                      path, self.path.split("?", 1)[1] if "?" in self.path else "")
@@ -130,13 +130,17 @@
 +                return self._send(500, {"error": type(exc).__name__})
 +            return self._send(code, out)
 +
-+        if path in ("/api/memory/learning", "/api/memory/auto"):
++        if path in ("/api/memory/learning", "/api/memory/auto",
++                    "/api/memory/fault"):
 +            # auto-learn.patch - automatic learning (jarvis_auto_learn.py,
 +            # docs/JARVIS-API.md section 19). /api/memory/learning: both
 +            # switches, whether a card for either is waiting, and background
 +            # learning's own switch as `enabled`. /api/memory/auto: the facts
-+            # saved without a card, newest first (?limit=&before=). Read-only,
-+            # behind the token like every memory route.
++            # saved without a card, newest first (?limit=&before=). And since
++            # 2026-11-09 /api/memory/fault: the ONE fault banner both apps
++            # read - the PC's own reason, sentence, count and times, never a
++            # fact's words. All three are reads, behind the token like every
++            # memory route.
 +            if not _origin_ok(self):
 +                return self._send(403, {"error": "cross-origin request refused"})
 +            if not _token_ok(self):
@@ -154,12 +158,12 @@
              except Exception as exc:
                  return self._send(500, {"error": type(exc).__name__})
              return self._send(code, out)
-@@ -2532,6 +2617,37 @@
+@@ -2532,6 +2617,44 @@
                  return self._send(500, {"error": type(exc).__name__})
              return self._send(code, out)
  
 +        if route in ("/api/memory/learning/auto", "/api/memory/learning/sensitive",
-+                     "/api/memory/learning/paraphrase"):
++                     "/api/memory/learning/paraphrase", "/api/memory/fault/retry"):
 +            # auto-learn.patch (jarvis_auto_learn.py).
 +            #   {"enabled": false}: off at once, never a card, and a waiting
 +            #   card is withdrawn. {"enabled": true}: ONE approval card
@@ -184,7 +188,14 @@
 +            except Exception:
 +                return self._send(503, _NO_AUTO_LEARN)
 +            try:
-+                code, out = jarvis_auto_learn.handle_post(route, body)
++                # 2026-11-09: /api/memory/fault/retry re-runs the failed
++                # batch check with the learner's OWN handles - the same
++                # functions and the same model this PC already learns with,
++                # so no new route for the model and nothing off this PC. The
++                # three switches ignore them.
++                code, out = jarvis_auto_learn.handle_post(
++                    route, body, learning_on=learning_enabled(),
++                    model=_extract_model(), ollama=getattr(jarvis_extract, "OLLAMA", None))
 +            except Exception as exc:
 +                return self._send(500, {"error": type(exc).__name__})
 +            return self._send(code, out)
@@ -343,7 +354,24 @@
      c.execute("UPDATE proposals SET state='accepted', decided=?, fact_id=? WHERE id=?",
                (time.time(), fid, row["id"]))
      return fid
-@@ -608,3 +611,88 @@
+@@ -509,9 +509,14 @@
+         # memory-intake: each row also gets `flags` (does this read like a
+         # planted instruction?), `keep_both_ok` and `verbatim`. Computed, not
+         # stored: a card queued before this patch gets them too.
+-        return _intake_annotate([dict(r) for r in c.execute(
++        # auto-learn.patch (2026-11-09, the memory-card research): while a
++        # learning fault is active, the cards it parked are left out of this
++        # one read - the single banner in both apps says why. Nothing is
++        # decided: they stay pending, and they come back when it clears.
++        _rows = _intake_annotate([dict(r) for r in c.execute(
+             "SELECT id,text,replaces,replaces_id,replaces_text,confidence,source,created"
+-            " FROM proposals WHERE state='pending' ORDER BY created")])
++            " FROM proposals WHERE state='pending' ORDER BY created")])
++        return _intake_fault_visible(_rows)
+ 
+ 
+ def decide(proposal_id: int, accept: bool) -> Optional[int]:
+@@ -608,3 +616,103 @@
                f"Nothing was sent there.", file=sys.stderr)
          return []
      return _propose_unchecked(*args, **kwargs)
@@ -432,3 +460,19 @@
 +        return None
 +    cid = got[0] if got else None
 +    return cid if isinstance(cid, str) and cid else None
++
++
++def _intake_fault_visible(rows: list) -> list:
++    """auto-learn.patch (2026-11-09, the memory-card research): the pending
++    read without the cards a learning fault parked.
++
++    ONE read for every client - the Brain, the phone, and the HUD's proposal
++    count - so the banner and the hidden cards can never disagree. With no
++    fault, or a store that cannot be read, the list comes back unchanged:
++    hiding a card with nothing to explain it would be worse than showing it.
++    """
++    try:
++        import jarvis_auto_learn
++        return jarvis_auto_learn.visible_pending(rows)
++    except Exception:
++        return rows
