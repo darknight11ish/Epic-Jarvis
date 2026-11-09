@@ -1475,6 +1475,19 @@ html[data-hud-shell="single-stage-bento"] .history-bar{
    the shared `.rail-toolbar-btn` rules above. */
 .rail-toolbar #rail-faces{flex:0 1 auto;}
 
+/* The Galaxy map's door (2026-11-09) carries the owner's whole sentence as its
+   word, so it takes a row of its own in the 212px rail and wraps there instead
+   of squeezing the three labelled buttons beside it. Wrapping changes nothing
+   while the shorter buttons still fit - the shared rule above already wraps
+   the row when they do not. */
+.rail-toolbar #rail-galaxy-map{flex:1 1 100%;}
+.rail-toolbar #rail-galaxy-map .rt-label{white-space:normal; line-height:1.3;}
+/* The Studio shell turns this bar into a 42px COLUMN, where "100%" would be
+   the column's height rather than its width - so there the button keeps the
+   shared 42x38 icon box instead. The id keeps this rule ahead of the shell's
+   .rail-toolbar-btn rule above. */
+html[data-hud-shell="split-stage"] .rail-toolbar #rail-galaxy-map{flex:0 0 auto;}
+
 .bento-empty{
   display:none; margin:2px 0 4px; font-family:var(--f-mono); font-size:11px;
   color:var(--text-faint);
@@ -3324,6 +3337,31 @@ html[data-cal-view="day"] .cal-side{display:none;}
           <path d="M8 9.2c1.4-1.7 2.7 1.7 4 0M12 12.4c1.3-1.5 2.5 1.5 3.8 0"/>
         </svg>
         <span class="rt-label">Brain</span>
+      </button>
+      <!-- The one press from the HUD to the Brain's MEMORY MAP (2026-11-09,
+           the IA recommendations: "honest Galaxy labels + a 1-click HUD->Brain
+           map button"). It is the Brain WINDOW's own Galaxy view - not this
+           HUD's inline picture, which the rail's "Galaxy" view already shows -
+           opened through the SAME opener and the SAME navigation-only command
+           as the two Brain buttons above (`open_fix_place {place: "brain"}`,
+           hud_bootstrap.js's openBrainAt("galaxy")). The shell leaves the
+           Brain's own place key first, exactly as the settings gear's
+           `openSettingsAt` leaves the Settings place; the Brain reads it and
+           opens on its map. No route, no command, no card, and the phone is
+           untouched (/api/graph stays off it). Hidden until the shell is
+           there, like its neighbours: a plain browser has no command to send.
+           Its word is the owner's own sentence, so it takes its own row in
+           the rail (the #rail-galaxy-map rules in the style above). -->
+      <button type="button" class="rail-toolbar-btn" id="rail-galaxy-map"
+              title="Galaxy: everything at a glance - the memory map, in the Brain window"
+              aria-label="Galaxy - everything at a glance" hidden>
+        <svg class="glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="2.4"/>
+          <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-18 12 12)"/>
+          <circle cx="19.2" cy="8.6" r="1.3"/>
+        </svg>
+        <span class="rt-label">Galaxy - everything at a glance</span>
       </button>
       <!-- Why Live did not start, for a screen reader. The button's title
            carries the on/off wording; the READABLE refusal is the stage's

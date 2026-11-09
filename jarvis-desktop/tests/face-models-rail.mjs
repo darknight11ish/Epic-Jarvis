@@ -140,12 +140,14 @@ await check("the face models icon is the left rail's own toolbar button", () => 
   // the ONE #calendar-panel; it is not a stage tab and not a second calendar,
   // and tests/hud-calendar.mjs holds its own half. The Brain door opens the ONE
   // existing Brain window through the same shell opener the tray row uses.
+  // The sixth (2026-11-09, the IA recommendations) is the one-click Galaxy
+  // door, written here so a seventh button cannot slip in unnoticed either.
   assert.match(group, /id="rail-calendar-open"/, "the toolbar has no #rail-calendar-open button");
   assert.deepEqual(
     [...group.matchAll(/<button[^>]*id="([^"]+)"/g)].map((m) => m[1]),
     ["rail-presets", "rail-live", "rail-faces", "rail-calendar-open",
-     "rail-brain-window"],
-    "the toolbar's buttons are not the five this page draws");
+     "rail-brain-window", "rail-galaxy-map"],
+    "the toolbar's buttons are not the six this page draws");
 });
 
 await check("the icon is a plain button with the rail's own classes and an accessible name", () => {

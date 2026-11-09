@@ -297,8 +297,13 @@ export function takeAnyPlace(freshMs = 60_000) {
   // the same one Help destination the palette's Help row uses (tutorials.js
   // TUTORIALS_PLACE). Named here as a literal, the way "topics" is, so this
   // file does not import the tutorials panel to learn one word.
+  // "galaxy": the HUD's one-click Galaxy door (2026-11-09, the IA
+  // recommendations) leaves this place and then opens the Brain at its memory
+  // map. It is one of brain.js's own VIEWS keys - `showPlace` opens any of
+  // those - but this list is the one gate the key passes first, so the word is
+  // named here too, as a literal, for the same reason "tutorials" is.
   if (left.place === PLACE || left.place === HISTORY_PLACE || left.place === "topics"
-      || left.place === "tutorials") {
+      || left.place === "tutorials" || left.place === "galaxy") {
     lastLeft = left;
     return left.place;
   }

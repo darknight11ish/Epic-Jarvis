@@ -7263,6 +7263,24 @@ in Rust by the same shared call (`commands.rs::open_app_from_route`) from
 either chat. Backend: `backend/test_jarvis_open.py` (243 checks), including
 that real programs, the refusals and "open my calendar" are unchanged.
 
+**And the HUD's one-click way into the memory map (2026-11-09).** The HUD
+window's left rail has a **"Galaxy - everything at a glance"** button that
+opens the Brain window at its Galaxy view, which is now titled **"The memory
+map"** with **"what Jarvis remembers"** under it. It adds no route, field,
+command or phone surface: the shell leaves the Brain's own place key
+(`jarvis.brain.place`, the one the Jarvis bar already uses for "earlier chats"
+and "forget a time frame") and then calls the same navigation-only
+`open_fix_place {place: "brain"}` the settings gear's own door uses - the same
+shape `main.js`'s palette already leaves for a Brain place. The Brain accepts
+`"galaxy"` as one of its own view places (`forget-range-panel.js`'s
+`takeAnyPlace`, `brain.js`'s `showPlace`), opens the "Advanced" disclosure so
+the selected tab is visible, and shows the map. Nothing is read, changed or
+approved by the press. `/api/graph` stays off the phone and no phone file
+changed. Tests: `jarvis-desktop/tests/hud-brain-doors.mjs` (the door, the one
+opener, the key both files spell, and the Brain's acceptance of "galaxy") and
+`jarvis-desktop/tests/galaxy.mjs` (the plain-words title, with the view and
+tab ids unchanged).
+
 Tests: `backend/test_calendar_answer.py` - the setup sentences this answer keeps
 and the card's own shapes checked to belong to the card, the phrase→owner table
 above, 11 near misses keeping their own answer, the answer's steps checked against
@@ -13755,14 +13773,17 @@ NOTHING that acts - it only starts a repeating check-in, which is data,
 not action. Every acting step still needs its own separate card, raised by
 the ordinary chat/tool path, never by this feature.
 
-**Both apps' UI is built.** The phone: Brain, "Goals", right beside "Coming
-up" (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`) - it reuses
+**Both apps' UI is built.** The phone: Brain, the "Your projects and goals"
+section, its "Goals" plate after Projects (`net/Goals.kt`,
+`ui/screens/GoalsPlate.kt`; `BrainSections.kt` places it there) - it reuses
 `net/Schedule.kt`'s own job parser to read the check-in job `accept`'s
 answer carries, and `Schedule.actionsOf` gives that row no Pause/Delete of
 its own, since only Stop tracking, on the goal itself, can take the
-check-in down cleanly. The desktop: Brain -> Work -> Goals, beside Coming
-up (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
-goals.rs`) - it reads its own limits back from `GET /api/goals` rather
+check-in down cleanly. The desktop: Brain -> Projects -> Goals, after the
+project list (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
+goals.rs`) - the same place the phone draws it since 2026-11-09 (the IA
+recommendations; it was on Work until then) - it reads its own limits back
+from `GET /api/goals` rather
 than hard-coding them, and redacts a goal's and a step's own words under
 the same "Windows Hello for memory lists and chat history" gate Coming up
 already uses. Both apps find the weekly check-in's live state (paused, its
@@ -33079,7 +33100,7 @@ same file, not a second file. The two new columns are added to an existing
 2026-11-02 keeps working; the progress table is created by the same
 `CREATE TABLE IF NOT EXISTS` script.
 
-**BOTH APPS, SAID PLAINLY.** The PC's Brain -> Work -> Goals plate is
+**BOTH APPS, SAID PLAINLY.** The PC's Brain -> Projects -> Goals plate is
 unchanged: it reads the same route, shows its plan and steps as before, and
 ignores the new fields. The phone's Reminders screen gets the third choice,
 **Goals**, in the follow-up PR on top of #1102's screen; until that lands the

@@ -666,7 +666,7 @@ const VIEWS = {
   history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
-  projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
+  projects: { title: "Projects", sub: "what you are working on, your goals, and the numbers you track" },
   // The owner's own request (2026-10-05): a skippable intro and a tutorial for
   // each major part, the same ones the phone shows, with reading progress kept
   // on this PC and shared by both apps (JARVIS-API section 114). Named for the
@@ -674,7 +674,11 @@ const VIEWS = {
   // was folded in here - the same words the phone's own menu carries
   // (`brain.tab.tutorials`, PR #108's retitle).
   tutorials: { title: "Tutorials and the FAQ", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
-  galaxy: { title: "Galaxy", sub: "the people and things Jarvis knows about" },
+  // Named in plain words (2026-11-09, the IA recommendations): "Galaxy" on
+  // its own never said what the picture is. The view's key, its id and its
+  // tab's id all stay `galaxy`, and the button that opens it from the HUD
+  // still says "Galaxy - everything at a glance" (the owner's own wording).
+  galaxy: { title: "The memory map", sub: "what Jarvis remembers" },
   // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
   // not confused with Jarvis Live (the voice conversation).
   now: { title: "Now", sub: "what Jarvis is doing" },
@@ -1369,7 +1373,6 @@ function render(name) {
       renderChatbot();
       renderSupport();
       renderComingUp();
-      renderGoals();
       renderQuiz();
       renderDecks();
       retirementCard.enter();
@@ -1381,6 +1384,10 @@ function render(name) {
     case "projects":
       // Its own read; the status line is painted again once it is in.
       showProjects().then(() => paintFreshness(), () => paintFreshness());
+      // Goals is drawn here since 2026-11-09 (the IA recommendations): the
+      // phone has always put the goals plate under "Your projects and goals".
+      // It keeps its own read (brain_goals), not this view's.
+      renderGoals();
       break;
     case "trust":
       renderContentRisk();
@@ -9718,13 +9725,14 @@ async function loadComingUp() {
     await loadComingUp();
     return;
   }
-  if (state.view === "work") {
-    paintComingUp();
-    // A goal's weekly check-in lives on this very list (goals.js's own
-    // module doc says why) - repaint it too, so its "waiting"/"paused"/next
-    // note stays in step with Coming up rather than needing its own read.
-    paintGoals();
-  }
+  if (state.view === "work") paintComingUp();
+  // A goal's weekly check-in lives on this very list (goals.js's own module
+  // doc says why) - repaint Goals too, so its "waiting"/"paused"/next note
+  // stays in step with Coming up rather than needing its own read. Goals is
+  // drawn on the Projects tab since 2026-11-09 (the IA recommendations), so
+  // the repaint follows where the card really is; `paintComingUp` above stays
+  // inside Work, where the list itself is drawn.
+  if (state.view === "projects") paintGoals();
 }
 
 async function scheduleAct(job, action, change) {
@@ -10406,6 +10414,11 @@ if (dom.standbyAdd) {
    Goals - a plan the owner edits, one card per acting step (the owner's
    "build it now", 2026-09-27; JARVIS-API.md section 59; goals.js).
 
+   Drawn on the Projects tab since 2026-11-09 (the IA recommendations): the
+   phone has always put this plate under "Your projects and goals"
+   (BrainSections.kt, GoalsPlate.kt). The card's id and its menu id stay
+   `goals-card` / `brain.work.goals` - only the tab it is drawn on moved.
+
    Read through its own command (brain/goals.rs), not brain_read - the words
    are taken out while the private lists are hidden, same as Coming up. A new
    draft and marking a step raise no card; Stop tracking is one tap,
@@ -10453,7 +10466,7 @@ async function loadGoals() {
     await loadGoals();
     return;
   }
-  if (state.view === "work") paintGoals();
+  if (state.view === "projects") paintGoals();
 }
 
 /** The working copy of a draft's plan - made once, from what the PC sent,
@@ -10532,7 +10545,7 @@ async function loadMeasures() {
   } catch {
     gl.measures = [];
   }
-  if (state.view === "work") paintGoals();
+  if (state.view === "projects") paintGoals();
 }
 
 async function goalStep(goal, step, index, done, undoing = false) {
@@ -10834,6 +10847,11 @@ function paintGoals() {
 function renderGoals() {
   paintGoals();
   if (IS_TAURI && !gl.loading && Date.now() - gl.at > GOALS_READ_MS) loadGoals();
+  // The check-in's own state is read from Coming up (see loadComingUp), and
+  // that list is drawn on the Work tab - so keep it fresh while Goals is on
+  // screen here on Projects. It repaints only Goals while this view is up;
+  // paintComingUp() stays inside Work.
+  if (IS_TAURI && !upL.loading && Date.now() - upL.at > SCHEDULE_READ_MS) loadComingUp();
 }
 
 if (dom.goalsNewForm) {
@@ -12622,11 +12640,12 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);
-  // Goals hides its words the same way (brain/goals.rs redact_goals).
+  // Goals hides its words the same way (brain/goals.rs redact_goals). It is
+  // drawn on Projects since 2026-11-09, so the re-read follows that tab.
   const rereadGoals = () => {
     gl.measuresAt = 0;
     gl.at = 0;
-    if (state.view === "work") loadGoals();
+    if (state.view === "projects") loadGoals();
   };
   TAURI.event.listen("security-changed", rereadGoals);
   TAURI.event.listen("private-hidden", rereadGoals);
@@ -16111,7 +16130,10 @@ onEvent((frame) => {
   }
   if (kind === "schedule") {
     upL.at = 0;
-    if (state.view === "work") loadComingUp();
+    // Projects too: Goals' weekly check-in is read from this same Coming up
+    // list, and Goals is drawn on Projects since 2026-11-09. loadComingUp()
+    // repaints only the card whose tab is showing.
+    if (state.view === "work" || state.view === "projects") loadComingUp();
     // A briefing went off or is ready (`{id, kind: "briefing", state}`):
     // read the briefing again, its lines by the authenticated route only.
     if (frame && frame.data && frame.data.kind === "briefing") {
@@ -16201,6 +16223,13 @@ async function showPlace(place) {
     // renamed out from under the palette by accident.
     await showView(place);
   } else if (Object.prototype.hasOwnProperty.call(VIEWS, place)) {
+    // One of the rail's own views. The HUD's "Galaxy" door lands on "galaxy",
+    // the memory map (2026-11-09) - and that view is one of the four behind
+    // "Advanced". Open the disclosure too, with the same press the owner makes
+    // by hand, or he would land on a view with no visible tab saying where he
+    // is. `advancedOpen` is this window's own, never stored, so nothing is
+    // remembered by it.
+    if (ADVANCED_VIEWS.includes(place) && !advancedOpen) dom.advancedToggle?.click();
     await showView(place);
   } else {
     return false;

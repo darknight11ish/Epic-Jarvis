@@ -2916,6 +2916,12 @@
    * actOnOpenRoute above has carried the same literal since 2026-10-31. */
   var SETTINGS_PLACE_KEY = "jarvis.settings.place";
 
+  /* Where the Brain reads the place it should open (src/forget-range.js
+   * BRAIN_PLACE_KEY). The bar and the palette have left this key since
+   * 2026-09-28; the Galaxy door below is the HUD's own use of it. Spelled a
+   * second time here for the same reason as the Settings key above. */
+  var BRAIN_PLACE_KEY = "jarvis.brain.place";
+
   /** A system line in the page's own chat log, or the console when the page is
    *  not far enough along to have one. The same shape `hudMicNote` uses. */
   function hudNavNote(text) {
@@ -2947,8 +2953,27 @@
     if (p && p.catch) p.catch(function () {});
   }
 
-  /** Opens the Brain window at one of its own places. */
+  /** Opens the Brain window at one of its own places.
+   *
+   *  "galaxy" is the Brain's own memory-map view (2026-11-09, the IA
+   *  recommendations). It is NOT a new route or a new command: the door is the
+   *  same `open_fix_place {place: "brain"}` the two Brain buttons use, with
+   *  the Brain's own place key left first - exactly the shape the settings
+   *  gear's `openSettingsAt` above uses for its card. The key is the one the
+   *  Jarvis bar already leaves for "earlier chats"/"forget a time frame", so
+   *  no field, no grant and no command is added.
+   */
   function openBrainAt(place) {
+    if (place === "galaxy") {
+      try {
+        localStorage.setItem(
+          BRAIN_PLACE_KEY,
+          JSON.stringify({ place: "galaxy", at: Date.now() })
+        );
+      } catch (err) {
+        /* no storage: the Brain opens where it was, and the button's own words said where */
+      }
+    }
     var named = place === "history" || place === "tutorials" ? place : "brain";
     var p = navInvoke("open_fix_place", { place: named });
     if (p && p.catch) p.catch(function () {});
@@ -2988,6 +3013,35 @@
     document.addEventListener("DOMContentLoaded", wireBrainWindowDoors, { once: true });
   } else {
     wireBrainWindowDoors();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The HUD's one-click door to the Brain's memory map
+   *
+   * 2026-11-09, the IA recommendations: the owner asked for one press that
+   * opens the Brain's own Galaxy view, and for that entry to say what it is.
+   * #rail-galaxy-map is page markup (hidden in a plain browser, revealed here
+   * only when a shell can send the command), and its click calls the SAME
+   * `openBrainAt` above with "galaxy", so there is one opener, one command and
+   * no second window. A separate wirer on purpose: the two Brain-window doors
+   * have their own id list, which tests/hud-brain-doors.mjs holds to exactly
+   * those two ids.
+   * ---------------------------------------------------------------- */
+  function openGalaxyMapFromHud(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    openBrainAt("galaxy");
+  }
+
+  function wireGalaxyMapDoor() {
+    var el = document.getElementById("rail-galaxy-map");
+    if (!el) return;
+    el.hidden = false;
+    el.addEventListener("click", openGalaxyMapFromHud);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireGalaxyMapDoor, { once: true });
+  } else {
+    wireGalaxyMapDoor();
   }
 
   /** The areas this PAGE can switch: the ones the Rust table can send as a

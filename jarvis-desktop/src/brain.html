@@ -110,7 +110,7 @@
             <button class="rail-item" role="tab" id="tab-galaxy" data-goto="galaxy"
                     aria-selected="false" aria-controls="view-galaxy" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">◍</span>
-              <span class="rail-label">Galaxy</span>
+              <span class="rail-label">The memory map</span>
             </button>
           </li>
           <li hidden>
@@ -167,8 +167,14 @@
       <!-- ── Main ─────────────────────────────────────────────────────── -->
       <div class="main">
         <header class="topbar" data-tauri-drag-region>
-          <h1 class="topbar-title" id="view-title">Galaxy</h1>
-          <p class="topbar-sub" id="view-sub">what Jarvis knows</p>
+          <!-- The Galaxy view, titled in plain words (2026-11-09, the IA
+               recommendations): "Galaxy" alone never said what the picture
+               was. The view's id, its tab's id and every selector stay
+               `galaxy` / `view-galaxy` / `tab-galaxy` - this is a label, not
+               a rename. brain.js's VIEWS.galaxy carries the same two lines
+               for every switch after the first paint. -->
+          <h1 class="topbar-title" id="view-title">The memory map</h1>
+          <p class="topbar-sub" id="view-sub">what Jarvis remembers</p>
 
           <div class="topbar-right">
             <!-- Live link state. The same struct the tray and the quickbar
@@ -845,17 +851,6 @@
                 <button id="standby-add" class="btn small" type="submit">Set up</button>
               </form>
             </div>
-            <div class="card card-wide" id="goals-card" data-menu-id="brain.work.goals" data-menu-group="goals-projects">
-              <h2>Goals</h2>
-              <p class="note">Say what you want, add a few steps with rough dates, then Accept. Jarvis checks in once a week - only ever a nudge, never an action. Ticking a step off, and Stop tracking, need no approval card.</p>
-              <div id="goals-list"></div>
-              <h3 class="subhead">New goal</h3>
-              <form id="goals-new-form" class="todo-form" autocomplete="off">
-                <input id="goals-new-text" class="field todo-text" type="text" maxlength="300"
-                       placeholder="What do you want to get done?" aria-label="A new goal, in your own words">
-                <button id="goals-new-add" class="btn small" type="submit">Add</button>
-              </form>
-            </div>
             <div class="card card-wide" id="quiz-card" data-menu-id="brain.work.quiz" data-menu-group="study">
               <h2>Quiz me on a text</h2>
               <p class="note" id="quiz-intro">Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.</p>
@@ -966,6 +961,31 @@
                Jarvis bar; this page never approves anything. -->
           <div class="panes" id="guardian-root"></div>
           <div class="panes" id="projects-root"></div>
+          <!-- Goals: a plan the owner edits, with a weekly check-in (the
+               owner's "build it now", 2026-09-27; JARVIS-API.md section 59;
+               brain.js paintGoals). MOVED here from Work (2026-11-09, the IA
+               recommendations): the phone already draws this plate under
+               "Your projects and goals" (BrainSections.kt's `projects`
+               section, GoalsPlate.kt), so the two apps now say the same
+               thing. The id and the menu id are UNCHANGED on purpose -
+               `brain.work.goals` is the one id the menu catalogue, the phone
+               and every test already know; only where it is drawn changed.
+               Its own `.panes` wrapper because each pane here is its own
+               grid: a card dropped straight into `#view-projects` would lose
+               the page's card spacing. -->
+          <div class="panes">
+            <div class="card card-wide" id="goals-card" data-menu-id="brain.work.goals" data-menu-group="goals-projects">
+              <h2>Goals</h2>
+              <p class="note">Say what you want, add a few steps with rough dates, then Accept. Jarvis checks in once a week - only ever a nudge, never an action. Ticking a step off, and Stop tracking, need no approval card.</p>
+              <div id="goals-list"></div>
+              <h3 class="subhead">New goal</h3>
+              <form id="goals-new-form" class="todo-form" autocomplete="off">
+                <input id="goals-new-text" class="field todo-text" type="text" maxlength="300"
+                       placeholder="What do you want to get done?" aria-label="A new goal, in your own words">
+                <button id="goals-new-add" class="btn small" type="submit">Add</button>
+              </form>
+            </div>
+          </div>
         </section>
 
         <!-- ── Tutorials and the FAQ (tutorials.js draws it, the owner's own

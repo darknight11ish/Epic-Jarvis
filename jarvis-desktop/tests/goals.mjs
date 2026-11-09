@@ -1,5 +1,5 @@
 /**
- * Goals on the Brain's Work tab - a plan the owner edits, one card per
+ * Goals on the Brain's Projects tab - a plan the owner edits, one card per
  * acting step (the owner's "build it now", 2026-09-27; JARVIS-API.md
  * section 59; src/goals.js, brain.js paintGoals, src-tauri/src/brain/
  * goals.rs).
@@ -82,13 +82,32 @@ const STOPPED = { id: "g0000000003", text: "learn Spanish",
 
 /* ── The words and the pure reading ───────────────────────────────────── */
 
-await check("the section's words, in the page", async () => {
+await check("the section's words, in the page, on the Projects tab", async () => {
   assert.equal(GOALS_TITLE, "Goals");
   const html = read("src/brain.html");
   assert.match(html, /<h2>Goals<\/h2>/);
   assert.ok(html.includes(`>${GOALS_DETAIL}</p>`));
   assert.ok(html.includes(`placeholder="${NEW_GOAL_PLACEHOLDER}"`));
   assert.match(html, new RegExp(`>${NEW_GOAL_LABEL}</button>`));
+  // WHERE IT IS DRAWN, held to the phone's own shape (2026-11-09, the IA
+  // recommendations): the phone puts the goals plate under "Your projects
+  // and goals" (BrainSections.kt's `projects` section), so the desktop card
+  // lives inside #view-projects and NOT inside #view-work any more. The id
+  // and the menu id stay `goals-card` / `brain.work.goals` - only the tab
+  // moved - which is why this reads the view sections rather than the ids.
+  const between = (src, start, end) => {
+    const at = src.indexOf(start);
+    assert.notEqual(at, -1, `${start} is not in brain.html`);
+    const stop = src.indexOf(end, at);
+    assert.notEqual(stop, -1, `${end} does not follow ${start}`);
+    return src.slice(at, stop);
+  };
+  const work = between(html, 'id="view-work"', '<!-- ── Projects');
+  const projects = between(html, 'id="view-projects"', '<!-- ── Tutorials');
+  assert.match(projects, /id="goals-card"[^>]*data-menu-id="brain\.work\.goals"/,
+    "the Goals card is not in the Projects view");
+  assert.doesNotMatch(work, /id="goals-card"/,
+    "the Goals card is still in the Work view - it was moved, not copied");
 });
 
 await check("reading GET /api/goals: ids, plans, limits, and an older PC", async () => {
@@ -148,15 +167,15 @@ const { base, close } = await K.serve();
 const browser = await K.launch();
 const SIZE = { width: 1180, height: 900 };
 
-async function workTab(data = {}) {
+async function projectsTab(data = {}) {
   const page = await K.open(browser, base, "brain.html", data, SIZE);
-  await page.locator("#tab-work").click();
+  await page.locator("#tab-projects").click();
   await page.waitForTimeout(500);
   return page;
 }
 
 await check("the section lists goals: a draft's editor, an active goal's checkboxes", async () => {
-  const page = await workTab({ goals: { goals: [DRAFT, ACTIVE] },
+  const page = await projectsTab({ goals: { goals: [DRAFT, ACTIVE] },
     schedule: { jobs: [CHECKIN_JOB], todo: [] } });
   const card = page.locator("#goals-card");
   const title = (await card.locator("h2").textContent()).trim();
@@ -169,7 +188,7 @@ await check("the section lists goals: a draft's editor, an active goal's checkbo
 });
 
 await check("a draft: editable step text, Add a step, and Accept sends the edited plan", async () => {
-  const page = await workTab({ goals: { goals: [DRAFT] } });
+  const page = await projectsTab({ goals: { goals: [DRAFT] } });
   const block = page.locator("#goals-list .goal-block").first();
   const stepField = block.locator(".goal-editor-row input").first();
   await stepField.fill("contact 3 installers");
@@ -192,7 +211,7 @@ await check("a draft: editable step text, Add a step, and Accept sends the edite
 await check("Remove takes a step out of the draft before it is ever sent anywhere", async () => {
   const twoStepDraft = { ...DRAFT, plan: [{ step: "one", by: "", done: false },
     { step: "two", by: "", done: false }] };
-  const page = await workTab({ goals: { goals: [twoStepDraft] } });
+  const page = await projectsTab({ goals: { goals: [twoStepDraft] } });
   const block = page.locator("#goals-list .goal-block").first();
   await block.getByRole("button", { name: "Remove" }).first().click();
   const left = await block.locator(".goal-editor-row").count();
@@ -205,7 +224,7 @@ await check("Remove takes a step out of the draft before it is ever sent anywher
 });
 
 await check("accepting shows \"waiting for your yes\", the same words a reminder card uses", async () => {
-  const page = await workTab({ goals: { goals: [DRAFT] } });
+  const page = await projectsTab({ goals: { goals: [DRAFT] } });
   const block = page.locator("#goals-list .goal-block").first();
   await block.getByRole("button", { name: "Accept" }).click();
   await page.waitForTimeout(500);
@@ -218,7 +237,7 @@ await check("accepting shows \"waiting for your yes\", the same words a reminder
 });
 
 await check("an active goal's steps are checkboxes; ticking one sends ONE change, asking nothing", async () => {
-  const page = await workTab({ goals: { goals: [ACTIVE] }, schedule: { jobs: [CHECKIN_JOB], todo: [] } });
+  const page = await projectsTab({ goals: { goals: [ACTIVE] }, schedule: { jobs: [CHECKIN_JOB], todo: [] } });
   let asked = false;
   page.on("dialog", (d) => { asked = true; d.dismiss(); });
   const block = page.locator("#goals-list .goal-block").first();
@@ -234,7 +253,7 @@ await check("an active goal's steps are checkboxes; ticking one sends ONE change
 });
 
 await check("Stop tracking is one tap, no confirm dialog, and immediate", async () => {
-  const page = await workTab({ goals: { goals: [ACTIVE] }, schedule: { jobs: [CHECKIN_JOB], todo: [] } });
+  const page = await projectsTab({ goals: { goals: [ACTIVE] }, schedule: { jobs: [CHECKIN_JOB], todo: [] } });
   let asked = false;
   page.on("dialog", (d) => { asked = true; d.dismiss(); });
   await page.locator("#goals-list").getByRole("button", { name: "Stop tracking" }).click();
@@ -250,7 +269,7 @@ await check("Stop tracking is one tap, no confirm dialog, and immediate", async 
 });
 
 await check("a new goal: typing the words alone is enough", async () => {
-  const page = await workTab({ goals: { goals: [] } });
+  const page = await projectsTab({ goals: { goals: [] } });
   await page.locator("#goals-new-text").fill("insulate the garage before winter");
   await page.locator("#goals-new-add").click();
   await page.waitForTimeout(500);
@@ -264,7 +283,7 @@ await check("a new goal: typing the words alone is enough", async () => {
 });
 
 await check("no bulk control anywhere in the card", async () => {
-  const page = await workTab({ goals: { goals: [DRAFT, ACTIVE, STOPPED] },
+  const page = await projectsTab({ goals: { goals: [DRAFT, ACTIVE, STOPPED] },
     schedule: { jobs: [CHECKIN_JOB], todo: [] } });
   const buttons = await page.locator("#goals-card button").allInnerTexts();
   await page.close();
@@ -274,14 +293,14 @@ await check("no bulk control anywhere in the card", async () => {
 });
 
 await check("the empty state says what to do next", async () => {
-  const page = await workTab({ goals: { goals: [] } });
+  const page = await projectsTab({ goals: { goals: [] } });
   const text = await page.locator("#goals-list").innerText();
   await page.close();
   assert.equal(text.trim(), EMPTY_GOALS);
 });
 
 await check("a PC without Goals: the section says so, and offers no new-goal form", async () => {
-  const page = await workTab({});
+  const page = await projectsTab({});
   const text = await page.locator("#goals-list").innerText();
   const formHidden = await page.locator("#goals-new-form").isHidden();
   await page.close();
@@ -290,7 +309,7 @@ await check("a PC without Goals: the section says so, and offers no new-goal for
 });
 
 await check("held on a stale link: Add, Accept, a step's checkbox and Stop tracking are all greyed", async () => {
-  const page = await workTab({ goals: { goals: [DRAFT, ACTIVE] },
+  const page = await projectsTab({ goals: { goals: [DRAFT, ACTIVE] },
     schedule: { jobs: [CHECKIN_JOB], todo: [] }, link: { stale: true } });
   const addDisabled = await page.locator("#goals-new-add").isDisabled();
   const acceptDisabled = await page.locator("#goals-list").getByRole("button", { name: "Accept" }).isDisabled();
@@ -304,7 +323,7 @@ await check("held on a stale link: Add, Accept, a step's checkbox and Stop track
 });
 
 await check("the words are hidden with the private lists; status and steps stay visible", async () => {
-  const page = await workTab({ goals: { goals: [ACTIVE] },
+  const page = await projectsTab({ goals: { goals: [ACTIVE] },
     schedule: { jobs: [CHECKIN_JOB], todo: [] }, security: { hidden: true } });
   const text = await page.locator("#goals-card").innerText();
   await page.close();
@@ -316,7 +335,7 @@ await check("a draft opened while the lists are hidden gets its real steps back 
   // Bug audit 2026-09-29: the blank steps the PC sends while hidden were kept
   // as the editor's working copy, so they stayed blank after Show and Accept
   // refused an empty plan.
-  const page = await workTab({ goals: { goals: [DRAFT] }, security: { hidden: true } });
+  const page = await projectsTab({ goals: { goals: [DRAFT] }, security: { hidden: true } });
   const hiddenValue = await page.locator("#goals-list .goal-editor-row input").first().inputValue();
   await page.evaluate(() => { window.__security.revealed = true; });
   await page.evaluate(() => window.__emit("security-changed", {}));
@@ -330,7 +349,7 @@ await check("a draft opened while the lists are hidden gets its real steps back 
 await check("full: the new-goal form is not offered, and it says why", async () => {
   const many = Array.from({ length: 20 }, (_, i) => ({ ...DRAFT, id: `g${String(i).padStart(10, "0")}`,
     text: `goal ${i}` }));
-  const page = await workTab({ goals: { goals: many } });
+  const page = await projectsTab({ goals: { goals: many } });
   const formHidden = await page.locator("#goals-new-form").isHidden();
   const text = await page.locator("#goals-list").innerText();
   await page.close();
@@ -339,7 +358,7 @@ await check("full: the new-goal form is not offered, and it says why", async () 
 });
 
 await check("a `schedule` event carrying a goal_checkin reads Coming up again, which Goals shares", async () => {
-  const page = await workTab({ goals: { goals: [ACTIVE] },
+  const page = await projectsTab({ goals: { goals: [ACTIVE] },
     schedule: { jobs: [{ ...CHECKIN_JOB, state: "waiting" }], todo: [] } });
   const before = await page.locator("#goals-list").innerText();
   await page.evaluate(() => {
@@ -359,7 +378,7 @@ await check("a `schedule` event carrying a goal_checkin reads Coming up again, w
 /* ── Step locks: rows, the pickers, the 409, Undo ────────────────────── */
 
 await check("a locked step: tick disabled, 'locked' and why in words, a screen reader hears both", async () => {
-  const page = await workTab({ goals: { goals: [goalOf(GC.created)] } });
+  const page = await projectsTab({ goals: { goals: [goalOf(GC.created)] } });
   const rows = page.locator("#goals-list .goal-step");
   const s1 = rows.nth(0).locator('input[type="checkbox"]');
   const s2 = rows.nth(1).locator('input[type="checkbox"]');
@@ -384,7 +403,7 @@ await check("a locked step: tick disabled, 'locked' and why in words, a screen r
 });
 
 await check("a number that reached its target is 'number reached', not a tick, and the tick stays", async () => {
-  const page = await workTab({ goals: { goals: [goalOf(GC.number_reached)] } });
+  const page = await projectsTab({ goals: { goals: [goalOf(GC.number_reached)] } });
   const row = page.locator("#goals-list .goal-step").first();
   const box = row.locator('input[type="checkbox"]');
   const text = await row.innerText();
@@ -398,7 +417,7 @@ await check("a number that reached its target is 'number reached', not a tick, a
 });
 
 await check("ticking sends the step's id; Undo unticks it and asks nothing", async () => {
-  const page = await workTab({ goals: { goals: [goalOf(GC.created)] } });
+  const page = await projectsTab({ goals: { goals: [goalOf(GC.created)] } });
   await page.locator("#goals-list .goal-step").first().locator('input[type="checkbox"]').check();
   await page.waitForTimeout(500);
   const hasUndo = await page.locator("#goals-list .goal-undo").count();
@@ -421,7 +440,7 @@ await check("ticking sends the step's id; Undo unticks it and asks nothing", asy
 
 await check("a locked step ticked from a stale screen: the PC's 409 sentence is shown, nothing changes", async () => {
   const locked = GC.refuse_tick_locked.body.error;
-  const page = await workTab({ goals: { goals: [goalOf(GC.created)], lockedError: locked } });
+  const page = await projectsTab({ goals: { goals: [goalOf(GC.created)], lockedError: locked } });
   const box = page.locator("#goals-list .goal-step").nth(1).locator('input[type="checkbox"]');
   await box.evaluate((e) => { e.disabled = false; e.click(); });
   await page.waitForTimeout(600);
@@ -440,7 +459,7 @@ await check("a step ticked after an unticked earlier one reads '(open again)'", 
   const g = goalOf(GC.first_undone);
   g.plan[0] = { ...g.plan[0], done: false, done_at: null, state: "open", reached: false, reached_words: "" };
   g.plan[1] = { ...g.plan[1], lock_words: 'after: "Get the 5k under 30" (open again)', waiting_on: ["s1"] };
-  const page = await workTab({ goals: { goals: [g] } });
+  const page = await projectsTab({ goals: { goals: [g] } });
   const row = page.locator("#goals-list .goal-step").nth(1);
   const text = await row.innerText();
   const disabled = await row.locator('input[type="checkbox"]').isDisabled();
@@ -454,14 +473,14 @@ await check("a step ticked after an unticked earlier one reads '(open again)'", 
 await check("the followed number is gone: the PC's sentence is shown", async () => {
   const g = goalOf(GC.created);
   g.plan[0] = { ...g.plan[0], measure_gone: true, measure_name: "" };
-  const page = await workTab({ goals: { goals: [g] } });
+  const page = await projectsTab({ goals: { goals: [g] } });
   const text = await page.locator("#goals-list .goal-step").first().innerText();
   await page.close();
   assert.match(text, /The number this step follows is gone - tick it by hand\./);
 });
 
 await check("hidden with the private lists: no step words, no lock sentence, no number name", async () => {
-  const page = await workTab({ goals: { goals: [goalOf(GC.number_reached)] }, security: { hidden: true } });
+  const page = await projectsTab({ goals: { goals: [goalOf(GC.number_reached)] }, security: { hidden: true } });
   const text = await page.locator("#goals-card").innerText();
   await page.close();
   for (const leaked of ["Get the 5k", "Enter the race", "5k time", "29.5", "after:"]) {
@@ -471,7 +490,7 @@ await check("hidden with the private lists: no step words, no lock sentence, no 
 
 /** A draft with lock support, and a stand-in for Projects (the benchmark list). */
 async function draftTab(goal, extra = {}) {
-  const page = await workTab({ goals: { goals: [goal], ...extra } });
+  const page = await projectsTab({ goals: { goals: [goal], ...extra } });
   return page;
 }
 const sentPlan = async (page) => (await page.evaluate(() => window.__goalsCalls))
@@ -584,7 +603,7 @@ await check("a refused save shows the PC's sentence as sent and the draft stays 
 });
 
 await check("an older PC (no needs limit) gets no pickers and the plain steps", async () => {
-  const page = await workTab({ goals: { goals: [DRAFT] } });
+  const page = await projectsTab({ goals: { goals: [DRAFT] } });
   await page.evaluate(() => {
     const core = window.__TAURI__.core;
     const inner = core.invoke;

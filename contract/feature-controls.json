@@ -2564,7 +2564,7 @@
       "name": "Galaxy",
       "group": "Memory",
       "surface": "both",
-      "where": "Brain, Galaxy (desktop). Brain, Memory, People and things (phone).",
+      "where": "Brain, The memory map (desktop). Brain, Memory, People and things (phone).",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -2575,7 +2575,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Brain, Galaxy.",
+        "location": "Brain, The memory map.",
         "search": [
           "Galaxy"
         ],
@@ -3899,7 +3899,7 @@
       "name": "Goals",
       "group": "Notes and files",
       "surface": "both",
-      "where": "Brain, Work, Goals. Ask in chat for a short plan if you want one drafted first.",
+      "where": "Brain, Projects, Goals. Ask in chat for a short plan if you want one drafted first.",
       "control": {
         "type": "refused",
         "setting_keys": [],
@@ -3910,7 +3910,7 @@
       },
       "desktop": {
         "section": null,
-        "location": "Brain, Work, Goals.",
+        "location": "Brain, Projects, Goals.",
         "search": [
           "Goals"
         ],
@@ -3918,7 +3918,7 @@
       },
       "phone": {
         "section": null,
-        "location": "Brain, Work, Goals.",
+        "location": "Brain, Projects, Goals.",
         "search": [
           "goals"
         ],
