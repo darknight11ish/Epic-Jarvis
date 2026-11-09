@@ -302,11 +302,7 @@ This project's habit is to say what is not done. One of its own architecture rul
   24 rows PASS, one FAIL since fixed) and every Wave-12/13 row stays **NOT RUN YET**. A row becomes PASS only
   after the feature is driven on the real desktop app or the owner's phone - no line on this page claims
   otherwise.
-- **The pooled Coding lane's 49,152-token window does not survive a chat-triggered reload.** Measured on the
-  live install: with the 30B unloaded, a `/v1/chat/completions` turn reloads it at 8,192 tokens because
-  Ollama's OpenAI-compatible endpoint ignores the request's `options` field. It is recorded open with its
-  measured evidence and a design page (`docs/POOLED-WINDOW-PRELOAD-DESIGN-2026-11-09.md`); nothing here
-  claims the window survives a reload.
+- **The pooled Coding lane's 49,152-token window used to be lost on a chat-triggered reload; the fix is in code but not yet driven on the live PC.** Measured on the live install: with the 30B unloaded, a `/v1/chat/completions` turn reloaded it at 8,192 tokens because Ollama's OpenAI-compatible endpoint ignores the request's `options` field. The wave-13 branch now warms the lane natively at 49,152 before a cold pooled turn and proves the loaded window from `/api/ps` (design page `docs/POOLED-WINDOW-PRELOAD-DESIGN-2026-11-09.md`); the live cold-turn row stays **NOT RUN** until it is measured after the wave-13 deploy, and nothing here claims that measurement.
 - **Creator mode's plug-in half is refused, not built.** It stages and scans a plug-in and refuses it in the
   pack manager's own words; skills install behind the one card. The first real plug-in install is future
   work.
@@ -315,9 +311,10 @@ This project's habit is to say what is not done. One of its own architecture rul
   history and encrypted backups use AES-256-GCM. It is a known gap with its own fix queued, said plainly
   rather than claimed as encrypted.
 - **Memory cards are being reduced, not removed.** The owner approved turning on the existing "Save facts
-  even when Jarvis had to reword them" switch after the next deploy, and building ONE "retry now" banner when
-  a memory check fails instead of a queue of cards. Sensitive topics still ask; card counts will be measured
-  after the change.
+  even when Jarvis had to reword them" switch after the next deploy, and the ONE "retry now" banner when a
+  memory check fails is built in the wave-13 branch (one fault record, a card-free retry, the desktop banner
+  and the phone's fault view) instead of a queue of cards. Sensitive topics still ask; card counts will be
+  measured after the change and the banner is still to be driven on the live PC.
 - **The new gestures and sounds are owner tests.** Drag-and-drop needs a real Explorer drag on the packaged
   window; read-aloud needs the owner's speakers and his WebView2 voice list. The wiring is proved, the
   experience is not.

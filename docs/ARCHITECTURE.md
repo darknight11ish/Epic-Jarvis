@@ -2462,9 +2462,11 @@ the verification step and the second-card analysis are in
 [MODEL-TOPOLOGY.md](MODEL-TOPOLOGY.md). Two things belong here because they
 are architectural rather than configuration:
 
-- **`num_ctx` cannot be set from the HUD.** It posts to an OpenAI-compatible
-  endpoint, which has no field for it. Context length lives on the model or in
-  the environment. Left alone, Ollama picks 4096.
+- **`num_ctx` cannot be set from the HUD's own request.** It posts to an
+  OpenAI-compatible endpoint, which has no field for it. Context length lives on
+  the model or in the environment; left alone, Ollama picks 4096. The chat path
+  now warms the pooled lane natively with `options.num_ctx` before a cold turn
+  (wave 13), so the window it asks for is the window the runner loads.
 - **The recalled-facts block goes late, never at index 0.** At index 0 it
   invalidates the KV prefix cache for the whole conversation every turn, *and*
   suppresses the Modelfile's `SYSTEM` block — which is where the persona
