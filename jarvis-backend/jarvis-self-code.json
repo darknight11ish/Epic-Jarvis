@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "8fc8dfbbf7e3a9ed225fb25d166b3d68d03fbb23",
- "built_at": "2026-11-07T19:16:50-08:00",
+ "ref": "eb776a6e036194d8bc31e41bbe6106a9910beacd",
+ "built_at": "2026-11-08T15:07:18-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6154,6 +6154,31 @@
  ],
  "recent_commits": [
   {
+   "sha": "eb776a6e036194d8bc31e41bbe6106a9910beacd",
+   "date": "2026-11-08",
+   "subject": "test(hud): the crisis-thread suite follows the typed-silent policy"
+  },
+  {
+   "sha": "6a992d536805590537526cbefad5f88631e28ef6",
+   "date": "2026-11-07",
+   "subject": "test(desktop): hud.mjs, hud-galaxy-options and hud-live-read-aloud follow the typed-silent policy"
+  },
+  {
+   "sha": "1b6b52b4dc82d3f12d42b3fb1258c7f995b5543e",
+   "date": "2026-11-07",
+   "subject": "test(desktop): the three suites the Wave-9 UI legitimately changed"
+  },
+  {
+   "sha": "a43cf088e0cd71374ef5184bfc97d578022f4fc2",
+   "date": "2026-11-07",
+   "subject": "fix(tests): replace two new source-text pins with behavioural coverage"
+  },
+  {
+   "sha": "78329f8c01a2e645e5265b27914b14e23a916924",
+   "date": "2026-11-07",
+   "subject": "fix(records): record bench-scores.jsonl in the backup register and regenerate the map at the pushed head"
+  },
+  {
    "sha": "8fc8dfbbf7e3a9ed225fb25d166b3d68d03fbb23",
    "date": "2026-11-07",
    "subject": "docs(records): Wave 9 claims, API/ARCHITECTURE sections, changelog and decision fragments"
@@ -6227,31 +6252,6 @@
    "sha": "3f5b39cd3fc1161a4a1b00ba3c34f41a4a24c213",
    "date": "2026-11-07",
    "subject": "Merge branch 'feat/wave9-lane2-hud-model-filters-2026-11-07' into integration/wave9-2026-11-07"
-  },
-  {
-   "sha": "5a3086c7790ab534adf296a98a00465d77dbe367",
-   "date": "2026-11-07",
-   "subject": "feat(bench): five-suite measurement runner, hardware-aware recommender, pooled-lane modes"
-  },
-  {
-   "sha": "cb3c1d493bdb2a5a5662fd1a752a863abc4a4dfb",
-   "date": "2026-11-07",
-   "subject": "chore(self-code): regenerate the map for the Wave-9 Lane 2 files"
-  },
-  {
-   "sha": "2927a61749f99a27ef13912681f8666c23984873",
-   "date": "2026-11-07",
-   "subject": "feat(awareness): Wave-9 findings 1-4 and the automatic read-aloud switch (backend)"
-  },
-  {
-   "sha": "5a0d3d28735f8ab795297691890451794c0cb5f5",
-   "date": "2026-11-07",
-   "subject": "feat(hud): Brain window doors, honest skills line, and the model fit filter bar (Wave-9 Lane 2)"
-  },
-  {
-   "sha": "bbb3e0c1d4826f8ac6948d9ce2abe07a0936f966",
-   "date": "2026-11-07",
-   "subject": "Merge pull request #1213 from darknight11ish/feat/wave82-total-awareness"
   }
  ],
  "top_level": [
