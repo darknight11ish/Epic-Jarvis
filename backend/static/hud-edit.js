@@ -1617,6 +1617,10 @@ export function mountHudEditor(options = {}) {
   function selectEditCard(id) {
     if (id && !MOVABLE_SET.has(id)) return;
     selectedCard = id || null;
+    // The controls live in the Cards tab. A selection therefore opens that tab,
+    // so picking a card while another tab is showing still answers with its
+    // options rather than with nothing visible.
+    if (selectedCard) editTab = "cards";
     renderPanes();
   }
 
@@ -1837,7 +1841,9 @@ export function mountHudEditor(options = {}) {
   }
 
   /** A plain click on a card selects it (its options move into the bar), while
-   *  a click on one of its own controls still does what that control does. */
+   *  a click on one of its controls still does what that control does OUTSIDE
+   *  edit mode. Inside edit mode `onMainScreenClick` below has already taken
+   *  the event, so this only runs for the editor's own controls. */
   function onEditCardClick(event) {
     if (!editing || !event || !event.target || !event.target.closest) return;
     // A click on a card's OWN controls is that control's business: it must not
@@ -1852,6 +1858,51 @@ export function mountHudEditor(options = {}) {
     const id = shell.getAttribute("data-hud-card");
     if (!id || !MOVABLE_SET.has(id)) return;
     if (id !== selectedCard) selectEditCard(id);
+  }
+
+  /* THE MAIN SCREEN IS A SELECTOR WHILE EDITING (the owner's report of
+   * 2026-11-09): "in the edit HUD, when i click on any part including the left
+   * column icons, there should be the edit options that appear. right now when
+   * i click on it it just opens the icon's intended menu." A first click on a
+   * card must pick it, never run the card: the nav icons must not switch view,
+   * a card's buttons must not approve/send/open anything, and a link inside one
+   * must not navigate. So the click is caught in the CAPTURE phase at the
+   * document, before any of the page's own handlers, and stopped there. One
+   * interception covers every card and every control they draw, and it cannot
+   * change what any of them does outside edit mode because it only exists then.
+   *
+   * The editor's own controls keep the click they were given: the edit bar
+   * (Done / Undo / Reset / Discard, its tabs and panes, and the selected card's
+   * toolbar while it is moved there), each card's toolbar, its drag handle, the
+   * [Edit HUD] toggle, and the fixed Stop control. Dragging is a pointerdown
+   * path and is untouched. */
+  const EDITOR_OWN_CLICK = [
+    "#hud-edit-bar",
+    ".hud-card-tools",
+    "[data-hud-card-handle]",
+    "#hud-edit-toggle",
+    "#hud-stop",
+  ].join(", ");
+
+  function onMainScreenClick(event) {
+    if (!editing || !event || !event.target || !event.target.closest) return;
+    if (event.target.closest(EDITOR_OWN_CLICK)) return;
+    // Before the page's own listener can run: this click is a selection.
+    event.preventDefault();
+    event.stopPropagation();
+    const shell = event.target.closest("[data-hud-card]");
+    if (shell) {
+      const id = shell.getAttribute("data-hud-card");
+      if (id && MOVABLE_SET.has(id)) selectEditCard(id);
+      return;
+    }
+    // The left column's own controls (Presets, Live, Faces, Calendar, Brain,
+    // Galaxy, the Studio dock and Galaxy options) are the Navigation card's
+    // rail, not cards of their own - so a click on one selects Navigation, the
+    // card that column is, instead of opening the menu the icon stands for.
+    if (event.target.closest(".rail.left") && selectedCard !== "nav") {
+      selectEditCard("nav");
+    }
   }
 
   function ensureBar() {
@@ -2286,6 +2337,10 @@ export function mountHudEditor(options = {}) {
 
   // ------------------------------------------------------------------- mount
   function wire() {
+    // Registered in the CAPTURE phase (last argument `true`): while Edit HUD is
+    // on, this is what turns a first click on the main screen into a selection
+    // before the page's own handler can run. See `onMainScreenClick`.
+    doc.addEventListener("click", onMainScreenClick, true);
     doc.addEventListener("click", onToolbarClick);
     doc.addEventListener("click", onHomeClick);
     doc.addEventListener("click", onEditCardClick);
