@@ -249,6 +249,16 @@ export function candidateRow(candidate) {
     fitState: fit.state,
     why: text(candidate.why),
     sourceUrl: text(candidate.source_url),
+    // The Brain's model filter fields (Q4, 2026-11-07). Each is the PC's own
+    // number or word; absent when the PC did not send it, never defaulted.
+    fitSingle: text(candidate.fit_single || candidate.fit).toLowerCase(),
+    fitPooled: text(candidate.fit_pooled).toLowerCase(),
+    vramNeedGb: num(candidate.vram_need_gb),
+    pooledVramGb: num(candidate.pooled_vram_gb),
+    capabilities: Array.isArray(candidate.capabilities)
+      ? candidate.capabilities.filter((tag) => CAPABILITY_TAGS.includes(tag))
+      : [],
+    releasedAt: num(candidate.released_at),
   };
 }
 
@@ -508,4 +518,520 @@ export function advisorFailureWords(error) {
     return error.message.trim();
   }
   return "Jarvis could not ask the PC about new models, and did not say why.";
+}
+
+/* ── The model filter bar (owner's Q4 ruling, 2026-11-07) ───────────────────
+ *
+ * The owner asked for a full filter set on Brain -> Models -> "Check for new
+ * models": Hardware fit (fits one card / fits 2-3 cards pooled / all that fit,
+ * the default / show non-fitting view-only), Size cap, Quantization, Context,
+ * Licence, Capability tags, Parameter range, Source, and Sort.
+ *
+ * TWO RULES THIS BLOCK EXISTS TO KEEP, and each is proved in
+ * `tests/model-filters.mjs` with no browser:
+ *
+ *   1. A NON-FITTING MODEL IS HIDDEN BY DEFAULT and is NEVER offered a working
+ *      Download. A 36.7 GB model that cannot run here is not a suggestion; the
+ *      owner's complaint was exactly that check offering one. "Show non-fitting"
+ *      makes them VISIBLE, view-only, with the reason - `mayDownload()` is the
+ *      one predicate brain.js asks before it draws a Download button.
+ *   2. A FILTER NEVER INVENTS A FACT. A row whose pooled fit or release date
+ *      was not reported is excluded from a filter that needs it, and sorted
+ *      last - never treated as a zero or as fitting.
+ *
+ * Nothing here downloads, installs, benchmarks or applies anything: the block
+ * is words and arithmetic over the PC's own answer.
+ */
+
+/** The owner's capability-tag vocabulary, in the order he listed it. */
+export const CAPABILITY_TAGS = Object.freeze([
+  "vision", "tools", "coding", "reasoning", "uncensored",
+]);
+
+/**
+ * Hardware fit choices. The owner listed them in this order; the DEFAULT is
+ * "all" (everything that fits this PC) - so a model that cannot run here is
+ * never on screen unless he asks for it.
+ */
+export const FIT_MODES = Object.freeze([
+  Object.freeze({ id: "one", label: "Fits 1 card (fast)" }),
+  Object.freeze({ id: "pooled", label: "Fits 2-3 cards (pooled)" }),
+  Object.freeze({ id: "all", label: "All that fit this PC" }),
+  Object.freeze({ id: "nonfitting", label: "Show non-fitting (view-only)" }),
+]);
+
+/** Quantization choices: the owner's four, plus whatever the PC's rows carry. */
+export const QUANT_SUGGESTIONS = Object.freeze([
+  "Q4_K_M", "QAT", "UD-Q3_K_XL", "Q8_0",
+]);
+
+/** Minimum context windows, in tokens. 0 means "any". */
+export const CONTEXT_OPTIONS = Object.freeze([
+  Object.freeze({ value: 0, label: "Any context" }),
+  Object.freeze({ value: 16384, label: "16K or more" }),
+  Object.freeze({ value: 32768, label: "32K or more" }),
+  Object.freeze({ value: 65536, label: "64K or more" }),
+  Object.freeze({ value: 131072, label: "128K or more" }),
+]);
+
+/**
+ * The owner's parameter ranges, as the boundaries he named. Only the named
+ * bands are filters: a 40B model belongs to none of them and is never folded
+ * into "70B+" to make the count look complete.
+ */
+export const PARAM_RANGES = Object.freeze([
+  Object.freeze({ id: "1-4", label: "1B-4B", min: 1, max: 4 }),
+  Object.freeze({ id: "7-14", label: "7B-14B", min: 7, max: 14 }),
+  Object.freeze({ id: "24-35", label: "24B-35B", min: 24, max: 35 }),
+  Object.freeze({ id: "70+", label: "70B+", min: 70, max: null }),
+]);
+
+/** Sort choices, in the order the owner listed them. */
+export const SORT_MODES = Object.freeze([
+  Object.freeze({ id: "fit", label: "Best fit" }),
+  Object.freeze({ id: "speed", label: "Speed" }),
+  Object.freeze({ id: "size", label: "Size" }),
+  Object.freeze({ id: "newest", label: "Newest" }),
+]);
+
+/** The default view: everything that fits this PC, nothing filtered out. */
+export const DEFAULT_FILTERS = Object.freeze({
+  fit: "all",
+  sizeCap: 0,
+  quant: "",
+  contextMin: 0,
+  licence: "",
+  capabilities: Object.freeze([]),
+  params: "",
+  source: "",
+  sort: "fit",
+});
+
+/** A fresh mutable copy of the defaults (capabilities is a real array). */
+export function freshFilters() {
+  return {
+    fit: DEFAULT_FILTERS.fit,
+    sizeCap: DEFAULT_FILTERS.sizeCap,
+    quant: DEFAULT_FILTERS.quant,
+    contextMin: DEFAULT_FILTERS.contextMin,
+    licence: DEFAULT_FILTERS.licence,
+    capabilities: [],
+    params: DEFAULT_FILTERS.params,
+    source: DEFAULT_FILTERS.source,
+    sort: DEFAULT_FILTERS.sort,
+  };
+}
+
+/** Does this row fit on ONE measured card? Unknown stays unknown. */
+export function fitsOneCard(row) {
+  return row.fitSingle === "fits" || row.fitSingle === "tight";
+}
+
+/** Does this row fit across the cards together (and need more than one)? */
+export function fitsPooled(row) {
+  if (fitsOneCard(row)) return false;
+  return row.fitPooled === "fits" || row.fitPooled === "tight";
+}
+
+/** Does this row fit anywhere on this PC? Unknown stays unknown. */
+export function fitsThisPc(row) {
+  return fitsOneCard(row) || fitsPooled(row);
+}
+
+/** "one" | "pooled" | "nonfitting" | "unknown" - the hardware-fit category. */
+export function fitModeOf(row) {
+  if (fitsOneCard(row)) return "one";
+  if (fitsPooled(row)) return "pooled";
+  if (row.fitSingle === "no" && row.fitPooled === "no") return "nonfitting";
+  if (row.fitSingle === "no" && !row.fitPooled) return "nonfitting";
+  return "unknown";
+}
+
+/**
+ * THE ONE PREDICATE brain.js asks before drawing a Download button. False for
+ * a row that does not fit this PC, and false for a row whose fit was not
+ * reported at all - an unknown fit is not a licence to offer 36 GB.
+ */
+export function mayDownload(row) {
+  return Boolean(row) && fitsThisPc(row);
+}
+
+/** The measured cards' memory in words for a pooled reason, or "". */
+export function pooledWords(row) {
+  if (typeof row.vramNeedGb !== "number" || typeof row.pooledVramGb !== "number") return "";
+  return `It needs about ${row.vramNeedGb} GB of video memory; the measured cards hold ` +
+    `${row.pooledVramGb} GB together, so it does not fit here.`;
+}
+
+/** Why a non-fitting row is shown view-only: the PC's numbers, or its words. */
+export function nonFittingWhy(row) {
+  const pooled = pooledWords(row);
+  if (pooled) return pooled;
+  if (row.why) return row.why;
+  return "The PC did not report enough for a fit, so no fit is claimed here - and none is offered.";
+}
+
+/** The values this PC's rows really carry, for the three value filters. */
+export function filterOptions(rows) {
+  const quants = new Set();
+  const licences = new Set();
+  const sources = new Set();
+  for (const row of rows || []) {
+    const quant = String(row.quant || "").trim();
+    if (quant) quants.add(quant);
+    const licence = String(row.licence || "").trim();
+    if (licence) licences.add(licence);
+    const source = providerWords(row);
+    if (source) sources.add(source);
+  }
+  const byText = (a, b) => a.toLowerCase().localeCompare(b.toLowerCase());
+  const knownQuants = QUANT_SUGGESTIONS.filter((q) => quants.has(q));
+  const otherQuants = [...quants].filter((q) => !QUANT_SUGGESTIONS.includes(q)).sort(byText);
+  return {
+    quants: [...knownQuants, ...otherQuants],
+    licences: [...licences].sort(byText),
+    sources: [...sources].sort(byText),
+  };
+}
+
+/** Does the row match one selected quantisation? "QAT" matches the word anywhere. */
+function quantMatches(row, wanted) {
+  if (!wanted) return true;
+  const hay = `${row.quant || ""} ${row.name || ""} ${row.family || ""}`.toLowerCase();
+  return hay.includes(String(wanted).toLowerCase());
+}
+
+/** The named parameter band, or null for "Any". */
+function paramRange(id) {
+  return PARAM_RANGES.find((range) => range.id === id) || null;
+}
+
+/** Does the row pass the filters? Sort is NOT part of this. */
+export function matchesFilters(row, filters) {
+  const f = filters || DEFAULT_FILTERS;
+  const mode = f.fit || "all";
+  if (mode === "one" && fitModeOf(row) !== "one") return false;
+  if (mode === "pooled" && fitModeOf(row) !== "pooled") return false;
+  if (mode === "nonfitting" && fitModeOf(row) !== "nonfitting") return false;
+  if (mode === "all" && fitModeOf(row) === "nonfitting") return false;
+  const cap = Number(f.sizeCap) || 0;
+  if (cap > 0 && !(typeof row.sizeGb === "number" && row.sizeGb <= cap)) return false;
+  if (!quantMatches(row, f.quant)) return false;
+  const wantContext = Number(f.contextMin) || 0;
+  if (wantContext > 0 && !(typeof row.contextTokens === "number" && row.contextTokens >= wantContext)) {
+    return false;
+  }
+  if (f.licence && row.licence !== f.licence) return false;
+  const tags = Array.isArray(f.capabilities) ? f.capabilities : [];
+  if (tags.length && !tags.every((tag) => row.capabilities.includes(tag))) return false;
+  const range = paramRange(f.params);
+  if (range) {
+    const p = row.paramsB;
+    if (typeof p !== "number") return false;
+    if (!(p >= range.min && (range.max === null || p <= range.max))) return false;
+  }
+  if (f.source && providerWords(row) !== f.source) return false;
+  return true;
+}
+
+/** The PC's measured speed for a row, or null. */
+function measuredSpeed(row, benchmarked) {
+  if (!benchmarked || typeof benchmarked !== "object") return null;
+  const keys = Object.keys(benchmarked);
+  const want = bareRef(row.ref);
+  for (const key of keys) {
+    if (bareRef(key) !== want) continue;
+    const entry = benchmarked[key];
+    const speed = entry && typeof entry === "object" ? entry.tokens_per_s : null;
+    return typeof speed === "number" && Number.isFinite(speed) && speed > 0 ? speed : null;
+  }
+  return null;
+}
+
+/**
+ * The rows, filtered by every filter and then ordered by the chosen sort.
+ * "Best fit" keeps the PC's own fits-first order; every other sort is stable
+ * and puts a row with no value for it LAST (never first, never invented).
+ */
+export function filterCandidates(rows, filters, benchmarked = null) {
+  const list = (Array.isArray(rows) ? rows : []).filter((row) => matchesFilters(row, filters));
+  const sort = (filters && filters.sort) || "fit";
+  if (sort === "size") {
+    return list
+      .map((row, i) => ({ row, i }))
+      .sort((a, b) => {
+        const av = typeof a.row.sizeGb === "number" ? a.row.sizeGb : null;
+        const bv = typeof b.row.sizeGb === "number" ? b.row.sizeGb : null;
+        if (av === null && bv === null) return a.i - b.i;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        return av - bv || a.i - b.i;
+      })
+      .map((pair) => pair.row);
+  }
+  if (sort === "speed") {
+    return list
+      .map((row, i) => ({ row, i, speed: measuredSpeed(row, benchmarked) }))
+      .sort((a, b) => {
+        if (a.speed === null && b.speed === null) return a.i - b.i;
+        if (a.speed === null) return 1;
+        if (b.speed === null) return -1;
+        return b.speed - a.speed || a.i - b.i;
+      })
+      .map((pair) => pair.row);
+  }
+  if (sort === "newest") {
+    return list
+      .map((row, i) => ({ row, i }))
+      .sort((a, b) => {
+        const av = typeof a.row.releasedAt === "number" ? a.row.releasedAt : null;
+        const bv = typeof b.row.releasedAt === "number" ? b.row.releasedAt : null;
+        if (av === null && bv === null) return a.i - b.i;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+        return bv - av || a.i - b.i;
+      })
+      .map((pair) => pair.row);
+  }
+  return list;
+}
+
+/** How many non-default filters are on (for the summary line). */
+export function activeFilterCount(filters) {
+  const f = filters || DEFAULT_FILTERS;
+  let n = 0;
+  if ((f.fit || "all") !== "all") n += 1;
+  if (Number(f.sizeCap) > 0) n += 1;
+  if (f.quant) n += 1;
+  if (Number(f.contextMin) > 0) n += 1;
+  if (f.licence) n += 1;
+  if (Array.isArray(f.capabilities) && f.capabilities.length) n += 1;
+  if (f.params) n += 1;
+  if (f.source) n += 1;
+  if ((f.sort || "fit") !== "fit") n += 1;
+  return n;
+}
+
+/**
+ * The sentence under the filter bar: how many are shown, how many non-fitting
+ * rows are hidden while the default view is on, and - in the view-only view -
+ * that these rows cannot be offered for download.
+ */
+export function filterWords(filters, rows, shownRows) {
+  const f = filters || DEFAULT_FILTERS;
+  const total = Array.isArray(rows) ? rows.length : 0;
+  const shown = Array.isArray(shownRows) ? shownRows.length : 0;
+  const nonFitting = (Array.isArray(rows) ? rows : [])
+    .filter((row) => fitModeOf(row) === "nonfitting").length;
+  const pieces = [`Showing ${shown} of ${total} newer model${total === 1 ? "" : "s"}.`];
+  if ((f.fit || "all") === "nonfitting") {
+    pieces.push(
+      "These do not fit on this PC, so they are view-only: no download is offered for a model that " +
+        "cannot run here."
+    );
+  } else if (nonFitting > 0) {
+    pieces.push(
+      `${nonFitting} non-fitting model${nonFitting === 1 ? " is" : "s are"} hidden because ` +
+        `${nonFitting === 1 ? "it does" : "they do"} not fit this PC - choose "Show non-fitting" ` +
+        "to see them view-only."
+    );
+  }
+  if (f.sort === "newest") {
+    pieces.push(
+      "Newest first, using the catalogue's own release date when it gives one; a row with no date is last."
+    );
+  }
+  if (f.sort === "speed") {
+    pieces.push("Speed uses only benchmarks measured on this PC; a model never measured is last.");
+  }
+  return pieces.join(" ");
+}
+
+/* ── The hardware-aware recommender section (Wave-9 Lane 2b, 2026-11-07) ────
+ *
+ * Lane 3's `jarvis_model_recommender.panel()` answers "what model should THIS
+ * PC run?" with strict provenance labels (Q6: MEASURED ON THIS PC / MEASURED
+ * ON DIFFERENT CARDS / ESTIMATED FIT). This block is the READING half of that
+ * panel for the Brain: pure normalisation and words, no DOM, no fetch, no
+ * clock. brain.js draws it through ONE render seam (advisorRecommenderSection),
+ * beside the model filter bar, and nothing here downloads, applies, benchmarks
+ * or changes a preset.
+ *
+ * THE PANEL IS OPTIONAL. A backend without `jarvis_model_recommender` omits the
+ * `recommender` key from GET /api/models/recommendations (Lane 2b's backend
+ * change), and `recommenderPanel()` then returns null - which brain.js draws as
+ * NO section, never as an error and never as an invented table.
+ *
+ * Q4 STILL HOLDS HERE: a row that does not fit this PC is not drawn. Lane 3's
+ * panel already leaves those out and counts them in `not_shown`, which is shown
+ * as a line; this block filters `fit === "too_big"` anyway so a future shape
+ * cannot smuggle one in.
+ */
+
+/** The section's own heading, shared by the page and its test. */
+export const RECOMMENDER_TITLE = "What this PC should run";
+
+/** The three provenance labels, short, in the order the owner's ruling names. */
+export const PROVENANCE_LABELS = Object.freeze({
+  measured_this_pc: "MEASURED ON THIS PC",
+  measured_other_hardware: "MEASURED ON DIFFERENT CARDS",
+  estimated_fit: "ESTIMATED FIT",
+});
+
+/** The tag state for each provenance (the page's own row-tag colours). */
+export const PROVENANCE_STATES = Object.freeze({
+  measured_this_pc: "ok",
+  measured_other_hardware: "warn",
+  estimated_fit: "",
+});
+
+const textOr = (v) => (typeof v === "string" ? v.trim() : "");
+
+/** A catalogue date from a unix-seconds stamp, UTC and fixed width, or "". */
+function isoDate(seconds) {
+  const n = num(seconds);
+  if (n === null || n <= 0) return "";
+  try {
+    return new Date(n * 1000).toISOString().slice(0, 10);
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * One measured line: only the facts the PC really sent. "41.0 tok/s", "0%
+ * spill" (or the real spill), the on-card percentage when reported, and the
+ * run's date. Nothing is filled in for a missing number.
+ */
+export function recommenderMeasuredLine(row) {
+  const measured = row && row.measured;
+  if (!measured || typeof measured !== "object") return "";
+  const bits = [];
+  if (typeof measured.decode_tps === "number" && measured.decode_tps > 0) {
+    bits.push(`${measured.decode_tps.toFixed(1)} tok/s`);
+  }
+  if (typeof measured.spill_bytes === "number") {
+    bits.push(measured.spill_bytes === 0
+      ? "0% spill"
+      : `${Math.round(measured.spill_bytes / (1024 * 1024))} MiB spilled`);
+  }
+  if (typeof measured.on_card_percent === "number") {
+    bits.push(`${measured.on_card_percent}% on card`);
+  }
+  const when = isoDate(measured.at);
+  if (when) bits.push(when);
+  return bits.join(" · ");
+}
+
+/** One row of the panel, as words brain.js can draw and a node test can read. */
+export function recommenderRowView(row) {
+  if (!row || typeof row !== "object") return null;
+  const provenance = textOr(row.provenance);
+  const label = PROVENANCE_LABELS[provenance] || textOr(row.provenance_label);
+  if (!textOr(row.model) && !textOr(row.label)) return null;
+  const meta = [];
+  if (textOr(row.params)) meta.push(`${textOr(row.params)} parameters`);
+  if (textOr(row.quant)) meta.push(`${textOr(row.quant)} quantization`);
+  if (Array.isArray(row.capabilities) && row.capabilities.length) {
+    meta.push(`capabilities: ${row.capabilities.join(", ")}`);
+  }
+  if (typeof row.vram_needed_gib === "number") {
+    const ctx = typeof row.context_gib === "number"
+      ? ` at ${row.context_gib.toLocaleString("en-US")} tokens` : "";
+    meta.push(`needs about ${row.vram_needed_gib} GiB${ctx}`);
+  }
+  if (textOr(row.why)) meta.push(textOr(row.why));
+  if (textOr(row.measured_note)) meta.push(textOr(row.measured_note));
+  return {
+    model: textOr(row.model),
+    label: textOr(row.label) || textOr(row.model) || "(unnamed)",
+    fit: textOr(row.fit),
+    provenance,
+    provenanceLabel: label,
+    provenanceState: PROVENANCE_STATES[provenance] || "",
+    measuredLine: recommenderMeasuredLine(row),
+    warning: textOr(row.downgrade_warning),
+    why: textOr(row.why),
+    meta,
+  };
+}
+
+/**
+ * The panel, normalised: the hardware sentence, the tier, the fitting rows,
+ * the not-shown count and the module's own notes. null when the answer carries
+ * no `recommender` at all (an older PC) - the caller then draws no section.
+ */
+export function recommenderPanel(payload) {
+  const rec = payload && typeof payload === "object" ? payload.recommender : null;
+  if (!rec || typeof rec !== "object") return null;
+  const hardware = rec.hardware && typeof rec.hardware === "object" ? rec.hardware : {};
+  const tier = rec.tier && typeof rec.tier === "object" ? rec.tier : {};
+  const rows = (Array.isArray(rec.rows) ? rec.rows : [])
+    .filter((row) => row && textOr(row.fit) !== "too_big")
+    .map(recommenderRowView)
+    .filter(Boolean);
+  const notes = (Array.isArray(rec.notes) ? rec.notes : [])
+    .map(textOr).filter(Boolean);
+  const words = textOr(rec.words);
+  const hardwareWords = textOr(hardware.words);
+  const tierLabel = textOr(tier.label);
+  const tierWords = textOr(tier.words);
+  if (!rows.length && !notes.length && !words && !hardwareWords && !tierLabel) {
+    return null;
+  }
+  return {
+    title: RECOMMENDER_TITLE,
+    words,
+    hardwareWords,
+    tierLabel,
+    tierWords,
+    rows,
+    notShown: Number.isInteger(rec.not_shown) && rec.not_shown > 0 ? rec.not_shown : 0,
+    notes,
+    generatedAt: num(rec.generated_at),
+  };
+}
+
+/** "As of 2026-10-28", or "" when the panel carries no moment. */
+export function recommenderWhen(panel) {
+  const day = isoDate(panel && panel.generatedAt);
+  return day ? `As of ${day}.` : "";
+}
+
+/** The not-shown line: Q4's rule said out loud, or "". */
+export function recommenderNotShownLine(panel) {
+  const n = panel && panel.notShown;
+  if (!n) return "";
+  return (
+    `${n} more model${n === 1 ? "" : "s"} need more video memory than this PC has, ` +
+    "so they are not offered here. The filter above can show them as not-fitting " +
+    "and view-only."
+  );
+}
+
+/**
+ * The whole section as one readable string. brain.js draws the same facts as
+ * rows; this is the node fixture's view (and the shape a future `feature_guide`
+ * answer could reuse), so every label and warning is asserted without a browser.
+ */
+export function recommenderText(panel) {
+  if (!panel) return "";
+  const lines = [panel.title];
+  if (panel.hardwareWords) lines.push(panel.hardwareWords);
+  if (panel.tierLabel) {
+    lines.push(`${panel.tierLabel}${panel.tierWords ? `: ${panel.tierWords}` : ""}`);
+  }
+  for (const row of panel.rows) {
+    const bits = [row.provenanceLabel, row.label];
+    if (row.measuredLine) bits.push(row.measuredLine);
+    lines.push(bits.join(" - "));
+    for (const meta of row.meta) lines.push(meta);
+    if (row.warning) lines.push(`Warning: ${row.warning}`);
+  }
+  const notShown = recommenderNotShownLine(panel);
+  if (notShown) lines.push(notShown);
+  for (const note of panel.notes) lines.push(note);
+  const when = recommenderWhen(panel);
+  if (when) lines.push(when);
+  return lines.join("\n");
 }

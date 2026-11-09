@@ -4326,6 +4326,7 @@ private fun Reply(
             text = text,
             question = question,
             answerAtMs = answerAtMs,
+            readTurnId = feedback?.turnId,
             onDismiss = { menuOpen = false },
         )
     }
@@ -4583,6 +4584,14 @@ private fun MessageMenu(
     question: String?,
     /** When this answer finished, in ms since the epoch, or null (no line). */
     answerAtMs: Long? = null,
+    /**
+     * This answer's own `turn_id`, when the desktop gave one: the key its
+     * privacy facts are kept under, so "Read out loud" can read THIS answer
+     * (2026-11-07) - never a guess, and never the newest answer's facts. Null
+     * for a folded answer (the thread keeps words, not ids) and for an answer
+     * the PC gave no id; the item is still shown and refuses in words.
+     */
+    readTurnId: String? = null,
     onDismiss: () -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -4631,6 +4640,43 @@ private fun MessageMenu(
                 Rule()
                 Gap(4)
             }
+
+            // "Read out loud" for THIS answer (the owner's ask of 2026-11-07),
+            // beside Right/Wrong in that answer's own menu, on every answer. It
+            // reads THIS answer through the phone's existing say path (the
+            // runtime's one voice route; no new one is added here) with the same
+            // rules the newest-answer control uses: a locked phone
+            // refuses first, then the facts THIS answer was built with decide -
+            // a sensitive saved fact or a private tool keeps it on screen with
+            // its own words. An answer whose facts are not kept is refused in
+            // words; nothing is ever guessed at or spoken unchecked.
+            var readLine by remember(text) { mutableStateOf<String?>(null) }
+            val readScope = rememberCoroutineScope()
+            MoreRow("Read out loud") {
+                readScope.launch {
+                    readLine = com.jarvis.client.JarvisRuntime.readAnswerAloud(readTurnId, text)
+                }
+            }
+            Text(
+                "Hear this answer in Jarvis's voice. An answer that used extremely " +
+                    "sensitive facts, or that has to stay on your screen, is refused here " +
+                    "and says why.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+                modifier = Modifier.padding(start = 16.dp),
+            )
+            if (readLine != null) {
+                Gap(4)
+                Text(
+                    readLine.orEmpty(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.liveStatus(),
+                )
+            }
+            Gap(8)
+            Rule()
+            Gap(4)
 
             // The pin. Its key is worked out once, here, so the row that says
             // "Unpin message" and the action that unpins cannot disagree.
@@ -4878,6 +4924,17 @@ private fun Composer(
     // prompt coach's "Send mine" all come through here, so the words below
     // cannot be sent to the PC by one of them and not the others.
     fun sendNow() {
+        // The owner's own sentence about this phone's remembered-answers switch
+        // (2026-11-07: "stop reading remembered answers out loud" / "read
+        // everything out loud" / the state question): answered BY THE PHONE,
+        // because the switch is this phone's own preference - so nothing is
+        // sent, and a model answer can never toggle it. The same parser answers
+        // the sentence when it is spoken instead of typed.
+        com.jarvis.client.JarvisRuntime.readMemoriesLocalCommand(text)?.let { line ->
+            askLine = line
+            actions.onDraftChange("")
+            return
+        }
         // The decision is NOT made here any more: it is
         // [com.jarvis.client.net.AnswerMenuAsk.decide], the one function the
         // full-screen face bar's box calls too (2026-11-02). There is more than
@@ -5332,6 +5389,14 @@ private fun VoiceBar(
     // composer's Send does, and leaves them there when nothing was sent (a
     // note the PC refused, a picture it would not take).
     fun sendTyped() {
+        // The phone's own remembered-answers switch (2026-11-07): answered
+        // here, nothing sent, so the model never sees the sentence and can never
+        // toggle it. Same parser as the chat box's Send.
+        com.jarvis.client.JarvisRuntime.readMemoriesLocalCommand(text)?.let { line ->
+            askLine = line
+            actions.onDraftChange("")
+            return
+        }
         when (com.jarvis.client.net.AnswerMenuAsk.decide(text, canSend, hasFinishedAnswer())) {
             com.jarvis.client.net.AnswerMenuAsk.Decision.OPEN_MENU -> {
                 askLine = null

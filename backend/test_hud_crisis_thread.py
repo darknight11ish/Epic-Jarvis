@@ -83,38 +83,29 @@ def main() -> int:
                     hist) is not None)
 
 
-    print("\n--- the speech gate: shown, not said (owner, 2026-10-16) ---")
-    check("the page imports the bar's own RULE rather than copying it",
+    print("\n--- the speech gate: the typed send path is SILENT (Wave 9, owner 2026-11-06/07) ---")
+    # Wave 9 removed automatic speech from the typed box: a typed answer is never
+    # read aloud, and speech now belongs to a VOICE turn (the quickbar) or to the
+    # per-answer Read out loud tap. So the old question - "did the send path ask
+    # the rule before speaking?" - has a stronger answer: the send path speaks
+    # nothing at all, and cannot speak by mistake.
+    check("the typed send path no longer speaks",
+          "voice.speak(aloud ? full :" not in src)
+    check("the answer still renders before anything else can happen",
+          'node.textContent = full' in src and 'addMessage("jarvis", full)' in src)
+    check("the answer is still shown once, and History still keeps it",
+          "conversation_id: S.conversationId" in src)
+    check("the page still imports the bar's own rule for its PER-ANSWER speaker",
           'import("./private-speech.js")' in src and ".mayReadAloud(" in src)
-    check("and passes it THIS turn's route",
-          "turnRoute = route;" in src and "route: turnRoute || {}" in src)
-    # THE ROUTE IS PER-TURN, so it must be cleared per-turn. It is module-level
-    # so the reply handler can see it, and nothing cleared it: once one turn
-    # carried a sensitive route, every later turn looked private too and the page
-    # said the on-screen line instead of speaking ORDINARY answers, for ever.
-    # hud.mjs caught it as 10 failed "reads the real reply" checks.
-    check("and the route is cleared at the start of every turn",
+    check("... and asks it with the answer's own route, and says what it cannot know",
+          "route: route || {}" in src and "toolsKnown: true" in src)
+    check("... and the route is cleared at the start of every turn",
           "turnRoute = null;" in src,
           "a per-turn value must be per-turn")
-    check("what the page cannot know is not silently claimed known",
-          "toolsKnown: true" in src and "cannot know that" in src,
-          "the limit must be written down beside the call")
-    # THE LINE IS SPOKEN, NOT POSTED. `private-speech.js:41` is the authority -
-    # "Jarvis says one fixed line instead, PRIVATE_LINE, once" - and the bar does
-    # it with `speechQueue.push(PRIVATE_LINE)` (main.js:4642, :4728). #504 first
-    # did `addMessage("system", ...)` instead, and a system line is how this page
-    # draws an ERROR, so every private answer looked like a failure: hud.mjs
-    # reported "an error was shown for a good reply" on 10 checks.
-    check("speech happens only inside the rule's yes",
-          re.search(r"voice\.speak\(aloud \? full :", src) is not None)
-    check("and a refused answer SAYS the rule's own line instead of the answer",
-          "(rule && rule.PRIVATE_LINE) ||" in src
-          and 'addMessage("system", (rule' not in src,
-          "spoken, not added as a message - a system line reads as an error here")
-    speak_at = src.index("voice.speak(aloud ? full :")
-    render_at = min(src.index("node.textContent = full"), src.index('addMessage("jarvis", full)'))
-    check("the answer RENDERS before the speak decision is even reached",
-          render_at < speak_at, (render_at, speak_at))
+    check("the remaining voice.speak calls are the per-answer taps (icon and menu)",
+          src.count("voice.speak(ANSWER_SAID") == 1
+          and src.count("voice.speak(said.text)") == 1,
+          (src.count("voice.speak(ANSWER_SAID"), src.count("voice.speak(said.text)")))
 
     print("\n--- the rule reused is still the bar's rule, and rule 1 is untouched ---")
     rule_src = (REPO / "jarvis-desktop" / "src" / "private-speech.js").read_text(encoding="utf-8")

@@ -365,22 +365,105 @@ def pooled_url(port: Optional[int] = None) -> str:
     return f"http://127.0.0.1:{int(port or POOLED_PORT)}"
 
 
-def pooled_state(*, engine=None) -> dict:
+#: The coding lane's own measured sentence, unchanged since 2026-11-07. A new
+#: mode passes its own measured words from `jarvis_big_coder.MODES`; the coding
+#: lane keeps these exact words, so its card text did not move.
+POOLED_MEASURED_WORDS = (
+    "the largest window measured on this PC with all three cards, with zero "
+    "CPU spill")
+
+
+def _same_model(a, b) -> bool:
+    """Two model names are the same model, with or without `:latest`."""
+    x = str(a or "").strip()
+    y = str(b or "").strip()
+    x = x[:-7] if x.endswith(":latest") else x
+    y = y[:-7] if y.endswith(":latest") else y
+    return bool(x) and x == y
+
+
+def pooled_profile(mode: str = "coding", *, engine=None) -> dict:
+    """The model, window and measured words for ONE pooled mode.
+
+    Borrowed from `jarvis_big_coder.MODES` (the module that owns the three-card
+    server) when it is beside this backend; a backend without it can still
+    describe and start the coding lane from this lane's own constants, and
+    says so plainly for any other mode rather than inventing one.
+
+    {"key", "label", "model", "num_ctx", "measured_words", "spill_allowance",
+     "needs_cards"}. An unknown key raises ValueError.
+    """
+    want = str(mode or "coding").strip().lower()
+    try:
+        eng = _engine(engine)
+    except Exception:
+        eng = None
+    modes = list(getattr(eng, "MODES", ()) or ()) if eng is not None else []
+    for m in modes:
+        if str(getattr(m, "key", "")) == want:
+            # The coding lane keeps the words its own card text always used;
+            # the new modes pass their measured sentence from the big-coder
+            # module, which is where their measurement lives.
+            words = (POOLED_MEASURED_WORDS if want == "coding"
+                     else str(m.measured_words))
+            return {"key": str(m.key), "label": str(m.label),
+                    "model": str(m.model), "num_ctx": int(m.num_ctx),
+                    "measured_words": words,
+                    "spill_allowance": int(m.spill_allowance),
+                    "needs_cards": int(m.needs_cards)}
+    if want == "coding":
+        return {"key": "coding", "label": "Coding", "model": POOLED_MODEL,
+                "num_ctx": POOLED_CTX,
+                "measured_words": POOLED_MEASURED_WORDS,
+                "spill_allowance": POOLED_SPILL_ALLOWANCE,
+                "needs_cards": 3}
+    raise ValueError(f"{mode!r} is not one of the pooled modes: "
+                     + ", ".join(str(getattr(m, "key", "")) for m in modes)
+                     + ("the coding lane only" if not modes else ""))
+
+
+def pooled_mode_now(*, engine=None) -> Optional[str]:
+    """Which pooled mode the server holds right now, or None. Read-only."""
+    state = pooled_state(engine=engine)
+    return state.get("mode") if state.get("row") is not None else None
+
+
+def pooled_state(*, engine=None, mode: Optional[str] = None) -> dict:
     """What the pooled lane holds RIGHT NOW. Read-only, never raises.
 
     `answering` is False when nothing answers on the port (which is not the
     same as "nothing is loaded" - it means this process cannot tell), and
     `row` is the model's own `/api/ps` row when it is loaded. The same
     evidence-first rule as `jarvis_big_coder.running()`: only `/api/ps` decides
-    whether the lane is up.
+    whether the lane is up. `mode`, `model` and `context_length` say WHICH
+    pooled mode is loaded, so a caller cannot mistake the deep-think model for
+    the coding one.
     """
     eng = _engine(engine)
     url = pooled_url()
     rows = eng.ps(url)
+    profile = pooled_profile(mode, engine=eng) if mode is not None else None
     if rows is None:
         return {"url": url, "answering": False, "loaded": [], "row": None,
-                "spill": None, "context_length": None}
-    row = eng.loaded_row(rows, POOLED_MODEL)
+                "spill": None, "context_length": None, "mode": None,
+                "model": None}
+    wanted = [profile["model"]] if profile else [
+        str(getattr(m, "model", "")) for m in
+        (getattr(eng, "MODES", ()) or ())]
+    wanted.append(POOLED_MODEL)
+    row, model = None, None
+    for name in wanted:
+        if not name:
+            continue
+        row = eng.loaded_row(rows, name)
+        if row is not None:
+            model = name
+            break
+    found_mode = None
+    for m in list(getattr(eng, "MODES", ()) or ()):
+        if _same_model(getattr(m, "model", ""), model):
+            found_mode = str(getattr(m, "key", ""))
+            break
     return {
         "url": url,
         "answering": True,
@@ -388,6 +471,8 @@ def pooled_state(*, engine=None) -> dict:
         "row": row,
         "spill": eng.spill_bytes(row) if row is not None else None,
         "context_length": (row or {}).get("context_length"),
+        "mode": found_mode,
+        "model": model,
     }
 
 
@@ -444,46 +529,62 @@ def _publish_pooled(data: dict) -> None:
         pass
 
 
-def pooled_card_text(*, engine=None) -> str:
+def pooled_card_text(*, mode: str = "coding", engine=None) -> str:
     """The card the owner reads before anything is unloaded, in plain words.
 
     The pause half is `jarvis_big_coder.card_text_start()`'s own words - the
     same model, the same cards, the same two lane models and contexts - because
     it is the same pause, and two descriptions of one action would drift. What
-    this lane passes it is what is THIS lane's own measurement: the window it
-    asks for and the spill that measurement saw, so the card describes the load
-    that will really happen (49,152 tokens, zero CPU spill on all three cards,
-    83.8 tokens a second, 2026-11-07). The last line is this lane's own: what
-    changes about chat.
+    this lane passes it is what is THIS mode's own measurement: the window it
+    asks for and the words for that measurement, so the card describes the load
+    that will really happen. The last line is this lane's own: what changes
+    about chat.
     """
     eng = _engine(engine)
-    measured = ("the largest window measured on this PC with all three cards, "
-                "with zero CPU spill")
-    return (eng.card_text_start(num_ctx=POOLED_CTX, measured_words=measured)
+    profile = pooled_profile(mode, engine=eng)
+    measured = (POOLED_MEASURED_WORDS if profile["key"] == "coding"
+                else profile["measured_words"])
+    return (eng.card_text_start(num_ctx=profile["num_ctx"],
+                                measured_words=measured,
+                                mode=profile["key"])
             + "\n\nWhile it runs, chat uses it. Applying another preset, or "
               "stopping it, unloads it and puts both models back exactly as "
               "they were.")
 
 
 def start_pooled_lane(*, gate=None, engine=None, by: str = "",
-                      tasks=None) -> tuple:
-    """Start the ONE both-card lane for the Coding preset. `(status, body)`.
+                      tasks=None, mode: str = "coding") -> tuple:
+    """Start the ONE three-card lane for a heavy preset. `(status, body)`.
 
-    The card, the pause, the load and every restore are described in this
-    section's own comment. The seams exist so the whole order can be proved
-    without a graphics card: `gate` is the approval, `engine` is
-    `jarvis_big_coder` (a fake in the suites), and `tasks` says whether a
-    multi-step job is running.
+    `mode` chooses which pooled mode the lane carries: `coding` (the shipped
+    default, unchanged), `deep_think` (`gemma4:31b-it-qat`) or `creative`
+    (`orcarouter/Qwen3.8-27B-Uncensored:q4_K_M`). The card, the pause, the load
+    and every restore are described in this section's own comment. The seams
+    exist so the whole order can be proved without a graphics card: `gate` is
+    the approval, `engine` is `jarvis_big_coder` (a fake in the suites), and
+    `tasks` says whether a multi-step job is running.
     """
     eng = _engine(engine)
-    state = pooled_state(engine=eng)
+    try:
+        profile = pooled_profile(mode, engine=eng)
+    except ValueError as exc:
+        return 400, {"ok": False, "changed": False, "running": False,
+                     "lane": POOLED_KEY, "error": str(exc)}
+    state = pooled_state(engine=eng, mode=profile["key"])
     if state["row"] is not None:
+        if profile["key"] == "coding":
+            message = ("The pooled three-card lane is already holding the coding "
+                       "model, so nothing was started and nothing was paused.")
+        else:
+            message = (f"The pooled three-card lane is already holding the "
+                       f"{profile['label'].lower()} model, so nothing was "
+                       f"started and nothing was paused.")
         return 200, {
             "ok": True, "changed": False, "running": True, "lane": POOLED_KEY,
-            "url": state["url"], "model": POOLED_MODEL,
-            "num_ctx": state["context_length"] or POOLED_CTX,
-            "message": ("The pooled three-card lane is already holding the coding "
-                        "model, so nothing was started and nothing was paused."),
+            "mode": profile["key"], "url": state["url"],
+            "model": profile["model"],
+            "num_ctx": state["context_length"] or profile["num_ctx"],
+            "message": message,
         }
 
     live = (tasks or _running_tasks)()
@@ -495,10 +596,10 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
                       "was loaded"),
         }
 
-    words = pooled_card_text(engine=eng)
+    words = pooled_card_text(mode=profile["key"], engine=eng)
     verdict = (gate or _pooled_gate)(
         "switch_model",
-        {"from": _current_model(), "to": POOLED_MODEL, "why": "preset"},
+        {"from": _current_model(), "to": profile["model"], "why": "preset"},
         prompt=words)
     if not getattr(verdict, "allowed", False):
         return 200, {
@@ -530,10 +631,11 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
             out["error"] = out["error"] + " " + back["why"]
         return 409, out
 
-    loaded = eng.load_coder(port=port, num_ctx=POOLED_CTX,
-                            allow_spill=POOLED_SPILL_ALLOWANCE)
+    loaded = eng.load_coder(port=port, num_ctx=profile["num_ctx"],
+                            allow_spill=profile["spill_allowance"],
+                            mode=profile["key"])
     if not loaded["ok"]:
-        eng.unload_coder(port=port)
+        eng.unload_coder(port=port, mode=profile["key"])
         back = eng.restore_lanes()
         eng.server_stop()
         error = loaded["why"]
@@ -547,29 +649,40 @@ def start_pooled_lane(*, gate=None, engine=None, by: str = "",
         _POOLED.clear()
         _POOLED.update({"url": srv.get("url") or pooled_url(),
                         "port": port, "since": time.time(),
-                        "by": by or "an app",
+                        "by": by or "an app", "mode": profile["key"],
+                        "model": profile["model"],
+                        "num_ctx": profile["num_ctx"],
                         "owned": bool(srv.get("owned")),
                         "proof": list(paused["proof"]) + list(loaded["proof"])})
-    _publish_pooled({"state": "running", "model": POOLED_MODEL, "num_ctx": POOLED_CTX})
+    _publish_pooled({"state": "running", "mode": profile["key"],
+                     "model": profile["model"],
+                     "num_ctx": profile["num_ctx"]})
+    what = "coding" if profile["key"] == "coding" else profile["label"].lower()
     return 200, {
         "ok": True, "changed": True, "running": True, "lane": POOLED_KEY,
-        "url": srv.get("url") or pooled_url(), "model": POOLED_MODEL,
-        "num_ctx": POOLED_CTX,
-        "message": (f"The coding model is running across all three cards at "
-                    f"{POOLED_CTX:,} tokens. The two lane models are paused and "
-                    f"come back when you stop it or apply another preset."),
+        "mode": profile["key"],
+        "url": srv.get("url") or pooled_url(), "model": profile["model"],
+        "num_ctx": profile["num_ctx"],
+        "message": (f"The {what} model is running across all three cards at "
+                    f"{profile['num_ctx']:,} tokens. The two lane models are "
+                    f"paused and come back when you stop it or apply another "
+                    f"preset."),
         "paused": paused["proof"], "proof": loaded["proof"],
     }
 
 
-def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True) -> tuple:
+def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True,
+                     mode: Optional[str] = None) -> tuple:
     """End the pooled lane: unload it, stop the server it started, put both
     lanes back exactly as they were. `(status, body)`; no card.
 
-    Safe to call when nothing is running (it still puts the lanes back, which
-    is the state the caller wants), and it never kills a process it did not
-    start: an Ollama already answering on the port is left alone, and only its
-    model is unloaded - which is what frees the cards.
+    `mode` is optional: when omitted the lane unloads WHATEVER pooled mode the
+    server is holding right now (read from `/api/ps`), so stopping after a
+    deep-think or creative session does not leave its model resident. Safe to
+    call when nothing is running (it still puts the lanes back, which is the
+    state the caller wants), and it never kills a process it did not start: an
+    Ollama already answering on the port is left alone, and only its model is
+    unloaded - which is what frees the cards.
 
     `restore=False` skips putting the two lane models back, and that is for
     STANDBY (`sleep()` below), not a shortcut: standby exists to empty the
@@ -578,8 +691,20 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True) -> tupl
     lanes back and keeps the default.
     """
     eng = _engine(engine)
-    was_running = pooled_running(engine=eng)
-    gone = eng.unload_coder(port=POOLED_PORT)
+    # ONE read of /api/ps decides everything below: whether anything is loaded,
+    # which mode it is, and the exact model name to unload. Three reads would
+    # be three chances for the server to answer differently in between.
+    held_state = pooled_state(engine=eng)
+    current = held_state.get("mode")
+    loaded_model = held_state.get("model")
+    try:
+        profile = pooled_profile(mode or current or "coding", engine=eng)
+    except ValueError as exc:
+        return 400, {"ok": False, "changed": False, "running": False,
+                     "lane": POOLED_KEY, "error": str(exc)}
+    was_running = held_state.get("row") is not None
+    gone = eng.unload_coder(port=POOLED_PORT, mode=profile["key"],
+                            model=(loaded_model if loaded_model else None))
     eng.server_stop()
     if restore:
         back = eng.restore_lanes()
@@ -590,20 +715,22 @@ def stop_pooled_lane(*, engine=None, by: str = "", restore: bool = True) -> tupl
     with _POOLED_LOCK:
         held = dict(_POOLED)
         _POOLED.clear()
-    _publish_pooled({"state": "stopped"})
+    _publish_pooled({"state": "stopped", "mode": profile["key"]})
     if not gone["ok"] or not back["ok"]:
         error = "; ".join(x for x in (gone["why"], back["why"]) if x)
         return 503, {"ok": False, "changed": was_running, "running": False,
                      "lane": POOLED_KEY, "error": error,
                      "unloaded": gone["proof"], "restored": back["proof"]}
-    message = ("The coding model is stopped, the three-card server this "
-               "app started is stopped, and both lane models are back: "
+    what = "coding" if profile["key"] == "coding" else profile["label"].lower()
+    message = (f"The {what} model is stopped, the three-card server this "
+               f"app started is stopped, and both lane models are back: "
                + "; ".join(eng.lane_lines())) if restore else (
-        "The coding model is stopped and the three-card server this app "
+        f"The {what} model is stopped and the three-card server this app "
         "started is stopped; the two lane models were left stopped, because "
         "the cards are being freed.")
     return 200, {
         "ok": True, "changed": was_running, "running": False, "lane": POOLED_KEY,
+        "mode": profile["key"],
         "message": message,
         "unloaded": gone["proof"], "restored": back["proof"],
         "since": held.get("since"), "by": held.get("by"),

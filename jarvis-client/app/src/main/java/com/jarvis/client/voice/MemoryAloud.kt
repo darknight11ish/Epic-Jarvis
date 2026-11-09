@@ -38,31 +38,36 @@ object MemoryAloud {
     const val NAME = "Read out answers that use what Jarvis remembers"
 
     /**
-     * The line under the switch, in its two states. The OFF sentence says
-     * "Off by default", because that is the owner's own framing of this
-     * setting: a choice he makes, not a behaviour he is given.
+     * The line under the switch, in its two states. ON is the default since the
+     * owner's decision of 2026-11-07 ("i wanted to read everything out loud ...
+     * unless it's extremely sensitive information it's okay"), and it covers
+     * every voice answer on this phone - the mic press, "hey Jarvis" and Jarvis
+     * Live. A TYPED answer is silent unless he taps Read aloud, and an extremely
+     * sensitive saved fact always stays on screen.
      */
     fun describe(on: Boolean): String = if (on) {
-        "On, on this phone: when you press the mic while it is unlocked, an answer that " +
-            "uses what Jarvis remembers is read out. The same goes for a typed answer when " +
-            "you tap Read aloud on this unlocked phone. A sensitive saved fact and a private " +
-            "tool still stay on your screen; an answer about your screen is read out only " +
-            "when you tap Read it aloud anyway."
+        "On by default, on this phone. A voice answer that uses what Jarvis remembers is " +
+            "read out - the mic, \"hey Jarvis\" and Jarvis Live. A typed answer is read " +
+            "only when you tap Read aloud. An extremely sensitive saved fact (health, " +
+            "money, passwords, other people's private details), a private tool and an " +
+            "answer about your screen still always stay on your screen."
     } else {
-        "Off by default: an answer that uses what Jarvis remembers stays on your screen, and " +
-            "says so. Turning it on covers the mic and the Read aloud control on this phone " +
-            "while it is unlocked - not \"hey Jarvis\", and not Jarvis Live. A sensitive saved " +
-            "fact and a private tool still stay on your screen."
+        "Off: an answer that uses what Jarvis remembers stays on your screen, and says so. " +
+            "Say \"read everything out loud\" in the chat to turn it back on, or use the " +
+            "button below. An extremely sensitive saved fact and a private tool still stay " +
+            "on your screen."
     }
 
     /**
-     * The one line that says whose setting this is. Two apps, two switches:
-     * the PC's own `memory_aloud` still decides what the PC reads, and this
-     * row changes nothing there.
+     * The one line that says whose setting this is. The PC's own `memory_aloud`
+     * still decides what the PC reads (and the PC has its own automatic
+     * read-aloud switch); this row changes nothing there.
      */
     const val NOTE =
-        "This phone's own setting, for its mic and its Read aloud control. Your PC has its " +
-            "own rule for what it reads out, and turning this on changes nothing on the PC."
+        "This phone's own setting, for its voice answers and its Read aloud controls. " +
+            "Your PC has its own rule for what it reads out, and turning this on changes " +
+            "nothing on the PC. The chat can change it too: say \"stop reading remembered " +
+            "answers out loud\" or \"read everything out loud\"."
 
     /** The button that turns it on. */
     const val TURN_ON = "Read them out"

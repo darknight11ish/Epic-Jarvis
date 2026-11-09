@@ -194,10 +194,17 @@ def t_every_tool_can_be_changed_discussed_and_read():
 
 
 def t_presets_and_models():
-    presets = P.presets() if hasattr(P, "presets") else []
+    # `jarvis_presets` exposes its rows as the module constant PRESETS (the
+    # tuple `/api/presets` renders through P.view()); it has no presets()
+    # helper. Asking for one made this loop iterate ZERO rows and pass
+    # trivially, and made the live "what can you change?" say "0 presets"
+    # (Wave-8.2 deploy finding 1, 2026-11-07). It reads the real collection now.
+    presets = list(getattr(P, "PRESETS", ()) or ())
     problems = []
+    if len(presets) < 9:
+        problems.append(("the preset collection is short", len(presets)))
     for row in presets:
-        title = str((row.get("title") if isinstance(row, dict) else "") or "").lower()
+        title = str(getattr(row, "title", "") or "").lower()
         changed = [n for n in ("use the " + title + " preset",
                                "switch to the " + title + " preset")
                    if _intent(n) in CHANGE_SET]
@@ -237,11 +244,21 @@ def t_awareness_answers_read_locally():
           and str(len(R.tool_targets())) in inv.reply,
           None if inv is None else inv.reply[:200])
     chg = _ran("what can you change?", sched)
+    # Wave-8.2 deploy finding 1 (2026-11-07): the live answer said "switch
+    # between 0 presets" because the code asked for a `P.presets()` helper the
+    # module does not have. It must report the REAL collection - at least 9 rows,
+    # and the exact number /api/presets serves.
+    real_presets = len(getattr(P, "PRESETS", ()) or ())
     check("the changeable overview names the settings and tools it can change",
           chg is not None and chg.intent == "changeable_overview"
           and "settings" in chg.reply and "tools" in chg.reply
           and "card" in chg.reply,
           None if chg is None else chg.reply[:200])
+    check("... and reports the real preset count, never 0 (finding 1)",
+          chg is not None and real_presets >= 9
+          and f"between {real_presets} presets" in chg.reply
+          and "0 presets" not in chg.reply,
+          None if chg is None else (real_presets, chg.reply[:240]))
     changes = _ran("what changed about you?", sched)
     check("the change journal answers (empty honestly at first)",
           changes is not None and changes.intent == "self_changes"
@@ -265,8 +282,18 @@ def t_awareness_answers_read_locally():
     # The older explain door keeps a sentence it can answer; either it or the
     # new page-row answer is a deterministic, page-worded answer.
     check("a desktop Settings-page row answers by the words on the page",
-          row is not None and row.intent in READ_SET and len(row.reply) > 40,
+          row is not None and row.intent in ("feature_explain", "desktop_row_info")
+          and len(row.reply) > 40,
           None if row is None else (row.intent, row.reply[:120]))
+    # Wave-9 finding 4 (2026-11-07): the prompt-coach sentence belongs to
+    # `feature_explain` on purpose, so the desktop-row door needs a sentence
+    # that is really a Settings PAGE row and nothing else. This one is the
+    # sentence the live verification uses, so both measure the same door.
+    page_row = _ran("what does the morning briefing setting do?", sched)
+    check("... and a page-only row reaches desktop_row_info by its page words",
+          page_row is not None and page_row.intent == "desktop_row_info"
+          and "morning briefing" in page_row.reply.lower(),
+          None if page_row is None else (page_row.intent, page_row.reply[:160]))
     named = _ran("what is saving facts in jarvis's own words set to?", sched)
     check("a named setting reads its current value from the registry",
           named is not None and named.intent == "setting_named_read"

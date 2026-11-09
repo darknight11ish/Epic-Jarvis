@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **55 drop-in modules**, in [`ready/`](ready/) -
+- **56 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **29** replace a patch, and are generated from it;
-  - **26** replace no patch: they were born as folders, and
+  - **27** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **148 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -57,7 +57,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 26 were never patches. There is nothing in the core
+These 27 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -82,6 +82,7 @@ it is one `apply-patches.ps1` copies in.
 | 163 | `habits` | habit check-ins: a repeating thing the owner wants to do - walk, stretch, practise - with one tap recording that it happened that day, and no score, streak, percentage or chart of judgement anywhere in it. |
 | 164 | `mood` | the owner's own mood log: one 1-5 tap a day with optional words, kept on this PC, never learned, never sent anywhere, and never turned into a score or a judgement. |
 | 165 | `self-portrait` | what Jarvis is made of on this PC: every place it can open (imported from the Settings and menu registries), every setting with its live on/off value, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only, never a secret, a path or a word of chat. |
+| 166 | `read-aloud` | the automatic read-aloud switch: GET/POST /api/read-aloud, so the Settings switch, the HUD page and chat/Live read and change the one value - ON by default, OFF at once, and a model answer can never toggle it. |
 | 168 | `android-builder` | Build the Android app in one of your app tasks with Gradle, and put it on your phone over the cable: one approval card for the build and one for the install. The card for the build names the exact command and says that a first build downloads Gradle and the Android Gradle plugin. |
 | 169 | `notes-edit` | browse, open and edit any note in your Obsidian vault, from the desktop or the phone: one approval card per save, a File Guardian copy first, and the sha256 the edit started from so two editors cannot clobber each other. |
 | 171 | `protected-items` | a list of folders, files and programs Jarvis may not touch: Blocked (no access) or Read-only (reads allowed, every write/action refused); one card for a chat add and one for every removal, and a Settings add that is the owner's own direct act. |

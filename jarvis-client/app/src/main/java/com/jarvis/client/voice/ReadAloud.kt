@@ -118,6 +118,16 @@ object ReadAloud {
     const val OFFLINE = "Not connected, so that answer cannot be read aloud just now."
 
     /**
+     * Refusal for an answer older than this app run (2026-11-07): the phone only
+     * keeps each finished answer's privacy facts while the app is running, so
+     * an answer from before it started cannot be checked - and an answer that
+     * cannot be checked is never spoken. Said plainly instead of guessing.
+     */
+    const val OLD_ANSWER =
+        "I can only read answers aloud from this time the app is open - this one is older, " +
+            "so I cannot check whether it is safe to hear. Tap Read aloud on a new answer."
+
+    /**
      * At most this many sentences per answer: every sentence is one round trip
      * to `/api/voice/say`, so a long answer is capped rather than turned into
      * hundreds of requests. One named constant so the HUD read-aloud slice

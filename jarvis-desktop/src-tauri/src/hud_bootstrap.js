@@ -1243,11 +1243,17 @@
    *     mark; pressing the one already on takes it back. A backend without the
    *     route answers 404/503, `mark_answer` says `available: false`, and the
    *     menu removes itself, quietly. A mark changes no memory; it only counts.
-   *   - Read out loud: clicks the page's OWN `.speak-answer` button when it
-   *     exists - the one voice path the page's automatic read-aloud uses (the
-   *     same voice, rate, pitch and the shell's local-voices-only rule), which
-   *     exists only when the owner's read-aloud setting and the page's privacy
-   *     rule allow it. This file creates no second speaker.
+   *     The item now says "Marked." (or "Cleared.") in place for a moment, so
+   *     the owner sees the answer was recorded - an owner's ask of 2026-11-07,
+   *     the same shape Copy answer has always had.
+   *   - Read out loud: ALWAYS shown for every finished answer (the owner's ask
+   *     of 2026-11-07). It clicks the page's OWN `.speak-answer` button when it
+   *     exists - the one voice path the page uses for a tapped answer, with its
+   *     privacy check - and otherwise asks the page's own `__jarvisReadAnswer`
+   *     hook, which asks the SAME `private-speech.js` rule for THAT answer
+   *     before it speaks one word. An answer that must stay on screen is never
+   *     read: the item's receipt is the rule's own line ("It's on your
+   *     screen."). The receipt is "Reading." while it starts, like "Copied.".
    *   - Copy answer: the answer's own words, through the clipboard; the item
    *     says "Copied." in place, never a toast.
    *
@@ -1415,11 +1421,29 @@
       return button;
     }
 
-    /** What the menu shows right now: the answer exists, the page's real
-     *  speaker exists, and one mark at most. Called on every open. */
+    /** One item's own in-place receipt: "Copied."/"Marked."/"Reading." for a
+     *  moment, then its label back. The owner's ask of 2026-11-07 - the same
+     *  shape Copy answer has always had, so a tap visibly did something even
+     *  when the action itself is silent. Never a toast, never a new element. */
+    var receiptTimer = null;
+    function receipt(button, text) {
+      if (!button) return;
+      if (button.dataset.receiptLabel === undefined) {
+        button.dataset.receiptLabel = button.textContent;
+      }
+      button.textContent = text;
+      if (receiptTimer) clearTimeout(receiptTimer);
+      receiptTimer = setTimeout(function () {
+        button.textContent = button.dataset.receiptLabel;
+      }, 1400);
+    }
+
+    /** What the menu shows right now: the answer exists, and one mark at most.
+     *  "Read out loud" is ALWAYS there for a finished answer (owner's ask of
+     *  2026-11-07); whether it may actually speak is the page's privacy rule,
+     *  asked at the tap, and the item's receipt says so when it refuses. */
     tools.refresh = function () {
-      var speaker = msg.querySelector ? msg.querySelector(".speak-answer") : null;
-      if (readItem) readItem.hidden = !(speaker && answer);
+      if (readItem) readItem.hidden = !answer;
       if (copyItem) copyItem.hidden = !answer;
     };
 
@@ -1440,6 +1464,10 @@
             return;
           }
           current = next;
+          // The visible receipt (owner's ask of 2026-11-07): the mark was
+          // recorded, or taken back. Painting the same item keeps it one menu.
+          receipt(next === "none" ? wrong : (next === "right" ? right : wrong),
+                  next === "none" ? "Cleared." : "Marked.");
         })
         .catch(function () { /* leave it as it was */ })
         .then(function () {
@@ -1455,28 +1483,43 @@
     menu.appendChild(q);
     var right = item("Right", function () { send("right"); }, "menuitemradio");
     var wrong = item("Wrong", function () { send("wrong"); }, "menuitemradio");
-    readItem = item("Read out loud", function () {
+    readItem = item("Read out loud", function (button) {
+      // 1. The page's own speaker, when it exists: exactly the voice path the
+      //    owner's speaker switch draws, with the page's own privacy check.
       var speaker = msg.querySelector ? msg.querySelector(".speak-answer") : null;
-      if (!speaker) return;
-      speaker.click();
-      closeAnswerMenu(true);
+      if (speaker) {
+        speaker.click();
+        receipt(button, "Reading.");
+        return;
+      }
+      // 2. No speaker (the speaker switch is off, or the answer arrived before
+      //    it was drawn): ask the page for THIS answer's words. The page asks
+      //    private-speech.js for THIS answer before it speaks, and refuses in
+      //    words - the item shows that sentence instead of reading anything.
+      var hook = window.__jarvisReadAnswer;
+      if (typeof hook !== "function") {
+        receipt(button, "Could not read it.");
+        return;
+      }
+      Promise.resolve(hook(msg)).then(function (result) {
+        receipt(button, (result && result.why) || "Could not read it.");
+      }).catch(function () {
+        receipt(button, "Could not read it.");
+      });
     });
     copyItem = item("Copy answer", function (button) {
       if (!answer) return;
-      function done() {
-        button.textContent = "Copied.";
-        setTimeout(function () { button.textContent = "Copy answer"; }, 1400);
-      }
+      function done() { receipt(button, "Copied."); }
       try {
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(answer).then(done, function () {
-            button.textContent = "Could not copy.";
+            receipt(button, "Could not copy.");
           });
         } else {
-          button.textContent = "Could not copy.";
+          receipt(button, "Could not copy.");
         }
       } catch (err) {
-        button.textContent = "Could not copy.";
+        receipt(button, "Could not copy.");
       }
     });
     paintMarks();
@@ -2348,6 +2391,42 @@
     var named = place === "history" || place === "tutorials" ? place : "brain";
     var p = navInvoke("open_fix_place", { place: named });
     if (p && p.catch) p.catch(function () {});
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The Brain WINDOW's two doors in this page (owner's Q5 ruling, 2026-11-07)
+   *
+   * BOTH the HUD's top menu bar word (#stage-brain-window) and its left column
+   * rail button (#rail-brain-window) call THIS one opener, which is the door
+   * the shell already has: `open_fix_place {place: "brain"}`, the same command
+   * the tray's "Open the Brain" row and a chat answer's open_brain route use.
+   * There is no second window and no new command.
+   *
+   * They are page markup, hidden in a plain browser (no shell, no command),
+   * and revealed here only when the shell exists - the same rule as
+   * #rail-faces and #rail-live. Nothing is removed: the rail's own "Brain"
+   * VIEW (data-view="brain", the Galaxy map) keeps its id and its behaviour,
+   * and relabelBrainTab above already renamed its visible label to "Galaxy",
+   * so the word "Brain" in this HUD now means exactly one thing.
+   * ---------------------------------------------------------------- */
+  function openBrainWindowFromHud(event) {
+    if (event && event.preventDefault) event.preventDefault();
+    openBrainAt("brain");
+  }
+
+  function wireBrainWindowDoors() {
+    var ids = ["rail-brain-window", "stage-brain-window"];
+    for (var i = 0; i < ids.length; i++) {
+      var el = document.getElementById(ids[i]);
+      if (!el) continue;
+      el.hidden = false;
+      el.addEventListener("click", openBrainWindowFromHud);
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", wireBrainWindowDoors, { once: true });
+  } else {
+    wireBrainWindowDoors();
   }
 
   /** The areas this PAGE can switch: the ones the Rust table can send as a

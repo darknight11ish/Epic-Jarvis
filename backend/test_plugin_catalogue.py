@@ -128,6 +128,11 @@ NO_PATCH = {
     # drop-in loader, so the folder is the whole of its wiring and no patch is
     # added to `jarvis_hud.py`.
     "upload",
+    # The automatic read-aloud switch (2026-11-07, jarvis_read_aloud.py): its
+    # GET/POST /api/read-aloud routes come from its own install(), called by the
+    # drop-in loader, so the folder is the whole of its wiring and no patch is
+    # added to `jarvis_hud.py`.
+    "read-aloud",
 }
 
 
@@ -184,7 +189,7 @@ def t_every_ready_folder_is_in_the_catalogue():
           f"listed={len(listed)} folder_count={data['folder_count']}")
     check("catalogue: nothing is unaccounted",
           not data["unaccounted"], str(data["unaccounted"]))
-    check("catalogue: the ten no-patch drop-ins are the audited ones",
+    check("catalogue: the no-patch drop-ins are the audited ones",
           {f["name"] for f in data["folders"]} == NO_PATCH,
           f"got {sorted(f['name'] for f in data['folders'])}")
     check("catalogue: every no-patch row is complete",

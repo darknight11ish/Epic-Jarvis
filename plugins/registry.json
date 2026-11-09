@@ -7,8 +7,8 @@
     "core": 148,
     "missing": 0
   },
-  "folder_count": 26,
-  "ready_count": 55,
+  "folder_count": 27,
+  "ready_count": 56,
   "folders": [
     {
       "name": "skill-hub",
@@ -136,6 +136,14 @@
       "install": "handler",
       "stack_order": 165,
       "summary": "what Jarvis is made of on this PC: every place it can open (imported from the Settings and menu registries), every setting with its live on/off value, what asks first, its abilities, its drop-in plugins, its stores' counts and the installer's recorded identity - fixed registry data and live state only, never a secret, a path or a word of chat.",
+      "why": "born as a folder: it replaces no patch"
+    },
+    {
+      "name": "read-aloud",
+      "module": "jarvis_read_aloud",
+      "install": "handler",
+      "stack_order": 166,
+      "summary": "the automatic read-aloud switch: GET/POST /api/read-aloud, so the Settings switch, the HUD page and chat/Live read and change the one value - ON by default, OFF at once, and a model answer can never toggle it.",
       "why": "born as a folder: it replaces no patch"
     },
     {

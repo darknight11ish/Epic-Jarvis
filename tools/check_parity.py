@@ -168,6 +168,15 @@ CLASSIFICATION = {
     "/api/connect-account/pending": ("deliberate", "The connect-account card is PC-only: the owner types the token, private link or password into the PC's own card and it goes straight into this PC's Credential Manager. A phone-side card would have to send the value over the network to reach that store (ARCHITECTURE section 8, JARVIS-API section 161)."),
     "/api/connect-account/save": ("deliberate", "Saving a connect-account card is PC-only: the values are saved into Windows Credential Manager on this PC, and there is no route by which a phone may send a credential (rule 3, JARVIS-API section 161)."),
     "/api/connect-account/cancel": ("deliberate", "Cancelling the connect-account card is PC-only, like the card itself: it exists only in the desktop HUD (ARCHITECTURE section 8)."),
+    # The automatic read-aloud switch (2026-11-07, the owner's read-aloud
+    # control): PC-only. It gates the DESKTOP HUD's own speech for voice-turn
+    # answers (the HUD quickbar and Settings switch). The phone has its own
+    # on-device switch for remembered answers (MemoryAloud + its per-answer
+    # Read out loud in the message menu) and never calls this route, so the two
+    # apps cannot disagree about a switch that only exists to control the PC's
+    # speakers. Backend: jarvis_read_aloud.py, installed by the read-aloud
+    # ready plug-in; desktop: src/read-aloud.js + src-tauri/src/read_aloud.rs.
+    "/api/read-aloud": ("deliberate", "The automatic read-aloud switch controls the DESKTOP HUD's own speakers for voice-turn answers; it is PC-only. The phone has its own on-device switch for remembered answers (MemoryAloud) and its own per-answer Read out loud action, and never calls this route, so no phone change can silence or unmute the PC by accident (ARCHITECTURE section 8, JARVIS-API read-aloud section)."),
 
     "/api/appearance": ("ported", ""),
     # Send ONE file from the PC to the phone (2026-10-31, the owner's ask;

@@ -133,7 +133,7 @@ check("the dock's new icon is the left-column door, after the five sections", ()
     "the icon became a sixth section tab - it opens a menu, not a panel");
 });
 
-check("the stage words read Galaxy, Approvals, Reminders, Memory, Telemetry, Galaxy options, Presets", () => {
+check("the stage words read Galaxy, Approvals, Reminders, Memory, Telemetry, Galaxy options, Presets, Brain", () => {
   const tabs = between(HUD, 'id="stage-tabs"', "</div>", 3000);
   const tabWords = [...tabs.matchAll(/data-hud-tab-choice="([a-z]+)"[^>]*>([^<]+)<\/button>/g)]
     .map((m) => m[2].trim());
@@ -142,8 +142,11 @@ check("the stage words read Galaxy, Approvals, Reminders, Memory, Telemetry, Gal
   const words = between(HUD, 'id="stage-words"', "</div>", 1200);
   const wordsList = [...words.matchAll(/<button\b[^>]*>([^<]+)<\/button>/g)]
     .map((m) => m[1].trim());
-  assert.deepEqual(wordsList, ["Galaxy options", "Presets"],
-    "the words row does not end with Galaxy options, then Presets, in that order");
+  // "Brain" is the Wave-9 owner-asked window door (2026-11-07, Q5: both the
+  // stage words and the left column); it is not a sixth stage tab, so it comes
+  // after the five tabs' words and the two Galaxy words.
+  assert.deepEqual(wordsList, ["Galaxy options", "Presets", "Brain"],
+    "the words row does not end with Galaxy options, Presets, Brain, in that order");
   assert.ok(HUD.indexOf('id="stage-words"') > HUD.indexOf('data-hud-tab-choice="telemetry"'),
     "the words do not sit after the Telemetry tab");
   assert.match(words, /id="stage-galaxy-options"/, "the Galaxy options word is gone");

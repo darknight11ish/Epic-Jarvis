@@ -437,6 +437,16 @@ SHIPPED = (
     # install(), called by plugins/ready/antislop - no patch of its own. A
     # cardless preference either way, like the prompt coach.
     "jarvis_antislop.py",
+    # The automatic read-aloud switch (2026-11-07): ON by default, so the big
+    # HUD window reads finished answers aloud exactly as before; OFF at once,
+    # by the Settings switch or by saying "stop reading your replies out loud"
+    # in chat or Jarvis Live. GET/POST /api/read-aloud come from its own
+    # install(), called by plugins/ready/read-aloud - no patch of its own. No
+    # card either way: OFF removes speech and ON restores the shipped default,
+    # and the private-speech rule still keeps a private answer on screen. A
+    # model answer can never toggle it: there is no model tool and no route the
+    # model reaches.
+    "jarvis_read_aloud.py",
     # The Jarvis-owned local calendar (2026-10-29): the owner's own events in
     # `calendar.db`, ON when no settings file says otherwise, OFF keeps every
     # row. GET /api/calendar and the three writes come from its own install(),
@@ -1706,6 +1716,15 @@ SHIPPED = (
     # They sit BEFORE jarvis_bench.py, which stays LAST.
     "jarvis_self_code.py",
     "jarvis-self-code.json",
+    # The hardware-aware model recommender (jarvis_model_recommender.py,
+    # 2026-11-07, Wave-9 Lane 3; the owner's Q6 ruling): "what model should
+    # THIS PC run?" for ANY PC, from the detected cards/VRAM/RAM and this PC's
+    # own scorecard store, every row labelled MEASURED ON THIS PC or ESTIMATED
+    # FIT (run benchmark to verify). Read-only: loads no model, starts no
+    # server, writes no file, raises no card. Its deterministic chat hook is
+    # `jarvis_model_recommender.chat_hook(question, *, hardware=None,
+    # scores=None) -> Optional[str]`, for jarvis_quick to wire.
+    "jarvis_model_recommender.py",
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04;
     # the owner's own request: measure Jarvis's own token speed across the
     # local models, the layer placement and the context sizes, keep a separate

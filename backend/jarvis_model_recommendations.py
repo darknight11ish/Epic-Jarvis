@@ -220,6 +220,114 @@ DESKTOP_ONLY_REFUSAL = (
 FIT_ROOM = 0.85
 FIT_TIGHT = 1.0
 
+#: The capability tags the owner chose for the Brain's model filter bar (Q4,
+#: 2026-11-07). ONE fixed vocabulary, in one order; a candidate carries only the
+#: tags its own catalogue row's words really support. This is a filter's
+#: vocabulary, not a quality claim: a tag says what a model can do, never how
+#: well it does it, and nothing here promotes a candidate.
+CAPABILITY_KEYS = ("vision", "tools", "coding", "reasoning", "uncensored")
+
+#: Whole words that make a catalogue row carry one capability tag. Matched
+#: against the row's own tags, ref and family - the same catalogue text the
+#: licence is read from - so a tag is never guessed at. "code" is a whole word,
+#: so "encoder" cannot produce the coding tag.
+_CAPABILITY_WORDS = {
+    "vision": ("vision", "image", "multimodal", "vlm", "vl", "ocr", "llava"),
+    "tools": ("tool", "tools", "agentic", "function"),
+    "coding": ("code", "coder", "coding", "codestral", "starcoder", "devstral"),
+    "reasoning": ("reason", "reasoning", "think", "thinking", "qwq", "r1"),
+    "uncensored": ("uncensored", "abliterated", "unaligned", "dolphin"),
+}
+
+#: Catalogue keys that can carry a release/update moment, newest first. The
+#: public listing does not always carry one; `released_at` is then null and the
+#: Brain's "Newest" sort puts that row last rather than invent a date.
+_DATE_KEYS = ("released_at", "released", "updated_at", "last_modified",
+              "created_at")
+
+
+def _capabilities(d: dict) -> list:
+    """The owner's capability tags a catalogue row really carries.
+
+    Read from the row's OWN tags/ref/family text, matched on whole words. A tag
+    whose words are absent is ABSENT from the list - never assumed from a
+    neighbouring model or from the parameter count."""
+    words = " ".join(
+        [str(tag) for tag in (d.get("tags") or ()) if isinstance(tag, str)]
+        + [str(d.get("ref") or ""), str(d.get("family") or "")]).lower()
+    words = re.sub(r"[^a-z0-9]+", " ", words)
+    padded = " " + " ".join(words.split()) + " "
+    out = []
+    for key in CAPABILITY_KEYS:
+        if any((" " + word + " ") in padded for word in _CAPABILITY_WORDS[key]):
+            out.append(key)
+    return out
+
+
+def _newest_epoch(d: dict) -> Optional[int]:
+    """When the catalogue says the row was released or last updated, or None.
+
+    Seconds and milliseconds are both accepted (anything above 1e12 is read as
+    milliseconds) and so is an ISO-8601 string; anything else means "the
+    listing did not say", which is None - never the check's own clock."""
+    for key in _DATE_KEYS:
+        value = d.get(key)
+        if value is None or value == "":
+            continue
+        if isinstance(value, (int, float)):
+            number = float(value)
+            if number > 1e12:
+                number = number / 1000.0
+            if 1e9 <= number <= 4.1e9:
+                return int(number)
+            continue
+        text = str(value).strip()
+        if text.isdigit():
+            number = float(text)
+            if number > 1e12:
+                number = number / 1000.0
+            if 1e9 <= number <= 4.1e9:
+                return int(number)
+            continue
+        try:
+            from datetime import datetime, timezone
+            when = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            number = when.timestamp()
+            if 1e9 <= number <= 4.1e9:
+                return int(number)
+        except ValueError:
+            continue
+    return None
+
+
+def _pooled_fit(need_gb: Optional[float], gpus: list) -> tuple:
+    """(fit, pooled_gb) for a need spread across EVERY measured card.
+
+    The single-card fit answers "can one card hold it"; this answers "can the
+    cards together". The owner asked for both in the Brain's Hardware fit filter
+    ("fits 1 card" vs "fits 2-3 cards, pooled", 2026-11-07). The same 85%/100%
+    ratio bands the single-card fit uses are applied to the SUM, so the two
+    words cannot mean different things. `pooled_gb` is the measured sum, or
+    None when no card reported its memory."""
+    caps = []
+    for gpu in gpus if isinstance(gpus, list) else []:
+        cap = _number(gpu.get("vram_gb"))
+        if cap is not None and cap > 0:
+            caps.append(cap)
+    if not caps:
+        return "no", None
+    pooled = round(sum(caps), 2)
+    if need_gb is None or need_gb <= 0:
+        return "no", pooled
+    ratio = need_gb / pooled
+    if ratio <= FIT_ROOM:
+        return "fits", pooled
+    if ratio <= FIT_TIGHT:
+        return "tight", pooled
+    return "no", pooled
+
 #: A model change needs this much measured gain to be worth a download and a
 #: swap. 5% matches `jarvis_models`' own `min_benefit` default; the number is a
 #: policy bar, not a measurement.
@@ -406,6 +514,18 @@ def _clean_candidate(value) -> Optional[dict]:
                             or _provider_words(source_url))[:60],
             "fit": fit,
             "source_url": source_url,
+            # The filter fields (2026-11-07). A row written by an older check
+            # has none of them; each then reads as "not reported" (None / []),
+            # which the Brain draws as unreported - never as zero and never as
+            # a fit it did not compute.
+            "vram_need_gb": _optional_round(value.get("vram_need_gb"), 2),
+            "fit_pooled": (str(value.get("fit_pooled"))
+                           if str(value.get("fit_pooled") or "") in
+                           ("fits", "tight", "no") else None),
+            "pooled_vram_gb": _optional_round(value.get("pooled_vram_gb"), 2),
+            "capabilities": [c for c in (value.get("capabilities") or [])
+                             if c in CAPABILITY_KEYS],
+            "released_at": _optional_int(value.get("released_at")),
             "why": str(value.get("why") or "")[:1000]}
 
 
@@ -742,6 +862,8 @@ def _candidate_row(model, gpus: list, estimate: Callable) -> Optional[dict]:
         # need could not be estimated rather than dress that floor up as a fit.
         need_mb = None
     fit, card, ratio = _fit_label(need_mb, gpus)
+    need_gb = round(need_mb / 1024.0, 2) if need_mb is not None else None
+    fit_pooled, pooled_gb = _pooled_fit(need_gb, gpus)
     context = _optional_int(d.get("context") or d.get("context_tokens"))
     params = _number(d.get("params"))
     params_b = round(params / 1e9, 3) if params else _optional_round(
@@ -781,6 +903,9 @@ def _candidate_row(model, gpus: list, estimate: Callable) -> Optional[dict]:
         why.append("estimated to need about %.1f GB; the largest measured card "
                    "(%s, %.1f GB) cannot hold it"
                    % (need_mb / 1024.0, card["name"], card["vram_gb"]))
+    if fit == "no" and fit_pooled in ("fits", "tight"):
+        why.append("it does not fit one card, but the measured cards hold %.1f GB "
+                   "together, so it fits pooled" % pooled_gb)
     why.append("size %.2f GB from the public file listing" % size_gb)
     return {"ref": ref, "name": name[:120], "family": family[:80],
             "params_b": params_b, "quant": (str(quant)[:24] if quant else None),
@@ -788,6 +913,15 @@ def _candidate_row(model, gpus: list, estimate: Callable) -> Optional[dict]:
             "licence": _licence(d.get("tags")),
             "provider": _provider_words(source_url),
             "fit": fit, "source_url": source_url,
+            # The Brain's model filter bar (Q4, 2026-11-07) reads these five:
+            # the estimated need, the fit on one card and on all cards pooled,
+            # the measured pooled memory, the capability tags the catalogue row
+            # really carries, and the catalogue's own date when it has one.
+            "vram_need_gb": need_gb,
+            "fit_pooled": fit_pooled,
+            "pooled_vram_gb": pooled_gb,
+            "capabilities": _capabilities(d),
+            "released_at": _newest_epoch(d),
             "why": "; ".join(why[:MAX_REASONS])}
 
 
@@ -1250,27 +1384,62 @@ def record_opinion(text, *, store_path_: Optional[Path] = None,
 #   The three read answers
 # --------------------------------------------------------------------------
 
+def _recommender_panel(loader=None) -> Optional[dict]:
+    """Lane 3's hardware-aware recommender panel, or None when it is absent.
+
+    THE SEAM (Wave-9, 2026-11-07): `jarvis_model_recommender.panel()` is the
+    merged module that says what THIS PC should run, labelled MEASURED ON THIS
+    PC / MEASURED ON DIFFERENT CARDS / ESTIMATED FIT. It is imported LAZILY and
+    only here, so a backend that never got the module still serves this route
+    exactly as before - the `recommender` key is then simply absent, which the
+    Brain draws as no section rather than as an error.
+
+    `loader` exists so a suite can prove both halves without a second copy of
+    the import: with no argument it is `importlib.import_module`, the same
+    standard-library door the rest of this module uses. Nothing here reads the
+    network, writes a file, raises a card or changes a preset: `panel()` is a
+    read of this PC's own hardware probe and scorecards, like the bench
+    module's status routes.
+    """
+    import importlib
+    load = loader or importlib.import_module
+    try:
+        module = load("jarvis_model_recommender")
+        panel = module.panel()
+    except Exception:                       # noqa: BLE001 - absent is a fact
+        return None
+    return panel if isinstance(panel, dict) and panel else None
+
+
 def recommendations_view(*, path: Optional[Path] = None,
                          gpus: Optional[list] = None,
-                         presets: Optional[list] = None) -> dict:
+                         presets: Optional[list] = None,
+                         recommender_loader=None) -> dict:
     """GET /api/models/recommendations: the cached check, the measured hardware,
-    the measured benchmarks, and the changes they justify.
+    the measured benchmarks, the changes they justify, and - when the shipped
+    recommender is present - its "what this PC should run" panel.
 
-    READ-ONLY and NETWORK-FREE: it reads one JSON file and the PC's own card
-    list. A cached check that does not exist yet is `checked_at: null` and no
-    candidates, not an error.
+    READ-ONLY and NETWORK-FREE: it reads one JSON file, the PC's own card list,
+    and (through `jarvis_model_recommender`) the PC's local hardware probe and
+    scorecard store. A cached check that does not exist yet is `checked_at:
+    null` and no candidates, not an error. `recommender` is OPTIONAL and is
+    omitted entirely when that module is absent - see `_recommender_panel`.
     """
     doc = load_store(path)
     gpus = gpus if gpus is not None else measured_gpus()
-    return {"checked_at": doc.get("checked_at"),
-            "gpus": gpus,
-            "candidates": doc.get("candidates") or [],
-            "skipped_no_size": doc.get("skipped_no_size") or 0,
-            "recommendations": preset_recommendations(
-                presets=presets, gpus=gpus,
-                benchmarked=doc.get("benchmarked"),
-                opinion=doc.get("last_opinion")),
-            "benchmarked": doc.get("benchmarked") or {}}
+    out = {"checked_at": doc.get("checked_at"),
+           "gpus": gpus,
+           "candidates": doc.get("candidates") or [],
+           "skipped_no_size": doc.get("skipped_no_size") or 0,
+           "recommendations": preset_recommendations(
+               presets=presets, gpus=gpus,
+               benchmarked=doc.get("benchmarked"),
+               opinion=doc.get("last_opinion")),
+           "benchmarked": doc.get("benchmarked") or {}}
+    panel = _recommender_panel(recommender_loader)
+    if panel is not None:
+        out["recommender"] = panel
+    return out
 
 
 def check_models(*, path: Optional[Path] = None,

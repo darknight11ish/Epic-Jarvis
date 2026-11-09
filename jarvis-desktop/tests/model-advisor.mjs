@@ -472,7 +472,14 @@ await check("one click shows progress, then the candidates with size, quant, fit
   assert.match(text, /Q4_K_M quantization/);
   assert.match(text, /32,768 tokens of context/);
   assert.match(text, /tight/i);
-  assert.match(text, /does not fit/i, "the 'no' fit is not said in words");
+  // Wave-9 (Q4, 2026-11-07): the default view is "All that fit this PC", so the
+  // one candidate that does NOT fit is hidden - and the panel SAYS it is hidden
+  // rather than quietly shortening the list. Its own "does not fit" words are
+  // proved in the view-only check below.
+  assert.match(text, /1 non-fitting model is hidden/,
+    "the default view hid a non-fitting model without saying so");
+  assert.doesNotMatch(text, /Llama 4 17B/,
+    "a model that does not fit this PC was drawn in the default view");
   assert.match(text, /14B is the largest that still fits the 12 GB card/,
     "the PC's own why is missing");
   assert.match(text, /On Hugging Face: https:\/\/huggingface\.co\/Qwen\/Qwen3-14B-GGUF/);
@@ -485,6 +492,51 @@ await check("one click shows progress, then the candidates with size, quant, fit
     "the panel let an unmeasured list read as an upgrade");
   assert.match(text, /Nothing downloads until you approve that card/);
 });
+
+await check("the filter bar's default hides non-fitting models, and view-only explains them", async () => {
+  const p = await tab({}, { answers: { check: CANDIDATES, benchmark: BENCHMARK, opinion: REVISED } });
+  await p.locator("#model-check").click();
+  await K.until(p, "the candidates", async () => /Qwen3 14B/.test(await modelsText(p)));
+  // The owner's default: only rows that fit this PC.
+  assert.equal(await p.locator("#models .advisor-candidate").count(), 2,
+    "the default view is not the two fitting candidates");
+  assert.match(await modelsText(p), /1 non-fitting model is hidden/);
+  // Choosing "Show non-fitting (view-only)" draws it, with the reason and a
+  // Download that is visibly disabled - never a working offer.
+  await p.locator("#advisor-filter-fit").selectOption("nonfitting");
+  await K.until(p, "the non-fitting row", async () => /Llama 4 17B/.test(await modelsText(p)));
+  const row = candidateRow(p, "Llama 4 17B");
+  assert.equal(await row.count(), 1, "Show non-fitting did not draw the non-fitting row");
+  assert.match(await modelsText(p), /View-only: it does not fit this PC, so no download is offered/,
+    "the view-only row does not say it cannot be downloaded");
+  assert.equal(await row.getByRole("button", { name: "Download" }).isDisabled(), true,
+    "a non-fitting model was offered a working Download");
+  await p.close();
+});
+
+await check("the filter bar's controls are the owner's set, and Clear returns to the default", async () => {
+  const p = await tab({}, { answers: { check: CANDIDATES, benchmark: BENCHMARK, opinion: REVISED } });
+  await p.locator("#model-check").click();
+  await K.until(p, "the candidates", async () => /Qwen3 14B/.test(await modelsText(p)));
+  for (const id of ["advisor-filter-fit", "advisor-filter-size", "advisor-filter-quant",
+                    "advisor-filter-context", "advisor-filter-licence", "advisor-filter-params",
+                    "advisor-filter-source", "advisor-filter-sort",
+                    "advisor-filter-tag-vision", "advisor-filter-tag-tools",
+                    "advisor-filter-tag-coding", "advisor-filter-tag-reasoning",
+                    "advisor-filter-tag-uncensored"]) {
+    assert.equal(await p.locator(`#${id}`).count(), 1, `the filter bar is missing #${id}`);
+  }
+  // A size cap that excludes every fitting row leaves an honest empty answer,
+  // then Clear brings the default list back.
+  await p.locator("#advisor-filter-size").fill("2");
+  await p.locator("#advisor-filter-size").dispatchEvent("change");
+  await K.until(p, "the filtered-empty line", async () => /No newer model matches these filters/.test(await modelsText(p)));
+  await p.locator("#advisor-filter-clear").click();
+  await K.until(p, "the default list again", async () => /Qwen3 14B/.test(await modelsText(p)));
+  await p.close();
+});
+
+async function __afterFilterCheck() {}
 
 await check("an Ollama row says Ollama's library, and rows with no size are explained", async () => {
   // THE 2026-10-28 FIELD TEST: rows linked to ollama.com while the copy said

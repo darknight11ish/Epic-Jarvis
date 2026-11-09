@@ -76,6 +76,10 @@ import { validToFromText } from "./valid-to.js";
 // Whether a model can chat, and the words when it cannot (shared with the
 // phone through tests/fixtures/model-chat-cases.json).
 import { CANNOT_CHAT, canChat } from "./model-chat.js";
+// The Brain Skills card's honest count line and empty state (Wave-9,
+// 2026-11-07): pure words, so the misleading "or the scanner quarantined
+// them all" sentence can never come back and every count is measured.
+import * as Skills from "./skills-words.js";
 // Brain -> Projects: its own module (projects-panel.js, projects.js).
 import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 // Brain -> Tutorials and the FAQ: its own module (tutorials.js), its own three
@@ -1727,6 +1731,12 @@ function renderModels() {
   // "Check for new models" (2026-10-28, the owner's ask): the candidates, the
   // benchmark measured here, and the preset changes to approve or argue with.
   dom.models.append(advisorPanel());
+  // Lane 3's "what this PC should run" panel (Wave-9 Lane 2b, 2026-11-07),
+  // beside the model advisor through that ONE render seam. It rides the same
+  // GET /api/models/recommendations read as an OPTIONAL `recommender` key; a
+  // PC without the module simply draws no section here.
+  const recPanel = advisorRecommenderPanel();
+  if (recPanel) dom.models.append(advisorRecommenderSection(recPanel));
 
   const comp = state.data.compute || {};
   const compPlan = comp.plan && typeof comp.plan === "object" ? comp.plan : comp;
@@ -1818,6 +1828,9 @@ const advisor = {
   presetError: "",
   /** The explicit "ask for preset recommendations" action (no card, no apply). */
   recommend: { phase: "idle", error: "" },
+  /** The owner's model filter bar (Q4, 2026-11-07). Session-only: a filter is a
+   *  way of looking at this answer, not a setting the PC owns. */
+  filters: Advisor.freshFilters(),
 };
 
 /** The one bridge call, with the action's own wait and the right late sentence. */
@@ -2107,16 +2120,167 @@ function advisorCandidateRow(candidate) {
         )
       );
     }
-  } else {
+  } else if (Advisor.mayDownload(candidate)) {
     actions.append(
       button("Download", () => modelAction("install", candidate.ref), {
         title: `Ask to install this model. You approve it ${APPROVE_WHERE} — nothing downloads until you do.`,
         live: true,
       })
     );
+  } else {
+    // THE OWNER'S COMPLAINT, fixed (Q4, 2026-11-07): a model that cannot run
+    // here is never offered for download. It is shown view-only, with the
+    // PC's own numbers for why, and the Download control is visibly disabled.
+    main.append(
+      el("span", "row-meta model-advisor-viewonly",
+         "View-only: it does not fit this PC, so no download is offered.")
+    );
+    main.append(el("span", "row-meta model-advisor-fit-why", Advisor.nonFittingWhy(candidate)));
+    const denied = button("Download", () => {}, {
+      title: "This model does not fit this PC, so it cannot be downloaded here. It is shown so you can check the fit - never offered as a suggestion.",
+    });
+    denied.disabled = true;
+    denied.id = `advisor-download-disabled-${Advisor.bareRef(candidate.ref).replace(/[^a-z0-9]+/gi, "-")}`;
+    actions.append(denied);
   }
   item.append(actions);
   return item;
+}
+
+/* ── The model filter bar (owner's Q4 ruling, 2026-11-07) ─────────────────── */
+
+/** One labelled select for the filter bar. */
+function advisorFilterSelect(id, label, options, value, onChange) {
+  const select = el("select", "field advisor-filter");
+  select.id = id;
+  select.setAttribute("aria-label", label);
+  for (const option of options) {
+    const node = el("option", "", option.label);
+    node.value = option.value;
+    if (String(option.value) === String(value)) node.selected = true;
+    select.append(node);
+  }
+  select.addEventListener("change", () => onChange(select.value));
+  const box = el("label", "advisor-filter-field", label);
+  box.setAttribute("for", id);
+  box.append(select);
+  return box;
+}
+
+/** One labelled text/number box for the filter bar. */
+function advisorFilterNumber(id, label, value, onChange, placeholder) {
+  const input = el("input", "field advisor-filter");
+  input.id = id;
+  input.type = "number";
+  input.min = "0";
+  input.step = "1";
+  input.value = value ? String(value) : "";
+  input.placeholder = placeholder;
+  input.setAttribute("aria-label", label);
+  input.addEventListener("change", () => onChange(Number(input.value) || 0));
+  const box = el("label", "advisor-filter-field", label);
+  box.setAttribute("for", id);
+  box.append(input);
+  return box;
+}
+
+/** One capability-tag checkbox. */
+function advisorFilterTag(tag) {
+  const input = el("input", "advisor-filter-tag");
+  input.id = `advisor-filter-tag-${tag}`;
+  input.type = "checkbox";
+  input.checked = advisor.filters.capabilities.includes(tag);
+  input.addEventListener("change", () => {
+    const tags = new Set(advisor.filters.capabilities);
+    if (input.checked) tags.add(tag);
+    else tags.delete(tag);
+    advisor.filters.capabilities = [...tags];
+    renderModels();
+  });
+  const box = el("label", "advisor-filter-tag-box");
+  box.setAttribute("for", input.id);
+  box.append(input, el("span", "", tag));
+  return box;
+}
+
+/**
+ * The full filter bar the owner chose (Q4, 2026-11-07): hardware fit, size cap,
+ * quantization, context, licence, capability tags, parameter range, source and
+ * sort. Every control writes `advisor.filters` and redraws; nothing here reads
+ * the network or changes a model. The summary under it is `filterWords`, which
+ * counts what is hidden - so "non-fitting hidden by default" is said on screen,
+ * not left to be inferred from a shorter list.
+ */
+function advisorFilterBar(allRows, benchmarked) {
+  const wrap = el("div", "model-filters");
+  wrap.id = "advisor-filters";
+  const bar = el("div", "row-actions model-filter-controls");
+  const options = Advisor.filterOptions(allRows);
+  const onFit = (value) => {
+    advisor.filters.fit = value;
+    renderModels();
+    announce(Advisor.filterWords(advisor.filters, allRows,
+      Advisor.filterCandidates(allRows, advisor.filters, benchmarked)));
+  };
+  bar.append(advisorFilterSelect(
+    "advisor-filter-fit", "Hardware fit",
+    Advisor.FIT_MODES.map((mode) => ({ value: mode.id, label: mode.label })),
+    advisor.filters.fit, onFit));
+  bar.append(advisorFilterNumber(
+    "advisor-filter-size", "Size cap (GB)", advisor.filters.sizeCap,
+    (value) => { advisor.filters.sizeCap = Math.max(0, value); renderModels(); },
+    "any"));
+  bar.append(advisorFilterSelect(
+    "advisor-filter-quant", "Quantization",
+    [{ value: "", label: "Any quantization" }]
+      .concat(options.quants.map((q) => ({ value: q, label: q }))),
+    advisor.filters.quant, (value) => { advisor.filters.quant = value; renderModels(); }));
+  bar.append(advisorFilterSelect(
+    "advisor-filter-context", "Context window",
+    Advisor.CONTEXT_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+    advisor.filters.contextMin,
+    (value) => { advisor.filters.contextMin = Number(value) || 0; renderModels(); }));
+  bar.append(advisorFilterSelect(
+    "advisor-filter-licence", "Licence",
+    [{ value: "", label: "Any licence" }]
+      .concat(options.licences.map((licence) => ({ value: licence, label: licence }))),
+    advisor.filters.licence, (value) => { advisor.filters.licence = value; renderModels(); }));
+  bar.append(advisorFilterSelect(
+    "advisor-filter-params", "Parameters",
+    [{ value: "", label: "Any size" }]
+      .concat(Advisor.PARAM_RANGES.map((range) => ({ value: range.id, label: range.label }))),
+    advisor.filters.params, (value) => { advisor.filters.params = value; renderModels(); }));
+  bar.append(advisorFilterSelect(
+    "advisor-filter-source", "Source",
+    [{ value: "", label: "Any source" }]
+      .concat(options.sources.map((source) => ({ value: source, label: source }))),
+    advisor.filters.source, (value) => { advisor.filters.source = value; renderModels(); }));
+  bar.append(advisorFilterSelect(
+    "advisor-filter-sort", "Sort",
+    Advisor.SORT_MODES.map((mode) => ({ value: mode.id, label: mode.label })),
+    advisor.filters.sort, (value) => { advisor.filters.sort = value; renderModels(); }));
+  wrap.append(bar);
+
+  const tags = el("div", "row-actions advisor-filter-tags");
+  tags.append(el("span", "advisor-filter-label", "Capabilities"));
+  for (const tag of Advisor.CAPABILITY_TAGS) tags.append(advisorFilterTag(tag));
+  wrap.append(tags);
+
+  const foot = el("div", "row-actions advisor-filter-foot");
+  const clear = button("Clear filters", () => {
+    advisor.filters = Advisor.freshFilters();
+    renderModels();
+    announce("Filters cleared. Showing every model that fits this PC.");
+  }, { title: "Back to the default view: every newer model that fits this PC." });
+  clear.id = "advisor-filter-clear";
+  if (Advisor.activeFilterCount(advisor.filters) > 0) foot.append(clear);
+  const summary = el("p", "note model-filters-summary",
+    Advisor.filterWords(advisor.filters, allRows,
+      Advisor.filterCandidates(allRows, advisor.filters, benchmarked)));
+  summary.id = "advisor-filter-summary";
+  foot.append(summary);
+  wrap.append(foot);
+  return wrap;
 }
 
 /** One recommended preset, its rows' changes, its evidence, and Approve. */
@@ -2246,6 +2410,10 @@ function advisorPanel() {
   }
 
   const candidates = Advisor.candidateRows(payload);
+  // THE OWNER'S DEFAULT VIEW (Q4, 2026-11-07): only the models that fit this
+  // PC. `candidates` stays the whole answer, so the summary can say how many
+  // were hidden as non-fitting rather than silently shortening the list.
+  const shown = Advisor.filterCandidates(candidates, advisor.filters, payload.benchmarked);
   // Rows the PC could not judge are explained, not silently dropped: the count
   // is the PC's own, and it says the public listing gave no download size.
   const notJudged = Advisor.notJudgedNote(payload);
@@ -2254,9 +2422,17 @@ function advisorPanel() {
   // claim about a lookup nobody ran.
   const everChecked = Boolean((payload && payload.checked_at) || (answer.source !== "read" && advisor.at));
   if (candidates.length) {
-    const list = el("div", "rows");
-    for (const candidate of candidates) list.append(advisorCandidateRow(candidate));
-    wrap.append(list);
+    wrap.append(advisorFilterBar(candidates, payload.benchmarked));
+    if (shown.length) {
+      const list = el("div", "rows");
+      for (const candidate of shown) list.append(advisorCandidateRow(candidate));
+      wrap.append(list);
+    } else {
+      const empty = el("p", "note advisor-filter-empty",
+        "No newer model matches these filters. Clear a filter to see the rest.");
+      empty.id = "advisor-filter-empty";
+      wrap.append(empty);
+    }
     wrap.append(el("p", "note", anyMeasuredNow(payload) ? Advisor.MEASURED_SOMEWHERE : Advisor.NOT_MEASURED));
     wrap.append(el("p", "note", Advisor.NO_HASH));
     wrap.append(el("p", "note", Advisor.DOWNLOAD_IS_CARDED));
@@ -2627,6 +2803,91 @@ function renderCompute() {
   }
 }
 
+
+/* ── "What this PC should run" (Lane 3's recommender; Wave-9 Lane 2b) ──────
+ *
+ * The owner's Q6 ruling: combine both tiers with strict provenance labels -
+ * MEASURED ON THIS PC (a local benchmark record matching this hardware) and
+ * the estimate for an unmeasured model - and never dress an estimate as a
+ * measurement. `jarvis_model_recommender.panel()` builds the facts; this is
+ * the ONE render seam for it, beside the model filter bar, and the words come
+ * from `model-advisor.js`'s pure block so they are proved without a browser.
+ *
+ * It is OPTIONAL by construction: the GET answer carries `recommender` only
+ * when that shipped module is present (Lane 2b's backend change). A PC without
+ * it draws NO section - no error, no invented table.
+ */
+
+/** The panel for this render: the current answer first, else the stored read.
+ *  The POST check's answer does not carry the recommender, so the tab's own
+ *  GET read (which does) is the fallback; it says its own date. */
+function advisorRecommenderPanel() {
+  const answer = advisorAnswer();
+  const fromAnswer = Advisor.recommenderPanel(answer && answer.payload);
+  if (fromAnswer) return fromAnswer;
+  const body = state.data.model_recommendations;
+  if (body && body.available !== false) {
+    return Advisor.recommenderPanel(body);
+  }
+  return null;
+}
+
+/** One row: the provenance tag, the model, the measured line and any warning. */
+function advisorRecommenderRow(row) {
+  const item = el("div", "row-item model-recommender-row");
+  const tag = el("span", "row-tag", row.provenanceLabel);
+  if (row.provenanceState) tag.dataset.state = row.provenanceState;
+  item.append(tag);
+  const main = el("div", "row-main");
+  main.append(el("span", "row-title", row.label));
+  for (const line of row.meta) main.append(el("span", "row-meta", line));
+  if (row.measuredLine) {
+    main.append(el("span", "row-meta model-advisor-measured", row.measuredLine));
+  }
+  if (row.warning) {
+    const warning = el("p", "banner model-recommender-warning", `Warning: ${row.warning}`);
+    warning.id = `model-recommender-warning-${row.model.replace(/[^a-z0-9]+/gi, "-")}`;
+    main.append(warning);
+  }
+  item.append(main);
+  return item;
+}
+
+/** The whole section, exactly as the owner's ruling describes it. */
+function advisorRecommenderSection(panel) {
+  const wrap = el("section", "model-recommender");
+  wrap.id = "model-recommender";
+  const title = el("h4", "", panel.title);
+  title.id = "model-recommender-title";
+  wrap.append(title);
+  if (panel.hardwareWords) {
+    const words = el("p", "note model-recommender-hardware", panel.hardwareWords);
+    words.id = "model-recommender-hardware";
+    wrap.append(words);
+  }
+  if (panel.tierLabel) {
+    wrap.append(el("p", "note model-recommender-tier",
+      `${panel.tierLabel}${panel.tierWords ? `: ${panel.tierWords}` : ""}`));
+  }
+  if (panel.rows.length) {
+    const list = el("div", "rows");
+    for (const row of panel.rows) list.append(advisorRecommenderRow(row));
+    wrap.append(list);
+  } else {
+    wrap.append(el("p", "note", "No model on the known list fits this PC."));
+  }
+  const notShown = Advisor.recommenderNotShownLine(panel);
+  if (notShown) {
+    const line = el("p", "note model-recommender-not-shown", notShown);
+    line.id = "model-recommender-not-shown";
+    wrap.append(line);
+  }
+  for (const note of panel.notes) wrap.append(el("p", "note model-recommender-note", note));
+  const when = Advisor.recommenderWhen(panel);
+  if (when) wrap.append(el("p", "note", when));
+  return wrap;
+}
+
 function renderSkills() {
   const body = state.data.skills || {};
   const why = unavailable("skills");
@@ -2686,8 +2947,24 @@ function renderSkills() {
         ],
       });
     },
-    "No skills installed, or the scanner has quarantined them all."
+    ""
   );
+  // The measured state (Wave-9, 2026-11-07). The old empty sentence joined two
+  // different facts with "or" and guessed at the second; the PC's own
+  // `/api/skills` carries `stats.installed` and `stats.quarantined`, so both
+  // are shown when reported and said to be unreported when not.
+  const summary = Skills.summaryLine(body);
+  if (list.length) {
+    if (summary) dom.skills.prepend(el("p", "note skills-count-line", summary));
+    return;
+  }
+  const honest = Skills.emptyWords(body);
+  dom.skills.replaceChildren();
+  const line = el("p", "empty skills-count-line", honest.line);
+  line.id = "skills-count-line";
+  dom.skills.append(line);
+  dom.skills.append(el("p", "note", honest.means));
+  dom.skills.append(el("p", "note", honest.arrives));
 }
 
 function renderMemory() {

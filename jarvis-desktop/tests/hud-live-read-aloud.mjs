@@ -619,26 +619,29 @@ if (K) {
     }
   });
 
-  /* ── B2. OFF by default, and today's read-aloud is untouched ───────────── */
+  /* ── B2. A typed answer is never read aloud automatically (Wave-9 policy) ── */
 
-  await check("B: with the switch off no speaker shows, and read-aloud still works", async () => {
+  await check("B: a typed answer is never read aloud automatically, with the switch off", async () => {
     const browser = await K.launch();
     try {
       const { page } = await openHud(browser, {
-        replies: [{ text: "The first answer, spoken as it always was.", route: {} }],
+        replies: [{ text: "The first answer, and it is not spoken.", route: {} }],
       });
       await send(page, "a question", 1);
-      // Wait for the turn to finish (the page speaks at the end of the send).
-      await page.waitForFunction(() => window.__spoken.length > 0, null, { timeout: 8000 });
+      // The owner's 2026-11-06/07 rule: a typed question is silent. Wait for
+      // the answer to finish (not for speech - there must be none), then hold
+      // both halves: no per-answer speaker (the icons switch is off) and
+      // nothing in the spoken record.
+      await page.waitForFunction(
+        () => Boolean(document.querySelector('#log .msg.jarvis[data-state="done"]')),
+        null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
         spoken: window.__spoken.slice(),
       }));
       assert.equal(state.speakers, 0, "a speaker was drawn with the switch off");
-      // The CONTROL that says the switch is not the read-aloud switch: the
-      // answer was still read aloud, exactly as before this feature.
-      assert.deepEqual(state.spoken, ["The first answer, spoken as it always was."],
-        "the automatic read-aloud changed when the speaker switch was added");
+      assert.deepEqual(state.spoken, [],
+        "a typed answer was read aloud automatically, which the owner asked against");
       await page.close();
     } finally {
       await browser.close();
@@ -712,17 +715,18 @@ if (K) {
         replies: [{ text: "Your test results came back, and here they are.", route: { gate: "private" } }],
       });
       await send(page, "what did my test results say", 1);
-      // The shell draws its own line under an answer it keeps on screen.
-      await page.waitForFunction(() => Boolean(document.querySelector("#log .jarvis-kept")),
+      // A typed answer makes no automatic speech attempt, so there is no kept
+      // line to wait for; the two properties that matter are still measured:
+      // no speaker offered, and nothing spoken.
+      await page.waitForFunction(
+        () => Boolean(document.querySelector('#log .msg.jarvis[data-state="done"]')),
         null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,
-        kept: document.querySelectorAll("#log .jarvis-kept").length,
         spoken: window.__spoken.slice(),
       }));
       assert.equal(state.speakers, 0,
         "a speaker was offered on an answer that has to stay on screen");
-      assert.equal(state.kept, 1, "the shell did not draw its kept-on-screen line");
       assert.deepEqual(state.spoken, [],
         "an answer that has to stay on screen reached the room");
       // And there is no side door: a click can only reach voice.speak, which is
@@ -753,7 +757,8 @@ if (K) {
         }],
       });
       await send(page, "when is my appointment", 1);
-      await page.waitForFunction(() => Boolean(document.querySelector("#log .jarvis-kept")),
+      await page.waitForFunction(
+        () => Boolean(document.querySelector('#log .msg.jarvis[data-state="done"]')),
         null, { timeout: 8000 });
       const state = await page.evaluate(() => ({
         speakers: document.querySelectorAll("#log .msg.jarvis .speak-answer").length,

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-read-aloud"
+description = "Enables the get_read_aloud command without any pre-configured scope."
+commands.allow = ["get_read_aloud"]
+
+[[permission]]
+identifier = "deny-get-read-aloud"
+description = "Denies the get_read_aloud command without any pre-configured scope."
+commands.deny = ["get_read_aloud"]
