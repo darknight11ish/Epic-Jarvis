@@ -643,6 +643,41 @@ PACKS_TAMPER_PROBES = (
     '_pack_check.get("tampered")',
 )
 
+#: skill-scan-wiring.patch (2026-11-09) - the F5 DELIVERY GAP, and the reason it
+#: is a table entry rather than "just another patch in the list".
+#:
+#: Wave 12 (DEF-049 + Gemini's Q3) put the four extra scan checks into
+#: `jarvis_skills.vet()` and gave an install a `skills.lock` row, in the
+#: PUBLISHED BASE only (`jarvis-backend/jarvis_skills.py`) and in no `.patch`.
+#: `jarvis_skills.py` is one of the FIVE patched base files, so `plan_shipped`
+#: never copies it and `plan_deltas` is the only door that can carry it. With no
+#: entry here a correct wave-12 deploy reports every patch ALREADY PRESENT,
+#: copies the shipped hub (which does carry the four checks), and leaves the
+#: live `vet()` judging with `_RULES` alone - measured read-only on the owner's
+#: folder 2026-11-09: `extra_findings` 0, `skills.lock` 0, `_lock_after_install`
+#: 0 in a 2026-11-06 `jarvis_skills.py` of 42,416 B. That is the
+#: `cloud-escalate.patch` shape again (DEF-018): green deploy, absent feature.
+#:
+#: The patch is cut against the LIVE file's own text and its `+` lines are the
+#: published base's bytes, so its five hunks replay exactly on the live file and
+#: the five regions come out byte-identical to the base. `"hunks": True` is the
+#: right shape because the change lands in FOUR disjoint places (a new block in
+#: front of `vet()`, one line inside `vet()`, one field in its report, one call
+#: in `install()`, the two helpers after `_pin_skill()`, and one call in
+#: `uninstall()`) - one anchor insert would put unrelated code in one place.
+#: Every probe is a post-image line that appears nowhere in the patch's own
+#: pre-image, so a second deploy reports ALREADY PRESENT and a half-applied file
+#: is refused rather than duplicated.
+SKILL_SCAN_WIRING_PROBES = (
+    "EXTRA_CHECKS_VERSION = 1",
+    "def _extra_findings(skill) -> list:",
+    "    findings += _extra_findings(skill)",
+    '"extra_checks": EXTRA_CHECKS_VERSION if _hub_present() else 0,',
+    "    _lock_after_install(skill, report)",
+    "    _unlock_after_remove(name)",
+    "def _lock_after_install(skill, report) -> None:",
+)
+
 #: `record_call` (jarvis_call_notes.py, the owner's request of 2026-11-04) HAS a `_RISK`
 #: row, and jarvis_call_notes.py:207-214 says so: it was added 2026-11-05 by the privacy
 #: audit's D8 fix, because without it `risk_for()` fell back to `_UNKNOWN_RISK` and the
@@ -1562,6 +1597,16 @@ DELTA_TABLE = {
             "probes": CARD_PENDING_PROBES,
             "anchor": GATE_CARD_PENDING_ANCHOR,
             "file": GATE_CARD_PENDING_FILE,
+        },
+    },
+    # skill-scan-wiring.patch (2026-11-09): the wave-12 skill-scan work, which
+    # lived in the published base only and had no route to a live install. Four
+    # disjoint regions, so its own five hunks are the carrier. See the constant's
+    # comment above for the measurements and for why this is not a `file` entry.
+    "skill-scan-wiring.patch": {
+        "jarvis_skills.py": {
+            "probes": SKILL_SCAN_WIRING_PROBES,
+            "hunks": True,
         },
     },
 }

