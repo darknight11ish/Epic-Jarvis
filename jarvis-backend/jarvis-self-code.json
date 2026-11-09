@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "497081e583dc422d82a7c824c5ad6cf8fecaa6da",
- "built_at": "2026-11-09T10:02:50-08:00",
+ "ref": "589f12f78cc832bf1cd490932a185c9bff15fa14",
+ "built_at": "2026-11-09T10:34:52-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -6228,9 +6228,34 @@
  ],
  "recent_commits": [
   {
+   "sha": "589f12f78cc832bf1cd490932a185c9bff15fa14",
+   "date": "2026-11-09",
+   "subject": "test(wave13): allowlist the F5 patch after gate-touches, and read the patch-original-text pin at runtime (no source-text pin)"
+  },
+  {
+   "sha": "3feaca4c71d70c422d137e3ef93a0e53c15bbedd",
+   "date": "2026-11-09",
+   "subject": "fix(merge): take the corrected F5 commit's files whole (patch position before activity-turn-guard) and regenerate the patch catalogue"
+  },
+  {
+   "sha": "b44935d04a3353eb174f0a741a867593daeb7582",
+   "date": "2026-11-09",
+   "subject": "merge(wave13): fold the corrected F5 route (patch before activity-turn-guard, 28-check test) (Gemini F5)"
+  },
+  {
+   "sha": "90d1ee42424e8c2a8bf642673ee15e574cdf031e",
+   "date": "2026-11-09",
+   "subject": "chore(wave13): the self-code map covers the memory-fault banner, the F2 preload seam and the F5 delivery test (both twins, written LAST)"
+  },
+  {
    "sha": "497081e583dc422d82a7c824c5ad6cf8fecaa6da",
    "date": "2026-11-09",
    "subject": "test(skills): read the patch-original-text pin from the checker's own table, not from its source text (no new source pin)"
+  },
+  {
+   "sha": "6ae96767ea8e75390f1fac3fe24e081d6d8d8880",
+   "date": "2026-11-09",
+   "subject": "fix(skills): give the wave-12 skill scan a route to a live install (F5)"
   },
   {
    "sha": "714d215e9940014a8dd23c7a2335d6c6f592b490",
@@ -6301,31 +6326,6 @@
    "sha": "e0642d5f6c7a09cb9b41f2bcbc30059bafe9845a",
    "date": "2026-11-09",
    "subject": "feat(memory): one fault banner with \"Retry now\", not a queue of failure cards"
-  },
-  {
-   "sha": "c07054ca44d6de1efa46db5cad63a72cf362830e",
-   "date": "2026-11-09",
-   "subject": "chore(wave13): the self-code map covers the creator module, and the reversible-UI suite stops calling github_create_repo unbuilt"
-  },
-  {
-   "sha": "11f0f6ac4fc6e57715d2ec7f165e7a04fc5c7643",
-   "date": "2026-11-09",
-   "subject": "fix(ci): two stale pins and a decks mention the required Windows backend job caught on #1217"
-  },
-  {
-   "sha": "2d5d0ec2f6d1f54f0219b55463e4d757b5323d33",
-   "date": "2026-11-09",
-   "subject": "merge(wave12): bring the #1217 head content into the wave-13 branch ahead of the main merge"
-  },
-  {
-   "sha": "bbcfd01365f5ccd34cdaabf10fab1aa45c2068b4",
-   "date": "2026-11-09",
-   "subject": "chore(wave13): assemble the three lanes - tool lists, phone contract, owner-capital wording"
-  },
-  {
-   "sha": "0aee1f9fcf7e5c0d23f5bc08bad1d0459a7f987d",
-   "date": "2026-11-09",
-   "subject": "fix(claims): the recorded skip reason is matched lowercase, like every other entry"
   }
  ],
  "top_level": [
