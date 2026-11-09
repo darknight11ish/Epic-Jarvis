@@ -18,6 +18,11 @@
  *   - Coding IS a button since 2026-11-02 (the PC's pooled both-card lane runs
  *     it), with its cost said underneath; it used to be drawn as words and
  *     refused by the stub (contract audit F1, the old stub pinned a fiction);
+ *   - the model chip reads the model IN USE: the chosen focus preset's own
+ *     model at boot, not the PC's default (the owner's field report of
+ *     2026-11-08, when the chip said qwen3.5:9b while Current Models said the
+ *     Coding preset's qwen3-coder was answering), while the panel still names
+ *     the default only as the default;
  *   - the top-right model name is the door to the Current Models panel, and
  *     Ambient's pill is a second door to the same panel (HUD audit P1-1/P1-2);
  *   - the panel says plainly when the PC has nothing loaded or did not answer,
@@ -397,6 +402,41 @@ await check("the chosen preset is the highlighted one, with its model on the sta
   assert.deepEqual(rows.filter((r) => r.pressed === "true").map((r) => r.id), ["coding"], "the chosen preset is not the pressed one");
   assert.match(words, /Chosen: Coding/, words);
   assert.deepEqual(problems, []);
+});
+
+await check("the model chip reads the chosen preset's model at boot, never the PC's default", async () => {
+  // THE OWNER'S FIELD BUG (2026-11-08, ~19:05 PT): the chip read qwen3.5:9b
+  // while its own Current Models panel said the Coding preset's
+  // qwen3-coder-30b-a3b-ud-q3-k-xl was answering. The page now paints the chip
+  // from the model in use - the chosen preset's own model - once the chosen
+  // preset's read lands. /api/status below still says the default is qwen3.5:9b.
+  const coding = FIXTURE.presets.find((p) => p.id === "coding");
+  assert.equal(coding.model, "qwen3-coder-30b-a3b-ud-q3-k-xl",
+    "the fixture's Coding model is no longer the field evidence");
+  const statusModel = "qwen3.5:9b";
+  assert.notEqual(coding.model, statusModel, "the fixture no longer distinguishes the two models");
+  const { page, problems } = await openHud(browser, { chosen: "coding" });
+  const chip = await page.evaluate(async (want) => {
+    for (let i = 0; i < 30; i += 1) {
+      const text = document.getElementById("chip-model").textContent;
+      if (text === want) return text;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return document.getElementById("chip-model").textContent;
+  }, coding.model);
+  await page.close();
+  assert.equal(chip, coding.model, `the chip shows ${chip}, not the chosen preset's model`);
+  assert.notEqual(chip, statusModel, "the chip still shows the PC's default model");
+  assert.deepEqual(problems, []);
+  // With NO preset chosen the chip falls back to the PC's default model - the
+  // same one /api/status sends.
+  const plain = await openHud(browser);
+  await plain.page.waitForTimeout(800);
+  const defaultChip = await plain.page.evaluate(() => document.getElementById("chip-model").textContent);
+  await plain.page.close();
+  assert.equal(defaultChip, statusModel,
+    `with no preset chosen the chip reads ${defaultChip}, not the PC's default`);
+  assert.deepEqual(plain.problems, []);
 });
 
 await check("a click posts /api/work/apply once with the right preset id, then marks the PC's answer", async () => {
