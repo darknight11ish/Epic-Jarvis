@@ -2988,6 +2988,13 @@ NO_COMMAND_REASON = {
     # does have is named in its own `where`/`limit`. Appended at the end of the
     # dict for the same crossing-safety reason reminder-asks gives.
     "product-check": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
+    # Creator mode (2026-11-09, Wave 13): ONE waiting folder in Settings, a
+    # read-only scan when the card is opened, and each install behind its own
+    # modify_own_code card. There is no stored setting here to turn on or off -
+    # installing is the carded action, and enabling is the ordinary Turn on
+    # control - so this row is the read/behaviour. Appended at the end of the
+    # dict for the same crossing-safety reason product-check gives.
+    "creator-mode": ('not-a-setting', 'An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.', 'none-needed'),
 }
 
 #: Feature ids whose typed controls do not live behind a `settings.<id>` cover,

@@ -3507,8 +3507,7 @@
     "aliases": [
       "creator mode",
       "put a skill in a waiting folder",
-      "stage a plug-in",
-      "install a skill from a folder i drop in"
+      "stage a plug-in"
     ],
     "gate": [
       "modify_own_code"

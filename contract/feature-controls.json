@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 181,
+  "feature_count": 182,
   "features": [
     {
       "id": "typing",
@@ -9825,6 +9825,57 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "creator-mode",
+      "name": "Creator mode: put a skill or a plug-in in a waiting folder",
+      "group": "The PC itself",
+      "surface": "desktop",
+      "where": "Settings, Skills, Creator mode, on the PC. The waiting folder is creator-incoming, beside the skills folder in Jarvis's own settings folder.",
+      "control": {
+        "type": "refused",
+        "setting_keys": [],
+        "turn_on": "turn on Creator mode: put a skill or a plug-in in a waiting folder",
+        "turn_off": "turn off Creator mode: put a skill or a plug-in in a waiting folder",
+        "adjust": [],
+        "intent": "feature_switch_refused"
+      },
+      "desktop": {
+        "section": null,
+        "location": "Settings, Skills, Creator mode, on the PC. The waiting folder is creator-incoming, beside the skills folder in Jarvis's own settings folder.",
+        "search": [
+          "Creator mode: put a skill or a plug-in in a waiting folder"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": null,
+        "location": "Settings, Skills, Creator mode, on the PC. The waiting folder is creator-incoming, beside the skills folder in Jarvis's own settings folder.",
+        "search": [
+          "creator mode: put a skill or a plug-in in a waiting folder"
+        ],
+        "found": false
+      },
+      "status": "not-a-setting",
+      "owner": "none-needed",
+      "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+      "label": "Command-Only (Runs When You Ask — No Switch Needed)",
+      "label_evidence": {
+        "example_phrase": "turn on Creator mode: put a skill or a plug-in in a waiting folder",
+        "screen_path": "desktop Settings: All features and abilities; phone: All features and abilities"
+      },
+      "command": {
+        "status": "not-a-setting",
+        "reason_code": "not-a-setting",
+        "owner": "none-needed",
+        "reason": "An action, a read or a behaviour rather than a stored setting: there is nothing to turn on/off or set. Where part of it has a switch, that switch has its own row.",
+        "settings_gap": null,
+        "label_source": "Command-Only (Runs When You Ask — No Switch Needed)"
+      },
+      "own_keys": [],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -14262,7 +14313,7 @@
   "command_source": "jarvis_feature_guide.control_matrix() (task-78 / PR #734)",
   "label_breakdown": {
     "Command-Only (Runs When You Ask — No Switch Needed)": {
-      "not-a-setting": 106
+      "not-a-setting": 107
     },
     "Switchable / Adjustable (Typed & Settings)": {
       "planned": 28,
@@ -14279,7 +14330,7 @@
     }
   },
   "label_counts": {
-    "Command-Only (Runs When You Ask — No Switch Needed)": 107,
+    "Command-Only (Runs When You Ask — No Switch Needed)": 108,
     "Switchable / Adjustable (Typed & Settings)": 43,
     "PC-Only Setting (Honest Refusal on Phone)": 17,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,

@@ -3,7 +3,7 @@
 The owner's feature list, as data: 182 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 8aa3120ad8e99a0e20527fb76c8703ae734bcc7e7acc776f56a090241e10c7a1); the apps' Features pages read their own
+`features/features.json` (sha256 d3eef0a7bb33eaff926d53cd3ecc52c3c56f66cfb17dee6d911e23f3aae05056); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "8aa3120ad8e99a0e20527fb76c8703ae734bcc7e7acc776f56a090241e10c7a1"
+SOURCE_SHA256 = "d3eef0a7bb33eaff926d53cd3ecc52c3c56f66cfb17dee6d911e23f3aae05056"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -1977,7 +1977,7 @@ FEATURES = (
         "limit": "Installing is not enabling: a skill lands turned off, and the only way on is the ordinary Turn on control. A plug-in is a program, and this first slice stages it, scans it and refuses it in the pack manager's own words - no plug-in is installed yet. There is no install-all, no download source and no watcher: the folder is scanned when the card is opened, nothing is installed without a card answered on the PC, and the phone has no Creator mode screen.",
         "surface": "desktop",
         "surface_reason": "A skill is instructions the model follows and a plug-in is code that runs beside it, so the screen that puts one in sits where the folder is; the phone keeps reading the plain list of what is already installed (docs/ARCHITECTURE.md section 8).",
-        "aliases": ["creator mode", "put a skill in a waiting folder", "stage a plug-in", "install a skill from a folder i drop in"],
+        "aliases": ["creator mode", "put a skill in a waiting folder", "stage a plug-in"],
         "covers": [],
     },
     {
