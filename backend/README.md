@@ -2362,7 +2362,14 @@ seconds instead of two — at which point the owner blames the assistant rather
 than the fit.
 
 `MM.offload_status()` reads `/api/ps`, which carries `size` and `size_vram`
-per loaded model, so the split is a subtraction:
+per loaded model, so the split is a subtraction. It asks the lane the chat is
+ACTUALLY using - `jarvis_hud.active_ollama_url()`, the one resolver
+`presets.patch` introduced for the active chat lane - not the fixed `OLLAMA`
+address: on 2026-11-08 the fixed address held a stale duplicate of the coder
+model at 74% while the chat lane was at 100% on the card, so the warning named
+the wrong server. When that lane does not answer the status says so (it never
+reports another server's numbers), and when the lane is empty it says no model
+is loaded on the chat lane:
 
 | reading | status | what it means |
 |---|---|---|
@@ -2385,8 +2392,11 @@ failure reports `unknown` rather than inventing a number. A `size` of zero,
 which happens while a model is still loading, is not a divide-by-zero and is
 not called a failure.
 
-`test_gpu_offload.py`: 26 checks, 15 of which fail on the unpatched tree. It
-also asserts that the only URL the check ever touches is loopback.
+`test_gpu_offload.py`: 41 checks. The module half fails on the unpatched tree
+(there is no `offload_status` at all); it also asserts that the check asks the
+chat lane (never the module's fixed address), that a spilled model on another
+server is never used, that an unreachable lane is reported honestly, and that
+the only URL the check ever touches is loopback.
 
 Idea from janhq/jan `extensions/llamacpp-extension/src/readiness.ts`
 (Apache-2.0). See `docs/COMPARISON.md` §3.
