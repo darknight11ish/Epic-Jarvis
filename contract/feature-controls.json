@@ -24,7 +24,7 @@
     "Session B": "the Android Settings owner",
     "none-needed": "no gap: the row is honestly not a setting"
   },
-  "feature_count": 180,
+  "feature_count": 181,
   "features": [
     {
       "id": "typing",
@@ -9768,6 +9768,63 @@
       "own_intents": [],
       "own_actions": {},
       "label_note": ""
+    },
+    {
+      "id": "wifi-auto-reconnect",
+      "name": "Reconnect to Wi-Fi by itself",
+      "group": "The PC itself",
+      "surface": "desktop",
+      "where": "Settings, Wi-Fi reconnect - on by default. Turn it off there, or say \"turn off auto wifi reconnect\"; turning it on again asks once on a card.",
+      "control": {
+        "type": "title",
+        "setting_keys": [
+          "wifi_auto_reconnect"
+        ],
+        "turn_on": "turn on auto wifi reconnect",
+        "turn_off": "turn off auto wifi reconnect",
+        "adjust": [],
+        "intent": "settings_bool"
+      },
+      "desktop": {
+        "section": "wifi-reconnect",
+        "location": "Settings, Wi-Fi reconnect - on by default. Turn it off there, or say \"turn off auto wifi reconnect\"; turning it on again asks once on a card.",
+        "search": [
+          "wifi reconnect",
+          "Reconnect to Wi-Fi by itself"
+        ],
+        "found": true
+      },
+      "phone": {
+        "section": "wifi-reconnect",
+        "location": "Settings, Wi-Fi reconnect - on by default. Turn it off there, or say \"turn off auto wifi reconnect\"; turning it on again asks once on a card.",
+        "search": [
+          "wifi reconnect",
+          "reconnect to wi-fi by itself"
+        ],
+        "found": false
+      },
+      "status": "pc-only",
+      "owner": "voiceprint-wiring",
+      "reason": "PC-only by nature (ARCHITECTURE section 8, ruling Q4): reconnecting THIS PC's Wi-Fi from the phone is refused by the route (it refuses every device but this PC), so the desktop Settings switch and the PC's own typed sentences are its only controls. The phone neither shows nor changes it.",
+      "label": "PC-Only Setting (Honest Refusal on Phone)",
+      "label_evidence": {
+        "example_phrase": "turn on auto wifi reconnect",
+        "screen_path": "desktop Settings: wifi-reconnect; phone: All features and abilities"
+      },
+      "command": {
+        "status": "switch",
+        "reason_code": "command",
+        "owner": "voiceprint-wiring",
+        "reason": "",
+        "settings_gap": null,
+        "label_source": "PC-Only Setting (Honest Refusal on Phone)"
+      },
+      "own_keys": [
+        "wifi_auto_reconnect"
+      ],
+      "own_intents": [],
+      "own_actions": {},
+      "label_note": ""
     }
   ],
   "bool_settings": [
@@ -14212,7 +14269,7 @@
       "enforced": 15
     },
     "PC-Only Setting (Honest Refusal on Phone)": {
-      "pc-only": 16
+      "pc-only": 17
     },
     "Always On (Core Safety Rule — Cannot Be Turned Off)": {
       "not-a-setting": 12
@@ -14224,9 +14281,9 @@
   "label_counts": {
     "Command-Only (Runs When You Ask — No Switch Needed)": 107,
     "Switchable / Adjustable (Typed & Settings)": 43,
-    "PC-Only Setting (Honest Refusal on Phone)": 16,
+    "PC-Only Setting (Honest Refusal on Phone)": 17,
     "Always On (Core Safety Rule — Cannot Be Turned Off)": 12,
     "Settings-Only (By Design — Security Boundary)": 2
   },
-  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (plugins by chat): the \"Turn a drop-in module on or off by asking\" row joined as Command-Only (95 -> 96 Command-Only, 168 -> 169 features), because the two chat tools and the modify_own_code card are the feature and there is no stored setting for it. 2026-11-02 (stacked #1111 onto #1110's stacked head for the merge train): the plugin-switch row joined as Command-Only, so 43/2/16/102/12 (175 total). Measured from the contract, not chosen. The call-recording row joined as Command-Only on 2026-11-04 (the owner's 'record call' feature: the phone records, this PC transcribes and labels, and ONE new note named for the date and time is created through the notes editor's own card - there is no in-app switch, so there is no setting row). The six-PR wave of 2026-11-05 landed three Command-Only rows together - call recording, the product check and VoiceStudio - so the measured combined mix is 43 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 105 Command-Only, 12 Always-On (178 total). Measured from the contract, not chosen. 2026-11-06 (the phone doors' catalogue fix): \"Send a document from your phone\" joined as one Command-Only row (105 -> 106 Command-Only, 178 -> 179 features), and the notion-import row's surface moved desktop -> both because the phone's \"Bring in a Notion export\" door landed on 2026-11-05. Measured from the contract, not chosen."
+  "label_count_note": "Current mix after this branch adds the reminder-actions row and the 2026-10-26 face-by-asking change: 41 Switchable/Adjustable, 2 Settings-Only, 15 PC-Only, 71 Command-Only, 12 Always-On (141 total). The reminder-actions row joined as Command-Only (2026-10-27). Choose Jarvis's face moved PC-Only -> Switchable/Adjustable because it is now changeable by asking (one named choice, no card). Before those, the mix was 40/2/16/70/12: the owner-approved 2026-10-23 counts plus the desktop Private chat row added 2026-10-26, itself changed from the 2026-10-22 mix (42/2/13/70/12) by picture-mode moving to Switchable/Adjustable (ADJ-Q1), calendar, phone-notifications and phone-watch moving to PC-Only (ADJ-Q1), and private-chat added as Command-Only (2026-10-26). 2026-10-28: the anti-slop row joined as Switchable/Adjustable (41 -> 42 Switchable/Adjustable, 141 -> 142 features), because the switch, the During/After mode and the typed phrases are all real. 2026-10-31: the notes editor and Protected from Jarvis joined as Command-Only rows (71 -> 73 Command-Only, 144 -> 146 features). 2026-10-31 (send-file): the File from your PC row joined as Command-Only (73 -> 74 Command-Only, 146 -> 147 features). 2026-10-31 (feature-depth coverage): twenty built capabilities the owner can reach joined the catalogue as Command-Only rows (74 -> 94 Command-Only, 147 -> 167 features): media transport, parking, places memory, thinking levels, calculator, open-a-program, GitHub research, computer control, browser control, shell commands, read-one-page, propose-plan, REA, Android builder, Docker, card summary, receipts, recordings index, Notion import and the vault organizer. Measured from the contract, not chosen. 2026-10-31 (cloud honesty): the Cloud (DeepSeek API) row joined as Command-Only (94 -> 95 Command-Only, 167 -> 168 features). 2026-11-02 (plugins by chat): the \"Turn a drop-in module on or off by asking\" row joined as Command-Only (95 -> 96 Command-Only, 168 -> 169 features), because the two chat tools and the modify_own_code card are the feature and there is no stored setting for it. 2026-11-02 (stacked #1111 onto #1110's stacked head for the merge train): the plugin-switch row joined as Command-Only, so 43/2/16/102/12 (175 total). Measured from the contract, not chosen. The call-recording row joined as Command-Only on 2026-11-04 (the owner's 'record call' feature: the phone records, this PC transcribes and labels, and ONE new note named for the date and time is created through the notes editor's own card - there is no in-app switch, so there is no setting row). The six-PR wave of 2026-11-05 landed three Command-Only rows together - call recording, the product check and VoiceStudio - so the measured combined mix is 43 Switchable/Adjustable, 2 Settings-Only, 16 PC-Only, 105 Command-Only, 12 Always-On (178 total). Measured from the contract, not chosen. 2026-11-06 (the phone doors' catalogue fix): \"Send a document from your phone\" joined as one Command-Only row (105 -> 106 Command-Only, 178 -> 179 features), and the notion-import row's surface moved desktop -> both because the phone's \"Bring in a Notion export\" door landed on 2026-11-05. Measured from the contract, not chosen. 2026-11-08 (Wave 10, owner ruling Q4): the auto Wi-Fi reconnect switch joined as PC-Only Setting (16 -> 17 PC-Only, 180 -> 181 features). Measured from the contract, not chosen."
 }

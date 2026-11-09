@@ -492,7 +492,7 @@ is its acceptance proof.
   next time Jarvis looks.
 - `changeable_overview` ("what can you change?") and `self_inventory` ("what
   do you have?") answer with the counts read from the program's own tables
-  (49 settings, 61 tools, 180 features, presets, installed models, version)
+  (49 settings, 61 tools, 181 features, presets, installed models, version)
   and the card rule that applies to changes.
 - `tool_switches_on_off` / `tool_switch_state`: which tool switches are on or
   off, and one named tool's state (detail still comes from `tool_profile`).
