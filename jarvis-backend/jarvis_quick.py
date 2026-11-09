@@ -691,9 +691,18 @@ _UNITS = {w: i for i, w in enumerate(
     "fourteen fifteen sixteen seventeen eighteen nineteen".split())}
 _TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60,
          "seventy": 70, "eighty": 80, "ninety": 90}
+#: Lengths of time, in seconds. Days and weeks are here since 2026-11-09 (the
+#: owner's Wave-13 "Grandma" bug): "remind me to call Grandma in 4 days from
+#: now" is a plain length of time, and the fast path used to have no unit for
+#: it at all - so the sentence fell to the model, which is where a wrong time
+#: and the whole sentence as the title came from. A timer is still capped at a
+#: day by the scheduler (`jarvis_schedule.MAX_TIMER`), and `_bare_when` sends
+#: anything longer to the REMINDER path, exactly as `MAX_TIMER`'s own comment
+#: says ("a timer is for today; later is a reminder").
 _UNIT_S = {"h": 3600, "hr": 3600, "hrs": 3600, "hour": 3600, "hours": 3600,
            "m": 60, "min": 60, "mins": 60, "minute": 60, "minutes": 60,
-           "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1}
+           "s": 1, "sec": 1, "secs": 1, "second": 1, "seconds": 1,
+           "day": 86400, "days": 86400, "week": 604800, "weeks": 604800}
 
 
 def _tokens(s: str) -> list:
@@ -1036,7 +1045,11 @@ def _parse_day(s: str):
     m = re.fullmatch(r"this\s+(morning|afternoon|evening)", s)
     if m:
         return 0, m.group(1)
-    m = re.fullmatch(r"(?:on\s+)?(" + _WD + r")" + _DAYPART, s)
+    # "next Monday" (2026-11-09): the same day "on Monday" already means - the
+    # NEXT time that weekday comes round, today counting as next week when it
+    # is today (`_days_until`). The word "next" changes nothing by itself, so
+    # this is one optional word and not a second way to read a weekday.
+    m = re.fullmatch(r"(?:on\s+)?(?:next\s+)?(" + _WD + r")" + _DAYPART, s)
     if m:
         return ("wd", _WEEKDAYS.index(m.group(1))), m.group(2)
     return None
@@ -1122,21 +1135,26 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
     if s.startswith("every ") or s.startswith("each "):
         return None
     # --- once ---------------------------------------------------------------
-    m = re.fullmatch(r"in\s+(.+)", s)
-    if m:
-        d = parse_duration(m.group(1))
-        if d is None:
-            return None
-        return When(at=now + d)
-    # "30 minutes from now", "an hour from now", "half an hour from now"
-    # (2026-10-31: the live owner's "a reminder for 30 minutes from now to
-    # check my phone" reached the model as a calendar event).
-    m = re.fullmatch(r"(.+?)\s+from\s+now", s)
-    if m:
-        d = parse_duration(m.group(1))
-        if d is None:
-            return None
-        return When(at=now + d)
+    # A LENGTH OF TIME, whichever way it is framed (2026-11-09): "in 4 days",
+    # "4 days from now" and "in 4 days from now" are ONE phrase in three
+    # shapes, and the owner's own words were the third. The frame is removed
+    # before the length is read, so the same time comes out of all three.
+    #
+    # This used to be two branches, and each one answered None when its own
+    # frame was not the one used: "in 4 days from now" reached `in ...`, which
+    # handed "4 days from now" to parse_duration and returned None; and it
+    # reached "from now", which handed "in 4 days" to the same parser. The fast
+    # path split the phrase first and got through, which is why only the
+    # model's `set_reminder` call ("could not read `when`") and the bare
+    # "in 4 days" phrase were broken.
+    if s.startswith("in ") or s.endswith(" from now"):
+        length = re.sub(r"^in\s+(?:the\s+next\s+)?", "", s)
+        length = re.sub(r"\s+from\s+now$", "", length)
+        d = parse_duration(length)
+        if d is not None:
+            return When(at=now + d)
+        # Not a length of time after all ("in the morning", "in your notes"):
+        # the day and clock parsers below still get their turn.
     # "tomorrow at 6", "on friday at 5pm", "tonight at 8", "tomorrow 6am"
     for split in _splits(s):
         a, b = split
@@ -3129,12 +3147,108 @@ def _bare_when(s: str, now: float) -> Optional[Intent]:
     if m:
         d = parse_duration(m.group(1))
         if d is not None:
-            return Intent("timer_set", {"seconds": d, "label": ""})
+            # "in 10 minutes" is a timer, "in 4 days" is a reminder: a timer is
+            # for today and the scheduler refuses longer than
+            # `MAX_TIMER` ("a timer can be up to 24 hours - for later than
+            # that, set a reminder" - `jarvis_schedule.add_timer`). Said HERE
+            # (2026-11-09), before the scheduler is even called, so a bare
+            # "in 4 days" gets a real reminder instead of an error about a
+            # timer nobody asked for. The default hour is not used: "in 4
+            # days" is a LENGTH of time, so the clock time is the one the
+            # owner put it down at.
+            try:
+                import jarvis_schedule as _S
+                longest_timer = _S.MAX_TIMER
+            except Exception:
+                longest_timer = 86400.0
+            if d <= longest_timer:
+                return Intent("timer_set", {"seconds": d, "label": ""})
+            return Intent("reminder_set", {"text": "your reminder",
+                                           "when": When(at=now + d)})
         return None
     when = parse_when(s, now, "reminder")
     if when is not None:
         return Intent("reminder_set", {"text": "your reminder", "when": when})
     return None
+
+
+#: The words a reminder's title must never carry (2026-11-09, the owner's
+#: Wave-13 "Grandma" bug): the COMMAND that asked for it, and the time phrase
+#: that says when. Both belong to the sentence, not to the action - the title
+#: is what the notification and both apps print above the reminder, so it has
+#: to read "Call Grandma", never "remind me to call Grandma in 4 days from now"
+#: and never "call Grandma in".
+_REMIND_COMMAND_LEAD = re.compile(
+    r"^(?:(?:please|can\s+you|could\s+you|would\s+you)\s+)?"
+    r"(?:remind\s+me(?:\s+(?:to|that|about))?"
+    r"|(?:set|add|make|create|schedule)\s+(?:a|an)?\s*(?:new\s+)?reminder(?:\s+(?:to|for|about))?"
+    r"|reminder\s*[:\-])\s+", re.I)
+#: A word that only ever JOINS a time phrase to the action ("call Grandma **in**
+#: 4 days", "pills **at** 9"). Left on the end of a title it is the sentence
+#: leaking through, which is exactly what the owner saw. `to` and `about` are
+#: here for the same reason on the model's side ("remind me to call Grandma
+#: **to**"), and never for a title the fast path builds, whose grammar has
+#: already removed the joining word.
+_TITLE_JOIN_TAIL = re.compile(r"[\s,]+(?:in|at|on|for|from|by|after|before|and|to|about|that)$",
+                              re.I)
+
+
+def reminder_action_words(text, now: Optional[float] = None) -> str:
+    """The ACTION a reminder is about, from words that may still carry the
+    sentence around it (2026-11-09).
+
+    A title is what the reminder says when it goes off and what both apps print
+    above it, so it has to be the action - "Call Grandma" - and never the
+    instruction ("remind me to call Grandma in 4 days from now"). Three pieces
+    of the sentence are removed, in this order, and only when something is left:
+
+      1. the command that asked for it ("remind me to", "set a reminder for");
+      2. a time phrase at the END that `parse_when` reads whole ("in 4 days
+         from now", "tomorrow at 9") - `now` is needed for that, so a caller
+         without a clock keeps it;
+      3. a joining word left on the end ("call Grandma in").
+
+    The owner's own words and capitals inside the action are untouched: the
+    fast path's `_restore` has already put them back, and a title this function
+    shortens is still the owner's own phrasing ("call Grandma", not "Call
+    grandma" and not a paraphrase). NEVER returns a different action - only
+    fewer words from the same sentence - and a title that is ALL command or ALL
+    time comes back empty, so the caller says it needs words rather than
+    storing nothing.
+    """
+    out = " ".join(str(text or "").replace("\u2019", "'").split()).strip(" ,;:.")
+    out = _REMIND_COMMAND_LEAD.sub("", out).strip(" ,;:.")
+    out = re.sub(r"^(?:to|that|about)\s+", "", out, flags=re.I).strip(" ,;:.")
+    if not out:
+        return ""
+    while True:
+        trimmed = _TITLE_JOIN_TAIL.sub("", out).strip(" ,;:.")
+        if trimmed == out or not trimmed:
+            break
+        out = trimmed
+    if now is not None:
+        # The LONGEST time phrase at the end wins ("at 5pm on Friday" before
+        # "on Friday"), it is removed, and the end is looked at AGAIN - "tomorrow
+        # at 9" loses "at 9" first and then the "tomorrow" left behind it.
+        # A phrase that is ALL time leaves nothing: the caller then says it needs
+        # some words rather than storing "tomorrow" as the action.
+        while out:
+            words = out.split()
+            removed = False
+            for take in range(min(len(words), 8), 0, -1):
+                tail = " ".join(words[-take:])
+                candidate = re.sub(r"^(?:at|on|for)\s+(?=\d|noon|midday|midnight)", "", tail)
+                if parse_when(candidate, now, "reminder") is None:
+                    continue
+                kept = " ".join(words[:-take]).strip(" ,;:.")
+                out = reminder_action_words(kept, None) if kept else ""
+                removed = True
+                break
+            if not removed:
+                break
+        if out and parse_when(out, now, "reminder") is not None:
+            return ""
+    return out
 
 
 def _reminder(s: str, now: float) -> Optional[Intent]:
@@ -3148,7 +3262,7 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
                         + _REMIND_ASK +
                         r"\s+(?:to|about|that)\s+(?P<text>.+)", s)
     if lead:
-        text = lead.group("text").strip()
+        text = reminder_action_words(lead.group("text"), now)
         if text and len(text) <= 300 and text not in (
                 "it", "this", "that", "something", "things", "stuff"):
             when = parse_when(lead.group("lead") + " " + lead.group("when"),
@@ -3172,7 +3286,12 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
         for k in range(1, len(words)):
             candidates.append((" ".join(words[:k]), " ".join(words[k:])))
     for text, when_s in candidates:
-        text = text.strip()
+        # The ACTION, never the sentence's own time framing (2026-11-09): the
+        # candidate loop stops at the first split that leaves a readable time,
+        # and "call Grandma in" / "4 days from now" leaves the sentence's "in"
+        # stuck to the end of the title. Cleaned here, so the split that is
+        # found does not decide the words the owner reads back.
+        text = reminder_action_words(text, now)
         if not text or len(text) > 300:
             continue
         # A reminder "about" nothing is not one.

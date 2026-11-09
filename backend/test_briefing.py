@@ -545,8 +545,8 @@ def t_it_goes_off_is_built_without_a_model_and_rings_ready():
         kinds = [(k_, dd.get("state")) for k_, dd in w.events if dd.get("id") == job["id"]]
         check("fired, then ready", kinds[-2:] == [("schedule", "fired"), ("schedule", "ready")],
               repr(kinds))
-        check("the events carry ids and the kind only",
-              all(set(dd) <= {"id", "kind", "state", "late"} for _, dd in w.events))
+        check("the events carry ids, the kind and the notify flag only",
+              all(set(dd) <= {"id", "kind", "state", "late", "notify"} for _, dd in w.events))
         b = B.latest()
         text = b["text"]
         check("it is kept as the latest, for the apps to read",

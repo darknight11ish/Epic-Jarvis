@@ -6291,14 +6291,19 @@ the owner asked for it.
 ### 21.4 The event
 
 `schedule`: `{"id", "kind", "state": "fired" | "changed" | "ready",
-"late"?: bool, "notify"?: false}` - **ids and the kind only, never the
+"late"?: bool, "notify": bool}` - **ids and the kind only, never the
 words** (ARCHITECTURE section 6). `"ready"` is a morning briefing whose own
 words are built and kept: `jarvis_briefing.py` publishes it (its
 `deps.publish("schedule", {"id", "kind", "state": "ready"})`) once the
 briefing exists, so a notification is never ahead of it (section 22).
-`"notify": false` (since 2026-09-25) marks a kind
+`"notify"` says whether THIS firing is something to tell the owner about, and
+since 2026-11-09 it is on every `fired` event, true or false (section 21.17).
+`false` (since 2026-09-25) marks a kind
 that tells nobody - the standby schedule at 01:00 - and then neither app
-shows a toast or a notification; both still read Coming up again.
+shows a toast or a notification; both still read Coming up again. Both apps
+only ever test for `false`, so a `true` and an older event's absent key mean
+the same thing to them; carrying the key on every firing is the 2026-11-09
+change, not a new requirement on a client.
 `"fired"` is a job going off; `"changed"` is the list changing (added,
 paused, deleted, a card decided). Both apps read Coming up again on it.
 Since 2026-09-25 there is also `"matched"` - a "tell me when" that
@@ -7755,6 +7760,117 @@ sentences falling through, all 178 rows answering from their own words and
 surface with no denial, the read-only contract (READ_ONLY_INTENTS, no card, no
 route, a private chat gets None), and the measured settings inversion answering
 with its rule.
+
+### 21.17 The words a reminder is set from - relative dates, the title, and one true receipt (added 2026-11-09)
+
+**What the owner saw.** He said *"remind me to call Grandma in 4 days from
+now"* and got three things wrong at once: the reminder was due **today at
+13:00** instead of four days out, its **title was the whole instruction**, and
+Jarvis said **"I've updated it"** on a turn whose own footer said no action ran.
+All three are fixed in `backend/jarvis_quick.py`, `backend/jarvis_schedule.py`,
+`backend/jarvis_claims.py` and `backend/jarvis_agent.py`, and the suite that
+pins his exact sentence with a frozen clock is
+`backend/test_reminders_grandma.py`.
+
+**A length of time in days and weeks is now a length of time.** Until
+2026-11-09 `jarvis_quick.parse_duration` knew hours, minutes and seconds and
+nothing larger, so "4 days" was not a duration at all; `parse_when` then gave up
+on "in 4 days from now" both for the fast path and for the model's
+`set_reminder` tool call. Days and weeks are units now (seven days each, to the
+second), and the way the phrase is framed makes no difference - all of these
+read the same:
+
+    in 4 days           4 days from now           in 4 days from now
+    in 2 weeks          in 2 hours                in 15 minutes
+
+A length of time keeps the CLOCK TIME it was said at: "in 4 days" at 10:15 is
+due at 10:15 four days later, not at a default hour, because the owner said a
+length and not a day. A phrase with **no** length but a day - "next Monday",
+"tomorrow", "tonight", "on Friday" - uses the same default the product already
+uses (`jarvis_quick.DEFAULT_HOUR`: 09:00, or 14:00/18:00/20:00 for
+afternoon/evening/tonight) **on that day**, and the reply always names the time
+it chose ("Reminder set for 09:00 on Monday 16 November.") so a default is never
+a surprise. "next <weekday>" is the same day "on <weekday>" already meant - the
+next time that weekday comes round.
+
+A bare "in 4 days", with no request around it, is a **reminder**, never a
+timer: a timer is capped at 24 hours (`jarvis_schedule.MAX_TIMER`, whose own
+comment says "later than that, set a reminder"), and the fast path now sends the
+long phrase to the reminder path instead of letting the scheduler refuse a timer
+nobody asked for.
+
+**The title is the action, never the sentence.** A reminder has one field for
+its words (`text`) - that is its title in both apps and the body of its
+notification; there is no second "body" field to put detail in. `text` is the
+ACTION in the owner's own words, with his capitals kept ("call Grandma",
+"take my pills"), and the sentence's own framing is removed:
+`jarvis_quick.reminder_action_words` drops the command that asked for it
+("remind me to ...", "set a reminder for ...") and a trailing time phrase
+("in 4 days from now", "tomorrow at 9", and a joining word left behind such as
+the "in" of "call Grandma in"). It is applied on BOTH roads into a reminder: the
+fast path's grammar, and the model's `set_reminder` arguments (the tool's `text`
+description now says the action only). A `text` that is nothing but the command
+and the time comes back empty, and the scheduler then refuses with its ordinary
+"a reminder needs some words" rather than storing "tomorrow".
+
+**One receipt, and only because the action ran.** The fast path's receipt is
+`Result.made` - the ids of rows that really exist; nothing else ever fills it,
+so a matched intent that changes nothing (a question, a read) leaves it empty
+and writes no "cancel that" record. On the model's road the claim was the
+problem: when a `set_reminder`/`set_timer`/`todo_add`/`todo_done` call FAILED,
+the model could still answer "I've updated it", and the owner read that above a
+footer saying no action ran. Now:
+
+- `jarvis_claims.CLAIMS_DONE` knows the verb **"updated"** - "I've updated it."
+  on its own is read as a claim for the first time; before this only a sentence
+  that happened to contain another claim verb was caught.
+- a scheduler WRITE that did not succeed sets `_TurnWatch.schedule_failed`, and
+  the words of the round that answers are **held** (the same seam a spending
+  table and a what-if already use). If those words claim the change was made
+  they are **dropped** and the tool's own error is said instead - "That reminder
+  was not set: <the tool's reason>. Nothing was changed." Words that claim
+  nothing are shown exactly as written (they are only delayed in this rare
+  case). The generic "nothing was actually done" footer is not added a second
+  time over that sentence.
+- No gate is weakened by any of this: the approval rule, the outside-text
+  refusal and the scheduler's own checks have all already decided; this changes
+  only what the ANSWER may say after them.
+
+**The phone notification flag is `notify`, and a reminder now carries it
+explicitly.** The key both apps read is `notify` on the `schedule` event: the
+phone's `Schedule.kt` `firedFrom` shows no notification for `false`, and the
+desktop's `coming-up.js` tests the same key. Until 2026-11-09 the key was
+present only when it was `false` (the standby schedule), so a reminder notified
+by carrying NO key at all - "notify by omission". Since 2026-11-09:
+
+- a job's own view (`GET /api/schedule`, and `GET /api/schedule?id=`) carries
+  `"notify": true` for every kind that tells the owner about its time (a
+  reminder, alarm, timer, to-do) and `"notify": false` for the quiet kinds;
+- every `fired` event carries the same key, true or false.
+
+This is additive for an older client: both apps only ever test for `false`, so
+`true` and an absent key mean the same thing to them, and a kind that tells
+nobody still says `false` and is still silent. What it buys is that a saved
+reminder states, in its own row and in its own going-off event, that the phone
+should be told - a default one silent kind away from a reminder that never
+notified could not be read from the data at all.
+
+**Honest limits.** The phone notification still needs the phone connected to the
+PC when the job goes off (the PC is the clock, §21.1); nothing here sets a phone
+alarm of its own. The relative-date grammar reads the shapes listed above - an
+unusual phrasing still falls through to the model, and the model's own reading
+of a time is not checked by this section. The frozen-clock suite proves the
+scheduler row, the title, the receipt and the `notify` field; it does not prove
+that a notification appeared on a real phone, which is a field-test row, not a
+test in this repository.
+
+Tests: `backend/test_reminders_grandma.py` (the owner's sentence with a frozen
+clock, every relative phrasing, the title cleanup on both roads, one receipt
+against a real scheduler row, a control turn with none, the failed-write claim
+dropped through a scripted model, and the `notify` field on the row and the
+event), plus the existing `backend/test_schedule.py`,
+`backend/test_schedule_steps.py`, `backend/test_standby_schedule.py`,
+`backend/test_smarter_answers.py` and `backend/test_reminders_honesty.py`.
 
 ## 22. The morning briefing, and the back-off for offers (added 2026-09-25)
 The owner's decisions of 2026-09-25 (`CLAUDE.md`): ONE scheduler, reused for

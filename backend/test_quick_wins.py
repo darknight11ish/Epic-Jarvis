@@ -279,8 +279,9 @@ def t_snooze_is_a_one_off_copy_of_what_went_off():
     check("... and can be snoozed in turn", code == 200 and "12:25" in out3["said"], out3)
     blob = json.dumps(w.events) + json.dumps(_AUDIT)
     check("no event and no audit line carries the words", "get up" not in blob)
-    check("the events are ids, kinds and states only",
-          all(set(d) <= {"id", "kind", "state", "late"} for _, d in w.events), w.events[-3:])
+    check("the events are ids, kinds, states and the notify flag only",
+          all(set(d) <= {"id", "kind", "state", "late", "notify"} for _, d in w.events),
+          w.events[-3:])
     for secs, why in ((0, "no length"), (59, "under a minute"), (86401, "over a day")):
         code, out = w.s.act(copy["id"], "snooze", secs)
         check(f"a snooze of {why} is refused with a sentence", code == 400 and out.get("error"))

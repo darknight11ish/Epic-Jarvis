@@ -4321,10 +4321,26 @@ class Scheduler:
                     # buttons on the notification instead of the row's.
                     data["step"] = int(part)
                     data["parts"] = int(parts_n)
-                if k is not None and not k.notify:
-                    # Nothing to tell the owner (the standby schedule at
-                    # 01:00): both apps show no notification or toast for it.
-                    data["notify"] = False
+                if k is not None:
+                    # WHETHER THIS FIRING IS SOMETHING TO TELL THE OWNER ABOUT
+                    # (2026-11-09, the owner's Wave-13 "Grandma" bug). Said
+                    # explicitly on EVERY firing, true or false, instead of
+                    # only the false: this is the exact key the phone reads -
+                    # `Schedule.kt`'s `firedFrom` returns no notification when
+                    # it is `false` - and the desktop's `coming-up.js` tests
+                    # the same key. A reminder therefore carries the phone
+                    # notification flag itself rather than carrying no key at
+                    # all, which read as "notify" by omission and was one
+                    # silent kind's default away from a saved reminder that
+                    # never told the phone.
+                    #
+                    # AN OLDER CLIENT IS UNAFFECTED: both apps only ever test
+                    # for `false`, so `true` and an absent key mean the same
+                    # thing to them - which is why this is additive even
+                    # though it changes the shape of the event. A kind that
+                    # tells nobody (the standby schedule) still says `false`
+                    # and is still silent in both apps.
+                    data["notify"] = bool(k.notify)
                 if k is not None and k.say is not None:
                     # The words THIS firing says (the quote of the day,
                     # 2026-11-05). Additive, like step/parts above: an older
@@ -4689,8 +4705,14 @@ class Scheduler:
             v[CONTEXT_DROPPED] = True
         if any(bundle_here.get(key) for key in BUNDLE_CONTENT_KEYS):
             v["has_context"] = True
-        if k is not None and not k.notify:
-            v["notify"] = False
+        if k is not None:
+            # The same flag on the job's own view since 2026-11-09, so a saved
+            # reminder can be read as notifying the phone BEFORE it fires, not
+            # only from its going-off event. True for every kind that tells the
+            # owner about its time (a reminder, an alarm, a timer, a to-do) and
+            # false for the quiet kinds (the standby schedule), which is what
+            # the key always said when it was present.
+            v["notify"] = bool(k.notify)
         if k is not None and k.note is not None:
             try:
                 said = str(k.note(row["id"]) or "")

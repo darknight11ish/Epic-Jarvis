@@ -5486,7 +5486,10 @@ TOOLS: dict = {
         "Set a reminder or alarm on this PC, once or repeating. `when` is plain "
         "English, e.g. \"tomorrow at 6pm\" or \"in 20 minutes\".",
         {"type": "object", "properties": {
-            "text": {"type": "string", "description": "what to remind the owner of, in their words"},
+            "text": {"type": "string",
+                     "description": "the ACTION only, in the owner's words - e.g. \"Call "
+                                    "Grandma\" or \"take my pills\"; never the whole request "
+                                    "(\"remind me to call Grandma in 4 days\") and never the time"},
             "when": {"type": "string"},
             "alarm": {"type": "boolean", "description": "true for a wake-up alarm"},
             "repeat": {"type": "object", "description": "only for something that repeats",
@@ -5779,6 +5782,26 @@ TOOLS: dict = {
 #: set Jarvis's alarms. The owner can type or say it instead.
 SCHEDULE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done", "coming_up"})
 
+#: The scheduler tools that CHANGE something, as opposed to `coming_up`, which
+#: only reads. A failed write is what `run_local_turn` holds the answering
+#: round's words for (2026-11-09), so a claim like "I've updated it" cannot be
+#: said over a tool result that says it was not.
+SCHEDULE_WRITE_TOOLS = frozenset({"set_timer", "set_reminder", "todo_add", "todo_done"})
+
+#: What a failed scheduler write says in the answer, in place of the model's
+#: own "done" claim. One noun per tool, so the owner reads which thing was not
+#: set; `{why}` is the tool's own error, in the tool's own words.
+SCHEDULE_NOT_DONE = {
+    "set_reminder": "That reminder was not set: {why}",
+    "set_timer": "That timer was not started: {why}",
+    "todo_add": "That was not added to your list: {why}",
+    "todo_done": "That was not marked done: {why}",
+}
+#: The last line, always: nothing changed, whatever the reason was.
+SCHEDULE_NOT_DONE_END = " Nothing was changed."
+#: When the tool gave no reason at all, the same sentence without one.
+SCHEDULE_NOT_DONE_PLAIN = "That was not set, and nothing was changed."
+
 SCHEDULE_AFTER_OUTSIDE = ("refused: outside text shaped this turn, so Jarvis does not set or "
                           "change timers, reminders or the to-do list from it. Nothing was "
                           "changed. Tell the owner they can type or say it themselves.")
@@ -5889,7 +5912,14 @@ def _schedule_run(name: str, args: dict, sched, now: float) -> dict:
         return {"ok": bool(res.ids), "said": res.reply}
     # set_reminder
     kind = "alarm" if args.get("alarm") is True else "reminder"
-    text = str(args.get("text") or "").strip()
+    # THE TITLE IS THE ACTION, NEVER THE SENTENCE (2026-11-09, the owner's
+    # Wave-13 "Grandma" bug): a model that copies the whole request into `text`
+    # ("remind me to call Grandma in 4 days from now") used to store exactly
+    # that, so the reminder's title - what both apps print and what a
+    # notification says - was the instruction. The command lead and a trailing
+    # time phrase are the SENTENCE's words, not the action's, so they are
+    # removed here, once, on the only path a model has into a reminder.
+    text = Q.reminder_action_words(str(args.get("text") or ""), now)
     if isinstance(args.get("repeat"), dict):
         res = Q._set_at(kind, Q.When(rule=args["repeat"]), text, sched, now, "reminder_set")
         return {"ok": bool(res.ids), "said": res.reply}
@@ -5942,6 +5972,18 @@ def _schedule_call(name: str, args: dict, call: dict, convo: list, steps: list, 
             # schedule_correction).
             step["said"] = str(result.get("said") or "").strip()
         say_step("tool_finished", name, ok=step["ok"])
+    if watch is not None and not step["ok"] and name in SCHEDULE_WRITE_TOOLS:
+        # A WRITE THAT DID NOT HAPPEN (2026-11-09). The owner's Wave-13 bug:
+        # Jarvis answered "I've updated it" on a turn whose own footer said no
+        # action ran. The words of the round that answers are HELD from here
+        # (run_local_turn), so that claim is dropped before it is read and the
+        # tool's own error is said instead - a receipt exists only when the
+        # action really ran. Nothing is weakened by recording this: the gate,
+        # the outside-text refusal and the tool's own checks have all already
+        # decided, and this only changes what the ANSWER may say.
+        watch.schedule_failed = {"tool": name,
+                                 "why": str(result.get("error")
+                                            or result.get("said") or "").strip()}
     if name == "coming_up" and watch is not None:
         # C5 (security audit 2026-10-30): a reminder's own words are stored
         # data - a previous turn could in principle have written them, and
@@ -9284,6 +9326,13 @@ class _TurnWatch:
         # per-review fake/real verdict the model wrote cannot reach the owner.
         self.product_result = None
         self.product_done = False
+        # A reminder, timer or to-do WRITE that did not succeed this turn
+        # (2026-11-09): {"tool", "why"}. The answering round's words are held
+        # from then on so a claim ("I've updated it") can be dropped before the
+        # owner sees it, and `schedule_failed_done` says the held words have
+        # been dealt with. Empty/False on every turn that raised nothing.
+        self.schedule_failed = {}
+        self.schedule_failed_done = False
         self.secrets: list = []      # KINDS of password or key read, never values
         # The websites (host names) browser_control read this turn, for the
         # form-review rule "only the form's own site" (FORM_REVIEW_OTHER_SITE).
@@ -15263,7 +15312,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         spend_hold = _spending_hold(watch, names)
         holding = (spend_hold
                    or (watch.retirement_result is not None and not watch.retirement_done)
-                   or (watch.product_result is not None and not watch.product_done))
+                   or (watch.product_result is not None and not watch.product_done)
+                   # A reminder, timer or to-do write that FAILED this turn
+                   # (2026-11-09): the answering round's words are held and
+                   # checked before the owner sees them, so "I've updated it"
+                   # over a tool result saying it was not set cannot be read.
+                   # The same seam a spending table and a what-if already use.
+                   or (bool(watch.schedule_failed) and not watch.schedule_failed_done))
         # The model's words this round are thrown away and replaced by code's
         # own text (a what-if, a product report): they are not "what it said"
         # for the checks that read the model's words (the "I've done it" line).
@@ -15362,6 +15417,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 deliver_table("".join(held))
             elif spend_hold:
                 deliver_plain("".join(held))
+            elif watch.schedule_failed and not watch.schedule_failed_done:
+                # A failed reminder/timer/to-do write: the model's words are
+                # checked for a "done" claim before the owner reads them
+                # (2026-11-09). A spending answer keeps its own checked
+                # sentence above, which is itself a guard.
+                deliver_schedule_truth("".join(held))
             deliver_retirement()
             deliver_product_report()
         elif spend_hold and not watch.spending_asked and watch.spending_table is None:
@@ -15462,6 +15523,49 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         said["gap"] = True          # a blank line after another held sentence
         out.set_status(None)
         emit(answer)
+
+    def deliver_schedule_truth(text: str) -> None:
+        """A reminder, timer or to-do was asked for and NOT set (2026-11-09).
+
+        The owner's Wave-13 bug, in his own words: Jarvis said "I've updated
+        it" on a turn whose own footer said no action ran. The footer was
+        right; the claim above it was not, and the owner read both. The
+        answering round's words are held when a scheduler WRITE failed
+        (`_TurnWatch.schedule_failed`, set by `_schedule_call`), and this is
+        the one place they are dealt with before they stream:
+
+          * words that claim the change was made are DROPPED - a receipt
+            exists only when the action really ran - and the tool's own error
+            is said instead, in a sentence the owner can act on;
+          * words that claim nothing are shown exactly as written (delayed
+            only in this rare case).
+
+        It cannot check when `jarvis_claims` is missing or broken: then the
+        words are treated as a claim rather than risked, the same fail-closed
+        direction the private-chat gate uses. The tool's error is always the
+        tool's own; nothing here invents a reason.
+        """
+        watch.schedule_failed_done = True
+        try:
+            import jarvis_claims
+            claimed = jarvis_claims.unbacked_claim(text, steps)
+        except Exception:
+            claimed = True
+        out.set_status(None)
+        if not claimed:
+            if text.strip():
+                emit(text)
+            return
+        failed = watch.schedule_failed if isinstance(watch.schedule_failed, dict) else {}
+        tool = str(failed.get("tool") or "")
+        why = str(failed.get("why") or "").strip()
+        head = SCHEDULE_NOT_DONE.get(tool, "That was not set: {why}")
+        reason = head.format(why=why).rstrip() if why else ""
+        if reason and reason[-1] not in ".!?":
+            reason += "."                # the tool's error need not end a sentence
+        line = (reason + SCHEDULE_NOT_DONE_END) if reason else SCHEDULE_NOT_DONE_PLAIN
+        said["gap"] = True
+        emit(line)
 
     def fail(message: str) -> None:
         if out.sse:
@@ -16753,12 +16857,19 @@ def postscript_lines(text: str, steps=(), *, watch=None, owner_words: str = "",
     broken pattern costs that one line and nothing else.
     """
     kinds: list = []
-    try:
-        line = _nothing_done_line(text, list(steps or ()), spoken=spoken)
-    except Exception:
-        line = ""
-    if line:
-        kinds.append(("claimed_undone", line))
+    # A failed reminder/timer/to-do write whose claim was already dropped and
+    # replaced by code's own line (`deliver_schedule_truth`, 2026-11-09) needs
+    # no second correction: the generic line would repeat what the owner has
+    # just been told. `watch` may be None on the cloud lane, where no scheduler
+    # tool can run at all - so the check is False there, and nothing changes.
+    already_told = bool(getattr(watch, "schedule_failed_done", False))
+    if not already_told:
+        try:
+            line = _nothing_done_line(text, list(steps or ()), spoken=spoken)
+        except Exception:
+            line = ""
+        if line:
+            kinds.append(("claimed_undone", line))
     try:
         line = _schedule_refusal_line(text, list(steps or ()))
     except Exception:
