@@ -3292,6 +3292,15 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
       // this set is NOT is as load-bearing as what it is: no amend, no
       // bulk, nothing the card's own two buttons do not need.
       "hud-approvals",
+      // The Memory tab's ONE Keep (owner's ruling, 2026-11-09: "Keep on plain
+      // facts only"): the Brain's own `brain_memory_decide`, one integer id and
+      // one bool, held on a stale link in Rust. It can keep ONE plain new fact
+      // and nothing else - no forget, no merge, no learning switch - and every
+      // card with a warning, a replacement or a retire question still opens the
+      // Brain (the page's one eligibility function). This list is the window's
+      // whole permission set, so the entry belongs here or the grant is not
+      // proved: `capabilities/hud.json` holds it in this same position.
+      "hud-memory-keep",
       // The fixed Stop everything control (owner-approved 2026-10-22): the
       // same `stop_everything` command as Alt+Shift+X, the tray and the widget.
       // Stop only - approves and starts nothing - and a separate set so this
