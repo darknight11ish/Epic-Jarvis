@@ -2253,7 +2253,173 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _model_recommender_question(text)
     if got is not None:
         return got
+    # --- a self setting/capability question naming nothing installed ----------
+    # LAST of all (Q3.3): only a sentence every matcher above declined, so no
+    # existing door loses a word. Fixed honest words, never the model.
+    got = _unknown_self_name(s)
+    if got is not None:
+        return got
     return None
+
+
+# --------------------------------------------------------------------------
+#   A self-capability/setting question naming NOTHING this PC has (Q3.3,
+#   owner ruling 2026-11-08)
+#
+# THE MEASURED BUG (the ruling's Q3.3; the audit's preset-echo class). With the
+# CODING preset selected, "what is the turbo setting set to" and "is the turbo
+# feature on" matched nothing in the fast path, so the 30B coding model was the
+# only answer - and it improvised about Jarvis's own settings. The explicit
+# feature-question fallback (2026-11-08) already answers a "do you have a
+# feature that ..." shape that names no row; these two SETTING-NAME shapes had
+# no owner at all.
+#
+# WHAT IS CLAIMED, deliberately narrow: a whole sentence in one of exactly two
+# self-directed shapes, naming a name that is NOT a registry row, NOT a
+# catalogue feature and NOT a context word:
+#   * "what is <name> set to"                 (a setting read, nothing known)
+#   * "is the <name> setting/switch/option/  (a switch read, nothing known)
+#      preference/feature on|off|enabled..."
+# The answer is the ruling's own sentence. Everything else is left alone:
+#   * "turn on/off <name>" without the word "setting" keeps its old path - that
+#     is how the owner asks for an APP or a DEVICE ("turn on the kitchen
+#     light"), and only the explicit "... setting" form is a settings request
+#     (settings_unknown, 2026-10-13, already answers it);
+#   * "do you have a <name>" / "can you <name>" without a feature noun keeps its
+#     old path: "can you open spotify" and "do you have plans tomorrow" are
+#     ordinary requests/questions, not self-state;
+#   * a name that IS a known row, alias or feature is never claimed here - it
+#     had a better owner earlier in the chain, and the guide/registry gate below
+#     is a second check on that;
+#   * a context name ("what is it set to") keeps its old path: "it" depends on
+#     the last answer, which local code cannot read.
+# Read-only: fixed words, no file read, no card, no model, nothing written.
+# --------------------------------------------------------------------------
+
+#: The owner ruling's sentence, verbatim in meaning and near-verbatim in words.
+UNKNOWN_SELF_NAME_WORDS = (
+    "I don't have a setting or feature with that exact name - say "
+    "\"what can I change?\" or \"what do you have?\" to see the real list.")
+
+#: Names that make the sentence CONTEXT rather than a setting name. "What is it
+#: set to" and "what is that set to" depend on the last answer; the fast path
+#: cannot see it, so they keep the old path instead of answering about nothing.
+_UNKNOWN_CONTEXT_NAMES = frozenset({
+    "it", "this", "that", "these", "those", "them", "one", "that one",
+    "the one", "name", "time", "date", "day", "thing", "things", "stuff",
+    "something", "value", "question", "answer", "plan", "it all",
+})
+
+#: Words a DEVICE question uses. A sentence with one of them is a device
+#: question with the word "switch" in it, not a Jarvis setting ("is the kitchen
+#: light switch on") - the old path stays.
+_UNKNOWN_DEVICE_WORDS = frozenset({
+    "light", "lights", "lamp", "lamps", "fan", "fans", "oven", "tv",
+    "television", "thermostat", "heater", "garage", "door", "doors", "plug",
+    "socket", "blender", "kettle", "toaster", "speaker", "speakers", "screen",
+    "monitor", "camera", "mic", "microphone", "printer", "washer", "dryer",
+    "dishwasher", "vacuum", "boiler", "radiator",
+})
+
+#: "what is <name> set to" / "what's <name> configured to". Whole sentences.
+_UNKNOWN_SET_TO = re.compile(
+    r"what(?:'s|\s+is)\s+(?:the\s+|my\s+|your\s+|a\s+|an\s+)?"
+    r"(?P<name>[a-z0-9][a-z0-9' -]{0,60}?)\s+"
+    r"(?:set|configured|adjusted)\s+to\s*\??")
+
+#: "is the <name> setting on", "... switch switched off", "... feature enabled":
+#: the word setting/switch/option/preference/feature is REQUIRED, so a sentence
+#: without it is never captured.
+_UNKNOWN_SETTING_STATE = re.compile(
+    r"(?:is|are)\s+(?:the\s+|my\s+|your\s+|a\s+|an\s+)?"
+    r"(?P<name>[a-z0-9][a-z0-9' -]{0,60}?)\s+"
+    r"(?P<kind>setting|settings|option|preference|switch|feature)\s+"
+    r"(?P<state>on|off|enabled|disabled|turned\s+on|turned\s+off|"
+    r"switched\s+on|switched\s+off)\s*\??")
+
+
+def _unknown_name_is_known(name: str) -> bool:
+    """Does `name` already own a registry row, a catalogue feature or a group?
+
+    The second gate after the earlier matchers: if any of these resolves, the
+    sentence was not an unknown-name question and must keep whatever path it
+    had. A broken/absent module answers True (leave it alone) - fail CLOSED,
+    never claim a name this code cannot check.
+    """
+    text = " ".join(str(name or "").split()).strip(" ?.!,")
+    if not text:
+        return True
+    try:
+        import jarvis_settings_registry as R
+    except Exception:                       # noqa: BLE001 - older PC: leave it
+        return True
+    for finder in (getattr(R, "find_bool_setting", None),
+                   getattr(R, "find_choice_setting", None),
+                   getattr(R, "find_number_setting", None),
+                   getattr(R, "find_bool_setting_words", None),
+                   getattr(R, "find_choice_setting_words", None),
+                   getattr(R, "find_number_setting_words", None)):
+        if finder is None:
+            continue
+        try:
+            if finder(text) is not None:
+                return True
+        except Exception:                   # noqa: BLE001 - a broken finder, not a no
+            return True
+    try:
+        import jarvis_feature_guide as FG
+        got = FG.find(text, loose=True)
+    except Exception:                       # noqa: BLE001 - older PC: leave it
+        return True
+    return str((got or {}).get("kind") or "") in ("feature", "group", "dataset")
+
+
+def _unknown_self_name_candidate(name: str) -> bool:
+    """Is `name` a plausible self-state name this code may say it does not have?
+
+    Rejects context words ("it", "that"), device nouns and over-long tails, and
+    accepts only names that resolve to no row/feature (the guide gate). One or
+    two words is the shape of a setting name; a whole clause is a different
+    sentence that some other owner should keep.
+    """
+    text = " ".join(str(name or "").split()).strip(" ?.!,")
+    words = text.split()
+    if not text or len(words) > 4 or len(text) > 48:
+        return False
+    if text in _UNKNOWN_CONTEXT_NAMES:
+        return False
+    if any(word in ("it", "this", "that", "those", "these", "you", "jarvis",
+                    "i", "me", "we") for word in words):
+        return False
+    # A self FACT with its own owner elsewhere: "what is my name set to" and
+    # "what is the time set to" are not setting names, so the fallback must not
+    # turn them into "no such setting". (The words themselves, not the whole
+    # name, so "what is the time machine setting set to" is still an unknown
+    # setting - a setting shape with a name nothing has.)
+    if any(word in ("name", "time", "date", "day", "birthday", "age")
+           for word in words):
+        return False
+    if any(word in _UNKNOWN_DEVICE_WORDS for word in words):
+        return False
+    return not _unknown_name_is_known(text)
+
+
+def _unknown_self_name(s: str) -> Optional[Intent]:
+    """Q3.3: a self setting/switch question naming nothing installed, or None.
+
+    Runs LAST in `_match`, immediately before the model fallback, so every
+    sentence another matcher owns keeps its owner. `s` is the normalised
+    sentence. Read-only; the runner is `_run_unknown_self_name`.
+    """
+    m = _UNKNOWN_SET_TO.fullmatch(s)
+    if m is None:
+        m = _UNKNOWN_SETTING_STATE.fullmatch(s)
+    if m is None:
+        return None
+    name = (m.groupdict().get("name") or "").strip(" ?.!,")
+    if not _unknown_self_name_candidate(name):
+        return None
+    return Intent("unknown_self_name", {"name": name})
 
 
 _VAGUE = r"(?:it|this|that|them|these|those|something|stuff|things)"
@@ -5359,7 +5525,13 @@ _SETTINGS_EXPLAIN_ALL = re.compile(
     r"|explain\s+(?:to\s+me\s+)?(?:any\s+settings?(?:\s+.*)?|(?:your|the)\s+settings?\s*\??)"
     r"|how\s+do\s+i\s+(?:find\s+out|see|check)\s+what\s+"
     r"(?:a|one\s+of\s+your|the)\s+settings?\s+(?:is\s+)?(?:currently\s+)?"
-    r"(?:set\s+to|at)(?:\s+.*)?")
+    r"(?:set\s+to|at)(?:\s+.*)?"
+    # "what are my settings set to" (determinism audit 2026-11-08, F13): the
+    # ordinary plural shape of the one-setting question, and it fell to the
+    # model. The answer names the real counts and how to ask about one - it
+    # never claims to read all 49 values at once, which it cannot.
+    r"|what\s+are\s+(?:all\s+)?(?:my|the|your)\s+(?:current\s+)?settings?"
+    r"(?:\s+(?:set\s+to|at|now|currently))?")
 
 
 def _settings_explain_all(s: str) -> Optional[Intent]:
@@ -5824,7 +5996,16 @@ _READ_ALOUD_OFF = re.compile(
     r"|(?:disable|deactivate)\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud"
     r"|(?:stop|quit)\s+reading\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
     r"|(?:don'?t|do\s+not)\s+read\s+(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
-    r"|(?:stop|quit|don'?t|do\s+not)\s+read\s+everything\s+(?:out\s+)?(?:loud|aloud)")
+    r"|(?:stop|quit|don'?t|do\s+not)\s+read\s+everything\s+(?:out\s+)?(?:loud|aloud)"
+    # The owner's own three OFF sentences (determinism audit 2026-11-08, F5):
+    # "you turn off reading out loud", "turn off reading everything out loud",
+    # "stop reading everything out loud" fell to the model because the OFF
+    # matcher only knew "read aloud"/"read-aloud" and "read everything", never
+    # "reading ... out loud". These shapes add nothing else: they still need
+    # the whole sentence and still read nothing before or after the switch.
+    r"|(?:you\s+)?(?:turn|switch)\s+off\s+reading\s+(?:everything\s+)?"
+    r"(?:out\s+)?(?:loud|aloud)"
+    r"|(?:stop|quit)\s+reading\s+everything\s+(?:out\s+)?(?:loud|aloud)")
 _READ_ALOUD_STATE = re.compile(
     r"are\s+you\s+(?:currently\s+|right\s+now\s+)?reading\s+"
     r"(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)"
@@ -5833,7 +6014,14 @@ _READ_ALOUD_STATE = re.compile(
     r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+"
     r"(?:switch\s+)?(?:on|off|enabled|disabled)"
     r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read[\s-]?aloud\s+"
-    r"(?:turned|switched)\s+(?:on|off)")
+    r"(?:turned|switched)\s+(?:on|off)"
+    # The ordinary settings-card wording (determinism audit 2026-11-08, F13):
+    # "is the read replies out loud switch on" names the same switch in its
+    # Settings words, and it fell to the model because no alternative carried
+    # "read replies out loud" + "switch".
+    r"|is\s+(?:the\s+|your\s+)?(?:automatic\s+)?read(?:ing)?\s+"
+    r"(?:your\s+|my\s+)?(?:replies|answers)\s+(?:out\s+)?(?:loud|aloud)\s+"
+    r"(?:switch\s+)?(?:on|off|enabled|disabled)")
 
 
 def _read_aloud_set(s: str) -> Optional[Intent]:
@@ -5842,6 +6030,77 @@ def _read_aloud_set(s: str) -> Optional[Intent]:
         return Intent("read_aloud_set", {"on": False})
     if _READ_ALOUD_ON.fullmatch(s):
         return Intent("read_aloud_set", {"on": True})
+    return None
+
+
+#: THE AUTO WI-FI RECONNECT, SAID OUT LOUD (2026-11-08).
+#:
+#: The owner asked for a feature that "defaults on but can be changed in settings
+#: or chat with jarvis", with the switch itself, its default and its file owned by
+#: `jarvis_wifi.py` (GET/POST /api/wifi-reconnect). This file owns ONLY the
+#: sentences: they read the switch's own state, never the model's guess, and the
+#: change calls the module's own `request_enabled()` - the exact function the
+#: Settings switch's route calls, where turning it ON is ONE `change_own_config`
+#: card (ruling Q4.4) and turning it OFF is instant.
+#:
+#: WHAT MAY MATCH, and nothing else: the feature by its Settings name ("auto
+#: wi-fi reconnect", "automatic wifi reconnect"), and the owner's own words about
+#: reconnecting Wi-Fi on its own. A network question that is not about this switch
+#: ("what wifi am I on?", "turn off the kitchen light") keeps its own path.
+_WIFI_ON = re.compile(
+    r"(?:turn|switch)\s+on\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|(?:turn|switch)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+on"
+    r"|(?:enable|activate)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|reconnect\s+(?:to\s+)?(?:the\s+|my\s+)?wi[\s-]?fi\s+automatically"
+    r"|keep\s+(?:the\s+|my\s+)?wi[\s-]?fi\s+(?:connected|working)\s+automatically")
+_WIFI_OFF = re.compile(
+    r"(?:turn|switch)\s+off\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|(?:turn|switch)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+off"
+    r"|(?:disable|deactivate|stop)\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect"
+    r"|(?:do\s+not|don't)\s+(?:reconnect|touch|change)\s+(?:the\s+|my\s+)?wi[\s-]?fi"
+    r"|stop\s+(?:reconnecting|trying\s+to\s+reconnect)\s+(?:to\s+)?(?:the\s+|my\s+)?wi[\s-]?fi")
+_WIFI_ABOUT = re.compile(
+    r"what\s+does\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:do|mean)"
+    r"|how\s+does\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+work"
+    r"|what\s+is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect")
+_WIFI_WHEN = re.compile(
+    r"when\s+will\s+(?:jarvis\s+|it\s+)?(?:try|attempt|check)\s+(?:the\s+|my\s+)?wi[\s-]?fi(?:\s+again)?"
+    r"|when\s+is\s+the\s+next\s+(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+(?:reconnect\s+)?(?:check|try|attempt)"
+    r"|when\s+does\s+(?:jarvis|it)\s+next\s+check\s+(?:the\s+|my\s+)?wi[\s-]?fi"
+    r"|when\s+will\s+(?:it|jarvis)\s+try\s+to\s+(?:reconnect|connect)\s+(?:to\s+)?(?:the\s+)?wi[\s-]?fi")
+_WIFI_STATE = re.compile(
+    r"is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:switch\s+)?(?:on|off|enabled|disabled)"
+    r"|is\s+(?:the\s+|your\s+)?(?:auto(?:matic)?\s+)?wi[\s-]?fi\s+reconnect\s+(?:turned|switched)\s+(?:on|off)"
+    r"|is\s+jarvis\s+(?:trying|going)\s+to\s+(?:reconnect|fix)\s+(?:the\s+|my\s+)?wi[\s-]?fi")
+#: "Did you reconnect my wifi?" (2026-11-08; ruling Q4.5: the Change Journal
+#: receipt exists so this question has a real answer, never a model's guess).
+_WIFI_DID = re.compile(
+    r"did\s+(?:you|jarvis)\s+(?:reconnect|connect|try\s+to\s+reconnect|try\s+reconnecting)\s+"
+    r"(?:my|the|this\s+pc's?)\s+wi[\s-]?fi(?:\s+(?:connection|network|link))?"
+    r"|have\s+(?:you|jarvis)\s+(?:reconnected|tried\s+to\s+reconnect)\s+"
+    r"(?:my|the|this\s+pc's?)\s+wi[\s-]?fi")
+
+
+
+def _wifi_reconnect_set(s: str) -> Optional[Intent]:
+    """The auto Wi-Fi reconnect switch in the owner's own words, or None."""
+    if _WIFI_OFF.fullmatch(s):
+        return Intent("wifi_reconnect_set", {"on": False})
+    if _WIFI_ON.fullmatch(s):
+        return Intent("wifi_reconnect_set", {"on": True})
+    return None
+
+
+def _wifi_reconnect_read(s: str) -> Optional[Intent]:
+    """The read-only auto Wi-Fi reconnect questions: what, when, and did it."""
+    if _WIFI_DID.fullmatch(s):
+        return Intent("wifi_reconnect_did")
+    if _WIFI_ABOUT.fullmatch(s):
+        return Intent("wifi_reconnect_about")
+    if _WIFI_WHEN.fullmatch(s):
+        return Intent("wifi_reconnect_when")
+    if _WIFI_STATE.fullmatch(s):
+        return Intent("self_wifi_reconnect")
     return None
 
 
@@ -6672,6 +6931,12 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     got = _read_aloud_set(s)
     if got is not None:
         return got
+    # The auto Wi-Fi reconnect (2026-11-08), the owner's own words. The change
+    # writes the switch's own file through jarvis_wifi.set_enabled and is
+    # deliberately NOT read-only; the questions fall through to the reads below.
+    got = _wifi_reconnect_set(s)
+    if got is not None:
+        return got
     got = _phone_remembered_aloud(s)
     if got is not None:
         return got
@@ -6683,6 +6948,9 @@ def _settings_adjust(s: str) -> Optional[Intent]:
         return got
     if _READ_ALOUD_STATE.fullmatch(s):
         return Intent("self_read_aloud")
+    got = _wifi_reconnect_read(s)
+    if got is not None:
+        return got
     # A sentence that clearly asks to change A SETTING, naming one nothing
     # above knows: "turn off the turbo setting", "change my security settings",
     # "enable the settings thing". Answered honestly rather than handed to the
@@ -7250,6 +7518,36 @@ def _cap_stem(word: str) -> str:
     return word
 
 
+#: THE OWNER'S SPOKEN SYNONYM, AND WHY IT IS HERE (2026-11-08, the feature-echo
+#: defect). "does jarvis have a feature for reading out loud?" was answered with
+#: the `read-web-page` row ("Read one web page out loud") although the row he
+#: meant is `read-aloud` ("Jarvis reads its answers aloud"). The read-web-page
+#: row's alias is literally "read out loud", so its NAME beat the read-aloud
+#: row's own words - a deterministic echo of an unrelated feature row, measured
+#: on both the QUEUED and the LIVE 0.2.439 trees. The fix is the words he says:
+#: "out loud" is "aloud", and "reading"/"reads" are "read". Applied to the
+#: QUESTION only, never to a row's own words, so no row is ever rewritten and
+#: the mapping cannot make two rows share a name they did not have.
+_CAP_ALOUD = re.compile(r"\bout[\s-]+loud\b", re.I)
+_CAP_ALOUD_WORDS = (
+    (re.compile(r"\breading\b", re.I), "read"),
+    (re.compile(r"\breads\b", re.I), "read"),
+)
+
+
+def _cap_alias_normalise(text) -> str:
+    """The question's words with the owner's spoken synonyms applied.
+
+    Only the ones a person says differently from the catalogue's own spelling:
+    "out loud" -> "aloud" (the read-aloud row) and "reading/reads" -> "read".
+    The rows keep their own words; this is the question side only.
+    """
+    out = _CAP_ALOUD.sub("aloud", str(text or ""))
+    for rx, repl in _CAP_ALOUD_WORDS:
+        out = rx.sub(repl, out)
+    return out
+
+
 def _cap_tokens(text) -> tuple:
     """The content words of a phrase, lower-cased, stemmed, de-duplicated."""
     out = []
@@ -7372,7 +7670,8 @@ def _cap_resolve(raw) -> Optional[dict]:
     tail = _cap_tail(raw)
     if not tail:
         return None
-    query = _cap_tokens(tail)
+    # The question's spoken words, not the row's: see `_cap_alias_normalise`.
+    query = _cap_tokens(_cap_alias_normalise(tail))
     if len(query) < 2:
         return None
     query_set = frozenset(query)
@@ -7478,7 +7777,11 @@ def _cap_question(raw) -> Optional[Intent]:
     if rows:
         return Intent("capability_answer",
                       {"ids": [str(r.get("id") or "") for r in rows], "ask": ask})
-    return None
+    # 2026-11-08, the feature-echo defect: a feature question this matcher did
+    # not claim is answered from the one row it names - or honestly when it
+    # names none - instead of being handed to the model. See the block comment
+    # beside `_explicit_feature_question`.
+    return _explicit_feature_question(raw)
 
 
 def _cap_safety_question(raw) -> Optional[Intent]:
@@ -8327,6 +8630,7 @@ PLUGIN_CATALOGUE = (
     ('vault', 'a secret is kept in Windows Credential Manager and everything else carries its NAME - a handle, {{vault:github}} - never the value.'),
     ('voiceprint', "Write Like Me: Jarvis drafts in the owner's own voice, learned from his own words on his own PC, with names and numbers taken out before any of it..."),
     ('watch-decisions', 'what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak.'),
+    ('wifi-reconnect', 'the auto Wi-Fi reconnect: ON by default, every 2 hours while this PC has no internet it asks Windows to connect to a saved password-protected Wi-Fi network it already knows - never open, never new, never a password, never while Jarvis is answering, and every attempt is reported in one calm line.'),
 )
 
 
@@ -9275,7 +9579,6 @@ def _price_radar_question(raw) -> Optional[Intent]:
         return Intent("price_radar_lookup")
     return None
 
-
 def _feature_capability_question(raw) -> Optional[Intent]:
     """A capability question read off the RAW sentence (2026-10-31).
 
@@ -9297,6 +9600,161 @@ def _feature_capability_question(raw) -> Optional[Intent]:
         if got is not None:
             return got
     return _feature_capabilities(text)
+
+
+# ---------------------------------------------------------------------------
+#   A FEATURE QUESTION THAT FELL THROUGH (2026-11-08, the feature-echo defect)
+#
+# MEASURED, on the QUEUED tree (eb776a6e0) and the LIVE 0.2.439 tree, by
+# driving the real matcher (no model): "does jarvis have a feature for reading
+# out loud?" was answered from the `read-web-page` row -
+#   "Yes - Read one web page out loud. Fetch the one page you named ..."
+# - while the row the owner means is `read-aloud` ("Jarvis reads its answers
+# aloud"). The deterministic layer, not the model, was the echo: the
+# read-web-page row's own alias is "read out loud", so it outranked the
+# read-aloud row's words in the capability matcher. `_cap_alias_normalise`
+# (beside `_cap_stem`) is the first half of the fix: it makes the QUESTION's
+# "out loud" mean "aloud", so the right row wins.
+#
+# RULED OUT as the echo's source: the model prompt. `jarvis_agent.LANE_SYSTEM`
+# carries no catalogue rows, no note that `with_rules_first` adds does, and
+# `jarvis_agent` imports no feature catalogue at all - rows reach a model only
+# through the `feature_guide` tool, which a model has to call. A test pins that
+# (backend/test_feature_question_answers.py).
+#
+# THE OTHER HALF OF THE CLASS IS COVERAGE. These natural feature shapes had no
+# matcher, so they fell to the model, which can echo rows already in the
+# conversation. The fallback below runs LAST in `match()`, after every action
+# and every older capability shape, and is deterministic:
+#   * a question that NAMES a catalogue row (its own words, an alias, or the
+#     row's id) answers from that row - never from a different row;
+#   * a question that says "feature"/"ability"/"tool"/"option" and names NO row
+#     gets the honest "I don't know that name" answer instead of the model;
+#   * "what can you tell me about <known feature>" answers from that row; an
+#     unknown subject there keeps the old model path, because "tell me about a
+#     car" is an ordinary question, not a feature question.
+# Read-only: every branch returns an Intent the existing runners answer from
+# the guide's own rows; nothing beyond the catalogue is read and nothing is
+# written.
+# ---------------------------------------------------------------------------
+
+#: The explicit feature-question shapes, checked only after the generic
+#: capability matcher has declined. `area` is the words after the feature noun.
+_FEAT_EXPLICIT = re.compile(
+    r"(?:does|do|is|are|can|could|has|have)\s+(?:jarvis|you)\s+"
+    r"(?:(?:have|got|offer|support|provide|do)\s+)?"
+    r"(?:a\s+|an\s+|any\s+|the\s+)?(?:feature|ability|option|way|tool)s?\s+"
+    r"(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)?"
+    r"(?P<area>.+)"
+    r"|is\s+there\s+(?:a\s+|an\s+|any\s+)?(?:feature|ability|option|way|tool)s?\s+"
+    r"(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)?"
+    r"(?P<area2>.+)"
+    r"|(?:does|do|is|are|can)\s+(?:jarvis|you)\s+(?:have|got|offer|support)\s+"
+    r"(?:the\s+)?(?P<area3>.+?)\s+(?:feature|ability|option|tool)")
+#: "what can you tell me about <a known feature>" - a known row only.
+_FEAT_TELL_ABOUT = re.compile(
+    r"what\s+can\s+you\s+tell\s+me\s+about\s+(?:the\s+|my\s+|a\s+|an\s+)?"
+    r"(?P<area>.+?)\s*\??$")
+#: "can jarvis read my email?" - THIRD PERSON ONLY: "can YOU read my email" is
+#: how the owner asks Jarvis to DO it and must keep its action path.
+_FEAT_CAN_JARVIS = re.compile(
+    r"can\s+jarvis\s+(?:read|see|view|check|search|find|use)\s+"
+    r"(?:my|the|your)\s+(?P<area>.+?)\s*\??$")
+
+#: Leading words that describe the question rather than the feature.
+_FEAT_AREA_LEAD = re.compile(
+    r"^(?:(?:for|with|about|in|on|to|that|which|of|called|named)\s+)+", re.I)
+_FEAT_AREA_AUX = re.compile(
+    r"^(?:(?:can|could|will|would|does|do|is|are|has|have)\s+)+", re.I)
+_FEAT_AREA_ARTICLE = re.compile(r"^(?:(?:a|an|the|my|your)\s+)+", re.I)
+#: The evaluation harness's own trailing instructions, which are not part of the
+#: question ("... Answer in one sentence."). The same words `_cap_tail` strips.
+_FEAT_HARNESS_TAIL = re.compile(
+    r"\s+(?:answer\s+in\s+(?:one|a\s+short|a\s+single)\s+sentence"
+    r"|in\s+one\s+sentence|one\s+sentence|please)\s*$", re.I)
+
+
+def _feat_spoken(text) -> str:
+    """The question's spoken words via `_cap_alias_normalise` (one home)."""
+    return _cap_alias_normalise(text)
+
+
+def _feature_echo_row(area):
+    """The ONE catalogue row the question's subject names, or None.
+
+    NORMALISED QUESTION, UNCHANGED ROWS: "reading out loud" -> "read aloud",
+    which is the read-aloud row's own id. Exact name first, then the guide's
+    loose finder - and only when it answers with exactly one row; an ambiguous
+    name is never turned into an answer about the wrong one.
+    """
+    target = " ".join(_feat_spoken(area).split()).strip(" ?.!,;")
+    target = _FEAT_AREA_LEAD.sub("", target)
+    target = _FEAT_AREA_AUX.sub("", target)
+    target = _FEAT_AREA_ARTICLE.sub("", target)
+    target = _feature_target(target)
+    if not target:
+        return None
+    row = _feature_lookup_exact(target)
+    if row is not None:
+        return row
+    try:
+        import jarvis_feature_guide as FG
+        got = FG.find(target, loose=True)
+    except Exception:                       # noqa: BLE001 - guide absent/broken
+        return None
+    if got.get("kind") == "feature":
+        return got.get("row")
+    return None
+
+
+def _explicit_feature_question(raw) -> Optional[Intent]:
+    """A feature question the capability matcher did not claim, or None.
+
+    Runs LAST in `match()` (through `_cap_question`), after every action and
+    every older capability shape, so it can never take a sentence that already
+    has a better owner. See the block comment above for the measured defect.
+    """
+    text = " ".join(str(raw or "").replace("\u2019", "'").lower().split())
+    text = re.sub(r"^(?:hey\s+|ok\s+|okay\s+)?jarvis[,: ]+", "", text)
+    text = _FEAT_HARNESS_TAIL.sub("", text).strip(" ?.!,")
+    if not text:
+        return None
+    # These already have their own deterministic owners, and stealing them would
+    # take a better answer away: the GitHub self-knowledge intents, the crisis
+    # help answer, and the two-part question matcher.
+    if re.search(r"\bgithub\b", text):
+        return None
+    if "crisis" in text:
+        return None
+    if re.search(r"\band\b", text):
+        return None
+    m = _FEAT_EXPLICIT.fullmatch(text)
+    if m:
+        area = next((g for g in (m.group("area"), m.group("area2"),
+                                 m.group("area3")) if g), "")
+        row = _feature_echo_row(area)
+        if row is not None:
+            return Intent("capability_answer",
+                          {"id": str(row.get("id") or ""), "ask": False})
+        # The owner said "feature"/"ability"/"tool"/"option": answering "I do
+        # not know that name" is honest and deterministic. The model must not
+        # be handed a feature question to dress up with rows it has seen.
+        return Intent("feature_unknown",
+                      {"words": _feature_target(_feat_spoken(area))})
+    m = _FEAT_TELL_ABOUT.fullmatch(text)
+    if m:
+        row = _feature_echo_row(m.group("area"))
+        if row is not None:
+            return Intent("feature_explain", {"id": str(row.get("id") or "")})
+        return None
+    m = _FEAT_CAN_JARVIS.fullmatch(text)
+    if m:
+        row = _feature_echo_row(m.group("area"))
+        if row is not None:
+            return Intent("capability_answer",
+                          {"id": str(row.get("id") or ""), "ask": False})
+        return None
+    return None
 
 
 # ---- discussion/explanation resolution (2026-10-31, pass-11 audit) ---------
@@ -11780,6 +12238,15 @@ CHANGE_BY_ASKING = frozenset({
     # (`_read_handsfree`) answers a real True/False, so the read-back below is a
     # read and not a claim.
     "handsfree",
+    # The auto Wi-Fi reconnect (2026-11-08, ruling Q4): the owner asked for it
+    # to be changeable "in Settings or chat". ON is exactly ONE
+    # change_own_config card through jarvis_wifi.request_enabled - the same
+    # function its own Settings switch and its dedicated phrases reach - and OFF
+    # is immediate and cardless, so this lane raises nothing of its own and
+    # reports the waiting honestly. Its reader (`_read_wifi_auto_reconnect` in
+    # the feature guide) answers a real True/False, so the receipt below is a
+    # read and not a claim.
+    "wifi_auto_reconnect",
     "web_search", "smartwatch_notifications", "phone_notifications",
     "screen_picture", "headless_browser", "sandbox_exec", "media_index",
     "briefing_senders", "big_coder", "better_voice", "chat_history",
@@ -12813,6 +13280,138 @@ _GITHUB_ASKS = re.compile(
     r"|which\s+(?:github\s+)?(?:tools|actions)\s+ask\s+(?:you\s+)?first\b.*")
 
 
+# --------------------------------------------------------------------------
+#   The turn AFTER the connect card saved a GitHub token (2026-11-08)
+# --------------------------------------------------------------------------
+#
+# THE OWNER'S REPORT. On the CODING preset he saved a GitHub token on the
+# connect card (the host ran its ONE real test), typed "i added a token", and the
+# model answered "I've tested the token and it works. I can now access your
+# GitHub repositories and perform actions like cloning, pushing, and pulling
+# code" - then contradicted itself. Nothing in the fast path claimed those
+# sentences, so the model was the only answer and it had no receipt to read.
+#
+# WHAT THESE SHAPES DO. They answer from the host's recorded test receipt, which
+# `jarvis_connect_account.record_receipt` writes when the card saves
+# (`connect-receipts.json`: service, when, pass/fail, the verifier's own words -
+# never a value). The capability words come from
+# `jarvis_feature_guide.SELF_FACTS["github_connect"]`, the SAME bounded digest
+# the model's `self_portrait` tool result carries, so the deterministic answer
+# and a model turn cannot say different things. Read-only: no card, no network,
+# no model, no write.
+_GITHUB_TOKEN_ADDED = re.compile(
+    r"(?:i\s+)?(?:just\s+|now\s+)?(?:added|saved|pasted|entered|typed|put\s+in|"
+    r"submitted)\s+(?:a\s+|the\s+|my\s+)?(?:new\s+)?(?:github\s+)?token"
+    r"(?:\s+(?:in|on)\s+(?:the\s+|that\s+)?(?:card|chat|hud))?\s*\??"
+    # FIRST PERSON only: "set up github" is still the connect-card ask, so the
+    # "i connected/set up" form requires the "i"; the imperative keeps its own path.
+    r"|i\s+(?:just\s+|now\s+)?(?:connected|set\s+up|linked)\s+(?:my\s+|the\s+)?github\s*\??"
+    r"|i(?:'ve|\s+have)\s+(?:just\s+)?(?:connected|set\s+up|linked)\s+"
+    r"(?:my\s+|the\s+)?github\s*\??"
+    r"|github\s+is\s+(?:now\s+)?(?:connected|linked|working)\s*\??"
+    r"|(?:the\s+|my\s+)?(?:github\s+)?token\s+(?:is\s+|was\s+)?(?:added|saved)\s*\??")
+_GITHUB_TEST_PROVED = re.compile(
+    r"did\s+(?:the\s+|my\s+|your\s+)?(?:github\s+)?token\s+"
+    r"(?:work|get\s+tested|test|verify|validate|pass)\s*\??"
+    r"|does\s+(?:the\s+|my\s+|your\s+)?(?:github\s+)?token\s+"
+    r"(?:work|test|verify|validate|pass)\s*\??"
+    r"|was\s+(?:the\s+|my\s+)?(?:github\s+)?token\s+"
+    r"(?:tested|verified|validated|checked)\s*\??"
+    r"|is\s+(?:the\s+|my\s+)?github\s+token\s+(?:valid|working)\s*\??"
+    r"|did\s+(?:the\s+|my\s+|that\s+)?(?:github\s+)?test\s+"
+    r"(?:work|pass|run|succeed|prove)\s*\??"
+    r"|did\s+you\s+(?:test|check|verify|validate)\s+(?:the\s+|my\s+)?"
+    r"(?:github\s+)?token\s*\??"
+    r"|what\s+did\s+(?:the\s+|my\s+|that\s+)?(?:github\s+)?test\s+"
+    r"(?:prove|say|show|find|report)\s*\??"
+    r"|what\s+(?:did|does)\s+(?:it|that|the\s+test)\s+prove\s*\??"
+    r"|what\s+(?:was|is)\s+(?:the\s+|my\s+)?github\s+test\s+result\s*\??")
+#: "is github connected?" is the receipt question (the owner's own words) ONCE a
+#: save has been recorded; with no receipt it keeps the older connect path, which
+#: runs the service's one real test (and opens no socket at all when no token is
+#: saved) - that is the answer GH-2 pins. "is github SET UP?" keeps the connect
+#: path either way.
+_GITHUB_CONNECT_STATE = re.compile(
+    r"is\s+(?:my\s+|the\s+|your\s+)?github\s+(?:now\s+)?"
+    r"(?:connected|linked|working|ready)\s*\??"
+    r"|is\s+(?:my\s+|the\s+|your\s+)?github\s+token\s+"
+    r"(?:saved|working|valid|connected)\s*\??"
+    r"|(?:do\s+you|have\s+you)\s+(?:have|got)\s+(?:my\s+|the\s+)?github\s+"
+    r"(?:connected|linked|working|token)\s*\??"
+    r"|do\s+you\s+have\s+(?:my\s+|the\s+)?github\s+token\s*\??"
+    r"|are\s+you\s+(?:connected|linked)\s+to\s+(?:my\s+|the\s+)?github\s*\??")
+#: A clone/push/pull VERB plus a GitHub/code context word, so "can you push a
+#: notification to my phone" keeps its own path. The answer is the never-list.
+_GITHUB_CODE_CONTEXT = re.compile(
+    r"\b(?:github|repos?(?:itory|itories)?|code|commit|branch|project)\b")
+_GITHUB_CODE_VERB = re.compile(
+    r"\bclone(?:s|d|ing)?\b"
+    r"|\b(?:push|pushed|pushes|pushing|pull|pulled|pulls|pulling)\b(?!\s+up\b)")
+
+
+#: "do you have access to my github", "can you read my github" - the capability
+#: question F11 found reaching the model. It gets the same honest capability
+#: list as the post-save answer, and its words never say cloning/pushing/pulling
+#: (GH-5), so no answer here can be read as a claim that those are possible.
+_GITHUB_ACCESS_ASK = re.compile(
+    r"(?:do|does|can|could|have|has)\s+(?:you|jarvis)\s+(?:have\s+|got\s+)?"
+    r"(?:access|a\s+connection)\s+(?:to|on)\s+(?:my|the)\s+github\s*\??"
+    r"|(?:do|does)\s+(?:you|jarvis)\s+have\s+(?:my|the)\s+github\s+token\s*\??"
+    r"|what\s+(?:access|permissions?|rights?)\s+(?:do\s+you|does\s+jarvis)\s+"
+    r"(?:have|got)\s+(?:to|on)\s+(?:my|the)\s+github\s*\??"
+    # The normalized sentence drops "can you", so the verb alone must claim it.
+    r"|(?:access|read|see|browse|look\s+at)\s+(?:my|the)\s+github\s*\??"
+    r"|are\s+you\s+able\s+to\s+(?:access|read|see)\s+(?:my|the)\s+github\s*\??")
+
+
+def _github_receipt_recorded() -> bool:
+    """Whether the host has a saved connect-card test receipt for GitHub.
+
+    Only used to decide which deterministic answer owns "is github connected?": a
+    recorded receipt answers from what the test said; with none, the older
+    connect answer runs the service's own test. No model, no socket by itself.
+    """
+    try:
+        import jarvis_connect_account as C
+        return C.receipt("github") is not None
+    except Exception:                       # noqa: BLE001 - older PC
+        return False
+
+
+def _github_connect_receipt_intent(s: str) -> Optional[Intent]:
+    """The post-save receipt shapes, or None. Whole sentences only."""
+    low = s.strip()
+    if not low:
+        return None
+    # A "tell me when ..." watch sentence is jarvis_tellme's own, including the
+    # PR-URL shape ("tell me when https://github.com/o/r/pull/9 is merged").
+    # The "/pull/" in that URL must never be read as the clone/push/pull
+    # never-list below - that would replace a real watch with a capability
+    # answer. The tellme matchers run later and already own these openers.
+    if re.match(r"^(?:urgently\s+)?(?:please\s+)?(?:tell\s+me|let\s+me\s+know)\b",
+                low, re.I):
+        return None
+    if _GITHUB_TOKEN_ADDED.fullmatch(low) or _GITHUB_TEST_PROVED.fullmatch(low):
+        return Intent("github_connect_receipt", {"shape": "status"})
+    if _GITHUB_CONNECT_STATE.fullmatch(low):
+        # The receipt answer only once one exists: before that, "is github
+        # connected?" keeps the connect path's own status answer, which runs
+        # the real test - and opens no socket at all when no token is saved.
+        if _github_receipt_recorded():
+            return Intent("github_connect_receipt", {"shape": "status"})
+        return None
+    if _GITHUB_ACCESS_ASK.fullmatch(low):
+        return Intent("github_connect_receipt", {"shape": "status"})
+    if _GITHUB_CODE_VERB.search(low) and _GITHUB_CODE_CONTEXT.search(low):
+        # "can you clone ...", "do you push code?", and a bare "clone my repo"
+        # all get the never-list: there is no clone/push/pull action to run, so
+        # a deterministic answer that says so is right whether it was a question
+        # about ability or a request to do it. A sentence with no GitHub/code
+        # context ("push a notification to my phone") is not claimed here.
+        return Intent("github_connect_receipt", {"shape": "never"})
+    return None
+
+
 def _github_module():
     """jarvis_github when this PC has it, else None."""
     try:
@@ -12859,6 +13458,12 @@ def _self_github(s: str) -> Optional[Intent]:
     Whole-sentence shapes only, in the order a person would be surprised to
     see them interchanged. A sentence this does not claim keeps its old path.
     """
+    # FIRST, so the post-save receipt (and the clone/push/pull never-list) wins
+    # over the newer store answers below and over the model: this is the
+    # owner's 2026-11-08 sentence and it must answer the same on every preset.
+    got = _github_connect_receipt_intent(s)
+    if got is not None:
+        return got
     if _GITHUB_OWN_REPO.fullmatch(s):
         return Intent("github_self", {"shape": "repo"})
     if _GITHUB_OWN_CI.fullmatch(s):
@@ -13845,6 +14450,25 @@ def _self_projects_words(sources: Optional[dict] = None) -> str:
             + ", so I will not guess how many there are.")
 
 
+def _self_wifi_reconnect_words(sources: Optional[dict] = None) -> str:
+    """Is the auto Wi-Fi reconnect on? Read from the switch's OWN file (2026-11-08).
+
+    Never the voice, never the model: the switch, its default and its file live in
+    `jarvis_wifi.py`, so the answer is that module's own sentence. A build without
+    the module says so rather than guessing.
+    """
+    try:
+        import jarvis_wifi as W
+    except Exception:
+        return ("This build of Jarvis has no auto Wi-Fi reconnect yet - run "
+                "apply-patches.ps1 on the PC. Nothing was changed.")
+    try:
+        return str(W.state_words())
+    except Exception:
+        return ("I could not read the auto Wi-Fi reconnect's own state, so I will "
+                "not say whether it is on.")
+
+
 _MEASURED_SELF_WORDS = {
     "self_version": _self_version_words,
     "self_desktop_version": _self_desktop_version_words,
@@ -13854,6 +14478,7 @@ _MEASURED_SELF_WORDS = {
     "self_chats": _self_chats_words,
     "self_wake": _self_wake_words,
     "self_read_aloud": _self_read_aloud_words,
+    "self_wifi_reconnect": _self_wifi_reconnect_words,
     "self_projects": _self_projects_words,
 }
 
@@ -13914,10 +14539,21 @@ def _run_self_setting_state(intent: Intent, sources: Optional[dict] = None) -> O
     setting = next((b for b in (getattr(R, "BOOL_SETTINGS", ()) or ())
                     if str(getattr(b, "key", "")) == key), None)
     if setting is None:
-        return None                         # the switch is gone: the model's, as before
+        # Determinism Phase A (2026-11-08, the audit's F4/NEG-7): a matched
+        # state question used to return None here, which handed it to the
+        # model - so a switch removed from this PC's registry could make the
+        # model guess about its own settings. Say the honest sentence instead;
+        # the deterministic layer never silently becomes a model claim.
+        label = str(what or key or "that setting").strip()
+        return Result("I could not read whether " + label + " is on right now - "
+                      "this PC's settings list does not have that switch any more, "
+                      "so I will not guess.", intent.name)
     names = tuple(getattr(setting, "names", ()) or ())
     label = str(names[0] if names else (what or key)).strip()
-    value = FG.read_state(key)
+    try:
+        value = FG.read_state(key)
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        value = None
     if isinstance(value, bool):
         return Result(("Yes" if value else "No") + " - " + label + " is "
                       + ("on" if value else "off") + " right now.", intent.name)
@@ -17171,7 +17807,10 @@ _K_MODEL_CURRENT = re.compile(
     # optional "and why" tail is tolerated and NOT invented on: the preset the
     # answer already names is the honest reason this PC has.
     r"|(?:what|which)\s+(?:ai\s+)?model\s+is\s+answering(?:\s+(?:me|this|that|you))?"
-    r"(?:\s*,?\s*and\s+why\b.*)?")
+    r"(?:\s*,?\s*and\s+why\b.*)?"
+    # "what is the current model" / "what's the current model" (2026-11-08):
+    # the same fact as "what model are you using", which already answers it.
+    r"|(?:what|which)(?:'s|\s+is)\s+the\s+current\s+(?:ai\s+)?model\b.*")
 _K_MODEL_ANSWERED = re.compile(
     r"(?:which|what)\s+model\s+(?:answered|wrote|gave|produced|said)\s+"
     r"(?:that|this|it|the\s+answer)\b.*")
@@ -17199,6 +17838,56 @@ _K_PRESET_DETAIL = re.compile(
     r"(?:\s+(?:change|do|mean|load|run|use))?\s*\??$"
     r"|which\s+model\s+(?:would|does|will)\s+(?:the\s+)?(.+?)\s+preset\s+"
     r"(?:load|run|use)\s*\??$")
+#: "what models do the current presets use" (owner's ask, 2026-11-08). A summary
+#: of ALL preset rows, each by its own model/lane/context words - the same rows
+#: the HUD's preset chip and both apps read. It is not "what preset am I on"
+#: (`preset_current`, one preset) and not "what does <one preset> change"
+#: (`preset_detail`).
+_K_PRESET_MODELS_ALL = re.compile(
+    r"(?:what|which)\s+models?\s+(?:do|does)\s+(?:the\s+|my\s+|your\s+)?"
+    r"(?:current\s+)?presets?\s+(?:use|run|load|have)\b.*"
+    r"|(?:what|which)\s+models?\s+(?:are\s+)?(?:the\s+|my\s+|your\s+)?"
+    r"(?:current\s+)?presets?\s+(?:using|running)\b.*"
+    r"|what\s+are\s+the\s+current\s+models?\s+(?:for|of|in)\s+(?:the\s+|my\s+)?"
+    r"(?:current\s+)?presets?\b.*"
+    r"|(?:which|what)\s+model\s+(?:is\s+)?each\s+preset\s+(?:using|running)\b.*"
+    r"|(?:which|what)\s+preset\s+uses\s+which\s+model\b.*"
+    r"|what\s+are\s+the\s+preset\s+models?\b.*", re.I)
+
+#: "which model is better for the coding preset" / "what is a better model for
+#: the coding preset" / "what should I use for coding" (2026-11-08). Claimed
+#: ONLY when the words name a real preset row; a non-preset task keeps its
+#: older `model_recommend` answer (advice about which preset fits a job).
+_K_PRESET_BEST = re.compile(
+    r"what\s+is\s+(?:a\s+|the\s+)?(?:better|best)\s+(?:local\s+)?model\s+for\s+"
+    r"(?:the\s+|my\s+)?(?P<name0>.+?)\s*(?:preset)?\s*\??$"
+    r"|what\s+should\s+i\s+(?:use|pick|run)\s+for\s+(?:the\s+|my\s+)?"
+    r"(?P<name4>.+?)\s*(?:preset)?\s*\??$"
+    r"|(?:what|which)\s+(?:local\s+)?model\s+(?:is\s+)?(?:better|best)\s+"
+    r"(?:for|to\s+use\s+for|to\s+run)\s+(?:the\s+|my\s+)?(?P<name1>.+?)\s*"
+    r"(?:preset)?\s*\??$"
+    r"|(?:what|which)\s+(?:local\s+)?model\s+should\s+i\s+(?:use|pick|run)\s+"
+    r"for\s+(?:the\s+|my\s+)?(?P<name2>.+?)\s*(?:preset)?\s*\??$"
+    r"|is\s+there\s+a\s+better\s+(?:local\s+)?model\s+for\s+(?:the\s+|my\s+)?"
+    r"(?P<name3>.+?)\s*(?:preset)?\s*\??$", re.I)
+
+#: "what are the best models for the current presets" (the owner's own plural).
+_K_PRESET_BEST_ALL = re.compile(
+    r"(?:what|which)\s+(?:are\s+)?the\s+(?:better|best)\s+(?:local\s+)?models?\s+"
+    r"(?:for|to\s+use\s+for)\s+(?:the\s+|my\s+)?(?:current\s+)?presets?\b.*"
+    r"|what\s+better\s+(?:local\s+)?models?\s+(?:are\s+there|exist)\s+"
+    r"(?:for|in)\s+(?:the\s+|my\s+)?(?:current\s+)?presets?\b.*", re.I)
+
+#: "what did you use before" (2026-11-08): the model history is the change
+#: journal's, and this reads it. With nothing recorded it says so, never guesses.
+_K_MODEL_BEFORE = re.compile(
+    r"what\s+(?:ai\s+)?model\s+did\s+you\s+(?:use|run)\s+before\b.*"
+    r"|what\s+did\s+you\s+(?:use|run)\s+before\s*(?:as\s+(?:your|the)\s+model)?\s*\??$"
+    r"|what\s+was\s+the\s+(?:ai\s+)?model\s+before\b.*"
+    r"|which\s+(?:ai\s+)?model\s+did\s+you\s+(?:use|run)\s+"
+    r"(?:before|previously|last)\b.*"
+    r"|what\s+(?:ai\s+)?model\s+was\s+running\s+before\b.*", re.I)
+
 _K_MODEL_SPEED = re.compile(
     r"(?:how\s+fast\s+is|what(?:'s|\s+is)\s+the\s+speed\s+of|"
     r"tokens\s+(?:a|per)\s+second\s+for)\s+(.+?)\s*\??$")
@@ -17274,6 +17963,11 @@ _K_BOTH_CARDS = re.compile(
     + r"(?:\s+at\s+(?:the\s+)?(?:same\s+time|once))?\s*\??$")
 
 
+_K_PRESET_MODEL_BARE = re.compile(
+    r"(?:what|which)\s+(?:ai\s+)?model\s+does\s+(?:the\s+)?"
+    r"(?P<name>[a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,1})\s+(?:use|run|load)\s*\??$")
+
+
 def _preset_model_ask(s: str) -> Optional[str]:
     """The preset name in a model-of-a-preset question, or None."""
     # `_K_PRESET_MODEL_USED` before `_K_PRESET_MODEL_ITS`: "what model is
@@ -17285,6 +17979,13 @@ def _preset_model_ask(s: str) -> Optional[str]:
         m = rx.fullmatch(s)
         if m is not None:
             return " ".join(str(m.group("name") or "").split())
+    # "what model does fast use": only a REAL preset name answers here, so a
+    # sentence about something else keeps whatever owner it had (2026-11-08).
+    m = _K_PRESET_MODEL_BARE.fullmatch(s)
+    if m is not None:
+        name = " ".join(str(m.group("name") or "").split())
+        if _preset_lookup_words(name) is not None:
+            return name
     return None
 
 
@@ -17488,6 +18189,14 @@ def _model_chat(s: str) -> Optional[Intent]:
     # called "focus" and `_preset_model_ask` as the model of one.
     if _K_FOCUS_PRESETS.fullmatch(s):
         return Intent("focus_presets")
+    # The model-conversation summaries of 2026-11-08 run BEFORE the
+    # one-preset "what model does <name> use" ask: "which model is each
+    # preset using" is a summary, and that ask would read "each" as a
+    # preset name.
+    if _K_PRESET_MODELS_ALL.fullmatch(s):
+        return Intent("preset_models")
+    if _K_PRESET_BEST_ALL.fullmatch(s):
+        return Intent("preset_best_all")
     # FIRST, deliberately: "what model are you using in the coding preset"
     # also fits _K_MODEL_CURRENT's "are you using" prefix, and the preset
     # question must win - it is the one with a fact to quote. The owner's own
@@ -17500,6 +18209,19 @@ def _model_chat(s: str) -> Optional[Intent]:
         return Intent("preset_model", {"name": name})
     if _K_BOTH_CARDS.fullmatch(s):
         return Intent("both_cards")
+    # Advice for one named preset, and the model history (2026-11-08). A
+    # name that is not a preset falls through to the older recommendation.
+    m = _K_PRESET_BEST.fullmatch(s)
+    if m is not None:
+        name = next((g for g in m.groupdict().values() if g), "")
+        name = re.sub(r"^(?:the|my|your)\s+", "", str(name or "").strip())
+        name = re.sub(r"\s+preset$", "", name).strip(" ?.!,")
+        if _preset_lookup_words(name) is not None:
+            return Intent("preset_best", {"name": name})
+        # Not a preset: "which model should i use for writing" keeps the older
+        # task recommendation below, which is advice about a preset's fit.
+    if _K_MODEL_BEFORE.fullmatch(s):
+        return Intent("model_before")
     for rx, intent_name in ((_K_MODEL_CURRENT, "model_current"),
                             (_K_MODEL_ANSWERED, "model_answerer")):
         if rx.fullmatch(s):
@@ -19154,6 +19876,255 @@ def _model_record() -> str:
     return ""
 
 
+def _preset_lookup_words(words):
+    """The preset row a name means (id, title or own words), or None - never a guess."""
+    text = " ".join(str(words or "").lower().replace("-", " ").split())
+    text = re.sub(r"^(?:the|my|your)\s+", "", text)
+    text = re.sub(r"\s+presets?$", "", text).strip(" ?.!,")
+    if not text:
+        return None
+    try:
+        import jarvis_model_knowledge as K
+        row = K.preset_by_name(text)
+        if row:
+            return row
+        for candidate in K.presets():
+            title = str(candidate.get("title") or "").lower().replace("-", " ")
+            if text == title or text in title or title.startswith(text):
+                return candidate
+    except Exception:                       # noqa: BLE001 - older PC
+        return None
+    return None
+
+
+def _preset_lane_words(row: dict) -> str:
+    """Where a preset's model runs, in the preset row's own words."""
+    lane = row.get("lane") or {}
+    card = str(lane.get("card") or "")
+    context = row.get("context")
+    parts = []
+    if card:
+        parts.append("on " + card)
+    if context:
+        try:
+            parts.append("at " + f"{int(context):,}" + " tokens")
+        except (TypeError, ValueError):
+            pass
+    return (" " + " ".join(parts)) if parts else ""
+
+
+def _stored_rate_words(row: dict) -> str:
+    """One measured store row's speed, in the store's own numbers."""
+    rate = row.get("tokens_per_s")
+    if rate is None:
+        rate = row.get("tok_s")
+    bits = []
+    try:
+        if rate is not None:
+            bits.append(f"{float(rate):g} tokens a second")
+    except (TypeError, ValueError):
+        pass
+    context = row.get("context_tokens")
+    if context:
+        try:
+            bits.append("at " + f"{int(context):,} tokens")
+        except (TypeError, ValueError):
+            pass
+    return ", ".join(bits)
+
+
+def _recommender_candidate_words(exclude: str = "", limit: int = 3) -> list:
+    """The hardware-aware list's other candidates, with ITS provenance labels.
+
+    Read from `jarvis_model_recommender.recommend()`, the same panel the Brain
+    shows, so a chat answer and a screen cannot offer different models. A row
+    that is not this PC's measurement keeps the module's own ESTIMATED/OTHER
+    label - this function never upgrades an estimate to a measurement.
+    """
+    try:
+        import jarvis_model_recommender as MR
+        panel = MR.recommend(limit=0)
+    except Exception:                       # noqa: BLE001 - older PC
+        return []
+    rows = [r for r in (panel.get("rows") or ()) if isinstance(r, dict)]
+    measured, estimated = [], []
+    for row in rows:
+        model = str(row.get("model") or "")
+        if not model or model == exclude:
+            continue
+        label = str(row.get("label") or model)
+        prov = str(row.get("provenance") or "")
+        speed = (row.get("measured") or {}).get("decode_tps")
+        if prov == "measured_this_pc":
+            if isinstance(speed, (int, float)) and not isinstance(speed, bool):
+                label += f" ({float(speed):g} tokens a second)"
+            measured.append(label)
+        else:
+            tier = str(row.get("provenance_label") or "ESTIMATED FIT (run benchmark to verify)")
+            estimated.append(f"{label} [{tier}]")
+    out = []
+    if measured:
+        out.append("MEASURED ON THIS PC: " + ", ".join(measured[:limit]))
+    if estimated:
+        out.append("ESTIMATED FIT (run benchmark to verify): "
+                   + ", ".join(estimated[:limit]))
+    return out
+
+
+def _run_preset_models() -> Result:
+    """What model every CURRENT preset uses - the summary the owner asked for."""
+    try:
+        import jarvis_model_knowledge as K
+        rows, current = K.presets(), K.current_preset()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("I cannot read this PC's preset rows right now (the model "
+                      "knowledge module is missing), so I will not list the models "
+                      "the presets use.", "preset_models")
+    if not rows:
+        return Result("The preset store on this PC answered with no rows, so I "
+                      "cannot tell you which models the presets use.", "preset_models")
+    current_id = (current or {}).get("id")
+    parts = []
+    for row in rows:
+        title = str(row.get("title") or row.get("id") or "a preset")
+        model = str(row.get("model") or "")
+        bit = title + ": " + (model or "no local model (the cloud preset)")
+        bit += _preset_lane_words(row)
+        if row.get("id") == current_id:
+            bit += " (active)"
+        parts.append(bit)
+    said = (f"These are the {len(rows)} presets on this PC and the model each one "
+            "uses: " + "; ".join(parts) + ".")
+    if current:
+        said += (' The active preset is "' + str(current.get("title") or current_id)
+                 + '".')
+    said += (' Ask "what model is better for the <preset> preset?" for advice that '
+             "says which candidate is measured and which is only estimated. Nothing "
+             "was switched.")
+    return Result(said, "preset_models")
+
+
+def _run_preset_best(f: dict) -> Result:
+    """Better-model advice for ONE preset, with the measured/estimated labels."""
+    name = str((f or {}).get("name") or "")
+    row = _preset_lookup_words(name)
+    if row is None:
+        try:
+            import jarvis_model_knowledge as K
+            names = ", ".join(str(p.get("title")) for p in K.presets())
+        except Exception:                   # noqa: BLE001 - older PC
+            names = ""
+        return Result('I do not know a preset called "' + name + '" on this PC, so '
+                      "I will not guess advice for it. The presets are: "
+                      + (names or "not readable right now") + ".",
+                      "preset_best")
+    title = str(row.get("title") or row.get("id") or name)
+    model = str(row.get("model") or "")
+    if not model:
+        return Result('The "' + title + '" preset has no local model - it uses the '
+                      "cloud service you chose, so there is nothing local to compare "
+                      "or benchmark.", "preset_best")
+    said = 'The "' + title + '" preset runs ' + model + _preset_lane_words(row) + "."
+    try:
+        import jarvis_model_knowledge as K
+        measured = K.bench_for(model)
+        if measured:
+            said += " Measured on this PC: " + K.speed_words(model)
+        else:
+            said += (" This PC has no measured speed for it yet, so I will not call "
+                     "it fast or slow.")
+    except Exception:                       # noqa: BLE001 - said, never guessed
+        said += " I could not read this PC's measured record just now."
+    candidates = _recommender_candidate_words(exclude=model)
+    if candidates:
+        said += (" The hardware-aware list offers other models this PC could run, "
+                 "with its own labels - " + "; ".join(candidates) + ".")
+    else:
+        said += (" The hardware-aware list could not name another model this PC can "
+                 "run right now.")
+    said += (' Those are candidates, not a verdict: nothing has measured them FOR '
+             'the "' + title + '" preset, so I will not claim one is better. Say '
+             '"benchmark the ' + title.lower() + ' model" and its scorecard decides. '
+             "Nothing was switched.")
+    return Result(said, "preset_best")
+
+
+def _run_preset_best_all() -> Result:
+    """The same advice for every current preset, in one honest answer."""
+    try:
+        import jarvis_model_knowledge as K
+        rows, current = K.presets(), K.current_preset()
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("I cannot read this PC's preset rows right now, so I will not "
+                      "guess better models for them.", "preset_best_all")
+    if not rows:
+        return Result("The preset store answered with no rows on this PC, so there "
+                      "are no current presets to advise about.", "preset_best_all")
+    current_id = (current or {}).get("id")
+    parts = []
+    for row in rows:
+        title = str(row.get("title") or row.get("id") or "a preset")
+        model = str(row.get("model") or "")
+        bit = title + ": " + (model or "no local model (the cloud preset)")
+        if row.get("id") == current_id:
+            bit += " (active)"
+        try:
+            measured = K.bench_for(model) if model else None
+        except Exception:                   # noqa: BLE001 - said as unmeasured
+            measured = None
+        rate = _stored_rate_words(measured or {})
+        bit += (" - measured on this PC: " + rate) if rate else " - not measured on this PC yet"
+        parts.append(bit)
+    said = ("For each of the " + str(len(rows)) + " presets on this PC, what it runs "
+            "now and what has been measured: " + "; ".join(parts) + ".")
+    candidates = _recommender_candidate_words()
+    if candidates:
+        said += (" The hardware-aware list's other candidates, with its own labels - "
+                 + "; ".join(candidates) + ".")
+    else:
+        said += (" The hardware-aware list offered no other model for this PC right "
+                 "now.")
+    said += (' Nothing has measured those FOR a specific preset, so I will not call '
+             'one better than another - a benchmark is the only proof. Say "benchmark '
+             'the coding model" for the preset you care about. Nothing was switched.')
+    return Result(said, "preset_best_all")
+
+
+def _run_model_before() -> Result:
+    """What model ran before: the change journal's own record, or an honest no."""
+    said = ("I do not keep a separate model history - only my change journal. ")
+    try:
+        rows = _awareness_journal_rows()
+    except Exception:                       # noqa: BLE001 - unreadable journal
+        rows = []
+    changes = []
+    for row in rows:
+        for change in (row.get("changed") or []):
+            if isinstance(change, dict) and str(change.get("key") or "") == "model":
+                changes.append((row, change))
+    current = _model_record() or ""
+    if not current:
+        try:
+            import jarvis_model_knowledge as K
+            current = str(K.current_model() or "")
+        except Exception:                   # noqa: BLE001 - older PC
+            current = ""
+    if not changes:
+        said += ("No model change is recorded there on this PC, so I will not guess "
+                 "what I used before.")
+    else:
+        row, change = changes[-1]
+        old = str(change.get("from") or "").strip()
+        new = str(change.get("to") or "").strip()
+        day = _bench_day(row.get("at"))
+        said += ("The last model change in my change journal was from "
+                 + (old or "nothing recorded") + " to " + (new or "nothing recorded")
+                 + (", recorded " + day if day else "") + ".")
+    said += (" The model now is " + current + "." if current
+             else " This PC does not record which model is running now.")
+    return Result(said, "model_before")
+
+
 def _run_model_current() -> Result:
     model = _model_record()
     try:
@@ -19784,6 +20755,100 @@ def _github_asks_words() -> str:
     return ("These GitHub actions ask you first every time: " + _self_list(got)
             + ". The reads ask too, because a read sends your token to "
               "api.github.com. That cannot be loosened from an app.")
+
+
+#: The same capability words as `jarvis_feature_guide.SELF_FACTS
+#: ["github_connect"]` (the digest the model's self_portrait result carries),
+#: kept as a fallback so a PC missing that row still answers honestly rather
+#: than overclaiming. ONE source of truth when the row is there.
+GITHUB_CAPABILITY_FALLBACK = (
+    "A GitHub token saved on the connect card is tested once with one GitHub "
+    "request - that proves the token identifies your GitHub account, nothing more. "
+    "It lets me search GitHub, see private repositories and watch CI. With the "
+    "GitHub tools switched on I can also read your repositories, pull requests, "
+    "issues, CI status and one file, comment, open an issue and re-run a workflow - "
+    "each on its own approval card. I can never clone, push or pull code, and never "
+    "merge, commit, close or delete anything.")
+GITHUB_NEVER_FALLBACK = (
+    "No - I never copy a repository to this PC, send code back to GitHub, or change "
+    "code in any way: there is no action, card or endpoint for that, so approving a "
+    "card cannot create one. What a saved token does let me do: search GitHub, see "
+    "private repositories and watch CI; and with the GitHub tools switched on, read "
+    "your repositories, pull requests, issues, CI status and one file, comment, open "
+    "an issue and re-run a workflow - each on its own approval card. There is no "
+    "merge action and no merge card at all.")
+GITHUB_SHORT_FALLBACK = (
+    "It lets me search GitHub, see private repositories and watch CI; with the "
+    "GitHub tools switched on, it can also read your repositories, pull requests, "
+    "issues, CI status and one file, comment, open an issue and re-run a workflow - "
+    "each on its own approval card. I never copy a repository to this PC, send code "
+    "back to GitHub, or change code in any way: there is no action, card or endpoint "
+    "for that, and no merge action or merge card either.")
+
+
+def _github_capability_words(which: str = "sentence") -> str:
+    """The honest GitHub capability words, from the feature guide's own row.
+
+    `which` is "sentence" (the owner-facing capability half) or "never" (the
+    clone/push/pull answer). One source with the digest the model reads; the
+    fixed fallback is only for an older PC with no such row.
+    """
+    try:
+        import jarvis_feature_guide as FG
+        row = FG.self_fact("github_connect") or {}
+        said = str(row.get(which) or row.get("sentence") or "").strip()
+    except Exception:                       # noqa: BLE001 - older PC
+        said = ""
+    if said:
+        return said
+    if which == "never":
+        return GITHUB_NEVER_FALLBACK
+    if which == "short":
+        return GITHUB_SHORT_FALLBACK
+    return GITHUB_CAPABILITY_FALLBACK
+
+
+def _run_github_connect_receipt(f: dict) -> Result:
+    """The turn after a connect-card save, answered ONLY from the host receipt.
+
+    `jarvis_connect_account` wrote what the card's ONE real test said (service,
+    timestamp, verdict words) when it saved. This runner says exactly that,
+    then the honest capability list from the feature guide's own row - nothing
+    the receipt does not support, no value, no token, no model. When there is no
+    record it says so and, if a token is saved, sends the owner through the card
+    again rather than guessing what the test might have said.
+    """
+    shape = str(f.get("shape") or "")
+    if shape == "never":
+        return Result(_github_capability_words("never"), "github_connect_receipt")
+    head = ""
+    have = False
+    try:
+        import jarvis_connect_account as C
+        have = C.receipt("github") is not None
+        head = C.receipt_words("github")
+    except Exception:                       # noqa: BLE001 - older PC
+        have, head = False, ""
+    if not have:
+        GH = _github_module()
+        saved = False
+        if GH is not None:
+            try:
+                saved = bool(GH.connected())
+            except Exception:               # noqa: BLE001 - unreadable is unknown
+                saved = False
+        if saved:
+            head = ("A GitHub token is saved on this PC, but I have no record of the one "
+                    "test that checks it, so I will not say whether it works. Save it "
+                    "again through the \"connect my GitHub\" card and that test runs once "
+                    "- then I can tell you exactly what it proved.")
+        else:
+            head = ("Nothing is saved yet: there is no GitHub token on this PC, so I "
+                    "cannot read or act on your GitHub at all. Say \"connect my GitHub\" "
+                    "and one card appears for a personal access token, typed on that card "
+                    "and never in chat; saving it runs one real test.")
+    return Result((head + " " + _github_capability_words("short")).strip(),
+                  "github_connect_receipt")
 
 
 def _run_github_self(f: dict) -> Result:
@@ -22638,6 +23703,84 @@ def _run_phone_memory_aloud_command() -> Result:
     return Result(_PHONE_MEMORY_ALOUD_COMMAND_SAID, "phone_memory_aloud_command")
 
 
+def _run_wifi_reconnect_set(f: dict) -> Result:
+    """"Turn the auto Wi-Fi reconnect on/off" - one writer, the module's own setter.
+
+    The same door the Settings switch's route uses: `request_enabled()`.
+    RULING Q4.4 makes turning it ON exactly ONE `change_own_config` card (the
+    call returns after the owner answers it, or says a card is waiting when the
+    platform reports that state); turning it OFF is instant and cardless. A
+    model answer can never reach this, and a switch that could not be saved is
+    never reported as saved.
+    """
+    try:
+        import jarvis_wifi as W
+    except Exception:                       # noqa: BLE001 - older PC: no switch
+        return Result("This build of Jarvis has no auto Wi-Fi reconnect yet - run "
+                      "apply-patches.ps1 on the PC. Nothing was changed.",
+                      "wifi_reconnect_set")
+    on = f.get("on") is True
+    try:
+        code, out = W.request_enabled(on)
+    except Exception as exc:                # noqa: BLE001 - said, never swallowed
+        return Result("I could not change the auto Wi-Fi reconnect "
+                      f"({type(exc).__name__}), so nothing was changed.",
+                      "wifi_reconnect_set")
+    out = out if isinstance(out, dict) else {}
+    said = str(out.get("words") or out.get("message") or "").strip()
+    if not said:
+        said = (W.SET_ON if on and int(code) < 400
+                else "The auto Wi-Fi reconnect was not changed.")
+    return Result(said, "wifi_reconnect_set")
+
+
+def _run_wifi_reconnect_did() -> Result:
+    """"Did you reconnect my wifi?" - read from the Change Journal receipts.
+
+    Ruling Q4.5: every attempt writes `timestamp`, `profile_name`, `auth_type`
+    and `result: connected | still_offline`, so this deterministic answer comes
+    from the module's own record, never the model.
+    """
+    try:
+        import jarvis_wifi as W
+        said = W.did_words()
+    except Exception:                       # noqa: BLE001 - older PC: fixed words
+        said = ("This build of Jarvis has no auto Wi-Fi reconnect record yet - "
+                "run apply-patches.ps1 on the PC.")
+    return Result(said, "wifi_reconnect_did")
+
+
+def _run_wifi_reconnect_about() -> Result:
+    """"What does the auto Wi-Fi reconnect do?" - fixed words about the feature.
+
+    Fixed so it can answer in a private chat without a model; it says what the
+    module does and does not do, never a guess.
+    """
+    try:
+        import jarvis_wifi as W
+        said = W.about_words()
+    except Exception:                       # noqa: BLE001 - older PC: fixed words
+        said = ("The auto Wi-Fi reconnect keeps this desktop's link repaired: while "
+                "this PC has no internet it tries a saved password-protected network "
+                "it already knows, every 2 hours, and never asks for a password.")
+    return Result(said, "wifi_reconnect_about")
+
+
+def _run_wifi_reconnect_when() -> Result:
+    """"When will it try the Wi-Fi again?" - read from the switch's own state.
+
+    Never a made-up time: OFF, no saved profile and "the last check was at HH:MM,
+    the next is due at HH:MM" are all real answers from the module's own file.
+    """
+    try:
+        import jarvis_wifi as W
+        said = W.when_words()
+    except Exception:                       # noqa: BLE001 - older PC: fixed words
+        said = ("This build of Jarvis has no auto Wi-Fi reconnect yet - run "
+                "apply-patches.ps1 on the PC.")
+    return Result(said, "wifi_reconnect_when")
+
+
 def _run_cloud_escalation_rule() -> Result:
     """The cloud switch's rule, read-only - the Gate 11 probe's own question."""
     return Result(_CLOUD_ESCALATION_RULE_SAID, "cloud_escalation_rule")
@@ -22959,6 +24102,15 @@ def _run_settings_unknown() -> Result:
         "and I will list the ones I can, or name the screen and I will open it - "
         "\"open security\".",
         "settings_unknown")
+
+
+def _run_unknown_self_name() -> Result:
+    """Q3.3: the honest answer to a setting/feature name this PC does not have.
+
+    Fixed words, no file read, no model, no card, nothing written. It says what
+    is true (no such name) and points at the two deterministic lists that show
+    the real ones, so the coding preset can never improvise a setting again."""
+    return Result(UNKNOWN_SELF_NAME_WORDS, "unknown_self_name")
 
 
 def _run_settings_budget(f: dict, peer, local) -> Result:
@@ -23308,12 +24460,31 @@ def _run_feature_can_do(f: dict) -> Result:
     return Result(str(out.get("words") or ""), "feature_can_do")
 
 
+def _could_not_read_state(label: str) -> Result:
+    """The ONE honest sentence for a state read that failed (Phase A, 2026-11-08).
+
+    The audit's NEG-7: an exception inside the deterministic layer must become
+    an honest sentence, never a crash that the /api/chat handler turns into a
+    model answer. It says "could not read" and "will not guess", and never
+    claims on or off."""
+    label = str(label or "that setting").strip() or "that setting"
+    return Result("I could not read whether " + label + " is on right now - "
+                  "the module that owns it is not answering on this PC, so I "
+                  "will not guess.", "feature_state")
+
+
 def _run_feature_state(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_state")
-    out = FG.state(f.get("id") or "")
-    return Result(str(out.get("words") or ""), "feature_state")
+    try:
+        out = FG.state(f.get("id") or "")
+        words = str((out or {}).get("words") or "").strip()
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        words = ""
+    if not words:
+        return _could_not_read_state(str(f.get("id") or "that feature"))
+    return Result(words, "feature_state")
 
 
 def _setting_name_for_guide(key: str) -> str:
@@ -23346,8 +24517,15 @@ def _run_feature_state_setting(f: dict) -> Result:
     FG = _guide()
     if FG is None:
         return Result(FEATURE_MISSING, "feature_state")
-    out = FG.state(_setting_name_for_guide(f.get("key") or ""))
-    return Result(str(out.get("words") or ""), "feature_state")
+    label = _setting_name_for_guide(f.get("key") or "")
+    try:
+        out = FG.state(label)
+        words = str((out or {}).get("words") or "").strip()
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        words = ""
+    if not words:
+        return _could_not_read_state(label or str(f.get("key") or "that setting"))
+    return Result(words, "feature_state")
 
 
 def _run_feature_howto(f: dict) -> Result:
@@ -23641,7 +24819,18 @@ def _run_setting_explain(f: dict) -> Result:
         import jarvis_settings_registry as R
     except Exception:
         return Result(SETTINGS_MISSING, "setting_explain")
-    return Result(R.explain_setting_words(f), "setting_explain")
+    try:
+        words = str(R.explain_setting_words(f) or "").strip()
+    except Exception:                       # noqa: BLE001 - said, never a crash
+        words = ""
+    if not words:
+        # Phase A (2026-11-08): a named explain read that fails is said plainly
+        # rather than raising into the /api/chat handler, where the try/except
+        # would have made the model answer instead (the audit's NEG-7).
+        return Result("I could not read that setting right now - the module "
+                      "that owns it is not answering on this PC, so I will not "
+                      "guess. Nothing was changed.", "setting_explain")
+    return Result(words, "setting_explain")
 
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
@@ -23888,9 +25077,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "bench_history":
         return _run_bench_history()
     if n == "bench_run":
-        return _run_bench_run()
+        return _run_bench_run(intent.f)
     if n == "bench_suites":
         return _run_bench_suites()
+    if n == "bench_how":
+        return _run_bench_how()
     if n == "bench_progress":
         return _run_bench_progress()
     if n == "bench_stop":
@@ -23938,6 +25129,18 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_phone_read_aloud_refused()
     if n == "phone_memory_aloud_command":
         return _run_phone_memory_aloud_command()
+    # The auto Wi-Fi reconnect (2026-11-08): the owner's own sentences through
+    # jarvis_wifi's own setter/state - the same functions the Settings route and
+    # its switch call. Cardless both ways, PC-only, one narrow saved-profile
+    # action; see jarvis_wifi.py's own header for the argument.
+    if n == "wifi_reconnect_set":
+        return _run_wifi_reconnect_set(f)
+    if n == "wifi_reconnect_about":
+        return _run_wifi_reconnect_about()
+    if n == "wifi_reconnect_when":
+        return _run_wifi_reconnect_when()
+    if n == "wifi_reconnect_did":
+        return _run_wifi_reconnect_did()
     if n == "cloud_escalation_rule":
         return _run_cloud_escalation_rule()
     if n == "model_recommender":
@@ -23977,6 +25180,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_not_by_asking(f)
     if n == "settings_unknown":
         return _run_settings_unknown()
+    if n == "unknown_self_name":
+        return _run_unknown_self_name()
     if n == "settings_budget":
         return _run_settings_budget(f, peer, local)
     if n == "settings_card_mode":
@@ -24108,6 +25313,11 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_connected(intent)
     if n == "github_self":
         return _run_github_self(f)
+    # The turn after a connect-card save (2026-11-08, the owner's GitHub-token
+    # honesty report): answered ONLY from the host's recorded test receipt and
+    # the feature guide's own capability words - no model, no network, no card.
+    if n == "github_connect_receipt":
+        return _run_github_connect_receipt(f)
     if n == "accounts_answer":
         return _run_accounts_answer(f)
     if n == "self_refresh":
@@ -24222,6 +25432,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # "how long does it take to clear old chats if i batched a lot of them
         # together?" - answered from this PC's measured state, never the model.
         return _run_history_purge()
+    if n == "preset_models":
+        return _run_preset_models()
+    if n == "preset_best":
+        return _run_preset_best(intent.f)
+    if n == "preset_best_all":
+        return _run_preset_best_all()
+    if n == "model_before":
+        return _run_model_before()
     if n == "model_current":
         return _run_model_current()
     if n == "model_answerer":
@@ -24718,6 +25936,7 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # know this PC's preset, benchmark rows, switch states or change journal,
     # so a private chat answers these from the local code, never the model.
     "preset_current", "bench_history", "bench_progress", "self_changes",
+    "preset_models", "preset_best", "preset_best_all", "model_before", "bench_how",
     "changeable_overview", "self_inventory", "tool_switches_on_off",
     "tool_switch_state", "desktop_row_info", "setting_named_read",
     "area_overview",
@@ -24734,6 +25953,27 @@ _PRIVATE_DETERMINISTIC_READS = frozenset({
     # PC's own settings file, so a private chat gets the real answer instead of
     # a model's guess. The CHANGE (`read_aloud_set`) is deliberately NOT here.
     "self_read_aloud",
+    # The connect-card receipt answer (2026-11-08): fixed local words built from
+    # ONE non-secret verdict file - nothing leaves this PC and nothing is
+    # written, so a private chat gets the truth rather than a model's overclaim.
+    "github_connect_receipt",
+    # The auto Wi-Fi reconnect's reads (2026-11-08): the switch's state, what it
+    # does and when it next tries are all read from this PC's own file, so a
+    # private chat answers them instead of guessing. The CHANGE
+    # (`wifi_reconnect_set`) is deliberately NOT here.
+    "self_wifi_reconnect", "wifi_reconnect_about", "wifi_reconnect_when",
+    "wifi_reconnect_did",
+    # Determinism Phase A (2026-11-08, the audit's NEG-6): these are the same
+    # kind of read - the owner's own settings/catalogue state, answered from
+    # local code with no secret and no write. A private chat gets the real
+    # words from this PC rather than a model's guess about its own settings.
+    # None of them changes anything, so none may clear a "cancel that".
+    "feature_state", "feature_state_setting", "setting_explain",
+    "self_setting_state", "settings_explain_all",
+    # Q3.3 (2026-11-08): the honest "no such setting or feature" answer reads
+    # nothing but this PC's own lists and writes nothing, so a private chat gets
+    # it from local code too - the model has no list to read.
+    "unknown_self_name",
 })
 
 #: The intents `run()` answers through `_run_reminders`. This is a DISPATCH
@@ -24899,10 +26139,19 @@ READ_ONLY_INTENTS = frozenset({
     # changing or restarting anything - so none may take back what "cancel
     # that" would undo.
     "tools_inventory", "tools_asking", "connected_list", "self_refresh",
+    # The model-conversation reads (2026-11-08): all-preset models, per-preset
+    # advice, the model history, and how to start a benchmark - every one reads
+    # this PC's own rows and changes nothing, so none may clear "cancel that".
+    "preset_models", "preset_best", "preset_best_all", "model_before",
+    "bench_how",
     # GitHub's own makeup and the accounts list (2026-11-07): each only reads a
     # module that owns the fact (jarvis_github, jarvis_accounts, the asks-first
     # page) and raises no card, so none may take away what "cancel that" undoes.
     "github_self", "accounts_answer",
+    # The connect-card receipt answer (2026-11-08): it reads ONE non-secret
+    # verdict file (service, timestamp, pass/fail words - never a value) and
+    # changes nothing, so "cancel that" must not lose its record to it.
+    "github_connect_receipt",
     # The six subsystems that only the model answered (2026-11-04): each reads
     # a real state - the preset/hardware readers, the speed record, the memory
     # store, the disk reader, the two schedulers - and changes nothing, so none
@@ -24920,6 +26169,8 @@ READ_ONLY_INTENTS = frozenset({
     # nothing, so none may take back what "cancel that" would undo.
     "self_version", "self_desktop_version", "self_phone_version", "self_hardware",
     "self_notes", "self_chats", "self_wake", "self_projects", "self_read_aloud",
+    "self_wifi_reconnect", "wifi_reconnect_about", "wifi_reconnect_when",
+    "wifi_reconnect_did",
     "self_setting_state",
     "safety_pretend", "safety_without_asking", "safety_approve_for_me",
     "safety_tunnel", "safety_checks_off", "safety_token",
@@ -24938,7 +26189,8 @@ READ_ONLY_INTENTS = frozenset({
     # nothing, so "cancel that" must not lose its record to it. Its change and
     # refusal intents are NOT here - they write or refuse, like every other one.
     "settings_antislop_state", "settings_antislop_bad",
-    "settings_open", "settings_unknown", "tellme_help", "thinking_status", "thinking_when",
+    "settings_open", "settings_unknown", "unknown_self_name", "tellme_help",
+    "thinking_status", "thinking_when",
     "time_now", "timer_status", "today_list", "todo_list", "weather_now", "wellbeing_me",
     "wellbeing_now", "where_put",
     # Updates in chat (2026-10-26): these two only read the public release
@@ -26085,13 +27337,49 @@ _AW_PRESET_CURRENT = re.compile(
     r"|(?:what|which)\s+preset\s+(?:am\s+i|are\s+you)\s*", re.I)
 
 _AW_BENCH_HISTORY = re.compile(
-    r"(?:what|which)\s+benchmarks?\s+(?:have|has|were|did)\s+(?:been\s+)?"
+    r"(?:what|which)\s+benchmarks?\s+(?:have|has|were|did)\s+"
+    r"(?:(?:you|i|jarvis|we)\s+)?(?:been\s+)?"
     r"(?:run|measured|done|recorded|completed)(?:\s+(?:on|for)\s+(?:you|me|this\s+pc))?"
     r"|(?:what|which)\s+(?:are\s+)?(?:your|the)\s+benchmark\s+"
     r"(?:results|numbers|measurements|scores|history)"
     r"|(?:show|tell)\s+me\s+(?:your|the)\s+benchmarks?"
     r"|what\s+have\s+you\s+measured"
-    r"|benchmark\s+history", re.I)
+    r"|benchmark\s+history"
+    # The owner's other ways of asking "what did the benchmark measure?"
+    # (2026-11-08): these used to fall to the model, which does not have the
+    # numbers. They all read the SAME two stores the other shapes read.
+    r"|what\s+(?:has\s+been|was|got)\s+measured"
+    r"(?:\s+(?:on|for|so\s+far\s+on)\s+(?:you|me|this\s+pc))?"
+    r"|what(?:'s|\s+has|\s+is)\s+been\s+measured"
+    r"(?:\s+(?:on|for)\s+(?:you|me|this\s+pc))?"
+    r"|what\s+did\s+the\s+(?:last\s+)?benchmark\s+(?:measure|find|show|record|prove)"
+    r"|what\s+did\s+you\s+(?:measure|benchmark)"
+    r"|what\s+were\s+the\s+benchmark\s+(?:results|numbers|measurements)"
+    r"|what\s+are\s+your\s+measured\s+(?:speeds|results|numbers|figures)"
+    r"|tell\s+me\s+what\s+you\s+measured"
+    r"|show\s+me\s+the\s+measured\s+(?:results|numbers|speeds)", re.I)
+
+#: The owner's "start Benchmarks" (2026-11-08). A PLURAL benchmark ask is the
+#: five-suite run; the singular ones keep `_AW_BENCH_RUN`'s speed bench. Checked
+#: before the open/launch matcher, which used to read "start benchmarks" as
+#: "open the benchmarks app" and answer "I have asked this PC to open
+#: benchmarks." - a door that does not exist.
+_AW_BENCH_PLURAL = re.compile(
+    r"(?:start|run|do|take|begin)\s+(?:the\s+|some\s+|all\s+(?:of\s+)?the\s+)?"
+    r"benchmarks\s*\??$", re.I)
+
+#: One benchmark of a NAMED model/preset: "benchmark the coding model", "run the
+#: coding benchmark", "start a benchmark on the fast model" (2026-11-08). Only
+#: known preset words are claimed; a model tag typed by hand keeps the model
+#: switch language it had.
+_AW_BENCH_TARGET = re.compile(
+    r"benchmark\s+(?:the\s+)?(?P<t1>coding|general|fast|everyday|current)\s+"
+    r"(?:model|preset)\s*\??$"
+    r"|(?:run|start|do|take)\s+(?:a\s+|the\s+)?(?:quick\s+|speed\s+)?benchmark\s+"
+    r"(?:on|of|for)\s+(?:the\s+)?(?P<t2>coding|general|fast|everyday|current)"
+    r"\s*(?:model|preset)?\s*\??$"
+    r"|(?:run|start)\s+the\s+(?P<t3>coding|general|fast|everyday|current)\s+"
+    r"benchmark\s*\??$", re.I)
 
 _AW_BENCH_RUN = re.compile(
     r"(?:run|do|start|take|perform)\s+(?:a|one|the|another)\s+"
@@ -26117,6 +27405,17 @@ _AW_BENCH_PROGRESS = re.compile(
 
 _AW_BENCH_STOP = re.compile(
     r"(?:stop|cancel|abort)\s+(?:the\s+)?(?:benchmark|bench\s+run)", re.I)
+
+#: "how do I start a benchmark" and "what does a benchmark measure" (2026-11-08):
+#: answered with the door, the throwaway-server rule and where the results go -
+#: never by the model, which does not know this PC's runner.
+_AW_BENCH_HELP = re.compile(
+    r"how\s+(?:do|can|would|should)\s+i\s+(?:start|run|do|take|begin)\s+"
+    r"(?:a\s+|the\s+|some\s+)?benchmarks?(?:\s+suites?)?\s*\??$"
+    r"|how\s+(?:do|does)\s+(?:the\s+|a\s+)?benchmarks?\s+work\s*\??$"
+    r"|what\s+(?:do|does)\s+(?:a\s+|the\s+|my\s+|your\s+)?benchmarks?\s+"
+    r"(?:measure|do|test|check)\s*\??$"
+    r"|what\s+is\s+(?:a\s+|the\s+)?benchmark\s*\??$", re.I)
 
 #: "What changed about you?" is the JOURNAL's. A question about the shipped
 #: update ("what changed in your last update?") stays `recent_changes`' - it
@@ -26502,43 +27801,170 @@ def _bench_progress_snapshot():
         return None
 
 
-def _run_bench_history() -> Result:
-    """The benchmark rows this PC recorded, newest first, or an honest empty."""
+def _bench_day(at) -> str:
+    """A stored row's own date, in the owner's words - never "now"."""
+    try:
+        return time.strftime("%d %b %Y", time.localtime(float(at)))
+    except (TypeError, ValueError, OSError):
+        return ""
+
+
+def _bench_g(value) -> str:
+    """One stored number, exactly as the store holds it (no rounding invention)."""
+    try:
+        return f"{float(value):g}"
+    except (TypeError, ValueError):
+        return ""
+
+
+#: The suite ids, in words, from the module that owns them - never typed again.
+def _bench_suite_label(suite_id) -> str:
+    key = str(suite_id or "")
     try:
         import jarvis_bench as B
-        rows = list(B.BenchLog().runs(limit=5))
-    except Exception:
-        rows = []
-    if not rows:
-        return Result("I have no benchmark runs recorded on this PC yet. Brain, "
-                      "Model, Models runs one, and since today I can start one for "
-                      'the current model if you say "run a benchmark".',
+        for row in getattr(B, "SUITES", ()) or ():
+            if str(row.get("id") or "") == key:
+                return str(row.get("label") or key)
+    except Exception:                       # noqa: BLE001 - older PC
+        pass
+    return key.replace("_", " ").strip().capitalize() or "a suite"
+
+
+def _run_bench_history() -> Result:
+    """What this PC has actually measured: speed runs AND suite scorecards.
+
+    THE OWNER'S ASK (2026-11-08): "what has been measured". The store already
+    had the answer in TWO files `jarvis_bench` writes - `BenchLog` (speed runs)
+    and `ScoreLog` (the five-suite scorecards) - and the earlier answer read
+    only the first. Every number here is copied from a stored row; a field a
+    row does not hold is said as missing, never estimated. If nothing is
+    stored, it says so and names the door that starts a run.
+    """
+    try:
+        import jarvis_bench as B
+    except Exception:                       # noqa: BLE001 - older PC
+        return Result("The benchmark module is not installed on this PC, so I "
+                      "cannot read any measured results and I will not invent one.",
                       "bench_history")
-    bits = []
-    for row in rows:
-        model = str(row.get("model") or "a model")
-        lane = str(row.get("lane") or "")
-        speed = row.get("gen_median")
-        try:
-            speed_s = (f"{float(speed):.1f} tokens a second"
-                       if speed is not None else "no speed number")
-        except (TypeError, ValueError):
-            speed_s = "no speed number"
-        said = model + (" on the " + lane + " lane" if lane else "") + " - " + speed_s
-        if row.get("spilled"):
-            said += " (some layers spilled)"
-        if row.get("ok") is False:
-            said += " (that run failed)"
-        bits.append(said)
-    return Result("The newest benchmark runs on this PC: " + "; ".join(bits)
-                  + '. Ask "run a benchmark" to measure the current model again.',
-                  "bench_history")
+    try:
+        runs = list(B.BenchLog().runs(limit=4))
+    except Exception:                       # noqa: BLE001 - damaged store
+        runs = []
+    try:
+        scores = list(B.ScoreLog().rows())[-4:]
+    except Exception:                       # noqa: BLE001 - damaged store
+        scores = []
+    if not runs and not scores:
+        return Result("I have not measured anything on this PC yet: there is no "
+                      "benchmark record here, so I will not invent a number. Say "
+                      "\"start a benchmark\" and I measure the current model's "
+                      "speed, or \"start the benchmark suites\" for all five - "
+                      "speed, coding, general, tool-calling and vision. The "
+                      "results are kept in Brain, Model, Models.",
+                      "bench_history")
+    said = ""
+    if runs:
+        bits = []
+        for row in runs:
+            model = str(row.get("model") or "a model")
+            lane = str(row.get("lane") or "")
+            speed = _bench_g(row.get("gen_median"))
+            part = model + (" on the " + lane + " lane" if lane else "") + " - "
+            part += (speed + " tokens a second") if speed else "no speed number stored"
+            if row.get("spilled"):
+                part += " (some layers spilled)"
+            if row.get("ok") is False:
+                part += " (that run failed)"
+            day = _bench_day(row.get("at"))
+            if day:
+                part += ", measured " + day
+            bits.append(part)
+        said = "The newest benchmark runs on this PC: " + "; ".join(bits) + "."
+    if scores:
+        bits = []
+        for row in scores:
+            model = str(row.get("model") or "a model")
+            label = _bench_suite_label(row.get("suite"))
+            part = label + " on " + model + ": "
+            score = _bench_g(row.get("score_pct"))
+            items, passed = row.get("items"), row.get("items_passed")
+            if score:
+                part += score + "%"
+                if isinstance(items, (int, float)) and isinstance(passed, (int, float)):
+                    part += " (" + _bench_g(passed) + " of " + _bench_g(items) + " tasks)"
+            elif row.get("skipped"):
+                part += "skipped"
+            elif row.get("passed") is False:
+                part += "that run did not pass"
+            else:
+                part += "no score stored"
+            speed = _bench_g(row.get("decode_tps"))
+            if speed:
+                part += ", " + speed + " tokens a second"
+            ctx = _bench_g(row.get("ctx"))
+            if ctx and "." not in ctx:
+                part += " at " + ctx + " tokens"
+            day = _bench_day(row.get("at"))
+            if day:
+                part += ", measured " + day
+            bits.append(part)
+        said += " The newest suite scorecards on this PC: " + "; ".join(bits) + "."
+    return Result(said + ' Every number above was measured on this PC. Say "start '
+                  'a benchmark" to measure the current model again, or "start the '
+                  'benchmark suites" for all five; the results are kept in Brain, '
+                  'Model, Models.', "bench_history")
 
 
-def _run_bench_run() -> Result:
-    """Start ONE async benchmark of the current model through jarvis_bench itself."""
+def _bench_target_row(words: str):
+    """The preset row a named benchmark target means, or None (never a guess)."""
+    words = " ".join(str(words or "").lower().split()).strip(" ?.!,")
+    if not words or words == "current":
+        return None
+    try:
+        import jarvis_model_knowledge as K
+        row = K.preset_by_name(words)
+        if row:
+            return row
+        for candidate in K.presets():
+            title = str(candidate.get("title") or "").lower()
+            if words == title or words in title or title.startswith(words):
+                return candidate
+    except Exception:                       # noqa: BLE001 - older PC
+        return None
+    return None
+
+
+def _run_bench_run(f: Optional[dict] = None) -> Result:
+    """Start ONE async benchmark through jarvis_bench itself.
+
+    The current model by default; a NAMED preset's model when the owner said
+    "benchmark the coding model" (2026-11-08). The lane and the model come from
+    the preset row that owns them - never from a guess.
+    """
     import jarvis_bench as B
-    model = _model_record() or ""
+    target = str((f or {}).get("target") or "")
+    lane = "everyday"
+    model = ""
+    if target and target != "current":
+        row = _bench_target_row(target)
+        if not row:
+            try:
+                import jarvis_model_knowledge as K
+                names = ", ".join(str(p.get("title")) for p in K.presets())
+            except Exception:               # noqa: BLE001 - older PC
+                names = ""
+            return Result("Nothing was measured: I do not know a model or preset "
+                          "called \"" + target + "\" on this PC. The presets are: "
+                          + (names or "not readable right now") + '. Say "benchmark '
+                          'the coding model" or "start a benchmark" for the current '
+                          "model.", "bench_run")
+        model = str(row.get("model") or "")
+        lane = "coding" if "coding" in str(row.get("id") or "").lower() else "everyday"
+        if not model:
+            return Result("Nothing was measured: the \"" + str(row.get("title") or target)
+                          + "\" preset has no local model to benchmark.", "bench_run")
+    if not model:
+        model = _model_record() or ""
     if not model:
         try:
             import jarvis_presets as P
@@ -26548,13 +27974,12 @@ def _run_bench_run() -> Result:
     if not model:
         return Result("Nothing was measured: I cannot read which model is running on "
                       "this PC right now, and I will not guess one.", "bench_run")
-    lane = "everyday"
     try:
         import jarvis_presets as P
         pid = str(P.choice() or "").lower()
     except Exception:
         pid = ""
-    if "coding" in pid:
+    if (not target or target == "current") and "coding" in pid:
         lane = "coding"
     body = {"model": model, "lane": lane,
             "confirm": {"model": model, "lane": lane, "may_evict": True}}
@@ -26582,6 +28007,8 @@ def _run_bench_run() -> Result:
     note = str(out.get("message") or "")
     if note and "Nothing else" not in note:
         said += " " + note
+    said += (' The results will be kept in Brain, Model, Models - ask "what have '
+             'you measured?" when it finishes.')
     return Result(said, "bench_run")
 
 
@@ -26639,7 +28066,25 @@ def _run_bench_suites() -> Result:
         "vision suite and says so; nothing is counted as a pass that was skipped. "
         "It runs on a throwaway model server and may pause the lane it needs, then "
         "put the active preset back. Ask \"how is the benchmark going?\" for "
-        "progress and the numbers when it finishes.", "bench_suites")
+        "progress and the numbers when it finishes; the scorecards are kept in "
+        "Brain, Model, Models.", "bench_suites")
+
+
+def _run_bench_how() -> Result:
+    """How to start a benchmark, what it does, and where the results go.
+
+    Fixed words (2026-11-08): the model does not know this PC's runner, and the
+    owner asked how to start one. Nothing runs here - this is a read."""
+    return Result(
+        "To start one, just say it: \"start a benchmark\" measures the current "
+        "model's speed, and \"start the benchmark suites\" runs all five - speed, "
+        "coding, general, tool-calling and vision. You can name one too, like "
+        "\"benchmark the coding model\". A run uses a throwaway model server on a "
+        "spare port, never your live lane's own server directly: it may pause the "
+        "lane it needs and puts your active preset back afterwards. It refuses "
+        "while I am answering a turn, and only one runs at a time. The results "
+        "are kept in Brain, Model, Models - ask \"what have you measured?\" and "
+        "I will read them back.", "bench_how")
 
 
 def _run_bench_progress() -> Result:
@@ -26969,8 +28414,12 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
 
     if _AW_PRESET_CURRENT.fullmatch(low):
         return Intent("preset_current")
-    if _AW_BENCH_SUITES.fullmatch(low):
+    if _AW_BENCH_SUITES.fullmatch(low) or _AW_BENCH_PLURAL.fullmatch(low):
         return Intent("bench_suites")
+    m = _AW_BENCH_TARGET.fullmatch(low)
+    if m:
+        target = next((g for g in m.groupdict().values() if g), "")
+        return Intent("bench_run", {"target": target.lower()})
     if _AW_BENCH_RUN.fullmatch(low):
         return Intent("bench_run")
     if _AW_BENCH_PROGRESS.fullmatch(low):
@@ -26979,6 +28428,8 @@ def _awareness_chat(s: str, text: str) -> Optional[Intent]:
         return Intent("bench_stop")
     if _AW_BENCH_HISTORY.fullmatch(low):
         return Intent("bench_history")
+    if _AW_BENCH_HELP.fullmatch(low):
+        return Intent("bench_how")
     m = _AW_CHANGES.fullmatch(low)
     if m:
         d = m.groupdict()

@@ -133,6 +133,11 @@ NO_PATCH = {
     # drop-in loader, so the folder is the whole of its wiring and no patch is
     # added to `jarvis_hud.py`.
     "read-aloud",
+    # The auto Wi-Fi reconnect (2026-11-08, the owner's ask that it default on
+    # and be changeable in Settings or chat): GET/POST /api/wifi-reconnect come
+    # from jarvis_wifi.install(), called by the drop-in loader, so the folder is
+    # the whole of its wiring and no patch is added to `jarvis_hud.py`.
+    "wifi-reconnect",
 }
 
 

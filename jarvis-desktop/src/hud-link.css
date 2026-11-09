@@ -170,3 +170,288 @@
   opacity: 1;
   font-weight: 600;
 }
+
+/* Wave 10 (2026-11-08): the wrong-answer sheet, INSIDE the same answer menu.
+   Plain words, five reasons, one optional correction line. Colours are the
+   HUD's own tokens - no hard-coded colour. */
+.jarvis-answer-menu.is-sheet {
+  min-width: 260px;
+  max-width: 320px;
+}
+
+.jarvis-answer-menu.is-sheet > :not(.jarvis-answer-sheet) {
+  display: none !important;
+}
+
+.jarvis-answer-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px;
+}
+
+.jarvis-answer-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.jarvis-answer-reason {
+  font: inherit;
+  font-size: 11px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line-hot);
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.jarvis-answer-reason:hover {
+  color: var(--ice);
+}
+
+.jarvis-answer-reason[aria-pressed="true"] {
+  color: var(--ice);
+  border-color: rgb(var(--accent-rgb) / .6);
+  background: rgb(var(--accent-rgb) / .12);
+}
+
+.jarvis-answer-reason:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 1px;
+}
+
+.jarvis-answer-sheet-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.jarvis-answer-correction {
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-hot);
+  border-radius: 4px;
+  padding: 4px 6px;
+  min-height: 34px;
+  max-height: 90px;
+  resize: vertical;
+}
+
+.jarvis-answer-correction:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: -2px;
+}
+
+.jarvis-answer-counter {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--dim);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.jarvis-answer-sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.jarvis-answer-sheet-action {
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--line-hot);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.jarvis-answer-sheet-action:hover,
+.jarvis-answer-sheet-action:focus-visible {
+  color: var(--ice);
+  outline: none;
+}
+
+.jarvis-answer-sheet-action:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 1px;
+}
+
+.jarvis-answer-sheet-action.primary {
+  color: var(--ice);
+  border-color: rgb(var(--accent-rgb) / .6);
+}
+
+.jarvis-answer-sheet-action[disabled] {
+  opacity: .45;
+  cursor: default;
+}
+
+/* Wave 10 (Q2.1): "Take the mark back" exists only while a wrong mark is
+   saved; hidden means hidden in every WebView, never a 0-height button. */
+.jarvis-answer-sheet-action[hidden] {
+  display: none !important;
+}
+
+.jarvis-answer-sheet-note {
+  margin: 0 2px;
+  font-size: 11px;
+  color: var(--warn);
+}
+
+.jarvis-answer-said {
+  margin: 2px 6px;
+  font-size: 12px;
+  color: var(--ice);
+}
+
+.jarvis-answer-said[hidden] {
+  display: none !important;
+}
+/* ==========================================================================
+ * Wave 10 (2026-11-08): the Studio stage's layout, fixed in the shell's own
+ * stylesheet.
+ *
+ * WHY HERE AND NOT IN THE PAGE: `jarvis_hud.html` is a BESIDE-file, so a line
+ * changed there has to be carried into `backend/jarvis_hud.html` and
+ * `jarvis-backend/jarvis_hud.html` before the repo's twin checks pass. The
+ * owner's two faults are shell-layout faults - exactly what this injected
+ * stylesheet is for - so the page stays untouched and the fix ships with the
+ * desktop shell alone.
+ *
+ * BUG A - the two host-raised cards. `#secret-handoff` and `#connect-account`
+ * are direct children of `#stage`, and the split-stage shell lays `#stage` out
+ * as a grid. They had NO placement, so the grid auto-placed them into the
+ * first free cell - the Galaxy/face column, row 3 - which pushed the
+ * conversation and the face down (the owner's screenshot, 2026-11-08 15:18).
+ * They now own rows 4 and 5, full width, above the approvals row; the cards
+ * that were placed by number move down by two rows with them. AND: a hidden
+ * stage card no longer claims a cell. `#approvals` and `#initiative` are
+ * `display:flex` by author CSS, which beats the browser's `[hidden]` rule, so
+ * a hidden card was still a full-width grid item with no height - the thing
+ * that had pushed the auto-placed card into column 2 in the first place.
+ *
+ * The numbering, non-edit (9 rows):
+ *   1 stage-bar | 2 stage-menu | 3 main-screen strip | 4 secret-handoff |
+ *   5 connect-account | 6 the editor's Stage-top region (which OWNS the
+ *   approvals queue and the stage-top cards) | 7 banner | 8 model-warn |
+ *   9 conversation + face
+ */
+html[data-hud-shell="split-stage"] #stage{
+  grid-template-rows:auto auto auto auto auto auto auto auto minmax(0, 1fr);
+}
+/* The main-screen strip is a direct child too, and it was auto-placed as well;
+   on the Galaxy tab it is hidden (the page's own rule), but on the other tabs
+   it belongs in its own full-width row above the raised cards. */
+html[data-hud-shell="split-stage"] #stage > #hud-home-cards{
+  grid-column:1 / -1; grid-row:3;
+}
+/* THE TWO HOST CARDS: their own full-width rows, same margins as the other
+   stage cards (approvals/initiative use 10px 16px 0). */
+html[data-hud-shell="split-stage"] #stage > #secret-handoff{
+  grid-column:1 / -1; grid-row:4; margin:10px 16px 0;
+}
+html[data-hud-shell="split-stage"] #stage > #connect-account{
+  grid-column:1 / -1; grid-row:5; margin:10px 16px 0;
+}
+/* THE EDITOR'S OWN STAGE-TOP REGION. hud-edit.js creates it on mount and
+   MOVES the approvals queue (and the stage's other top cards) into it, so it
+   is the row the approvals card really lives in - it gets a deliberate,
+   full-width row of its own instead of being auto-placed. It is NOT hidden:
+   that would hide the approvals queue with it. Its hidden card shells carry
+   the page's own `.hud-card[hidden]{display:none}`, so nothing hidden claims
+   height inside it. */
+html[data-hud-shell="split-stage"] #stage > [data-hud-region="stage_top"]{
+  grid-column:1 / -1; grid-row:6; margin:10px 16px 0;
+}
+/* Before the editor mounts, the two queues are still direct children of
+   #stage; they belong in that same row (and the same margins). */
+html[data-hud-shell="split-stage"] #stage > #approvals,
+html[data-hud-shell="split-stage"] #stage > #initiative{
+  grid-column:1 / -1; grid-row:6; margin:10px 16px 0;
+}
+/* The cards that were already placed by number move down by the two rows. */
+html[data-hud-shell="split-stage"] #stage > #banner{grid-row:7;}
+html[data-hud-shell="split-stage"] #stage > #model-warn{grid-row:8;}
+html[data-hud-shell="split-stage"] #stage > #talk,
+html[data-hud-shell="split-stage"] #stage > #brain{grid-row:9;}
+/* A hidden stage card must not claim a grid cell. Scoped to the grid shell on
+   purpose: every other shell still lays the stage out as a flex column, where
+   the page's own display rules have never pushed anything around. */
+html[data-hud-shell="split-stage"] #stage > [hidden]{display:none !important;}
+/* The owner's ruling (Q1, 2026-11-08) words it wider than the Studio shell, so
+   the same rule is stated once for EVERY layout: a hidden stage child never
+   claims a cell, whatever the shell. Safe everywhere - a hidden element was
+   never meant to be drawn, and the page's own author display rules are exactly
+   what used to beat the browser's [hidden] rule. (`.host-card` is not a class
+   this page uses: the two host-raised cards are `#connect-account` and
+   `#secret-handoff`, which this covers.) */
+#stage > [hidden]{display:none !important;}
+/* EDIT MODE (the editor's own template, kept in step with the two new rows):
+ *   1 stage-bar | 2 editor banner | 3 Stage-top region | 4 secret-handoff |
+ *   5 connect-account | 6 stage-menu | 7 main-screen strip | 8 banner |
+ *   9 model-warn | 10 conversation + face
+ * Stage-top stays row 3, so the editor's region and the raised cards never
+ * collide. (Approvals/initiative are moved INTO that region, so they take no
+ * #stage row of their own here.) */
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage{
+  grid-template-rows:auto auto auto auto auto auto auto auto auto minmax(0, 1fr);
+}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > .stage-bar{grid-row:1;}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > .hud-edit-banner{
+  grid-column:1 / -1; grid-row:2;
+}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > [data-hud-region="stage_top"]{
+  grid-column:1 / -1; grid-row:3;
+}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #secret-handoff{
+  grid-column:1 / -1; grid-row:4; margin:10px 16px 0;
+}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #connect-account{
+  grid-column:1 / -1; grid-row:5; margin:10px 16px 0;
+}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #stage-menu{grid-row:6;}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #hud-home-cards{
+  grid-column:1 / -1; grid-row:7; max-height:50vh; overflow-y:auto;
+}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #banner{grid-row:8;}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #model-warn{grid-row:9;}
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #talk,
+html[data-hud-shell="split-stage"] body[data-hud-edit="on"] #stage > #brain{
+  grid-row:10; grid-column:1 / -1;
+}
+
+/* ==========================================================================
+ * BUG B - the fixed safety strip over the stage bar's chips.
+ *
+ * `#hud-safety` sits `position:fixed; top:2px` at the centre of the window
+ * (H4's promise: always visible). At the owner's 150% screen the stage bar's
+ * right-hand group (the model chip, `standing by`, and the shell's Layout
+ * badge + Edit HUD buttons) shifts left INTO that band, and his screenshot
+ * showed only "DING BY" peeking out from under the strip. The strip must stay
+ * visible and must not cover a control, so the shell reserves a band for it:
+ * hud_bootstrap.js watches the strip and sets `data-hud-safety-visible` plus
+ * the measured height in `--hud-safety-band` while it is really on screen;
+ * this rule pushes the whole shell's content below it.
+ *
+ * SCOPED TO STUDIO: that is the shell whose stage bar is tight enough to
+ * collide (the other layouts were measured clear in H4's own geometry tests),
+ * so no other shell's layout moves. The strip itself stays outside every
+ * region and card, keeps no controls, and stays visible in edit mode - this
+ * only reserves room for it.
+ */
+html[data-hud-shell="split-stage"] body[data-hud-safety-visible] #shell{
+  padding-top:var(--hud-safety-band, 0px);
+}

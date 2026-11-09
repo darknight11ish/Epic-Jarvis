@@ -1,9 +1,9 @@
 """GENERATED FILE - do not edit by hand.
 
-The owner's feature list, as data: 180 rows from features/features.json.
+The owner's feature list, as data: 181 rows from features/features.json.
 Regenerate with `python3 tools/gen_feature_guide_catalogue.py`; the check for a
 stale copy is in `backend/test_feature_guide.py`. The source file is
-`features/features.json` (sha256 f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de); the apps' Features pages read their own
+`features/features.json` (sha256 921e2c2e41ec60fc04faa1c04dab7a077b8c535b42d6a7b4f0965ea259bd3dd0); the apps' Features pages read their own
 copies of it, and `tools/check_feature_list.py` keeps those three in step.
 
 WHY THIS COPY EXISTS: features.json is not shipped to the owner's PC (it lives
@@ -13,7 +13,7 @@ is this feature?" and "is it on?" on the PC - needs the rows beside it.
 from __future__ import annotations
 
 #: sha256 of the features/features.json this file was generated from.
-SOURCE_SHA256 = "f1656a58e32a78a998e02bf42360053cc7eb0e03653a35b80bc2efdd50ccb5de"
+SOURCE_SHA256 = "921e2c2e41ec60fc04faa1c04dab7a077b8c535b42d6a7b4f0965ea259bd3dd0"
 
 #: The feature groups, in the order the list first names them.
 GROUPS = ["Talking", "Memory", "Screen and pictures", "Notes and files", "Money and health", "Home", "Phone", "The PC itself", "Safety"]
@@ -72,7 +72,7 @@ FEATURES = (
         "group": "Talking",
         "title": "Jarvis reads its answers aloud",
         "what": "Jarvis reads its answers aloud, in the voice you chose; a finished answer can be read out again from its own speaker button.",
-        "where": "On by default: a question asked by voice gets a spoken answer, and no switch turns that off. Settings, Voice, \"Answers that use what Jarvis remembers\" and \"Answers that use sensitive saved facts\" choose whether those answers are read aloud or kept on screen. Settings, HUD, \"Read-aloud buttons on answers\" adds the speaker to each finished answer - it does not turn read-aloud on or off.",
+        "where": "On by default: a question asked by voice, or in Jarvis Live, gets a spoken answer; an answer to a typed question stays silent. Settings, Voice, \"Read replies out loud\" turns the automatic reading off and back on, and saying \"stop reading your replies out loud\" in chat or Jarvis Live does the same (\"read your replies out loud\" turns it back on). The speaker beside a finished answer, and Read out loud in its menu, read that one answer again; Settings, HUD, \"Read-aloud buttons on answers\" adds those speakers on the PC. An answer that used a sensitive saved fact stays on screen. No card is raised, and no model can change this switch.",
         "asks": "No card to read aloud; an answer that used a sensitive fact stays on screen unless you allow it in Settings.",
         "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
         "surface": "both",
@@ -1933,12 +1933,12 @@ FEATURES = (
         "id": "model-knowledge",
         "group": "The PC itself",
         "title": "Ask which model is answering",
-        "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. A named preset or model can be switched to from the same question.",
-        "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"switch to the Coding preset\".",
+        "what": "Ask which AI model is answering right now and which preset is in force, what else this PC has installed, how fast each one was measured here, and which model suits a job. From the same chat you can start a benchmark - the current model, or one named preset's model - ask what has been measured (speed runs and the five suite scorecards), which model each preset uses, and whether a better model is only an estimate. A named preset or model can be switched to from the same question.",
+        "where": "Just ask in chat - \"what model are you running?\", \"which model should I use for coding?\", \"what have you measured?\", \"what models do the current presets use?\", \"start a benchmark\", \"start the benchmark suites\", \"benchmark the coding model\", \"switch to the Coding preset\".",
         "asks": "Answering asks nothing. Applying a preset or switching a model raises one approval card, the same one the model switch already uses; nothing is downloaded or swapped until you approve it.",
-        "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed is only stated when this PC measured it; the phone still has no list of models to browse.",
+        "limit": "A model's release date is not recorded on this tree, so a question about one gets an honest answer instead of a made-up date. A speed or score is only stated when this PC measured it, with its date; a candidate model is labelled MEASURED ON THIS PC or ESTIMATED FIT (run benchmark to verify) and is never called better for a preset until a benchmark measured it there. A benchmark uses a throwaway model server on a spare port, never a live lane's own server directly; it may pause the lane it needs and puts the active preset back, refuses while an answer is streaming, and only one runs at a time. The phone still has no list of models to browse.",
         "surface": "both",
-        "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running", "tells me which model is answering"],
+        "aliases": ["model knowledge", "which model is answering", "what model is answering", "what ai model", "the model you are running", "tells me which model is answering", "model benchmarks", "benchmark the models"],
         "covers": ["model-page"],
     },
     {
@@ -1953,6 +1953,19 @@ FEATURES = (
         "surface_reason": "The program runs on this PC and is started by a PowerShell script on this PC. The phone has no switch for it, and a phone that could start a program on the PC would be a new power.",
         "aliases": ["voicestudio", "voice studio", "the second voice program"],
         "covers": [],
+    },
+    {
+        "id": "wifi-auto-reconnect",
+        "group": "The PC itself",
+        "title": "Reconnect to Wi-Fi by itself",
+        "what": "While this PC has no internet, Jarvis asks Windows to reconnect to a saved password-protected Wi-Fi network it already knows, every two hours, and stops as soon as the connection is back.",
+        "where": "Settings, Wi-Fi reconnect - on by default. Turn it off there, or say \"turn off auto wifi reconnect\"; turning it on again asks once on a card.",
+        "asks": "Turning it on raises one approval card; turning it off is instant and shows no card. Each reconnect attempt shows no card of its own.",
+        "limit": "It only asks Windows to reconnect to a saved, password-protected network already on this PC; an open, WEP or enterprise network is skipped, and it tries only the top three saved networks actually in range. It never asks for a password and never changes a network's settings.",
+        "surface": "desktop",
+        "surface_reason": "The feature repairs THIS PC's own Wi-Fi link, so the phone neither shows nor changes it (ARCHITECTURE section 8, owner ruling Q4).",
+        "aliases": ["wifi reconnect", "wi-fi reconnect", "auto wifi reconnect", "automatic wi-fi reconnection"],
+        "covers": ["settings.wifi-reconnect"],
     },
     {
         "id": "approvals",

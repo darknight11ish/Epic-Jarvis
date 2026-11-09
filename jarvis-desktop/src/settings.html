@@ -155,6 +155,7 @@
             <a href="#shortcuts">Shortcuts</a>
             <a href="#security">Security</a>
             <a href="#learning">Learning</a>
+        <a href="#wifi-reconnect">Wi-Fi reconnect</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Voice and sound</span>
@@ -1918,6 +1919,46 @@
 
           <span class="status" id="learning-status" role="status"></span>
         </div>
+      </section>
+
+      <!-- The auto Wi-Fi reconnect (2026-11-08; the owner's words: "add a
+           feature to jarvis that defaults on but can be changed in settings or
+           chat with jarvis, that jarvis if its running on a desktop and the
+           desktop has lost internet connection, that it will tell the desktop to
+           try to reconnect to password protected networks (that have already been
+           connected to in the past on that desktop) every 2 hours on its own if
+           its still offline").
+
+           WHERE THE VALUE LIVES. The PC's backend, not localStorage:
+           GET/POST /api/wifi-reconnect (jarvis_wifi.py) through two Tauri
+           commands (wifi_reconnect.rs). Drawn and saved by
+           wifi-reconnect-settings.js. ON by default, as asked; OFF is immediate.
+           The page never shows a network name, a password or a key, and it
+           never asks the PC to connect to anything - the two-hourly attempt
+           belongs to the PC. -->
+      <section class="card" id="wifi-reconnect">
+        <h2>Wi-Fi reconnect</h2>
+        <p class="note">
+          While this PC has no internet, Jarvis asks Windows every 2 hours to
+          reconnect to a Wi-Fi network this PC has already saved and whose
+          password is already stored. It never asks you for a password, never
+          tries a network this PC has not saved, and does nothing while Jarvis is
+          answering you.
+        </p>
+        <label class="mn-sync-row">
+          <input id="wifi-reconnect-switch" type="checkbox" />
+          <span>Reconnect Wi-Fi automatically
+            <span class="toggle-detail" id="wifi-reconnect-detail">
+              On to start, as you asked. On: every 2 hours, only while this PC
+              has no internet and only with Lockdown off and the Wi-Fi radio left
+              on, Jarvis tries the saved password-protected networks that are in
+              range - at most 3, verified for 10 seconds each - and says what
+              happened. Turning it back on asks for one approval card; turning it
+              off is instant. Off: Jarvis never touches this PC's Wi-Fi choice.
+            </span>
+          </span>
+        </label>
+        <p class="note" id="wifi-reconnect-status" role="status"></p>
       </section>
 
       <!-- ── Jarvis's voice ────────────────────────────────────────────────
@@ -3929,6 +3970,7 @@
     <script type="module" src="menu-visibility-settings.js"></script>
     <script type="module" src="hud-window-settings.js"></script>
     <script type="module" src="read-aloud-settings.js"></script>
+    <script type="module" src="wifi-reconnect-settings.js"></script>
 <script type="module" src="pictures-settings.js"></script>
     <script type="module" src="sandbox-settings.js"></script>
     <script type="module" src="media-index-settings.js"></script>

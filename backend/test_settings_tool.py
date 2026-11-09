@@ -813,13 +813,18 @@ def t_every_one_of_the_22_switches_resolves_from_its_own_names():
     # 38 since 2026-11-04: `handsfree` joined with hands-free mode (JARVIS-API
     # section 191). Its setter calls jarvis_handsfree's own switch function, so
     # "turn on hands-free mode" reaches the same rule the Settings card does.
-    check("the count is now 38: the 23 measured on 2026-10-19, the eight added"
+    # 39 since 2026-11-08: `wifi_auto_reconnect` joined with the auto Wi-Fi
+    # reconnect (ruling Q4). Its setter calls jarvis_wifi.request_enabled, the
+    # ONE function its Settings switch, its chat phrases and its Live path all
+    # reach: OFF is instant, ON is exactly one change_own_config card.
+    check("the count is now 39: the 23 measured on 2026-10-19, the eight added"
           " by the universal-control pass on 2026-10-22, antislop on"
           " 2026-10-28, the Jarvis calendar on 2026-10-29, one moment on"
           " 2026-11-01, learn_paraphrase on 2026-11-02, the two added on"
           " 2026-11-03 (Wave B's pc_setup_notification and the locked-phone"
-          " voice check), and hands-free mode on 2026-11-04",
-          len(R.BOOL_SETTINGS) == 38, str(len(R.BOOL_SETTINGS)))
+          " voice check), hands-free mode on 2026-11-04, and the auto Wi-Fi"
+          " reconnect on 2026-11-08",
+          len(R.BOOL_SETTINGS) == 39, str(len(R.BOOL_SETTINGS)))
 
 
 def gate_signs_in(source: str, fn_name: str) -> list:

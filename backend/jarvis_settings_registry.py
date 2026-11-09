@@ -292,6 +292,18 @@ SECTIONS: tuple = (
     Section("learning", ("learning", "the learning switches", "background learning",
                          "automatic learning", "learn automatically",
                          "what jarvis learns")),
+    # "Wi-Fi reconnect" (2026-11-08, the owner's ask: a feature that defaults on,
+    # changeable in Settings or chat, that every 2 hours while this PC has no
+    # internet asks Windows to reconnect to a saved password-protected Wi-Fi
+    # network it already knows). DESKTOP ONLY by nature: it repairs THIS PC's own
+    # Wi-Fi link, so the phone neither shows nor changes it (ARCHITECTURE section
+    # 8; tools/check_parity.py carries the route as deliberate). The card is
+    # drawn by wifi-reconnect-settings.js from the same route the chat sentences
+    # read and write.
+    Section("wifi-reconnect", ("wi-fi reconnect", "wifi reconnect",
+                               "the auto wi-fi reconnect",
+                               "reconnect wi-fi automatically",
+                               "automatic wi-fi reconnection"), app="desktop"),
     Section("voices", ("jarvis's voice", "jarvis's voices", "custom voices",
                        "how jarvis sounds")),
     Section("web-search", ("web search", "search settings", "the search provider")),
@@ -2430,6 +2442,25 @@ class BoolSetting:
     off_word: str = "off"
 
 
+# --- the auto Wi-Fi reconnect (jarvis_wifi.py, 2026-11-08; ruling Q4) ------
+
+def set_wifi_auto_reconnect(on: bool, *, peer=None, local=None) -> Outcome:
+    """Turn the auto Wi-Fi reconnect on or off - through the module's own door.
+
+    RULING Q4 GUARDRAIL 4 (2026-11-08): turning it ON is exactly ONE
+    `change_own_config` card and nothing is written until the owner answers it;
+    turning it OFF is instant and cardless. `jarvis_wifi.request_enabled` is the
+    ONE implementation the chat phrase, the Settings switch and the Live voice
+    path all reach, and it is the same function the module's own route calls.
+    """
+    try:
+        import jarvis_wifi as WIFI
+    except Exception:
+        return _missing("the auto Wi-Fi reconnect")
+    code, out = WIFI.request_enabled(bool(on))
+    return _say(code, out)
+
+
 BOOL_SETTINGS: tuple = (
     BoolSetting("background_learning",
                ("background learning", "automatic learning", "learn automatically",
@@ -2545,6 +2576,11 @@ BOOL_SETTINGS: tuple = (
                 "the python sandbox", "the small python sandbox", "the sandbox",
                 "small python scripts", "the data and maths tool"),
                "sandbox", set_sandbox_exec),
+    # The auto Wi-Fi reconnect (2026-11-08; the owner's ask, ruling Q4). Default
+    # ON; turning it ON is ONE `change_own_config` card, OFF is instant. Its
+    # Section is the Settings card that draws the switch, so "open the Wi-Fi
+    # reconnect" reaches a real place and "is wifi reconnect on?" is read from
+    # the module's own state file.
     # "Searchable recordings and videos" (F5 S2, the owner's decision of
     # 2026-10-19: readable transcript text, ON by default). Its switch is the
     # shipped `[media_index] enabled = true`; the owner's own file wins, so OFF
@@ -2729,6 +2765,13 @@ BOOL_SETTINGS: tuple = (
                 "suggesting a bigger model after i correct you",
                 "the correction suggestion for a bigger model"),
                "second-card", set_second_card_suggest_correction),
+    BoolSetting("wifi_auto_reconnect",
+               ("auto wifi reconnect", "automatic wifi reconnect",
+                "auto wi-fi reconnect", "automatic wi-fi reconnect",
+                "wi-fi reconnect", "the wi-fi reconnect", "wifi reconnect",
+                "reconnect wi-fi automatically",
+                "automatic wi-fi reconnection"),
+               "wifi-reconnect", set_wifi_auto_reconnect),
 )
 
 _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}

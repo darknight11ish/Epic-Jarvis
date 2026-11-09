@@ -59,6 +59,7 @@ extraction-wiring.patch	extraction-wiring/35a1001.patch	35a1001e2028fb245b79606e
 extraction-wiring.patch	extraction-wiring/80309e5.patch	80309e584047abb27a30f3163c29a841000ea7f7	2026-09-15T01:42:10Z	The route is /api/pending, and I told the other client the wrong one
 extraction-wiring.patch	extraction-wiring/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34Z	Master audit: the worst finding was a cloud lane nobody re-filtered
 extraction-wiring.patch	extraction-wiring/a50cbf1.patch	a50cbf1ee96d71ac66e3d7a9bab702dc5b7b8b49	2026-09-15T00:50:38Z	backend: give the learning loop a trigger and the review queue a doorbell
+feedback.patch	feedback/7c3d31a.patch	7c3d31ad3571e9bee05b3d7c62c69c1f430f5422	2026-09-24T00:01:13Z	Memory: the overnight-tidy card tells the truth, and the HUD stops using it up
 feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2026-09-23T09:22:45Z	Learning backend review fixes: marker filter, hidden retire cards, partial stack, shipped modules
 feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29Z	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
 focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09-25T23:45:52Z	Focus sessions, backend: jarvis_focus.py, focus.patch, the fast-path commands
@@ -93,6 +94,7 @@ gate-touches.patch	gate-touches/81e1128.patch	81e1128ad5beab8198943aaec2fd994c81
 gate-touches.patch	gate-touches/0f244f7.patch	0f244f7b04ecbea8640b5440943242991113a7af	2026-10-11T00:19:59-07:00	the gate reads what an action touches, not the words on its card (#249)
 github-tools.patch	github-tools/72f6847.patch	72f68473885ee7844bca1eb43855a5dcb4050000	2026-11-03T16:39:39-08:00	feat(github): read your own GitHub, and three small actions on it - one card each, never merge or push
 goals.patch	goals/d68f7b2.patch	d68f7b240737ac081d91b26c85410738520d8f42	2026-09-27T23:29:50Z	Backend: Goals - a plan the owner edits, one card per acting step
+gpu-offload.patch	gpu-offload/b2f5a08.patch	b2f5a083305955bca736934c0fb9e8d89c39c623	2026-09-15T04:08:06Z	The three daily annoyances: a log file, autostart, and a CPU warning
 handsfree.patch	handsfree/8c3490d.patch	8c3490d834b8e11a2b93ba0629a866de99d3d641	2026-11-05T03:19:26-08:00	fix(handsfree): the gate rows go where no other patch reads, and every red suite is answered
 handsfree.patch	handsfree/ced61a2.patch	ced61a23f7b691acade485e9b5d86f416b2b54d3	2026-11-04T16:56:58-08:00	feat(handsfree): read every card out, answer one by voice, and text a contact
 hud-request-gate.patch	hud-request-gate/af2adbb.patch	af2adbbbe5281363e88dc09b61375482b6869e3e	2026-10-18T22:07:57-07:00	fix(hud): header deadline, bounded concurrency and a token-failure gate without touching a route
@@ -131,6 +133,7 @@ plugin-loader.patch	plugin-loader/e8d837d.patch	e8d837d609c8bcb522dd83afd56d7155
 plugin-loader.patch	plugin-loader/ff4ee28.patch	ff4ee2880fa1880279aadfc4cd34f02f276ee8c2	2026-10-11T13:51:26-07:00	#266: re-anchor plugin-loader.patch on pictures.patch, and regenerate the plug-in catalogue
 plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9f345549a	2026-10-11T05:50:49-07:00	finish the uncensored opt-ins: off by default, on is one card, and a way in (#253)
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder
+presets.patch	presets/fa071ce.patch	fa071ce64b25635eb2a77e9bc82972410f432a1a	2026-11-03T16:08:13-08:00	fix(backend): re-anchor presets.patch's URL hunk on the text ollama-direct now writes
 presets.patch	presets/aac88d6.patch	aac88d6a69734b65f69cfe717b949b7669f463e8	2026-10-19T16:06:15-07:00	fix(presets): re-anchor the patch on the applied HUD shape
 presets.patch	presets/41c9069.patch	41c906981c399944d236123b1bdd3e5f7a2786e9	2026-10-19T13:45:56-07:00	feat(presets): lane-aware single-approval apply with rollback
 product-check.patch	product-check/96b1f1d.patch	96b1f1d306e7654712c3b44d90818687f4d79a1a	2026-11-04T17:32:48-08:00	feat(product): wire the existing product check - one card, one read-only page, one report

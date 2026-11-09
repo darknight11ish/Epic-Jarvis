@@ -233,6 +233,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions). `done` makes the animals' orb glow once - "a long answer is ready" (`face-moments.js`); the robot, which has no orb, brightens its eyes and fins once instead | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`); `done` makes the animal's orb glow once, the robot's eyes and fins (`face/AnimalNow.kt`) |
 | `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
+| `read_aloud` | The PC's automatic read-aloud switch moved: `{"enabled": bool}` only, never words. The Jarvis bar sets its rule at once and, on `false`, stops the sentence in flight, empties its queue and settles the clip being made, so OFF is literal mid-answer (`main.js`, `read-aloud.js` `createReadAloudStop`; section 201) | Nothing: the phone's read-aloud is its own on-device switch and it never calls this route (ARCHITECTURE section 8) |
 
 `devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
 a device was paired or removed, or the old shared key was retired or
@@ -2155,26 +2156,40 @@ dropped), and `remember_last`: `{"at", "queued", "reason", "note",
 sentence meant to be shown as-is ("This exact wording is already waiting for
 your review.").
 
-**The "retire this?" card** (`feedback.patch`) is a row in this same queue
-with `source == "feedback_retire"`, `confidence: null`, and
+**The two feedback cards** (`feedback.patch`, Right/Wrong v2, owner ruling Q2
+2026-11-08) are rows in this same queue with `confidence: null` and
 `replaces_id`/`replaces_text` naming a stored fact that keeps turning up in
-answers the owner marked wrong. Its buttons must NOT read Keep / Discard:
-accepting it (`/api/memory/decide {"id", "accept": true}`) **retires** the
-fact, and discarding it keeps the fact exactly as it is. Label accept
-"Retire it" and discard "Keep using it"; show `replaces_text` as the fact in
-question and `text` as the reason; show no confidence; no "Both are true".
-**Android** labels accept "Stop using this fact" (the same action in plainer
-words) and discard "Keep using it", with the line "Stopping it does not delete
-it. The fact stays in the history - Jarvis just stops using it."
-The desktop labels it the same way as the phone (`brain.js` `proposalRow`);
-an older client's plain Keep button would say the opposite of what happens
-on this card, which is why it is hidden unless asked for:
+answers the owner marked wrong:
+
+- `source == "feedback_correction"` - an ORDINARY review card whose `text` is
+  the owner's own correction words, proposed as the fact's replacement.
+  Accepting it (`/api/memory/decide {"id", "accept": true}`) stores the
+  correction, retires the old fact (history kept) and adds nothing else - the
+  queue's own accept rule is the only writer. Label accept "Update the fact"
+  and discard "Keep it as it is".
+- `source == "feedback_retire"` - the queue's existing "retire this?" card,
+  raised only when the owner marked an answer wrong and typed NO correction.
+  Accepting it **retires** the fact, and discarding it keeps the fact exactly
+  as it is. Label accept "Forget that fact" and discard "Keep using it".
+
+Show `replaces_text` as the fact in question and `text` as the reason; show no
+confidence; no "Both are true". **Android** labels the same four strings (the
+same actions in plainer words), with the line "Stopping it does not delete it.
+The fact stays in the history - Jarvis just stops using it."
+The desktop labels them the same way as the phone (`brain.js` `proposalRow`,
+both strings from `memory-words.js`); an older client's plain Keep button would
+say the opposite of what happens on the retire card, which is why that card is
+hidden unless asked for:
 
 **So the card is hidden unless asked for.** `GET /api/memory/pending` leaves
 out every `source == "feedback_retire"` row. A client that shows the card
 with the labels above asks for it with `GET /api/memory/pending?retire_cards=1`
 (exactly `1`; anything else is the same as not asking), and gets those rows
-in the same `pending` list as every other card. A client that has not been
+in the same `pending` list as every other card. The correction card
+(`source == "feedback_correction"`) is an ordinary proposal and is never
+hidden: every client that already shows the review queue shows it, and the two
+labels above are what keep its meaning ("update", not "keep") straight. A
+client that has not been
 changed never sees one, so its Keep button can never retire a fact. Hidden
 from the list is not removed from the queue: the card waits, undecided, until
 a client that asks shows it. Two things still count it, and a client should
@@ -2237,7 +2252,7 @@ neither app says it would.
 | `/api/models/rollback` | POST | `{}` | `brain.rs:436` | `JarvisApi.kt:314` | Tier `auto`; never waits. |
 | `/api/memory/decide` | POST | `{"id": <int>, "accept": bool}` | `brain.rs:283` | `JarvisApi.kt:417` | One id, one decision. **No list form anywhere** — a "keep all" would be an approve-all with another name. |
 | `/api/memory/keep_both` | POST | `{"id": <int>}` (a PROPOSAL id) | `brain.rs` `brain_memory_keep_both` | `JarvisApi.kt:439` (`keepBothMemory`) | `memory-intake.patch`. The third answer on a correction card: keep the new fact and do NOT retire the old one. Same claim as `decide` (two taps, one fact). `200 {"ok": true, "id", "fact_id", "kept_id", "kept_text"}`; `409 {"ok": false, "reason": "not_a_correction", "note"}` for a card that retires nothing; `404` if the id is not pending; `400` for a non-integer id; `501` if the patch is missing. Show the button only when the row's `keep_both_ok` is true. |
-| `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs` `mark_answer` (quickbar, and the HUD page through `hud_bootstrap.js`, which holds no token) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). |
+| `/api/feedback/mark` | POST | `{"turn_id": "<32 hex>", "mark": "right" \| "wrong" \| "none"}` | `commands.rs` `mark_answer` (quickbar, and the HUD page through `hud_bootstrap.js`, which holds no token) | `JarvisApi.kt:451` (`markAnswer`) | `feedback.patch`. One answer, one mark; `"none"` takes a mark back. A list of ids is refused (`400`) - there is no "mark all". `200 {"ok": true, "turn_id", "mark", "was", "changed", "facts", "retire_cards_raised"}`; `400` bad id or mark; `401`/`403` token or origin; `404` unknown id; `503` module missing. A mark never changes memory: at most it queues ONE "retire this?" card (above). **Wave 10 (2026-11-08), the HUD's Wrong sheet:** the body may also carry an optional `reason` (one of `wrong_fact`, `outdated`, `misunderstood`, `too_long`, `too_sensitive`, or `""`), and an optional `correction` (the owner's one-line "what should I have said?", at most 500 characters, or `""`); both are sent only by the HUD's own answer menu after Submit, and omitting both is byte-identical to the old request ("Just mark it wrong"). The reply keeps `ok` and may add `said` (the PC's own one-sentence receipt, which the HUD shows) and `card_raised` (bool; the HUD never approves anything). |
 | `/api/memory/forget` | POST | object, optional `valid_to` | `brain.rs` `brain_memory_forget` | `JarvisApi.forgetFact`, from the "Saved automatically" list (§19) and, since 2026-09-25, from "Used in this answer" and "Jarvis remembered N things" (§4, §19.5), after a confirm, held on a stale link | Retires rather than deletes. No undo. Refused by the desktop while the event stream is stale, like every memory write. Since the owner's decision of 2026-09-24 (automatic learning, §19) the phone calls it too, for automatically saved facts - one fact per request, held on a stale link, like the desktop. Rewording (`/api/memory/edit`) stays desktop-only. |
 | `/api/memory/erase` | POST | `{"id": <int>, "also_delete_conversation": <bool, optional>}` and nothing else | `brain.rs` `brain_memory_erase` (Saved automatically, and every fact in What Jarvis knows about you - forgotten ones too; since 2026-09-25 also beside Forget under the quickbar's "Used in this answer" and the Brain's "Jarvis remembered N things"), after a confirm, held on a stale link | `JarvisApi.eraseFact` / `JarvisRuntime.eraseAutoFact` (Brain, Saved automatically), after a confirm, held on a stale link | **"Erase the words"** (the owner's decision, 2026-09-24; `memory-erase.patch`, `rebuilt/jarvis_memory.py` `erase()`). Wipes ONE fact's words for good and keeps its row and dates: `text` becomes `[erased]`, `erased_at` is set, the word-search row and meaning vector are deleted, meta keeps only dates, ids and where it came from (no message hash, no conversation id), a current fact is retired as Forget retires it, and copies of the words in the review queue go too (a card still waiting with exactly those words, or a "retire this?" card about the fact, is turned down). Then the file is cleaned: the word index compacted, freed space zeroed, `memory.db-wal` emptied. Works on an already-forgotten fact. Same token and origin checks as forget and, like forget, **no approval card** - both apps ask first ("Erase the words of this fact from your PC for good? Jarvis keeps only the date it was saved, so its history shows something was erased here. This cannot be undone.") and say "Erased.". **The earlier wordings go too** (security audit L3, 2026-09-25): every fact this one replaced - an edit (`/api/memory/edit`) or a correction - and every fact THOSE replaced is erased the same way; never a later one. **"Also delete the chat it came from"** (the owner's decision, 2026-09-27): `also_delete_conversation`, off by default. This fact's own `conversation_id` (§18.1) is read from its meta the instant before erasing strips it out, and, if the flag is set and one is on record, that whole conversation is deleted from chat history the same way `/api/history/delete` is (`jarvis_chat_log.delete()`) - only for the fact named in this call, never for the earlier wordings erased alongside it, which may have been said in a different chat. Both apps ask a second time, right after the first "are you sure?" - a real checkbox on the phone (a Compose dialog can have one), a second `window.confirm` on the desktop (which cannot) - "Also delete the chat this fact came from? That whole conversation will be deleted from History too, on this PC. This cannot be undone either." The desktop's dialog opens with "The fact's words will be erased either way." and ends "OK: delete that chat too. Cancel: keep the chat.", because a Windows dialog cannot rename its buttons and owners read Cancel as "cancel the erase" (play tester, 2026-09-27); the phone's checkbox, "Also delete the chat it came from", needs neither. `200 {"ok": true, "id", "erased_at", "already_erased", "retired_now", "file_clean", "copies", "earlier", "chat_deleted", "note"}` (`earlier`: the ids of the earlier wordings erased with it, newest first; `chat_deleted`: whether this fact's own conversation was found and deleted - false when `also_delete_conversation` was not set, or the fact never had a conversation_id on record, or already had it stripped by an earlier erase) - **never the words** (forget's reply has a `was`; this has not). `file_clean: false`: something was reading the file, so an old copy may stay in `memory.db-wal` until the next erase. `400` for anything but one integer `id` and an optional boolean `also_delete_conversation` (a list, a string, `true`, an extra key, a non-boolean flag); `404 {"ok": false, "reason": "no_such_fact"}` - an app tells this apart from a PC without the route (a plain 404, or `501` from an older `jarvis_memory.py`), where nothing was erased; `503` memory not running. **No event** - forget sends none either, so the other app's list shows the change on its next read. |
 | `/api/memory/profile` | POST | `{"id": <int>, "pinned": true \| false}` and nothing else | `brain/profile.rs` `brain_memory_pin` (Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you, and Unpin in Always keep in mind), held on a stale link | `JarvisApi.pinFact` / `JarvisRuntime.pinFact` (Pin / Unpin in Brain, Saved automatically; Unpin in Always keep in mind), held on a stale link | **"Always keep in mind"** - pin or unpin ONE fact (the owner's decision, 2026-09-24). Only the id is stored (a `profile(fact_id, added, how)` table in memory.db); the words stay the fact's own, never summarised or rewritten. **No approval card and no confirm**: it is the owner's own tap on a fact they can see, like Forget, and Unpin takes it back. Pinning a sensitive fact is allowed - only the owner's tap can put one there. Same token and origin checks as forget. `200 {"ok": true, "id", "pinned", "changed", "chars", "limit", "note"}` (pinning a pinned fact, or unpinning one that is not, is `changed: false`); **`409`** `{"ok": false, "reason", "error", "chars", "limit"}` with `reason` `"too_long"` ("That would make the list too long - unpin something first"), `"fact_too_long"` (one fact over 1,200 characters on its own) or `"not_current"` (forgotten or erased) - both apps show `error` word for word; `404 {"ok": false, "reason": "no_such_fact"}` (told apart from a PC without the route, as for erase); `400` for anything but one integer `id` and one boolean `pinned`; `501` older `jarvis_memory.py`; `503` memory not running. The reply never has the words. Audit log: `memory.pinned` / `memory.unpinned` with the id only. **No event** - forget and erase send none either; each app reads the list again after its own memory writes and when Memory / Brain is shown. |
@@ -16503,15 +16518,23 @@ waiting at once:
 
 ### 78.4 The cards: the ones both apps already show
 
-Each is an ordinary "stop using this fact?" card in the review queue
-(`source: "feedback_retire"`, `replaces_id` the fact) - the card both apps
-already label "Stop using this fact" / "Keep using it" (section 6, and the
-phone's `MemoryCards`), shown only to a client that asks with
-`retire_cards=1`. One card, one fact, one decision; nothing is decided in
-bulk.
+Each is an ordinary review card about one remembered fact (`replaces_id` the
+fact), and both apps label the two kinds from one source (section 6, and the
+phone's `MemoryCards`). One card, one fact, one decision; nothing is decided
+in bulk.
 
-- **Stop using this fact**: the owner's own `jarvis_extract._accept_retire`
-  calls `MemoryStore.retire(fact)`. For a tidy card, `retire()` sees the
+- **"Update the fact" / "Keep it as it is"** - the correction card
+  (`source: "feedback_correction"`, raised when the owner marked an answer
+  wrong and typed his own correction words): an ordinary proposal whose
+  `text` is the correction and whose `replaces_id` names the fact it would
+  replace. Accepting it stores the correction, retires the old fact (history
+  kept) and adds nothing else; discarding it keeps the fact as it is.
+- **"Forget that fact" / "Keep using it"** - the "retire this?" card
+  (`source: "feedback_retire"`, raised when the owner marked an answer wrong
+  and typed no correction), shown only to a client that asks with
+  `retire_cards=1`. Accepting it FORGETS the fact: the owner's own
+  `jarvis_extract._accept_retire` calls `MemoryStore.retire(fact)`. For a
+  tidy card, `retire()` sees the
   card being accepted (`tidy_cards` joined to the proposal in state
   `accepting`, the claim decide-once.patch makes) and ENDS the fact as
   history instead of filing a Forget: "Still true?" ends it on the date its
@@ -29436,7 +29459,7 @@ logged, echoed or stored).**
 | route | what it does |
 |---|---|
 | `GET /api/connect-account/pending` | the cards waiting for the owner, metadata only. Never a value - none exists yet. |
-| `POST /api/connect-account/save` | body `{"card_id": "ca_...", "values": {"<field>": "<value>", ...}}`. Refuses any field the card did not declare (by name), an empty or oversized value (by label), and an unknown, expired or used card - none of those sentences ever contains a value. The card is spent exactly once, and the re-check and the removal are **one step under the lock**, so two submits of the same card at the same moment cannot both save (one receipt, one write; the other is refused as voided). Then: each value goes to `jarvis_token_store.store_secret` (Credential Manager **and nowhere else**), the service is tested with the values that will actually be used, and the receipt names the store entries, the source that won, and the verdict. |
+| `POST /api/connect-account/save` | body `{"card_id": "ca_...", "values": {"<field>": "<value>", ...}}`. Refuses any field the card did not declare (by name), an empty or oversized value (by label), and an unknown, expired or used card - none of those sentences ever contains a value. The card is spent exactly once, and the re-check and the removal are **one step under the lock**, so two submits of the same card at the same moment cannot both save (one receipt, one write; the other is refused as voided). Then: each value goes to `jarvis_token_store.store_secret` (Credential Manager **and nowhere else**), the service is tested with the values that will actually be used, and the receipt names the store entries, the source that won, and the verdict. **Wave 10 (2026-11-08): that verdict is also remembered.** One non-secret record per service (which service, when it was saved, whether the one test ran, its words, and how long they count) is kept in the settings folder's `connect-receipts.json` - never a value and never a token, and a damaged or absent file reads as "no record" - so a later chat turn ("i added a token", "did the token work?", "what did the github test prove?") answers from what the host measured instead of a model's guess; it is never exposed by `GET /api/connect-account/pending`. |
 | `POST /api/connect-account/cancel` | body `{"card_id": "ca_..."}`. The owner pressed Cancel. |
 
 Both POST routes refuse a non-loopback caller **before the body is read** (403),
@@ -36347,11 +36370,18 @@ if that source is off) and carry `quick` in `X-Jarvis-Route`, with no model call
 
 ## 201. The automatic read-aloud switch (2026-11-07)
 
-`GET /api/read-aloud` and `POST /api/read-aloud {"on": bool}` read and set the
-PC's own answer-speech switch. It is ON by default (the pre-2026-11-07 behaviour
-of the HUD's voice answers), OFF at once with no approval card in either
-direction, and a model answer can never set it: the chat/Live sentences below
-go through `jarvis_quick`'s own deterministic door. It is **PC-only**
+`GET /api/read-aloud` and `POST /api/read-aloud {"enabled": bool}` read and set
+the PC's own answer-speech switch. It is ON by default (the pre-2026-11-07
+behaviour of the HUD's voice answers), OFF at once with no approval card in
+either direction, and a model answer can never set it: the chat/Live sentences
+below go through `jarvis_quick`'s own deterministic door. **OFF is literal
+mid-answer** (the owner's Q5 ruling, 2026-11-08): on every set the backend
+publishes one `read_aloud` event (`{"enabled": bool}` only - never words), the
+desktop's one event stream carries it to every window, and the Jarvis bar stops
+the sentence in flight, empties its queue and settles the clip being made, so an
+OFF from Settings, chat or Live silences the answer already being spoken. (Before
+this it was read at the start of each voice turn, so one OFF stopped only the
+next answer.) It is **PC-only**
 (`tools/check_parity.py` classifies it `deliberate`; ARCHITECTURE section 8):
 the route controls the desktop HUD's speakers for voice-turn answers, while the
 phone has its own on-device remembered-answer switch and its own per-answer
@@ -36411,4 +36441,171 @@ model, it warns when a stored run spilled, and the chat answer "what model
 should this PC run?" is deterministic. `GET /api/models/recommendations`
 carries the panel as its optional `recommender` key (omitted honestly by a PC
 without the module); the Brain draws it in Models as "What this PC should run".
+
+## 204. The auto Wi-Fi reconnect (2026-11-08)
+
+The owner's ask: a feature that "defaults on but can be changed in settings or
+chat with jarvis", that every 2 hours while this desktop has no internet asks
+Windows to reconnect to a password-protected Wi-Fi network "that have already
+been connected to in the past on that desktop".
+
+`backend/jarvis_wifi.py`, installed by its own drop-in
+(`plugins/ready/wifi-reconnect/plugin.json`, `install(): handler`) - no patch
+carries it.
+
+**The route** (PC-only; `tools/check_parity.py` carries it as `deliberate` and
+ARCHITECTURE section 8 gives the reason):
+
+```
+GET  /api/wifi-reconnect
+     -> 200 {"ok": true, "enabled": true, "default": true, "known": true,
+             "dry_run": false, "words": "...", "last_words": "...",
+             "last_at": ..., "last_class": "...", "next_check_at": ...,
+             "attempts": N, "state_path": "..."}
+POST /api/wifi-reconnect  {"enabled": true|false}
+     -> 200 the same shape (plus "before" and "changed"); 400 on a bad value or
+        an unknown setting; 403 from any device other than this PC; 503 when the
+        setting could not be saved. Cardless in both directions.
+```
+
+**What it does, exactly.** It reads this PC's own Windows Wi-Fi profile store
+read-only (`netsh wlan show profiles` / `show profile` - never a plaintext-key
+export, never a password prompt). A profile is a candidate only when it reports
+a stored key AND a Personal/PSK authentication, so an open network is never
+tried and a name the PC has not saved can never be introduced. Every 2 hours,
+and only when it is due, a check runs: OFF returns at once; an answer streaming,
+standby or a running task SKIPS the cycle and says so; then it diagnoses - no
+adapter, Wi-Fi down, connected-but-no-internet, online, or (the case that must
+not touch the Wi-Fi) the Wi-Fi is fine and the VPN/private link or the internet
+upstream is the problem. Only a genuinely broken Wi-Fi link goes on: at most 3
+candidates, the one in use first, each attempt given about 20 s, stopping as
+soon as the internet is back. A dry run (`JARVIS_WIFI_DRY_RUN=1`) logs what it
+WOULD do and never calls Windows' connect.
+
+**State**: `wifi_reconnect.json` in the Jarvis settings folder holds the switch,
+the last check time (so sleep/resume is one check, not a burst), the last calm
+sentence and a bounded history (20 rows). A missing file is the shipped default
+ON (the owner asked for that); a damaged file fails SAFE (OFF). No network name,
+password, key or BSSID is ever written: a record names a profile by its saved
+list position at most.
+
+**Who changes it**: the Settings switch ("On this PC" -> "Wi-Fi reconnect") and
+the deterministic chat/Live sentences in `jarvis_quick.py` - "is the auto wi-fi
+reconnect on?", "turn the auto wi-fi reconnect off/on", "what does the wi-fi
+reconnect do?", "when will it try the wi-fi again?". All read the same state
+file and call the same setter; no model tool exists for it, so a model answer
+can never toggle it.
+
+**What it may not do**: connect to a network that is not saved, connect to an
+open network, read or print a key, toggle the radio, start/stop the VPN or
+Meshnet app, change any Windows setting, act while the link is healthy, act
+mid-turn, or raise a card per attempt. Each of those is a rule in the module's
+own header, and the audit trail is one calm sentence in the HUD/Settings line
+and the event stream (`wifi_reconnect`).
+
+**Ruling Q4 guardrails (2026-11-08).** The owner approved this as a bounded,
+default-ON, PC-only maintenance feature. There is **no card per attempt** (an
+offline PC cannot be reached by a phone to answer one); instead the ruling's six
+mandatory guardrails are enforced in the module and proved in its suite:
+
+1. **Saved password-protected profiles only** - the profile must carry a stored
+   key AND an authentication in the exact allow-list `WPA2PSK`, `WPA3SAE`,
+   `WPA2`, `WPA3`; Open, None, WEP and 802.1X/Enterprise are hard-refused, and
+   `key=clear` is never passed.
+2. **Strictly offline-only** - (a) the switch is ON, (b) Lockdown is readable
+   and OFF, (c) this Wi-Fi has no working internet, and (d) the owner did not
+   turn Wi-Fi off: an adapter disabled or radio off means NOTHING is switched
+   back on, and an unreadable radio or Lockdown fails SAFE (skip).
+3. **Bounded in-range attempts** - only the top 3 saved password-protected
+   profiles whose SSID `netsh wlan show networks` currently sees, each verified
+   for 10 seconds, stopping at the first success.
+4. **The switch** - ON by default as the owner asked; changing it is exactly ONE
+   `change_own_config` card to turn it ON (nothing is written until that card is
+   answered; a waiting card answers "a card is waiting") and instant/cardless to
+   turn it OFF. Settings, Chat and Jarvis Live all reach the same
+   `jarvis_wifi.request_enabled`; a model answer can never toggle it.
+5. **Full audit receipt** - every attempt writes `timestamp`, `profile_name`,
+   `auth_type`, `result: connected | still_offline` to the project's audit/status
+   log and to the module's bounded receipts (never a key), so the deterministic
+   sentence "did you reconnect my wifi?" is answered from that record.
+6. **Decision record** - `decisions.d/2026-11-08-wifi-auto-reconnect-saved-profiles.md`
+   (the Lead owns records).
+
+If the in-range scan or the radio state cannot be read (on a Windows 11 PC with
+Location services off, `netsh wlan show networks`/`show interfaces` are refused -
+measured 2026-11-08), the check says so in one calm line and **makes no attempt**;
+it never guesses that a network is in range.
+
+## 205. Talking about the local models: measured results, starting a benchmark, which model each preset uses, and honest advice (added 2026-11-08)
+
+The owner's ask: *"I'd also like to be able to talk about the local AI models.
+what has been measured, start Benchmarks, what a better models for the current
+Presets, what are the current models for the current Presets and more in chat
+and in jarvis live."* Chat and Jarvis Live share `/api/chat`, so every answer
+below is one deterministic implementation in `jarvis_quick.py` and takes the
+same `quick:` route (the intent name travels in `X-Jarvis-Route`'s `quick`
+field). No new HTTP route exists in this wave.
+
+**What has been measured.** "what have you measured", "what has been measured",
+"what did the last benchmark measure", "what are the benchmark results",
+"what benchmarks have you run" and their plain variants answer from the TWO
+stores `jarvis_bench.py` writes: `BenchLog` (speed runs: model, lane, decode
+rate, spill, pass/fail, date) and `ScoreLog` (`bench-scores.jsonl`: one row per
+suite per model/quant/context/digest, with score, items passed, decode rate and
+date). Every number is copied from a stored row - the answer says "Every number
+above was measured on this PC", names the date it was measured, and says a
+field is missing rather than estimating it. With no record at all it says so
+plainly and names the door that starts a run.
+
+**Starting a benchmark.** The door is the existing machinery, never a second
+runner: `jarvis_bench.start` for one speed run and `jarvis_bench.start_suites`
+for the five suites. "start a benchmark" / "run a benchmark" / "benchmark
+yourself" start the speed run of the current model; "start benchmarks", "start
+the benchmarks", "run the benchmarks", "start the benchmark suites", "run the
+full benchmark" start the five-suite run; "benchmark the coding model", "run the
+coding benchmark" and "start a benchmark on the fast model" start a speed run of
+that preset's model on that preset's lane (the lane comes from the preset row,
+never from a guess). An unknown name is refused in words and nothing is
+measured. The answer says it may pause the lane it needs, that it uses a
+throwaway model server on a spare port (never a live lane's own server
+directly), that only one runs at a time, that a streaming chat/voice turn is the
+one busy refusal, and that the results are kept in Brain, Model, Models. "how do
+I start a benchmark" / "what does a benchmark measure" answers with that same
+explanation and starts nothing.
+
+**Which model each preset uses.** "what models do the current presets use",
+"what are the current models for the current presets", "which model is each
+preset using", "what are the preset models" and "which preset uses which model"
+answer from `jarvis_model_knowledge.presets()` and `current_preset()` - title,
+model tag, card and context window, with the active one marked. The one-preset
+question keeps its own older answer (`preset_model`, "what model does the coding
+preset use"), which now also accepts the bare name ("what model does fast use").
+
+**Which model is better for a preset.** "what are the best models for the
+current presets", "what is a better model for the coding preset", "which model
+is better for coding", "what should I use for coding" and "is there a better
+model for general" answer with the preset's current model and whatever this PC
+measured for it, then the hardware-aware recommender's
+(`jarvis_model_recommender.recommend()`) other candidates with its own labels -
+`MEASURED ON THIS PC` or `ESTIMATED FIT (run benchmark to verify)`. It never
+upgrades an estimate to a measurement and never calls one model better for a
+preset until a benchmark measured it there; it says a benchmark is the only
+proof and that nothing was switched. The older "which model should I use for
+<task>" answer keeps owning a task that names no preset.
+
+**What did you use before.** "what did you use before", "what model did you use
+before" and "which model did you use previously" read the change journal
+(`<OPENJARVIS_HOME>/self-awareness/changes.jsonl`) for the newest recorded model
+change - from, to, date - and say plainly when no model change is recorded
+instead of guessing.
+
+**The feature guide cannot contradict this.** `jarvis_feature_guide.py`'s
+`SELF_FACTS` gained a bounded `model_benchmarks` digest (in `SELF_FACT_IDS`, so
+the model's `self_portrait` tool result carries it), and the feature list's
+"Ask which model is answering" row now names the measured/benchmark/best-model
+sentences. `backend/test_model_conversation.py` pins the exact owner phrasings
+as chat turns AND as Live-marked turns (byte-identical words), asserts no number
+appears that is not in the store, blocks the model entry point and the network,
+and uses a fake `jarvis_bench.start`/`start_suites` - no benchmark is started by
+the tests and no live lane is contacted.
 

@@ -327,6 +327,13 @@ MENUS: tuple = (
     # Voice section's place, because Kotlin's `mapOf` keeps the last duplicate
     # and drops the rest (MenuVisibilityTest, 2026-10-10). This id belongs in
     # MenuPlaces.INSIDE.
+    # "Wi-Fi reconnect" (2026-11-08): the desktop card that repairs THIS PC's
+    # own Wi-Fi link while it is offline, so its menu is desktop-only with the
+    # section itself (jarvis_settings_registry.Section app="desktop").
+    _m("settings.wifi-reconnect", "Wi-Fi reconnect",
+       "Reconnect to a saved Wi-Fi network while this PC has no internet.",
+       (DESKTOP,), names=("wi-fi reconnect", "wifi reconnect",
+                          "the auto wi-fi reconnect")),
     _m("settings.voices", "Jarvis's voice", "Custom voices and the voice pack.",
        names=("jarvis's voice", "jarvis's voices", "custom voices")),
     _m("settings.prompt-coach", "Prompt coach",

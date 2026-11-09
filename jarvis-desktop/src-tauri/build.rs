@@ -393,6 +393,12 @@ fn main() {
             "open_conversation_window",
             // The right/wrong mark on one answer (feedback.patch). Quickbar.
             "mark_answer",
+            // Reading that saved mark back for the answer being re-shown
+            // (2026-11-08, Wave 10 ruling Q2 section 1.5): the HUD answer menu
+            // reads the reason and the correction through this GET when the
+            // mark is already saved, so it never shows a stale or invented one.
+            // Read-only.
+            "get_feedback_mark",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
             // Re-opening that same walkthrough on demand (the owner's request
@@ -588,6 +594,13 @@ fn main() {
             // rule keeps a private answer on screen whatever it says.
             "get_read_aloud",
             "set_read_aloud",
+            // The auto Wi-Fi reconnect (2026-11-08; JARVIS-API section 204,
+            // backend/jarvis_wifi.py). Settings only: the switch, the PC's own
+            // sentence and its last result. PC-only by the backend's own rule;
+            // the page never shows a network name or a key, and never asks the
+            // PC to connect to anything.
+            "get_wifi_reconnect",
+            "set_wifi_reconnect",
             // Hands-free mode (2026-11-04; JARVIS-API section 191,
             // backend/jarvis_handsfree.py). The read is a read; ON raises ONE
             // `handsfree_enable` approval card through the backend and the call

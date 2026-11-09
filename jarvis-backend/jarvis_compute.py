@@ -464,9 +464,16 @@ def plan(model: Optional[str] = None) -> Plan:
                 vision = jarvis_second_card.lane_for("vision") is not None
             except Exception:
                 vision = False
+        # WAVE 11 (2026-11-08, the owner's three-card PC): the old sentence
+        # said "the second card runs only the second-card features", which on
+        # a three-card PC describes one card of three. The hardware truth is
+        # that the model runs on the FIRST card and any card beyond it is used
+        # only by a feature the owner switched on and measured; the number of
+        # cards is the probe's, not a two-card assumption.
         why = (f"speed: everyday chat on the {first.name} (because {rule}); "
-               + ("the second card runs only the second-card features that are "
-                  "switched on (GET /api/second-card)"
+               + ("any card beyond the first is used only by a second-card "
+                  "feature that is switched on and measured "
+                  "(GET /api/second-card)"
                   if second else "one card only"))
     else:
         text_on = "+".join(f"cuda:{d.index}" for d in ranked)

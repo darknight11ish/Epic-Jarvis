@@ -9,10 +9,10 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **56 drop-in modules**, in [`ready/`](ready/) -
+- **57 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change:
   - **29** replace a patch, and are generated from it;
-  - **27** replace no patch: they were born as folders, and
+  - **28** replace no patch: they were born as folders, and
     their own `plugin.json` is the whole of their wiring.
 - **148 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
@@ -57,7 +57,7 @@ the catalogue cannot account for is refused, never silently left out.
 
 ## Drop-in modules with no patch of their own
 
-These 27 were never patches. There is nothing in the core
+These 28 were never patches. There is nothing in the core
 to take out: the folder **is** that feature's wiring, and the module it names
 is shipped by `scripts/apply-patches.ps1` like every other one. They are listed
 here so the count above has one home; `tools/check_plugins.py` checks each one
@@ -93,6 +93,7 @@ it is one `apply-patches.ps1` copies in.
 | 177 | `skill-menu` | the skills menu's PC doors: install a skill from a folder or a .zip, import one from %USERPROFILE%\.hermes\skills, turn an installed skill off and back on, and edit its SKILL.md - every install, turn-on and edit behind ONE modify_own_code card, and a skill the scanner refuses never becomes a card at all. |
 | 178 | `watch-decisions` | what the GitHub watcher WOULD have told you: one structured decision row per event, written in observe mode instead of interrupting, and readable before you let the watcher speak. |
 | 188 | `upload` | a document from your phone: three routes put one file into a folder Jarvis already looks in, after ONE approval card per file, and then it is processed exactly as a file you dropped there yourself. |
+| 189 | `wifi-reconnect` | the auto Wi-Fi reconnect: GET/POST /api/wifi-reconnect, ON by default, every 2 hours while this PC has no internet it asks Windows to connect to a saved password-protected Wi-Fi network it already knows - never open, never new, never a password, never while Jarvis is answering, and every attempt is reported in one calm line. |
 
 ## What stays in the core
 

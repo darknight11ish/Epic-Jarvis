@@ -176,7 +176,7 @@ function makeNode(tag = "") {
  *
  * Returns the fake page and everything the run created.
  */
-function runBootstrap({ saved = {}, shell = true, raw = null, layout = null } = {}) {
+function runBootstrap({ saved = {}, shell = true, raw = null, layout = null, events = true } = {}) {
   const created = [];
   const page = {
     input: makeNode("textarea"),
@@ -259,6 +259,18 @@ function runBootstrap({ saved = {}, shell = true, raw = null, layout = null } = 
         },
       },
     };
+    // The shell's Tauri event channel (Tauri v2: listen(name, cb)), present
+    // only when this run says so - the older-shell case is exercised too.
+    if (events) {
+      window.__layoutListeners = {};
+      window.__TAURI__.event = {
+        listen(name, cb) {
+          window.__layoutListeners[name] = cb;
+          return Promise.resolve(() => {});
+        },
+        emit() { return Promise.resolve(); },
+      };
+    }
     window.__layoutAsks = () => layoutAsks;
   }
 
@@ -698,6 +710,85 @@ await check("H3: the bootstrap renders the saved preset's shell, density and ope
     id: "studio", name: "Studio", shell_template: "split-stage" } });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(studio.document.documentElement.getAttribute("data-hud-shell"), "split-stage");
+});
+
+/* A save from ANOTHER window (the Settings picker) or from this window's own
+ * Presets menu must repaint the HUD that is already open. It did not: the page
+ * only ever applied the document it read at start-up, so a long-lived window
+ * looked like the layout options did nothing (the owner's report of
+ * 2026-11-08; the settings picker's own comment documented "on its next
+ * load"). Rust's one write, set_hud_layout, now announces the validated
+ * document on jarvis:hud-layout-changed, and this check proves the injected
+ * bootstrap hears it and applies it exactly like the start-up read. */
+await check("a layout saved while the HUD is open paints it, with no reload", async () => {
+  const studio = {
+    version: 1,
+    id: "studio",
+    name: "Studio",
+    base_preset: "studio",
+    shell_template: "split-stage",
+    density: "comfortable",
+    default_stage_tab: "talk",
+    cards: [],
+  };
+  const run = runBootstrap({ shell: true, layout: studio });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(run.document.documentElement.getAttribute("data-hud-shell"), "split-stage");
+  const listeners = run.window.__layoutListeners || {};
+  assert.ok(Object.prototype.hasOwnProperty.call(listeners, "jarvis:hud-layout-changed"),
+    "the bootstrap does not listen for a layout saved while it is open - the page would only change on the next window open");
+  const heard = [];
+  run.window.addEventListener("jarvis:hud-shell", (event) => heard.push(event.detail));
+  const ambient = { ...studio, id: "ambient", name: "Ambient", base_preset: "ambient",
+    shell_template: "center-core", density: "spacious" };
+  listeners["jarvis:hud-layout-changed"]({ event: "jarvis:hud-layout-changed", payload: ambient });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(run.document.documentElement.getAttribute("data-hud-shell"), "center-core",
+    "a saved layout did not repaint the open window");
+  assert.equal(run.document.documentElement.getAttribute("data-hud-density"), "spacious",
+    "the saved density did not follow");
+  assert.equal(run.document.body.dataset.hudShell, "center-core",
+    "the body contract did not follow the save");
+  assert.equal(run.window.__jarvisHudLayout.base_preset, "ambient",
+    "the editor's document did not follow the save");
+  const opened = heard.filter((detail) => detail && detail.shell_template === "center-core");
+  assert.equal(opened.length, 1, "the page was not told to open the saved preset");
+  // The first-paint mirror follows too, so the NEXT window opens in it.
+  assert.deepEqual(JSON.parse(run.window.localStorage.getItem("jarvis.hud.preview")),
+    { shell_template: "center-core", density: "spacious", default_stage_tab: "talk" });
+  // The Edit HUD editor autosaves through the SAME command. That must put the
+  // look on the page (so the owner sees it) but must not yank them to another
+  // view mid-arrangement: the preset's opening tab belongs to opening the
+  // window, not to every save while editing.
+  run.window.__jarvisHudEdit = { editing: true };
+  const quiet = { ...studio, id: "quiet", name: "Quiet", base_preset: "quiet",
+    shell_template: "two-column-left", density: "compact", default_stage_tab: "galaxy" };
+  heard.length = 0;
+  listeners["jarvis:hud-layout-changed"]({ payload: quiet });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(run.document.documentElement.getAttribute("data-hud-shell"), "two-column-left",
+    "an edit-mode save did not put its shell on the page");
+  assert.equal(heard.length, 1, "the page was not told about the edit-mode save");
+  assert.equal(heard[0].shell_template, "two-column-left");
+  assert.ok(!Object.prototype.hasOwnProperty.call(heard[0], "default_stage_tab"),
+    "an edit-mode save told the page to open the preset's tab mid-edit");
+  run.window.__jarvisHudEdit = null;
+  // A payload this cannot read changes nothing and never throws.
+  listeners["jarvis:hud-layout-changed"]({ payload: null });
+  assert.equal(run.document.documentElement.getAttribute("data-hud-shell"), "two-column-left");
+});
+
+await check("an older shell with no event channel still paints at start-up", async () => {
+  const layout = {
+    version: 1, id: "quiet", name: "Quiet", base_preset: "quiet",
+    shell_template: "two-column-left", density: "comfortable",
+    default_stage_tab: "talk", cards: [],
+  };
+  const run = runBootstrap({ shell: true, layout, events: false });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(run.document.documentElement.getAttribute("data-hud-shell"), "two-column-left",
+    "the start-up read stopped working without the event channel");
+  assert.equal(run.window.__layoutListeners, undefined);
 });
 
 await check("with no saved layout, or no shell, the page's own look is left alone", async () => {

@@ -318,9 +318,27 @@ async function openHud(browser, status, pageOptions = {}) {
           // through `hud-link`): no token, no words, nothing written.
           case "get_lock_flags": return lockFlags;
           case "mark_answer": {
+            // The Wave-10 reason sheet's two optional fields are forwarded only
+            // when the page sends them, exactly as Rust's mark_answer_body does.
+            const markBody = { turn_id: args.turnId, mark: args.mark };
+            if (Object.prototype.hasOwnProperty.call(args, "reason")) markBody.reason = args.reason;
+            if (Object.prototype.hasOwnProperty.call(args, "correction")) {
+              markBody.correction = args.correction;
+            }
             const r = await origFetch(backend + "/api/feedback/mark", { method: "POST",
               headers: { ...shellHeaders, "Content-Type": "application/json" },
-              body: JSON.stringify({ turn_id: args.turnId, mark: args.mark }) });
+              body: JSON.stringify(markBody) });
+            if ([404, 501, 503].includes(r.status)) return { available: false, status: r.status };
+            if (!r.ok) throw new Error(`the server answered HTTP ${r.status}`);
+            return r.json();
+          }
+          // Wave 10 Q2.1 (2026-11-08): the saved mark on ONE answer, read back
+          // through the same shell family as the mark itself, so a re-opened
+          // menu can show the saved reason and the owner's own words.
+          case "get_feedback_mark": {
+            const r = await origFetch(
+              backend + "/api/feedback/mark?turn_id=" + encodeURIComponent(args.turnId),
+              { headers: shellHeaders });
             if ([404, 501, 503].includes(r.status)) return { available: false, status: r.status };
             if (!r.ok) throw new Error(`the server answered HTTP ${r.status}`);
             return r.json();
@@ -570,11 +588,22 @@ async function openHud(browser, status, pageOptions = {}) {
         return route.fulfill({ status: 200, headers: cors,
           json: { available: true, pending: status.memory, setup: status.memorySetup || {} } });
       }
-      if (url.pathname === "/api/feedback/mark" && status.turnId) {
+      if (url.pathname === "/api/feedback/mark" && req.method() === "POST" && status.turnId) {
         marks.push(JSON.parse(req.postData() || "{}"));
         return status.markRoute === false
           ? route.fulfill({ status: 404, headers: cors, json: { error: "not found" } })
-          : route.fulfill({ status: 200, headers: cors, json: { ok: true } });
+          : route.fulfill({ status: 200, headers: cors, json: {
+              // The Wave-10 reply: the PC's own receipt sentence, plus a flag
+              // the HUD must tolerate and never act on.
+              ok: true, said: "Marked wrong - thanks, I'll factor that in.",
+              card_raised: false } });
+      }
+      // Wave 10 Q2.1: the saved mark on this answer, which the re-opened menu
+      // reads back. Only a scenario that gives one has a mark saved.
+      if (url.pathname === "/api/feedback/mark" && req.method() === "GET" && status.turnId) {
+        return status.savedMark
+          ? route.fulfill({ status: 200, headers: cors, json: status.savedMark })
+          : route.fulfill({ status: 404, headers: cors, json: { error: "no mark" } });
       }
       // A decision that came out of the HUD's own buttons: the shell's
       // `decide_approval` is what posts this, with the token (audit M2).
@@ -2807,10 +2836,24 @@ await check("a HUD answer gets a caret menu, not a permanent right/wrong row", a
     "more than one answer menu opened");
   // The menu heading is styled uppercase by CSS (hud-link.css text-transform); a\n  // case-sensitive regex reads the transformed text and fails on the case. Assert\n  // the sentence case-insensitively so the visual style stays.\n  assert.match(await menu.innerText(), /was this answer right\?/i);
   assert.match(await menu.innerText(), /Read out loud|Copy answer/);
+  // Wave 10: Wrong opens the reason sheet INSIDE the same menu, and nothing
+  // is sent until the owner submits.
   await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(200);
+  assert.equal(marks.length, 0, "Wrong sent a mark before the sheet was submitted");
+  const sheetWords = await menu.innerText();
+  assert.match(sheetWords, /What was wrong\?/i);
+  for (const label of ["wrong fact", "outdated", "misunderstood", "too long", "too sensitive"]) {
+    assert.match(sheetWords, new RegExp(label, "i"), `the sheet is missing ${label}`);
+  }
+  assert.match(sheetWords, /Just mark it wrong/i);
+  // "Just mark it wrong" is EXACTLY today's body: no reason, no correction.
+  await menu.locator("button", { hasText: "Just mark it wrong" }).click();
   await page.waitForTimeout(300);
   assert.deepEqual(marks, [{ turn_id: turnId, mark: "wrong" }]);
   assert.equal(await menu.locator("button", { hasText: "Wrong" }).getAttribute("aria-checked"), "true");
+  assert.match(await menu.innerText(), /Marked wrong - thanks/,
+    "the PC's said sentence is not shown as the receipt");
   // Esc closes and puts the keyboard back on the caret.
   await page.keyboard.press("Escape");
   await page.waitForTimeout(100);
@@ -2818,6 +2861,151 @@ await check("a HUD answer gets a caret menu, not a permanent right/wrong row", a
   assert.equal(await page.evaluate(() => document.activeElement &&
     document.activeElement.classList.contains("jarvis-answer-caret")), true,
     "Esc did not return focus to the caret");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("a saved wrong mark with no why opens the sheet empty but offers take-back (Q2.1)", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const savedMark = { turn_id: turnId, mark: "wrong", reason: "", correction: "" };
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId, savedMark });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(250);
+  const menu = tools.locator(".jarvis-answer-menu");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(200);
+  // Nothing is invented: no chip is pressed and the box is empty.
+  assert.equal(await menu.locator(".jarvis-answer-reason[aria-pressed=true]").count(), 0,
+    "a why was invented for a mark saved without one");
+  assert.equal(await menu.locator(".jarvis-answer-correction").inputValue(), "");
+  // But the mark itself is known, so its removal is offered.
+  assert.equal(await menu.locator("button", { hasText: "Take the mark back" }).isVisible(), true);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("the wrong sheet sends a reason and correction only on Submit", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  const menu = tools.locator(".jarvis-answer-menu");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(150);
+  // The chip and the typed line are LOCAL until Submit.
+  await menu.locator(".jarvis-answer-reason", { hasText: "wrong fact" }).click();
+  await menu.locator(".jarvis-answer-correction").fill("I run a 2060, not a 2080.");
+  await page.waitForTimeout(150);
+  assert.equal(marks.length, 0, "the sheet sent something before Submit");
+  await menu.locator("button", { hasText: "Submit" }).click();
+  await page.waitForTimeout(300);
+  assert.deepEqual(marks, [{
+    turn_id: turnId, mark: "wrong", reason: "wrong_fact",
+    correction: "I run a 2060, not a 2080.",
+  }]);
+  assert.match(await menu.innerText(), /Marked wrong - thanks/,
+    "the PC's said sentence is not shown as the receipt");
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  assert.equal(await menu.isVisible(), false, "Esc did not close the menu after a submit");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("the wrong sheet can be dismissed without sending anything", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  const menu = tools.locator(".jarvis-answer-menu");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(150);
+  // Esc closes the sheet with the menu; Cancel also goes back without sending.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  assert.equal(await menu.isVisible(), false, "Esc did not close the sheet/menu");
+  assert.equal(marks.length, 0, "dismissing the sheet sent a mark");
+  // Reopen: the sheet is gone and the normal items are back; Cancel is inert.
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(150);
+  await menu.locator("button", { hasText: "Cancel" }).click();
+  await page.waitForTimeout(150);
+  assert.match(await menu.innerText(), /Read out loud|Copy answer/,
+    "Cancel did not return to the normal menu");
+  assert.equal(marks.length, 0, "Cancel sent a mark");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("two receipts each go back to their own label (Wave-9 audit F4)", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(150);
+  const menu = tools.locator(".jarvis-answer-menu");
+  // One receipt, then a DIFFERENT button's receipt before the first one has
+  // cleared. One shared timer used to leave the first button saying "Copied."
+  // for ever (the second click cancelled its restore).
+  await menu.locator("button", { hasText: "Copy answer" }).click();
+  await page.waitForTimeout(120);
+  await menu.locator("button", { hasText: "Right" }).click();
+  await page.waitForTimeout(1700);
+  const labels = await menu.locator("button.jarvis-answer-item").allTextContents();
+  assert.ok(labels.includes("Copy answer"),
+    `the Copy answer receipt never went back to its label: ${JSON.stringify(labels)}`);
+  assert.ok(labels.includes("Right"),
+    `the Right receipt never went back to its label: ${JSON.stringify(labels)}`);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("a marked answer re-shows its saved reason and correction (Q2.1)", async () => {
+  const turnId = "0123456789abcdef0123456789abcdef";
+  const savedMark = { turn_id: turnId, mark: "wrong", reason: "wrong_fact",
+    correction: "I run a 2060, not a 2080." };
+  const { page, problems, marks } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false, turnId, savedMark });
+  await send(page, "hi");
+  const tools = page.locator("#log .msg.jarvis .jarvis-answer-tools");
+  await tools.locator(".jarvis-answer-caret").click();
+  await page.waitForTimeout(250);
+  const menu = tools.locator(".jarvis-answer-menu");
+  // The saved mark paints as the current one, and opening the menu sent nothing.
+  assert.equal(await menu.locator("button", { hasText: "Wrong" }).getAttribute("aria-checked"),
+    "true", "the saved wrong mark is not shown as the current one");
+  assert.equal(marks.length, 0, "re-opening the menu sent a mark");
+  await menu.locator("button", { hasText: "Wrong" }).click();
+  await page.waitForTimeout(250);
+  // Not an empty sheet: the chip it was saved with and the owner's words are back.
+  const pressed = menu.locator(".jarvis-answer-reason[aria-pressed=true]");
+  assert.equal(await pressed.count(), 1, "the saved reason chip is not pressed");
+  assert.match(await pressed.textContent(), /wrong fact/i);
+  assert.equal(await menu.locator(".jarvis-answer-correction").inputValue(),
+    "I run a 2060, not a 2080.", "the owner's own saved words are not in the box");
+  // Taking the mark back is its own explicit action, and it sends today's body.
+  await menu.locator("button", { hasText: "Take the mark back" }).click();
+  await page.waitForTimeout(300);
+  assert.deepEqual(marks, [{ turn_id: turnId, mark: "none" }]);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
   await page.close();
   assert.deepEqual(problems, []);
 });
@@ -3133,6 +3321,10 @@ await check("the HUD holds the mic's command, its reads, chat and mark - and ans
   const linkPerms = link.slice(link.indexOf("permissions = ["), link.indexOf("]") + 1);
   assert.deepEqual(linkPerms.match(/allow-[a-z-]+/g),
     ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer",
+      // Wave 10 (Q2 section 1.5): the saved reason and correction on one
+      // answer, so the re-opened menu shows them. Read-only, beside the mark
+      // it belongs to.
+      "allow-get-feedback-mark",
       // Two yes/no answers (App lock, "Hide memory lists"): its face never
       // nods at a saved fact while either is on (face-moments.js).
       "allow-get-lock-flags",
@@ -3359,6 +3551,90 @@ await check("the connect card draws the newest waiting card and saves it through
   assert.equal(after.cardHidden, true, "the spent card is still on screen");
   assert.deepEqual(problems, [], "the page logged or threw");
   await page.close();
+});
+
+
+/* Wave 10 (2026-11-08): the owner's screenshot showed the "Connect an account"
+ * card painted into the Studio's face column, with the conversation and the
+ * face pushed down under it. The two host-raised cards are direct children of
+ * `#stage` and the Studio shell is a grid; they had no placement, so the grid
+ * auto-placed them into the first free cell. This measures the REAL page: the
+ * cards own full-width rows, the conversation starts below them, a hidden
+ * stage card claims no cell, and hiding the cards moves the conversation back
+ * up. (The static render of the owner's 150% window measured the same boxes:
+ * before x=1049 w=809 row=auto; after x=76 w=1766 row=5 and row=4.) */
+await check("Studio: the two host cards own full-width rows, and hidden stage cards claim no cells", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: false, ollama: true, proxy: false }, { viewport: { width: 1280, height: 820 } });
+  await setHudLook(page, "studio");
+  await page.waitForTimeout(250);
+  const measure = () => page.evaluate(() => {
+    const box = (selector) => {
+      const node = document.querySelector(selector);
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      const cs = getComputedStyle(node);
+      return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width),
+               h: Math.round(r.height),
+               bottom: Math.round(r.bottom), display: cs.display,
+               gridRow: cs.gridRow, gridColumn: cs.gridColumn };
+    };
+    const stage = box("#stage");
+    const talk = box("#talk");
+    return {
+      stage,
+      talk,
+      brain: box("#brain"),
+      connect: box("#connect-account"), secret: box("#secret-handoff"),
+      approvals: box("#approvals"),
+      region: box('#stage > [data-hud-region="stage_top"]'),
+    };
+  });
+  // Raise BOTH host cards (the host normally opens one; the layout must be the
+  // same for either, and they must not share a row).
+  await page.evaluate(() => {
+    document.getElementById("connect-account").hidden = false;
+    document.getElementById("secret-handoff").hidden = false;
+  });
+  await page.waitForTimeout(120);
+  const m = await measure();
+  for (const [name, card] of [["connect-account", m.connect], ["secret-handoff", m.secret]]) {
+    assert.ok(card, `${name} is missing from the Studio page`);
+    assert.notEqual(card.display, "none", `${name} did not show when raised`);
+    assert.notEqual(card.gridRow, "auto",
+      `${name} is still auto-placed into whatever cell is free (grid-row: ${card.gridRow})`);
+    assert.ok(card.x <= m.stage.x + 20,
+      `${name} does not start at the stage's left edge: ${JSON.stringify(card)} vs stage ${JSON.stringify(m.stage)}`);
+    assert.ok(card.w >= m.stage.w - 40,
+      `${name} is not full width: ${card.w} inside a ${m.stage.w}px stage`);
+    assert.equal(card.gridColumn, "1 / -1", `${name} does not span both stage columns`);
+  }
+  assert.notEqual(m.connect.gridRow, m.secret.gridRow,
+    "the two host cards share one grid row instead of owning one each");
+  assert.ok(m.talk.y >= Math.max(m.connect.bottom, m.secret.bottom) - 1,
+    `the conversation is not below the raised cards (talk ${m.talk.y}, cards end ${m.connect.bottom}/${m.secret.bottom})`);
+  // A hidden stage card claims no height: #approvals is author display:flex,
+  // so before the fix it was a 0-height full-width row player.
+  assert.equal(m.approvals.h, 0, "the hidden approvals card has height");
+  // The editor's Stage-top region is NOT hidden (it owns the approvals queue);
+  // it gets a deliberate row instead of being auto-placed into a free cell.
+  if (m.region) {
+    assert.notEqual(m.region.gridRow, "auto",
+      "the editor's Stage-top region (which owns the approvals queue) is still auto-placed");
+  }
+  // Hiding the cards again moves the conversation back up: the card row was
+  // what pushed it down (the owner's complaint).
+  const throughY = m.talk.y;
+  await page.evaluate(() => {
+    document.getElementById("connect-account").hidden = true;
+    document.getElementById("secret-handoff").hidden = true;
+  });
+  await page.waitForTimeout(120);
+  const after = await measure();
+  assert.ok(after.talk.y < throughY,
+    `hiding the host cards did not move the conversation up (${after.talk.y} >= ${throughY})`);
+  await page.close();
+  assert.deepEqual(problems, []);
 });
 
 await check("a HUD voice is used only when it is on this computer (and typed answers are silent)", async () => {
@@ -5383,6 +5659,7 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
     const toggle = document.getElementById("hud-edit-toggle");
     const bar = document.querySelector(".stage-bar");
     const rail = document.getElementById("rail-right");
+    const shell = document.getElementById("shell");
     const cards = [...document.querySelectorAll("[data-hud-card]")]
       .filter((c) => !c.hidden && c.getBoundingClientRect().height > 0);
     cards.sort((a, b) => a.getBoundingClientRect().y - b.getBoundingClientRect().y);
@@ -5405,6 +5682,10 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
       railShown: Boolean(rail && getComputedStyle(rail).display !== "none"
         && rail.getBoundingClientRect().width > 0),
       railTop: railBox ? railBox.y : null,
+      // The shell reserves a top band for the fixed safety strip while it is on
+      // screen (hud-link.css: `#shell{padding-top:var(--hud-safety-band)}`); the
+      // rail starts at the shell's own top, just below that reserved band.
+      safetyBand: shell ? Math.round(parseFloat(getComputedStyle(shell).paddingTop) || 0) : 0,
       barBottom: barBox ? barBox.y + barBox.h : null,
       vw: innerWidth,
     };
@@ -5420,12 +5701,15 @@ await check("FT-2/L2: in Studio with the rail open, Edit HUD and the top card to
   // The structural half, P0.6 (owner field test, 2026-10-23): in Edit HUD the
   // Studio rail is no longer a fixed overlay that must start BELOW the header
   // band - that overlay was the jumble the owner photographed. It is now a
-  // normal in-flow column beside the stage: it starts at the window's top and
-  // sits to the RIGHT of the stage, so it cannot cover anything in it.
+  // normal in-flow column beside the stage: it starts at the shell's top and
+  // sits to the RIGHT of the stage, so it cannot cover anything in it. The one
+  // exception is the shell's reserved safety band (Wave 10's H4 fix): while the
+  // fixed safety strip is on screen `#shell` carries a top padding, and the
+  // in-flow rail rightly starts below that band rather than under the strip.
   assert.equal(hit.railPosition, "static",
     `the Studio rail is still an out-of-flow overlay in Edit HUD (${hit.railPosition})`);
-  assert.ok(hit.railTop <= 1,
-    `the Studio rail starts at y=${hit.railTop} instead of the window's top`);
+  assert.ok(hit.railTop <= hit.safetyBand + 1,
+    `the Studio rail starts at y=${hit.railTop} instead of the shell's top (the safety band reserves ${hit.safetyBand}px)`);
   assert.ok(hit.stageBox && hit.railBox.x >= hit.stageBox.x + hit.stageBox.w - 1,
     `the Studio rail starts at x=${hit.railBox.x}, at or left of the stage's right edge ${hit.stageBox && hit.stageBox.x + hit.stageBox.w}`);
   assert.ok(hit.railBox.x + hit.railBox.w <= hit.vw + 1,
@@ -6146,6 +6430,81 @@ await check("H4: catching up shows the rail, Approve waits and Deny keeps workin
   assert.deepEqual(problems, []);
 });
 
+
+/* Wave 10 (2026-11-08): the fixed safety strip sat over the Studio stage bar's
+ * model/state chips at the owner's 150% scaling (his screenshot showed only
+ * "DING BY" under it). The shell now reserves a band as tall as the strip, so
+ * the stage bar starts below it and the strip still covers no control. The
+ * band is measured from the strip's own box, so a second chip cannot slip
+ * back under either. (Static render at the owner's 1269x669 CSS viewport,
+ * DPR 1.5: before padding 0 and both chips overlapped; after padding 40px and
+ * no overlap.) */
+await check("H4: in Studio the safety strip reserves a band and covers no top-bar chip", async () => {
+  const { page, problems } = await openHud(browser,
+    { jarvis: true, ollama: true, proxy: false, pending: PLAIN_CARD },
+    { viewport: { width: 1269, height: 669 } });
+  await setHudLook(page, "studio");
+  await LINK(page, { connected: true, stale: true });
+  await K.until(page, "the safety strip to show", async () =>
+    (await page.evaluate(() => !document.getElementById("hud-safety").hidden)), { ms: 8000 });
+  await page.waitForTimeout(250);
+  const m = await page.evaluate(() => {
+    const strip = document.getElementById("hud-safety").getBoundingClientRect();
+    const bar = document.querySelector("#stage > .stage-bar").getBoundingClientRect();
+    const shell = document.getElementById("shell");
+    const ids = ["chip-model-door", "chip-state", "hud-stop", "hud-layout-badge",
+                 "hud-edit-toggle", "stage-bar-galaxy-options", "galaxy-show-placeholder"];
+    const overlaps = [];
+    for (const id of ids) {
+      const node = document.getElementById(id);
+      if (!node || node.hidden) continue;
+      const b = node.getBoundingClientRect();
+      if (!b.width || !b.height) continue;
+      if (strip.left < b.right && b.left < strip.right
+          && strip.top < b.bottom && b.top < strip.bottom) overlaps.push(id);
+    }
+    return {
+      attr: document.body.getAttribute("data-hud-safety-visible"),
+      band: getComputedStyle(document.body).getPropertyValue("--hud-safety-band").trim(),
+      pad: parseFloat(getComputedStyle(shell).paddingTop) || 0,
+      stripBottom: Math.round(strip.bottom),
+      barTop: Math.round(bar.top),
+      overlaps,
+    };
+  });
+  assert.equal(m.attr, "", "the shell never marked the strip visible, so no band was reserved");
+  assert.match(m.band, /^\d+(\.\d+)?px$/, `the band height is not a measured px value: '${m.band}'`);
+  assert.ok(m.pad >= m.stripBottom,
+    `the reserved band (${m.pad}px) is shorter than the strip (${m.stripBottom}px)`);
+  assert.ok(m.barTop >= m.stripBottom - 1,
+    `the stage bar starts at ${m.barTop}px, under a strip that ends at ${m.stripBottom}px`);
+  assert.deepEqual(m.overlaps, [],
+    `the safety strip covers top-bar controls: ${m.overlaps}`);
+  // A hidden strip gives the space back.
+  await LINK(page, { connected: true, stale: false });
+  await page.waitForTimeout(250);
+  const off = await page.evaluate(() => ({
+    attr: document.body.getAttribute("data-hud-safety-visible"),
+    pad: parseFloat(getComputedStyle(document.getElementById("shell")).paddingTop) || 0,
+  }));
+  assert.equal(off.attr, null, "the band stayed reserved after the strip hid");
+  assert.equal(off.pad, 0, "the shell kept padding with no strip on screen");
+  // Scoped to Studio on purpose: the other layouts were already measured clear,
+  // so nothing else's geometry moves.
+  await LINK(page, { connected: true, stale: true });
+  await page.waitForTimeout(250);
+  await setHudLook(page, "cockpit");
+  await page.waitForTimeout(250);
+  const other = await page.evaluate(() => ({
+    attr: document.body.getAttribute("data-hud-safety-visible"),
+    pad: parseFloat(getComputedStyle(document.getElementById("shell")).paddingTop) || 0,
+  }));
+  assert.equal(other.attr, "", "the strip is visible in the cockpit shell too");
+  assert.equal(other.pad, 0, "the reserved band leaked into a non-Studio shell");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
 await check("H4: linked is silent here (the one status row already says it)", async () => {
   const { page, problems } = await openHud(browser, { jarvis: true, ollama: true, proxy: false });
   await LINK(page, { connected: true, stale: false });
@@ -6424,8 +6783,8 @@ await check("H4: the rush banner is the waiting card's evidence, escaped, never 
   assert.deepEqual(problems, []);
 });
 
-await check("H4/A4: the persistent latches show read-only, and unknown stays silent", async () => {
-  // Both armed: one chip, both plain sentences, no control, still one strip.
+await check("H4/A4: the rush latch shows read-only, unknown stays silent, and the owner's local-session line is gone", async () => {
+  // Both armed: one chip, the rush sentence only, no control, still one strip.
   const both = await openHud(browser,
     { jarvis: true, ollama: true, proxy: false, taint_latched: true, rush_latched: true });
   await both.page.waitForFunction(() => {
@@ -6433,7 +6792,10 @@ await check("H4/A4: the persistent latches show read-only, and unknown stays sil
     return node && !node.hidden && node.textContent.length > 0;
   }, null, { timeout: 8000 });
   const words = await both.page.locator("#hud-safety-latch").innerText();
-  assert.match(words, /staying on your PC/, words);
+  // The owner asked on 2026-11-08 for the persistent "This session is staying
+  // on your PC." line to be taken off the HUD; the rush latch still speaks.
+  assert.ok(!/staying on your PC/.test(words),
+    `the owner asked for this line to be gone, and it is back: ${words}`);
   assert.match(words, /tried to rush you recently/, words);
   assert.ok(!/taint|latch|tier|armed/i.test(words), `internal jargon on screen: ${words}`);
   assert.equal(await both.page.locator("#hud-safety-latch").getAttribute("role"), "status");

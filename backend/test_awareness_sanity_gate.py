@@ -735,6 +735,47 @@ def a_whole_run_scores_and_writes_json():
 
 
 # ---------------------------------------------------------------------------
+#  12. A chat error is surfaced, never hidden behind "no answer text"
+# ---------------------------------------------------------------------------
+
+def a_chat_error_is_surfaced_not_hidden():
+    """The 2026-11-08 field finding, proved offline.
+
+    The backend answers a dead local model with HTTP 200 and
+    `{"error": "The local model is not running. ..."}` - a STRING, not Ollama's
+    `{"error": {"message": ...}}`. On 2026-11-08 19:00 PT three live probes hit
+    exactly that and the gate's own row said only "HTTP 200 with no answer
+    text", so the deploy record could not say WHY nothing was measured. Both
+    shapes must now become the row's evidence; a body with no real error must
+    add nothing at all.
+    """
+    local = ("The local model is not running. Open Ollama on this PC "
+             "(or run `ollama serve`), then try again.")
+    check("a string error becomes the row's evidence",
+          A.error_sentence({"error": local})
+          == "the reply carried an error: " + local,
+          A.error_sentence({"error": local}))
+    check("a string error is what explains an empty 200",
+          "The local model is not running"
+          in A.error_sentence({"error": local}),
+          A.error_sentence({"error": local}))
+    check("Ollama's object error still becomes the row's evidence",
+          A.error_sentence({"error": {"message": "model requires more memory"}})
+          == "the reply carried an error: model requires more memory",
+          A.error_sentence({"error": {"message": "model requires more memory"}}))
+    long_error = A.error_sentence({"error": "x" * 600})
+    check("a long error is cut to one readable line, not printed whole",
+          len(long_error) <= 200
+          and long_error.startswith("the reply carried an error: "),
+          long_error)
+    for body in ({"choices": [{"message": {"content": ""}}]}, {"error": ""},
+                 {"error": "   "}, {"error": {"message": "  "}},
+                 {"error": None}, {"error": 17}, "not an object", None):
+        check("a body with no real error adds nothing: %r" % (body,),
+              A.error_sentence(body) == "", A.error_sentence(body))
+
+
+# ---------------------------------------------------------------------------
 #   Main
 # ---------------------------------------------------------------------------
 
@@ -752,7 +793,8 @@ def main() -> int:
                the_summary_counts_blocked_separately,
                the_gate_cannot_call_an_approval_route,
                the_token_is_scrubbed_from_everything,
-               a_whole_run_scores_and_writes_json):
+               a_whole_run_scores_and_writes_json,
+               a_chat_error_is_surfaced_not_hidden):
         print("\n-- " + fn.__name__)
         try:
             fn()

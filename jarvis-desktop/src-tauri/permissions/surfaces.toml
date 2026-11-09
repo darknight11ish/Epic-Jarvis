@@ -234,6 +234,10 @@ permissions = [
   "allow-hud-chat",
   "allow-hud-chat-cancel",
   "allow-mark-answer",
+  # Wave 10 (Q2 section 1.5): the saved reason and correction on one answer,
+  # read back so the answer menu can re-show them. Read-only; the mark itself
+  # still goes through `mark_answer` above.
+  "allow-get-feedback-mark",
   # Two yes/no answers - App lock and "Hide memory lists" - so the HUD's
   # face never nods at a saved fact while either is on (face-moments.js).
   "allow-get-lock-flags",
@@ -2444,3 +2448,23 @@ permissions = ["allow-get-read-aloud"]
 identifier = "read-aloud-write"
 description = "Turn automatic read-aloud on or off (Settings -> The big HUD window). Cardless both ways."
 permissions = ["allow-set-read-aloud"]
+
+
+# ---------------------------------------------------------------------------
+# The auto Wi-Fi reconnect (2026-11-08; the owner's ask that it default on and
+# be changeable in Settings or chat): GET/POST /api/wifi-reconnect
+# (jarvis_wifi.py, installed by its own drop-in folder). PC-only by the
+# backend's own rule, so the SETTINGS window is the only surface that holds it:
+# the switch, the PC's own sentence and its last result. It never shows a
+# network name, a password or a key, and it never asks the PC to connect to
+# anything - the two-hourly attempt belongs to the PC.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "wifi-reconnect-read"
+description = "Read whether the PC's auto Wi-Fi reconnect switch is on, and what its last check said. Read-only."
+permissions = ["allow-get-wifi-reconnect"]
+
+[[set]]
+identifier = "wifi-reconnect-write"
+description = "Turn the auto Wi-Fi reconnect on or off (Settings -> On this PC). Cardless both ways."
+permissions = ["allow-set-wifi-reconnect"]

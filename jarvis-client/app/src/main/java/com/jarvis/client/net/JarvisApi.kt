@@ -3687,6 +3687,40 @@ class JarvisApi(
     }
 
     /**
+     * The Right/Wrong v2 mark - `POST /api/feedback/mark` with the owner's
+     * reason and/or correction (`net/Feedback.kt`, Wave 10).
+     *
+     * [body] comes from [WrongFeedback.request], the ONE place a v2 body is
+     * built, so the shape posted here cannot drift from the shape the unit
+     * tests pin. The answer's `said` / `card_raised` are read with
+     * [Feedback.receipt] and handed back for the sheet's receipt; a PC that
+     * does not know the new fields answers an old body with no `said`, and
+     * the sheet then says only what is known ([WrongFeedback.receiptWords]).
+     *
+     * Like [markAnswer], this goes on the SHORT client: a mark never blocks
+     * on a card (the PC queues at most ONE card and answers immediately).
+     */
+    suspend fun markAnswerWithFeedback(body: String): ApiResult<MarkReceipt> =
+        postObject(Feedback.MARK_PATH, body).map { Feedback.receipt(it) }
+
+    /**
+     * The PC's SAVED mark and why for ONE answer -
+     * `GET /api/feedback/mark?turn_id=` (Wave 10 contract v2, Q2.1).
+     *
+     * Read-only and quiet: an older PC without the GET answers 404
+     * ([ApiError.NotFound]) and a PC without `jarvis_feedback` answers 503
+     * ([ApiError.NotAvailable]); both simply mean "nothing saved to re-show",
+     * never an error wall. The body is read by [Feedback.markState].
+     */
+    suspend fun markState(turnId: String): ApiResult<AnswerMarkDetails> {
+        val path = Feedback.markStatePath(turnId)
+            ?: return ApiResult.Failed(ApiError.Malformed("not an answer id"))
+        return probe(path).map { body ->
+            Feedback.markState(body) ?: AnswerMarkDetails(turnId)
+        }
+    }
+
+    /**
      * "What did I believe as of this moment?" - `GET /api/memory/facts?known_at=`,
      * the exact route the desktop's 2026-09-18 feature audit named for this
      * (§3, "Memory consolidation", P3). Read-only, and still not the memory

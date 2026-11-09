@@ -175,6 +175,29 @@ await check("only the Advanced views start hidden, and they are the ones hidden"
     `hidden at load: ${hidden.join(", ") || "nothing"}; ADVANCED_VIEWS is ${ADVANCED.join(", ")}`);
 });
 
+/* ── 3b. The disclosure says what pressing it does ─────────────────────── */
+
+/** The Advanced toggle's own click handler, as text. */
+function advancedClickHandler() {
+  const at = JS.indexOf('dom.advancedToggle?.addEventListener("click"');
+  assert.ok(at > -1, "brain.js has no click listener on the Advanced toggle");
+  const end = JS.indexOf("\n});", at);
+  assert.ok(end > at, "the Advanced toggle's click listener has no end");
+  return JS.slice(at, end);
+}
+
+await check("the Advanced toggle says Hide advanced while the views are out", async () => {
+  // The owner, 2026-11-08: after opening Advanced the rail still read
+  // "Advanced", so pressing it looked like it had done nothing at all.
+  assert.match(HTML, /<span class="rail-label" id="rail-advanced-label">Advanced<\/span>/,
+    "the Advanced toggle's line is missing, or no longer starts as Advanced");
+  const handler = advancedClickHandler();
+  assert.match(handler, /advancedLabel\.textContent = advancedOpen \? "Hide advanced" : "Advanced"/,
+    "the toggle no longer changes its own line to Hide advanced while open");
+  assert.match(handler, /setAttribute\("aria-expanded", String\(advancedOpen\)\)/,
+    "the toggle no longer sets aria-expanded, which the CSS and a screen reader read");
+});
+
 /* ── 4. The keyboard half is still the handler this all rests on ──────── */
 
 await check("the rail's keydown handler moves on the arrows and on Home/End", async () => {

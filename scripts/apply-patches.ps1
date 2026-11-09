@@ -3133,6 +3133,13 @@ $SHIPPED = @(
     # docstring for jarvis_quick. The same entry, in the same position, is in
     # backend/_where.py's SHIPPED list.
     'jarvis_model_recommender.py'
+    # The auto Wi-Fi reconnect (jarvis_wifi.py, 2026-11-08; the owner's ask
+    # that it default on and be changeable in Settings or chat): every 2 hours
+    # while this PC has no internet, try a saved password-protected Wi-Fi
+    # network it already knows. Bounded, idle-only, dry-run switchable, every
+    # attempt logged and reported. Its route is a drop-in plugin, so no patch.
+    # The same entry, in the same position, is in backend/_where.py's SHIPPED.
+    'jarvis_wifi.py'
     # The self-benchmark's measurement engine (jarvis_bench.py, 2026-11-04; the
     # owner's own request: measure Jarvis's own token speed across the local
     # models, the layer placement and the context sizes, keep a separate

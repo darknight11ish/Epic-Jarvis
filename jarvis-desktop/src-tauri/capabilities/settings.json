@@ -44,6 +44,8 @@
     "version-handshake",
     "core:webview:allow-set-webview-zoom",
     "read-aloud-read",
-    "read-aloud-write"
+    "read-aloud-write",
+    "wifi-reconnect-read",
+    "wifi-reconnect-write"
   ]
 }

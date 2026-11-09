@@ -27,7 +27,7 @@ review-queue half needs jarvis_extract.py WITH feedback.patch applied, and
 the route half needs jarvis_hud.py with it applied; each skips honestly when
 the file is absent and FAILS when the file is there without the patch.
 """
-import json, os, socket, sys, tempfile, textwrap, time, traceback, types
+import json, os, socket, subprocess, sys, tempfile, textwrap, time, traceback, types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -60,6 +60,33 @@ import jarvis_feedback as F
 
 FAILED, PASSED = [], []
 SKIPPED = []
+
+
+def _agent_probe(assertions: str):
+    """Run `import jarvis_agent` in a CLEAN interpreter, then let [assertions]
+    observe the real import and its real model-facing prompt there.
+
+    BEHAVIOUR, NOT SOURCE TEXT (Wave 10, the source-pin audit). The old checks
+    on this page read `jarvis_agent.py` as text and matched module names: that
+    goes red when the file is reformatted or a helper is renamed, and stays
+    green when the agent imports the same module through a different path. This
+    runs the agent's own import graph in a fresh process and looks at what it
+    actually pulled in, which cannot be fooled by spelling.
+
+    Returns the finished process: returncode 0 is the pass, stderr says what
+    went wrong. `HERE` is on PYTHONPATH so the agent under test is this tree's.
+    """
+    code = "import sys\nimport jarvis_agent as AG\n" + assertions
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(HERE), env.get("PYTHONPATH", "")]).strip(os.pathsep)
+    return subprocess.run([sys.executable, "-c", code], cwd=str(HERE),
+                          env=env, capture_output=True, text=True, timeout=180)
+
+
+def _probe_detail(proc) -> str:
+    """The one line worth printing when a probe fails (its last assertion)."""
+    return (proc.stderr or proc.stdout).strip()[-400:]
 
 
 def check(name, cond, detail=""):
@@ -148,10 +175,23 @@ def t_only_ids_are_kept():
     check("free text handed in as an id is not stored",
           "penicillin" not in dump and "DROP TABLE" not in dump)
     allowed = {"turn_id", "created", "item", "id", "mark", "marked", "fact_id",
-               "proposal_id", "helpful", "harmful", "raised"}
+               "proposal_id", "helpful", "harmful", "raised",
+               # Right/Wrong v2 (2026-11-08): the owner's own why tag and
+               # correction words, kept with the mark; and the two note kinds.
+               "reason", "correction", "kind", "text"}
     extra = {t: [x for x in v if x not in allowed] for t, v in cols.items()}
-    check("no table has a column that could hold a question or an answer",
+    check("every column is an id, a number, a mark, or the OWNER'S own words "
+          "typed on the mark - no column for a question, an answer or model output",
           not any(extra.values()), repr(extra))
+    text_cols = sorted((t, c) for t, v in cols.items() for c in v
+                       if c in ("reason", "correction", "kind", "text",
+                                "question", "answer", "prompt", "reply"))
+    check("the only free-text columns are the v2 mark's why/correction and the "
+          "note's kind/text", text_cols == [("marks", "correction"),
+                                            ("marks", "reason"),
+                                            ("notes", "kind"),
+                                            ("notes", "reason"),
+                                            ("notes", "text")], repr(text_cols))
     many = F.record_turn([f"mem:{i}" for i in range(500)])
     c = sqlite3.connect(os.environ["JARVIS_FEEDBACK_DB"])
     try:
@@ -328,9 +368,22 @@ def t_nothing_leaves_and_the_model_cannot_mark():
         check("recording, marking, counting and raising a card open no socket", False, str(exc))
     finally:
         F._maybe_raise = real
-    agent = (HERE / "jarvis_agent.py").read_text(encoding="utf-8")
-    check("the model's tool loop never names this module",
-          "jarvis_feedback" not in agent and "/api/feedback" not in agent)
+    # BEHAVIOUR (Wave 10 source-pin audit): the model's tool loop must not
+    # reach this module. Read the REAL agent in a clean interpreter, ask where
+    # its import graph went, and build the REAL model-facing prompt - a text
+    # match on the module's name would go red on a rename and green if the
+    # module were imported under another name.
+    probe = _agent_probe(
+        "assert 'jarvis_feedback' not in sys.modules, "
+        "'jarvis_agent imported jarvis_feedback'\n"
+        "msgs = AG.with_rules_first([{'role': 'user', "
+        "'content': 'mark that answer wrong'}])\n"
+        "text = '\\n'.join(str(m.get('content') or '') "
+        "for m in AG.messages_for_model(msgs))\n"
+        "assert '/api/feedback' not in text, "
+        "'the model prompt carries the feedback route'")
+    check("the model's tool loop never reaches this module",
+          probe.returncode == 0, _probe_detail(probe))
     src = Path(F.__file__).read_text(encoding="utf-8")
     import ast
     mods = set()
@@ -342,8 +395,13 @@ def t_nothing_leaves_and_the_model_cannot_mark():
     check("the module imports no network code at all",
           not mods & {"urllib", "requests", "http", "socket", "ssl", "urllib3"},
           repr(sorted(mods)))
-    check("and never retires or deletes anything itself",
-          ".retire(" not in src and "DELETE" not in src)
+    # Right/Wrong v2 (2026-11-08): the correction/f forget cards are QUEUED by
+    # this module but the accept rule lives in jarvis_extract's own review queue
+    # (`_accept` / `_accept_retire`), so a mark still cannot change memory by
+    # itself: no retire, no supersede, no delete in this file.
+    check("a mark queues a card but never retires, deletes or corrects a fact itself",
+          ".retire(" not in src and "DELETE" not in src
+          and "supersedes=" not in src and "store.add(" not in src)
 
 
 # ---- the review-queue half: jarvis_extract with feedback.patch --------------

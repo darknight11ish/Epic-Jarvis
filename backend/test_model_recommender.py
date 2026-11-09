@@ -192,8 +192,11 @@ def t_every_row_is_labelled_measured_or_estimated():
     check("every row carries exactly the documented keys",
           all(set(r) == ROW_KEYS for r in panel["rows"]),
           [set(r) ^ ROW_KEYS for r in panel["rows"]][:2])
-    check("every row has a plain reason",
-          all("needs about" in r["why"] for r in panel["rows"]))
+    check("every row's reason is scoped to its fit, with the requirement said "
+          "once (the row's own needs line), not repeated",
+          all(r["why"].startswith("At that window it ")
+              and "needs about" not in r["why"] for r in panel["rows"]),
+          [r["why"] for r in panel["rows"]][:1])
 
 
 def t_a_scorecard_from_other_cards_is_not_measured_here():
@@ -339,6 +342,92 @@ def t_the_catalogue_has_no_duplicates_and_says_where_its_numbers_come_from():
           all(float(row["min_vram_gib"]) > 0 for row in R.CATALOGUE))
     check("every catalogue row says where its number comes from",
           all(row.get("measured_note") for row in R.CATALOGUE))
+
+
+
+
+# ==========================================================================
+#   8. The PC's hardware, not one running Ollama's usage (Wave 11)
+# ==========================================================================
+
+def t_the_three_card_pc_is_described_by_its_hardware_not_by_ollama():
+    """The owner's PC on 2026-11-08: three cards, and live `jarvis_hardware`
+    marks two of them `used: false` because Ollama's log lists only one.
+    `detect_cards()` must count every CUDA card; the tier and words describe
+    the hardware, and Ollama's current usage stays out of them."""
+    probe = {
+        "found": "Found 3 graphics cards; Ollama can use 1: the 2080 SUPER",
+        "cards": [
+            {"name": "NVIDIA GeForce RTX 2080 SUPER", "total_gib": 8.0,
+             "route": "CUDA", "used": True, "index": 0},
+            {"name": "NVIDIA GeForce RTX 2060", "total_gib": 12.0,
+             "route": "CUDA", "used": False, "index": 1,
+             "why_unused": "Ollama's log does not list it, so Ollama does not use it"},
+            {"name": "NVIDIA GeForce RTX 2080 SUPER", "total_gib": 8.0,
+             "route": "CUDA", "used": False, "index": 2,
+             "why_unused": "Ollama's log does not list it, so Ollama does not use it"},
+            {"name": "llvmpipe", "total_gib": 4.0, "route": "VULKAN",
+             "used": False, "index": 3},
+        ],
+    }
+    cards = R.detect_cards(detect=lambda: probe)
+    check("all three CUDA cards are counted, whether or not Ollama lists them",
+          len(cards) == 3
+          and sorted(c["total_gib"] for c in cards) == [8.0, 8.0, 12.0],
+          cards)
+    check("a non-CUDA probe row is still not a graphics card", len(cards) == 3)
+    profile = R.hardware_profile(detect=lambda: probe, ram_gb=31.9)
+    check("...so the profile is three cards and 28 GiB, not one 8 GB card",
+          profile["card_count"] == 3
+          and profile["vram_total_gib"] == 28.0
+          and profile["tier"]["id"] == R.TIER_MULTI_20_28,
+          (profile["card_count"], profile["vram_total_gib"],
+           profile["tier"]["id"]))
+    words = profile["words"]
+    check("the hardware sentence says three cards and 28 GiB",
+          "3 NVIDIA cards with 28 GiB" in words, words)
+    check("the tier words appear exactly once in the sentence",
+          words.count(profile["tier"]["label"]) == 1, words)
+    check("which cards one Ollama session lists is not in the hardware words",
+          "Ollama" not in words and "used" not in words.lower(), words)
+    panel = R.recommend(hardware=profile, scores={})
+    check("the panel's own hardware block is the three-card PC, not one card",
+          panel["hardware"]["card_count"] == 3
+          and panel["hardware"]["vram_total_gib"] == 28.0,
+          panel["hardware"].get("words"))
+
+
+def t_every_row_separates_its_estimate_from_the_2026_11_07_measurement():
+    """An estimate and a measurement are different claims. Every row says its
+    fit in an estimate-scoped sentence, and every catalogue measurement is
+    prefixed as the separate 2026-11-07 measurement; neither is dressed up as
+    the other, and no number is invented."""
+    profile = R.hardware_profile(cards=THREE_CARDS, ram_gb=31.9)
+    panel = R.recommend(hardware=profile, scores={})
+    rows = panel["rows"]
+    check("every fit sentence is the estimate-scoped line",
+          all(r["why"].startswith("At that window it ") for r in rows),
+          [r["why"] for r in rows if not r["why"].startswith("At that window it ")][:1])
+    check("every measurement note is labelled as the separate 2026-11-07 one",
+          all(r["measured_note"].startswith(
+              "Separately measured on 2026-11-07: ") for r in rows),
+          [r["measured_note"] for r in rows
+           if not r["measured_note"].startswith("Separately measured on 2026-11-07: ")][:1])
+    check("no measurement note is left unprefixed in the catalogue",
+          all("2026-11-07 sweep" not in row["measured_note"]
+              and "2026-11-07, this PC" not in row["measured_note"]
+              for row in R.CATALOGUE))
+    mini = next(r for r in rows if r["model"] == "minicpm-v4.6")
+    check("MiniCPM-V's one-card fit and its three-card run are scoped "
+          "separately, so the two lines cannot be read as one claim",
+          "fits on one card" in mini["why"]
+          and "across three cards" in mini["measured_note"]
+          and "1.33 GiB" in mini["measured_note"],
+          (mini["why"], mini["measured_note"]))
+    for row in rows:
+        check(f"{row['label']}: the requirement is said by its needs line, "
+              "not mixed into the fit sentence",
+              "needs about" not in row["why"])
 
 
 if __name__ == "__main__":

@@ -697,6 +697,36 @@ def pending_ids(args, token):
     return [str(card.get("id")) for card in cards if isinstance(card, dict)]
 
 
+def error_sentence(parsed) -> str:
+    """The error out of a chat reply body, as one plain sentence, or "".
+
+    A reply can carry an error two ways and BOTH must be surfaced, because a
+    BLOCKED row that says only "HTTP 200 with no answer text" hides the reason
+    the check measured nothing:
+
+    * `{"error": {"message": "..."}}` - Ollama's own OpenAI-shaped error;
+    * `{"error": "..."}` - this backend's own plain words, e.g. "The local
+      model is not running. Open Ollama on this PC ... then try again."
+
+    The second shape is not hypothetical: on 2026-11-08 19:00 PT the live
+    awareness gate reported three BLOCKED rows whose bodies were exactly that
+    sentence, and the gate's own report could not say so (found 2026-11-08,
+    Wave-11). A reply with no error, an empty one, or a body that is not an
+    object keeps its "" - nothing is invented.
+    """
+    if not isinstance(parsed, dict):
+        return ""
+    error = parsed.get("error")
+    if isinstance(error, dict):
+        message = error.get("message")
+        if isinstance(message, str) and message.strip():
+            return "the reply carried an error: %s" % one_line(message, 140)
+        return ""
+    if isinstance(error, str) and error.strip():
+        return "the reply carried an error: %s" % one_line(error, 140)
+    return ""
+
+
 def chat_turn(args, token, sentence: str, conversation_id: str) -> dict:
     """One POST /api/chat with a HARD wall-clock deadline.
 
@@ -771,10 +801,7 @@ def chat_turn(args, token, sentence: str, conversation_id: str) -> dict:
                                                         str):
                 answer = message["content"]
     if isinstance(parsed, dict) and not answer:
-        error = parsed.get("error")
-        if isinstance(error, dict) and error.get("message"):
-            err = err or "the reply carried an error: %s" % one_line(
-                error.get("message"), 140)
+        err = err or error_sentence(parsed)
     return {"status": status, "answer": answer, "route": route,
             "route_raw": one_line(route_raw, 400), "error": err,
             "seconds": elapsed, "timed_out": timed_out}

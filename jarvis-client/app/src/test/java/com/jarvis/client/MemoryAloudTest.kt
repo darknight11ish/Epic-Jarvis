@@ -95,4 +95,14 @@ class MemoryAloudTest {
             assertFalse(word, word.lowercase() in PrivateAloud.MEMORY_ON_SCREEN.lowercase())
         }
     }
+
+    @Test
+    fun `the row says the default in one subtle line (Q7, 2026-11-08)`() {
+        // The owner's approved wording, exactly - em dash and all. Q7 says no
+        // banner: one line, under the row's name.
+        assertEquals("On by default — toggle off anytime", MemoryAloud.SUBTITLE)
+        assertTrue(MemoryAloud.SUBTITLE, MemoryAloud.SUBTITLE.length < 45)
+        assertTrue(MemoryAloud.SUBTITLE, "banner" !in MemoryAloud.SUBTITLE.lowercase())
+        assertTrue(MemoryAloud.SUBTITLE, "toggle off" in MemoryAloud.SUBTITLE)
+    }
 }

@@ -4439,9 +4439,12 @@ clears anything). **Since A4 (2026-10-23) the two persistent session latches are
 readable too**: the PC's own `/api/status` carries `taint_latched` /
 `rush_latched`, read-only (true/false/null, where null is "the PC has not said" —
 never "not latched" — and a taint read that fails answers true, the gate's own
-fail-closed rule), so the strip can say "this session is staying on your PC" and
-"something Jarvis read tried to rush you recently; approvals ask for one more
-look" with no card waiting and across a backend restart. The queue-scoped banner
+fail-closed rule), so the strip can say "something Jarvis read tried to rush you
+recently; approvals ask for one more look" with no card waiting and across a
+backend restart. **The owner asked on 2026-11-08 that the persistent
+"This session is staying on your PC." line be taken off the HUD** — it is gone
+from the strip; the taint latch itself is unchanged (the gate still fails
+closed, and a waiting card still carries the queue-scoped rush evidence). The queue-scoped banner
 stays separate and never claims a latch from a card alone; none of this adds a
 command, permission, card, route or grant (`/api/status` was already on the HUD's
 fixed allowlist), and no control can clear either latch. The real locked-window
@@ -4910,6 +4913,43 @@ what is missing is only the Settings screen agreeing about who turned it off.
 
 
 - **The automatic read-aloud switch is PC-only, and the phone has its own on-device switch - one-sided on purpose (2026-11-07).** The owner asked for a real control over Jarvis reading replies aloud: typed answers stay silent by default, voice answers are spoken, and an answer that uses what Jarvis remembers is read aloud by default in Jarvis Live too, unless it is extremely sensitive. The PC half is the backend-owned `GET/POST /api/read-aloud` switch (ON by default), wired from brain to mouth by the ready plug-in `plugins/ready/read-aloud` (`backend/jarvis_read_aloud.py`, `backend/test_read_aloud.py`): the Settings switch, the chat/Live sentences and the HUD quickbar all speak the same state, and a model answer can never toggle it. The phone half is its own local switch (`MemoryAloud`, `PrivateAloud`, default ON including "hey Jarvis"/Live), its own chat sentences and its own per-answer Read out loud in the message menu; the phone never calls `/api/read-aloud`. That is deliberate: the PC route controls the PC's speakers, and a phone change must not silence or unmute the desktop by accident. `tools/check_parity.py` classifies `/api/read-aloud` as `deliberate` with that reason; what is one-sided is the *switch's owner*, not the permission, and both apps still show every answer and the same sensitive-answer rule.
+
+- **The auto Wi-Fi reconnect is the PC's, and only the PC's** (2026-11-08; the
+  owner's ask: *"add a feature to jarvis that defaults on but can be changed in
+  settings or chat with jarvis, that jarvis if its running on a desktop and the
+  desktop has lost internet connection, that it will tell the desktop to try to
+  reconnect to password protected networks (that have already been connected to
+  in the past on that desktop) every 2 hours on its own if its still offline"*).
+  Changing a DESKTOP's Wi-Fi link is not something the phone can do or should
+  try: it would be acting on a machine it cannot see, on a network it is not on.
+  So `GET`/`POST /api/wifi-reconnect` (`backend/jarvis_wifi.py`, installed by
+  `plugins/ready/wifi-reconnect/`) refuse any device other than this PC
+  (`_from_this_pc`), and the switch is drawn in Settings - "On this PC" ->
+  "Wi-Fi reconnect" via `jarvis-desktop/src/wifi-reconnect-settings.js` and
+  `jarvis-desktop/src-tauri/src/wifi_reconnect.rs`. `tools/check_parity.py`
+  carries the route as `deliberate` and this bullet is the reason. The phone
+  neither calls it nor shows the setting. Its permission shape is section 3's,
+  as the owner's ruling Q4 (2026-11-08) settled it: APPROVED as a bounded,
+  default-ON, PC-only maintenance feature with ZERO per-attempt cards - but the
+  SWITCH follows the ordinary card rule: turning it ON raises exactly ONE
+  `change_own_config` card and nothing changes until that card is answered,
+  while turning it OFF is instant and cardless. The ruling's six mandatory
+  guardrails are enforced in `backend/jarvis_wifi.py` and proved in its suite:
+  (1) saved password-protected profiles only, with the authentication allow-list
+  exactly `WPA2PSK`/`WPA3SAE`/`WPA2`/`WPA3` and Open/WEP/802.1X hard-refused, and
+  no `key=clear` ever passed; (2) strictly offline-only - switch ON, Lockdown
+  readable and OFF, no working internet on this Wi-Fi, and the owner did not turn
+  the radio/adapter off (an unreadable radio or Lockdown fails SAFE); (3) at most
+  the top 3 saved profiles that are actually broadcasting in range, each verified
+  for 10 seconds, stopping at the first success; (4) the switch in Settings, chat
+  and Jarvis Live behind the one card described above, which a model answer can
+  never reach; (5) a full Change Journal receipt per attempt - `timestamp`,
+  `profile_name`, `auth_type`, `result: connected | still_offline` - so "did you
+  reconnect my wifi?" has a real deterministic answer; (6) a decision record.
+  It is not a general "change my network" permission, and no card is raised per
+  attempt (a card every 2 hours is not answerable). JARVIS-API section 204
+  records the route and the guardrails.
+
 
 ## 9. Where the backend lives
 

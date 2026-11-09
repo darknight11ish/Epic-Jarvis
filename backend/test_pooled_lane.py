@@ -19,6 +19,14 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+# This file IS a suite run. `backend/_where.py` sets this for every suite that
+# imports it, but this one imports only the lane modules, and a BARE
+# `python backend/test_pooled_lane.py` - exactly what `tools/check_claims.py`
+# runs for its `test:` rows - must still prove that the live-file guard in
+# `jarvis_presets.reconcile_after_restart` refuses it. Sibling suites set the
+# same marker the same way (`test_cloud_escalate_setting.py`).
+os.environ["JARVIS_SUITE_RUNNING"] = "1"
+
 FAILED, PASSED = [], []
 TMP = tempfile.mkdtemp(prefix="pooled-lane-")
 os.environ["OPENJARVIS_CONFIG_DIR"] = TMP
@@ -812,6 +820,189 @@ def t_a_heavy_apply_whose_record_fails_rolls_everything_back():
           (d.calls, out))
 
 
+# ---------------------------------------------------------------------------
+#   AFTER A RESTART: the on-demand pooled lane does not come back (2026-11-08)
+# ---------------------------------------------------------------------------
+
+def _lane_state(lane_url=None, preset=None):
+    """Write (or clear) the two files a preset apply leaves behind. Temp dir."""
+    d = Path(os.environ["OPENJARVIS_CONFIG_DIR"])
+    d.mkdir(parents=True, exist_ok=True)
+    lane_file = d / "presets-active-lane.json"
+    choice_file = d / "presets-choice.json"
+    for path in (lane_file, choice_file):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+    if lane_url is not None:
+        lane_file.write_text(json.dumps({"base_url": lane_url}), encoding="utf-8")
+    if preset is not None:
+        choice_file.write_text(json.dumps({"preset": preset}), encoding="utf-8")
+    return lane_file, choice_file
+
+
+def t_restart_with_a_dead_pooled_lane_points_chat_back_and_forgets_the_preset():
+    lane_file, choice_file = _lane_state("http://127.0.0.1:11450", "coding")
+    called = {}
+
+    def probe(url):
+        called["probe"] = url
+        return False
+
+    def set_url(url):
+        called["lane"] = url
+        return True
+
+    def rollback():
+        called["rollback"] = called.get("rollback", 0) + 1
+        return {"ok": True}
+
+    got = P.reconcile_after_restart(probe=probe, set_active_url=set_url,
+                                    rollback_model=rollback)
+    check("a dead pooled lane after a restart is repaired",
+          got.get("changed") is True and got.get("lane_ok") is True
+          and got.get("model_rolled_back") is True
+          and got.get("preset_cleared") is True, got)
+    check("chat is pointed back at the configured lane",
+          called.get("lane") == P._active_url(), (called, P._active_url()))
+    check("the pooled preset is forgotten, so the HUD stops claiming it",
+          not choice_file.exists() and got.get("preset") == "coding", got)
+    check("... and the sentence says why and what to do",
+          "does not survive a restart" in got.get("why", "")
+          and "Apply the preset again" in got.get("why", ""), got.get("why"))
+    check("the lane file itself is not deleted (the HUD patch reads it)",
+          lane_file.exists())
+    # A rollback that could not happen is said, not glossed.
+    got2 = P.reconcile_after_restart(
+        probe=lambda u: False, set_active_url=lambda u: True,
+        rollback_model=lambda: {"ok": False})
+    check("a model that could not be restored is said in the sentence",
+          got2.get("model_rolled_back") is False
+          and "could not be restored" in got2.get("why", ""), got2)
+
+
+def t_a_pooled_lane_that_answers_is_never_touched():
+    lane_file, choice_file = _lane_state("http://127.0.0.1:11450", "coding")
+    calls = []
+    got = P.reconcile_after_restart(
+        probe=lambda u: True,
+        set_active_url=lambda u: calls.append(u) or True,
+        rollback_model=lambda: calls.append("rollback") or {"ok": True})
+    check("a pooled lane that answers is left exactly as it is",
+          got.get("changed") is False and calls == [], (got, calls))
+    check("... and its chosen preset stays chosen", choice_file.exists())
+
+
+def t_a_logon_task_lane_is_left_to_its_windows_task():
+    _lane_state("http://127.0.0.1:11436", "general")
+    calls = []
+    got = P.reconcile_after_restart(
+        probe=lambda u: False,
+        set_active_url=lambda u: calls.append(u) or True,
+        rollback_model=lambda: calls.append("rollback") or {"ok": True})
+    check("the everyday lane is not this bug - its own Windows task restarts it",
+          got.get("changed") is False and calls == []
+          and "Windows task" in got.get("why", ""), got)
+
+
+def t_no_preset_state_means_nothing_to_reconcile():
+    _lane_state(None, None)
+    calls = []
+    got = P.reconcile_after_restart(
+        probe=lambda u: calls.append(u) or False,
+        set_active_url=lambda u: calls.append(u) or True)
+    check("a PC with no applied preset is a read-only no-op",
+          got.get("changed") is False and calls == [], (got, calls))
+
+
+def t_install_runs_the_restart_check_once_on_a_real_hud_start():
+    real = (P.reconcile_after_restart, P._warm_on_startup,
+            P._refresh_detect_cache_async)
+
+    class Handler:
+        do_GET = lambda self: None
+        do_POST = lambda self: None
+
+    calls = []
+    try:
+        P._warm_on_startup = lambda: True
+        P._refresh_detect_cache_async = lambda: None
+        P.reconcile_after_restart = lambda **kw: (calls.append(kw)
+                                                  or {"changed": False, "why": ""})
+        line = P.install(Handler, origin_ok=lambda s: True,
+                         token_ok=lambda s: True, read_body=lambda s: b"{}")
+        check("the real HUD start runs the restart check exactly once",
+              line == "presets    ready" and len(calls) == 1, (line, calls))
+        P._warm_on_startup = lambda: False
+        P.install(Handler, origin_ok=lambda s: True, token_ok=lambda s: True,
+                  read_body=lambda s: b"{}")
+        check("a suite's install() does NOT touch the owner's state",
+              len(calls) == 1, calls)
+    finally:
+        (P.reconcile_after_restart, P._warm_on_startup,
+         P._refresh_detect_cache_async) = real
+
+
+def t_stopping_the_mode_never_leaves_chat_on_a_dead_pooled_port():
+    """The lane file must never outlive the server it names (2026-11-08 live)."""
+    lane_file, _choice = _lane_state("http://127.0.0.1:11450", "coding")
+    eng = Engine()
+    L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
+    code, body = L.stop_pooled_lane(engine=eng,
+                                    probe_fn=lambda port, timeout: False)
+    check("stopping the mode puts a dead pooled chat lane back on a live lane",
+          code == 200 and body.get("chat_lane_restored") is True
+          and "11450" not in P._persisted_lane_url(),
+          (code, body, P._persisted_lane_url()))
+    # A pooled server someone else left answering is NOT renamed away from: it
+    # is alive, so the lane file is still true.
+    _lane_state("http://127.0.0.1:11450", "coding")
+    code, body = L.stop_pooled_lane(engine=eng,
+                                    probe_fn=lambda port, timeout: True)
+    check("a pooled server still answering keeps the lane file",
+          code == 200 and body.get("chat_lane_restored") is False
+          and P._persisted_lane_url().endswith(":11450"),
+          (code, body, P._persisted_lane_url()))
+
+
+def t_the_pooled_child_env_still_holds_the_measured_settings():
+    import jarvis_big_coder as B
+    env = B._child_env(B.BIG_PORT)
+    check("the three-card child still sets OLLAMA_SCHED_SPREAD=1",
+          env.get("OLLAMA_SCHED_SPREAD") == "1", env.get("OLLAMA_SCHED_SPREAD"))
+    check("... and still has NO CUDA_VISIBLE_DEVICES pin",
+          "CUDA_VISIBLE_DEVICES" not in env, sorted(env))
+
+
+def t_a_pooled_start_asks_for_the_measured_49152_window():
+    """The measured window must be ASKED for at load time (2026-11-08 live:
+    a bare server_start + a chat loaded it at Ollama's 8192 instead)."""
+    eng = Engine()
+    code, body = L.start_pooled_lane(engine=eng, gate=lambda *a, **k: Verdict(True))
+    loads = [c for c in eng.calls if c[0] == "load"]
+    check("starting the pooled lane loads it at the measured 49,152 window",
+          code == 200 and loads and loads[0][2] == L.POOLED_CTX == 49152,
+          (code, loads))
+    check("... and the model row it came back with says the same context",
+          eng.rows and int(eng.rows[0].get("context_length") or 0) == 49152,
+          eng.rows)
+
+
+def t_a_suite_run_can_never_touch_the_owners_live_files():
+    saved = os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
+    try:
+        got = P.reconcile_after_restart(
+            probe=lambda u: False,
+            set_active_url=lambda u: (_ for _ in ()).throw(
+                AssertionError("a suite rewrote the owner's live lane file")))
+    finally:
+        if saved is not None:
+            os.environ["OPENJARVIS_CONFIG_DIR"] = saved
+    check("a suite with no temp config dir is refused before any read or write",
+          got.get("changed") is False and "temp folder" in got.get("why", ""), got)
+
+
 def main() -> int:
     for fn in (t_the_lane_is_the_one_big_coder_owns,
                t_the_card_describes_the_load_it_will_really_do,
@@ -840,7 +1031,16 @@ def main() -> int:
                t_adopt_writes_the_same_record_the_switch_writes,
                t_adopt_is_a_no_op_when_the_model_is_already_in_use,
                t_adopt_refuses_when_it_cannot_record,
-               t_a_heavy_apply_whose_record_fails_rolls_everything_back):
+               t_a_heavy_apply_whose_record_fails_rolls_everything_back,
+               t_restart_with_a_dead_pooled_lane_points_chat_back_and_forgets_the_preset,
+               t_a_pooled_lane_that_answers_is_never_touched,
+               t_a_logon_task_lane_is_left_to_its_windows_task,
+               t_no_preset_state_means_nothing_to_reconcile,
+               t_stopping_the_mode_never_leaves_chat_on_a_dead_pooled_port,
+               t_the_pooled_child_env_still_holds_the_measured_settings,
+               t_a_pooled_start_asks_for_the_measured_49152_window,
+               t_a_suite_run_can_never_touch_the_owners_live_files,
+               t_install_runs_the_restart_check_once_on_a_real_hud_start):
         fn()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:

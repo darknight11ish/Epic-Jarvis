@@ -53,59 +53,79 @@ const check = (name, fn) => {
 const MEASURED_AT = 1_761_700_000;
 const MEASURED_DAY = new Date(MEASURED_AT * 1000).toISOString().slice(0, 10);
 
-/** One panel exactly as `jarvis_model_recommender.panel()` documents it. */
+/** One panel exactly as `jarvis_model_recommender.panel()` documents it, for
+ *  the owner's PC: three cards (RTX 2060 12 GB + two RTX 2080 SUPER 8 GB =
+ *  28 GiB) - the hardware truth the 2026-11-08 screenshot got wrong. */
+const HARDWARE_WORDS =
+  "This PC has 3 NVIDIA cards with 28 GiB of video memory in total " +
+  "(12 GB + 8 GB + 8 GB) and 32 GiB of RAM. It is the Two to three cards, " +
+  "20-28 GB in total tier: a 20-28 GB pool: the everyday model on one card " +
+  "plus the pooled coding lane across all of them is the arrangement this " +
+  "pool was measured for.";
 const PANEL = {
   hardware: {
-    cards: [{ name: "NVIDIA GeForce RTX 2060", total_gib: 12.0, monitor: false }],
-    card_count: 1,
-    vram_total_gib: 12.0,
+    cards: [
+      { name: "NVIDIA GeForce RTX 2080 SUPER", total_gib: 8.0, monitor: true },
+      { name: "NVIDIA GeForce RTX 2060", total_gib: 12.0, monitor: false },
+      { name: "NVIDIA GeForce RTX 2080 SUPER", total_gib: 8.0, monitor: false },
+    ],
+    card_count: 3,
+    vram_total_gib: 28.0,
     largest_card_gib: 12.0,
     ram_gib: 32.0,
     cpu: "AMD Ryzen",
     detected: true,
-    words: "This PC has 1 NVIDIA card with 12 GiB of video memory in total (12 GB).",
+    words: HARDWARE_WORDS,
   },
   tier: {
-    id: "single_12_16gb",
-    label: "One 12-16 GB card",
-    words: "one 12-16 GB card: the everyday 9B fits with room for a long context",
+    id: "multi_gpu_20_28gb",
+    label: "Two to three cards, 20-28 GB in total",
+    words: "a 20-28 GB pool: the everyday model on one card plus the pooled " +
+      "coding lane across all of them is the arrangement this pool was " +
+      "measured for",
   },
   rows: [
     {
       model: "qwen3.5:9b", label: "Qwen 3.5 9B", params: "9B", quant: "Q4_K_M",
       capabilities: ["tools", "coding"], fit: "fits_1_card",
-      vram_needed_gib: 6.0, context_gib: 16.0,
+      vram_needed_gib: 9.3, context_gib: 196608,
       provenance: "measured_this_pc",
       provenance_label: `MEASURED ON THIS PC (41.0 tok/s, 0% spill, ${MEASURED_DAY})`,
       measured: { decode_tps: 41.0, spill_bytes: 0, on_card_percent: 100,
                   at: MEASURED_AT, suite: "speed" },
       downgrade_warning: "",
-      why: "Qwen 3.5 9B needs about 6 GiB at 16,384 tokens, and it fits on one card on this PC.",
-      measured_note: "",
+      why: "At that window it fits on one card on this PC.",
+      measured_note:
+        "Separately measured on 2026-11-07: 9.18 GiB at 196,608 on the " +
+        "RTX 2060 alone (42.01 tok/s)",
     },
     {
       model: "gemma4:31b-it-qat", label: "Gemma 4 31B", params: "31B", quant: "QAT",
       capabilities: ["tools"], fit: "pooled",
-      vram_needed_gib: 19.0, context_gib: 32.0,
+      vram_needed_gib: 18.3, context_gib: 16384,
       provenance: "measured_other_hardware",
       provenance_label: "MEASURED ON DIFFERENT CARDS (run benchmark to verify)",
       measured: { decode_tps: 9.5, spill_bytes: 0, on_card_percent: 100,
                   at: MEASURED_AT, suite: "speed" },
       downgrade_warning: "measured on a different card set than the one this PC reports now - " +
         "run the benchmark here to verify",
-      why: "Gemma 4 31B needs about 19 GiB at 32,768 tokens, and it fits across the pooled cards on this PC.",
-      measured_note: "",
+      why: "At that window it fits across the pooled cards on this PC.",
+      measured_note:
+        "Separately measured on 2026-11-07: 18.25 GiB at 16,384 across " +
+        "three cards (15.57 tok/s)",
     },
     {
-      model: "qwen3.5:4b", label: "Qwen 3.5 4B", params: "4B", quant: "Q4_K_M",
-      capabilities: [], fit: "fits_1_card",
-      vram_needed_gib: 3.0, context_gib: 16.0,
+      model: "minicpm-v4.6", label: "MiniCPM-V 4.6", params: "1.3B", quant: "Q4_K_M",
+      capabilities: ["vision"], fit: "fits_1_card",
+      vram_needed_gib: 1.4, context_gib: 16384,
       provenance: "estimated_fit",
       provenance_label: "ESTIMATED FIT (run benchmark to verify)",
       measured: null,
       downgrade_warning: "",
-      why: "Qwen 3.5 4B needs about 3 GiB at 16,384 tokens, and it fits on one card on this PC.",
-      measured_note: "",
+      why: "At that window it fits on one card on this PC.",
+      measured_note:
+        "Separately measured on 2026-11-07: 1.33 GiB at 16,384 across " +
+        "three cards",
     },
     {
       model: "huge:70b", label: "Huge 70B", params: "70B", quant: "Q4_K_M",
@@ -121,7 +141,7 @@ const PANEL = {
   notes: ["nothing has been benchmarked on this PC yet, so every row is an ESTIMATED FIT; " +
           "run the benchmark to verify one."],
   generated_at: MEASURED_AT,
-  words: "This PC has 1 NVIDIA card with 12 GiB of video memory in total (12 GB).",
+  words: HARDWARE_WORDS,
 };
 
 /* ── 1. Optional, and absent without a guess ─────────────────────────────── */
@@ -147,13 +167,19 @@ check("a panel with no usable row but real notes still reads, and an empty one d
 
 /* ── 2. The panel's own facts ────────────────────────────────────────────── */
 
-check("the hardware sentence and the tier are carried in the PC's own words", () => {
+check("the hardware sentence carries the PC's real cards, and the tier ONCE", () => {
   const panel = A.recommenderPanel({ recommender: PANEL });
   assert.ok(panel, "a full panel was refused");
   assert.equal(panel.title, "What this PC should run");
-  assert.match(panel.hardwareWords, /1 NVIDIA card with 12 GiB of video memory/);
-  assert.equal(panel.tierLabel, "One 12-16 GB card");
-  assert.match(panel.tierWords, /everyday 9B fits with room/);
+  // The 2026-11-08 screenshot said one 8 GB card; the PC has 12 + 8 + 8 = 28.
+  assert.match(panel.hardwareWords, /3 NVIDIA cards with 28 GiB of video memory/);
+  assert.equal(panel.tierLabel, "Two to three cards, 20-28 GB in total");
+  assert.match(panel.tierWords, /20-28 GB pool/);
+  // ONE tier paragraph: the hardware sentence already ends with it.
+  assert.equal(panel.hardwareWords.split(panel.tierLabel).length - 1, 1,
+    "the hardware sentence does not name the tier exactly once");
+  assert.equal(A.recommenderText(panel).split(panel.tierLabel).length - 1, 1,
+    "the section prints the tier twice");
   assert.equal(panel.generatedAt, MEASURED_AT);
   assert.match(A.recommenderWhen(panel), new RegExp(`As of ${MEASURED_DAY}`));
 });
@@ -161,7 +187,7 @@ check("the hardware sentence and the tier are carried in the PC's own words", ()
 check("only the rows that fit this PC are drawn (Q4's rule holds in this section too)", () => {
   const panel = A.recommenderPanel({ recommender: PANEL });
   assert.deepEqual(panel.rows.map((row) => row.label),
-    ["Qwen 3.5 9B", "Gemma 4 31B", "Qwen 3.5 4B"],
+    ["Qwen 3.5 9B", "Gemma 4 31B", "MiniCPM-V 4.6"],
     "a too_big row was drawn, or a fitting row was lost");
   assert.equal(panel.notShown, 3);
 });
@@ -205,8 +231,31 @@ check("the row's own numbers and words are carried, not summarised away", () => 
   assert.ok(row.meta.includes("9B parameters"));
   assert.ok(row.meta.includes("Q4_K_M quantization"));
   assert.ok(row.meta.includes("capabilities: tools, coding"));
-  assert.ok(row.meta.some((line) => /needs about 6 GiB at 16,384 tokens/.test(line)));
+  assert.ok(row.meta.some((line) => /needs about 9\.3 GiB at 196,608 tokens/.test(line)));
   assert.ok(row.meta.includes(row.why));
+});
+
+check("every row scopes its fit estimate and its separate measurement", () => {
+  const panel = A.recommenderPanel({ recommender: PANEL });
+  for (const row of panel.rows) {
+    assert.ok(row.why.startsWith("At that window it "),
+      `${row.label}: the fit sentence is not estimate-scoped: ${row.why}`);
+    assert.ok(!row.why.includes("needs about"),
+      `${row.label}: the requirement is repeated in the fit sentence`);
+    const notes = row.meta.filter((line) => line.includes("Separately measured"));
+    assert.equal(notes.length, 1,
+      `${row.label}: the separate measurement is not labelled once: ${row.meta}`);
+    assert.ok(notes[0].startsWith("Separately measured on 2026-11-07: "),
+      `${row.label}: the measurement is not scoped: ${notes[0]}`);
+  }
+  // MiniCPM-V: an estimate that it CAN fit on one card, beside a measurement
+  // that was RUN across three. Both are true; the words now say which is which.
+  const mini = panel.rows.find((row) => row.label === "MiniCPM-V 4.6");
+  assert.match(mini.why, /fits on one card/);
+  assert.ok(mini.meta.some((line) => /Separately measured on 2026-11-07: 1\.33 GiB at 16,384 across three cards/.test(line)),
+    `MiniCPM-V's measurement is not scoped: ${mini.meta}`);
+  const text = A.recommenderText(panel);
+  assert.match(text, /Separately measured on 2026-11-07: 1\.33 GiB/);
 });
 
 check("Q4's not-shown count is said, and the module's notes are lines of their own", () => {
@@ -235,6 +284,11 @@ check("brain.js draws the section through its one recommender seam", () => {
     "the page does not draw the not-shown line");
   assert.match(BRAIN, /Advisor\.recommenderWhen\(panel\)/,
     "the page does not date the section");
+  // Wave 11: the tier is printed exactly once, inside the hardware sentence.
+  assert.doesNotMatch(BRAIN, /model-recommender-tier/,
+    "the page draws a second tier paragraph again");
+  assert.doesNotMatch(BRAIN, /panel\.tierLabel/,
+    "the page draws the tier outside the hardware sentence");
   // Appended beside the advisor through the same models pane, and ONLY when
   // the answer carries a panel: an older PC draws nothing here.
   assert.match(BRAIN,

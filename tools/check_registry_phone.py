@@ -323,6 +323,17 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"handsfree",',
     },
+    "settings.wifi-reconnect": {
+        "name": "Wi-Fi reconnect",
+        "why": ("The auto Wi-Fi reconnect repairs THIS PC's own wireless link - it asks Windows "
+                "to rejoin a saved, password-protected network the PC already knows, every two "
+                "hours while the PC has no internet. The phone has no such link to repair and no "
+                "saved PC profile to use, so there is no version of the switch it could drive; "
+                "\"open wi-fi reconnect\" answers with the honest PC-only sentence "
+                "(docs/ARCHITECTURE.md section 8, JARVIS-API section 204, Q4 2026-11-08)."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"wifi-reconnect",',
+    },
 }
 
 #: The menu ids the audit found on the phone while the registry called them

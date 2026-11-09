@@ -265,16 +265,19 @@ def t_setting_links_are_real():
     # reason (typed switch built with the store; the Settings card is the UI
     # slice), so it is fifteen. `voice_check_locked` joined on 2026-11-03: the
     # typed switch and the phone's Voice card are built, and no desktop
-    # SETTINGS_ROWS row exists yet, so it is sixteen.
+    # SETTINGS_ROWS row exists yet, so it is sixteen. `wifi_auto_reconnect`
+    # joined on 2026-11-08 (ruling Q4): its desktop control is the Wi-Fi
+    # feature's own card plus the settings registry row, not a generated
+    # toggle row, so it is seventeen.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known sixteen",
+    check("...and the BoolSettings with no desktop row are the known seventeen",
           orphans == ["antislop", "big_coder", "big_model",
                       "big_model_deep_questions", "big_model_wiki", "chat_history",
                       "jarvis_calendar", "lights_without_card", "media_index",
                       "phone_notifications", "second_card_combined",
                       "second_card_suggest_correction", "second_card_suggest_struggle",
                       "smartwatch_notifications", "voice_check_locked",
-                      "write_like_me"], str(orphans))
+                      "wifi_auto_reconnect", "write_like_me"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
                           if r.owner == "phone" and r.setting)
     check("the three phone rows name the three phone-side spoken settings",
@@ -398,9 +401,14 @@ def t_bool_settings_is_the_measured_thirteen():
     Thirty-eight since 2026-11-04: `handsfree`, the spoken name for the
     hands-free switch behind `hf-enabled` (jarvis_handsfree.py, JARVIS-API
     section 191).
+
+    Thirty-nine since 2026-11-08: `wifi_auto_reconnect`, the auto Wi-Fi
+    reconnect (ruling Q4). ONE OF THE ORPHANS ABOVE, said plainly: its desktop
+    control is the Wi-Fi feature's own card, not a generated toggle row, while
+    the chat phrases, the Live path and the phone contract are real.
     """
-    check("BOOL_SETTINGS holds its thirty-eight spoken settings",
-          len(R.BOOL_SETTINGS) == 38, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirty-nine spoken settings",
+          len(R.BOOL_SETTINGS) == 39, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

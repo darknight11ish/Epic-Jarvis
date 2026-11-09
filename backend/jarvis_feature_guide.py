@@ -436,6 +436,17 @@ def _read_notify(flag: str):
     return None if limit is None else M.value_of(limit) is True
 
 
+def _read_wifi_auto_reconnect():
+    """The auto Wi-Fi reconnect's switch (2026-11-08, owner ruling Q4).
+
+    Read from the module itself, never from a copy of the rule: `enabled()`
+    reads a missing or damaged settings file as OFF (the safe direction for
+    "is it on?"), and a module that cannot answer reads as "I could not read
+    it", never as off."""
+    import jarvis_wifi as M
+    return M.enabled() is True
+
+
 def _read_watch_notify():
     import jarvis_watch_notify as M
     return M.settings().get("enabled") is True
@@ -640,6 +651,10 @@ STATE_READERS = {
     # Its one rule lives in jarvis_live.voice_check_needed(); this reads the
     # same answer the PC acts on, never a second copy.
     "voice_check_locked": _read_voice_check_locked,
+    # 2026-11-08: the auto Wi-Fi reconnect (owner ruling Q4) is a registry
+    # switch, so it gets its state reader here like every other one - "is
+    # auto wifi reconnect on?" answers from the module's own enabled().
+    "wifi_auto_reconnect": _read_wifi_auto_reconnect,
 }
 
 
@@ -2789,7 +2804,7 @@ NO_COMMAND_REASON = {
     # reason for matrix_rows_without_reason(); their label stays Switchable and
     # their row status stays planned, so this reason is reported, not a hidden pass.
     "wake-word": ("planned", "no own switch or typed control is wired today; planned row", "voiceprint-wiring"),
-    "read-aloud": ("planned", "the read-aloud control is not a registered switch and has no typed path yet", "voiceprint-wiring"),
+    "read-aloud": ("planned", "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin.", "voiceprint-wiring"),
     "spoken-style": ("planned", "spoken style is automatic, not a registered switch or typed control yet", "voiceprint-wiring"),
     "home-status": ("planned", "no own typed phrase is wired for the home-status feature yet", "voiceprint-wiring"),
 
@@ -3068,7 +3083,7 @@ PLANNED_SWITCHABLE = {
     "wake-word": ("voiceprint-wiring",
                   "no own switch or typed control is wired today; a planned row, not a fake phrase"),
     "read-aloud": ("voiceprint-wiring",
-                   "the read-aloud control is not a registered switch and has no typed path yet"),
+                   "The read-aloud switch, its chat and Live words and the speaker on each answer ship. This row is still marked planned only because the switch is its own saved setting rather than one of the registry switches, so the guide has no registry phrase to pin."),
     "spoken-style": ("voiceprint-wiring",
                      "spoken style is automatic, not a registered switch or typed control yet"),
     "home-status": ("voiceprint-wiring",
@@ -3087,7 +3102,11 @@ FEATURE_ADJUST_PHRASES = {
 #: label even though their typed control exists. The old matrix labelled them
 #: Switchable/Adjustable because it looked only at status, not at which app
 #: the feature lives on.
-PC_ONLY_FEATURES = {"calendar", "phone-notifications", "phone-watch"}
+#: 2026-11-08 (Wave 10, owner ruling Q4): the auto Wi-Fi reconnect switch is
+#: PC-only by nature for the same reason - it repairs THIS PC's own link and
+#: the route refuses every device but this PC - so it takes the same label.
+PC_ONLY_FEATURES = {"calendar", "phone-notifications", "phone-watch",
+                    "wifi-auto-reconnect"}
 
 #: Feature id -> (own setting keys, own intent names, expected action values).
 #: Used by control_matrix() and the checker: a phrase is this feature's words
@@ -3924,7 +3943,8 @@ def abilities_directory() -> list:
 # from features/features.json and their count is pinned by several checkers.
 # These four facts are about how Jarvis talks about itself, not new features,
 # so they live here and are held by `backend/test_self_answers.py`.
-SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history")
+SELF_FACT_IDS = ("approval_policy", "watches_ci", "spending_limits", "chat_history",
+                 "github_connect", "model_benchmarks")
 
 SELF_FACTS = {
     "approval_policy": {
@@ -3989,6 +4009,100 @@ SELF_FACTS = {
                      "for how long it is kept, and Forget a time frame for deleting a "
                      "range. Where: Settings, Security, on the PC, and the phone's History "
                      "and Privacy screens. Turning history back on asks on a card first."),
+    },
+    # THE OWNER'S 2026-11-08 REPORT, added 2026-11-08. He saved a GitHub token on
+    # the connect card (the host ran ONE real test: `GET /user`), typed "i added a
+    # token", and the CODING-preset model answered "I've tested the token and it
+    # works. I can now access your GitHub repositories and perform actions like
+    # cloning, pushing, and pulling code" - then contradicted itself. This family
+    # is the bounded self-digest the model's `self_portrait` tool result carries,
+    # so a model turn that is asked about the token has the real surface and the
+    # real never-list instead of an invented one. `jarvis_quick.py` answers the
+    # same words deterministically from the saved test receipt, before any model.
+    "github_connect": {
+        "family": "github_connect",
+        "digest": ("A GitHub token saved through the connect card is tested ONCE with "
+                   "one GitHub request; that one test proves the token identifies your "
+                   "GitHub account and nothing more. A saved token lets Jarvis search "
+                   "GitHub, see private repositories and watch CI. With the GitHub tools "
+                   "switched on it can also read your repositories, pull requests, issues, "
+                   "CI status and one file, comment, open an issue and re-run a workflow - "
+                   "each on its own approval card. It can NEVER clone, push or pull code, "
+                   "and never merge, commit, close or delete anything: there is no action, "
+                   "card or endpoint for those."),
+        "sentence": ("A GitHub token saved on the connect card is tested once with one "
+                     "GitHub request - that proves the token identifies your GitHub "
+                     "account, nothing more. It lets me search GitHub, see private "
+                     "repositories and watch CI. With the GitHub tools switched on I can "
+                     "also read your repositories, pull requests, issues, CI status and "
+                     "one file, comment, open an issue and re-run a workflow - each on "
+                     "its own approval card. I can never clone, push or pull code, and "
+                     "never merge, commit, close or delete anything."),
+        # The capability half alone, for the deterministic chat answer after a
+        # connect-card save: short, and the same words as `sentence`'s second
+        # half. One source of truth for both.
+        # NO "cloning / pushing / pulling" in this chat-facing half (GH-5): the
+        # overclaim words an owner reads as "so you can do that". The refusal is
+        # the same fact in plain words.
+        "short": ("It lets me search GitHub, see private repositories and watch CI; "
+                  "with the GitHub tools switched on, it can also read your "
+                  "repositories, pull requests, issues, CI status and one file, "
+                  "comment, open an issue and re-run a workflow - each on its own "
+                  "approval card. I never copy a repository to this PC, send code "
+                  "back to GitHub, or change code in any way: there is no action, "
+                  "card or endpoint for that, and no merge action or merge card "
+                  "either."),
+        # The same never-list, said as the answer to "can you clone/push/pull?".
+        # Kept here so the fixed answer, the model's digest and the chat receipt
+        # answer cannot drift apart.
+        "never": ("No - I never copy a repository to this PC, send code back to "
+                  "GitHub, or change code in any way: there is no action, card or "
+                  "endpoint for that, so approving a card cannot create one. What a "
+                  "saved token does let me do: search GitHub, see private repositories "
+                  "and watch CI; and with the GitHub tools switched on, read your "
+                  "repositories, pull requests, issues, CI status and one file, comment, "
+                  "open an issue and re-run a workflow - each on its own approval card. "
+                  "There is no merge action and no merge card at all."),
+    },
+    # THE OWNER'S 2026-11-08 ASK: "talk about the local AI models - what has
+    # been measured, start Benchmarks, what a better models for the current
+    # Presets, what are the current models for the current Presets". This digest
+    # is what the model's `self_portrait` tool result carries, so a model turn
+    # cannot contradict the deterministic answers or invent a measurement.
+    "model_benchmarks": {
+        "family": "model_benchmarks",
+        "digest": ("You can ask about the local models, all answered on this PC: "
+                   "what has been measured (speed runs and the five suite "
+                   "scorecards, with the date), which model each preset uses, "
+                   "whether a candidate is MEASURED ON THIS PC or only an "
+                   "ESTIMATED FIT (run benchmark to verify), and what model ran "
+                   "before from the change journal. A benchmark is started by "
+                   "asking and uses a throwaway model server on a spare port, "
+                   "never a live lane's own server directly; it may pause the lane "
+                   "it needs and puts the active preset back. No number may be "
+                   "invented, and a model is never called better until a benchmark "
+                   "measured it for that preset."),
+        "sentence": ("Yes. You can talk to me about the local models and I answer "
+                     "from this PC's own records, never the model's memory. Ask "
+                     "\"what has been measured?\" and I read the newest speed runs "
+                     "and the five suite scorecards - speed, coding, general, "
+                     "tool-calling and vision - with their dates. Ask \"what models "
+                     "do the current presets use?\" and I list each preset's model, "
+                     "card and context window. Ask \"what is a better model for the "
+                     "coding preset?\" and I give the current model plus the "
+                     "hardware-aware list's candidates, each labelled MEASURED ON "
+                     "THIS PC or ESTIMATED FIT (run benchmark to verify) - a "
+                     "candidate is never called better until a benchmark measured "
+                     "it for that preset. To start one, say \"start a benchmark\" "
+                     "(the current model's speed) or \"start the benchmark suites\" "
+                     "(all five), or name one like \"benchmark the coding model\": "
+                     "it uses a throwaway model server on a spare port, never your "
+                     "live lane's own server directly, may pause the lane it needs "
+                     "and puts your active preset back afterwards, refuses while I "
+                     "am answering a turn, and only one runs at a time. The results "
+                     "are kept in Brain, Model, Models. Ask \"what did you use "
+                     "before?\" and I read the change journal - with nothing "
+                     "recorded I say so instead of guessing."),
     },
 }
 

@@ -1013,6 +1013,266 @@ def _set_active_url(url: str) -> bool:
 
 
 
+# --------------------------------------------------------------------------
+#   After a RESTART: the on-demand pooled lane does not come back (2026-11-08)
+# --------------------------------------------------------------------------
+#
+# THE GAP THIS CLOSES (measured live, 2026-11-08). The Coding preset's lane is
+# NOT a Windows logon task - by the owner's 2026-11-04 decision there is no
+# third lane task, because a pooled Ollama that starts with Windows would hold
+# every card against the everyday model. It is ONE `ollama serve` this process
+# starts on demand (`jarvis_model_lanes.start_pooled_lane`, port 11450). Three
+# things survive a restart while that server does not:
+#   * `presets-choice.json` still says "coding";
+#   * `presets-active-lane.json` still says http://127.0.0.1:11450, and the
+#     HUD patch's active_ollama_url() points every chat turn there;
+#   * `model-state.json` still says the current model is the pooled 30B.
+# Tonight's deploy restarted the backend at 18:56 and all three were left as
+# they were: coding-routed chats then failed with "The local model is not
+# running" (a false sentence - the everyday lane was fine), and the wake-time
+# warm-up loaded the pooled 30B on the ONE-card everyday lane at Ollama's 8192
+# context, which is the HUD's 74%-on-GPU / 26%-CPU warning. Both are the same
+# state inconsistency, so this is where it is repaired.
+#
+# WHAT IT DOES, and what it deliberately does NOT do:
+#   * only when the remembered lane is the POOLED port and nothing answers
+#     there - the two logon-task lanes are left alone (their own Windows tasks
+#     race the backend at logon, and a briefly-down everyday lane is not this
+#     bug);
+#   * points the chat lane back at the configured lane (OLLAMA_URL, the
+#     everyday model), rolls the model back to the one it replaced, and forgets
+#     the preset that cannot be served - so the HUD's Presets screen says
+#     plainly that nothing is chosen instead of lying;
+#   * it never STARTS the pooled lane and never raises a card: starting the
+#     three-card lane is a model switch the owner approves, and a background
+#     reconcile must not approve one for him. Re-applying the Coding preset is
+#     the one carded action that brings the pooled lane back;
+#   * it never touches a lane that answers, never downloads, never leaves this
+#     PC, and never raises.
+
+LANE_FILE_NAME = "presets-active-lane.json"
+_LAST_RECONCILE: dict = {"changed": False, "why": "not run yet"}
+
+
+def _persisted_lane_url() -> str:
+    """The lane `presets.patch`'s active_ollama_url() reads, or "". Never raises."""
+    import json
+    try:
+        doc = json.loads((_config_dir() / LANE_FILE_NAME).read_text(encoding="utf-8"))
+        url = str(doc.get("base_url") or "").strip().rstrip("/")
+    except Exception:
+        return ""
+    if url.startswith(("http://127.0.0.1:", "http://localhost:")):
+        return url
+    return ""
+
+
+def _pooled_port() -> int:
+    """The pooled lane's own port, from the module that owns it (never typed)."""
+    try:
+        import jarvis_model_lanes
+        return int(jarvis_model_lanes.POOLED_PORT)
+    except Exception:
+        return 11450
+
+
+def _lane_answers(url: str, timeout: float = 2.0) -> bool:
+    """Does this loopback lane answer /api/version? Read-only; False on any error."""
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/api/version",
+                                    timeout=float(timeout)) as resp:
+            return int(getattr(resp, "status", 0) or 0) == 200
+    except Exception:
+        return False
+
+
+#: How long the Q4 probe may take. ONE TCP connect; no HTTP, no model, no card.
+_POOLED_PROBE_TIMEOUT_S = 0.35
+
+
+def _port_of_url(url) -> Optional[int]:
+    """The loopback port a lane URL names, or None. Never raises."""
+    try:
+        import urllib.parse
+        parts = urllib.parse.urlsplit(str(url or "").strip())
+        if (parts.hostname or "").lower() not in ("127.0.0.1", "localhost", "::1"):
+            return None
+        port = int(parts.port or 0)
+        return port if 0 < port < 65536 else None
+    except Exception:
+        return None
+
+
+def _lane_listening(url: str, timeout: float = _POOLED_PROBE_TIMEOUT_S) -> bool:
+    """Something is LISTENING on this loopback lane's port - one TCP connect.
+
+    Q4 (2026-11-08): this is the whole probe the chat-lane getter is allowed to
+    do. It opens no HTTP request, sends no /api/generate or /api/chat, loads no
+    model, pauses no lane and starts nothing; sub-second by construction.
+    """
+    import socket
+    port = _port_of_url(url)
+    if not port:
+        return False
+    try:
+        with socket.create_connection(("127.0.0.1", int(port)),
+                                      timeout=float(timeout)):
+            return True
+    except Exception:
+        return False
+
+
+def active_chat_url(default: str = "") -> str:
+    """Q4: the chat lane, with a dead POOLED pointer repaired atomically here.
+
+    The HUD patch's `active_ollama_url()` calls this for every chat turn. When
+    `presets-active-lane.json` names the on-demand pooled lane (`_pooled_port()`,
+    11450) and a fast TCP probe shows nothing is listening there, it puts the
+    file back - atomically, through the one setter every lane write uses - to the
+    configured lane (`OLLAMA_URL`, normally 11436) and returns it, so a chat turn
+    answers instead of failing "The local model is not running".
+
+    What it deliberately does NOT do: never starts/auto-spawns the pooled server
+    (a status/HUD poll calls this; starting the three-card lane would pause the
+    ordinary lanes and cold-load 13.8 GB inside a poll), never pauses or stops a
+    lane, never asks a model anything, never raises.
+    """
+    fallback = str(default or "").strip().rstrip("/") or _active_url()
+    lane = _persisted_lane_url()
+    if not lane:
+        return fallback                       # no file / not loopback: today's rule
+    if _port_of_url(lane) == _pooled_port() and not _lane_listening(lane):
+        _set_active_url(fallback)
+        return fallback
+    return lane
+
+
+def pooled_num_ctx() -> Optional[int]:
+    """The pooled lane's configured window, from the ONE lane config (MODES)."""
+    try:
+        import jarvis_model_lanes as lanes
+        profile = lanes.pooled_profile()
+        return int(profile.get("num_ctx") or lanes.POOLED_CTX)
+    except Exception:
+        try:
+            import jarvis_big_coder as big
+            return int(big.mode_profile(big.DEFAULT_MODE).num_ctx)
+        except Exception:
+            return None
+
+
+def lane_num_ctx(url) -> Optional[int]:
+    """The configured `num_ctx` a chat request on LANE `url` must carry, or None.
+
+    Q5 (2026-11-08): only the pooled lane has a window the chat request has to
+    NAME - its 49,152 measurement - because Ollama otherwise loads at the
+    model's own default (8192 here). Every other lane keeps today's behaviour:
+    its server carries the window in its environment and the request sends no
+    options. The number comes from the lane module's own config, never a second
+    copy here.
+    """
+    if _port_of_url(url) != _pooled_port():
+        return None
+    return pooled_num_ctx()
+
+
+def is_pooled_model(model) -> bool:
+    """Is `model` a pooled-lane (three-card) model name? Never a 11436 client.
+
+    Q6 (2026-11-08): the everyday lane must never be asked to load one of these
+    - the 30B model cannot fit one card, and loading it there is the duplicate
+    copy (74% GPU / 26% CPU) the owner photographed.
+    """
+    name = str(model or "").strip()
+    if not name:
+        return False
+    try:
+        import jarvis_big_coder as big
+        if str(getattr(big, "MODEL", "") or "").strip() == name:
+            return True
+        for key in getattr(big, "MODES", ()) or ():
+            profile = big.MODES[key] if isinstance(big.MODES, dict) else key
+            if str(getattr(profile, "model", "") or "").strip() == name:
+                return True
+    except Exception:
+        pass
+    try:
+        import jarvis_model_lanes as lanes
+        if str(getattr(lanes, "POOLED_MODEL", "") or "").strip() == name:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def reconcile_after_restart(*, probe=None, set_active_url=None,
+                            rollback_model=None) -> dict:
+    """Repair the persisted preset state when the on-demand pooled lane is gone.
+
+    Called ONCE by `install()` in the real HUD process (see `_warm_on_startup`);
+    every seam is injectable so the suite proves all three outcomes without a
+    socket, a model or a card. Returns {"changed", "why", "lane", "preset"}.
+    """
+    import os as _os
+    if _os.environ.get("JARVIS_SUITE_RUNNING") and not _os.environ.get(
+            "OPENJARVIS_CONFIG_DIR"):
+        # A suite that forgot to point OPENJARVIS_CONFIG_DIR at its own temp
+        # folder must NEVER read, let alone rewrite, the owner's live preset
+        # files (this happened once in a smoke check, 2026-11-08; content was
+        # restored at once). It is a bug in the caller, so it is refused loudly.
+        return {"changed": False, "lane": "", "preset": "",
+                "why": ("refused: a suite run must point OPENJARVIS_CONFIG_DIR at "
+                        "its own temp folder; nothing was touched")}
+    lane = _persisted_lane_url()
+    if not lane:
+        return {"changed": False, "why": "no preset has been applied on this PC yet",
+                "lane": "", "preset": ""}
+    port = _pooled_port()
+    if f"127.0.0.1:{port}" not in lane and f"localhost:{port}" not in lane:
+        # A logon-task lane is restarted by its own Windows task at logon; a
+        # briefly-down one is NOT this restart gap, so its files stay as they are.
+        return {"changed": False,
+                "why": (f"the remembered lane is not the on-demand pooled lane "
+                        f"(port {port}); it is started by its own Windows task"),
+                "lane": lane, "preset": str(choice() or "")}
+    probe = probe or _lane_answers
+    if probe(lane):
+        return {"changed": False, "why": "", "lane": lane,
+                "preset": str(choice() or "")}
+    target = _active_url()
+    lane_ok = bool((set_active_url or _set_active_url)(target))
+    rolled = False
+    try:
+        got = (rollback_model or _default_rollback_model)()
+        rolled = isinstance(got, dict) and got.get("ok") is not False
+    except Exception:
+        rolled = False
+    preset = str(choice() or "")
+    cleared = False
+    try:
+        _choice_path().unlink()
+        cleared = True
+    except FileNotFoundError:
+        cleared = True
+    except Exception:
+        cleared = False
+    why = (
+        f"the remembered preset ({preset or 'one with no name'}) needed the "
+        f"on-demand three-card lane at {lane}, which does not survive a "
+        f"restart; chat was pointed back at {target}"
+        + (", the previous model was restored" if rolled else
+           " (the previous model could not be restored)")
+        + (", and the preset was forgotten" if cleared else
+           ", but the preset file could not be cleared")
+        + ". Apply the preset again to bring the three-card lane back.")
+    return {"changed": bool(lane_ok or rolled or cleared), "why": why,
+            "lane": target, "preset": preset, "pooled_lane": lane,
+            "lane_ok": lane_ok, "model_rolled_back": rolled,
+            "preset_cleared": cleared}
+
+
 def _active_lane_key() -> Optional[str]:
     url = _active_url()
     for key, lane in LANES.items():
@@ -1067,6 +1327,9 @@ def live_status() -> dict:
         "chosen_preset": chosen,
         "chosen_model": chosen_preset.model if chosen_preset else None,
         "active_lane": {"key": lane_key, "base_url": _active_url()},
+        # What the startup reconcile did after the last restart (2026-11-08).
+        # A read: it changes nothing and is empty on a PC with no pooled preset.
+        "restart_reconcile": dict(_LAST_RECONCILE),
         "lane": lane,
         "lane_status": lane,
         "apply_path": APPLY_PATH,
@@ -1482,6 +1745,21 @@ def install(Handler, *, origin_ok, token_ok, read_body):
         return self._send(code, out)
 
     Handler.do_POST = do_POST
+    # Repair the persisted preset state BEFORE anything reads it: an on-demand
+    # pooled lane does not survive a restart, and a chat lane left pointing at
+    # its dead port fails every coding-routed turn with a false "not running"
+    # (and lets a wake-time warm-up load the pooled 30B on one card). Real HUD
+    # process only, the same rule as the card warm below, so a suite's
+    # install() stays off the owner's PC.
+    global _LAST_RECONCILE
+    if _warm_on_startup():
+        try:
+            _LAST_RECONCILE = reconcile_after_restart()
+            if _LAST_RECONCILE.get("changed"):
+                print("  presets    " + str(_LAST_RECONCILE.get("why") or ""))
+        except Exception as exc:                     # noqa: BLE001 - never blocks start-up
+            _LAST_RECONCILE = {"changed": False,
+                               "why": f"{type(exc).__name__}: the startup check failed"}
     # Warm the card detection while the HUD finishes starting, so the first
     # GET /api/work does not pay the ~10 s `nvidia-smi` + lane-probe cost. The
     # request path never does it again once a snapshot exists (see above).
