@@ -1,5 +1,9 @@
 # Field-test matrix - what has actually run on the owner's own devices
 
+> **For the Wave 9–13 sweep (2026-11-09 onward) see
+> [`FIELD-TEST-MATRIX-2026-11-09.md`](FIELD-TEST-MATRIX-2026-11-09.md).** The
+> October/early-November rows below are kept intact and unchanged.
+
 **Written 2026-10-11. Checkout `.dsh-scratch/field-matrix` (branch `docs/field-test-matrix`) off `origin/main` `70077268`.**
 
 The owner asked: *"are there any features that haven't been field tested on the real world jarvis android app or desktop app? Or conversation driven features that haven't been? I want thorough testing on everything."*
