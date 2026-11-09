@@ -2861,14 +2861,13 @@ function advisorRecommenderSection(panel) {
   const title = el("h4", "", panel.title);
   title.id = "model-recommender-title";
   wrap.append(title);
+  // ONE hardware sentence, one tier: the panel's hardwareWords already ends
+  // "It is the <tier label> tier: <tier words>." - printing the tier again as
+  // its own paragraph was the duplicate the owner photographed (Wave 11).
   if (panel.hardwareWords) {
     const words = el("p", "note model-recommender-hardware", panel.hardwareWords);
     words.id = "model-recommender-hardware";
     wrap.append(words);
-  }
-  if (panel.tierLabel) {
-    wrap.append(el("p", "note model-recommender-tier",
-      `${panel.tierLabel}${panel.tierWords ? `: ${panel.tierWords}` : ""}`));
   }
   if (panel.rows.length) {
     const list = el("div", "rows");

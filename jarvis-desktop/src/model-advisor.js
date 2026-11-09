@@ -941,7 +941,15 @@ export function recommenderRowView(row) {
     meta.push(`needs about ${row.vram_needed_gib} GiB${ctx}`);
   }
   if (textOr(row.why)) meta.push(textOr(row.why));
-  if (textOr(row.measured_note)) meta.push(textOr(row.measured_note));
+  const measuredNote = textOr(row.measured_note);
+  if (measuredNote) {
+    // WAVE 11: a catalogue measurement and the fit estimate above it are two
+    // different claims (MiniCPM-V "fits on one card" beside its "across three
+    // cards" run), so the measurement is labelled as one - once, in one place.
+    meta.push(measuredNote.startsWith("Separately measured on 2026-11-07:")
+      ? measuredNote
+      : `Separately measured on 2026-11-07: ${measuredNote}`);
+  }
   return {
     model: textOr(row.model),
     label: textOr(row.label) || textOr(row.model) || "(unnamed)",
@@ -973,9 +981,19 @@ export function recommenderPanel(payload) {
   const notes = (Array.isArray(rec.notes) ? rec.notes : [])
     .map(textOr).filter(Boolean);
   const words = textOr(rec.words);
-  const hardwareWords = textOr(hardware.words);
   const tierLabel = textOr(tier.label);
   const tierWords = textOr(tier.words);
+  // WAVE 11: the PC's hardware sentence already ends "It is the <tier label>
+  // tier: <tier words>." (jarvis_model_recommender.hardware_words), so the
+  // tier must not be printed by anyone a second time. If an older panel's
+  // sentence does not carry it, append it here - still exactly once.
+  let hardwareWords = textOr(hardware.words);
+  if (tierLabel && !hardwareWords.includes(tierLabel)) {
+    const tierSentence = `${tierLabel}${tierWords ? `: ${tierWords}` : ""}`;
+    hardwareWords = hardwareWords
+      ? `${hardwareWords} It is the ${tierSentence}.`
+      : `It is the ${tierSentence}.`;
+  }
   if (!rows.length && !notes.length && !words && !hardwareWords && !tierLabel) {
     return null;
   }
@@ -1017,8 +1035,10 @@ export function recommenderNotShownLine(panel) {
 export function recommenderText(panel) {
   if (!panel) return "";
   const lines = [panel.title];
+  // ONE hardware sentence, one tier: hardwareWords already carries the tier
+  // when the panel has it (Wave 11 duplicate-paragraph fix).
   if (panel.hardwareWords) lines.push(panel.hardwareWords);
-  if (panel.tierLabel) {
+  else if (panel.tierLabel) {
     lines.push(`${panel.tierLabel}${panel.tierWords ? `: ${panel.tierWords}` : ""}`);
   }
   for (const row of panel.rows) {
