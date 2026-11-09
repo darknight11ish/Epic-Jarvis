@@ -2156,26 +2156,40 @@ dropped), and `remember_last`: `{"at", "queued", "reason", "note",
 sentence meant to be shown as-is ("This exact wording is already waiting for
 your review.").
 
-**The "retire this?" card** (`feedback.patch`) is a row in this same queue
-with `source == "feedback_retire"`, `confidence: null`, and
+**The two feedback cards** (`feedback.patch`, Right/Wrong v2, owner ruling Q2
+2026-11-08) are rows in this same queue with `confidence: null` and
 `replaces_id`/`replaces_text` naming a stored fact that keeps turning up in
-answers the owner marked wrong. Its buttons must NOT read Keep / Discard:
-accepting it (`/api/memory/decide {"id", "accept": true}`) **retires** the
-fact, and discarding it keeps the fact exactly as it is. Label accept
-"Retire it" and discard "Keep using it"; show `replaces_text` as the fact in
-question and `text` as the reason; show no confidence; no "Both are true".
-**Android** labels accept "Stop using this fact" (the same action in plainer
-words) and discard "Keep using it", with the line "Stopping it does not delete
-it. The fact stays in the history - Jarvis just stops using it."
-The desktop labels it the same way as the phone (`brain.js` `proposalRow`);
-an older client's plain Keep button would say the opposite of what happens
-on this card, which is why it is hidden unless asked for:
+answers the owner marked wrong:
+
+- `source == "feedback_correction"` - an ORDINARY review card whose `text` is
+  the owner's own correction words, proposed as the fact's replacement.
+  Accepting it (`/api/memory/decide {"id", "accept": true}`) stores the
+  correction, retires the old fact (history kept) and adds nothing else - the
+  queue's own accept rule is the only writer. Label accept "Update the fact"
+  and discard "Keep it as it is".
+- `source == "feedback_retire"` - the queue's existing "retire this?" card,
+  raised only when the owner marked an answer wrong and typed NO correction.
+  Accepting it **retires** the fact, and discarding it keeps the fact exactly
+  as it is. Label accept "Forget that fact" and discard "Keep using it".
+
+Show `replaces_text` as the fact in question and `text` as the reason; show no
+confidence; no "Both are true". **Android** labels the same four strings (the
+same actions in plainer words), with the line "Stopping it does not delete it.
+The fact stays in the history - Jarvis just stops using it."
+The desktop labels them the same way as the phone (`brain.js` `proposalRow`,
+both strings from `memory-words.js`); an older client's plain Keep button would
+say the opposite of what happens on the retire card, which is why that card is
+hidden unless asked for:
 
 **So the card is hidden unless asked for.** `GET /api/memory/pending` leaves
 out every `source == "feedback_retire"` row. A client that shows the card
 with the labels above asks for it with `GET /api/memory/pending?retire_cards=1`
 (exactly `1`; anything else is the same as not asking), and gets those rows
-in the same `pending` list as every other card. A client that has not been
+in the same `pending` list as every other card. The correction card
+(`source == "feedback_correction"`) is an ordinary proposal and is never
+hidden: every client that already shows the review queue shows it, and the two
+labels above are what keep its meaning ("update", not "keep") straight. A
+client that has not been
 changed never sees one, so its Keep button can never retire a fact. Hidden
 from the list is not removed from the queue: the card waits, undecided, until
 a client that asks shows it. Two things still count it, and a client should
@@ -16504,15 +16518,23 @@ waiting at once:
 
 ### 78.4 The cards: the ones both apps already show
 
-Each is an ordinary "stop using this fact?" card in the review queue
-(`source: "feedback_retire"`, `replaces_id` the fact) - the card both apps
-already label "Stop using this fact" / "Keep using it" (section 6, and the
-phone's `MemoryCards`), shown only to a client that asks with
-`retire_cards=1`. One card, one fact, one decision; nothing is decided in
-bulk.
+Each is an ordinary review card about one remembered fact (`replaces_id` the
+fact), and both apps label the two kinds from one source (section 6, and the
+phone's `MemoryCards`). One card, one fact, one decision; nothing is decided
+in bulk.
 
-- **Stop using this fact**: the owner's own `jarvis_extract._accept_retire`
-  calls `MemoryStore.retire(fact)`. For a tidy card, `retire()` sees the
+- **"Update the fact" / "Keep it as it is"** - the correction card
+  (`source: "feedback_correction"`, raised when the owner marked an answer
+  wrong and typed his own correction words): an ordinary proposal whose
+  `text` is the correction and whose `replaces_id` names the fact it would
+  replace. Accepting it stores the correction, retires the old fact (history
+  kept) and adds nothing else; discarding it keeps the fact as it is.
+- **"Forget that fact" / "Keep using it"** - the "retire this?" card
+  (`source: "feedback_retire"`, raised when the owner marked an answer wrong
+  and typed no correction), shown only to a client that asks with
+  `retire_cards=1`. Accepting it FORGETS the fact: the owner's own
+  `jarvis_extract._accept_retire` calls `MemoryStore.retire(fact)`. For a
+  tidy card, `retire()` sees the
   card being accepted (`tidy_cards` joined to the proposal in state
   `accepting`, the claim decide-once.patch makes) and ENDS the fact as
   history instead of filing a Forget: "Still true?" ends it on the date its
