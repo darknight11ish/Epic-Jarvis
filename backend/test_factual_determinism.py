@@ -651,6 +651,141 @@ def t_no_answer_overclaims_what_jarvis_did():
           not bad, bad[:6])
 
 
+# --------------------------------------------------------------------------
+# 11. The Q3.3 unknown setting/feature fallback (owner ruling 2026-11-08)
+# --------------------------------------------------------------------------
+
+#: The ruling's own sentence, in this code's words. The suite pins it as the
+#: ONLY answer: not a model sentence, not a guess, not a near-miss.
+UNKNOWN_POSITIVES = (
+    "what is the turbo setting set to",
+    "what is the turbo mode set to",
+    "what is the flux capacitor set to",
+    "is the turbo setting on",
+    "is the turbo setting switched on",
+    "is the flux capacitor setting on",
+    "is the turbo switch on",
+    "is the turbo option on",
+    "is the turbo feature on",
+    "is the quantum flux option enabled",
+    "what's the doohickey preference set to",
+    "what is my quantum thing set to",
+)
+
+#: Ordinary requests and questions whose route was measured BEFORE the fallback
+#: and must be identical after it: one changed route here is a regression, not a
+#: test detail. None means "no deterministic owner - the model path, as before".
+UNKNOWN_GUARD = {
+    # The owner's three examples from the ruling/Lead brief.
+    "can you open spotify": "open_app",
+    "do you have plans tomorrow": None,
+    "turn off the kitchen lights": "honest_chat",
+    # Ordinary capability/action requests keep their action doors.
+    "can you read my notes": "note_read",
+    "can you teleport me to mars": None,
+    "do you have my keys": "cloud_honesty",
+    "do you have a car": None,
+    "turn on the fan": "honest_chat",
+    "turn on turbo mode": None,
+    "how do i connect you to github": "connect_account",
+    # Device and context questions are not Jarvis settings.
+    "is my phone on": None,
+    "is wifi on": None,
+    "is the oven on": None,
+    "is the kitchen light switch on": None,
+    "is spotify playing": None,
+    "what is my alarm set to": None,
+    "what is my timer set to": None,
+    "what is the thermostat set to": None,
+    "what is it set to": None,
+    "set the timer to 5 minutes": None,
+    # Known rows keep their own deterministic owner.
+    "is read aloud on": "self_read_aloud",
+    "is background learning on": "feature_state_setting",
+    "is the read replies out loud switch on": "self_read_aloud",
+    "what time is it": "time_now",
+}
+
+#: A deterministic read is one that answers from this PC's own words, takes the
+#: `quick:` route (never the model) and opens no card.
+
+
+def t_an_unknown_name_is_answered_honestly():
+    """Q3.3: a self setting/switch question naming nothing installed is answered
+    in fixed words, on the quick route, with the model entry point blocked."""
+    import jarvis_agent as A
+    names = ("run_local_turn", "_post", "_open_stream")
+    saved = {n: getattr(A, n, None) for n in names}
+
+    def boom(*a, **k):
+        raise AssertionError("the model entry point was called")
+
+    for n in names:
+        if saved[n] is not None:
+            setattr(A, n, boom)
+    try:
+        with no_network(), no_gate():
+            for sentence in UNKNOWN_POSITIVES:
+                got = Q.match(sentence)
+                check(f"Q3.3 {sentence!r} is matched deterministically",
+                      got is not None and got.name == "unknown_self_name", got)
+                if got is None or got.name != "unknown_self_name":
+                    continue
+                try:
+                    res = Q.answer_turn(body(sentence))
+                except AssertionError as exc:      # the gate guard or the model
+                    check(f"Q3.3 {sentence!r} does not touch the gate/model",
+                          False, str(exc))
+                    continue
+                check(f"Q3.3 {sentence!r} answers with the ruling's sentence",
+                      res is not None and res.reply == Q.UNKNOWN_SELF_NAME_WORDS,
+                      None if res is None else res.reply[:160])
+                if res is None:
+                    continue
+                check(f"Q3.3 {sentence!r} takes the quick: route",
+                      Q.route_fields(res).get("quick") == "unknown_self_name",
+                      Q.route_fields(res))
+                check(f"Q3.3 {sentence!r} changes nothing and reads no file",
+                      "unknown_self_name" in Q.READ_ONLY_INTENTS
+                      and "unknown_self_name" in Q._PRIVATE_DETERMINISTIC_READS)
+                private = Q.answer_turn(body(sentence, private=True))
+                check(f"Q3.3 {sentence!r} is the same in a private chat",
+                      private is not None
+                      and private.reply == Q.UNKNOWN_SELF_NAME_WORDS,
+                      None if private is None else private.reply[:160])
+    finally:
+        for n in names:
+            if saved[n] is not None:
+                setattr(A, n, saved[n])
+    check("Q3.3 the ruling's words name both deterministic lists",
+          "what can I change?" in Q.UNKNOWN_SELF_NAME_WORDS
+          and "what do you have?" in Q.UNKNOWN_SELF_NAME_WORDS)
+    check("Q3.3 the sentence never claims a change",
+          "changed" not in Q.UNKNOWN_SELF_NAME_WORDS.lower())
+
+
+def t_ordinary_questions_keep_their_old_routes():
+    """Q3.3 guard: the fallback is a NO-OP for ordinary chat and for every
+    sentence another matcher already owned. A route that moved is a failure."""
+    moved = []
+    for sentence, expected in UNKNOWN_GUARD.items():
+        got = Q.match(sentence)
+        actual = None if got is None else got.name
+        if actual != expected:
+            moved.append((sentence, expected, actual))
+        if expected is not None:
+            res = Q.answer_turn(body(sentence))
+            if res is None and sentence not in ("can you teleport me to mars",):
+                moved.append((sentence, "answered", None))
+    check("Q3.3 the fallback never claims an ordinary question (25 routes pinned)",
+          not moved, moved[:8])
+    check("Q3.3 no guard sentence was silently captured as an unknown name",
+          all((Q.match(s) is None or Q.match(s).name != "unknown_self_name")
+              for s in UNKNOWN_GUARD),
+          [s for s in UNKNOWN_GUARD
+           if Q.match(s) is not None and Q.match(s).name == "unknown_self_name"])
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn) and fn.__module__ == "__main__":
