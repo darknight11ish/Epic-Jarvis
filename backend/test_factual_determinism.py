@@ -698,6 +698,8 @@ UNKNOWN_GUARD = {
     "what is my timer set to": None,
     "what is the thermostat set to": None,
     "what is it set to": None,
+    "what is my name set to": None,
+    "what is the time set to": None,
     "set the timer to 5 minutes": None,
     # Known rows keep their own deterministic owner.
     "is read aloud on": "self_read_aloud",
@@ -777,7 +779,7 @@ def t_ordinary_questions_keep_their_old_routes():
             res = Q.answer_turn(body(sentence))
             if res is None and sentence not in ("can you teleport me to mars",):
                 moved.append((sentence, "answered", None))
-    check("Q3.3 the fallback never claims an ordinary question (25 routes pinned)",
+    check("Q3.3 the fallback never claims an ordinary question (27 routes pinned)",
           not moved, moved[:8])
     check("Q3.3 no guard sentence was silently captured as an unknown name",
           all((Q.match(s) is None or Q.match(s).name != "unknown_self_name")

@@ -2391,6 +2391,14 @@ def _unknown_self_name_candidate(name: str) -> bool:
     if any(word in ("it", "this", "that", "those", "these", "you", "jarvis",
                     "i", "me", "we") for word in words):
         return False
+    # A self FACT with its own owner elsewhere: "what is my name set to" and
+    # "what is the time set to" are not setting names, so the fallback must not
+    # turn them into "no such setting". (The words themselves, not the whole
+    # name, so "what is the time machine setting set to" is still an unknown
+    # setting - a setting shape with a name nothing has.)
+    if any(word in ("name", "time", "date", "day", "birthday", "age")
+           for word in words):
+        return False
     if any(word in _UNKNOWN_DEVICE_WORDS for word in words):
         return False
     return not _unknown_name_is_known(text)
