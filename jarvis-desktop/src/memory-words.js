@@ -52,6 +52,32 @@ export const WORDS = Object.freeze({
   true_from: "true from",
 });
 
+/**
+ * The two answers on a review card that came from a Right/Wrong mark on one
+ * answer (feedback.patch, Wave 10, 2026-11-08; the owner's ruling Q2 section
+ * 1.5 names these four strings exactly). ONE place: `brain.js`'s
+ * `proposalRow` draws its buttons from here, and `tests/memory-words.mjs`
+ * holds the words, so the two feedback cards cannot drift from the ruling or
+ * from each other.
+ *
+ * - `feedback_correction`: the owner marked an answer wrong AND typed what
+ *   should have been said, so accepting UPDATES the remembered fact with
+ *   those words (the old row is retired, its history kept).
+ * - `feedback_retire`: no correction was typed, so the only useful action is
+ *   FORGETTING the fact the answer leaned on - it stops being used and stays
+ *   in the history.
+ */
+export const MEMORY_CARD_ACTIONS = Object.freeze({
+  feedback_correction: Object.freeze({
+    accept: "Update the fact",
+    discard: "Keep it as it is",
+  }),
+  feedback_retire: Object.freeze({
+    accept: "Forget that fact",
+    discard: "Keep using it",
+  }),
+});
+
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ISO_IN_TEXT = /\b(\d{4}-\d{2}-\d{2})\b/g;
 

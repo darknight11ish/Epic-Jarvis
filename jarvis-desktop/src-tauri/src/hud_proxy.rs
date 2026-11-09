@@ -126,6 +126,13 @@ const CALENDAR_PATH: &str = "/api/calendar";
 /// are the only ones this page sends: the full read the phone's Learning plate
 /// also makes (`retire_cards=1&sleep_offer=1`) when the tab opens, and the
 /// `retire_cards=1` refresh on the same 30-second beat as the banner.
+///
+/// Wave 10 (2026-11-08, ruling Q2 section 1.5): EVERY desktop read of this
+/// queue asks for retire cards, because this app labels them ("Forget that
+/// fact" / "Keep using it"). The page's older banner still builds the bare
+/// path, so the bare form is normalised to the retire-aware refresh here -
+/// the proxy is the one place every desktop HUD read passes through, and a
+/// client that never asks never sees a retire card at all.
 const MEMORY_PENDING_PATH: &str = "/api/memory/pending";
 const MEMORY_PENDING_QUERY: &str = "retire_cards=1&sleep_offer=1";
 const MEMORY_PENDING_RETIRE_QUERY: &str = "retire_cards=1";
@@ -188,11 +195,15 @@ pub fn allowed_get(path: &str) -> Option<String> {
         }
         // The Memory tab's pending-card list (2026-10-31): the same read the
         // phone's Learning plate makes, plus the retire-only refresh the HUD's
-        // own beat sends. The bare path stays allowed for the existing banner,
-        // and every other query is refused here, before it reaches the PC.
+        // own beat sends. Wave 10: the bare form the banner still builds is
+        // normalised to the retire-aware refresh, so no desktop read of this
+        // queue can silently leave retire cards out (Q2 section 1.5). Every
+        // other query is refused here, before it reaches the PC.
         if route == MEMORY_PENDING_PATH {
             return match query {
-                None => Some(MEMORY_PENDING_PATH.to_string()),
+                None => Some(format!(
+                    "{MEMORY_PENDING_PATH}?{MEMORY_PENDING_RETIRE_QUERY}"
+                )),
                 Some(q) if q == MEMORY_PENDING_QUERY || q == MEMORY_PENDING_RETIRE_QUERY => {
                     Some(format!("{MEMORY_PENDING_PATH}?{q}"))
                 }
@@ -572,6 +583,16 @@ mod tests {
         assert_eq!(
             allowed_get("/api/memory/pending?retire_cards=1").as_deref(),
             Some("/api/memory/pending?retire_cards=1")
+        );
+        // Wave 10 (Q2 section 1.5): the page's older BANNER read builds the
+        // bare path. It is still allowed, but it is always rebuilt as the
+        // retire-aware refresh - a desktop read of this queue never omits the
+        // flag, so the count and the list below it agree and a retire card can
+        // never be invisible to the app that labels it.
+        assert_eq!(
+            allowed_get("/api/memory/pending").as_deref(),
+            Some("/api/memory/pending?retire_cards=1"),
+            "a bare desktop pending read stopped asking for retire cards"
         );
         for bad in [
             "/api/memory/pending?sleep_offer=1",

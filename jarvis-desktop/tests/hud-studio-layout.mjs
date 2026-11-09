@@ -115,6 +115,19 @@ check("a hidden stage card stops claiming a grid cell", () => {
     "a hidden stage card can still claim a full-width grid cell");
 });
 
+check("the ruling's wider hidden rule ships too: no shell keeps a hidden cell", () => {
+  // Q1 of the ruling (2026-11-08) words it `#stage > [hidden], .host-card[hidden]`.
+  // The Studio-only rule above is the grid contract; this one is the general
+  // statement, safe in every shell because a hidden element was never meant to
+  // be drawn. `.host-card` is not a class this page uses - checked here rather
+  // than silently widened - the two host-raised cards are #connect-account and
+  // #secret-handoff.
+  assert.match(BLOCK, /(?:^|\n)#stage > \[hidden\]\{display:none !important;\}/,
+    "the wider hidden-stage rule is missing");
+  assert.ok(!/class="host-card"/.test(PAGE) && !/\.host-card\b/.test(PAGE),
+    "the page grew a .host-card class - re-check the ruling's wording");
+});
+
 check("the EDIT-MODE template keeps step, and the Stage-top region keeps row 3", () => {
   // Edit: 10 rows (1 bar | 2 editor banner | 3 Stage-top region | 4 secret |
   // 5 connect | 6 menu | 7 main-screen strip | 8 banner | 9 model-warn |

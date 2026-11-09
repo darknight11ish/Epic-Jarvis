@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   cardLines,
+  MEMORY_CARD_ACTIONS,
   MONTHS,
   plainDate,
   plainDateOf,
@@ -79,6 +80,30 @@ check("plain dates from a time: on this PC's calendar, in the same words", () =>
   assert.equal(plainDateOf(-5), "");
   assert.equal(plainDateOf(Infinity), "");
   assert.equal(plainDateOf(1e20), "");
+});
+
+check("the feedback review cards' four answers are the ruling's words (Q2)", () => {
+  // The owner's ruling of 2026-11-08, Q2 section 1.5, names these four strings
+  // exactly; one wrong word here is a wrong button in the Brain.
+  assert.deepEqual({ ...MEMORY_CARD_ACTIONS }, {
+    feedback_correction: { accept: "Update the fact", discard: "Keep it as it is" },
+    feedback_retire: { accept: "Forget that fact", discard: "Keep using it" },
+  });
+  // ONE source: the Brain's card draws its two buttons from this table and
+  // keeps no hand-typed copy of the labels (the words appear in its comment,
+  // never as a button's own text).
+  const brain = src("brain.js");
+  assert.match(brain, /MEMORY_CARD_ACTIONS\[p\.source\]/,
+    "brain.js does not read the one table of feedback-card answers");
+  assert.match(brain, /button\(feedback\.accept,/,
+    "the accept button is not drawn from the one table");
+  assert.match(brain, /button\(feedback\.discard,/,
+    "the discard button is not drawn from the one table");
+  for (const label of ["Update the fact", "Keep it as it is", "Forget that fact",
+                       "Keep using it"]) {
+    assert.ok(!brain.includes(`button("${label}"`),
+      `brain.js hand-typed ${label} instead of using the table`);
+  }
 });
 
 check("brain.js draws the counts from statusRows and says the new label", () => {

@@ -1380,6 +1380,10 @@ pub fn run() {
             // read-only, opened from Settings and the tray.
             commands::open_features,
             commands::mark_answer,
+            // Wave 10 (Q2.1): the saved why and correction on one answer, read
+            // back through the same shell family as the mark itself, so the
+            // HUD can re-show them when an answer's menu is re-opened.
+            commands::get_feedback_mark,
             // Re-opening the walkthrough on demand, from Settings (the owner,
             // 2026-10-10). It reads and writes no marker: the automatic
             // first-run show below is unchanged.
