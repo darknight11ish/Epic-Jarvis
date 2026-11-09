@@ -31240,6 +31240,112 @@ failure/TOCTOU writing nothing, protected/hidden/symlink/`..` refusals, hidden
 cards, preview sentences and over-capture. It uses a fake gate and a temporary
 vault; the real desktop/phone cards are covered by the field check.
 
+### 170.11 Smart note creation: title, body, pin and date from ONE sentence (added 2026-11-09)
+
+The owner reported, 2026-11-09, having said:
+
+    create a new note called Workout Log, pin it, and add using todays date
+    that i used the punching bag
+
+and having got a note whose **title was the whole sentence** and whose body was
+empty. Measured on the tree before this change: the file was named
+`Workout Log, pin it, and add using todays date that i used the punching
+bag.md` and held nothing. The chat grammar in `jarvis_quick.py` took every word
+after "called" as the name.
+
+This section is that sentence read as the **four facts** it actually holds. It
+is local, deterministic code in `jarvis_quick.py` (no model, no network, no new
+route, no new tool). Both apps reach it through the one they already use:
+`POST /api/chat` -> `jarvis_quick.answer_turn()` -> `answer()` -> `match()`.
+
+**The four facts, and the words that carry them**
+
+| fact | read from |
+|---|---|
+| **title** | the words after `called`/`titled`/`named`, up to the first clause boundary: a comma, `with`/`saying`/`containing`, `and add`/`put`/`write`/`say`/`use`/`set`, a pin clause, or a date clause. A title's own `and` ("Salt and Pepper") and `on` ("Notes on Physics") are kept. |
+| **body** | after the title: `with X` / `containing X` / `saying X`, `add X` / `put X` / `write X` / `say X`, `that X`, or the words after the title's comma. A trailing `and pin it` or `using <date>` is taken back out, and `and put X in it` leaves X. |
+| **pin** | `pin it`, `pin this note`, `and pin it` anywhere in the sentence, before or after the body. `unpin it` in a CREATE writes nothing: a brand-new note is not pinned, so there is no pin to remove and none is pretended. |
+| **date** | `today`, `todays date`, `today's date`, `yesterday`, `tomorrow`, or an explicit date (`2026-11-03`, `3 November`, `November 3rd`, `12/11/2026`), normally after `using` / `dated` / `on` / `for`. Normalised to `YYYY-MM-DD`. An explicit date with **no year is THIS year** - a note records what a date was, unlike a reminder, which looks forward to the next time that day comes. |
+
+The parsing runs on the sentence the chat already normalises (lower case,
+spoken punctuation folded), and the owner's capital letters are restored for
+the title and body exactly as every other chat name is.
+
+**What is written.** A pin and/or a date become the new note's own front
+matter, in the same YAML shape `jarvis_notes_edit.py`'s `set_property` already
+writes (and Obsidian shows in the note's Properties panel). The owner's
+sentence above now writes `Workout Log.md` with exactly:
+
+```markdown
+---
+pinned: true
+date: 2026-11-09
+---
+i used the punching bag
+```
+
+With neither a pin nor a date, the request writes exactly the bytes it wrote
+before this change - no front matter - so every older shape keeps its answer.
+A body-only sentence ("write a note for me about the gym trip") is still a
+body-only note with its title drawn from the words, and `... called Shopping
+with milk and eggs` still has exactly `milk and eggs` as its body.
+
+**The permission model is UNCHANGED, on purpose.**
+
+- **A NEW note from chat is card-free**, the owner's decision of 2026-10-31
+  (Gemini round-3 ruling 2): additive, it cannot destroy content, it is
+  collision-refused (`409` before any card, and the write itself is `O_EXCL`),
+  and its undo receipt is recorded **before** the file exists. This change only
+  changes WHICH words become the title, the body and the two properties.
+- **Pinning or unpinning an EXISTING note is an EDIT**, so it keeps its ONE
+  `edit_vault_note` card, the File Guardian copy first and one Undo. It rides
+  the customize route's own `set_property` / `remove_property` action - no new
+  route, no new card, no second card. Pinning a note that is already pinned is
+  a `200 unchanged` with **no card**; unpinning a note that is not pinned says
+  so with no card. When the removed property was the note's ONLY property, the
+  empty `---`/`---` block is taken away too, so the note is byte-for-byte what
+  it was before it was pinned.
+- **The hidden lists / App lock rule is unchanged.** A new note is still
+  created card-free and its reply names no title and no date; pin/unpin is
+  refused with no card and no title.
+- **No bulk, no delete, no second note.** One sentence is one note. Several
+  notes in one request are still refused in words.
+
+**Both apps, backend-side.** Nothing about this reading is in either client:
+the phone's chat (`JarvisApi.chatCall`, `ChatHistory.requestBody`) and the
+desktop's both POST `/api/chat`, so both get the same note, the same pin, the
+same date and the same reply sentence. The desk's chat and the phone's chat
+were both driven through `answer_turn()` with their own body shapes in
+`backend/test_notes_smart_create.py`; the phone needs no rebuild for this.
+
+**What this does NOT do (said plainly).**
+
+- **The pin is a note property, not a screen.** Neither app has a "Pinned"
+  group, a pin button or pinned-first sorting yet; the property is visible and
+  searchable in Obsidian itself. A UI for it would be a separate feature on
+  BOTH apps (`docs/ARCHITECTURE.md` section 8).
+- A **standalone `pin it`** with no note named, after some earlier action, is
+  not matched: nothing here remembers which note that was. Name it ("pin my
+  Workout Log note").
+- A note's `date` property is not a calendar entry, a reminder or a daily note;
+  it records the day the note is about.
+- A "title" longer than 120 characters is not treated as a name: the older
+  grammar keeps that request.
+- The date is not put into the body as text; it is the note's own property.
+
+**Proven.** `backend/test_notes_smart_create.py` (83 checks) pins all of it on
+a temporary vault with a fake gate: the owner's exact sentence and its exact
+bytes, the card-free create and its undo receipt, a body-only control, an
+existing title's `and`/`on`, a trailing `yesterday` staying in the body, pin +
+add in one sentence, every date word above, pin/unpin of an existing note as
+exactly ONE `edit_vault_note` card (and no second card when nothing would
+change), the hidden-lists refusals, the collision, one note per request, both
+apps' chat bodies through `answer_turn()` (and the two `/api/notes` reads their
+Notes plate makes), the byte-identical twin and this section. Not tested here:
+the live PC (this is a repository change; the deploy is its own pass).
+
+The module's twin `jarvis-backend/jarvis_quick.py` is byte-identical.
+
 ## 171. "Protected from Jarvis": a list of folders, files and programs Jarvis may not touch (added 2026-10-31)
 
 The owner's request, in their own words: *"add a list of file folders, and

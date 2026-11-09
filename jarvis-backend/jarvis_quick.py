@@ -1547,7 +1547,7 @@ def _match(text, now: float, conversation: Optional[str] = None) -> Optional[Int
     got = _notes_chat(s)
     if got is not None:
         return got
-    got = _note_asking(s)
+    got = _note_asking(s, now)
     if got is not None:
         return got
     got = _local_calendar_prompt(s)
@@ -16061,6 +16061,309 @@ _NOTE_CREATE_CAPABILITY = re.compile(
     r"|(?:please\s+)?(?:write|make|create)\s+(?:me\s+|for\s+me\s+)?"
     r"(?:a\s+|one\s+)?(?:new\s+)?note\s+for\s+me\s*\??$"
     r"|(?:write|make|create)\s+(?:me\s+)?(?:a\s+|one\s+)?(?:new\s+)?note\s*\??$")
+
+
+# --------------------------------------------------------------------------
+#   ONE sentence, four facts: a new note's title, body, pin and date
+#   (2026-11-09)
+# --------------------------------------------------------------------------
+# WHY. The owner asked, in one sentence: "create a new note called Workout
+# Log, pin it, and add using todays date that i used the punching bag". The
+# `_NOTE_CREATE_NAMED` grammar above takes every word after "called" as the
+# TITLE, so the note's file name became the whole sentence and its body was
+# empty (measured on this tree, 2026-11-09). That sentence is ONE request with
+# four facts in it, and this block is the local, deterministic reader for
+# them - no model, no network, no new route:
+#
+#     title  the words after "called/titled/named", up to the first clause
+#            boundary: a comma, "with/saying/containing", "and add/put/write",
+#            a pin clause, or a date clause. The owner's capital letters are
+#            put back by match()'s _restore, exactly as every other name is.
+#     body   what follows the title: "with/containing/saying X", "add/put/
+#            write X", "that X", or the words after the title's comma. A
+#            trailing "and pin it" / "using today" is taken back out.
+#     pin    "pin it" / "pin this note" / "and pin it". "unpin it" in a CREATE
+#            sentence writes nothing: a brand-new note is not pinned, so there
+#            is no pin to remove and none is pretended.
+#     date   "today"/"todays date"/"today's date"/"yesterday"/"tomorrow", or an
+#            explicit date ("2026-11-03", "3 November", "November 3rd"),
+#            normalised to YYYY-MM-DD and written as the note's own `date:`
+#            property - the same YAML shape jarvis_notes_edit's set_property
+#            already writes, and what Obsidian shows in Properties.
+#
+# HOW IT IS WRITTEN. A new note with a pin or a date opens with front matter:
+#
+#     ---
+#     pinned: true
+#     date: 2026-11-09
+#     ---
+#     i used the punching bag
+#
+# A title-only or body-only request writes EXACTLY what it wrote before - no
+# front matter, the same bytes - so every older shape keeps its answer.
+#
+# THE PERMISSION MODEL IS EXACTLY THE OLD ONE. This is still the CARD-FREE
+# create path (owner's decision 2026-10-31): one brand-new note, additive,
+# collision-refused, with its undo receipt recorded before the file exists. It
+# only changes WHICH words become the title, the body and the two properties.
+# Pinning an EXISTING note is an edit, so it keeps its ONE `edit_vault_note`
+# card, the File Guardian copy and the undo: it goes through the customize
+# route's own set_property/remove_property (below), never a new route or a
+# second card.
+_CREATE_NOTE_HEAD = re.compile(
+    r"(?:please\s+)?(?:create|make|start|write)\s+(?:me\s+)?(?:a\s+|one\s+)?"
+    r"(?:new\s+|brand\s+new\s+)?note\s+(?:for\s+me\s+)?"
+    r"(?:called|named|titled)\s+(?P<rest>.+)$")
+#: Where a title stops. Each of these opens the NEXT clause of the same
+#: request, not part of the name. A bare "and" is deliberately NOT a boundary
+#: ("a note called Salt and Pepper"), and neither is a bare "on" ("a note
+#: called Notes on Physics").
+_TITLE_STOPS = (
+    re.compile(r","),
+    re.compile(r"\s+and\s+(?=(?:then\s+)?(?:pin|unpin|add|put|write|say|saying|use|set)\b)"),
+    re.compile(r"\s+(?=(?:pin|unpin)\b)"),
+    re.compile(r"\s+(?=(?:with|saying|containing)\s)"),
+    re.compile(r"\s+(?=(?:using|dated)\s+(?:today|todays|today's|yesterday|tomorrow|\d|"
+               + _MON + r"))"),
+)
+#: The separator before the next clause: ", and then ..." and the plain forms.
+_CLAUSE_SEP = re.compile(r"^(?:[\s,;.]+|and\s+|then\s+|also\s+)+")
+_PIN_CLAUSE = re.compile(
+    r"^(?P<how>unpin|pin)\s+(?:it|this(?:\s+note)?|the\s+note|the\s+new\s+note)\b")
+#: A date clause's lead word. "add"/"put"/"with" are also body verbs, so a
+#: date is taken only when a real date phrase follows - "add milk" stays body.
+_DATE_LEAD = re.compile(
+    r"^(?:add|put|use|using|with|for|on|dated|date|the\s+date)\s+", re.I)
+_REL_WHEN = re.compile(
+    r"(?P<w>today(?:'s|s)?|yesterday|tomorrow)(?:\s+date)?\b", re.I)
+#: An explicit date at the start of a phrase, in the four shapes
+#: jarvis_quick's own _calendar_day already reads. Built from _MON so there is
+#: no second list of month names to drift. The year is tried FOUR digits first
+#: ("12/11/2026" must not stop at "12/11/20") and the `(?!\d)` stops any shape
+#: from ending in the middle of a number.
+_EXPLICIT_WHEN = re.compile(
+    r"(?P<d>\d{4}-\d{1,2}-\d{1,2}"
+    r"|\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:" + _MON + r")\.?(?:\s+\d{4})?"
+    r"|(?:" + _MON + r")\.?\s+\d{1,2}(?:st|nd|rd|th)?(?:\s+\d{4})?"
+    r"|\d{1,2}/\d{1,2}(?:/(?:\d{4}|\d{2}))?)(?!\d)", re.I)
+_BODY_LEAD = re.compile(
+    r"^(?:and\s+)?(?:add|put|write|say|saying|with|containing|that)\s+(?P<text>.+)$")
+#: A pin or a date clause that ENDS the body ("add squats, pin it",
+#: "went to the gym using yesterday"): taken back out of the body.
+_BODY_TAIL_PIN = re.compile(
+    r",?\s+(?:and\s+)?(?P<how>unpin|pin)\s+(?:it|this(?:\s+note)?|the\s+note)\s*$")
+_BODY_TAIL_DATE = re.compile(r",?\s+(?:using|dated|on)\s+(?P<when>[^,]+?)\s*$")
+#: The same two clauses for a BODY-ONLY create ("write a note about X, pin
+#: it"). The comma/"and" is required here, so an ordinary topic keeps its
+#: words ("a note about how to pin it").
+_FREE_TAIL_PIN = re.compile(
+    r"(?:,|\s+and)\s+(?P<how>unpin|pin)\s+(?:it|this(?:\s+note)?)\s*$")
+_FREE_TAIL_DATE = re.compile(
+    r"(?:,|\s+and)\s+(?:using|dated)\s+(?P<when>[^,]+?)\s*$")
+#: A bound on the parsed title. A "title" longer than this is not a name, so
+#: the older grammar keeps the request rather than this reader inventing one.
+_NOTE_TITLE_MAX = 120
+
+
+def _note_iso_day(now: float, offset: int = 0) -> str:
+    """The local date `offset` days from `now`, as YYYY-MM-DD."""
+    import datetime
+    lt = time.localtime(now)
+    return (datetime.date(lt.tm_year, lt.tm_mon, lt.tm_mday)
+            + datetime.timedelta(days=int(offset))).isoformat()
+
+
+def _note_date_at_start(text: str, now: float):
+    """(YYYY-MM-DD, characters used) for a date phrase at the START of `text`."""
+    m = _REL_WHEN.match(text)
+    if m:
+        w = m.group("w").lower()
+        n = 0 if w.startswith("today") else (-1 if w.startswith("yesterday") else 1)
+        return _note_iso_day(now, n), m.end()
+    m = _EXPLICIT_WHEN.match(text)
+    if m:
+        cal = _calendar_day(m.group("d"))
+        if cal is not None:
+            if isinstance(cal, tuple) and cal[0] == "date" and cal[1] is None:
+                # A NOTE records what a date WAS, so an explicit day and month
+                # with no year is THIS year - deliberately not _ymd's rule for
+                # a reminder, which looks forward to the next time that day
+                # comes ("3 November" said on 9 November is 3 November this
+                # year, not next year's). 29 February in a non-leap year falls
+                # through to _ymd, which says None rather than guessing.
+                import datetime
+                y = time.localtime(now).tm_year
+                try:
+                    datetime.date(y, cal[2], cal[3])
+                    return "%04d-%02d-%02d" % (y, cal[2], cal[3]), m.end()
+                except ValueError:
+                    pass
+            ymd = _ymd(cal, now)
+            if ymd is not None:
+                return "%04d-%02d-%02d" % ymd, m.end()
+    return None
+
+
+def _note_date_phrase(text: str, now: float) -> str:
+    """YYYY-MM-DD when the WHOLE of `text` is a date phrase, else ""."""
+    got = _note_date_at_start(str(text or "").strip(), now)
+    if got is None or got[1] != len(str(text or "").strip()):
+        return ""
+    return got[0]
+
+
+def _note_date_clause(text: str, now: float):
+    """(YYYY-MM-DD, characters used) for a date clause at the START of `text`.
+
+    One or TWO lead words are allowed, because the owner's own sentence says
+    "add using todays date" - "add" opens the clause, "using" opens the date.
+    A lead with no date after it ("add milk", "with eggs") is not a date clause
+    at all, so the caller falls through to the body's own reading.
+    """
+    rest, used = str(text or ""), 0
+    for _ in range(2):
+        m = _DATE_LEAD.match(rest)
+        if not m:
+            break
+        rest = rest[m.end():]
+        used += m.end()
+    got = _note_date_at_start(rest, now)
+    if got is None:
+        return None
+    return got[0], used + got[1]
+
+
+def _note_body_clause(text: str, now: float):
+    """(body, pinned, date) for one body clause, a trailing pin/date removed.
+
+    `pinned` is None when the clause said nothing about pinning (a new note is
+    not pinned), True for "pin it" and False for "unpin it".
+    """
+    body, pinned, date = str(text or "").strip(), None, ""
+    for _ in range(4):
+        m = _BODY_TAIL_PIN.search(body)
+        if m:
+            pinned = m.group("how") == "pin"
+            body = body[:m.start()].strip()
+            continue
+        m = _BODY_TAIL_DATE.search(body)
+        if m:
+            said = _note_date_phrase(m.group("when"), now)
+            if said:
+                date = said
+                body = body[:m.start()].strip()
+                continue
+        break
+    # "and put milk IN IT" names the note it is being put into, not part of
+    # the words - the same reading the older `_NOTE_CREATE_NAMED` grammar gives.
+    body = re.sub(r"\s+(?:in|into|to)\s+it$", "", body).strip()
+    body = re.sub(r"^that\s+", "", body).strip()
+    return body, pinned, date
+
+
+def _note_title_and_rest(rest: str):
+    """(title, the words after it) split at the first clause boundary."""
+    rest = str(rest or "").strip()
+    cut = len(rest)
+    for rx in _TITLE_STOPS:
+        m = rx.search(rest)
+        if m and m.start() < cut:
+            cut = m.start()
+    return rest[:cut], rest[cut:]
+
+
+def _note_create_clauses(rest: str, now: float):
+    """(body parts, pinned, date) from the words after a note's title."""
+    body, pinned, date = [], None, ""
+    rest = str(rest or "")
+    for _ in range(12):
+        rest = _CLAUSE_SEP.sub("", rest).strip()
+        if not rest:
+            break
+        m = _PIN_CLAUSE.match(rest)
+        if m:
+            pinned = m.group("how") == "pin"
+            rest = rest[m.end():]
+            continue
+        got = _note_date_clause(rest, now)
+        if got is not None:
+            date, used = got
+            rest = rest[used:]
+            continue
+        m = _BODY_LEAD.match(rest)
+        if m:
+            piece, said_pin, said_date = _note_body_clause(m.group("text"), now)
+            if piece:
+                body.append(piece)
+            if said_pin is not None:
+                pinned = said_pin
+            if said_date:
+                date = said_date
+            rest = ""
+            continue
+        piece, said_pin, said_date = _note_body_clause(rest, now)
+        if piece:
+            body.append(piece)
+        if said_pin is not None:
+            pinned = said_pin
+        if said_date:
+            date = said_date
+        rest = ""
+    return body, pinned, date
+
+
+def _note_smart_create(s: str, now: float) -> Optional[Intent]:
+    """The four facts of ONE explicit-title create sentence, or None.
+
+    Only the "note called/titled/named X" shapes are read here. The body-only
+    shapes ("write a note for me about X") stay with `_NOTE_CREATE_FREE` and
+    `_run_note_create`'s derived title, so a plain body-only sentence still
+    becomes a body-only note, byte for byte as before.
+    """
+    m = _CREATE_NOTE_HEAD.fullmatch(str(s or ""))
+    if not m:
+        return None
+    title, rest = _note_title_and_rest(m.group("rest"))
+    title = title.strip().strip("\"'`").strip()
+    if not title or len(title) > _NOTE_TITLE_MAX:
+        return None
+    body, pinned, date = _note_create_clauses(rest, now)
+    fields = {"name": title, "text": " ".join(body).strip()}
+    if pinned is True:
+        fields["pinned"] = True
+    if date:
+        fields["date"] = date
+    return Intent("note_create", fields)
+
+
+def _note_document(text: str, *, pinned=None, date: str = "") -> str:
+    """The bytes of a new note: front matter for pin/date, then the words.
+
+    With neither a pin nor a date this returns `text` unchanged, which is what
+    keeps every older create byte-for-byte as it was.
+    """
+    props = []
+    if pinned is True:
+        props.append("pinned: true")
+    if date:
+        props.append("date: " + str(date))
+    if not props:
+        return str(text or "")
+    body = str(text or "")
+    tail = "" if not body or body.endswith("\n") else "\n"
+    return "---\n" + "\n".join(props) + "\n---\n" + body + tail
+
+
+def _note_create_extra_said(f: dict) -> str:
+    """The one added sentence that says a note was pinned and/or dated."""
+    bits = []
+    if f.get("pinned") is True:
+        bits.append("pinned")
+    if f.get("date"):
+        bits.append("dated " + str(f.get("date")))
+    return ("It is " + ", ".join(bits) + ".") if bits else ""
+
+
 #: Where the vault is and where the last note went (read-only, no card,
 #: 2026-10-31 field-test follow-up: the old answer said "I don't have access to
 #: the folder name ... I can search your files", which was wrong).
@@ -16108,6 +16411,13 @@ _NOTE_TAG_REMOVE = re.compile(
 _NOTE_TAG_WITH = re.compile(
     r"(?:tag|label)\s+(?:my|the)\s+(?P<name>.+?)(?:\s+note)?\s+with\s+"
     r"(?P<tag>[#A-Za-z0-9_/-]+)\b.*")
+#: "pin my Workout Log note" / "unpin the gym note" (2026-11-09). ONE existing
+#: note, so it is an EDIT and keeps the one card, guardian copy and undo the
+#: customize route already has. A bare "pin it"/"pin this note" with no name is
+#: deliberately not matched: nothing here remembers which note that was.
+_NOTE_PIN = re.compile(
+    r"(?:please\s+)?(?P<how>unpin|pin)\s+(?:my\s+|the\s+|this\s+)?"
+    r"(?P<name>.+?)(?:\s+note)?\s*$")
 #: Several notes at once: refused, never quietly done to the first one.
 _NOTE_WRITE_BATCH = re.compile(
     r"(?:add|append|write|tag|label|create|make|put)\b.*\b"
@@ -16363,9 +16673,14 @@ def _run_note_create(f: dict) -> Result:
     if not path:
         return Result("What should the new note be called? Say \"create a note called ...\".",
                       "note_create_refused")
+    # A pin and/or a date from the owner's one sentence become the new note's
+    # own front matter (2026-11-09); with neither, `text` is passed through
+    # unchanged, so every older create writes exactly the bytes it wrote before.
+    note_text = _note_document(text, pinned=f.get("pinned"),
+                               date=str(f.get("date") or ""))
     try:
         import jarvis_notes_edit as E
-        code, body = E.handle_create({"path": path, "text": text}, by="chat",
+        code, body = E.handle_create({"path": path, "text": note_text}, by="chat",
                                      provenance=_note_write_tainted(),
                                      client="hud", wait_s=1.5)
     except Exception as exc:                # noqa: BLE001
@@ -16393,8 +16708,14 @@ def _run_note_create(f: dict) -> Result:
         if hidden:
             return Result(NOTE_CREATE_HIDDEN_SAID, "note_created")
         said = str(body.get("message") or "").strip()
-        return Result(said or f"Created {filed} in your Obsidian vault. You can undo it.",
-                      "note_created")
+        said = said or f"Created {filed} in your Obsidian vault. You can undo it."
+        # The module's own sentence, then ONE added fact when the owner asked
+        # for a pin and/or a date ("It is pinned, dated 2026-11-09."). The
+        # hidden-lists reply above is untouched: it names no title.
+        extra = _note_create_extra_said(f)
+        if extra:
+            said = said + " " + extra
+        return Result(said, "note_created")
     return _note_write_result(body, "note_created", "note_create_waiting", "note_create_refused")
 
 
@@ -16868,8 +17189,13 @@ def _note_rename_move_asking(raw: str) -> Optional[Intent]:
     return None
 
 
-def _note_asking(s: str) -> Optional[Intent]:
-    """The note/vault sentences above, or None (not ours)."""
+def _note_asking(s: str, now: Optional[float] = None) -> Optional[Intent]:
+    """The note/vault sentences above, or None (not ours).
+
+    `now` is the turn's clock, read by the smart-create reader alone so
+    "today"/"yesterday"/"tomorrow" become the note's own `date:` property.
+    """
+    now = time.time() if now is None else float(now)
     # "move all my notion notes into obsidian" is the NOTION IMPORT
     # answer's sentence, not a note move (2026-10-28, one card, the
     # export tidied into a vault). Once the polite lead is stripped the
@@ -16919,9 +17245,32 @@ def _note_asking(s: str) -> Optional[Intent]:
         return Intent("note_create_capability")
     m = _NOTE_CREATE_FREE.fullmatch(s)
     if m:
-        return Intent("note_create", {
-            "name": "",
-            "text": (m.group("text") or m.group("text2") or "").strip()})
+        text = (m.group("text") or m.group("text2") or "").strip()
+        # A body-only create can still carry a pin or a date at its END
+        # ("write a note for me about the gym, pin it"). Only the ", pin it" /
+        # "and pin it" forms are read, so an ordinary topic keeps every word
+        # ("a note about how to pin it"); and with neither clause the fields
+        # are exactly what they were before this reader existed.
+        fields = {"name": "", "text": text}
+        m2 = _FREE_TAIL_PIN.search(text)
+        if m2 and text[:m2.start()].strip():
+            fields["text"] = text[:m2.start()].strip()
+            if m2.group("how") == "pin":
+                fields["pinned"] = True
+        m2 = _FREE_TAIL_DATE.search(fields["text"])
+        if m2:
+            said = _note_date_phrase(m2.group("when"), now)
+            if said and fields["text"][:m2.start()].strip():
+                fields["text"] = fields["text"][:m2.start()].strip()
+                fields["date"] = said
+        return Intent("note_create", fields)
+    # The owner's one-sentence create (2026-11-09): title, body, pin and date.
+    # FIRST, so "called Workout Log, pin it, and add ..." is read as four
+    # facts; the older `_NOTE_CREATE_NAMED` below stays the fallback for a
+    # shape this reader declines (a title over the bound, an empty name).
+    got = _note_smart_create(s, now)
+    if got is not None:
+        return got
     m = _NOTE_CREATE_NAMED.fullmatch(s)
     if m:
         return Intent("note_create", {"name": m.group("name").strip(),
@@ -17062,6 +17411,23 @@ def _note_asking(s: str) -> Optional[Intent]:
             and not _list_owns_name(m.group("name"))):
         return Intent("note_append", {"name": m.group("name").strip(),
                                       "text": m.group("text").strip()})
+    # "pin my Workout Log note" / "unpin ..." (2026-11-09). An EXISTING note is
+    # an edit, so it rides the customize route's own set_property /
+    # remove_property: ONE `edit_vault_note` card, the File Guardian copy first,
+    # one Undo - no new route, no second card, no bulk action. A sentence with
+    # no note word is matched only when that exact note exists, so "pin the
+    # tail on the donkey" stays the model's.
+    m = _NOTE_PIN.fullmatch(s)
+    if m:
+        name = m.group("name").strip()
+        if name and name.lower() != "note" and (_says_note or _named_note_exists(name)):
+            pin_it = m.group("how") == "pin"
+            fields = {"name": name,
+                      "op": "set_property" if pin_it else "remove_property",
+                      "key": "pinned"}
+            if pin_it:
+                fields["value"] = "true"
+            return Intent("note_customize", fields)
     for rx in (_NOTE_CREATE_REFUSED, _NOTE_RENAME_REFUSED, _NOTE_DELETE_REFUSED):
         if rx.match(s):
             return Intent("note_change_refused")
