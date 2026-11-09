@@ -862,8 +862,11 @@ def t_view_and_cancel():
 #   8. Promotion is read-only and Q2's three checks
 # ==========================================================================
 
-CODING_PAIR = next(p for p in B.PROMOTION_PAIRS if p["id"] == "coding_q4")
-GENERAL_PAIR = next(p for p in B.PROMOTION_PAIRS if p["id"] == "general_12b")
+#: The pair the Q2 checks are exercised on. `coding_q4` was RETIRED on
+#: 2026-11-09 (its candidate tag was deleted), so the pair that still exists
+#: carries the checks; the retired id keeps its own refusals below.
+PAIR = next(p for p in B.PROMOTION_PAIRS if p["id"] == "general_12b")
+GENERAL_PAIR = PAIR
 
 
 def _score(suite, model, **over):
@@ -875,42 +878,49 @@ def _score(suite, model, **over):
 
 
 def t_the_promotion_checks_are_q2_and_a_missing_measurement_fails():
-    incumbent = {"speed": _score("speed", CODING_PAIR["incumbent"], decode_tps=83.8),
-                 "coding": _score("coding", CODING_PAIR["incumbent"],
-                                  score_pct=100.0)}
-    candidate = {"speed": _score("speed", CODING_PAIR["candidate"], decode_tps=93.1),
-                 "coding": _score("coding", CODING_PAIR["candidate"],
-                                  score_pct=100.0)}
-    verdict = B.promotion_verdict(CODING_PAIR, incumbent, candidate)
+    suites = list(PAIR["suites"])
+    incumbent = {"speed": _score("speed", PAIR["incumbent"], decode_tps=83.8)}
+    candidate = {"speed": _score("speed", PAIR["candidate"], decode_tps=93.1)}
+    for suite in suites:
+        if suite != "speed":
+            incumbent[suite] = _score(suite, PAIR["incumbent"], score_pct=100.0)
+            candidate[suite] = _score(suite, PAIR["candidate"], score_pct=100.0)
+    verdict = B.promotion_verdict(PAIR, incumbent, candidate)
     check("a zero-spill, no-worse, above-floor candidate promotes",
           verdict["promote"] is True, verdict)
     check("and NOTHING is applied", verdict["applied"] is False
           and "Nothing has been changed" in verdict["words"])
+    expected = {"zero spill at the preset's target context"}
+    expected |= {f"quality not worse on the {s} rubric"
+                 for s in suites if s != "speed"}
+    expected.add(f"speed floor of {B.PROMOTION_DECODE_FLOOR[PAIR['preset']]:g} "
+                 "tokens a second")
     check("the checks are named in plain words",
-          {c["check"] for c in verdict["checks"]}
-          >= {"zero spill at the preset's target context",
-              "quality not worse on the coding rubric",
-              "speed floor of 75 tokens a second"})
-    worse = {"speed": _score("speed", CODING_PAIR["candidate"], decode_tps=93.1),
-             "coding": _score("coding", CODING_PAIR["candidate"],
-                              score_pct=83.3)}
-    verdict2 = B.promotion_verdict(CODING_PAIR, incumbent, worse)
+          {c["check"] for c in verdict["checks"]} >= expected,
+          {c["check"] for c in verdict["checks"]})
+    worse = {"speed": _score("speed", PAIR["candidate"], decode_tps=93.1)}
+    for suite in suites:
+        if suite != "speed":
+            worse[suite] = _score(suite, PAIR["candidate"], score_pct=83.3)
+    verdict2 = B.promotion_verdict(PAIR, incumbent, worse)
     check("a quality regression keeps the default",
           verdict2["promote"] is False and "quality not worse" in verdict2["words"])
-    slow = {"speed": _score("speed", CODING_PAIR["candidate"], decode_tps=60.0),
-            "coding": _score("coding", CODING_PAIR["candidate"],
-                             score_pct=100.0)}
-    verdict3 = B.promotion_verdict(CODING_PAIR, incumbent, slow)
+    slow = {"speed": _score("speed", PAIR["candidate"], decode_tps=30.0)}
+    for suite in suites:
+        if suite != "speed":
+            slow[suite] = _score(suite, PAIR["candidate"], score_pct=100.0)
+    verdict3 = B.promotion_verdict(PAIR, incumbent, slow)
     check("below the speed floor keeps the default",
           verdict3["promote"] is False and "speed floor" in verdict3["words"])
-    spill = {"speed": _score("speed", CODING_PAIR["candidate"],
-                             spill_bytes=300_000_000, on_card_percent=96),
-             "coding": _score("coding", CODING_PAIR["candidate"],
-                              score_pct=100.0)}
-    verdict4 = B.promotion_verdict(CODING_PAIR, incumbent, spill)
+    spill = {"speed": _score("speed", PAIR["candidate"],
+                             spill_bytes=300_000_000, on_card_percent=96)}
+    for suite in suites:
+        if suite != "speed":
+            spill[suite] = _score(suite, PAIR["candidate"], score_pct=100.0)
+    verdict4 = B.promotion_verdict(PAIR, incumbent, spill)
     check("spill keeps the default",
           verdict4["promote"] is False and "zero spill" in verdict4["words"])
-    empty = B.promotion_verdict(CODING_PAIR, {}, {})
+    empty = B.promotion_verdict(PAIR, {}, {})
     check("nothing measured means nothing promoted",
           empty["promote"] is False and "no scorecard yet" in empty["words"])
     check("the general pair needs tool-calling too",
@@ -919,31 +929,36 @@ def t_the_promotion_checks_are_q2_and_a_missing_measurement_fails():
 
 def t_pair_verdict_reads_the_store_shape_and_stays_read_only():
     cards = {}
-    for model, tps, coding in (
-            (CODING_PAIR["incumbent"], 83.8, 100.0),
-            (CODING_PAIR["candidate"], 93.1, 100.0)):
+    for model, tps in ((PAIR["incumbent"], 83.8), (PAIR["candidate"], 93.1)):
         bare = B._bare(model)
         cards[(bare, "speed")] = _score("speed", model, decode_tps=tps)
-        cards[(bare, "coding")] = _score("coding", model, score_pct=coding)
-    verdict = B.pair_verdict("coding_q4", scores=cards)
+        for suite in PAIR["suites"]:
+            if suite != "speed":
+                cards[(bare, suite)] = _score(suite, model, score_pct=100.0)
+    verdict = B.pair_verdict(PAIR["id"], scores=cards)
     check("pair_verdict finds both models by bare name",
           verdict["ok"] is True and verdict["promote"] is True, verdict)
     check("pair_verdict never applies anything",
           verdict["applied"] is False)
     unknown = B.pair_verdict("nope")
     check("an unknown pair says what exists",
-          unknown["ok"] is False and "coding_q4" in unknown["why"])
-    plan = B.promotion_plan("coding_q4")
+          unknown["ok"] is False and PAIR["id"] in unknown["why"])
+    retired = B.pair_verdict("coding_q4")
+    check("the RETIRED coding pair is refused by name, with the ids that exist",
+          retired["ok"] is False and "coding_q4" in retired["why"]
+          and PAIR["id"] in retired["why"], retired)
+    plan = B.promotion_plan(PAIR["id"])
     check("the plan names both models and the window",
-          plan["ok"] is True and plan["ctx"] == 32768
-          and plan["pair"]["candidate"] == "gemma4:26b-a4b-it-qat")
-    check("the deleted q4 build is no longer a candidate in any pair",
-          all(p["candidate"] != "qwen3-coder:30b-a3b-q4_K_M"
-              for p in B.PROMOTION_PAIRS))
+          plan["ok"] is True and plan["ctx"] == PAIR["ctx"]
+          and plan["pair"]["candidate"] == PAIR["candidate"])
+    check("no pair is called coding_q4 or names the deleted q4 build",
+          all(p["id"] != "coding_q4" for p in B.PROMOTION_PAIRS)
+          and all(p["candidate"] != "qwen3-coder:30b-a3b-q4_K_M"
+                  for p in B.PROMOTION_PAIRS))
     view = B.promotion_pairs_view(store=B.ScoreLog(Path(tempfile.gettempdir())
                                                     / "no-such-scores.jsonl"))
-    check("the pairs view offers both pairs, none applied",
-          len(view["pairs"]) == 2
+    check("the pairs view offers the one surviving pair, none applied",
+          len(view["pairs"]) == 1
           and all(p["applied"] is False for p in view["pairs"]))
     check("an empty store promotes nothing",
           all(p["promote"] is False for p in view["pairs"]))

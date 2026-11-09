@@ -2482,22 +2482,24 @@ DEFAULT_SUITE_CTX = {"everyday": 16384, "coding": 16384, "pooled": 49152}
 PROMOTION_DECODE_FLOOR = {"coding": 75.0, "general": 40.0,
                           "tool_calling": 40.0, "vision_ocr": 20.0}
 
-#: The two measure-first pairs the packet names. `needs` is what a promotion
+#: The measure-first pairs the packet names. `suites` is what a promotion
 #: verdict must have measured for BOTH models: the speed row is the zero-spill
 #: and speed evidence, the domain suite is the quality evidence, and General
 #: additionally needs tool-calling (Q2: it must pass both).
+#:
+#: THE CODING PAIR IS RETIRED (2026-11-09), and the receipt is why. `coding_q4`
+#: named `qwen3-coder:30b-a3b-q4_K_M` as its candidate until that tag was
+#: deleted on 2026-11-09 11:09 PT, and its last completed measurement is the
+#: honest verdict: the shipped `qwen3-coder-30b-a3b-ud-q3-k-xl` answered at
+#: 64.6-76.8 tok/s with 0 B spilled, the q4 build at 65.3 tok/s with 231.5 MiB
+#: spilled (both 6/6 on the coding rubric), and the other installed challenger,
+#: `gemma4:26b-a4b-it-qat` at 32,768, measured 49.26 tok/s with 4.4% (0.68 GiB)
+#: spilled. So the incumbent STAYS the Coding preset's speed default - KEEP
+#: CURRENT, measured rather than assumed - and a pair whose candidate cannot be
+#: installed is a dead row in the packet, not a pending promotion. The models
+#: stay in `docs/MEASURED-2026-11-07-THREE-GPU.md` as measured; only the pair is
+#: gone. `pair_verdict("coding_q4")` now refuses it by name.
 PROMOTION_PAIRS = (
-    {"id": "coding_q4", "preset": "coding",
-     "incumbent": "qwen3-coder-30b-a3b-ud-q3-k-xl",
-     "candidate": "gemma4:26b-a4b-it-qat",
-     "ctx": 32768, "suites": ("speed", "coding"),
-     "why": "measured 2026-11-09 at 32,768 tokens: 15.5 GiB loaded with 0.68 GiB "
-            "(4.4%) spilled and 49.26 tok/s, so the spill is expected to keep the "
-            "shipped q3 coder; the pair is measured rather than assumed. Re-pointed "
-            "from qwen3-coder:30b-a3b-q4_K_M after that tag was deleted on "
-            "2026-11-09 11:09 PT (its completed receipt: 65.3 tok/s with 231.5 MiB "
-            "spilled against the incumbent's 76.8 tok/s with 0 B, both 6/6 coding "
-            "-> KEEP CURRENT)"},
     {"id": "general_12b", "preset": "general",
      "incumbent": "qwen3.5:9b",
      "candidate": "gemma4:12b-it-qat",
