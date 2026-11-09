@@ -201,10 +201,11 @@ object ReadAloud {
         /**
          * The phone's OWN setting of 2026-11-05 ("Read out answers that use
          * what Jarvis remembers", `data/ClientSettings.readMemoriesAloud`,
-         * [PrivateAloud.MEMORY_ALOUD_DEFAULT]): OFF unless the owner turned it
-         * on. It is consulted here so a TYPED answer gets the same door the
-         * talk button got - and it lifts ONLY [Why.MEMORY], never a sensitive
-         * fact, a screen read, a tool, a stale link or a lock.
+         * [PrivateAloud.MEMORY_ALOUD_DEFAULT]): ON by default since the owner's
+         * decision of 2026-11-07. It is consulted here so a TYPED answer gets
+         * the same door the talk button got - and it lifts ONLY [Why.MEMORY],
+         * never a sensitive fact, a screen read, a tool, a stale link or a
+         * lock.
          */
         val phoneMemoryAloud: Boolean = false,
     ) {

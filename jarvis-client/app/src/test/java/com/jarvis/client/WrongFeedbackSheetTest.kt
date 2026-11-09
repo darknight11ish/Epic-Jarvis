@@ -37,6 +37,7 @@ class WrongFeedbackSheetTest {
     private val api by lazy { SourceFile.read(net + "JarvisApi.kt") }
     private val runtime by lazy { SourceFile.read(root + "JarvisRuntime.kt") }
     private val feedback by lazy { SourceFile.read(net + "Feedback.kt") }
+    private val learning by lazy { SourceFile.read(net + "Learning.kt") }
 
     private fun bodyOf(marker: String, text: String): String =
         text.substringAfter(marker, "").substringBefore("\n/**")
@@ -233,5 +234,74 @@ class WrongFeedbackSheetTest {
         val old = fnOf("suspend fun markAnswer(turnId", runtime)
         assertTrue(old.contains("val next = Feedback.nextMark(current, tapped)"))
         assertTrue(old.contains("api.markAnswer(turnId, next)"))
+    }
+
+    // ---- 6. Wave 10 Q2.1: the PC's saved why comes back ------------------
+
+    @Test
+    fun `the menu asks the PC for the saved why and re-shows it, not an empty sheet`() {
+        assertTrue(
+            "the menu never asks the PC for this answer's saved mark",
+            menu.contains("syncAnswerMarkDetached"),
+        )
+        assertTrue(
+            "the saved why is never drawn in the reopened menu",
+            menu.contains("WrongFeedback.savedWords(savedFor)"),
+        )
+        assertTrue(
+            "there is no door to change the saved why",
+            menu.contains("WrongFeedback.EDIT_WHY"),
+        )
+        assertTrue(
+            "the edit door does not open a PREFILLED sheet",
+            menu.contains("WrongFeedback.prefill(savedFor)"),
+        )
+        assertTrue(
+            "the sheet is never opened with the saved draft",
+            menu.contains("initial = wrongDraft"),
+        )
+        val sheetFn = sheet
+        assertTrue(
+            "the sheet cannot accept a saved draft",
+            sheetFn.contains("initial: WrongFeedback.Draft? = null"),
+        )
+        assertTrue(
+            "the sheet does not read the saved why itself (a reopened sheet would stay empty)",
+            sheetFn.contains("syncAnswerMarkDetached"),
+        )
+        assertTrue(
+            "the sheet never prefills from the saved why",
+            sheetFn.contains("WrongFeedback.prefill(savedFor)"),
+        )
+        assertTrue(
+            "the sheet would overwrite words the owner has already touched",
+            sheetFn.contains("if (!edited"),
+        )
+    }
+
+    @Test
+    fun `the saved why is a read-only GET on the existing route`() {
+        val read = fnOf("suspend fun markState(turnId", api)
+        assertTrue("the saved-why read does not build the GET path", read.contains("Feedback.markStatePath(turnId)"))
+        assertTrue("the saved-why read is not a GET", read.contains("probe(path)"))
+        assertFalse("the saved-why read posts", read.contains("postJson(") || read.contains("postObject("))
+        assertFalse("the saved-why read can answer a card", read.contains("Approval") || read.contains("approve"))
+
+        val runtimeRead = fnOf("suspend fun syncAnswerMark(", runtime)
+        assertTrue("the runtime does not call the read", runtimeRead.contains("api.markState(turnId)"))
+        assertTrue("the runtime does not keep the saved why", runtimeRead.contains("answerMarkDetails"))
+        assertTrue(
+            "the runtime does not show the PC's mark on the buttons again",
+            runtimeRead.contains("details.mark"),
+        )
+        assertFalse("a quiet read arms a notice", runtimeRead.contains("_notice.value"))
+
+        // The path itself is the EXISTING route with the answer id - never a
+        // new route, and never a guessed one.
+        assertTrue(learning.contains("fun markStatePath(turnId: String): String?"))
+        assertTrue(
+            "the GET path is not built from the one mark route",
+            learning.contains("?turn_id=") && learning.contains("MARK_PATH"),
+        )
     }
 }

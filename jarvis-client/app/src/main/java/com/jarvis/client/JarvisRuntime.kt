@@ -9,6 +9,7 @@ import com.jarvis.client.data.ModelsCacheStore
 import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ActivityEvent
 import com.jarvis.client.net.AnswerMark
+import com.jarvis.client.net.AnswerMarkDetails
 import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.CachedModels
@@ -345,6 +346,15 @@ object JarvisRuntime {
      */
     private val _answerMark = MutableStateFlow<AnswerMarkState?>(null)
     val answerMark: StateFlow<AnswerMarkState?> = _answerMark.asStateFlow()
+
+    /**
+     * The PC's SAVED why for one answer (Wave 10 Q2.1): the mark plus the
+     * reason and correction stored with it, read with [syncAnswerMark] when
+     * an answer is shown again (a reopened menu, a restored answer). Null
+     * until the PC has told this phone; in memory only, like the mark itself.
+     */
+    private val _answerMarkDetails = MutableStateFlow<AnswerMarkDetails?>(null)
+    val answerMarkDetails: StateFlow<AnswerMarkDetails?> = _answerMarkDetails.asStateFlow()
 
     private val _status = MutableStateFlow<StatusInfo?>(null)
     val status: StateFlow<StatusInfo?> = _status.asStateFlow()
@@ -11855,6 +11865,62 @@ object JarvisRuntime {
             _notice.value = "That mark did not reach the desktop. " + describe(result.error)
         }
         return result
+    }
+
+    /** Fire-and-forget [syncAnswerMark] on the runtime's own scope, like
+     *  [markAnswerDetached]: a rotation must not cancel the read between the
+     *  GET and the state update. */
+    fun syncAnswerMarkDetached(turnId: String) {
+        if (!com.jarvis.client.net.Feedback.isTurnId(turnId)) return
+        scope.launch { syncAnswerMark(turnId) }
+    }
+
+    /**
+     * Re-show what the PC already saved for one answer (Wave 10 Q2.1): reads
+     * `GET /api/feedback/mark?turn_id=` and puts BOTH the mark on the answer's
+     * buttons and the reason/correction in [answerMarkDetails], so a reopened
+     * menu shows the owner's own why instead of an empty sheet.
+     *
+     * Read-only and quiet: 404/503 (an older PC, or no feedback module) leaves
+     * everything as it was - nothing is invented and no notice is raised. It
+     * never runs while a mark is in flight for that answer, so a slow GET
+     * cannot overwrite a just-tapped mark.
+     */
+    suspend fun syncAnswerMark(turnId: String): AnswerMarkDetails? {
+        if (!com.jarvis.client.net.Feedback.isTurnId(turnId)) return null
+        val inFlight = _answerMark.value?.let { it.turnId == turnId && it.busy } == true
+        if (inFlight) return null
+        return when (val result = api.markState(turnId)) {
+            is ApiResult.Ok -> {
+                val details = result.value.copy(turnId = turnId)
+                _answerMarkDetails.value = details
+                _answerMark.update { state ->
+                    when {
+                        // The answer the menu is about: show the PC's own truth.
+                        state != null && state.turnId == turnId ->
+                            state.copy(mark = details.mark, busy = false, unavailable = false)
+                        // No local state yet (reopened or restored): a real mark
+                        // still makes the buttons show it.
+                        details.mark != AnswerMark.NONE ->
+                            AnswerMarkState(turnId, details.mark)
+                        else -> state
+                    }
+                }
+                details
+            }
+            is ApiResult.Failed -> {
+                if (result.error == ApiError.NotFound || result.error == ApiError.NotAvailable) {
+                    _answerMark.update { state ->
+                        if (state != null && state.turnId == turnId) {
+                            state.copy(unavailable = true)
+                        } else {
+                            state
+                        }
+                    }
+                }
+                null
+            }
+        }
     }
 
     /**

@@ -154,6 +154,42 @@ object Feedback {
     }
 
     /**
+     * `GET /api/feedback/mark?turn_id=` (Wave 10 contract v2, Q2.1): the PC's
+     * saved mark plus its reason and correction. Null for an id the PC would
+     * refuse, so nothing is sent.
+     */
+    fun markStatePath(turnId: String): String? =
+        if (!isTurnId(turnId)) null else "$MARK_PATH?turn_id=$turnId"
+
+    /**
+     * The GET's answer, read tolerantly: the mark and the saved why, with no
+     * field invented. A missing/garbled mark is [AnswerMark.NONE]; an
+     * unknown reason word is null (never a guessed chip) and a missing
+     * correction is "". Only a body with no usable `turn_id` returns null -
+     * the caller asked about a real answer, so it uses its own id then.
+     */
+    fun markState(body: JsonObject?): AnswerMarkDetails? {
+        if (body == null) return null
+        val turnId = (body["turn_id"] as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.content
+            ?.takeIf { isTurnId(it) }
+            ?: return null
+        val mark = AnswerMark.values().firstOrNull { candidate ->
+            candidate.wire == (body["mark"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        } ?: AnswerMark.NONE
+        val reason = FeedbackReason.values().firstOrNull { candidate ->
+            candidate.wire == (body["reason"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        }
+        val correction = (body["correction"] as? JsonPrimitive)
+            ?.takeIf { it.isString }
+            ?.content
+            ?.takeIf { it.isNotBlank() }
+            ?: ""
+        return AnswerMarkDetails(turnId, mark, reason, correction)
+    }
+
+    /**
      * What a tap sends. Tapping the mark already chosen takes it back
      * ("none"); tapping the other one replaces it. One mark per answer,
      * always changeable.
@@ -242,6 +278,15 @@ object MemoryCards {
     /** `jarvis_extract.RETIRE_SOURCE`. */
     const val RETIRE_SOURCE = "feedback_retire"
 
+    /**
+     * `jarvis_feedback.CARD_ACTION_CORRECTION`. A wrong_fact / outdated mark
+     * that carried the owner's own correction words queues this ORDINARY
+     * proposal: `text` is the correction, `replaces_id`/`replaces_text` the
+     * fact it updates. Accepting it UPDATES that fact; discarding it leaves
+     * the fact exactly as it is. (Wave 10 Q2.2.)
+     */
+    const val CORRECTION_SOURCE = "feedback_correction"
+
     /** `source` of a card queued from a "Remember:" message. */
     const val REMEMBER_SOURCE = "remember"
 
@@ -265,13 +310,23 @@ object MemoryCards {
 
     /** The heading on a RETIRE card, and the start of the backend's own reason text. */
     const val RETIRE_QUESTION = "Stop using this fact?"
-    const val RETIRE_ACCEPT = "Stop using this fact"
-    const val RETIRE_DISCARD = "Keep using it"
+
+    // THE FOUR LABELS THE OWNER RULED FOR WAVE 10 (Q2.2). These are the ONE
+    // source of truth: the screen draws `MemoryCardView.acceptLabel` /
+    // `discardLabel`, which come from these constants and nowhere else.
+    const val FEEDBACK_RETIRE_ACCEPT = "Forget that fact"
+    const val FEEDBACK_RETIRE_DISCARD = "Keep using it"
+    const val FEEDBACK_CORRECTION_ACCEPT = "Update the fact"
+    const val FEEDBACK_CORRECTION_DISCARD = "Keep it as it is"
     const val RETIRE_EXPLAINER =
         "Stopping it does not delete it. The fact stays in the history - Jarvis just stops using it."
     const val BOTH_ARE_TRUE = "Both are true"
     const val CORRECTION_EXPLAINER =
         "Keep swaps the old fact for this one. The old one stays in the history."
+    /** On a card from the owner's own correction words: accept UPDATES the fact. */
+    const val FEEDBACK_CORRECTION_EXPLAINER =
+        "Update replaces the remembered fact with your words. Keep it as it is leaves " +
+            "the fact untouched. The old one stays in the history either way."
     const val CORRECTION_EXPLAINER_BOTH =
         "Keep swaps the old fact for this one. Both are true keeps both."
     const val PLANTED_HEADLINE =
@@ -308,17 +363,26 @@ object MemoryCards {
         // retires nothing, and must not claim it would.
         val replacesText = row.str("replaces_text") ?: row.str("replaces")
         val hasTarget = row.str("replaces_id")?.let { it != "0" } == true
+        // THE TWO MACHINE SOURCES HAVE THEIR OWN FOUR LABELS (Wave 10 Q2.2):
+        // `feedback_retire` FORGETS the fact, `feedback_correction` UPDATES it
+        // with the owner's words. Every other card keeps its existing labels
+        // exactly. One source: the constants in [MemoryCards].
+        val fromFeedbackCorrection = source == CORRECTION_SOURCE
+        val fromFeedbackRetire = source == RETIRE_SOURCE
         val kind = when {
-            source == RETIRE_SOURCE -> MemoryCardKind.RETIRE
-            hasTarget -> MemoryCardKind.CORRECTION
+            fromFeedbackRetire -> MemoryCardKind.RETIRE
+            hasTarget || fromFeedbackCorrection -> MemoryCardKind.CORRECTION
             else -> MemoryCardKind.NEW_FACT
         }
         // Belt and braces: the backend already sends keep_both_ok=false on a
         // retire card (test_learning_integration.py), and refuses the route
         // for one with a 409. The phone refuses to OFFER it as well, and
         // offers it only on a card it can actually answer.
+        // One card, one decision (Q2, the Lead's ruling): a card raised from
+        // a mark is never offered a third answer beside its one decision.
         val bothOk = row.bool("keep_both_ok") == true &&
-            kind == MemoryCardKind.CORRECTION && id != null
+            kind == MemoryCardKind.CORRECTION && id != null &&
+            !fromFeedbackCorrection && !fromFeedbackRetire
         val warnings = (row["flags"] as? JsonArray).orEmpty().mapNotNull { el ->
             when (el) {
                 is JsonObject -> el.str("why") ?: el.str("code")?.let { "Flagged: $it" }
@@ -338,8 +402,8 @@ object MemoryCards {
                 // The card is headed "Stop using this fact?" already, so the
                 // backend's sentence loses its own copy of that question.
                 reason = text?.removePrefix(RETIRE_QUESTION)?.trim()?.takeIf { it.isNotEmpty() },
-                acceptLabel = RETIRE_ACCEPT,
-                discardLabel = RETIRE_DISCARD,
+                acceptLabel = FEEDBACK_RETIRE_ACCEPT,
+                discardLabel = FEEDBACK_RETIRE_DISCARD,
                 explainer = RETIRE_EXPLAINER,
                 bothAreTrue = false,
                 warnings = warnings,
@@ -362,10 +426,19 @@ object MemoryCards {
                 // "This might be about Work, which you set to not learn." (docs/
                 // JARVIS-API.md section 107): the card's two buttons are the answers
                 // "Save under Unsorted" and "Skip it" - the same accept and decline.
-                acceptLabel = Topics.askLabels(row)?.first ?: "Keep",
-                discardLabel = Topics.askLabels(row)?.second ?: "Discard",
+                // A card from the owner's own correction words says Update / Keep
+                // it as it is instead (Q2.2): its words ARE the replacement fact.
+                acceptLabel = when {
+                    fromFeedbackCorrection -> FEEDBACK_CORRECTION_ACCEPT
+                    else -> Topics.askLabels(row)?.first ?: "Keep"
+                },
+                discardLabel = when {
+                    fromFeedbackCorrection -> FEEDBACK_CORRECTION_DISCARD
+                    else -> Topics.askLabels(row)?.second ?: "Discard"
+                },
                 explainer = when {
                     kind != MemoryCardKind.CORRECTION -> null
+                    fromFeedbackCorrection -> FEEDBACK_CORRECTION_EXPLAINER
                     bothOk -> CORRECTION_EXPLAINER_BOTH
                     else -> CORRECTION_EXPLAINER
                 },
@@ -373,8 +446,13 @@ object MemoryCards {
                 warnings = warnings,
                 checked = row.bool("flags_checked"),
                 ownWords = ownWords,
-                // "your own words" says it better than "from remember".
-                sourceLine = source?.takeIf { !ownWords }?.let { "from ${it.replace('_', ' ')}" },
+                // "your own words" says it better than "from remember". The two
+                // machine sources are not shown as provenance words: the card
+                // itself says what it is (Update / Forget), and the owner never
+                // reads "feedback correction" on a screen.
+                sourceLine = source?.takeIf { !ownWords && !fromFeedbackCorrection }?.let {
+                    "from ${it.replace('_', ' ')}"
+                },
                 autoReasonLine = autoReason,
                 olderNewsLine = olderNews,
             )

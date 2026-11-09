@@ -114,8 +114,9 @@ class ClientSettings(context: Context) {
      * "Read out answers that use what Jarvis remembers" on this phone
      * (voice.MemoryAloud) - the owner's setting of 2026-11-05, **ON by
      * default** since the owner's decision of 2026-11-07
-     * ([PrivateAloud.MEMORY_ALOUD_DEFAULT]) and this phone's own: the PC has
-     * no matching switch, and nothing here changes what the PC reads. It
+     * ([PrivateAloud.MEMORY_ALOUD_DEFAULT]) and this phone's own: the PC now
+     * has its own read-aloud switch and rule (Wave 9), and nothing here
+     * changes what the PC reads. It
      * covers every VOICE answer on this phone - the mic press, "hey Jarvis"
      * and Jarvis Live - while it was unlocked at the press, and a TYPED answer
      * read aloud ("Read aloud") while it is unlocked. A typed answer is silent

@@ -4606,10 +4606,25 @@ private fun MessageMenu(
     // sheet sends nothing until one of its two submit controls is tapped; a
     // dismiss is a dismiss, never a mark.
     var wrongFor by remember(text) { mutableStateOf<String?>(null) }
+    // Q2.1 (2026-11-08): a sheet opened for an answer the PC already has a why
+    // for starts from it, so a re-shown answer never offers an empty sheet.
+    var wrongDraft by remember(text) { mutableStateOf<WrongFeedback.Draft?>(null) }
+    val savedDetails by com.jarvis.client.JarvisRuntime.answerMarkDetails.collectAsState()
+    // Ask the PC once, quietly, for this answer's saved mark and why. 404/503
+    // (an older PC) leaves everything as it was; nothing is invented.
+    LaunchedEffect(feedback?.turnId) {
+        feedback?.turnId?.let { com.jarvis.client.JarvisRuntime.syncAnswerMarkDetached(it) }
+    }
+    val savedFor = savedDetails?.takeIf { it.turnId == feedback?.turnId }
     Dialog(onDismissRequest = onDismiss) {
         val openWrong = wrongFor
         if (openWrong != null) {
-            WrongFeedbackSheet(turnId = openWrong, canMark = canMark, onClose = onDismiss)
+            WrongFeedbackSheet(
+                turnId = openWrong,
+                canMark = canMark,
+                initial = wrongDraft,
+                onClose = onDismiss,
+            )
         } else {
         Column(
             Modifier
@@ -4657,9 +4672,29 @@ private fun MessageMenu(
                     // always has - the sheet is for saying WHY, not for
                     // removing a mark.
                     if (tapped == AnswerMark.WRONG && feedback.mark != AnswerMark.WRONG) {
+                        wrongDraft = null
                         wrongFor = turnId
                     } else {
                         onMark(turnId, tapped)
+                    }
+                }
+                // Q2.1: what the PC saved for this answer, shown in the menu the
+                // owner reopens - the reason they picked and their own correction
+                // words - with a door to change it. A PC that saved nothing draws
+                // nothing here; the sheet then behaves exactly as before.
+                val savedLine = WrongFeedback.savedWords(savedFor)
+                if (savedLine != null && feedback.mark == AnswerMark.WRONG) {
+                    Gap(4)
+                    Text(
+                        savedLine,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                        modifier = Modifier.liveStatus(),
+                    )
+                    Gap(2)
+                    MoreRow(WrongFeedback.EDIT_WHY) {
+                        wrongDraft = WrongFeedback.prefill(savedFor)
+                        wrongFor = feedback.turnId
                     }
                 }
                 Gap(8)
@@ -4911,15 +4946,36 @@ private fun MarkToggle(
 private fun WrongFeedbackSheet(
     turnId: String,
     canMark: Boolean,
+    /** Q2.1: the PC's saved why, when this sheet was opened from one. */
+    initial: WrongFeedback.Draft? = null,
     onClose: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
-    var reason by remember(turnId) { mutableStateOf<FeedbackReason?>(null) }
-    var correction by remember(turnId) { mutableStateOf("") }
+    var reason by remember(turnId) { mutableStateOf(initial?.reason) }
+    var correction by remember(turnId) { mutableStateOf(initial?.correction ?: "") }
+    // True once the owner has touched the why; a late GET then cannot write
+    // over their choice.
+    var edited by remember(turnId) { mutableStateOf(false) }
     var sending by remember(turnId) { mutableStateOf(false) }
     var receipt by remember(turnId) { mutableStateOf<MarkReceipt?>(null) }
     var problem by remember(turnId) { mutableStateOf<String?>(null) }
+    // Q2.1: a re-shown answer's sheet starts from what the PC saved. The read
+    // is quiet and read-only; an older PC's 404 leaves the sheet empty.
+    val savedDetails by com.jarvis.client.JarvisRuntime.answerMarkDetails.collectAsState()
+    LaunchedEffect(turnId) {
+        com.jarvis.client.JarvisRuntime.syncAnswerMarkDetached(turnId)
+    }
+    val savedFor = savedDetails?.takeIf { it.turnId == turnId }
+    LaunchedEffect(savedFor, edited) {
+        if (!edited && receipt == null && reason == null && correction.isEmpty() &&
+            savedFor != null
+        ) {
+            val draft = WrongFeedback.prefill(savedFor)
+            reason = draft.reason
+            correction = draft.correction
+        }
+    }
 
     // The ONE place a control becomes a request, and a request becomes a send.
     // `WrongFeedback.request` decides, so the screen holds no second copy of
@@ -4990,6 +5046,7 @@ private fun WrongFeedbackSheet(
                     enabled = !sending && receipt == null,
                 ) {
                     reason = WrongFeedback.toggle(reason, option)
+                    edited = true
                 }
             }
         }
@@ -4999,7 +5056,10 @@ private fun WrongFeedbackSheet(
         // counter and the body can never disagree.
         TextInput(
             value = correction,
-            onValueChange = { correction = WrongFeedback.cap(it) },
+            onValueChange = {
+                correction = WrongFeedback.cap(it)
+                edited = true
+            },
             label = WrongFeedback.CORRECTION_LABEL,
             placeholder = WrongFeedback.CORRECTION_HINT,
             supportingText = WrongFeedback.remainingLabel(correction),
