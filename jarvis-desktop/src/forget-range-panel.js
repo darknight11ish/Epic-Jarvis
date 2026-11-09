@@ -574,7 +574,14 @@ function listPart(s) {
     part.append(hiddenNode(p));
     return part;
   }
-  if (p.tooMany || p.empty) return part;
+  if (p.empty) return part;
+  // A LARGE selection is said in the PC's own words BEFORE anything is sent
+  // (owner's 2026-11-08 ruling: no cap, but a big wipe keeps the two yesses).
+  if (p.largeWipe) {
+    const warn = el("p", "fr-large-wipe", p.largeWords || "This is a large wipe.");
+    warn.setAttribute("role", "status");
+    part.append(warn);
+  }
   if (p.chatsWhy) part.append(el("p", "empty failed", p.chatsWhy));
   // The chats this Forget is KEEPING (owner, 2026-11-04). Above the tickable
   // lists on purpose: the owner sees what stays before what goes. Nothing
@@ -612,7 +619,10 @@ function listPart(s) {
   const count = n.facts.length + n.chats.length;
   const go = button(forgetLabel(count), forgetNow, { isLive: true, danger: true,
     id: "forget-range-go" });
-  go.dataset.title = "Asks you first, with ONE approval card listing everything ticked.";
+  go.dataset.title = p.largeWipe
+    ? "Asks you first, with ONE approval card listing everything ticked - this is a "
+      + "large wipe, so you will be asked to say yes a second time after the card."
+    : "Asks you first, with ONE approval card listing everything ticked.";
   if (!count || s.waiting || s.confirm || s.undo) {
     go.dataset.off = "true";
     syncLive(go);

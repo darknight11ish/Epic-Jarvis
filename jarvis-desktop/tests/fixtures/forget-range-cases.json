@@ -111,6 +111,7 @@
     "confirm": {
      "expires_in": 120,
      "id": "hold-id",
+     "large_wipe": false,
      "route": "/api/memory/forget_range/confirm",
      "text": "Say yes again to finish. Undo stays available for 10 minutes."
     },
@@ -118,6 +119,9 @@
      "chats": 2,
      "facts": 2
     },
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "message": "Waiting for your approval. Nothing is forgotten or deleted unless you approve the card - and after that, unless you say yes a second time.",
     "ok": true,
     "pinned_kept_count": 0,
@@ -202,12 +206,13 @@
      "facts",
      "chats"
     ],
-    "max_items": 200,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "ok": true,
     "pinned_kept": [],
     "pinned_kept_count": 0,
-    "said": "2 facts and 2 chats from 1 to 15 September 2026.",
-    "too_many": false
+    "said": "2 facts and 2 chats from 1 to 15 September 2026."
    },
    "status": 200
   },
@@ -276,12 +281,13 @@
     "kinds": [
      "chats"
     ],
-    "max_items": 200,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "ok": true,
     "pinned_kept": [],
     "pinned_kept_count": 0,
-    "said": "2 chats from 1 to 15 September 2026.",
-    "too_many": false
+    "said": "2 chats from 1 to 15 September 2026."
    },
    "status": 200
   },
@@ -313,12 +319,1660 @@
      "facts",
      "chats"
     ],
-    "max_items": 200,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "ok": true,
     "pinned_kept": [],
     "pinned_kept_count": 0,
-    "said": "0 facts and 0 chats from 1 to 15 September 2026.",
-    "too_many": false
+    "said": "0 facts and 0 chats from 1 to 15 September 2026."
+   },
+   "status": 200
+  },
+  "preview_large_wipe": {
+   "body": {
+    "chats": [],
+    "chats_why": "",
+    "counts": {
+     "chats": 0,
+     "facts": 201
+    },
+    "empty": false,
+    "estimate": {
+     "chats": 0,
+     "facts": 201,
+     "messages": 0,
+     "seconds": 5,
+     "text": "About 5 seconds to forget 201 facts and delete 0 chats."
+    },
+    "facts": [
+     {
+      "between_us": false,
+      "id": 1,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350400,
+      "text": "Fact number 0"
+     },
+     {
+      "between_us": false,
+      "id": 2,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350401,
+      "text": "Fact number 1"
+     },
+     {
+      "between_us": false,
+      "id": 3,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350402,
+      "text": "Fact number 2"
+     },
+     {
+      "between_us": false,
+      "id": 4,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350403,
+      "text": "Fact number 3"
+     },
+     {
+      "between_us": false,
+      "id": 5,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350404,
+      "text": "Fact number 4"
+     },
+     {
+      "between_us": false,
+      "id": 6,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350405,
+      "text": "Fact number 5"
+     },
+     {
+      "between_us": false,
+      "id": 7,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350406,
+      "text": "Fact number 6"
+     },
+     {
+      "between_us": false,
+      "id": 8,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350407,
+      "text": "Fact number 7"
+     },
+     {
+      "between_us": false,
+      "id": 9,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350408,
+      "text": "Fact number 8"
+     },
+     {
+      "between_us": false,
+      "id": 10,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350409,
+      "text": "Fact number 9"
+     },
+     {
+      "between_us": false,
+      "id": 11,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350410,
+      "text": "Fact number 10"
+     },
+     {
+      "between_us": false,
+      "id": 12,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350411,
+      "text": "Fact number 11"
+     },
+     {
+      "between_us": false,
+      "id": 13,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350412,
+      "text": "Fact number 12"
+     },
+     {
+      "between_us": false,
+      "id": 14,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350413,
+      "text": "Fact number 13"
+     },
+     {
+      "between_us": false,
+      "id": 15,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350414,
+      "text": "Fact number 14"
+     },
+     {
+      "between_us": false,
+      "id": 16,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350415,
+      "text": "Fact number 15"
+     },
+     {
+      "between_us": false,
+      "id": 17,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350416,
+      "text": "Fact number 16"
+     },
+     {
+      "between_us": false,
+      "id": 18,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350417,
+      "text": "Fact number 17"
+     },
+     {
+      "between_us": false,
+      "id": 19,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350418,
+      "text": "Fact number 18"
+     },
+     {
+      "between_us": false,
+      "id": 20,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350419,
+      "text": "Fact number 19"
+     },
+     {
+      "between_us": false,
+      "id": 21,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350420,
+      "text": "Fact number 20"
+     },
+     {
+      "between_us": false,
+      "id": 22,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350421,
+      "text": "Fact number 21"
+     },
+     {
+      "between_us": false,
+      "id": 23,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350422,
+      "text": "Fact number 22"
+     },
+     {
+      "between_us": false,
+      "id": 24,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350423,
+      "text": "Fact number 23"
+     },
+     {
+      "between_us": false,
+      "id": 25,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350424,
+      "text": "Fact number 24"
+     },
+     {
+      "between_us": false,
+      "id": 26,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350425,
+      "text": "Fact number 25"
+     },
+     {
+      "between_us": false,
+      "id": 27,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350426,
+      "text": "Fact number 26"
+     },
+     {
+      "between_us": false,
+      "id": 28,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350427,
+      "text": "Fact number 27"
+     },
+     {
+      "between_us": false,
+      "id": 29,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350428,
+      "text": "Fact number 28"
+     },
+     {
+      "between_us": false,
+      "id": 30,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350429,
+      "text": "Fact number 29"
+     },
+     {
+      "between_us": false,
+      "id": 31,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350430,
+      "text": "Fact number 30"
+     },
+     {
+      "between_us": false,
+      "id": 32,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350431,
+      "text": "Fact number 31"
+     },
+     {
+      "between_us": false,
+      "id": 33,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350432,
+      "text": "Fact number 32"
+     },
+     {
+      "between_us": false,
+      "id": 34,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350433,
+      "text": "Fact number 33"
+     },
+     {
+      "between_us": false,
+      "id": 35,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350434,
+      "text": "Fact number 34"
+     },
+     {
+      "between_us": false,
+      "id": 36,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350435,
+      "text": "Fact number 35"
+     },
+     {
+      "between_us": false,
+      "id": 37,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350436,
+      "text": "Fact number 36"
+     },
+     {
+      "between_us": false,
+      "id": 38,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350437,
+      "text": "Fact number 37"
+     },
+     {
+      "between_us": false,
+      "id": 39,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350438,
+      "text": "Fact number 38"
+     },
+     {
+      "between_us": false,
+      "id": 40,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350439,
+      "text": "Fact number 39"
+     },
+     {
+      "between_us": false,
+      "id": 41,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350440,
+      "text": "Fact number 40"
+     },
+     {
+      "between_us": false,
+      "id": 42,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350441,
+      "text": "Fact number 41"
+     },
+     {
+      "between_us": false,
+      "id": 43,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350442,
+      "text": "Fact number 42"
+     },
+     {
+      "between_us": false,
+      "id": 44,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350443,
+      "text": "Fact number 43"
+     },
+     {
+      "between_us": false,
+      "id": 45,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350444,
+      "text": "Fact number 44"
+     },
+     {
+      "between_us": false,
+      "id": 46,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350445,
+      "text": "Fact number 45"
+     },
+     {
+      "between_us": false,
+      "id": 47,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350446,
+      "text": "Fact number 46"
+     },
+     {
+      "between_us": false,
+      "id": 48,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350447,
+      "text": "Fact number 47"
+     },
+     {
+      "between_us": false,
+      "id": 49,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350448,
+      "text": "Fact number 48"
+     },
+     {
+      "between_us": false,
+      "id": 50,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350449,
+      "text": "Fact number 49"
+     },
+     {
+      "between_us": false,
+      "id": 51,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350450,
+      "text": "Fact number 50"
+     },
+     {
+      "between_us": false,
+      "id": 52,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350451,
+      "text": "Fact number 51"
+     },
+     {
+      "between_us": false,
+      "id": 53,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350452,
+      "text": "Fact number 52"
+     },
+     {
+      "between_us": false,
+      "id": 54,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350453,
+      "text": "Fact number 53"
+     },
+     {
+      "between_us": false,
+      "id": 55,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350454,
+      "text": "Fact number 54"
+     },
+     {
+      "between_us": false,
+      "id": 56,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350455,
+      "text": "Fact number 55"
+     },
+     {
+      "between_us": false,
+      "id": 57,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350456,
+      "text": "Fact number 56"
+     },
+     {
+      "between_us": false,
+      "id": 58,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350457,
+      "text": "Fact number 57"
+     },
+     {
+      "between_us": false,
+      "id": 59,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350458,
+      "text": "Fact number 58"
+     },
+     {
+      "between_us": false,
+      "id": 60,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350459,
+      "text": "Fact number 59"
+     },
+     {
+      "between_us": false,
+      "id": 61,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350460,
+      "text": "Fact number 60"
+     },
+     {
+      "between_us": false,
+      "id": 62,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350461,
+      "text": "Fact number 61"
+     },
+     {
+      "between_us": false,
+      "id": 63,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350462,
+      "text": "Fact number 62"
+     },
+     {
+      "between_us": false,
+      "id": 64,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350463,
+      "text": "Fact number 63"
+     },
+     {
+      "between_us": false,
+      "id": 65,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350464,
+      "text": "Fact number 64"
+     },
+     {
+      "between_us": false,
+      "id": 66,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350465,
+      "text": "Fact number 65"
+     },
+     {
+      "between_us": false,
+      "id": 67,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350466,
+      "text": "Fact number 66"
+     },
+     {
+      "between_us": false,
+      "id": 68,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350467,
+      "text": "Fact number 67"
+     },
+     {
+      "between_us": false,
+      "id": 69,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350468,
+      "text": "Fact number 68"
+     },
+     {
+      "between_us": false,
+      "id": 70,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350469,
+      "text": "Fact number 69"
+     },
+     {
+      "between_us": false,
+      "id": 71,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350470,
+      "text": "Fact number 70"
+     },
+     {
+      "between_us": false,
+      "id": 72,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350471,
+      "text": "Fact number 71"
+     },
+     {
+      "between_us": false,
+      "id": 73,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350472,
+      "text": "Fact number 72"
+     },
+     {
+      "between_us": false,
+      "id": 74,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350473,
+      "text": "Fact number 73"
+     },
+     {
+      "between_us": false,
+      "id": 75,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350474,
+      "text": "Fact number 74"
+     },
+     {
+      "between_us": false,
+      "id": 76,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350475,
+      "text": "Fact number 75"
+     },
+     {
+      "between_us": false,
+      "id": 77,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350476,
+      "text": "Fact number 76"
+     },
+     {
+      "between_us": false,
+      "id": 78,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350477,
+      "text": "Fact number 77"
+     },
+     {
+      "between_us": false,
+      "id": 79,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350478,
+      "text": "Fact number 78"
+     },
+     {
+      "between_us": false,
+      "id": 80,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350479,
+      "text": "Fact number 79"
+     },
+     {
+      "between_us": false,
+      "id": 81,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350480,
+      "text": "Fact number 80"
+     },
+     {
+      "between_us": false,
+      "id": 82,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350481,
+      "text": "Fact number 81"
+     },
+     {
+      "between_us": false,
+      "id": 83,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350482,
+      "text": "Fact number 82"
+     },
+     {
+      "between_us": false,
+      "id": 84,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350483,
+      "text": "Fact number 83"
+     },
+     {
+      "between_us": false,
+      "id": 85,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350484,
+      "text": "Fact number 84"
+     },
+     {
+      "between_us": false,
+      "id": 86,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350485,
+      "text": "Fact number 85"
+     },
+     {
+      "between_us": false,
+      "id": 87,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350486,
+      "text": "Fact number 86"
+     },
+     {
+      "between_us": false,
+      "id": 88,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350487,
+      "text": "Fact number 87"
+     },
+     {
+      "between_us": false,
+      "id": 89,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350488,
+      "text": "Fact number 88"
+     },
+     {
+      "between_us": false,
+      "id": 90,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350489,
+      "text": "Fact number 89"
+     },
+     {
+      "between_us": false,
+      "id": 91,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350490,
+      "text": "Fact number 90"
+     },
+     {
+      "between_us": false,
+      "id": 92,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350491,
+      "text": "Fact number 91"
+     },
+     {
+      "between_us": false,
+      "id": 93,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350492,
+      "text": "Fact number 92"
+     },
+     {
+      "between_us": false,
+      "id": 94,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350493,
+      "text": "Fact number 93"
+     },
+     {
+      "between_us": false,
+      "id": 95,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350494,
+      "text": "Fact number 94"
+     },
+     {
+      "between_us": false,
+      "id": 96,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350495,
+      "text": "Fact number 95"
+     },
+     {
+      "between_us": false,
+      "id": 97,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350496,
+      "text": "Fact number 96"
+     },
+     {
+      "between_us": false,
+      "id": 98,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350497,
+      "text": "Fact number 97"
+     },
+     {
+      "between_us": false,
+      "id": 99,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350498,
+      "text": "Fact number 98"
+     },
+     {
+      "between_us": false,
+      "id": 100,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350499,
+      "text": "Fact number 99"
+     },
+     {
+      "between_us": false,
+      "id": 101,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350500,
+      "text": "Fact number 100"
+     },
+     {
+      "between_us": false,
+      "id": 102,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350501,
+      "text": "Fact number 101"
+     },
+     {
+      "between_us": false,
+      "id": 103,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350502,
+      "text": "Fact number 102"
+     },
+     {
+      "between_us": false,
+      "id": 104,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350503,
+      "text": "Fact number 103"
+     },
+     {
+      "between_us": false,
+      "id": 105,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350504,
+      "text": "Fact number 104"
+     },
+     {
+      "between_us": false,
+      "id": 106,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350505,
+      "text": "Fact number 105"
+     },
+     {
+      "between_us": false,
+      "id": 107,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350506,
+      "text": "Fact number 106"
+     },
+     {
+      "between_us": false,
+      "id": 108,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350507,
+      "text": "Fact number 107"
+     },
+     {
+      "between_us": false,
+      "id": 109,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350508,
+      "text": "Fact number 108"
+     },
+     {
+      "between_us": false,
+      "id": 110,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350509,
+      "text": "Fact number 109"
+     },
+     {
+      "between_us": false,
+      "id": 111,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350510,
+      "text": "Fact number 110"
+     },
+     {
+      "between_us": false,
+      "id": 112,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350511,
+      "text": "Fact number 111"
+     },
+     {
+      "between_us": false,
+      "id": 113,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350512,
+      "text": "Fact number 112"
+     },
+     {
+      "between_us": false,
+      "id": 114,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350513,
+      "text": "Fact number 113"
+     },
+     {
+      "between_us": false,
+      "id": 115,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350514,
+      "text": "Fact number 114"
+     },
+     {
+      "between_us": false,
+      "id": 116,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350515,
+      "text": "Fact number 115"
+     },
+     {
+      "between_us": false,
+      "id": 117,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350516,
+      "text": "Fact number 116"
+     },
+     {
+      "between_us": false,
+      "id": 118,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350517,
+      "text": "Fact number 117"
+     },
+     {
+      "between_us": false,
+      "id": 119,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350518,
+      "text": "Fact number 118"
+     },
+     {
+      "between_us": false,
+      "id": 120,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350519,
+      "text": "Fact number 119"
+     },
+     {
+      "between_us": false,
+      "id": 121,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350520,
+      "text": "Fact number 120"
+     },
+     {
+      "between_us": false,
+      "id": 122,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350521,
+      "text": "Fact number 121"
+     },
+     {
+      "between_us": false,
+      "id": 123,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350522,
+      "text": "Fact number 122"
+     },
+     {
+      "between_us": false,
+      "id": 124,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350523,
+      "text": "Fact number 123"
+     },
+     {
+      "between_us": false,
+      "id": 125,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350524,
+      "text": "Fact number 124"
+     },
+     {
+      "between_us": false,
+      "id": 126,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350525,
+      "text": "Fact number 125"
+     },
+     {
+      "between_us": false,
+      "id": 127,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350526,
+      "text": "Fact number 126"
+     },
+     {
+      "between_us": false,
+      "id": 128,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350527,
+      "text": "Fact number 127"
+     },
+     {
+      "between_us": false,
+      "id": 129,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350528,
+      "text": "Fact number 128"
+     },
+     {
+      "between_us": false,
+      "id": 130,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350529,
+      "text": "Fact number 129"
+     },
+     {
+      "between_us": false,
+      "id": 131,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350530,
+      "text": "Fact number 130"
+     },
+     {
+      "between_us": false,
+      "id": 132,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350531,
+      "text": "Fact number 131"
+     },
+     {
+      "between_us": false,
+      "id": 133,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350532,
+      "text": "Fact number 132"
+     },
+     {
+      "between_us": false,
+      "id": 134,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350533,
+      "text": "Fact number 133"
+     },
+     {
+      "between_us": false,
+      "id": 135,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350534,
+      "text": "Fact number 134"
+     },
+     {
+      "between_us": false,
+      "id": 136,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350535,
+      "text": "Fact number 135"
+     },
+     {
+      "between_us": false,
+      "id": 137,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350536,
+      "text": "Fact number 136"
+     },
+     {
+      "between_us": false,
+      "id": 138,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350537,
+      "text": "Fact number 137"
+     },
+     {
+      "between_us": false,
+      "id": 139,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350538,
+      "text": "Fact number 138"
+     },
+     {
+      "between_us": false,
+      "id": 140,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350539,
+      "text": "Fact number 139"
+     },
+     {
+      "between_us": false,
+      "id": 141,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350540,
+      "text": "Fact number 140"
+     },
+     {
+      "between_us": false,
+      "id": 142,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350541,
+      "text": "Fact number 141"
+     },
+     {
+      "between_us": false,
+      "id": 143,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350542,
+      "text": "Fact number 142"
+     },
+     {
+      "between_us": false,
+      "id": 144,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350543,
+      "text": "Fact number 143"
+     },
+     {
+      "between_us": false,
+      "id": 145,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350544,
+      "text": "Fact number 144"
+     },
+     {
+      "between_us": false,
+      "id": 146,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350545,
+      "text": "Fact number 145"
+     },
+     {
+      "between_us": false,
+      "id": 147,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350546,
+      "text": "Fact number 146"
+     },
+     {
+      "between_us": false,
+      "id": 148,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350547,
+      "text": "Fact number 147"
+     },
+     {
+      "between_us": false,
+      "id": 149,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350548,
+      "text": "Fact number 148"
+     },
+     {
+      "between_us": false,
+      "id": 150,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350549,
+      "text": "Fact number 149"
+     },
+     {
+      "between_us": false,
+      "id": 151,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350550,
+      "text": "Fact number 150"
+     },
+     {
+      "between_us": false,
+      "id": 152,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350551,
+      "text": "Fact number 151"
+     },
+     {
+      "between_us": false,
+      "id": 153,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350552,
+      "text": "Fact number 152"
+     },
+     {
+      "between_us": false,
+      "id": 154,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350553,
+      "text": "Fact number 153"
+     },
+     {
+      "between_us": false,
+      "id": 155,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350554,
+      "text": "Fact number 154"
+     },
+     {
+      "between_us": false,
+      "id": 156,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350555,
+      "text": "Fact number 155"
+     },
+     {
+      "between_us": false,
+      "id": 157,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350556,
+      "text": "Fact number 156"
+     },
+     {
+      "between_us": false,
+      "id": 158,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350557,
+      "text": "Fact number 157"
+     },
+     {
+      "between_us": false,
+      "id": 159,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350558,
+      "text": "Fact number 158"
+     },
+     {
+      "between_us": false,
+      "id": 160,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350559,
+      "text": "Fact number 159"
+     },
+     {
+      "between_us": false,
+      "id": 161,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350560,
+      "text": "Fact number 160"
+     },
+     {
+      "between_us": false,
+      "id": 162,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350561,
+      "text": "Fact number 161"
+     },
+     {
+      "between_us": false,
+      "id": 163,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350562,
+      "text": "Fact number 162"
+     },
+     {
+      "between_us": false,
+      "id": 164,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350563,
+      "text": "Fact number 163"
+     },
+     {
+      "between_us": false,
+      "id": 165,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350564,
+      "text": "Fact number 164"
+     },
+     {
+      "between_us": false,
+      "id": 166,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350565,
+      "text": "Fact number 165"
+     },
+     {
+      "between_us": false,
+      "id": 167,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350566,
+      "text": "Fact number 166"
+     },
+     {
+      "between_us": false,
+      "id": 168,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350567,
+      "text": "Fact number 167"
+     },
+     {
+      "between_us": false,
+      "id": 169,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350568,
+      "text": "Fact number 168"
+     },
+     {
+      "between_us": false,
+      "id": 170,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350569,
+      "text": "Fact number 169"
+     },
+     {
+      "between_us": false,
+      "id": 171,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350570,
+      "text": "Fact number 170"
+     },
+     {
+      "between_us": false,
+      "id": 172,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350571,
+      "text": "Fact number 171"
+     },
+     {
+      "between_us": false,
+      "id": 173,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350572,
+      "text": "Fact number 172"
+     },
+     {
+      "between_us": false,
+      "id": 174,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350573,
+      "text": "Fact number 173"
+     },
+     {
+      "between_us": false,
+      "id": 175,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350574,
+      "text": "Fact number 174"
+     },
+     {
+      "between_us": false,
+      "id": 176,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350575,
+      "text": "Fact number 175"
+     },
+     {
+      "between_us": false,
+      "id": 177,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350576,
+      "text": "Fact number 176"
+     },
+     {
+      "between_us": false,
+      "id": 178,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350577,
+      "text": "Fact number 177"
+     },
+     {
+      "between_us": false,
+      "id": 179,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350578,
+      "text": "Fact number 178"
+     },
+     {
+      "between_us": false,
+      "id": 180,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350579,
+      "text": "Fact number 179"
+     },
+     {
+      "between_us": false,
+      "id": 181,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350580,
+      "text": "Fact number 180"
+     },
+     {
+      "between_us": false,
+      "id": 182,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350581,
+      "text": "Fact number 181"
+     },
+     {
+      "between_us": false,
+      "id": 183,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350582,
+      "text": "Fact number 182"
+     },
+     {
+      "between_us": false,
+      "id": 184,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350583,
+      "text": "Fact number 183"
+     },
+     {
+      "between_us": false,
+      "id": 185,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350584,
+      "text": "Fact number 184"
+     },
+     {
+      "between_us": false,
+      "id": 186,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350585,
+      "text": "Fact number 185"
+     },
+     {
+      "between_us": false,
+      "id": 187,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350586,
+      "text": "Fact number 186"
+     },
+     {
+      "between_us": false,
+      "id": 188,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350587,
+      "text": "Fact number 187"
+     },
+     {
+      "between_us": false,
+      "id": 189,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350588,
+      "text": "Fact number 188"
+     },
+     {
+      "between_us": false,
+      "id": 190,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350589,
+      "text": "Fact number 189"
+     },
+     {
+      "between_us": false,
+      "id": 191,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350590,
+      "text": "Fact number 190"
+     },
+     {
+      "between_us": false,
+      "id": 192,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350591,
+      "text": "Fact number 191"
+     },
+     {
+      "between_us": false,
+      "id": 193,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350592,
+      "text": "Fact number 192"
+     },
+     {
+      "between_us": false,
+      "id": 194,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350593,
+      "text": "Fact number 193"
+     },
+     {
+      "between_us": false,
+      "id": 195,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350594,
+      "text": "Fact number 194"
+     },
+     {
+      "between_us": false,
+      "id": 196,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350595,
+      "text": "Fact number 195"
+     },
+     {
+      "between_us": false,
+      "id": 197,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350596,
+      "text": "Fact number 196"
+     },
+     {
+      "between_us": false,
+      "id": 198,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350597,
+      "text": "Fact number 197"
+     },
+     {
+      "between_us": false,
+      "id": 199,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350598,
+      "text": "Fact number 198"
+     },
+     {
+      "between_us": false,
+      "id": 200,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350599,
+      "text": "Fact number 199"
+     },
+     {
+      "between_us": false,
+      "id": 201,
+      "label": "Saved 2 September",
+      "pinned": false,
+      "saved": 1788350600,
+      "text": "Fact number 200"
+     }
+    ],
+    "frame": {
+     "end": 1789516800,
+     "from": "2026-09-01",
+     "said": "1 to 15 September 2026",
+     "start": 1788220800,
+     "to": "2026-09-15"
+    },
+    "kinds": [
+     "facts",
+     "chats"
+    ],
+    "large_wipe": true,
+    "large_wipe_items": 200,
+    "large_wipe_words": "That is 201 items - a large wipe. Nothing changes when you approve the card: you will be asked to say yes a second time on this PC before anything is removed.",
+    "ok": true,
+    "pinned_kept": [],
+    "pinned_kept_count": 0,
+    "said": "201 facts and 0 chats from 1 to 15 September 2026."
    },
    "status": 200
   },
@@ -350,12 +2004,13 @@
      "facts",
      "chats"
     ],
-    "max_items": 200,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "ok": true,
     "pinned_kept": [],
     "pinned_kept_count": 0,
-    "said": "0 facts and 0 chats from 28 September 2026, midnight to 11:59 am.",
-    "too_many": false
+    "said": "0 facts and 0 chats from 28 September 2026, midnight to 11:59 am."
    },
    "status": 200
   },
@@ -429,7 +2084,9 @@
      "facts",
      "chats"
     ],
-    "max_items": 200,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "ok": true,
     "pinned_kept": [
      {
@@ -439,8 +2096,7 @@
      }
     ],
     "pinned_kept_count": 1,
-    "said": "2 facts and 2 chats from 1 to 15 September 2026.",
-    "too_many": false
+    "said": "2 facts and 2 chats from 1 to 15 September 2026."
    },
    "status": 200
   },
@@ -470,49 +2126,13 @@
     "kinds": [
      "facts"
     ],
-    "max_items": 200,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "ok": true,
     "pinned_kept": [],
     "pinned_kept_count": 0,
-    "said": "0 facts from 21 to 27 September 2026.",
-    "too_many": false
-   },
-   "status": 200
-  },
-  "preview_too_many": {
-   "body": {
-    "chats": [],
-    "chats_why": "",
-    "counts": {
-     "chats": 0,
-     "facts": 201
-    },
-    "empty": false,
-    "estimate": {
-     "chats": 0,
-     "facts": 201,
-     "messages": 0,
-     "seconds": 5,
-     "text": "At least 5 seconds to forget 201 facts and delete 0 chats - and that is more than 200 at once, so nothing can be forgotten until you choose fewer days. Each request covers at most 200 items, and repeating it covers the rest."
-    },
-    "facts": [],
-    "frame": {
-     "end": 1789516800,
-     "from": "2026-09-01",
-     "said": "1 to 15 September 2026",
-     "start": 1788220800,
-     "to": "2026-09-15"
-    },
-    "kinds": [
-     "facts",
-     "chats"
-    ],
-    "max_items": 200,
-    "ok": true,
-    "pinned_kept": [],
-    "pinned_kept_count": 0,
-    "said": "That is 201 facts and 0 chats from 1 to 15 September 2026 - more than 200 at once. Choose fewer days.",
-    "too_many": true
+    "said": "0 facts from 21 to 27 September 2026."
    },
    "status": 200
   },
@@ -521,13 +2141,15 @@
     "asked": null,
     "available": true,
     "confirm": null,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": {
      "at": 0,
      "message": "Put back: 2 facts and 2 chats.",
      "outcome": "undone",
      "why": ""
     },
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -580,8 +2202,10 @@
     },
     "available": true,
     "confirm": null,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": null,
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -628,16 +2252,20 @@
     "confirm": {
      "expires_in": 120,
      "id": "hold-id",
+     "large_wipe": false,
+     "large_wipe_words": "",
      "route": "/api/memory/forget_range/confirm",
      "text": "Say yes again to finish. Undo stays available for 10 minutes."
     },
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": {
      "at": 0,
      "message": "Your card is approved. Nothing is forgotten or deleted until you say yes a second time.",
      "outcome": "confirm",
      "why": ""
     },
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -682,13 +2310,15 @@
     "asked": null,
     "available": true,
     "confirm": null,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": {
      "at": 0,
      "message": "The second yes timed out. Nothing was forgotten or deleted.",
      "outcome": "confirm_expired",
      "why": ""
     },
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -733,13 +2363,15 @@
     "asked": null,
     "available": true,
     "confirm": null,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": {
      "at": 0,
      "message": "Nothing was forgotten - you said no.",
      "outcome": "denied",
      "why": ""
     },
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -784,8 +2416,10 @@
     "asked": null,
     "available": true,
     "confirm": null,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": null,
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -830,13 +2464,15 @@
     "asked": null,
     "available": true,
     "confirm": null,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": {
      "at": 0,
      "message": "Done. You can undo it for 10 minutes.",
      "outcome": "done",
      "why": ""
     },
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -889,8 +2525,10 @@
     "asked": null,
     "available": true,
     "confirm": null,
+    "large_wipe": false,
+    "large_wipe_items": 200,
+    "large_wipe_words": "",
     "last": null,
-    "max_items": 200,
     "pinned_kept_count": 0,
     "presets": [
      {
@@ -963,7 +2601,7 @@
  },
  "limits": {
   "confirm_seconds": 120,
-  "max_items": 200,
+  "large_wipe_items": 200,
   "undo_minutes": 10
  },
  "missing": {

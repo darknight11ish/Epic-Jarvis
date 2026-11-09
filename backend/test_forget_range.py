@@ -19,12 +19,18 @@ chat history in a temp folder, with the clock and the time zone fixed:
     date), only facts still in use, chats that overlap the days - and the
     ones that spill outside them marked; PINNED chats are never on the
     tickable list and are counted as kept; an estimate measured from the
-    counts, with a human sentence; more than 200 is counts only and the
-    estimate says the batch must be narrowed;
+     counts, with a human sentence; NO ITEM CAP (the owner's 2026-11-08
+     ruling): any number is listed in full and offered, and a selection past
+     LARGE_WIPE_ITEMS (200) is called a LARGE WIPE in words - never refused;
   * the card: tier "ask" only, every fact word for word, every chat's
     title, the pinned-kept count and the estimate on it; one at a time; a
     list that changed since it was read refused;
-  * TWO yesses: approving the card changes NOTHING and holds the items;
+   * NO BACKUP IS TOUCHED: a backup folder present on disk is byte-unchanged
+     through a preview and a full forget, and the module names no backup at
+     all (walked as AST nodes, not pinned as source text);
+   * the DOUBLE-CONFIRM guard BITES (mutation-proved): removing the literal-yes
+     refusal makes a test go red, and the original refuses;
+   * TWO yesses: approving the card changes NOTHING and holds the items;
     only POST /confirm with a literal `yes: true` retires the facts (with
     Forget's own "forgotten" mark) and deletes the chats; denied or timed
     out: nothing changed; a non-literal yes is a 400 and the hold stays;
@@ -46,6 +52,8 @@ No pytest, no network, no model.
 """
 from __future__ import annotations
 
+import ast
+import importlib.util
 import json
 import os
 import socket
@@ -110,6 +118,20 @@ except ImportError:
 import jarvis_chat_log as CH  # noqa: E402
 import jarvis_forget_range as FR  # noqa: E402
 import jarvis_quick as Q  # noqa: E402
+
+# A MEASURED accommodation of a PRE-EXISTING path, not part of this feature:
+# `jarvis_quick.answer()` calls `_awareness_note()` after any answer whose
+# intent is not in READ_ONLY_INTENTS, and "forget_range" is not in that set
+# (jarvis_quick.py:25990 here). That note reads this PC's real model records -
+# which on this PC opens a connection to Ollama - and writes the change journal
+# under OPENJARVIS_HOME (~/.openjarvis by default). Measured 2026-11-09 with
+# the stub removed and OPENJARVIS_HOME pointed at a temp folder: 257 passed,
+# 1 failed ("nothing tried the network"), and self-awareness/snapshot.json was
+# written. A test must not touch the owner's live folder or the network, so
+# only that one post-answer writer is stubbed; the forget-range path under test
+# never calls it. (The real fix - adding "forget_range" to READ_ONLY_INTENTS -
+# touches a Wave-11 module and belongs to the Lead, not this lane.)
+Q._awareness_note = lambda *a, **k: ""
 
 PASSED, FAILED = [], []
 KEY = bytes(range(32))
@@ -371,7 +393,7 @@ def t_the_list():
           p["pinned_kept"] == [{"id": "conv-pinned-0004", "title": "Pinned planning",
                                 "messages": 1}]
           and p["pinned_kept_count"] == 1, p.get("pinned_kept"))
-    check("... a pinned chat does not use up the 200-item budget either",
+    check("... a pinned chat is not in the count that Forget these sends",
           p["counts"]["chats"] == 2)
     # The measured "how long would that take" (owner, 2026-11-04).
     est = p["estimate"]
@@ -397,26 +419,66 @@ def t_the_list():
           w.row(a)["valid_to"] is None and len(w.log.list()["conversations"]) == 4)
 
 
-def t_too_many():
+def t_no_cap_and_large_wipe():
+    """The owner's ruling, 2026-11-08, verbatim: "why is there a cap at 200? I
+    say i should be able to wipe as many as i want as long as there is a double
+    confirmation and it doesn't touch any backups."
+
+    So: 241 items preview in FULL and are offered in one action; the words say
+    LARGE WIPE (the old 200 is now only the threshold for saying so, named in
+    the body); and the double confirmation is unchanged - the card holds them
+    and only the second yes removes anything."""
     w = World()
+    n = 241                                   # 241, not 200: clearly past it
     with closing(sqlite3.connect(w.mem.path)) as c:
-        for i in range(FR.MAX_ITEMS + 1):
+        for i in range(n):
             c.execute("INSERT INTO facts (text, source, created, valid_from) VALUES (?,?,?,?)",
                       (f"The owner said thing number {i}", "test", at(2026, 9, 2) + i,
                        at(2026, 9, 2)))
         c.commit()
     p = w.preview("2026-09-01", "2026-09-15")
-    check(f"more than {FR.MAX_ITEMS}: counts only, no list", p["too_many"] is True
-          and p["facts"] == [] and p["chats"] == [] and p["counts"]["facts"] == FR.MAX_ITEMS + 1)
-    check("... and asks for fewer days", p["said"].endswith("more than 200 at once. Choose fewer days."),
+    check("241 items preview IN FULL - there is no cap", len(p["facts"]) == n
+          and p["counts"]["facts"] == n and "too_many" not in p, p["counts"])
+    check("... the counts sentence is exact",
+          p["said"] == f"{n} facts and 0 chats from 1 to 15 September 2026.",
           p["said"])
-    check("... and the estimate is honest about the cap: the batch size and repeating it",
-          p["estimate"]["facts"] == FR.MAX_ITEMS + 1 and p["estimate"]["seconds"] >= 1
-          and "more than 200 at once" in p["estimate"]["text"]
-          and "repeating it covers the rest" in p["estimate"]["text"], p["estimate"])
-    out = w.ask({"from": "2026-09-01", "to": "2026-09-15",
-                 "facts": list(range(1, FR.MAX_ITEMS + 2))})
-    check(f"a request for more than {FR.MAX_ITEMS} is refused", out[0] == 400, out)
+    check("... and it is called a large wipe, with the threshold named, never a limit",
+          p["large_wipe"] is True and p["large_wipe_items"] == FR.LARGE_WIPE_ITEMS
+          and str(n) in p["large_wipe_words"] and "large wipe" in p["large_wipe_words"]
+          and "say yes a second time" in p["large_wipe_words"], p["large_wipe_words"])
+    check("... the estimate is the whole batch, with no 'at least' or cap note",
+          p["estimate"]["facts"] == n and "At least" not in p["estimate"]["text"]
+          and "more than" not in p["estimate"]["text"]
+          and "repeating it" not in p["estimate"]["text"], p["estimate"])
+    body = {"from": "2026-09-01", "to": "2026-09-15",
+            "facts": [f["id"] for f in p["facts"]]}
+    code, out = w.ask(body)
+    check("a 241-item request is offered (202, ONE card), not refused",
+          code == 202 and out.get("waiting") is True and not w.gate.asked, out)
+    check("... and the 202 body says it is large",
+          out.get("large_wipe") is True and "large wipe" in out.get("message", "")
+          and "large wipe" in str(out.get("large_wipe_words") or ""), out)
+    w.clock.t = NOW + 1
+    w.approve()                                # the FIRST yes: nothing changes
+    prompt = w.gate.asked[-1][2]
+    check("the card lists the big selection and calls it a large wipe",
+          f"these {n} facts" in prompt and "large wipe" in prompt, prompt[:400])
+    check("... approving the card changes NOTHING: all 241 are still in use",
+          all(w.row(f["id"])["valid_to"] is None for f in p["facts"]))
+    st = FR.status(NOW + 2)
+    check("... the status offers the SECOND yes, with the large-wipe words",
+          st["confirm"] is not None and st["large_wipe"] is True
+          and st["confirm"]["large_wipe"] is True
+          and "large wipe" in st["confirm"]["text"], st.get("confirm"))
+    code, out = w.confirm(now=NOW + 3)
+    check("... and only the second yes forgets all 241", code == 200
+          and out["facts_forgotten"] == n, out)
+    check("... every one really is forgotten",
+          all(w.row(f["id"])["retired_at"] is not None for f in p["facts"]))
+    code, out = FR.undo(now=NOW + 60, mem=w.mem, chats=w.log)
+    check("... and Undo puts all 241 back", code == 200 and out["restored"]["facts"] == n, out)
+    check("... every one is in use again",
+          all(w.row(f["id"])["valid_to"] is None for f in p["facts"]))
 
 
 # --------------------------------------------------------------------------
@@ -1031,6 +1093,120 @@ def t_quick_never_removes():
         FR._memory = real_mem
 
 
+
+def t_backups_are_never_touched():
+    """The owner's 2026-11-08 ruling: wipe as many as he wants "as long as ...
+    it doesn't touch any backups".
+
+    A real backup folder on disk is byte-unchanged through a preview, the ONE
+    card, and the second yes; and the module's own code never names, imports,
+    copies, prunes or rotates a backup - only its card sentence mentions that
+    copies in older backups stay."""
+    w = _world_with_things()
+    backups = w.dir / "backups"
+    backups.mkdir()
+    (backups / "2026-09-01.db").write_bytes(b"an older backup, still sealed")
+    (backups / "2026-09-02.db").write_bytes(b"a second older backup")
+    older = backups / "2025"
+    older.mkdir()
+    (older / "2025-12-31.db").write_bytes(b"the oldest backup")
+
+    def snapshot():
+        return sorted((str(p.relative_to(backups)), p.read_bytes(), p.stat().st_mtime_ns)
+                      for p in backups.rglob("*") if p.is_file())
+
+    before = snapshot()
+    p = w.preview("2026-09-01", "2026-09-15")
+    code, _out = w.ask(_body(w))
+    check("the backup folder is untouched by the preview and the card request",
+          code == 202 and snapshot() == before, code)
+    w.approve()
+    code, _out = w.confirm()
+    check("... and by the second yes that actually forgets and deletes", code == 200)
+    check("... the backups are byte-for-byte unchanged, same names and mtimes",
+          snapshot() == before, [x[0] for x in snapshot()])
+    check("... no file was added to or removed from the backup folder",
+          [x[0] for x in snapshot()] == [x[0] for x in before])
+
+    # And the module's own CODE never names a backup: only the card sentence
+    # does (a string constant, not an import, a call or a path).
+    tree = ast.parse(Path(FR.__file__).read_text(encoding="utf-8"))
+    tree_imports = _imported_modules(tree)
+    named = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and "backup" in node.id.lower():
+            named.append(node.id)
+        elif isinstance(node, ast.Attribute) and "backup" in node.attr.lower():
+            named.append(node.attr)
+        elif isinstance(node, ast.Import):
+            named += [a.name for a in node.names if "backup" in a.name.lower()]
+        elif isinstance(node, ast.ImportFrom) and "backup" in (node.module or "").lower():
+            named.append(node.module)
+    check("the module's own code never names or imports a backup mechanism", named == [], named)
+    check("... and it imported no module that copies or prunes a file",
+          all(m not in tree_imports for m in ("shutil", "glob", "zipfile")),
+          sorted(tree_imports & {"shutil", "glob", "zipfile"}))
+    # The two stores this path owns ARE touched by the same run - so the test
+    # above cannot pass for the wrong reason (nothing happening at all).
+    check("... while the two stores it does own really were used",
+          w.row(w.a)["retired_at"] is not None
+          and len(w.log.list()["conversations"]) < 2)
+
+
+def t_the_double_confirm_guard_bites():
+    """MUTATION PROOF of the second yes: take the literal-yes refusal out of a
+    COPY of the module and a non-literal `yes: false` DELETES the items; the
+    real module refuses the same call in the PC's own words. So the guard is
+    load-bearing, and the suites that assert the refusal would go red if it
+    were removed."""
+    src = Path(FR.__file__).read_text(encoding="utf-8")
+    mutant_src = src.replace('if body.get("yes") is not True:', "if False:")
+    check("the mutation changes the module (the guard is really in the source)",
+          mutant_src != src)
+    tmp = Path(tempfile.mkdtemp(prefix="jarvis-forget-mutant-"))
+    mp = tmp / "jarvis_forget_range_mutant.py"
+    mp.write_text(mutant_src, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("jarvis_forget_range_mutant", mp)
+    MUT = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(MUT)
+    MUT._timer = Timers()
+    w = _world_with_things()
+    MUT._reset_for_tests()
+    spawn = Held()
+    code, _out = MUT.request(_body(w), now=NOW, mem=w.mem, chats=w.log,
+                             gate=Gate(), spawn=spawn)
+    check("the mutant flow still raises its card", code == 202, code)
+    while spawn.jobs:
+        spawn.jobs.pop(0)()
+    hid = (MUT.status(NOW).get("confirm") or {}).get("id")
+    code, _out = MUT.confirm({"id": hid, "yes": False}, now=NOW, mem=w.mem,
+                             chats=w.log, timer=Timers())
+    check("MUTANT: with that one guard removed, a `yes: false` deletes (so the "
+          "guard is what stops it)", code == 200 and w.row(w.a)["retired_at"] is not None,
+          (code, w.row(w.a).get("retired_at")))
+    w2 = _world_with_things()
+    code, _out = w2.ask(_body(w2))
+    check("the real module still offers the card", code == 202, code)
+    w2.approve()
+    code, out = w2.confirm(yes=False)
+    check("the real module REFUSES a non-literal yes, and the list stays held",
+          code == 400 and "literal yes" in out.get("error", "")
+          and w2.row(w2.a)["retired_at"] is None, out)
+    code, _out = w2.confirm(yes=True)
+    check("... and its real second yes still acts", code == 200
+          and w2.row(w2.a)["retired_at"] is not None)
+
+
+def _imported_modules(tree) -> set:
+    out = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            out |= {a.name.split(".")[0] for a in node.names}
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            out.add(node.module.split(".")[0])
+    return out
+
+
 # --------------------------------------------------------------------------
 #   The routes
 # --------------------------------------------------------------------------
@@ -1071,7 +1247,8 @@ def t_routes():
         h = H("/api/memory/forget_range")
         H.do_GET(h)
         check("GET status", h.sent[0] == 200 and h.sent[1]["available"] is True
-              and h.sent[1]["max_items"] == 200 and h.sent[1]["undo_minutes"] == 10
+               and h.sent[1]["large_wipe_items"] == 200
+               and h.sent[1]["large_wipe"] is False and h.sent[1]["undo_minutes"] == 10
               and [p["id"] for p in h.sent[1]["presets"]][:2] == ["today", "yesterday"], h.sent)
         h = H("/api/memory/forget_range/preview?from=2026-09-01&to=2026-09-15&kinds=facts")
         H.do_GET(h)

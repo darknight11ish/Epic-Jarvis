@@ -144,7 +144,8 @@ export function readStatus(v) {
   // really holding one - an id this page cannot hand back is not a second yes.
   const c = v.confirm && typeof v.confirm === "object" ? v.confirm : null;
   const confirm = c && isHoldId(text(c.id))
-    ? { id: text(c.id), expiresIn: num(c.expires_in), text: text(c.text) || EXTRA.confirm_text }
+    ? { id: text(c.id), expiresIn: num(c.expires_in), text: text(c.text) || EXTRA.confirm_text,
+        largeWipe: c.large_wipe === true, largeWords: text(c.large_wipe_words) }
     : null;
   return {
     available: true,
@@ -166,7 +167,11 @@ export function readStatus(v) {
       said: text(a.said),
       kinds: Array.isArray(a.kinds) ? a.kinds.filter((k) => k === "facts" || k === "chats") : [],
     } : null,
-    maxItems: num(v.max_items) || 200,
+    // There is NO item cap (owner's 2026-11-08 ruling). `largeWipe` only says a
+    // big selection is called that in words; `largeWipeItems` is the threshold.
+    largeWipe: v.large_wipe === true,
+    largeWipeItems: num(v.large_wipe_items) || 200,
+    largeWords: text(v.large_wipe_words),
     presets: Array.isArray(v.presets) && v.presets.length
       ? v.presets.filter((p) => p && typeof p.id === "string").map((p) => ({ id: p.id, label: text(p.label) }))
       : PRESETS.slice(),
@@ -219,7 +224,11 @@ export function readPreview(v) {
       seconds: num(est.seconds), text: text(est.text),
     },
     counts: { facts: num(counts.facts), chats: num(counts.chats) },
-    tooMany: v.too_many === true,
+    // NO item cap: the list is exact at any size. `largeWipe` only says the
+    // selection is big enough to be called that, in the PC's own words.
+    largeWipe: v.large_wipe === true,
+    largeWipeItems: num(v.large_wipe_items) || 200,
+    largeWords: text(v.large_wipe_words),
     empty: v.empty === true,
     said: text(v.said),
     chatsWhy: text(v.chats_why),

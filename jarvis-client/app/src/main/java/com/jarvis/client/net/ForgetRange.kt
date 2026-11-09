@@ -150,7 +150,9 @@ object ForgetRange {
      * deleted until this is answered - and only with [confirmBody]'s literal
      * `true`.
      */
-    data class Confirm(val id: String, val expiresIn: Int, val text: String)
+    data class Confirm(val id: String, val expiresIn: Int, val text: String,
+        /** True when the PC calls this selection a large wipe (owner's 2026-11-08 ruling). */
+        val largeWipe: Boolean = false)
 
     data class Status(
         val available: Boolean,
@@ -159,7 +161,11 @@ object ForgetRange {
         val undo: Undo?,
         val last: Last?,
         val asked: Asked?,
-        val maxItems: Int,
+        /** There is no item cap (owner's 2026-11-08 ruling): this is only the size
+         *  at which the PC calls a wipe LARGE, never a limit. */
+        val largeWipe: Boolean,
+        val largeWipeItems: Int,
+        val largeWords: String,
         val presets: List<Preset>,
         /** Null unless a card has been approved and the PC is holding items. */
         val confirm: Confirm? = null,
@@ -219,7 +225,10 @@ object ForgetRange {
         val chats: List<Chat>,
         val factsCount: Int,
         val chatsCount: Int,
-        val tooMany: Boolean,
+        /** No item cap: the list is exact at any size; [largeWipe] only names a big one. */
+        val largeWipe: Boolean,
+        val largeWipeItems: Int,
+        val largeWords: String,
         val empty: Boolean,
         val said: String,
         val chatsWhy: String,
@@ -281,7 +290,8 @@ object ForgetRange {
      */
     fun isHoldId(s: String?): Boolean = s != null && HOLD_ID.matches(s)
 
-    private fun unavailable(why: String?) = Status(false, why ?: MISSING, false, null, null, null, 200, PRESETS)
+    private fun unavailable(why: String?) = Status(false, why ?: MISSING, false, null, null, null,
+        false, 200, "", PRESETS)
 
     /** `GET /api/memory/forget_range`. */
     fun parseStatus(o: JsonObject?): Status {
@@ -316,10 +326,13 @@ object ForgetRange {
                 Asked(it.text("id").orEmpty(), it.text("from")!!, it.text("to")!!, it.text("said").orEmpty(),
                     it.words("kinds").filter { k -> k == "facts" || k == "chats" })
             },
-            maxItems = o.whole("max_items").takeIf { it > 0 } ?: 200,
+            largeWipe = o.flag("large_wipe"),
+            largeWipeItems = o.whole("large_wipe_items").takeIf { it > 0 } ?: 200,
+            largeWords = o.text("large_wipe_words").orEmpty(),
             presets = presets.ifEmpty { PRESETS },
             confirm = if (c != null && isHoldId(cid)) {
-                Confirm(cid!!, c.whole("expires_in"), c.text("text").orEmpty().ifEmpty { x("confirm_text") })
+                Confirm(cid!!, c.whole("expires_in"), c.text("text").orEmpty().ifEmpty { x("confirm_text") },
+                     c.flag("large_wipe"))
             } else {
                 null
             },
@@ -331,7 +344,7 @@ object ForgetRange {
     fun parsePreview(o: JsonObject?): Preview {
         if (o == null || (o["available"] as? JsonPrimitive)?.booleanOrNull == false) {
             return Preview(false, o?.text("why") ?: MISSING, "", "", "", emptyList(), emptyList(), emptyList(),
-                0, 0, false, false, "", "")
+                0, 0, false, 200, "", false, "", "")
         }
         val f = o.obj("frame")
         val counts = o.obj("counts")
@@ -368,7 +381,9 @@ object ForgetRange {
             chats = chats,
             factsCount = counts?.whole("facts") ?: 0,
             chatsCount = counts?.whole("chats") ?: 0,
-            tooMany = o.flag("too_many"),
+            largeWipe = o.flag("large_wipe"),
+            largeWipeItems = o.whole("large_wipe_items").takeIf { it > 0 } ?: 200,
+            largeWords = o.text("large_wipe_words").orEmpty(),
             empty = o.flag("empty"),
             said = o.text("said").orEmpty(),
             chatsWhy = o.text("chats_why").orEmpty(),

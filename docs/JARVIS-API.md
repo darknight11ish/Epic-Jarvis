@@ -15076,6 +15076,20 @@ were wrong. Three things changed, all additive:
   chats. The platform gate (Windows Hello on the PC, the phone's screen lock)
   stays on the card, where a person approves.
 
+**No item cap (owner's ruling, 2026-11-08).** Verbatim: *"why is there a cap
+at 200? I say i should be able to wipe as many as i want as long as there is a
+double confirmation and it doesn't touch any backups."* So there is no 200-item
+ceiling: any time frame is listed in FULL and forgotten in one action. A
+selection above `large_wipe_items` (200 - the OLD cap, now only a THRESHOLD,
+never a limit) is called a **large wipe** in the preview (`large_wipe`,
+`large_wipe_words`), on the card, in the status and in both apps; the two yesses
+are unchanged (the card is the FIRST yes, `/confirm` the SECOND), so a big wipe
+still needs both and nothing above the threshold is refused, hidden or split.
+**No backup is ever touched:** the only stores this path writes are
+`memory.db` (retire/unforget) and `chat-history.db` (take_out/put_back); it
+never reads, writes, copies, prunes or rotates a backup - the card's own
+sentence says copies in older backups stay until they age out.
+
 `backend/jarvis_forget_range.py` (shipped whole), installed by
 `forget-range.patch` (the startup `install()` block, and the gate's risk
 line). Desktop: a card on the Brain's History tab (`forget-range.js`,
@@ -15108,16 +15122,19 @@ hidden with every other title - it is a list of chat titles, as `chats` is
   these days - the whole chat is deleted."
 - **A PINNED chat is never deleted (added 2026-11-04).** Pinning is the
   owner's own "keep this", so it outranks a later "forget that week": a
-  pinned chat is not in the tickable `chats` list (the list budget of 200
-  counts only what can be ticked), and a request that names one anyway is
+  pinned chat is not in the tickable `chats` list (it is not in the count
+  "Forget these" sends), and a request that names one anyway is
   refused `409` with `"changed": true` - never a silent delete. The preview
   carries the kept ones as `pinned_kept` and `pinned_kept_count`, the status
   carries `pinned_kept_count`, and the card says "N pinned chats are kept".
 - **Days are the PC's own local time, and inclusive**: "1 to 15 September"
   runs from midnight at the start of the 1st to the end of the 15th. A frame
   may carry a time of day ("this morning": midnight to 11:59 am).
-- **At most 200 facts and chats together.** More: `too_many`, the counts
-  only, no list, and "Choose fewer days" - nothing can be forgotten from it.
+- **NO item cap (2026-11-08).** Any number of facts and chats is listed in
+  full and offered in one action. Above `large_wipe_items` (200 - the old cap,
+  now only the size at which the words say "large wipe") the preview's
+  `large_wipe` is true and `large_wipe_words` says so; nothing is refused,
+  hidden or split. **Nothing here touches a backup** (see the intro above).
 - **Each chat carries its kind** (since the chat audit, 2026-09-28, §18.6:
   `"kind"` and `"ticked"` on every chat of the preview). A
   **customer-support chat's record starts UNticked** - the owner's "Forget
@@ -15132,16 +15149,19 @@ hidden with every other title - it is a list of chat titles, as `chats` is
 
 `GET /api/memory/forget_range` - the status:
 `{"available": true, "waiting", "waiting_for", "confirm": null | {"route",
-"id", "expires_in", "text"}, "pinned_kept_count", "undo": null | {"until",
+"id", "expires_in", "text", "large_wipe", "large_wipe_words"},
+"pinned_kept_count", "undo": null | {"until",
 "seconds_left", "minutes_left", "facts", "chats", "frame", "said"}, "last":
 null | {"outcome", "message", "at"}, "asked": null | {"id", "from", "to",
-"said", "kinds"}, "max_items": 200, "undo_minutes": 10, "presets": [{"id",
+"said", "kinds"}, "large_wipe": false, "large_wipe_items": 200,
+"large_wipe_words": "", "undo_minutes": 10, "presets": [{"id",
 "label"}]}`. `asked` is a request said or typed in the last 30 minutes -
 the days the apps fill in. `confirm` is non-null exactly while a card has
 been approved and its items wait for the SECOND yes: `id` is the held id,
 `expires_in` counts down from 120, and `text` is "Say yes again to finish.
-Undo stays available for 10 minutes." It is not an error state when it
-disappears. `pinned_kept_count` is the number of pinned chats from the
+Undo stays available for 10 minutes." (For a LARGE selection it is
+`CONFIRM_TEXT_LARGE`, which starts "This is a large wipe." - the same second
+yes, said bigger.) It is not an error state when it disappears. `pinned_kept_count` is the number of pinned chats from the
 range that are being kept (0 when neither a card nor a second yes is
 waiting).
 
@@ -15155,15 +15175,17 @@ waiting).
 "started", "updated", "turns", "in_frame", "spills", "label"}], "counts":
 {"facts"?, "chats"?}, "pinned_kept": [{"id", "title", "messages"}],
 "pinned_kept_count", "estimate": {"facts", "chats", "messages", "seconds",
-"text"}, "too_many", "empty", "said", "chats_why"}`.
+"text"}, "large_wipe", "large_wipe_items", "large_wipe_words", "empty",
+"said", "chats_why"}`.
 `chats` holds only what may be ticked (pinned chats are in `pinned_kept`).
 `estimate.seconds` is the measured cost of this batch, never less than 1:
 20 ms per fact retired, 5 ms per chat taken out and 0.1 ms per message row,
 each rounded UP from a 2026-11-04 measurement on the owner's PC (best of
 three; best measured: 15.7 ms, 0.82 ms, 0.016 ms), and `text` is the human
-sentence. Over the cap the sentence says the batch must be narrowed, that
-each request covers 200 items and that repeating the request covers the
-rest. `chats_why`: the chats could not be read (the history key). `400` a
+sentence. There is no cap: above `large_wipe_items` (200) `large_wipe` is
+true and `large_wipe_words` says so in words - the list is still complete and
+the request below still accepts it. `chats_why`: the chats could not be read
+(the history key). `400` a
 date that is not one, a frame in the future, a kind that is not `facts` or
 `chats` - its sentence in `error`.
 
@@ -15174,9 +15196,11 @@ deletable (a chat - a pinned one is not), and still from those days -
 anything else is `409 {"changed": true}` ("The list changed since you read
 it ... Read the list again."), so nothing off the list the owner read can
 ride on the card. **202** `{"waiting": true, "counts",
-"pinned_kept_count", "confirm": {"route", "id", "expires_in": 120,
-"text"}}` and ONE card - and **nothing is forgotten or deleted**: the card
-is the FIRST yes. `400` nothing ticked, more than 200, a bad id or date.
+"pinned_kept_count", "large_wipe", "large_wipe_items", "large_wipe_words",
+"confirm": {"route", "id", "expires_in": 120, "text", "large_wipe"}}` and
+ONE card - and **nothing is forgotten or deleted**: the card is the FIRST
+yes. There is NO item cap: a large selection is accepted and its 202 body
+says `large_wipe`. `400` nothing ticked, a bad id or date.
 `409` a card already waiting, a second yes already held, or an Undo still
 open (one Undo window at a time: "You can still undo the last time frame
 you forgot, for about N more minutes..."). `503` the tier is not `ask`, or
@@ -15226,6 +15250,11 @@ and the status's `confirm` block appears. `POST /confirm` with the literal
 `yes: true` is the SECOND yes; without it, or after the 120 seconds, the
 hold is simply dropped and nothing was changed. The platform gate runs on
 the card (Windows Hello / phone screen lock), not on the confirm.
+
+For a LARGE selection (more than `large_wipe_items`) nothing about the two
+yesses changes; only the words do: the card carries "This is a large wipe."
+and both apps' second-yes line is the PC's `CONFIRM_TEXT_LARGE`. The card is
+still the FIRST yes and `/confirm` still the SECOND.
 
 - Each fact: `jarvis_memory.retire()`, the call Forget makes - so it gets
   Forget's own "forgotten" mark (`meta.forgotten_at`): a question about the
@@ -15296,6 +15325,11 @@ nothing - the second yes is a tap on the confirm block, never a voice.
   deletion is only after the 200 from `/confirm` (then the status says
   `last.outcome` "done"), and the 10-minute Undo it starts is drawn like any
   other.
+- **A large wipe is said in words (2026-11-08).** Both apps show the PC's
+  `large_wipe_words` under the list before anything is sent (the desktop's
+  `.fr-large-wipe` line, the phone's warning line), and the card/confirm text
+  says it too. The list stays complete, the `estimate.text` stays, and "Forget
+  these" stays offered - there is no cap and no refusal; only the two yesses.
 - **A pinned chat is never sent** (it is not in `chats`) and never rendered
   as tickable; both apps show the `pinned_kept` names as kept, with the PC's
   own "N pinned chats are kept" and why, and the `estimate.text` line as the

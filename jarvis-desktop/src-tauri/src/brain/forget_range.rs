@@ -153,7 +153,9 @@ pub(crate) fn read_path(
 }
 
 /// The body of "Forget these", checked: the two dates as the PC wrote
-/// them, fact ids (whole numbers) and chat ids, at least one, at most 200.
+/// them, fact ids (whole numbers) and chat ids, at least one. There is NO
+/// item cap (the owner's 2026-11-08 ruling): any number is offered, as long as
+/// the card and the PC's own second yes still happen.
 pub(crate) fn forget_body(body: Option<serde_json::Value>) -> Result<serde_json::Value, String> {
     let body = body.unwrap_or_else(|| serde_json::json!({}));
     let obj = body
@@ -191,9 +193,6 @@ pub(crate) fn forget_body(body: Option<serde_json::Value>) -> Result<serde_json:
     };
     if facts.is_empty() && chats.is_empty() {
         return Err("Tick at least one thing to forget.".to_string());
-    }
-    if facts.len() + chats.len() > 200 {
-        return Err("At most 200 at once. Choose fewer days.".to_string());
     }
     Ok(serde_json::json!({ "from": from, "to": to, "facts": facts, "chats": chats }))
 }
@@ -504,11 +503,20 @@ mod tests {
         ] {
             assert!(forget_body(Some(bad.clone())).is_err(), "{bad}");
         }
-        let many: Vec<u64> = (1..=201).collect();
-        assert!(forget_body(Some(
-            serde_json::json!({ "from": "2026-09-01", "to": "2026-09-15", "facts": many })
+        // There is NO item cap (the owner's 2026-11-08 ruling): a 241-item
+        // selection is checked and sent like any other; the card and the PC's
+        // own second yes are what keep it safe.
+        let many: Vec<u64> = (1..=241).collect();
+        let big = forget_body(Some(
+            serde_json::json!({ "from": "2026-09-01", "to": "2026-09-15", "facts": many }),
         ))
-        .is_err());
+        .expect("a large selection is offered, never refused");
+        assert_eq!(big["facts"].as_array().unwrap().len(), 241);
+        assert!(forget_body(Some(
+            serde_json::json!({ "from": "2026-09-01", "to": "2026-09-15",
+                                "chats": ["conv-trip-00001"] })
+        ))
+        .is_ok());
     }
 
     #[test]

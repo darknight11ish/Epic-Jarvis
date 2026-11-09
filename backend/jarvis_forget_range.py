@@ -30,9 +30,20 @@ WHICH FACTS, WHICH CHATS
     is from midnight at the start of the 1st to the end of the 15th. A
     frame may also carry a time of day ("this morning": midnight to 11:59
     am).
-  * At most MAX_ITEMS (200) facts and chats together in one go. More than
-    that and the list says how many and asks for fewer days - no list is
-    sent, and nothing can be forgotten from it.
+  * THERE IS NO ITEM CAP (the owner's ruling, 2026-11-08, verbatim: "why is
+    there a cap at 200? I say i should be able to wipe as many as i want as
+    long as there is a double confirmation and it doesn't touch any
+    backups"). Any time frame is listed exactly and can be forgotten in one
+    action. A selection LARGER than LARGE_WIPE_ITEMS (200 - the old cap, a
+    size the owner already saw handled in one card) is called a LARGE WIPE in
+    words in the list, on the card and in the status; the two yesses are
+    unchanged (the card is the first, POST /confirm the second), and a large
+    wipe never skips either one.
+  * NO BACKUP IS EVER TOUCHED. The only stores this module writes are
+    `memory.db` through `jarvis_memory` (retire/unforget) and
+    `chat-history.db` through `jarvis_chat_log` (take_out/put_back). It never
+    reads, writes, copies, prunes or rotates a backup folder; the card's own
+    sentence says copies in older backups stay until they age out.
 
 PINNED CHATS ARE KEPT (owner, 2026-11-04)
 A pinned chat is never on the list and is never deleted by this action:
@@ -125,8 +136,15 @@ UNDO = ROUTE + "/undo"
 CONFIRM = ROUTE + "/confirm"
 ROUTES = (ROUTE, PREVIEW, UNDO, CONFIRM)
 
-#: Facts and chats together, in one list and on one card.
-MAX_ITEMS = 200
+#: NO ITEM CAP (the owner's 2026-11-08 ruling: "i should be able to wipe as
+#: many as i want as long as there is a double confirmation and it doesn't
+#: touch any backups"). Any number of facts and chats is listed on one card and
+#: forgotten in one action. This is only the size at which a wipe is called
+#: LARGE - 200, the old cap, a number the owner already saw handled in one card
+#: - so the list, the card, the status and both apps can say "this is a large
+#: wipe" in words. It is a THRESHOLD, never a limit: nothing above it is
+#: refused, hidden or split.
+LARGE_WIPE_ITEMS = 200
 #: How long Undo lasts after the second yes.
 UNDO_SECONDS = 600
 UNDO_MINUTES = UNDO_SECONDS // 60
@@ -218,6 +236,11 @@ MISSING = WORDS["missing"]
 #: to them. Until it does, the backend sends these sentences itself and the
 #: fixture carries them under `confirm_words`, which neither old app reads.
 CONFIRM_TEXT = "Say yes again to finish. Undo stays available for 10 minutes."
+#: The second yes when the selection is LARGE (the owner's 2026-11-08 ruling):
+#: the card is still the first yes, but both apps say out loud that this one is
+#: big and that the second tap on this PC is what starts it.
+CONFIRM_TEXT_LARGE = ("This is a large wipe. Say yes again on this PC to finish - nothing has "
+                      "been removed yet. Undo stays available for 10 minutes.")
 CONFIRM_YES = "Yes, forget them"
 #: The pinned chats the list leaves out (owner, 2026-11-04).
 PINNED_ONE = "1 pinned chat is kept"
@@ -530,6 +553,38 @@ def _summary(nf: Optional[int], nc: Optional[int], said: str) -> str:
     return " and ".join(parts) + f" from {said}."
 
 
+def large_wipe_words(n: int) -> str:
+    """One sentence saying this selection is LARGE - never a limit. Used by
+    the preview, the card, the status and both apps (2026-11-08 ruling)."""
+    return (f"That is {_num(n)} items - a large wipe. Nothing changes when you approve the "
+            "card: you will be asked to say yes a second time on this PC before anything is "
+            "removed.")
+
+
+def _all_facts(mem, frame: Frame) -> tuple:
+    """EVERY fact in the frame, and the exact count - no item cap.
+
+    The store reads one page, so this asks its exact total first, then asks for
+    that many in one page; nothing is dropped and no arbitrary limit is
+    introduced (the owner's 2026-11-08 ruling)."""
+    _, total = mem.saved_between(frame.start, frame.end, 0)
+    total = int(total)
+    if total <= 0:
+        return [], 0
+    rows, total = mem.saved_between(frame.start, frame.end, total)
+    return rows, int(total)
+
+
+def _overlapping_all(chats, frame: Frame, *, pinned=None) -> dict:
+    """EVERY chat that overlaps the frame (the `pinned` filter as ChatLog
+    takes it), read by its own exact count - no item cap."""
+    counted = chats.overlapping(frame.start, frame.end, 0, pinned=pinned)
+    total = int(counted.get("total") or 0)
+    if total <= 0:
+        return counted
+    return chats.overlapping(frame.start, frame.end, total, pinned=pinned)
+
+
 def _num(n: int) -> str:
     """1,443 - the way the estimate's sentence writes a count."""
     return f"{int(n):,}"
@@ -549,13 +604,11 @@ def seconds_for(nf: int, nc: int, messages: int) -> int:
     return max(1, int(math.ceil(cost)))
 
 
-def estimate(nf: int, nc: int, messages: int, kinds=KINDS, capped: bool = False) -> dict:
+def estimate(nf: int, nc: int, messages: int, kinds=KINDS) -> dict:
     """The measured "how long would that take", from the counts just read.
 
-    `capped`: more than MAX_ITEMS together, so the range cannot be done in one
-    go. `messages` is then the messages of the chats that WERE read (the first
-    MAX_ITEMS + 1), so the sentence says "at least" rather than pretend to a
-    total it did not count."""
+    There is no cap (the owner's 2026-11-08 ruling): `nf`, `nc` and `messages`
+    are every item in the frame, so the sentence is the whole batch."""
     secs = seconds_for(nf, nc, messages)
     doing = []
     if "facts" in kinds:
@@ -567,11 +620,6 @@ def estimate(nf: int, nc: int, messages: int, kinds=KINDS, capped: bool = False)
         doing.append(part)
     body = " and ".join(doing) or "forget nothing"
     text = f"About {_count(secs, 'second')} to {body}."
-    if capped:
-        text = (f"At least {_count(secs, 'second')} to {body} - and that is more than "
-                f"{MAX_ITEMS} at once, so nothing can be forgotten until you choose fewer "
-                f"days. Each request covers at most {MAX_ITEMS} items, and repeating it "
-                f"covers the rest.")
     return {"facts": int(nf), "chats": int(nc), "messages": int(messages),
             "seconds": secs, "text": text}
 
@@ -584,7 +632,7 @@ def pinned_kept(chats, frame: Frame) -> tuple:
     status say is being kept. A chat history that cannot be opened gives
     ([], 0): the action itself will say why when it is asked for."""
     try:
-        got = chats.overlapping(frame.start, frame.end, MAX_ITEMS, pinned=True)
+        got = _overlapping_all(chats, frame, pinned=True)
     except Exception:
         return [], 0
     items = [{"id": c["id"], "title": c["title"] or "(no title)",
@@ -595,24 +643,27 @@ def pinned_kept(chats, frame: Frame) -> tuple:
 def preview(frame: Frame, kinds=KINDS, *, mem=None, chats=None) -> dict:
     """What is in `frame`: the facts saved then and the chats that overlap
     it, each with a label, oldest first, plus the measured estimate and the
-    pinned chats that are kept. Over MAX_ITEMS together: the counts only,
-    `too_many`, and no list."""
+    chats that are kept. There is no item cap (the owner's
+    2026-11-08 ruling): the list is exact at any size; `large_wipe` only says
+    the wipe is big enough to be called that in words."""
     kinds = tuple(kinds)
     year = datetime.fromtimestamp(frame.start).year
     out = {"ok": True, "frame": frame.view(), "kinds": list(kinds), "facts": [], "chats": [],
-           "counts": {}, "too_many": False, "max_items": MAX_ITEMS, "chats_why": "",
-           "pinned_kept": [], "pinned_kept_count": 0}
+           "counts": {}, "chats_why": "",
+           "pinned_kept": [], "pinned_kept_count": 0,
+           "large_wipe": False, "large_wipe_items": LARGE_WIPE_ITEMS,
+           "large_wipe_words": ""}
     facts_rows, nf, chat_rows, nc = [], None, [], None
     if "facts" in kinds:
         mem = mem if mem is not None else _memory()
-        facts_rows, nf = mem.saved_between(frame.start, frame.end, MAX_ITEMS + 1)
+        facts_rows, nf = _all_facts(mem, frame)
         out["counts"]["facts"] = nf
     if "chats" in kinds:
         chats = chats if chats is not None else _chats()
         # Pinned chats are kept, so they are not part of the tickable list
-        # (owner, 2026-11-04), and the MAX_ITEMS budget counts only what can
-        # actually be ticked.
-        got = chats.overlapping(frame.start, frame.end, MAX_ITEMS + 1, pinned=False)
+        # (owner, 2026-11-04); every other chat that overlaps is listed,
+        # however many there are.
+        got = _overlapping_all(chats, frame, pinned=False)
         chat_rows, nc = got.get("items") or [], int(got.get("total") or 0)
         out["counts"]["chats"] = nc
         if got.get("why_not"):
@@ -623,13 +674,10 @@ def preview(frame: Frame, kinds=KINDS, *, mem=None, chats=None) -> dict:
     messages = sum(int(c["turns"]) for c in chat_rows)
     out["said"] = _summary(nf, nc, frame.said)
     out["empty"] = total == 0
-    out["estimate"] = estimate(nf or 0, nc or 0, messages, kinds,
-                               capped=total > MAX_ITEMS)
-    if total > MAX_ITEMS:
-        out["too_many"] = True
-        out["said"] = (f"That is {_summary(nf, nc, frame.said)[:-1]} - more than {MAX_ITEMS} "
-                       f"at once. Choose fewer days.")
-        return out
+    out["estimate"] = estimate(nf or 0, nc or 0, messages, kinds)
+    out["large_wipe"] = total > LARGE_WIPE_ITEMS
+    if out["large_wipe"]:
+        out["large_wipe_words"] = large_wipe_words(total)
     if "facts" in kinds:
         pinned = _pinned(mem)
         out["facts"] = [_fact_item(r, pinned, year) for r in facts_rows]
@@ -643,13 +691,15 @@ def preview(frame: Frame, kinds=KINDS, *, mem=None, chats=None) -> dict:
 
 
 def card_text(frame: Frame, facts: list, chats: list, pinned_kept_count: int = 0,
-              estimate_text: str = "") -> str:
+              estimate_text: str = "", large_wipe: bool = False) -> str:
     """Every fact word for word and every chat's title, with their dates,
     the pinned chats kept, the measured estimate, and the second yes."""
     lines = [f"Forget what Jarvis learned and delete your chats from {frame.said}?"
              if facts and chats else
              f"Forget what Jarvis learned from {frame.said}?" if facts else
              f"Delete your chats from {frame.said}?", ""]
+    if large_wipe:
+        lines += [large_wipe_words(len(facts) + len(chats)), ""]
     if pinned_kept_count:
         lines += [f"{_pinned_words(pinned_kept_count)}. {PINNED_WHY}", ""]
     if facts:
@@ -830,9 +880,14 @@ def _confirm_view(h: Optional[dict], now: float) -> Optional[dict]:
     disappears when the hold does."""
     if not h:
         return None
+    counts = h.get("counts") or {}
+    n = int(counts.get("facts") or 0) + int(counts.get("chats") or 0)
+    large = n > LARGE_WIPE_ITEMS
     return {"route": CONFIRM, "id": h["token"],
             "expires_in": max(0, int(h["until"] - now)),
-            "text": CONFIRM_TEXT}
+            "text": CONFIRM_TEXT_LARGE if large else CONFIRM_TEXT,
+            "large_wipe": large,
+            "large_wipe_words": large_wipe_words(n) if large else ""}
 
 
 def _undo_view(u: Optional[dict], now: float) -> Optional[dict]:
@@ -852,6 +907,17 @@ def _undo_view(u: Optional[dict], now: float) -> Optional[dict]:
             "said": said[:1].upper() + said[1:] + f" from {u['frame']}."}
 
 
+def _large_count(p: Optional[dict], h: Optional[dict]) -> int:
+    """How many items the waiting card or the held second yes covers (0 when
+    neither). Only used to say "this is a large wipe" in words."""
+    counts = (p or h or {}).get("counts") or {}
+    return int(counts.get("facts") or 0) + int(counts.get("chats") or 0)
+
+
+def _large_from(p: Optional[dict], h: Optional[dict]) -> bool:
+    return _large_count(p, h) > LARGE_WIPE_ITEMS
+
+
 def status(now: Optional[float] = None) -> dict:
     now = _now() if now is None else now
     _expire(now)
@@ -869,7 +935,13 @@ def status(now: Optional[float] = None) -> dict:
             "undo": _undo_view(u, now),
             "last": dict(last) if last else None,
             "asked": {k: a[k] for k in ("id", "from", "to", "said", "kinds")} if a else None,
-            "max_items": MAX_ITEMS, "undo_minutes": UNDO_MINUTES,
+            # The item cap is GONE (owner's 2026-11-08 ruling). `large_wipe`
+            # only names a big selection in words; nothing is refused or split.
+            "large_wipe": _large_from(p, h),
+            "large_wipe_items": LARGE_WIPE_ITEMS,
+            "large_wipe_words": (large_wipe_words(_large_count(p, h))
+                                 if _large_from(p, h) else ""),
+            "undo_minutes": UNDO_MINUTES,
             "presets": [{"id": k, "label": v} for k, v in PRESETS],
         }
 
@@ -951,8 +1023,6 @@ def request(body, *, now: Optional[float] = None, mem=None, chats=None,
         return 400, {"ok": False, "error": str(exc)}
     if not fids and not cids:
         return 400, {"ok": False, "error": WORDS["none_ticked"]}
-    if len(fids) + len(cids) > MAX_ITEMS:
-        return 400, {"ok": False, "error": f"At most {MAX_ITEMS} at once. Choose fewer days."}
     t = tier_of(ACTION)
     if t != "ask":
         return 503, {"ok": False, "error": (
@@ -989,7 +1059,9 @@ def request(body, *, now: Optional[float] = None, mem=None, chats=None,
         chats if chats is not None else _chats(), frame) if cids else ([], 0)
     est = estimate(len(facts), len(chat_items),
                    sum(int(c["turns"]) for c in chat_items))
-    text = card_text(frame, facts, chat_items, kept_count, est["text"])
+    large = (len(facts) + len(chat_items)) > LARGE_WIPE_ITEMS
+    text = card_text(frame, facts, chat_items, kept_count, est["text"],
+                     large_wipe=large)
     counts = {"facts": len(facts), "chats": len(chat_items)}
     token = uuid.uuid4().hex
     with _LOCK:
@@ -1009,15 +1081,20 @@ def request(body, *, now: Optional[float] = None, mem=None, chats=None,
             _STATE["pending"] = None
         return 503, {"ok": False, "error": "could not raise the approval card"}
     return 202, {"ok": True, "waiting": True, "counts": counts,
-                 "pinned_kept_count": kept_count,
-                 # The second yes. Its id is settled now, so a client can poll
-                 # the status and use the same id when the card is approved -
-                 # until then, POST /confirm answers 409 "a card is waiting".
-                 "confirm": {"route": CONFIRM, "id": token, "expires_in": HOLD_SECONDS,
-                             "text": CONFIRM_TEXT},
-                 "message": "Waiting for your approval. Nothing is forgotten or deleted "
-                            "unless you approve the card - and after that, unless you say "
-                            "yes a second time."}
+                  "pinned_kept_count": kept_count,
+                  "large_wipe": large, "large_wipe_items": LARGE_WIPE_ITEMS,
+                  "large_wipe_words": (large_wipe_words(len(facts) + len(chat_items))
+                                       if large else ""),
+                  # The second yes. Its id is settled now, so a client can poll
+                  # the status and use the same id when the card is approved -
+                  # until then, POST /confirm answers 409 "a card is waiting".
+                  "confirm": {"route": CONFIRM, "id": token, "expires_in": HOLD_SECONDS,
+                              "text": CONFIRM_TEXT_LARGE if large else CONFIRM_TEXT,
+                              "large_wipe": large},
+                  "message": "Waiting for your approval. Nothing is forgotten or "
+                             "deleted unless you approve the card - and after that, "
+                             "unless you say yes a second time."
+                             + (" This is a large wipe." if large else "")}
 
 
 def _decide(job: dict, mem, chats, gate: Callable, tier_of: Callable,
@@ -1644,6 +1721,8 @@ def quick_answer(got: dict, now: Optional[float] = None, *, mem=None, chats=None
             text += f" {_pinned_words(kept)}."
         text += (" Nothing is removed until you approve the card and then say yes a second "
                  "time.")
+        if p.get("large_wipe"):
+            text += " " + str(p.get("large_wipe_words") or "")
         return text, True
     frame, kinds = got["frame"], got["kinds"]
     try:
@@ -1671,15 +1750,13 @@ def quick_answer(got: dict, now: Optional[float] = None, *, mem=None, chats=None
                            "said": frame.said, "kinds": list(kinds), "at": now}
     where = f"in Brain, under {WORDS['title']}"
     found = _summary(p["counts"].get("facts"), p["counts"].get("chats"), frame.said)[:-1]
-    if p["too_many"]:
-        return lead + (f"That is {found} - more than {MAX_ITEMS} at once. I've put the dates "
-                       f"{where}: choose fewer days there."), True
     kept = int(p.get("pinned_kept_count") or 0)
     keep_said = f" {_pinned_words(kept)}." if kept else ""
-    return lead + (f"I've put the list {where}: {found}.{keep_said} Check it, untick anything "
-                   f"you want to keep, and tap Forget these, then Approve on the card and say "
-                   f"yes a second time. Nothing is removed until you do - saying yes out loud "
-                   f"does not approve it."), True
+    large_said = (" " + str(p.get("large_wipe_words") or "")) if p.get("large_wipe") else ""
+    return lead + (f"I've put the list {where}: {found}.{keep_said}{large_said} Check it, untick "
+                   f"anything you want to keep, and tap Forget these, then Approve on the card "
+                   f"and say yes a second time. Nothing is removed until you do - saying yes "
+                   f"out loud does not approve it."), True
 
 
 # --------------------------------------------------------------------------

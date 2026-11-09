@@ -18139,8 +18139,11 @@ anyway, and the shipped one says `"ask"`.
   them, not by a date in their words), and only ones still in use.
 - **Which chats:** any chat with a message in those days. The whole chat is
   deleted, and the list says so when it also has messages from other days.
-- **Days** are this PC's own time, first and last day included. At most 200
-  facts and chats in one go; more, and it asks for fewer days.
+- **Days** are this PC's own time, first and last day included. There is NO
+  item cap (owner's 2026-11-08 ruling): any number of facts and chats is listed
+  in full and offered in one action. Above 200 (the old cap, now only the size
+  at which the PC and both apps call it a **large wipe**) the words say so, and
+  the two yesses are unchanged. Nothing here touches a backup.
 - **The card** (`memory_forget_range`) must be "ask" or nothing happens. It
   counts as a risky approval (Windows Hello on the PC, the screen lock on
   the phone), because after 10 minutes the chats cannot come back.
@@ -18153,7 +18156,7 @@ anyway, and the shipped one says `"ask"`.
 
 ## Test it
 
-`py -3 backend\test_forget_range.py` (154 checks, no network, no model).
+`py -3 backend\test_forget_range.py` (258 checks, no network, no model).
 The words and real answers both apps are tested against:
 `python3 tools/gen_forget_range_cases.py --check`.
 
@@ -18161,8 +18164,9 @@ The words and real answers both apps are tested against:
 
 - Not tried on your PC's real memory and chat history. The tests use real
   SQLite files and real encryption in a temporary folder.
-- The phone's screen (`ForgetRangePlate.kt`) is compiled only by CI; its
-  pure logic (`net/ForgetRange.kt`) and test were compiled and run here.
+- The phone's screen (`ForgetRangePlate.kt`) is compiled by the local
+  `testDebugUnitTest` build but no test drives it; its pure logic
+  (`net/ForgetRange.kt`) and test were compiled and run here (2026-11-09).
 - "A forgotten fact is not learned again automatically" is on the audit
   branch, not this one yet. These forgets use Forget's own mark, so it will
   cover them when it lands.
