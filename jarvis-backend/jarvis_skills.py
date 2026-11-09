@@ -469,9 +469,111 @@ def is_bundled_script(rel: str) -> bool:
     return head == "scripts" or plain.rstrip(" .").lower().endswith(EXEC_SUFFIXES)
 
 
+#: The instruction prose the four extra checks read: the SKILL.md body always,
+#: and the skill's own Markdown/text references. A bundled script's text is
+#: already handed to `scan_text` in `vet()`; these four shapes are about words
+#: an agent will read and follow, wherever in the skill they are written.
+EXTRA_TEXT_SUFFIXES = (".md", ".markdown", ".txt")
+
+#: 1 when `jarvis_skill_hub`'s four extra checks ran with this scan, 0 when the
+#: hub is absent (an older published base) and the scan is the one this module
+#: always had. Written on every report, so "the extra layer did not run" is
+#: visible instead of guessed at.
+EXTRA_CHECKS_VERSION = 1
+
+#: The four finding codes the hub adds. Used only by the older-hub fallback.
+EXTRA_CODES = frozenset({"hermes_exec", "exfil_phrasing",
+                         "gate_bypass_claim", "bare_url"})
+
+
+def _hub_present() -> bool:
+    """Is the module the four extra checks live in beside this one?
+
+    It is shipped whole in the published base, so on a real install this is
+    true. It is false only for an older base (or a hand-trimmed one), and the
+    report then says `extra_checks: 0` rather than claiming a layer ran that
+    did not.
+    """
+    try:
+        import jarvis_skill_hub          # noqa: F401
+        return True
+    except Exception:                                  # pragma: no cover
+        return False
+
+
+def _extra_findings(skill) -> list:
+    """The four shapes this module's `_RULES` does not cover, CALLED not copied.
+
+    WHY THIS EXISTS (2026-11-09 audit): the hub's four checks - the Hermes
+    inline `` !`command` `` form, exfiltration said in words, "the gate is
+    already approved" claims, and a bare external URL - were written and tested
+    but called by NOTHING in production. The install gate used `_RULES` alone,
+    so a Hermes skill using that inline form installed as "clean".
+
+    The regexes still live ONCE, in `jarvis_skill_hub`; this asks that module
+    for its findings, so there is no second definition of any shape. If the hub
+    is absent (an older base) the scan is exactly what it was, and the report's
+    `extra_checks` field says 0. If the hub RAISES while scanning, the text is
+    not cleared - it becomes a block, the same fail-closed rule the base
+    scanner follows when it cannot answer.
+    """
+    try:
+        import jarvis_skill_hub as hub
+    except Exception:                                  # pragma: no cover
+        return []
+    texts = [("SKILL.md", skill.body or "")]
+    if skill.path:
+        for rel in skill.files:
+            name = str(rel)
+            low = name.replace("\\", "/").lower()
+            if low.rsplit("/", 1)[-1] == "skill.md":
+                continue                       # the body above IS this file
+            if not low.endswith(EXTRA_TEXT_SUFFIXES):
+                continue
+            path = skill.path / name
+            try:
+                if path.stat().st_size > 256 * 1024:
+                    continue
+                texts.append((name, path.read_text(encoding="utf-8",
+                                                   errors="replace")))
+            except OSError:
+                continue
+    out = []
+    for where, text in texts:
+        try:
+            found = hub.extra_findings(text, where=where)
+        except AttributeError:             # an older hub, before the split-out
+            try:
+                report = hub.scan_skill_text(text, where=where)
+            except Exception:
+                found = []
+            else:
+                found = [f for f in (report.get("findings") or [])
+                         if f.get("code") in EXTRA_CODES]
+        except Exception:
+            found = [{"severity": "block", "code": "extra_scan_failed",
+                      "message": ("the extra scanner raised, so this text was "
+                                  "never cleared"), "where": where,
+                      "excerpt": ""}]
+        for f in found or []:
+            if not isinstance(f, dict):
+                continue
+            out.append(Finding(str(f.get("severity") or "warn"),
+                               str(f.get("code") or "extra_finding"),
+                               str(f.get("message") or ""),
+                               str(f.get("where") or where),
+                               str(f.get("excerpt") or "")))
+    return out
+
+
 def vet(skill: Skill) -> dict:
     """Scan a parsed skill. Returns a verdict and every finding behind it."""
     findings = scan_text(skill.body, "SKILL.md")
+    # The four shapes the hub knows and `_RULES` does not (2026-11-09): wired
+    # into THIS function, the one scan every door already calls, so the menu's
+    # preview, the install card, the pack door and a project skill all judge the
+    # same text the same way.
+    findings += _extra_findings(skill)
     findings += [Finding("note", "extra_field",
                          f"frontmatter field {k!r} is not in the skill spec", "SKILL.md")
                  for k in skill.extra_fields]
@@ -508,6 +610,9 @@ def vet(skill: Skill) -> dict:
             "findings": [f.as_dict() for f in findings],
             "blocking": len(blocks), "warnings": len(warns),
             "sha256": skill.sha256,
+            # 0 means the hub was not beside this module, so the four extra
+            # shapes were not checked at all - visible, never silently passed.
+            "extra_checks": EXTRA_CHECKS_VERSION if _hub_present() else 0,
             "summary": _summary(skill, verdict, blocks, warns)}
 
 

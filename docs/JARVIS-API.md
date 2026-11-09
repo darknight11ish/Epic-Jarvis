@@ -25610,6 +25610,18 @@ visible rather than asserted.
 verdict is `refuse` (`scanner_missing`), and a scanner that RAISES is a refusal
 too (`scan_failed`).
 
+**WIRED INTO THE ONE SCAN (2026-11-09).** `jarvis_skills.vet()` - the scan every
+install, preview and pack door already runs - CALLS `extra_findings()` below, the
+function that holds these four checks, so they are judged on every install and
+not only when this lock surface is read. Before this fix `scan_skill_text()` had
+**no production caller** (only `backend/test_skill_hub.py`), which is exactly the
+gap the four checks were written to close: a Hermes skill using the inline form
+installed as "clean". `jarvis_skills.vet()` reports `extra_checks: 1` when the hub
+was beside it and `0` when it was not, and a hub scanner that RAISES is a block
+(`extra_scan_failed`), the same fail-closed rule as below. One definition, two
+callers - `scan_skill_text()` and `vet()` - is the point: the shapes are not
+copied into the install path.
+
 ### 138.3 The lock file
 
 Beside the skill folder, `skills.lock`, written whole through a temp file and a
@@ -32297,6 +32309,18 @@ and takes ONE name - there is no list form anywhere.
    the same regex-over-raw-bytes scanner, the same limits - run before any card
    exists. A `.zip` is unpacked into a throwaway folder first (below) and its
    contents are scanned exactly as a folder's would be.
+
+   **The four shapes the base scanner does not cover run inside that same
+   `vet()` scan (wired 2026-11-09).** `jarvis_skill_hub`'s four checks - the
+   Hermes inline host-execution form `` !`command` ``, exfiltration said in
+   words, "the approval is already approved" claims, and the bare-URL warning -
+   are CALLED by `jarvis_skills.vet()` through `jarvis_skill_hub.extra_findings()`,
+   so the install card, the menu's preview, the pack door and a project skill all
+   judge the same shapes from the same regexes. Before this fix the four checks
+   existed and were tested but were called by NOTHING in production, so a Hermes
+   skill using the inline form installed as "clean". The report says
+   `extra_checks: 1`, or `0` when an older base has no hub beside it - the layer
+   did not run, said out loud rather than silently passed.
 2. **A refusal never becomes a card.** A `refuse` verdict is copied into
    `skills-quarantine\` with its report and returns `{"asked": false}`. This is
    the point of the whole module: the attack these rules exist for works by

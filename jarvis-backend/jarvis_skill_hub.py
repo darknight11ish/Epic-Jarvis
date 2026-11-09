@@ -926,6 +926,12 @@ def learn(topic: str, *, steps="", when: str = "", pitfalls: str = "",
 #   `scan_skill_text()` below CALLS `jarvis_skills.scan_text` and adds only those
 #   missing shapes, and its `checks` field says which layer found what, so the
 #   delegation is visible rather than asserted.
+#
+#   WIRED INTO THE ONE SCAN, 2026-11-09. `jarvis_skills.vet()` - the scan every
+#   install, preview and pack door already runs - CALLS `extra_findings()` below.
+#   Before this fix the four checks were tested but called by NOTHING in
+#   production, so a Hermes skill using the inline form installed as "clean".
+#   One definition, two callers: `scan_skill_text()` and `vet()`.
 # --------------------------------------------------------------------------
 
 #: Bumped when the checks change, and recorded in every lock entry so an old
@@ -1020,6 +1026,31 @@ CHECK_LAYERS = {
 }
 
 
+def extra_findings(text: str, where: str = "SKILL.md") -> list:
+    """ONLY the four shapes `jarvis_skills._RULES` does not cover.
+
+    `scan_skill_text()` is this plus the base scanner. `jarvis_skills.vet()`
+    CALLS this function for its four checks, so every door that scans a skill -
+    the menu's preview, the install card, the pack door, a project skill - judges
+    the same shapes from the same regexes, defined once, here. Before the
+    2026-11-09 fix these four were called by nothing in production.
+    """
+    s = text if isinstance(text, str) else ""
+    out = []
+    for severity, code, rx, message, _layer in _EXTRA_RULES:
+        try:
+            m = rx.search(s)
+        except Exception:
+            m = None
+        if m is None:
+            continue
+        line_no = s.count("\n", 0, m.start()) + 1
+        frag = s[max(0, m.start() - 30): m.end() + 40].replace("\n", " ").strip()
+        out.append({"severity": severity, "code": code, "message": message,
+                    "where": f"{where} line {line_no}", "excerpt": frag[:160]})
+    return out
+
+
 def scan_skill_text(text: str, where: str = "SKILL.md") -> dict:
     """Every finding for `text`: `jarvis_skills.scan_text` CALLED, plus the four
     shapes it does not cover.
@@ -1028,6 +1059,9 @@ def scan_skill_text(text: str, where: str = "SKILL.md") -> dict:
     scanner at all, so the verdict is `refuse` - an unscanned skill is not a
     skill. And a base scanner that RAISES is a refusal, not a pass: "the scanner
     did not answer" and "the scanner said no" have to end in the same place.
+
+    The four shapes themselves are `extra_findings()` above; this function calls
+    it, and so does `jarvis_skills.vet()` - one definition, two callers.
     """
     findings, blocks = [], []
     sk = _skills()
@@ -1045,18 +1079,7 @@ def scan_skill_text(text: str, where: str = "SKILL.md") -> dict:
                                      f"this text was never cleared"),
                          "where": where, "excerpt": ""}]
 
-    s = text if isinstance(text, str) else ""
-    for severity, code, rx, message, _layer in _EXTRA_RULES:
-        try:
-            m = rx.search(s)
-        except Exception:
-            m = None
-        if m is None:
-            continue
-        line_no = s.count("\n", 0, m.start()) + 1
-        frag = s[max(0, m.start() - 30): m.end() + 40].replace("\n", " ").strip()
-        findings.append({"severity": severity, "code": code, "message": message,
-                         "where": f"{where} line {line_no}", "excerpt": frag[:160]})
+    findings.extend(extra_findings(text, where))
 
     blocks = [f for f in findings if f.get("severity") == "block"]
     warns = [f for f in findings if f.get("severity") == "warn"]
