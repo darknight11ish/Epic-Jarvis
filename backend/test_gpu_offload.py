@@ -48,6 +48,13 @@ BRAIN_JS = REPO / "jarvis-desktop" / "src" / "brain.js"
 
 FAILED, PASSED = [], []
 MB = 1024 * 1024
+#: The lane the chat really uses (presets-active-lane.json on 2026-11-08) ...
+CHAT_LANE = "http://127.0.0.1:11450"
+#: ... and the fixed address the module constant read, which held a stale
+#: duplicate at 74% while the chat lane was at 100%.
+FIXED_ADDR = "http://127.0.0.1:11436"
+LANE_PS = f"{CHAT_LANE}/api/ps"
+FIXED_PS = f"{FIXED_ADDR}/api/ps"
 
 
 def check(name, cond, detail=""):
@@ -73,13 +80,29 @@ def with_ps(models):
     return Canned(json.dumps({"models": models}))
 
 
-def run(canned):
-    real = MM._get
+class Routed(Canned):
+    """Answers per URL, so one test can put a DIFFERENT /api/ps behind the
+    fixed address and prove it is never read."""
+
+    def __init__(self, answers):
+        super().__init__(None)
+        self.answers = dict(answers)
+
+    def __call__(self, url, timeout=12.0, headers=None):
+        self.urls.append(url)
+        return self.answers.get(url)
+
+
+def run(canned, lane=CHAT_LANE):
+    """Call the real offload_status, with `_get` canned and the lane injected."""
+    real_get, real_lane = MM._get, MM._chat_lane_base
     MM._get = canned
+    MM._chat_lane_base = lambda: lane
     try:
         return MM.offload_status()
     finally:
-        MM._get = real
+        MM._get = real_get
+        MM._chat_lane_base = real_lane
 
 
 def t_all_on_the_gpu():
@@ -89,6 +112,92 @@ def t_all_on_the_gpu():
     check("and 100 percent", out.get("on_gpu_percent") == 100)
     check("and it only ever asked loopback",
           all("127.0.0.1" in u or "localhost" in u for u in c.urls), f"asked {c.urls}")
+    check("and it asked the CHAT LANE, not the module's fixed address",
+          c.urls == [LANE_PS], f"asked {c.urls}")
+
+
+def t_it_asks_the_chat_lane():
+    """The live defect: the fixed address held a stale duplicate at 74% while
+    the chat lane was at 100%."""
+    full = json.dumps({"models": [
+        {"name": "qwen3-coder-30b-a3b-ud-q3-k-xl", "size": 100 * MB,
+         "size_vram": 100 * MB}]})
+    stale = json.dumps({"models": [
+        {"name": "qwen3-coder-30b-a3b-ud-q3-k-xl", "size": 100 * MB,
+         "size_vram": 74 * MB}]})
+    c = Routed({LANE_PS: full, FIXED_PS: stale})
+    out = run(c)
+    check("a model at size==size_vram on the chat lane reads gpu / 100%",
+          out["status"] == "gpu" and out.get("on_gpu_percent") == 100, out)
+    check("and the fixed address was never asked",
+          c.urls == [LANE_PS], f"asked {c.urls}")
+
+
+def t_a_spilled_model_on_another_server_is_not_used():
+    """A 74% copy on the env-constant server must not become the owner's
+    warning: the answer is the chat lane's 100%, or nothing."""
+    full = json.dumps({"models": [
+        {"name": "coder", "size": 100 * MB, "size_vram": 100 * MB}]})
+    stale = json.dumps({"models": [
+        {"name": "coder", "size": 100 * MB, "size_vram": 74 * MB}]})
+    out = run(Routed({LANE_PS: full, FIXED_PS: stale}))
+    check("the chat lane's 100% is reported, not the 74% elsewhere",
+          out["status"] == "gpu" and out.get("on_gpu_percent") == 100, out)
+    check("and the note never mentions the stale 74%", "74" not in out["note"],
+          out["note"])
+    # The stronger case: the lane is unreachable and the fixed address is
+    # spilled. Reporting 74% would be the old bug; saying nothing is honest.
+    silent = Routed({FIXED_PS: stale})
+    out = run(silent)
+    check("with the lane unreachable, the other server's 74% is NOT reported",
+          out["status"] == "unknown" and out.get("on_gpu_percent") is None, out)
+    check("and the fixed address was never asked", FIXED_PS not in silent.urls,
+          f"asked {silent.urls}")
+
+
+def t_an_unreachable_chat_lane_is_said_plainly():
+    c = Routed({FIXED_PS: json.dumps({"models": []})})
+    out = run(c)
+    check("an unreachable chat lane is 'unknown', not idle or another server's",
+          out["status"] == "unknown" and out["available"] is False, out)
+    check("and says the chat lane is not answering",
+          "chat lane" in out["note"] and "not answering" in out["note"],
+          out["note"])
+    check("and never asks the fixed address", c.urls == [LANE_PS], f"asked {c.urls}")
+
+
+def t_nothing_loaded_on_the_chat_lane():
+    out = run(with_ps([]))
+    check("nothing loaded on the chat lane is 'idle'", out["status"] == "idle",
+          out)
+    check("and the note names the chat lane, not a generic server",
+          "chat lane" in out["note"] and "No model is loaded" in out["note"],
+          out["note"])
+
+
+def t_it_resolves_the_one_source_and_never_guesses():
+    """The lane comes from jarvis_hud.active_ollama_url() - the chat's ONE
+    resolver - and a missing resolver is reported, not replaced by a guess."""
+    import types
+    had = sys.modules.get("jarvis_hud")
+    try:
+        sys.modules["jarvis_hud"] = types.SimpleNamespace(
+            active_ollama_url=lambda: CHAT_LANE + "/")
+        check("the lane is resolved through jarvis_hud.active_ollama_url",
+              MM._chat_lane_base() == CHAT_LANE, MM._chat_lane_base())
+        sys.modules["jarvis_hud"] = types.SimpleNamespace()
+        check("no resolver means it does NOT fall back to a fixed address",
+              MM._chat_lane_base() == "", MM._chat_lane_base())
+        out = MM.offload_status()
+        check("and the status says the lane could not be told, instead of "
+              "reading a fixed address",
+              out["status"] == "unknown" and "could not tell" in out["note"],
+              out)
+    finally:
+        if had is None:
+            sys.modules.pop("jarvis_hud", None)
+        else:
+            sys.modules["jarvis_hud"] = had
 
 
 def t_all_on_the_cpu():
@@ -176,7 +285,13 @@ def t_it_is_surfaced():
 def main():
     for fn in (t_all_on_the_gpu, t_all_on_the_cpu, t_partial_spill,
                t_the_worst_model_wins, t_nothing_loaded, t_it_never_raises,
-               t_a_zero_size_model_does_not_divide_by_zero, t_it_is_surfaced):
+               t_a_zero_size_model_does_not_divide_by_zero,
+               t_it_asks_the_chat_lane,
+               t_a_spilled_model_on_another_server_is_not_used,
+               t_an_unreachable_chat_lane_is_said_plainly,
+               t_nothing_loaded_on_the_chat_lane,
+               t_it_resolves_the_one_source_and_never_guesses,
+               t_it_is_surfaced):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

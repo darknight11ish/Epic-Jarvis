@@ -1,9 +1,33 @@
 --- a/jarvis_models.py
 +++ b/jarvis_models.py
-@@ -826,6 +826,93 @@
+--- a/jarvis_models.py
++++ b/jarvis_models.py
+@@ -826,6 +826,130 @@
      return any(n == ref or n == want or n.split(":")[0] == ref for n in names)
  
  
++def _chat_lane_base() -> str:
++    """The address chat is really using, from the ONE resolver.
++
++    `presets.patch` chooses the chat lane per request through
++    `jarvis_hud.active_ollama_url()`; the `OLLAMA` constant below is only that
++    resolver's fallback when no preset has ever been applied. A diagnostic
++    that reads the constant can describe a DIFFERENT server's model - on
++    2026-11-08 a stale duplicate on :11436 read 74% while the chat lane on
++    :11450 was 100% on the card. Lazy import because `jarvis_hud` imports this
++    module. `""` means "could not tell", which `offload_status()` reports
++    honestly rather than asking a fixed address. Never raises.
++    """
++    try:
++        import jarvis_hud
++        resolver = getattr(jarvis_hud, "active_ollama_url", None)
++        if callable(resolver):
++            return str(resolver() or "").strip().rstrip("/")
++    except Exception:
++        pass
++    return ""
++
++
 +def offload_status(timeout: float = 4.0) -> dict:
 +    """Is the model actually on the graphics card, or only pretending to be?
 +
@@ -19,27 +43,42 @@
 +    Jan built the same check by counting devices, which catches only the
 +    all-CPU case; this catches partial spill too, which is the commoner one.
 +
++    It asks the lane the chat ACTUALLY uses, resolved through
++    `jarvis_hud.active_ollama_url()` (the fixed `OLLAMA` address is only that
++    resolver's fallback). On 2026-11-08 reading the fixed address reported a
++    stale duplicate at 74% while the chat lane was at 100% on the card, which
++    warned the owner about the wrong server.
++
 +    Never raises and never blocks for long: a four-second budget, and every
 +    failure reports "unknown" rather than inventing a number. A diagnostic
 +    that takes the status page down with it is worse than no diagnostic.
 +    """
 +    out = {"available": False, "status": "unknown", "models": [], "note": ""}
-+    raw = _get(f"{OLLAMA}/api/ps", timeout=timeout)
++    lane = _chat_lane_base()
++    if not lane:
++        out["note"] = ("Jarvis could not tell which Ollama lane the chat "
++                       "uses, so the model's placement is unknown rather "
++                       "than read from a fixed address.")
++        return out
++    raw = _get(f"{lane}/api/ps", timeout=timeout)
 +    if not raw:
-+        out["note"] = ("Ollama did not answer, so there is nothing to report. "
-+                       "This is normal when nothing has been asked yet.")
++        out["note"] = (f"The chat lane ({lane}) is not answering, so the "
++                       "model's placement is unknown. This is normal when "
++                       "nothing has been asked yet.")
 +        return out
 +    try:
 +        running = json.loads(raw).get("models") or []
 +    except Exception:
-+        out["note"] = "Ollama answered with something that was not JSON."
++        out["note"] = (f"The chat lane ({lane}) answered with something "
++                       "that was not JSON.")
 +        return out
 +
 +    out["available"] = True
 +    if not running:
 +        out["status"] = "idle"
-+        out["note"] = ("No model is loaded right now. Ollama unloads after a "
-+                       "few minutes idle; ask Jarvis something and look again.")
++        out["note"] = (f"No model is loaded on the chat lane ({lane}) right "
++                       "now. Ollama unloads after a few minutes idle; ask "
++                       "Jarvis something and look again.")
 +        return out
 +
 +    worst = 100
@@ -94,6 +133,7 @@
  def local_geometry(ref: str, timeout: float = 15.0) -> Optional[dict]:
      """Exact layer/head counts for an INSTALLED model, so estimate_vram_mb
      can use the real KV formula instead of the parameter-count stand-in.
+
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
 @@ -295,10 +295,20 @@
