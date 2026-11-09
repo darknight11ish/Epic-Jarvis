@@ -102,10 +102,21 @@ def main() -> int:
     check("... and the route is cleared at the start of every turn",
           "turnRoute = null;" in src,
           "a per-turn value must be per-turn")
-    check("the remaining voice.speak calls are the per-answer taps (icon and menu)",
-          src.count("voice.speak(ANSWER_SAID") == 1
-          and src.count("voice.speak(said.text)") == 1,
-          (src.count("voice.speak(ANSWER_SAID"), src.count("voice.speak(said.text)")))
+    # Wave 12 (2026-11-09) put BOTH per-answer taps through ONE player,
+    # `readAnswerAloud`, which also carries the Pause / Resume / Stop controls and
+    # the PC's configured voice; the direct `voice.speak(...)` calls this check
+    # used to pin are gone (measured on #1217 run 42632408624: it read (0, 0) on
+    # both counts while the two tap sites were alive and routed through that one
+    # player). So the honest pin is: both taps speak the one answer they were
+    # clicked for, through the one player, and nothing speaks an answer directly.
+    check("both per-answer taps (icon and menu) say it through the ONE player",
+          src.count("readAnswerAloud(ANSWER_SAID.get(bubble)") == 1
+          and src.count("readAnswerAloud(said.text, bubble)") == 1,
+          (src.count("readAnswerAloud(ANSWER_SAID.get(bubble)"),
+           src.count("readAnswerAloud(said.text, bubble)")))
+    check("... and no per-answer path calls speech directly any more",
+          "voice.speak(ANSWER_SAID" not in src
+          and "voice.speak(said.text)" not in src)
 
     print("\n--- the rule reused is still the bar's rule, and rule 1 is untouched ---")
     rule_src = (REPO / "jarvis-desktop" / "src" / "private-speech.js").read_text(encoding="utf-8")
