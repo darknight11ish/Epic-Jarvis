@@ -2,8 +2,8 @@
  "schema": 1,
  "repo": "darknight11ish/Epic-Jarvis",
  "public": true,
- "ref": "57b8fc545f03b765cb5f940493d0f927f7698f77",
- "built_at": "2026-11-08T16:15:28-08:00",
+ "ref": "433f4e10866dd780c46edcb21f74f3af1dc92e62",
+ "built_at": "2026-11-08T16:18:07-08:00",
  "version": "0.2.0",
  "generated_by": "tools/gen_self_code_map.py",
  "about": "A map of Jarvis's own code as it stood at this commit: the major parts, the files each part owns, the module to start reading for each, and the suites and documents that go with it. It names code; it does not hold code and it runs nothing.",
@@ -3013,6 +3013,7 @@
     "jarvis-desktop/tests/lib/python.mjs",
     "jarvis-desktop/tests/limits.mjs",
     "jarvis-desktop/tests/lipsync.mjs",
+    "jarvis-desktop/tests/live-source-route.mjs",
     "jarvis-desktop/tests/live.mjs",
     "jarvis-desktop/tests/lock-capture.mjs",
     "jarvis-desktop/tests/look-rules.mjs",
@@ -3136,7 +3137,7 @@
     "jarvis-desktop/tests/youtube.mjs",
     "tokens/themes.tokens.json"
    ],
-   "file_count": 1233,
+   "file_count": 1234,
    "key_modules": [
     {
      "path": "backend/jarvis_animal.py",
@@ -3787,6 +3788,8 @@
     "backend/test_energy.py",
     "backend/test_events_pump.py",
     "backend/test_extraction_wiring.py",
+    "backend/test_factual_corpus.json",
+    "backend/test_factual_determinism.py",
     "backend/test_failure_detail.py",
     "backend/test_fault_probes.py",
     "backend/test_feature_answers.py",
@@ -4250,7 +4253,7 @@
     "contract/personalities.json",
     "contract/schedule-cases.json"
    ],
-   "file_count": 661,
+   "file_count": 663,
    "key_modules": [
     {
      "path": "backend/_where.py",
@@ -6169,9 +6172,29 @@
  ],
  "recent_commits": [
   {
+   "sha": "433f4e10866dd780c46edcb21f74f3af1dc92e62",
+   "date": "2026-11-08",
+   "subject": "merge: task-20 determinism phase A (read-aloud corpus, preset/Live proofs, 49-row sweep)"
+  },
+  {
+   "sha": "481923459c26aede1271c0a3aa356d4adbd2d7ac",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): the generated map covers the determinism corpus fixture"
+  },
+  {
+   "sha": "172d5564264d3e764bd5f7735696e24cd11e84f0",
+   "date": "2026-11-08",
+   "subject": "chore(self-code): give jarvis_wifi a subsystem and regenerate the map"
+  },
+  {
    "sha": "57b8fc545f03b765cb5f940493d0f927f7698f77",
    "date": "2026-11-08",
    "subject": "merge: task-21 feature-question echo fix (no model echo)"
+  },
+  {
+   "sha": "e1874cc17dc73bf4d3c9340506378060ef21d788",
+   "date": "2026-11-08",
+   "subject": "fix(determinism): the owner's factual sentences are answered before the model, proved"
   },
   {
    "sha": "727b46faf8cb30e81ad8d97993dbaf3be72c76a0",
@@ -6247,38 +6270,18 @@
    "sha": "52982005dc4c8ddebd5f9540ca08c516b37aeef8",
    "date": "2026-11-08",
    "subject": "chore(self-code): regenerate the map for the GitHub receipt work"
-  },
-  {
-   "sha": "51d647de21dec2ead8c624223acef7d1ce4a543f",
-   "date": "2026-11-08",
-   "subject": "feat(github): the turn after a connect-card save answers from the host receipt"
-  },
-  {
-   "sha": "088ba081c34040c1fa7ddce6aba0409fcf774f10",
-   "date": "2026-11-08",
-   "subject": "fix(hud): a layout chosen while the HUD is open paints it at once"
-  },
-  {
-   "sha": "0a992762b9b6032fe948c10f25e1981749962b2c",
-   "date": "2026-11-08",
-   "subject": "chore(self-code): regenerate the map for the Studio layout fix"
-  },
-  {
-   "sha": "88badc032cea1d3a2bd21421a48c287d59445cc3",
-   "date": "2026-11-08",
-   "subject": "fix(hud): give the Studio's raised cards their own rows, and reserve the safety strip's band (Wave 10)"
   }
  ],
  "top_level": [
   {
    "path": "backend/",
    "line": "the Python modules, patches and tests this repository installs on the PC",
-   "files": 1392
+   "files": 1394
   },
   {
    "path": "jarvis-desktop/",
    "line": "the Tauri 2 desktop shell (Rust) and the HUD page (JavaScript)",
-   "files": 1241
+   "files": 1242
   },
   {
    "path": "jarvis-client/",
@@ -6387,8 +6390,8 @@
   }
  ],
  "coverage": {
-  "tracked_files": 5510,
-  "covered": 5044,
+  "tracked_files": 5513,
+  "covered": 5047,
   "excluded": 466,
   "subsystems": 27
  },
